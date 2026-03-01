@@ -45,6 +45,16 @@ public static class ApiClient
         return await resp.Content.ReadAsStringAsync();
     }
 
+    public static async Task<byte[]?> DownloadAsync(string endpoint)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, $"{App.ApiBaseUrl}{endpoint}");
+        if (!string.IsNullOrEmpty(App.Token))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", App.Token);
+        var resp = await _http.SendAsync(req);
+        if (!resp.IsSuccessStatusCode) return null;
+        return await resp.Content.ReadAsByteArrayAsync();
+    }
+
     public static async Task<string> DeleteAsync(string endpoint)
     {
         var req = new HttpRequestMessage(HttpMethod.Delete, $"{App.ApiBaseUrl}{endpoint}");

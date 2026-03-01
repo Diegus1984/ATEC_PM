@@ -230,6 +230,49 @@ public class ProjectsController : ControllerBase
         return items;
     }
 
+    // --- DOWNLOAD FILE ---
+    [HttpGet("{id}/download")]
+    public IActionResult DownloadFile(int id, [FromQuery] string path)
+    {
+        if (string.IsNullOrEmpty(path)) return BadRequest("Path richiesto");
+
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath)) return NotFound("Cartella commessa non trovata");
+
+        var fullPath = Path.Combine(serverPath, path);
+
+        // Sicurezza: verifica che il path sia dentro la cartella commessa
+        var normalizedFull = Path.GetFullPath(fullPath);
+        var normalizedRoot = Path.GetFullPath(serverPath);
+        if (!normalizedFull.StartsWith(normalizedRoot))
+            return BadRequest("Path non valido");
+
+        if (!System.IO.File.Exists(fullPath))
+            return NotFound("File non trovato");
+
+        var fileName = Path.GetFileName(fullPath);
+        var ext = Path.GetExtension(fileName).ToLower();
+        var contentType = ext switch
+        {
+            ".pdf" => "application/pdf",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls" => "application/vnd.ms-excel",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".dwg" => "application/acad",
+            ".zip" => "application/zip",
+            ".txt" => "text/plain",
+            ".csv" => "text/csv",
+            _ => "application/octet-stream"
+        };
+
+        var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(stream, contentType, fileName);
+    }
+
     // --- LOOKUP ---
     [HttpGet("/api/lookup/customers")]
     public IActionResult LookupCustomers()

@@ -219,26 +219,105 @@ public partial class ProjectsPage : Page
 
         try
         {
-            // Mostra info file base
-            var panel = new StackPanel();
-            panel.Children.Add(new TextBlock
+            if (ext == ".pdf")
             {
-                Text = $"{GetFileIcon(fileName)}  {fileName}",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 0, 0, 12)
-            });
+                // Scarica il PDF via API e mostra anteprima con WebView2
+                var encoded = Uri.EscapeDataString(relativePath);
+                var bytes = await ApiClient.DownloadAsync($"/api/projects/{projectId}/download?path={encoded}");
+                if (bytes == null || bytes.Length == 0)
+                {
+                    SectionContent.Content = new TextBlock { Text = "Impossibile scaricare il file.", FontSize = 14, Foreground = System.Windows.Media.Brushes.Gray };
+                    return;
+                }
 
-            var infoGrid = new Grid();
-            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                // Salva in temp
+                var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
+                Directory.CreateDirectory(tempDir);
+                var tempFile = Path.Combine(tempDir, fileName);
+                File.WriteAllBytes(tempFile, bytes);
 
-            AddInfoRow(infoGrid, 0, "Percorso", relativePath);
-            AddInfoRow(infoGrid, 1, "Tipo", ext.TrimStart('.').ToUpper());
+                // Costruisci layout prima di inizializzare WebView2
+                var panel = new DockPanel();
+                var infoBar = new Border
+                {
+                    Background = Brush("#F7F8FA"),
+                    BorderBrush = Brush("#E4E7EC"),
+                    BorderThickness = new Thickness(0, 0, 0, 1),
+                    Padding = new Thickness(12, 8, 12, 8)
+                };
+                var infoText = new TextBlock
+                {
+                    Text = $"📕  {fileName}",
+                    FontSize = 14,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                infoBar.Child = infoText;
+                DockPanel.SetDock(infoBar, Dock.Top);
+                panel.Children.Add(infoBar);
 
-            panel.Children.Add(infoGrid);
-            SectionContent.Content = panel;
+                var webView = new Microsoft.Web.WebView2.Wpf.WebView2
+                {
+                    Height = Math.Max(500, scrollContent.ActualHeight - 60)
+                };
+                panel.Children.Add(webView);
+
+                // Assegna al content PRIMA di inizializzare (deve essere nel visual tree)
+                SectionContent.Content = panel;
+
+                // Inizializza e naviga
+                await webView.EnsureCoreWebView2Async();
+                var fileUri = new Uri(tempFile).AbsoluteUri;
+                webView.CoreWebView2.Navigate(fileUri);
+                return;
+            }
+            else if (ext is ".png" or ".jpg" or ".jpeg" or ".bmp")
+            {
+                // Scarica e mostra immagine
+                var encoded = Uri.EscapeDataString(relativePath);
+                var bytes = await ApiClient.DownloadAsync($"/api/projects/{projectId}/download?path={encoded}");
+                if (bytes == null || bytes.Length == 0)
+                {
+                    SectionContent.Content = new TextBlock { Text = "Impossibile scaricare il file.", FontSize = 14, Foreground = System.Windows.Media.Brushes.Gray };
+                    return;
+                }
+
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.StreamSource = new MemoryStream(bytes);
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+
+                var panel = new StackPanel();
+                panel.Children.Add(new TextBlock { Text = $"🖼  {fileName}", FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
+                panel.Children.Add(new System.Windows.Controls.Image { Source = bmp, MaxHeight = 500, Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left });
+
+                SectionContent.Content = panel;
+            }
+            else
+            {
+                // Info generiche per altri tipi di file
+                var panel = new StackPanel();
+                panel.Children.Add(new TextBlock
+                {
+                    Text = $"{GetFileIcon(fileName)}  {fileName}",
+                    FontSize = 18,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 16)
+                });
+
+                var infoGrid = new Grid();
+                infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                AddInfoRow(infoGrid, 0, "Percorso", relativePath);
+                AddInfoRow(infoGrid, 1, "Tipo", ext.TrimStart('.').ToUpper());
+                AddInfoRow(infoGrid, 2, "Azione", "Clicca 'Scarica' per aprire il file");
+
+                panel.Children.Add(infoGrid);
+                SectionContent.Content = panel;
+            }
         }
         catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
     }
@@ -535,20 +614,22 @@ public partial class ProjectsPage : Page
         {
             var relPath = parts[2];
             var fileName = Path.GetFileName(relPath);
-            // Per ora apre il file direttamente se in locale, in futuro via API download
             try
             {
-                var projJson = await ApiClient.GetAsync($"/api/projects/{dlId}");
-                var projDoc = JsonDocument.Parse(projJson);
-                var sp = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
-                if (!string.IsNullOrEmpty(sp))
+                var encoded = Uri.EscapeDataString(relPath);
+                var bytes = await ApiClient.DownloadAsync($"/api/projects/{dlId}/download?path={encoded}");
+                if (bytes == null || bytes.Length == 0)
                 {
-                    var fullPath = Path.Combine(sp, relPath);
-                    if (File.Exists(fullPath))
-                        OpenFile(fullPath);
-                    else
-                        MessageBox.Show("File non trovato.");
+                    MessageBox.Show("Impossibile scaricare il file.");
+                    return;
                 }
+
+                // Salva in temp e apri
+                var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
+                Directory.CreateDirectory(tempDir);
+                var tempFile = Path.Combine(tempDir, fileName);
+                File.WriteAllBytes(tempFile, bytes);
+                OpenFile(tempFile);
             }
             catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
         }
