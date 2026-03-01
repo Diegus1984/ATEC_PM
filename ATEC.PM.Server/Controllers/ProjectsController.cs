@@ -186,6 +186,50 @@ public class ProjectsController : ControllerBase
         return Ok(ApiResponse<List<FileItem>>.Ok(items));
     }
 
+    [HttpGet("{id}/file-tree")]
+    public IActionResult GetFileTree(int id)
+    {
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath) || !Directory.Exists(serverPath))
+            return Ok(ApiResponse<List<FileTreeItem>>.Ok(new()));
+
+        var tree = BuildFileTree(serverPath, serverPath);
+        return Ok(ApiResponse<List<FileTreeItem>>.Ok(tree));
+    }
+
+    private List<FileTreeItem> BuildFileTree(string rootPath, string currentPath)
+    {
+        var items = new List<FileTreeItem>();
+
+        foreach (var dir in Directory.GetDirectories(currentPath).OrderBy(d => d))
+        {
+            var di = new DirectoryInfo(dir);
+            var node = new FileTreeItem
+            {
+                Name = di.Name,
+                IsFolder = true,
+                RelativePath = Path.GetRelativePath(rootPath, dir),
+                Children = BuildFileTree(rootPath, dir)
+            };
+            items.Add(node);
+        }
+        foreach (var file in Directory.GetFiles(currentPath).OrderBy(f => f))
+        {
+            var fi = new FileInfo(file);
+            items.Add(new FileTreeItem
+            {
+                Name = fi.Name,
+                IsFolder = false,
+                Size = fi.Length,
+                RelativePath = Path.GetRelativePath(rootPath, file),
+                Modified = fi.LastWriteTime
+            });
+        }
+
+        return items;
+    }
+
     // --- LOOKUP ---
     [HttpGet("/api/lookup/customers")]
     public IActionResult LookupCustomers()

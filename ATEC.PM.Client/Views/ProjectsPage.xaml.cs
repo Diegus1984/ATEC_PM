@@ -53,11 +53,108 @@ public partial class ProjectsPage : Page
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
 
-            var docNode = new TreeViewItem { Header = "Documenti", Tag = $"documents|{p.Id}" };
+            var docNode = new TreeViewItem { Header = "📁 Documenti", Tag = $"documents|{p.Id}" };
+            // Placeholder per lazy-load al primo expand
+            docNode.Items.Add(new TreeViewItem { Header = "Caricamento...", IsEnabled = false });
+            docNode.Expanded += DocNode_Expanded;
             projNode.Items.Add(docNode);
 
             treeProjects.Items.Add(projNode);
         }
+    }
+
+    private async void DocNode_Expanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem docNode) return;
+        var tag = docNode.Tag?.ToString() ?? "";
+        if (!tag.StartsWith("documents|")) return;
+
+        // Evita ricaricamento se già popolato (controlla se c'è il placeholder)
+        if (docNode.Items.Count == 1 && docNode.Items[0] is TreeViewItem first && !first.IsEnabled)
+        {
+            var parts = tag.Split('|');
+            if (!int.TryParse(parts[1], out int projectId)) return;
+            await LoadFileTree(docNode, projectId);
+        }
+    }
+
+    private async Task LoadFileTree(TreeViewItem parentNode, int projectId)
+    {
+        parentNode.Items.Clear();
+        try
+        {
+            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/file-tree");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
+                return;
+            }
+
+            var items = JsonSerializer.Deserialize<List<FileTreeItem>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            if (items.Count == 0)
+            {
+                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
+                return;
+            }
+
+            AddFileTreeNodes(parentNode, items, projectId);
+        }
+        catch
+        {
+            parentNode.Items.Add(new TreeViewItem { Header = "Errore caricamento", IsEnabled = false });
+        }
+    }
+
+    private void AddFileTreeNodes(TreeViewItem parentNode, List<FileTreeItem> items, int projectId)
+    {
+        foreach (var item in items)
+        {
+            if (item.IsFolder)
+            {
+                var folderNode = new TreeViewItem
+                {
+                    Header = $"📁 {item.Name}",
+                    Tag = $"docfolder|{projectId}|{item.RelativePath}",
+                    FontWeight = FontWeights.Normal,
+                    FontSize = 12
+                };
+                AddFileTreeNodes(folderNode, item.Children, projectId);
+                parentNode.Items.Add(folderNode);
+            }
+            else
+            {
+                var icon = GetFileIcon(item.Name);
+                var fileNode = new TreeViewItem
+                {
+                    Header = $"{icon} {item.Name}",
+                    Tag = $"file|{projectId}|{item.RelativePath}",
+                    FontWeight = FontWeights.Normal,
+                    FontSize = 12
+                };
+                parentNode.Items.Add(fileNode);
+            }
+        }
+    }
+
+    private static string GetFileIcon(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLower();
+        return ext switch
+        {
+            ".pdf" => "📕",
+            ".doc" or ".docx" => "📘",
+            ".xls" or ".xlsx" => "📗",
+            ".dwg" or ".dxf" => "📐",
+            ".jpg" or ".jpeg" or ".png" or ".bmp" => "🖼",
+            ".zip" or ".rar" or ".7z" => "📦",
+            ".txt" => "📝",
+            ".csv" => "📊",
+            _ => "📄"
+        };
     }
 
     // === SEARCH ===
@@ -102,8 +199,63 @@ public partial class ProjectsPage : Page
                     var subPath = parts.Length > 2 ? parts[2] : "";
                     ShowDocuments(id, subPath);
                     break;
+                case "file":
+                    var filePath = parts.Length > 2 ? parts[2] : "";
+                    ShowFileInfo(id, filePath);
+                    break;
             }
         }
+    }
+
+    // === FILE INFO ===
+    private async void ShowFileInfo(int projectId, string relativePath)
+    {
+        var fileName = Path.GetFileName(relativePath);
+        var ext = Path.GetExtension(fileName).ToLower();
+        txtSectionTitle.Text = fileName;
+        btnAction.Content = "Scarica";
+        btnAction.Visibility = Visibility.Visible;
+        btnAction.Tag = $"download|{projectId}|{relativePath}";
+
+        try
+        {
+            // Mostra info file base
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"{GetFileIcon(fileName)}  {fileName}",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+
+            var infoGrid = new Grid();
+            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            AddInfoRow(infoGrid, 0, "Percorso", relativePath);
+            AddInfoRow(infoGrid, 1, "Tipo", ext.TrimStart('.').ToUpper());
+
+            panel.Children.Add(infoGrid);
+            SectionContent.Content = panel;
+        }
+        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+    }
+
+    private void AddInfoRow(Grid grid, int row, string label, string value)
+    {
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var lbl = new TextBlock { Text = label.ToUpper(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 6, 0, 2) };
+        Grid.SetRow(lbl, row);
+        Grid.SetColumn(lbl, 0);
+        grid.Children.Add(lbl);
+
+        var val = new TextBlock { Text = value, FontSize = 13, Foreground = Brush("#1A1D26"), Margin = new Thickness(0, 6, 0, 2), TextWrapping = TextWrapping.Wrap };
+        Grid.SetRow(val, row);
+        Grid.SetColumn(val, 2);
+        grid.Children.Add(val);
     }
 
     // === DETAILS ===
@@ -296,9 +448,7 @@ public partial class ProjectsPage : Page
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Populate document sub-nodes in tree
-            if (string.IsNullOrEmpty(subPath))
-                PopulateDocSubFolders(projectId, items.Where(i => i.IsFolder).ToList());
+            // Populate document sub-nodes in tree (now handled by file-tree)
 
             var dg = new DataGrid
             {
@@ -345,36 +495,6 @@ public partial class ProjectsPage : Page
         catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
     }
 
-    private void PopulateDocSubFolders(int projectId, List<FileItem> folders)
-    {
-        // Find the Documenti node for this project
-        foreach (TreeViewItem projNode in treeProjects.Items)
-        {
-            var projTag = projNode.Tag?.ToString() ?? "";
-            if (projTag == $"project|{projectId}")
-            {
-                foreach (TreeViewItem child in projNode.Items)
-                {
-                    if (child.Tag?.ToString() == $"documents|{projectId}")
-                    {
-                        child.Items.Clear();
-                        foreach (var f in folders)
-                        {
-                            child.Items.Add(new TreeViewItem
-                            {
-                                Header = f.Name,
-                                Tag = $"docfolder|{projectId}|{f.RelativePath}",
-                                FontSize = 12
-                            });
-                        }
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-    }
-
     // === ACTIONS ===
     private async void BtnAction_Click(object sender, RoutedEventArgs e)
     {
@@ -393,7 +513,11 @@ public partial class ProjectsPage : Page
                 var json = await ApiClient.PostAsync($"/api/projects/{cfId}/create-folder", "{}");
                 var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.GetProperty("success").GetBoolean())
+                {
+                    // Ricarica il nodo documenti nel tree
+                    RefreshDocNode(cfId);
                     ShowDocuments(cfId, "");
+                }
             }
             catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
         }
@@ -406,6 +530,47 @@ public partial class ProjectsPage : Page
             var fullPath = string.IsNullOrEmpty(sub) ? sp : Path.Combine(sp, sub);
             if (Directory.Exists(fullPath))
                 System.Diagnostics.Process.Start("explorer.exe", fullPath);
+        }
+        else if (parts[0] == "download" && parts.Length > 2 && int.TryParse(parts[1], out var dlId))
+        {
+            var relPath = parts[2];
+            var fileName = Path.GetFileName(relPath);
+            // Per ora apre il file direttamente se in locale, in futuro via API download
+            try
+            {
+                var projJson = await ApiClient.GetAsync($"/api/projects/{dlId}");
+                var projDoc = JsonDocument.Parse(projJson);
+                var sp = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
+                if (!string.IsNullOrEmpty(sp))
+                {
+                    var fullPath = Path.Combine(sp, relPath);
+                    if (File.Exists(fullPath))
+                        OpenFile(fullPath);
+                    else
+                        MessageBox.Show("File non trovato.");
+                }
+            }
+            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        }
+    }
+
+    private async void RefreshDocNode(int projectId)
+    {
+        foreach (TreeViewItem projNode in treeProjects.Items)
+        {
+            if (projNode.Tag?.ToString() == $"project|{projectId}")
+            {
+                foreach (TreeViewItem child in projNode.Items)
+                {
+                    if (child.Tag?.ToString() == $"documents|{projectId}")
+                    {
+                        await LoadFileTree(child, projectId);
+                        child.IsExpanded = true;
+                        break;
+                    }
+                }
+                break;
+            }
         }
     }
 
