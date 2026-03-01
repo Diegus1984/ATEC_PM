@@ -1,0 +1,10 @@
+﻿global using System;
+global using System.Collections.Generic;
+global using System.Linq;
+global using Microsoft.AspNetCore.Authorization;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.Extensions.Configuration;
+global using Dapper;
+global using ATEC.PM.Shared.DTOs;
+global using ATEC.PM.Server.Services;
+global using System.IO;

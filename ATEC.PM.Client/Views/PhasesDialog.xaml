@@ -1,0 +1,66 @@
+<Window x:Class="ATEC.PM.Client.Views.PhasesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fasi Commessa" Width="700" Height="500"
+        WindowStartupLocation="CenterOwner" Background="#F7F8FA">
+
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,10">
+            <DockPanel>
+                <TextBlock x:Name="txtStatus" Text="" FontSize="12" Foreground="#6B7280" VerticalAlignment="Center"/>
+                <Button Content="Chiudi" Width="90" Height="34" Background="#F3F4F6" Foreground="#374151"
+                        BorderThickness="0" Cursor="Hand" DockPanel.Dock="Right" HorizontalAlignment="Right" Click="BtnClose_Click"/>
+            </DockPanel>
+        </Border>
+
+        <DataGrid x:Name="dgPhases" AutoGenerateColumns="False" IsReadOnly="True"
+                  Background="White" BorderThickness="0" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
+                  RowHeight="38" ColumnHeaderHeight="38" FontSize="13" Margin="0">
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#F9FAFB"/>
+                    <Setter Property="Foreground" Value="#6B7280"/>
+                    <Setter Property="FontSize" Value="12"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="12,0"/>
+                    <Setter Property="BorderBrush" Value="#E4E7EC"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="White"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#EEF2FF"/></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F9FAFB"/></Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Padding" Value="12,0"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="DataGridCell">
+                                <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="#1A1D26"/></Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.CellStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Fase" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="Ore Prev." Binding="{Binding BudgetHours}" Width="80"/>
+                <DataGridTextColumn Header="Ore Fatte" Binding="{Binding HoursWorked, StringFormat='{}{0:N1}'}" Width="80"/>
+                <DataGridTextColumn Header="Stato" Binding="{Binding Status}" Width="100"/>
+                <DataGridTextColumn Header="Progresso" Binding="{Binding ProgressPct, StringFormat='{}{0}%'}" Width="80"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,93 @@
+<Page x:Class="ATEC.PM.Client.Views.TimesheetPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="#F7F8FA">
+    <Page.Resources>
+        <Style x:Key="FlatBtn" TargetType="Button">
+            <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="13"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/><Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Opacity" Value="0.85"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+    <DockPanel>
+        <!-- TOOLBAR -->
+        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Content="&lt; Sett. Prec." Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Click="BtnPrevWeek_Click"/>
+                    <TextBlock x:Name="txtWeekLabel" Text="" FontSize="14" FontWeight="SemiBold" Foreground="#1A1D26" VerticalAlignment="Center" Margin="16,0"/>
+                    <Button Content="Sett. Succ. &gt;" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Click="BtnNextWeek_Click"/>
+                    <Button Content="Oggi" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnToday_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <Button Content="+ Aggiungi Ore" Background="#4F6EF7" Foreground="White" Style="{StaticResource FlatBtn}" Click="BtnAdd_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- STATUS -->
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,6">
+            <TextBlock x:Name="txtStatus" Text="" FontSize="12" Foreground="#6B7280"/>
+        </Border>
+
+        <!-- ENTRIES GRID -->
+        <DataGrid x:Name="dgEntries" AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single" Background="White" BorderThickness="0"
+                  GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
+                  RowHeight="38" ColumnHeaderHeight="38" FontSize="13">
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#F9FAFB"/><Setter Property="Foreground" Value="#6B7280"/>
+                    <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="12,0"/><Setter Property="BorderBrush" Value="#E4E7EC"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="White"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#EEF2FF"/></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F9FAFB"/></Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Padding" Value="12,0"/><Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="DataGridCell">
+                                <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="#1A1D26"/></Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.CellStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Data" Binding="{Binding WorkDate, StringFormat='{}{0:ddd dd/MM}'}" Width="110"/>
+                <DataGridTextColumn Header="Commessa / Fase" Binding="{Binding PhaseDisplay}" Width="*"/>
+                <DataGridTextColumn Header="Ore" Binding="{Binding Hours, StringFormat='{}{0:N1}'}" Width="70"/>
+                <DataGridTextColumn Header="Tipo" Binding="{Binding EntryType}" Width="90"/>
+                <DataGridTextColumn Header="Note" Binding="{Binding Notes}" Width="200"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Page>

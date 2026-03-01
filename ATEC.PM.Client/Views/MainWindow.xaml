@@ -1,0 +1,97 @@
+<Window x:Class="ATEC.PM.Client.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ATEC PM - Gestione Commesse" Width="1280" Height="800"
+        MinWidth="1024" MinHeight="600" WindowStartupLocation="CenterScreen"
+        WindowState="Maximized" Background="#F7F8FA">
+
+    <Window.Resources>
+        <Style x:Key="NavBtn" TargetType="Button">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#9CA3AF"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#2A2D36"/>
+                                <Setter Property="Foreground" Value="#E5E7EB"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- SIDEBAR -->
+        <Border Grid.Column="0" Background="#1A1D26">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="16,20,16,24">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Background="#4F6EF7" Width="32" Height="32">
+                            <TextBlock Text="A" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="ATEC PM" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                    <Border Height="1" Background="#2A2D36" Margin="0,16,0,0"/>
+                </StackPanel>
+
+                <Border DockPanel.Dock="Bottom" BorderBrush="#2A2D36" BorderThickness="0,1,0,0" Padding="16,12">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Background="#4F6EF7" Width="34" Height="34">
+                            <TextBlock x:Name="txtInitials" Foreground="White" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="txtUserName" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="txtRole" Foreground="#6B7280" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Margin="8,0">
+                    <TextBlock Text="PRINCIPALE" FontSize="11" FontWeight="SemiBold" Foreground="#4A4D56" Margin="12,0,0,8"/>
+                    <Button Content="  Dashboard" Tag="Dashboard" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Commesse" Tag="Commesse" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Timesheet" Tag="Timesheet" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Documenti" Tag="Documenti" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+
+                    <TextBlock Text="GESTIONE" FontSize="11" FontWeight="SemiBold" Foreground="#4A4D56" Margin="12,24,0,8"/>
+                    <Button Content="  Dipendenti" Tag="Dipendenti" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Clienti" Tag="Clienti" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Fornitori" Tag="Fornitori" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+
+                    <TextBlock Text="REPORT" FontSize="11" FontWeight="SemiBold" Foreground="#4A4D56" Margin="12,24,0,8"/>
+                    <Button Content="  Report" Tag="Report" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                    <Button Content="  Impostazioni" Tag="Impostazioni" Click="Nav_Click" Style="{StaticResource NavBtn}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- MAIN CONTENT -->
+        <Border Grid.Column="1">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="24,12">
+                    <TextBlock x:Name="txtPageTitle" Text="Dashboard" FontSize="20" FontWeight="Bold" Foreground="#1A1D26"/>
+                </Border>
+                <Frame x:Name="PageContent" NavigationUIVisibility="Hidden" Margin="24"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
