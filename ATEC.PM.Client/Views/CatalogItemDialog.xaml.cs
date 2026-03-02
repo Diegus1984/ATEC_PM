@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
+using System.Linq;
 
 namespace ATEC.PM.Client.Views;
 
@@ -29,7 +30,7 @@ public partial class CatalogItemDialog : Window
         try
         {
             string json = await ApiClient.GetAsync("/api/suppliers");
-            JsonDocument doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 var suppliers = JsonSerializer.Deserialize<List<LookupItem>>(
@@ -50,58 +51,79 @@ public partial class CatalogItemDialog : Window
         try
         {
             string json = await ApiClient.GetAsync($"/api/catalog/{_id}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                JsonElement d = doc.RootElement.GetProperty("data");
-                txtCode.Text = d.GetProperty("code").GetString() ?? "";
-                txtDescription.Text = d.GetProperty("description").GetString() ?? "";
-                txtCategory.Text = d.GetProperty("category").GetString() ?? "";
-                txtSubcategory.Text = d.GetProperty("subcategory").GetString() ?? "";
-                txtUnit.Text = d.GetProperty("unit").GetString() ?? "PZ";
-                txtUnitCost.Text = d.GetProperty("unitCost").GetDecimal().ToString(CultureInfo.InvariantCulture);
-                txtListPrice.Text = d.GetProperty("listPrice").GetDecimal().ToString(CultureInfo.InvariantCulture);
-                txtSupplierCode.Text = d.GetProperty("supplierCode").GetString() ?? "";
-                txtManufacturer.Text = d.GetProperty("manufacturer").GetString() ?? "";
-                txtBarcode.Text = d.GetProperty("barcode").GetString() ?? "";
-                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
+            using var doc = JsonDocument.Parse(json);
 
-                int suppId = d.GetProperty("supplierId").ValueKind == JsonValueKind.Null ? 0 : d.GetProperty("supplierId").GetInt32();
-                foreach (LookupItem item in cmbSupplier.Items)
+            // Verifichiamo il successo della risposta API 
+            if (doc.RootElement.TryGetProperty("success", out var success) && success.GetBoolean())
+            {
+                // Il contenuto reale è dentro la proprietà "data" 
+                var data = doc.RootElement.GetProperty("data");
+
+                // Mappatura campi con i nomi corretti del DB 
+                txtCode.Text = data.TryGetProperty("code", out var c) ? c.GetString() : "";
+                txtDescription.Text = data.TryGetProperty("description", out var d) ? d.GetString() : "";
+                txtCategory.Text = data.TryGetProperty("category", out var cat) ? cat.GetString() : "";
+                txtSubcategory.Text = data.TryGetProperty("subcategory", out var sub) ? sub.GetString() : "";
+                txtUnit.Text = data.TryGetProperty("unit", out var u) ? u.GetString() : "PZ";
+
+                // Gestione dei decimali 
+                if (data.TryGetProperty("unitCost", out var uc))
+                    txtUnitCost.Text = uc.GetDecimal().ToString("N4");
+
+                if (data.TryGetProperty("listPrice", out var lp))
+                    txtListPrice.Text = lp.GetDecimal().ToString("N4");
+
+                txtSupplierCode.Text = data.TryGetProperty("supplierCode", out var sc) ? sc.GetString() : "";
+                txtManufacturer.Text = data.TryGetProperty("manufacturer", out var m) ? m.GetString() : "";
+                txtBarcode.Text = data.TryGetProperty("barcode", out var b) ? b.GetString() : "";
+                txtNotes.Text = data.TryGetProperty("notes", out var n) ? n.GetString() : "";
+
+                // Selezione del fornitore 
+                if (data.TryGetProperty("supplierId", out var sid) && sid.ValueKind != JsonValueKind.Null)
                 {
-                    if (item.Id == suppId) { cmbSupplier.SelectedItem = item; break; }
+                    int targetId = sid.GetInt32();
+                    var items = cmbSupplier.ItemsSource as List<LookupItem>;
+                    cmbSupplier.SelectedItem = items?.FirstOrDefault(i => i.Id == targetId);
                 }
             }
         }
-        catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
+        catch (Exception ex)
+        {
+            txtError.Text = "Errore nel caricamento: " + ex.Message;
+        }
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(txtCode.Text))
-        { txtError.Text = "Codice obbligatorio."; return; }
+        if (string.IsNullOrWhiteSpace(txtCode.Text) || string.IsNullOrWhiteSpace(txtDescription.Text))
+        {
+            txtError.Text = "Codice e Descrizione sono obbligatori.";
+            return;
+        }
 
         btnSave.IsEnabled = false;
         try
         {
-            int suppId = cmbSupplier.SelectedItem is LookupItem li ? li.Id : 0;
-            decimal.TryParse(txtUnitCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal unitCost);
-            decimal.TryParse(txtListPrice.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal listPrice);
+            int suppId = (cmbSupplier.SelectedItem as LookupItem)?.Id ?? 0;
+
+            // Parsing numeri sicuro
+            decimal.TryParse(txtUnitCost.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal unitCost);
+            decimal.TryParse(txtListPrice.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal listPrice);
 
             var obj = new
             {
-                code = txtCode.Text,
-                description = txtDescription.Text,
-                category = txtCategory.Text,
-                subcategory = txtSubcategory.Text,
-                unit = txtUnit.Text,
+                code = txtCode.Text.Trim(),
+                description = txtDescription.Text.Trim(),
+                category = txtCategory.Text.Trim(),
+                subcategory = txtSubcategory.Text.Trim(),
+                unit = txtUnit.Text.Trim(),
                 unitCost,
                 listPrice,
                 supplierId = suppId > 0 ? suppId : (int?)null,
-                supplierCode = txtSupplierCode.Text,
-                manufacturer = txtManufacturer.Text,
-                barcode = txtBarcode.Text,
-                notes = txtNotes.Text,
+                supplierCode = txtSupplierCode.Text.Trim(),
+                manufacturer = txtManufacturer.Text.Trim(),
+                barcode = txtBarcode.Text.Trim(),
+                notes = txtNotes.Text.Trim(),
                 isActive = true
             };
 
@@ -109,14 +131,31 @@ public partial class CatalogItemDialog : Window
             string result = _id == 0
                 ? await ApiClient.PostAsync("/api/catalog", jsonBody)
                 : await ApiClient.PutAsync($"/api/catalog/{_id}", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
+
+            using var doc = JsonDocument.Parse(result);
             if (doc.RootElement.GetProperty("success").GetBoolean())
-            { DialogResult = true; Close(); }
-            else txtError.Text = doc.RootElement.GetProperty("message").GetString();
+            {
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+            }
         }
-        catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
-        finally { btnSave.IsEnabled = true; }
+        catch (Exception ex)
+        {
+            txtError.Text = $"Errore: {ex.Message}";
+        }
+        finally
+        {
+            btnSave.IsEnabled = true;
+        }
     }
 
-    private void BtnCancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+    private void BtnCancel_Click(object sender, RoutedEventArgs e)
+    {
+        DialogResult = false;
+        Close();
+    }
 }
