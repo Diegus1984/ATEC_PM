@@ -153,6 +153,48 @@ public class ImportController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Anteprima generica di una tabella Easyfatt (per esplorazione)
+    /// </summary>
+    [HttpGet("easyfatt/preview")]
+    public IActionResult PreviewTable([FromQuery] string filePath, [FromQuery] string tableName, [FromQuery] int maxRows = 10)
+    {
+        if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(tableName))
+            return BadRequest("filePath e tableName richiesti");
+
+        try
+        {
+            var connStr = BuildConnectionString(filePath);
+            using var conn = new FbConnection(connStr);
+            conn.Open();
+
+            using var cmd = new FbCommand($"SELECT FIRST {maxRows} * FROM \"{tableName}\"", conn);
+            using var reader = cmd.ExecuteReader();
+
+            var columns = new List<string>();
+            for (int i = 0; i < reader.FieldCount; i++)
+                columns.Add(reader.GetName(i));
+
+            var rows = new List<Dictionary<string, object?>>();
+            while (reader.Read())
+            {
+                var dict = new Dictionary<string, object?>();
+                foreach (var col in columns)
+                {
+                    var val = reader[col];
+                    dict[col] = val == DBNull.Value ? null : val;
+                }
+                rows.Add(dict);
+            }
+
+            return Ok(ApiResponse<object>.Ok(new { Columns = columns, RowCount = rows.Count, Rows = rows }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
     private string BuildConnectionString(string filePath)
     {
         var appDir = AppContext.BaseDirectory;
