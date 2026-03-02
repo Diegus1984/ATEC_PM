@@ -28,6 +28,7 @@
                     <Button Content="+ Nuovo" Background="#4F6EF7" Foreground="White" Style="{StaticResource FlatBtn}" Click="BtnNew_Click"/>
                     <Button x:Name="btnEdit" Content="Modifica" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnEdit_Click" IsEnabled="False"/>
                     <Button x:Name="btnDelete" Content="Elimina" Background="#FEE2E2" Foreground="#DC2626" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnDelete_Click" IsEnabled="False"/>
+                    <Button Content="📥 Importa Easyfatt" Background="#DBEAFE" Foreground="#1D4ED8" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnImportEasyfatt_Click"/>
                 </StackPanel>
                 <Button Content="Aggiorna" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" DockPanel.Dock="Right" HorizontalAlignment="Right" Click="BtnRefresh_Click"/>
             </DockPanel>
@@ -79,6 +80,7 @@
                 <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="180"/>
                 <DataGridTextColumn Header="Telefono" Binding="{Binding Phone}" Width="120"/>
                 <DataGridTextColumn Header="P.IVA" Binding="{Binding VatNumber}" Width="140"/>
+                <DataGridTextColumn Header="C.F." Binding="{Binding FiscalCode}" Width="140"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

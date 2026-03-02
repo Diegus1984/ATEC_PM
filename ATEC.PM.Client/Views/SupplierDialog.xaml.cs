@@ -31,6 +31,7 @@ public partial class SupplierDialog : Window
                 txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
                 txtAddress.Text = d.GetProperty("address").GetString() ?? "";
                 txtVatNumber.Text = d.GetProperty("vatNumber").GetString() ?? "";
+                txtFiscalCode.Text = d.GetProperty("fiscalCode").GetString() ?? "";
                 txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
             }
         }
@@ -45,7 +46,7 @@ public partial class SupplierDialog : Window
         btnSave.IsEnabled = false;
         try
         {
-            var obj = new { companyName = txtCompanyName.Text, contactName = txtContactName.Text, email = txtEmail.Text, phone = txtPhone.Text, address = txtAddress.Text, vatNumber = txtVatNumber.Text, notes = txtNotes.Text, isActive = true };
+            var obj = new { companyName = txtCompanyName.Text, contactName = txtContactName.Text, email = txtEmail.Text, phone = txtPhone.Text, address = txtAddress.Text, vatNumber = txtVatNumber.Text, fiscalCode = txtFiscalCode.Text, notes = txtNotes.Text, isActive = true };
             var jsonBody = JsonSerializer.Serialize(obj);
             var result = _id == 0
                 ? await ApiClient.PostAsync("/api/suppliers", jsonBody)
