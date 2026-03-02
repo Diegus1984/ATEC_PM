@@ -32,7 +32,23 @@ public partial class EasyfattArticlesImportDialog : Window
         {
             string encoded = Uri.EscapeDataString(filePath);
             string json = await ApiClient.GetAsync($"/api/import/easyfatt/articles?filePath={encoded}");
-            JsonDocument doc = JsonDocument.Parse(json);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                txtStatus.Text = "Risposta vuota dal server. Verificare che il server sia avviato.";
+                return;
+            }
+
+            JsonDocument doc;
+            try
+            {
+                doc = JsonDocument.Parse(json);
+            }
+            catch (JsonException)
+            {
+                txtStatus.Text = $"Risposta non valida dal server: {json.Substring(0, Math.Min(json.Length, 200))}";
+                return;
+            }
 
             if (!doc.RootElement.GetProperty("success").GetBoolean())
             {
