@@ -1,20 +1,29 @@
-<Page x:Class="ATEC.PM.Client.Views.SuppliersPage"
-      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="#F7F8FA">
+<Page
+    x:Class="ATEC.PM.Client.Views.SuppliersPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
     <Page.Resources>
         <Style x:Key="FlatBtn" TargetType="Button">
-            <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="16,0"/>
-            <Setter Property="FontSize" Value="13"/><Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/><Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border
+                            x:Name="bd"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Opacity" Value="0.85"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -22,65 +31,151 @@
         </Style>
     </Page.Resources>
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,10">
+        <Border
+            Padding="16,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
             <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                    <Button Content="+ Nuovo" Background="#4F6EF7" Foreground="White" Style="{StaticResource FlatBtn}" Click="BtnNew_Click"/>
-                    <Button x:Name="btnEdit" Content="Modifica" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnEdit_Click" IsEnabled="False"/>
-                    <Button x:Name="btnDelete" Content="Elimina" Background="#FEE2E2" Foreground="#DC2626" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnDelete_Click" IsEnabled="False"/>
-                    <Button Content="📥 Importa Easyfatt" Background="#DBEAFE" Foreground="#1D4ED8" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnImportEasyfatt_Click"/>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button
+                        Background="#4F6EF7"
+                        Click="BtnNew_Click"
+                        Content="+ Nuovo"
+                        Foreground="White"
+                        Style="{StaticResource FlatBtn}" />
+                    <Button
+                        x:Name="btnEdit"
+                        Margin="8,0,0,0"
+                        Background="#F3F4F6"
+                        Click="BtnEdit_Click"
+                        Content="Modifica"
+                        Foreground="#374151"
+                        IsEnabled="False"
+                        Style="{StaticResource FlatBtn}" />
+                    <Button
+                        x:Name="btnDelete"
+                        Margin="8,0,0,0"
+                        Background="#FEE2E2"
+                        Click="BtnDelete_Click"
+                        Content="Elimina"
+                        Foreground="#DC2626"
+                        IsEnabled="False"
+                        Style="{StaticResource FlatBtn}" />
+                    <Button
+                        Margin="8,0,0,0"
+                        Background="#DBEAFE"
+                        Click="BtnImportEasyfatt_Click"
+                        Content="📥 Importa Easyfatt"
+                        Foreground="#1D4ED8"
+                        Style="{StaticResource FlatBtn}" />
                 </StackPanel>
-                <Button Content="Aggiorna" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" DockPanel.Dock="Right" HorizontalAlignment="Right" Click="BtnRefresh_Click"/>
+                <Button
+                    HorizontalAlignment="Right"
+                    Background="#F3F4F6"
+                    Click="BtnRefresh_Click"
+                    Content="Aggiorna"
+                    DockPanel.Dock="Right"
+                    Foreground="#374151"
+                    Style="{StaticResource FlatBtn}" />
             </DockPanel>
         </Border>
-        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,6">
-            <TextBlock x:Name="txtStatus" Text="Caricamento..." FontSize="12" Foreground="#6B7280"/>
+        <Border
+            Padding="16,6"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <TextBlock
+                x:Name="txtStatus"
+                FontSize="12"
+                Foreground="#6B7280"
+                Text="Caricamento..." />
         </Border>
-        <DataGrid x:Name="dgSuppliers" AutoGenerateColumns="False" IsReadOnly="True"
-                  SelectionMode="Single" SelectionChanged="Dg_SelectionChanged" MouseDoubleClick="Dg_DoubleClick"
-                  Background="White" BorderThickness="0" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
-                  RowHeight="40" ColumnHeaderHeight="40" FontSize="13">
+        <DataGrid
+            x:Name="dgSuppliers"
+            AutoGenerateColumns="False"
+            Background="White"
+            BorderThickness="0"
+            ColumnHeaderHeight="40"
+            FontSize="13"
+            GridLinesVisibility="Horizontal"
+            HorizontalGridLinesBrush="#F3F4F6"
+            IsReadOnly="True"
+            MouseDoubleClick="Dg_DoubleClick"
+            RowHeight="40"
+            SelectionChanged="Dg_SelectionChanged"
+            SelectionMode="Single">
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="#F9FAFB"/><Setter Property="Foreground" Value="#6B7280"/>
-                    <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
-                    <Setter Property="Padding" Value="12,0"/><Setter Property="BorderBrush" Value="#E4E7EC"/>
-                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                    <Setter Property="Background" Value="#F9FAFB" />
+                    <Setter Property="Foreground" Value="#6B7280" />
+                    <Setter Property="FontSize" Value="12" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Padding" Value="12,0" />
+                    <Setter Property="BorderBrush" Value="#E4E7EC" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
                 </Style>
             </DataGrid.ColumnHeaderStyle>
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="White"/>
+                    <Setter Property="Background" Value="White" />
                     <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#EEF2FF"/></Trigger>
-                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F9FAFB"/></Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#EEF2FF" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#F9FAFB" />
+                        </Trigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.CellStyle>
                 <Style TargetType="DataGridCell">
-                    <Setter Property="Padding" Value="12,0"/><Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Padding" Value="12,0" />
+                    <Setter Property="BorderThickness" Value="0" />
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="DataGridCell">
                                 <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                    <ContentPresenter VerticalAlignment="Center"/>
+                                    <ContentPresenter VerticalAlignment="Center" />
                                 </Border>
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
                     <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="#1A1D26"/></Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Foreground" Value="#1A1D26" />
+                        </Trigger>
                     </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Ragione Sociale" Binding="{Binding CompanyName}" Width="*"/>
-                <DataGridTextColumn Header="Referente" Binding="{Binding ContactName}" Width="160"/>
-                <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="180"/>
-                <DataGridTextColumn Header="Telefono" Binding="{Binding Phone}" Width="120"/>
-                <DataGridTextColumn Header="P.IVA" Binding="{Binding VatNumber}" Width="140"/>
-                <DataGridTextColumn Header="C.F." Binding="{Binding FiscalCode}" Width="140"/>
+                <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding CompanyName}"
+                    Header="Ragione Sociale" />
+                <DataGridTextColumn
+                    Width="160"
+                    Binding="{Binding ContactName}"
+                    Header="Referente" />
+                <DataGridTextColumn
+                    Width="180"
+                    Binding="{Binding Email}"
+                    Header="Email" />
+                <DataGridTextColumn
+                    Width="120"
+                    Binding="{Binding Phone}"
+                    Header="Telefono" />
+                <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding VatNumber}"
+                    Header="P.IVA" />
+                <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding FiscalCode}"
+                    Header="C.F." />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

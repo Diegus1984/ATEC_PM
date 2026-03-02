@@ -1,31 +1,104 @@
-<Window x:Class="ATEC.PM.Client.Views.LoginWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ATEC PM - Login" MinWidth="400" MinHeight="480"
-        WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Background="#F7F8FA">
+<Window
+    x:Class="ATEC.PM.Client.Views.LoginWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ATEC PM - Login"
+    MinWidth="400"
+    MinHeight="480"
+    Background="#F7F8FA"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterScreen">
     <Grid>
-        <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="40" Padding="32">
+        <Border
+            Margin="40"
+            Padding="32"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="1">
             <StackPanel VerticalAlignment="Center">
-                <Border Background="#1A1D26" Width="48" Height="48" Margin="0,0,0,16" HorizontalAlignment="Center">
-                    <TextBlock Text="A" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border
+                    Width="48"
+                    Height="48"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Center"
+                    Background="#1A1D26">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="22"
+                        FontWeight="Bold"
+                        Foreground="White"
+                        Text="A" />
                 </Border>
-                <TextBlock Text="ATEC PM" FontSize="22" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center"/>
-                <TextBlock Text="Gestione Commesse" FontSize="13" Foreground="#6B7280" HorizontalAlignment="Center" Margin="0,4,0,28"/>
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="22"
+                    FontWeight="Bold"
+                    Foreground="#1A1D26"
+                    Text="ATEC PM" />
+                <TextBlock
+                    Margin="0,4,0,28"
+                    HorizontalAlignment="Center"
+                    FontSize="13"
+                    Foreground="#6B7280"
+                    Text="Gestione Commesse" />
 
-                <TextBlock Text="SERVER" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Margin="0,0,0,6"/>
-                <TextBox x:Name="txtServer" Text="http://localhost:5100" Height="36" Padding="8,6" BorderBrush="#E4E7EC"/>
+                <TextBlock
+                    Margin="0,0,0,6"
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    Foreground="#9CA3AF"
+                    Text="SERVER" />
+                <TextBox
+                    x:Name="txtServer"
+                    Height="36"
+                    Padding="8,6"
+                    BorderBrush="#E4E7EC"
+                    Text="http://localhost:5100" />
 
-                <TextBlock Text="UTENTE" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Margin="0,16,0,6"/>
-                <TextBox x:Name="txtUsername" Height="36" Padding="8,6" BorderBrush="#E4E7EC"/>
+                <TextBlock
+                    Margin="0,16,0,6"
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    Foreground="#9CA3AF"
+                    Text="UTENTE" />
+                <TextBox
+                    x:Name="txtUsername"
+                    Height="36"
+                    Padding="8,6"
+                    BorderBrush="#E4E7EC" />
 
-                <TextBlock Text="PASSWORD" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Margin="0,16,0,6"/>
-                <PasswordBox x:Name="txtPassword" Height="36" Padding="8,6" BorderBrush="#E4E7EC"/>
+                <TextBlock
+                    Margin="0,16,0,6"
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    Foreground="#9CA3AF"
+                    Text="PASSWORD" />
+                <PasswordBox
+                    x:Name="txtPassword"
+                    Height="36"
+                    Padding="8,6"
+                    BorderBrush="#E4E7EC" />
 
-                <TextBlock x:Name="txtError" Foreground="#EF4444" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                <TextBlock
+                    x:Name="txtError"
+                    Margin="0,12,0,0"
+                    FontSize="12"
+                    Foreground="#EF4444"
+                    TextWrapping="Wrap" />
 
-                <Button x:Name="btnLogin" Content="Accedi" Height="40" Margin="0,20,0,0"
-                        Background="#4F6EF7" Foreground="White" FontSize="15" FontWeight="SemiBold"
-                        BorderThickness="0" Cursor="Hand" Click="BtnLogin_Click"/>
+                <Button
+                    x:Name="btnLogin"
+                    Height="40"
+                    Margin="0,20,0,0"
+                    Background="#4F6EF7"
+                    BorderThickness="0"
+                    Click="BtnLogin_Click"
+                    Content="Accedi"
+                    Cursor="Hand"
+                    FontSize="15"
+                    FontWeight="SemiBold"
+                    Foreground="White" />
             </StackPanel>
         </Border>
     </Grid>

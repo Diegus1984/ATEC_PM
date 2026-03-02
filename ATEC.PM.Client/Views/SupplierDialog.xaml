@@ -1,62 +1,111 @@
-<Window x:Class="ATEC.PM.Client.Views.SupplierDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Fornitore" Width="480" Height="570"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F7F8FA">
+<Window
+    x:Class="ATEC.PM.Client.Views.SupplierDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Fornitore"
+    Width="480"
+    Height="570"
+    Background="#F7F8FA"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <Style x:Key="Lbl" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#6B7280"/><Setter Property="Margin" Value="0,12,0,4"/>
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="Margin" Value="0,12,0,4" />
         </Style>
         <Style x:Key="Inp" TargetType="TextBox">
-            <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="8,6"/>
-            <Setter Property="FontSize" Value="13"/><Setter Property="BorderBrush" Value="#E4E7EC"/>
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
         </Style>
     </Window.Resources>
     <DockPanel>
-        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,12">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Annulla" Width="90" Height="34" Background="#F3F4F6" Foreground="#374151" BorderThickness="0" Cursor="Hand" Click="BtnCancel_Click"/>
-                <Button x:Name="btnSave" Content="Salva" Width="90" Height="34" Background="#4F6EF7" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0" Click="BtnSave_Click"/>
+        <Border
+            Padding="16,12"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                <Button
+                    Width="90"
+                    Height="34"
+                    Background="#F3F4F6"
+                    BorderThickness="0"
+                    Click="BtnCancel_Click"
+                    Content="Annulla"
+                    Cursor="Hand"
+                    Foreground="#374151" />
+                <Button
+                    x:Name="btnSave"
+                    Width="90"
+                    Height="34"
+                    Margin="8,0,0,0"
+                    Background="#4F6EF7"
+                    BorderThickness="0"
+                    Click="BtnSave_Click"
+                    Content="Salva"
+                    Cursor="Hand"
+                    FontWeight="SemiBold"
+                    Foreground="White" />
             </StackPanel>
         </Border>
         <ScrollViewer Padding="24,8,24,16">
             <StackPanel>
-                <TextBlock Text="RAGIONE SOCIALE *" Style="{StaticResource Lbl}"/>
-                <TextBox x:Name="txtCompanyName" Style="{StaticResource Inp}"/>
+                <TextBlock Style="{StaticResource Lbl}" Text="RAGIONE SOCIALE *" />
+                <TextBox x:Name="txtCompanyName" Style="{StaticResource Inp}" />
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="REFERENTE" Style="{StaticResource Lbl}"/>
-                        <TextBox x:Name="txtContactName" Style="{StaticResource Inp}"/>
+                        <TextBlock Style="{StaticResource Lbl}" Text="REFERENTE" />
+                        <TextBox x:Name="txtContactName" Style="{StaticResource Inp}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
-                        <TextBlock Text="P.IVA" Style="{StaticResource Lbl}"/>
-                        <TextBox x:Name="txtVatNumber" Style="{StaticResource Inp}"/>
+                        <TextBlock Style="{StaticResource Lbl}" Text="P.IVA" />
+                        <TextBox x:Name="txtVatNumber" Style="{StaticResource Inp}" />
                     </StackPanel>
                 </Grid>
-                <TextBlock Text="CODICE FISCALE" Style="{StaticResource Lbl}"/>
-                <TextBox x:Name="txtFiscalCode" Style="{StaticResource Inp}"/>
+                <TextBlock Style="{StaticResource Lbl}" Text="CODICE FISCALE" />
+                <TextBox x:Name="txtFiscalCode" Style="{StaticResource Inp}" />
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="EMAIL" Style="{StaticResource Lbl}"/>
-                        <TextBox x:Name="txtEmail" Style="{StaticResource Inp}"/>
+                        <TextBlock Style="{StaticResource Lbl}" Text="EMAIL" />
+                        <TextBox x:Name="txtEmail" Style="{StaticResource Inp}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
-                        <TextBlock Text="TELEFONO" Style="{StaticResource Lbl}"/>
-                        <TextBox x:Name="txtPhone" Style="{StaticResource Inp}"/>
+                        <TextBlock Style="{StaticResource Lbl}" Text="TELEFONO" />
+                        <TextBox x:Name="txtPhone" Style="{StaticResource Inp}" />
                     </StackPanel>
                 </Grid>
-                <TextBlock Text="INDIRIZZO" Style="{StaticResource Lbl}"/>
-                <TextBox x:Name="txtAddress" Style="{StaticResource Inp}"/>
-                <TextBlock Text="NOTE" Style="{StaticResource Lbl}"/>
-                <TextBox x:Name="txtNotes" Height="60" AcceptsReturn="True" TextWrapping="Wrap" Padding="8,6" FontSize="13" BorderBrush="#E4E7EC"/>
-                <TextBlock x:Name="txtError" Foreground="#EF4444" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                <TextBlock Style="{StaticResource Lbl}" Text="INDIRIZZO" />
+                <TextBox x:Name="txtAddress" Style="{StaticResource Inp}" />
+                <TextBlock Style="{StaticResource Lbl}" Text="NOTE" />
+                <TextBox
+                    x:Name="txtNotes"
+                    Height="60"
+                    Padding="8,6"
+                    AcceptsReturn="True"
+                    BorderBrush="#E4E7EC"
+                    FontSize="13"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="txtError"
+                    Margin="0,12,0,0"
+                    FontSize="12"
+                    Foreground="#EF4444"
+                    TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

@@ -1,81 +1,202 @@
-<Page x:Class="ATEC.PM.Client.Views.DashboardPage"
-      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="#F7F8FA">
+<Page
+    x:Class="ATEC.PM.Client.Views.DashboardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
     <ScrollViewer Padding="0,0,0,16">
         <StackPanel>
-            <!-- STAT CARDS -->
-            <UniformGrid Columns="4" Margin="0,0,0,24">
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,12,0" Padding="20">
+            <!--  STAT CARDS  -->
+            <UniformGrid Margin="0,0,0,24" Columns="4">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="COMMESSE ATTIVE" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtActiveProjects" Text="-" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="COMMESSE ATTIVE" />
+                        <TextBlock
+                            x:Name="txtActiveProjects"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,12,0" Padding="20">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="ORE QUESTA SETTIMANA" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtHoursWeek" Text="-" FontSize="28" FontWeight="Bold" Foreground="#4F6EF7" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="ORE QUESTA SETTIMANA" />
+                        <TextBlock
+                            x:Name="txtHoursWeek"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#4F6EF7"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,12,0" Padding="20">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="ORE QUESTO MESE" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtHoursMonth" Text="-" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="ORE QUESTO MESE" />
+                        <TextBlock
+                            x:Name="txtHoursMonth"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Padding="20">
+                <Border
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="RICAVO TOTALE" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtRevenue" Text="-" FontSize="28" FontWeight="Bold" Foreground="#10B981" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="RICAVO TOTALE" />
+                        <TextBlock
+                            x:Name="txtRevenue"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#10B981"
+                            Text="-" />
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
-            <!-- SECOND ROW -->
-            <UniformGrid Columns="3" Margin="0,0,0,24">
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,12,0" Padding="20">
+            <!--  SECOND ROW  -->
+            <UniformGrid Margin="0,0,0,24" Columns="3">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="DIPENDENTI ATTIVI" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtEmployees" Text="-" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="DIPENDENTI ATTIVI" />
+                        <TextBlock
+                            x:Name="txtEmployees"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,12,0" Padding="20">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="CLIENTI" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtCustomers" Text="-" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="CLIENTI" />
+                        <TextBlock
+                            x:Name="txtCustomers"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Padding="20">
+                <Border
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="COMMESSE BOZZA" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF"/>
-                        <TextBlock x:Name="txtDraftProjects" Text="-" FontSize="28" FontWeight="Bold" Foreground="#F59E0B" Margin="0,4,0,0"/>
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="COMMESSE BOZZA" />
+                        <TextBlock
+                            x:Name="txtDraftProjects"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#F59E0B"
+                            Text="-" />
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
-            <!-- RECENT PROJECTS -->
-            <TextBlock Text="Commesse Recenti" FontSize="16" FontWeight="Bold" Foreground="#1A1D26" Margin="0,0,0,12"/>
-            <DataGrid x:Name="dgRecent" AutoGenerateColumns="False" IsReadOnly="True"
-                      Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
-                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
-                      RowHeight="38" ColumnHeaderHeight="38" FontSize="13">
+            <!--  RECENT PROJECTS  -->
+            <TextBlock
+                Margin="0,0,0,12"
+                FontSize="16"
+                FontWeight="Bold"
+                Foreground="#1A1D26"
+                Text="Commesse Recenti" />
+            <DataGrid
+                x:Name="dgRecent"
+                AutoGenerateColumns="False"
+                Background="White"
+                BorderBrush="#E4E7EC"
+                BorderThickness="1"
+                ColumnHeaderHeight="38"
+                FontSize="13"
+                GridLinesVisibility="Horizontal"
+                HorizontalGridLinesBrush="#F3F4F6"
+                IsReadOnly="True"
+                RowHeight="38">
                 <DataGrid.ColumnHeaderStyle>
                     <Style TargetType="DataGridColumnHeader">
-                        <Setter Property="Background" Value="#F9FAFB"/><Setter Property="Foreground" Value="#6B7280"/>
-                        <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
-                        <Setter Property="Padding" Value="12,0"/><Setter Property="BorderBrush" Value="#E4E7EC"/>
-                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        <Setter Property="Background" Value="#F9FAFB" />
+                        <Setter Property="Foreground" Value="#6B7280" />
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                        <Setter Property="Padding" Value="12,0" />
+                        <Setter Property="BorderBrush" Value="#E4E7EC" />
+                        <Setter Property="BorderThickness" Value="0,0,0,1" />
                     </Style>
                 </DataGrid.ColumnHeaderStyle>
                 <DataGrid.CellStyle>
                     <Style TargetType="DataGridCell">
-                        <Setter Property="Padding" Value="12,0"/><Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="12,0" />
+                        <Setter Property="BorderThickness" Value="0" />
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="DataGridCell">
                                     <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                        <ContentPresenter VerticalAlignment="Center"/>
+                                        <ContentPresenter VerticalAlignment="Center" />
                                     </Border>
                                 </ControlTemplate>
                             </Setter.Value>
@@ -83,12 +204,30 @@
                     </Style>
                 </DataGrid.CellStyle>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Codice" Binding="{Binding Code}" Width="100"/>
-                    <DataGridTextColumn Header="Titolo" Binding="{Binding Title}" Width="*"/>
-                    <DataGridTextColumn Header="Cliente" Binding="{Binding CustomerName}" Width="160"/>
-                    <DataGridTextColumn Header="Stato" Binding="{Binding Status}" Width="90"/>
-                    <DataGridTextColumn Header="Ore Fatte" Binding="{Binding HoursWorked, StringFormat='{}{0:N1}'}" Width="80"/>
-                    <DataGridTextColumn Header="Ore Prev." Binding="{Binding BudgetHours}" Width="80"/>
+                    <DataGridTextColumn
+                        Width="100"
+                        Binding="{Binding Code}"
+                        Header="Codice" />
+                    <DataGridTextColumn
+                        Width="*"
+                        Binding="{Binding Title}"
+                        Header="Titolo" />
+                    <DataGridTextColumn
+                        Width="160"
+                        Binding="{Binding CustomerName}"
+                        Header="Cliente" />
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding Status}"
+                        Header="Stato" />
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding HoursWorked, StringFormat='{}{0:N1}'}"
+                        Header="Ore Fatte" />
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding BudgetHours}"
+                        Header="Ore Prev." />
                 </DataGrid.Columns>
             </DataGrid>
         </StackPanel>
