@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
@@ -8,8 +13,9 @@ namespace ATEC.PM.Client.Views;
 
 public partial class SuppliersPage : Page
 {
-    private List<SupplierListItem> _allSuppliers = new();
-    private List<SupplierListItem> _suppliers = new();
+    private List<SupplierListItem> _allItems = new();
+    private Dictionary<string, TextBox> _filterBoxes = new();
+    private CancellationTokenSource? _filterCts;
 
     public SuppliersPage()
     {
@@ -22,43 +28,59 @@ public partial class SuppliersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            var json = await ApiClient.GetAsync("/api/suppliers");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            string json = await ApiClient.GetAsync("/api/suppliers");
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var response = JsonSerializer.Deserialize<ApiResponse<List<SupplierListItem>>>(json, options);
+
+            if (response != null && response.Success)
             {
-                _allSuppliers = JsonSerializer.Deserialize<List<SupplierListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                _allItems = response.Data ?? new();
                 ApplyFilter();
             }
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
 
-    private void ApplyFilter()
+    private void Filter_Loaded(object sender, RoutedEventArgs e)
     {
-        string filter = txtSearch.Text.Trim().ToLower();
-        List<SupplierListItem> filtered = string.IsNullOrEmpty(filter)
-            ? _allSuppliers
-            : _allSuppliers.Where(s =>
-                (s.CompanyName?.ToLower().Contains(filter) ?? false) ||
-                (s.ContactName?.ToLower().Contains(filter) ?? false) ||
-                (s.Email?.ToLower().Contains(filter) ?? false) ||
-                (s.Phone?.ToLower().Contains(filter) ?? false) ||
-                (s.VatNumber?.ToLower().Contains(filter) ?? false) ||
-                (s.FiscalCode?.ToLower().Contains(filter) ?? false)
-            ).ToList();
-
-        _suppliers = filtered;
-        dgSuppliers.ItemsSource = _suppliers;
-        txtStatus.Text = $"{_suppliers.Count} fornitori" + (string.IsNullOrEmpty(filter) ? "" : $" (filtrati da {_allSuppliers.Count})");
+        if (sender is TextBox tb && tb.Tag != null)
+            _filterBoxes[tb.Tag.ToString()!] = tb;
     }
 
-    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private async void Filter_Changed(object sender, TextChangedEventArgs e)
     {
-        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text)
-            ? Visibility.Visible : Visibility.Collapsed;
-        if (_allSuppliers.Count > 0) ApplyFilter();
+        _filterCts?.Cancel();
+        _filterCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _filterCts.Token);
+            ApplyFilter();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void ApplyFilter()
+    {
+        if (_allItems == null) return;
+
+        string fName = _filterBoxes.GetValueOrDefault("Name")?.Text.Trim().ToLower() ?? "";
+        string fContact = _filterBoxes.GetValueOrDefault("Contact")?.Text.Trim().ToLower() ?? "";
+        string fVat = _filterBoxes.GetValueOrDefault("Vat")?.Text.Trim().ToLower() ?? "";
+
+        var filtered = _allItems.Where(s =>
+            (string.IsNullOrEmpty(fName) || (s.CompanyName?.ToLower().Contains(fName) ?? false)) &&
+            (string.IsNullOrEmpty(fContact) || (s.ContactName?.ToLower().Contains(fContact) ?? false)) &&
+            (string.IsNullOrEmpty(fVat) || (s.VatNumber?.ToLower().Contains(fVat) ?? false))
+        ).ToList();
+
+        dgSuppliers.ItemsSource = filtered;
+        txtStatus.Text = $"{filtered.Count} fornitori trovati su {_allItems.Count}";
+    }
+
+    private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var tb in _filterBoxes.Values) tb.Clear();
+        ApplyFilter();
     }
 
     private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)

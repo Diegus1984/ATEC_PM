@@ -4,41 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#F7F8FA">
 
-    <Page.Resources>
-        <Style x:Key="FlatBtn" TargetType="Button">
-            <Setter Property="Height" Value="34" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border
-                            x:Name="bd"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="HeaderSearchBox" TargetType="TextBox">
-            <Setter Property="Height" Value="24" />
-            <Setter Property="Margin" Value="0,4,0,2" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="BorderBrush" Value="#D1D5DB" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
-    </Page.Resources>
-
     <DockPanel>
         <Border
             Padding="16,10"
@@ -49,49 +14,50 @@
             <DockPanel>
                 <StackPanel Orientation="Horizontal">
                     <Button
-                        Background="#4F6EF7"
+                        Background="#2E90FA"
+                        BorderThickness="0"
                         Click="BtnNew_Click"
                         Content="+ Nuovo"
                         Foreground="White"
                         Style="{StaticResource FlatBtn}" />
                     <Button
                         x:Name="btnEdit"
-                        Margin="8,0"
-                        Background="#F3F4F6"
                         Click="BtnEdit_Click"
                         Content="Modifica"
-                        Foreground="#374151"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
                     <Button
                         x:Name="btnDelete"
-                        Background="#FEE2E2"
+                        Background="#FEF3F2"
+                        BorderBrush="#FECDCA"
                         Click="BtnDelete_Click"
                         Content="Elimina"
-                        Foreground="#DC2626"
+                        Foreground="#B42318"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
+                    <Separator
+                        Width="1"
+                        Margin="4,0"
+                        Background="#E4E7EC" />
                     <Button
-                        Margin="8,0"
-                        Background="#DBEAFE"
+                        Background="#12B76A"
                         Click="BtnImportEasyfatt_Click"
                         Content="📥 Importa Easyfatt"
-                        Foreground="#1D4ED8"
+                        Foreground="White"
                         Style="{StaticResource FlatBtn}" />
                 </StackPanel>
+
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <Button
-                        Margin="0,0,8,0"
                         Background="Transparent"
+                        BorderThickness="0"
                         Click="BtnClearFilters_Click"
                         Content="Reset Filtri"
-                        Foreground="#6B7280"
+                        Foreground="#667085"
                         Style="{StaticResource FlatBtn}" />
                     <Button
-                        Background="#F3F4F6"
                         Click="BtnRefresh_Click"
                         Content="Aggiorna"
-                        Foreground="#374151"
                         Style="{StaticResource FlatBtn}" />
                 </StackPanel>
             </DockPanel>
@@ -106,129 +72,118 @@
             <TextBlock
                 x:Name="txtStatus"
                 FontSize="12"
-                Foreground="#6B7280"
-                Text="Caricamento..." />
+                Foreground="#667085"
+                Text="Pronto" />
         </Border>
 
         <DataGrid
             x:Name="dgCatalog"
-            AutoGenerateColumns="False"
-            Background="White"
-            BorderThickness="0"
+            Margin="16"
             ColumnHeaderHeight="65"
-            FontSize="13"
-            GridLinesVisibility="Horizontal"
-            HorizontalGridLinesBrush="#F3F4F6"
             IsReadOnly="True"
             MouseDoubleClick="Dg_DoubleClick"
-            RowHeight="40"
             SelectionChanged="Dg_SelectionChanged"
-            SelectionMode="Single">
-
-            <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                    <Setter Property="Padding" Value="8,4" />
-                    <Setter Property="Background" Value="#F9FAFB" />
-                </Style>
-            </DataGrid.ColumnHeaderStyle>
+            SelectionMode="Single"
+            Style="{StaticResource ModernDataGrid}">
 
             <DataGrid.Columns>
-                <DataGridTextColumn Width="120" Binding="{Binding Code}">
-                    <DataGridTextColumn.HeaderTemplate>
+                <DataGridTemplateColumn Width="120">
+                    <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition />
-                                    <RowDefinition />
-                                </Grid.RowDefinitions>
+                            <StackPanel>
                                 <TextBlock
                                     FontWeight="Bold"
-                                    Foreground="#6B7280"
+                                    Foreground="#667085"
                                     Text="Codice" />
                                 <TextBox
-                                    Grid.Row="1"
                                     Loaded="Filter_Loaded"
                                     Style="{StaticResource HeaderSearchBox}"
                                     Tag="Code"
-                                    TextChanged="Filter_Changed"
-                                    ToolTip="Cerca codice..." />
-                            </Grid>
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
                         </DataTemplate>
-                    </DataGridTextColumn.HeaderTemplate>
-                </DataGridTextColumn>
-
-                <DataGridTextColumn Width="*" Binding="{Binding Description}">
-                    <DataGridTextColumn.HeaderTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition />
-                                    <RowDefinition />
-                                </Grid.RowDefinitions>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontWeight="Medium"
+                                Text="{Binding Code}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="*">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
                                 <TextBlock
                                     FontWeight="Bold"
-                                    Foreground="#6B7280"
+                                    Foreground="#667085"
                                     Text="Descrizione" />
                                 <TextBox
-                                    Grid.Row="1"
                                     Loaded="Filter_Loaded"
                                     Style="{StaticResource HeaderSearchBox}"
                                     Tag="Desc"
-                                    TextChanged="Filter_Changed"
-                                    ToolTip="Cerca descrizione..." />
-                            </Grid>
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
                         </DataTemplate>
-                    </DataGridTextColumn.HeaderTemplate>
-                </DataGridTextColumn>
-
-                <DataGridTextColumn Width="180" Binding="{Binding SupplierName}">
-                    <DataGridTextColumn.HeaderTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition />
-                                    <RowDefinition />
-                                </Grid.RowDefinitions>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Text="{Binding Description}"
+                                TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="180">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
                                 <TextBlock
                                     FontWeight="Bold"
-                                    Foreground="#6B7280"
+                                    Foreground="#667085"
                                     Text="Fornitore" />
                                 <TextBox
-                                    Grid.Row="1"
                                     Loaded="Filter_Loaded"
                                     Style="{StaticResource HeaderSearchBox}"
                                     Tag="Supp"
-                                    TextChanged="Filter_Changed"
-                                    ToolTip="Filtra fornitore..." />
-                            </Grid>
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
                         </DataTemplate>
-                    </DataGridTextColumn.HeaderTemplate>
-                </DataGridTextColumn>
-
-                <DataGridTextColumn Width="150" Binding="{Binding Manufacturer}">
-                    <DataGridTextColumn.HeaderTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition />
-                                    <RowDefinition />
-                                </Grid.RowDefinitions>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding SupplierName}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="150">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
                                 <TextBlock
                                     FontWeight="Bold"
-                                    Foreground="#6B7280"
+                                    Foreground="#667085"
                                     Text="Produttore" />
                                 <TextBox
-                                    Grid.Row="1"
                                     Loaded="Filter_Loaded"
                                     Style="{StaticResource HeaderSearchBox}"
                                     Tag="Man"
-                                    TextChanged="Filter_Changed"
-                                    ToolTip="Cerca produttore..." />
-                            </Grid>
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
                         </DataTemplate>
-                    </DataGridTextColumn.HeaderTemplate>
-                </DataGridTextColumn>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Manufacturer}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
 
                 <DataGridTextColumn
                     Width="130"
@@ -239,13 +194,27 @@
                     Binding="{Binding Unit}"
                     Header="UdM" />
                 <DataGridTextColumn
-                    Width="90"
+                    Width="100"
                     Binding="{Binding UnitCost, StringFormat='{}{0:N2} €'}"
-                    Header="Acquisto" />
+                    Header="Acquisto">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
                 <DataGridTextColumn
-                    Width="90"
+                    Width="100"
                     Binding="{Binding ListPrice, StringFormat='{}{0:N2} €'}"
-                    Header="Listino" />
+                    Header="Listino">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>
