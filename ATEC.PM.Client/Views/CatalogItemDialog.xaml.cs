@@ -1,9 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks; // Necessario per Task
 using System.Windows;
 using ATEC.PM.Client.Services;
-using ATEC.PM.Shared.DTOs;
-using System.Linq;
+using ATEC.PM.Shared.DTOs; // Assicurati che AllDTOs.cs abbia questo namespace
 
 namespace ATEC.PM.Client.Views;
 
@@ -30,20 +33,30 @@ public partial class CatalogItemDialog : Window
         try
         {
             string json = await ApiClient.GetAsync("/api/suppliers");
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var suppliers = JsonSerializer.Deserialize<List<LookupItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
+            // 1. Leggiamo usando il tipo che il controller invia effettivamente
+            var response = JsonSerializer.Deserialize<ApiResponse<List<SupplierListItem>>>(json, options);
+
+            if (response != null && response.Success && response.Data != null)
+            {
+                // 2. Trasformiamo i SupplierListItem in LookupItem per la ComboBox
                 var items = new List<LookupItem> { new() { Id = 0, Name = "(nessuno)" } };
-                items.AddRange(suppliers.Select(s => new LookupItem { Id = s.Id, Name = s.Name }));
+
+                items.AddRange(response.Data.Select(s => new LookupItem
+                {
+                    Id = s.Id,
+                    Name = s.CompanyName // Qui CompanyName viene mappato su Name
+                }));
+
                 cmbSupplier.ItemsSource = items;
                 cmbSupplier.SelectedIndex = 0;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("Errore caricamento fornitori: " + ex.Message);
+        }
     }
 
     private async Task LoadItem()
@@ -51,45 +64,57 @@ public partial class CatalogItemDialog : Window
         try
         {
             string json = await ApiClient.GetAsync($"/api/catalog/{_id}");
-            using var doc = JsonDocument.Parse(json);
 
-            // Verifichiamo il successo della risposta API 
-            if (doc.RootElement.TryGetProperty("success", out var success) && success.GetBoolean())
+            // CONTROLLO FONDAMENTALE: Se la stringa è vuota, il server ha fallito
+            if (string.IsNullOrWhiteSpace(json))
             {
-                // Il contenuto reale è dentro la proprietà "data" 
-                var data = doc.RootElement.GetProperty("data");
+                txtError.Text = $"Errore: Il server ha restituito una risposta vuota per l'ID {_id}.";
+                return;
+            }
 
-                // Mappatura campi con i nomi corretti del DB 
-                txtCode.Text = data.TryGetProperty("code", out var c) ? c.GetString() : "";
-                txtDescription.Text = data.TryGetProperty("description", out var d) ? d.GetString() : "";
-                txtCategory.Text = data.TryGetProperty("category", out var cat) ? cat.GetString() : "";
-                txtSubcategory.Text = data.TryGetProperty("subcategory", out var sub) ? sub.GetString() : "";
-                txtUnit.Text = data.TryGetProperty("unit", out var u) ? u.GetString() : "PZ";
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-                // Gestione dei decimali 
-                if (data.TryGetProperty("unitCost", out var uc))
-                    txtUnitCost.Text = uc.GetDecimal().ToString("N4");
+            // Proviamo a deserializzare solo se abbiamo del contenuto
+            var response = JsonSerializer.Deserialize<ApiResponse<CatalogItem>>(json, options);
 
-                if (data.TryGetProperty("listPrice", out var lp))
-                    txtListPrice.Text = lp.GetDecimal().ToString("N4");
+            if (response != null && response.Success && response.Data != null)
+            {
+                var item = response.Data;
 
-                txtSupplierCode.Text = data.TryGetProperty("supplierCode", out var sc) ? sc.GetString() : "";
-                txtManufacturer.Text = data.TryGetProperty("manufacturer", out var m) ? m.GetString() : "";
-                txtBarcode.Text = data.TryGetProperty("barcode", out var b) ? b.GetString() : "";
-                txtNotes.Text = data.TryGetProperty("notes", out var n) ? n.GetString() : "";
+                txtCode.Text = item.Code ?? "";
+                txtDescription.Text = item.Description ?? "";
+                txtCategory.Text = item.Category ?? "";
+                txtSubcategory.Text = item.Subcategory ?? "";
+                txtUnit.Text = string.IsNullOrEmpty(item.Unit) ? "PZ" : item.Unit;
 
-                // Selezione del fornitore 
-                if (data.TryGetProperty("supplierId", out var sid) && sid.ValueKind != JsonValueKind.Null)
+                txtUnitCost.Text = item.UnitCost.ToString("N4");
+                txtListPrice.Text = item.ListPrice.ToString("N4");
+
+                txtSupplierCode.Text = item.SupplierCode ?? "";
+                txtManufacturer.Text = item.Manufacturer ?? "";
+                txtBarcode.Text = item.Barcode ?? "";
+                txtNotes.Text = item.Notes ?? "";
+
+                if (item.SupplierId.HasValue)
                 {
-                    int targetId = sid.GetInt32();
-                    var items = cmbSupplier.ItemsSource as List<LookupItem>;
-                    cmbSupplier.SelectedItem = items?.FirstOrDefault(i => i.Id == targetId);
+                    var suppliers = cmbSupplier.ItemsSource as List<LookupItem>;
+                    var found = suppliers?.FirstOrDefault(s => s.Id == item.SupplierId.Value);
+                    if (found != null) cmbSupplier.SelectedItem = found;
                 }
             }
+            else
+            {
+                txtError.Text = response?.Message ?? "Articolo non trovato nel database.";
+            }
+        }
+        catch (JsonException jex)
+        {
+            txtError.Text = "Errore formato dati: Il server non ha inviato un JSON valido.";
+            System.Diagnostics.Debug.WriteLine($"JSON Errato: {jex.Message}");
         }
         catch (Exception ex)
         {
-            txtError.Text = "Errore nel caricamento: " + ex.Message;
+            txtError.Text = "Errore tecnico: " + ex.Message;
         }
     }
 
@@ -104,43 +129,48 @@ public partial class CatalogItemDialog : Window
         btnSave.IsEnabled = false;
         try
         {
-            int suppId = (cmbSupplier.SelectedItem as LookupItem)?.Id ?? 0;
+            int? suppId = (cmbSupplier.SelectedItem as LookupItem)?.Id;
+            if (suppId == 0) suppId = null;
 
-            // Parsing numeri sicuro
+            // Parsing robusto dei decimali
             decimal.TryParse(txtUnitCost.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal unitCost);
             decimal.TryParse(txtListPrice.Text.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal listPrice);
 
-            var obj = new
+            // Prepariamo l'oggetto di salvataggio
+            // Usa CatalogItem invece dell'oggetto anonimo o del Dto inesistente
+            var saveReq = new CatalogItem
             {
-                code = txtCode.Text.Trim(),
-                description = txtDescription.Text.Trim(),
-                category = txtCategory.Text.Trim(),
-                subcategory = txtSubcategory.Text.Trim(),
-                unit = txtUnit.Text.Trim(),
-                unitCost,
-                listPrice,
-                supplierId = suppId > 0 ? suppId : (int?)null,
-                supplierCode = txtSupplierCode.Text.Trim(),
-                manufacturer = txtManufacturer.Text.Trim(),
-                barcode = txtBarcode.Text.Trim(),
-                notes = txtNotes.Text.Trim(),
-                isActive = true
+                Id = _id,
+                Code = txtCode.Text.Trim(),
+                Description = txtDescription.Text.Trim(),
+                Category = txtCategory.Text.Trim(),
+                Subcategory = txtSubcategory.Text.Trim(),
+                Unit = txtUnit.Text.Trim(),
+                UnitCost = unitCost,
+                ListPrice = listPrice,
+                SupplierId = suppId,
+                SupplierCode = txtSupplierCode.Text.Trim(),
+                Manufacturer = txtManufacturer.Text.Trim(),
+                Barcode = txtBarcode.Text.Trim(),
+                Notes = txtNotes.Text.Trim(),
+                IsActive = true
             };
 
-            string jsonBody = JsonSerializer.Serialize(obj);
+            string jsonBody = JsonSerializer.Serialize(saveReq);
             string result = _id == 0
                 ? await ApiClient.PostAsync("/api/catalog", jsonBody)
                 : await ApiClient.PutAsync($"/api/catalog/{_id}", jsonBody);
 
-            using var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            var response = JsonSerializer.Deserialize<ApiResponse<object>>(result, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (response != null && response.Success)
             {
                 DialogResult = true;
                 Close();
             }
             else
             {
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = response?.Message ?? "Errore durante il salvataggio.";
             }
         }
         catch (Exception ex)

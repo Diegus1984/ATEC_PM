@@ -332,3 +332,21 @@ public class ImportArticlesRequest
 {
     public List<EasyfattArticleDto> Articles { get; set; } = new();
 }
+
+public class CatalogItem
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Subcategory { get; set; } = "";
+    public string Unit { get; set; } = "PZ";
+    public decimal UnitCost { get; set; }
+    public decimal ListPrice { get; set; }
+    public int? SupplierId { get; set; }
+    public string SupplierCode { get; set; } = "";
+    public string Manufacturer { get; set; } = "";
+    public string Barcode { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public bool IsActive { get; set; } = true;
+}
