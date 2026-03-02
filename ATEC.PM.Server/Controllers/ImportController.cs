@@ -246,12 +246,12 @@ public class ImportController : ControllerBase
             fbConn.Open();
 
             using var cmd = new FbCommand(@"
-                SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", 
-                       ""NomeSottocategoria"", ""Udm"", ""PrezzoNetto1"", 
-                       ""PrezzoNettoForn"", ""IDFornitore"", ""CodArticoloForn"",
-                       ""Produttore"", ""CodBarre"", ""Note""
-                FROM ""TArticoli""
-                ORDER BY ""CodArticolo""", fbConn);
+            SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", 
+                   ""NomeSottocategoria"", ""Udm"", ""PrezzoNetto1"", 
+                   ""PrezzoNettoForn"", ""IDFornitore"", ""CodArticoloForn"",
+                   ""Produttore"", ""CodBarre"", ""Note""
+            FROM ""TArticoli""
+            ORDER BY ""CodArticolo""", fbConn);
 
             using var reader = cmd.ExecuteReader();
 
@@ -261,8 +261,9 @@ public class ImportController : ControllerBase
                 articles.Add(new EasyfattArticleDto
                 {
                     EasyfattId = reader["IDArticolo"] != DBNull.Value ? Convert.ToInt32(reader["IDArticolo"]) : 0,
-                    Code = reader["CodArticolo"]?.ToString() ?? "",
-                    Description = reader["Desc"]?.ToString() ?? "",
+                    // PULIZIA IMMEDIATA DEL CODICE
+                    Code = reader["CodArticolo"]?.ToString()?.Trim() ?? "",
+                    Description = reader["Desc"]?.ToString()?.Trim() ?? "",
                     Category = reader["NomeCategoria"]?.ToString() ?? "",
                     Subcategory = reader["NomeSottocategoria"]?.ToString() ?? "",
                     Unit = reader["Udm"]?.ToString() ?? "PZ",
@@ -277,64 +278,59 @@ public class ImportController : ControllerBase
             }
             fbConn.Close();
 
-            // Mappa IDFornitore Easyfatt → supplier_id ATEC PM tramite easyfatt_id o P.IVA
-            // Prima leggiamo il mapping IDAnagr → PartitaIva da Easyfatt
+            // --- LOGICA DI MAPPING FORNITORI (Invariata) ---
             using var fbConn2 = new FbConnection(connStr);
             fbConn2.Open();
-            using var cmd2 = new FbCommand(@"
-                SELECT ""IDAnagr"", ""Nome"", ""PartitaIva""
-                FROM ""TAnagrafica"" WHERE ""Fornitore"" = 1", fbConn2);
+            using var cmd2 = new FbCommand(@"SELECT ""IDAnagr"", ""Nome"", ""PartitaIva"" FROM ""TAnagrafica"" WHERE ""Fornitore"" = 1", fbConn2);
             using var reader2 = cmd2.ExecuteReader();
-
             var easyfattSupplierMap = new Dictionary<int, (string Name, string Vat)>();
             while (reader2.Read())
             {
-                int id = Convert.ToInt32(reader2["IDAnagr"]);
-                string name = reader2["Nome"]?.ToString() ?? "";
-                string vat = reader2["PartitaIva"]?.ToString()?.Trim() ?? "";
-                easyfattSupplierMap[id] = (name, vat);
+                easyfattSupplierMap[Convert.ToInt32(reader2["IDAnagr"])] = (reader2["Nome"]?.ToString() ?? "", reader2["PartitaIva"]?.ToString()?.Trim() ?? "");
             }
             fbConn2.Close();
 
-            // Leggi fornitori ATEC PM per match su P.IVA
             using var mysqlConn = _db.Open();
-            var atecSuppliers = mysqlConn.Query<SupplierListItem>(
-                "SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM suppliers").ToList();
+            var atecSuppliers = mysqlConn.Query<SupplierListItem>("SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM suppliers").ToList();
             var vatToSupplier = new Dictionary<string, SupplierListItem>();
             foreach (var s in atecSuppliers.Where(s => !string.IsNullOrEmpty(s.VatNumber)))
             {
                 var vat = s.VatNumber.Trim();
-                if (!vatToSupplier.ContainsKey(vat))
-                    vatToSupplier[vat] = s;
+                if (!vatToSupplier.ContainsKey(vat)) vatToSupplier[vat] = s;
             }
 
-            // Leggi catalogo esistente per confronto duplicati
-            var existingCatalog = mysqlConn.Query<dynamic>(
-                "SELECT id, code FROM catalog_items").ToList();
-            var existingCodes = new HashSet<string>(
-                existingCatalog.Select(c => (string)(c.code ?? "")).Where(c => !string.IsNullOrEmpty(c)));
+            // --- CORREZIONE DUPLICATI ---
+            // Recuperiamo ID e CODE (pulito) dal database ATEC
+            var existingCatalog = mysqlConn.Query<(int Id, string Code)>(
+                "SELECT id, TRIM(code) as Code FROM catalog_items WHERE is_active = 1").ToList();
+
+            // Creiamo un dizionario per trovare velocemente l'ID partendo dal Codice
+            var codeToIdMap = existingCatalog
+                .Where(c => !string.IsNullOrEmpty(c.Code))
+                .GroupBy(c => c.Code)
+                .ToDictionary(g => g.Key, g => g.First().Id);
 
             foreach (var art in articles)
             {
                 // Risolvi fornitore
-                if (art.EasyfattSupplierId > 0 && easyfattSupplierMap.ContainsKey(art.EasyfattSupplierId))
+                if (art.EasyfattSupplierId > 0 && easyfattSupplierMap.TryGetValue(art.EasyfattSupplierId, out var supInfo))
                 {
-                    var (name, vat) = easyfattSupplierMap[art.EasyfattSupplierId];
-                    art.ResolvedSupplierName = name;
-                    if (!string.IsNullOrEmpty(vat) && vatToSupplier.ContainsKey(vat))
-                    {
-                        art.ResolvedSupplierId = vatToSupplier[vat].Id;
-                    }
+                    art.ResolvedSupplierName = supInfo.Name;
+                    if (!string.IsNullOrEmpty(supInfo.Vat) && vatToSupplier.TryGetValue(supInfo.Vat, out var atecSup))
+                        art.ResolvedSupplierId = atecSup.Id;
                 }
 
-                // Confronto duplicati su codice articolo
-                if (!string.IsNullOrEmpty(art.Code) && existingCodes.Contains(art.Code))
+                // Confronto robusto su codice pulito
+                if (!string.IsNullOrEmpty(art.Code) && codeToIdMap.TryGetValue(art.Code, out int existingId))
                 {
                     art.Status = "DUPLICATO";
+                    art.ExistingId = existingId; // FONDAMENTALE: permette l'UPDATE invece della INSERT
+                    art.Action = "UPDATE";       // Suggeriamo già l'aggiornamento
                 }
                 else
                 {
                     art.Status = "NUOVO";
+                    art.Action = "INSERT";
                 }
             }
 
@@ -343,7 +339,6 @@ public class ImportController : ControllerBase
                 TotalFound = articles.Count,
                 NewCount = articles.Count(a => a.Status == "NUOVO"),
                 DuplicateCount = articles.Count(a => a.Status == "DUPLICATO"),
-                WithSupplier = articles.Count(a => a.ResolvedSupplierId.HasValue),
                 Articles = articles
             };
 

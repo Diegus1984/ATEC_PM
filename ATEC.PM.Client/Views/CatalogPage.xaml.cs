@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
@@ -9,7 +14,8 @@ namespace ATEC.PM.Client.Views;
 public partial class CatalogPage : Page
 {
     private List<CatalogItemListItem> _allItems = new();
-    private List<CatalogItemListItem> _items = new();
+    private Dictionary<string, TextBox> _filterBoxes = new();
+    private CancellationTokenSource? _filterCts;
 
     public CatalogPage()
     {
@@ -23,7 +29,7 @@ public partial class CatalogPage : Page
         try
         {
             string json = await ApiClient.GetAsync("/api/catalog");
-            JsonDocument doc = JsonDocument.Parse(json);
+            var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 _allItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
@@ -35,29 +41,58 @@ public partial class CatalogPage : Page
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
 
-    private void ApplyFilter()
+    private void Filter_Loaded(object sender, RoutedEventArgs e)
     {
-        string filter = txtSearch.Text.Trim().ToLower();
-        List<CatalogItemListItem> filtered = string.IsNullOrEmpty(filter)
-            ? _allItems
-            : _allItems.Where(i =>
-                (i.Code?.ToLower().Contains(filter) ?? false) ||
-                (i.Description?.ToLower().Contains(filter) ?? false) ||
-                (i.Category?.ToLower().Contains(filter) ?? false) ||
-                (i.SupplierName?.ToLower().Contains(filter) ?? false) ||
-                (i.Manufacturer?.ToLower().Contains(filter) ?? false)
-            ).ToList();
-
-        _items = filtered;
-        dgCatalog.ItemsSource = _items;
-        txtStatus.Text = $"{_items.Count} articoli" + (string.IsNullOrEmpty(filter) ? "" : $" (filtrati da {_allItems.Count})");
+        if (sender is TextBox tb && tb.Tag != null)
+        {
+            _filterBoxes[tb.Tag.ToString()!] = tb;
+        }
     }
 
-    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    // Evento Change con Debounce
+    private async void Filter_Changed(object sender, TextChangedEventArgs e)
     {
-        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text)
-            ? Visibility.Visible : Visibility.Collapsed;
-        if (_allItems.Count > 0) ApplyFilter();
+        // Cancella il timer precedente se l'utente sta ancora scrivendo
+        _filterCts?.Cancel();
+        _filterCts = new CancellationTokenSource();
+
+        try
+        {
+            // Aspetta 300 millisecondi prima di filtrare
+            await Task.Delay(300, _filterCts.Token);
+            ApplyFilter();
+        }
+        catch (TaskCanceledException)
+        {
+            // L'utente ha scritto un altro carattere, non fare nulla
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        if (_allItems == null) return;
+
+        string fCode = _filterBoxes.GetValueOrDefault("Code")?.Text.Trim().ToLower() ?? "";
+        string fDesc = _filterBoxes.GetValueOrDefault("Desc")?.Text.Trim().ToLower() ?? "";
+        string fSupp = _filterBoxes.GetValueOrDefault("Supp")?.Text.Trim().ToLower() ?? "";
+        string fMan = _filterBoxes.GetValueOrDefault("Man")?.Text.Trim().ToLower() ?? "";
+
+        // Eseguiamo il filtraggio
+        var filtered = _allItems.Where(i =>
+            (string.IsNullOrEmpty(fCode) || (i.Code?.ToLower().Contains(fCode) ?? false)) &&
+            (string.IsNullOrEmpty(fDesc) || (i.Description?.ToLower().Contains(fDesc) ?? false)) &&
+            (string.IsNullOrEmpty(fSupp) || (i.SupplierName?.ToLower().Contains(fSupp) ?? false)) &&
+            (string.IsNullOrEmpty(fMan) || (i.Manufacturer?.ToLower().Contains(fMan) ?? false))
+        ).ToList();
+
+        dgCatalog.ItemsSource = filtered;
+        txtStatus.Text = $"{filtered.Count} articoli trovati su {_allItems.Count}";
+    }
+
+    private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var tb in _filterBoxes.Values) tb.Clear();
+        ApplyFilter();
     }
 
     private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)

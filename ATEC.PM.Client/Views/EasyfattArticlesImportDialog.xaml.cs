@@ -27,6 +27,7 @@ public partial class EasyfattArticlesImportDialog : Window
 
         txtStatus.Text = "Caricamento articoli da Easyfatt...";
         btnImport.IsEnabled = false;
+        _allRows.Clear();
 
         try
         {
@@ -35,85 +36,86 @@ public partial class EasyfattArticlesImportDialog : Window
 
             if (string.IsNullOrWhiteSpace(json))
             {
-                txtStatus.Text = "Risposta vuota dal server. Verificare che il server sia avviato.";
+                txtStatus.Text = "Risposta vuota dal server.";
                 return;
             }
 
-            JsonDocument doc;
-            try
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Controllo successo risposta
+            if (!root.TryGetProperty("success", out var successProp) || !successProp.GetBoolean())
             {
-                doc = JsonDocument.Parse(json);
-            }
-            catch (JsonException)
-            {
-                txtStatus.Text = $"Risposta non valida dal server: {json.Substring(0, Math.Min(json.Length, 200))}";
+                txtStatus.Text = root.TryGetProperty("message", out var msg) ? msg.GetString() : "Errore server";
                 return;
             }
 
-            if (!doc.RootElement.GetProperty("success").GetBoolean())
+            // Accesso ai dati (Summary)
+            if (!root.TryGetProperty("data", out var data)) return;
+
+            // Estrazione conteggi con valori di default se mancano (evita l'errore "key not present")
+            int totalFound = data.TryGetProperty("totalFound", out var tf) ? tf.GetInt32() : 0;
+            int newCount = data.TryGetProperty("newCount", out var nc) ? nc.GetInt32() : 0;
+            int dupCount = data.TryGetProperty("duplicateCount", out var dc) ? dc.GetInt32() : 0;
+            int withSupplier = data.TryGetProperty("withSupplier", out var ws) ? ws.GetInt32() : 0;
+
+            txtSummary.Text = $"Totale: {totalFound} | Nuovi: {newCount} | Esistenti: {dupCount} | Con fornitore: {withSupplier}";
+
+            if (data.TryGetProperty("articles", out var articles) && articles.ValueKind == JsonValueKind.Array)
             {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore";
-                return;
-            }
-
-            JsonElement data = doc.RootElement.GetProperty("data");
-            int totalFound = data.GetProperty("totalFound").GetInt32();
-            int newCount = data.GetProperty("newCount").GetInt32();
-            int dupCount = data.GetProperty("duplicateCount").GetInt32();
-            int withSupplier = data.GetProperty("withSupplier").GetInt32();
-
-            txtSummary.Text = $"Totale: {totalFound}  |  Nuovi: {newCount}  |  Duplicati: {dupCount}  |  Con fornitore: {withSupplier}";
-
-            _allRows.Clear();
-            JsonElement articles = data.GetProperty("articles");
-
-            foreach (JsonElement a in articles.EnumerateArray())
-            {
-                string status = a.GetProperty("status").GetString() ?? "NUOVO";
-                _allRows.Add(new ArticleImportRow
+                foreach (JsonElement a in articles.EnumerateArray())
                 {
-                    IsSelected = status == "NUOVO",
-                    EasyfattId = a.GetProperty("easyfattId").GetInt32(),
-                    Code = a.GetProperty("code").GetString() ?? "",
-                    Description = a.GetProperty("description").GetString() ?? "",
-                    Category = a.GetProperty("category").GetString() ?? "",
-                    Subcategory = a.GetProperty("subcategory").GetString() ?? "",
-                    Unit = a.GetProperty("unit").GetString() ?? "",
-                    UnitCost = a.GetProperty("unitCost").GetDecimal(),
-                    ListPrice = a.GetProperty("listPrice").GetDecimal(),
-                    SupplierCode = a.GetProperty("supplierCode").GetString() ?? "",
-                    Manufacturer = a.GetProperty("manufacturer").GetString() ?? "",
-                    Barcode = a.GetProperty("barcode").GetString() ?? "",
-                    Notes = a.GetProperty("notes").GetString() ?? "",
-                    Status = status,
-                    ExistingId = a.GetProperty("existingId").GetInt32(),
-                    ResolvedSupplierId = a.GetProperty("resolvedSupplierId").ValueKind == JsonValueKind.Null ? null : a.GetProperty("resolvedSupplierId").GetInt32(),
-                    ResolvedSupplierName = a.GetProperty("resolvedSupplierName").GetString() ?? "",
-                    Action = status == "NUOVO" ? "INSERT" : "SKIP"
-                });
+                    // Determiniamo lo stato e l'azione predefinita
+                    string status = a.TryGetProperty("status", out var st) ? (st.GetString() ?? "NUOVO") : "NUOVO";
+                    bool isNew = status == "NUOVO";
+
+                    _allRows.Add(new ArticleImportRow
+                    {
+                        IsSelected = isNew, // Seleziona automaticamente solo i nuovi
+                        EasyfattId = a.GetProperty("easyfattId").GetInt32(),
+                        Code = a.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "",
+                        Description = a.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
+                        Category = a.TryGetProperty("category", out var cat) ? cat.GetString() ?? "" : "",
+                        Subcategory = a.TryGetProperty("subcategory", out var sub) ? sub.GetString() ?? "" : "",
+                        Unit = a.TryGetProperty("unit", out var u) ? u.GetString() ?? "" : "",
+                        UnitCost = a.TryGetProperty("unitCost", out var uc) ? uc.GetDecimal() : 0,
+                        ListPrice = a.TryGetProperty("listPrice", out var lp) ? lp.GetDecimal() : 0,
+                        SupplierCode = a.TryGetProperty("supplierCode", out var sc) ? sc.GetString() ?? "" : "",
+                        Manufacturer = a.TryGetProperty("manufacturer", out var m) ? m.GetString() ?? "" : "",
+                        Barcode = a.TryGetProperty("barcode", out var b) ? b.GetString() ?? "" : "",
+                        Notes = a.TryGetProperty("notes", out var n) ? n.GetString() ?? "" : "",
+                        Status = status,
+                        ExistingId = a.TryGetProperty("existingId", out var exId) ? exId.GetInt32() : 0,
+                        ResolvedSupplierId = a.TryGetProperty("resolvedSupplierId", out var rsId) && rsId.ValueKind != JsonValueKind.Null ? rsId.GetInt32() : null,
+                        ResolvedSupplierName = a.TryGetProperty("resolvedSupplierName", out var rsName) ? rsName.GetString() ?? "" : "",
+                        Action = isNew ? "INSERT" : "SKIP"
+                    });
+                }
             }
 
             ApplyFilter();
             btnImport.IsEnabled = true;
-            txtStatus.Text = $"Caricati {totalFound} articoli. Selezionare quelli da importare.";
+            txtStatus.Text = $"Caricati {totalFound} articoli. Scegliere le azioni e cliccare Importa.";
         }
         catch (Exception ex)
         {
-            txtStatus.Text = $"Errore: {ex.Message}";
+            txtStatus.Text = $"Errore caricamento: {ex.Message}";
         }
     }
 
     private void ApplyFilter()
     {
-        if (txtSearch == null || _allRows.Count == 0) return;
+        if (txtSearch == null) return;
 
         string search = txtSearch.Text?.Trim().ToLower() ?? "";
 
         _filteredRows = _allRows.Where(r =>
         {
+            // Filtro Radio Buttons
             if (rbNew.IsChecked == true && r.Status != "NUOVO") return false;
             if (rbDup.IsChecked == true && r.Status != "DUPLICATO") return false;
 
+            // Filtro Ricerca Testuale
             if (!string.IsNullOrEmpty(search))
             {
                 return r.Code.ToLower().Contains(search) ||
@@ -134,13 +136,21 @@ public partial class EasyfattArticlesImportDialog : Window
 
     private void BtnSelectAll_Click(object sender, RoutedEventArgs e)
     {
-        foreach (ArticleImportRow row in _filteredRows) { row.IsSelected = true; row.Action = row.Status == "NUOVO" ? "INSERT" : "UPDATE"; }
+        foreach (ArticleImportRow row in _filteredRows)
+        {
+            row.IsSelected = true;
+            row.Action = (row.Status == "NUOVO") ? "INSERT" : "UPDATE";
+        }
         dgImport.Items.Refresh();
     }
 
     private void BtnDeselectAll_Click(object sender, RoutedEventArgs e)
     {
-        foreach (ArticleImportRow row in _filteredRows) { row.IsSelected = false; row.Action = "SKIP"; }
+        foreach (ArticleImportRow row in _filteredRows)
+        {
+            row.IsSelected = false;
+            row.Action = "SKIP";
+        }
         dgImport.Items.Refresh();
     }
 
@@ -149,15 +159,15 @@ public partial class EasyfattArticlesImportDialog : Window
         List<ArticleImportRow> toImport = _allRows.Where(r => r.IsSelected && r.Action != "SKIP").ToList();
         if (toImport.Count == 0)
         {
-            MessageBox.Show("Nessun articolo selezionato.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Nessun articolo selezionato per l'importazione.", "Avviso", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        MessageBoxResult confirm = MessageBox.Show(
-            $"Importare {toImport.Count} articoli?\n\n" +
-            $"INSERT: {toImport.Count(r => r.Action == "INSERT")}\n" +
-            $"UPDATE: {toImport.Count(r => r.Action == "UPDATE")}",
-            "Conferma Import", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = MessageBox.Show(
+            $"Confermi l'importazione di {toImport.Count} articoli?\n\n" +
+            $"Nuovi (INSERT): {toImport.Count(r => r.Action == "INSERT")}\n" +
+            $"Esistenti (UPDATE): {toImport.Count(r => r.Action == "UPDATE")}",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
         if (confirm != MessageBoxResult.Yes) return;
 
@@ -166,55 +176,33 @@ public partial class EasyfattArticlesImportDialog : Window
 
         try
         {
-            var payload = new
-            {
-                articles = toImport.Select(r => new
-                {
-                    easyfattId = r.EasyfattId,
-                    code = r.Code,
-                    description = r.Description,
-                    category = r.Category,
-                    subcategory = r.Subcategory,
-                    unit = r.Unit,
-                    unitCost = r.UnitCost,
-                    listPrice = r.ListPrice,
-                    supplierCode = r.SupplierCode,
-                    manufacturer = r.Manufacturer,
-                    barcode = r.Barcode,
-                    notes = r.Notes,
-                    status = r.Status,
-                    existingId = r.ExistingId,
-                    resolvedSupplierId = r.ResolvedSupplierId,
-                    resolvedSupplierName = r.ResolvedSupplierName,
-                    action = r.Action
-                }).ToList()
-            };
+            var payload = new { articles = toImport };
+            string jsonBody = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-            string jsonBody = JsonSerializer.Serialize(payload);
             string result = await ApiClient.PostAsync("/api/import/easyfatt/articles", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
+            using var doc = JsonDocument.Parse(result);
+            var root = doc.RootElement;
 
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (root.GetProperty("success").GetBoolean())
             {
-                JsonElement d = doc.RootElement.GetProperty("data");
-                int imported = d.GetProperty("imported").GetInt32();
-                int updated = d.GetProperty("updated").GetInt32();
-                int skipped = d.GetProperty("skipped").GetInt32();
+                var d = root.GetProperty("data");
+                int imp = d.GetProperty("imported").GetInt32();
+                int upd = d.GetProperty("updated").GetInt32();
 
-                MessageBox.Show($"Import completato!\n\nInseriti: {imported}\nAggiornati: {updated}\nSaltati: {skipped}",
-                    "Risultato", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"Operazione completata!\n\nArticoli creati: {imp}\nArticoli aggiornati: {upd}",
+                    "Successo", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                DialogResult = true;
-                Close();
+                this.DialogResult = true;
+                this.Close();
             }
             else
             {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore import";
+                txtStatus.Text = "Errore: " + root.GetProperty("message").GetString();
             }
         }
         catch (Exception ex)
         {
-            txtStatus.Text = $"Errore: {ex.Message}";
+            txtStatus.Text = $"Errore durante l'import: {ex.Message}";
         }
         finally
         {
@@ -226,7 +214,7 @@ public partial class EasyfattArticlesImportDialog : Window
 public class ArticleImportRow : INotifyPropertyChanged
 {
     private bool _isSelected;
-    private string _action = "";
+    private string _action = "SKIP";
 
     public bool IsSelected
     {
@@ -256,5 +244,5 @@ public class ArticleImportRow : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
