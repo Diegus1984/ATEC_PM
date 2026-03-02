@@ -17,17 +17,29 @@ public class ProjectsController : ControllerBase
     [HttpGet]
     public IActionResult GetAll()
     {
-        using var c = _db.Open();
-        var rows = c.Query<ProjectListItem>(@"
-            SELECT p.id, p.code, p.title, cu.company_name AS CustomerName,
-                   CONCAT(e.first_name,' ',e.last_name) AS PmName,
+        try
+        {
+            using var c = _db.Open();
+            // Utilizziamo LEFT JOIN per evitare che la mancanza di un PM o Cliente rompa la lista
+            // COALESCE gestisce i valori NULL per PM e Cliente trasformandoli in stringhe vuote
+            var rows = c.Query<ProjectListItem>(@"
+            SELECT p.id, p.code, p.title, 
+                   COALESCE(cu.company_name, 'CLIENTE MANCANTE') AS CustomerName,
+                   COALESCE(CONCAT(e.first_name,' ',e.last_name), 'NON ASSEGNATO') AS PmName,
                    p.status, p.priority, p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
                    p.revenue, p.budget_hours_total AS BudgetHoursTotal
             FROM projects p
-            JOIN customers cu ON cu.id = p.customer_id
-            JOIN employees e ON e.id = p.pm_id
+            LEFT JOIN customers cu ON cu.id = p.customer_id
+            LEFT JOIN employees e ON e.id = p.pm_id
             ORDER BY p.created_at DESC").ToList();
-        return Ok(ApiResponse<List<ProjectListItem>>.Ok(rows));
+            return Ok(ApiResponse<List<ProjectListItem>>.Ok(rows));
+        }
+        catch (Exception ex)
+        {
+            // Se c'è un errore SQL, restituiamo un oggetto ApiResponse valido con errore 
+            // invece di lasciar crashare il server (che manderebbe HTML al client)
+            return Ok(ApiResponse<List<ProjectListItem>>.Fail($"Errore DB: {ex.Message}"));
+        }
     }
 
     [HttpGet("{id}")]

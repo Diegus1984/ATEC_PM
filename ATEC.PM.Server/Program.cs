@@ -5,7 +5,16 @@ using ATEC.PM.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+// Cerca la riga builder.Services.AddControllers() e modificala così:
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Evita che riferimenti circolari (es. Commessa -> Fase -> Commessa) rompano il JSON
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        // Gestisce correttamente i valori null senza interrompere il token JSON
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors(o => o.AddPolicy("All", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
