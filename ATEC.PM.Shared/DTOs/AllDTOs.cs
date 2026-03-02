@@ -268,3 +268,67 @@ public class ImportSuppliersRequest
 {
     public List<EasyfattSupplierDto> Suppliers { get; set; } = new();
 }
+
+// === CATALOGO ARTICOLI ===
+public class CatalogItemListItem
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public decimal UnitCost { get; set; }
+    public decimal ListPrice { get; set; }
+    public int? SupplierId { get; set; }
+    public string SupplierName { get; set; } = "";
+    public string SupplierCode { get; set; } = "";
+    public string Manufacturer { get; set; } = "";
+    public bool IsActive { get; set; }
+}
+
+public class CatalogItemSaveRequest
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Subcategory { get; set; } = "";
+    public string Unit { get; set; } = "PZ";
+    public decimal UnitCost { get; set; }
+    public decimal ListPrice { get; set; }
+    public int? SupplierId { get; set; }
+    public string SupplierCode { get; set; } = "";
+    public string Manufacturer { get; set; } = "";
+    public string Barcode { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public bool IsActive { get; set; } = true;
+}
+
+public class EasyfattArticleDto
+{
+    public int EasyfattId { get; set; }
+    public string Code { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Subcategory { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public decimal UnitCost { get; set; }
+    public decimal ListPrice { get; set; }
+    public int EasyfattSupplierId { get; set; }
+    public string SupplierCode { get; set; } = "";
+    public string Manufacturer { get; set; } = "";
+    public string Barcode { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string Status { get; set; } = "NUOVO";
+    public int ExistingId { get; set; }
+    public string Action { get; set; } = "";
+    public bool IsSelected { get; set; }
+    // Risolto lato server
+    public int? ResolvedSupplierId { get; set; }
+    public string ResolvedSupplierName { get; set; } = "";
+}
+
+public class ImportArticlesRequest
+{
+    public List<EasyfattArticleDto> Articles { get; set; } = new();
+}

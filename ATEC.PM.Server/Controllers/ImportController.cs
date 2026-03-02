@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FirebirdSql.Data.FirebirdClient;
 using Dapper;
+using System.Data;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 
@@ -74,9 +75,13 @@ public class ImportController : ControllerBase
             var existing = mysqlConn.Query<SupplierListItem>(
                 "SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM suppliers").ToList();
 
-            var existingVats = existing
-                .Where(s => !string.IsNullOrEmpty(s.VatNumber))
-                .ToDictionary(s => s.VatNumber.Trim(), s => s);
+            var existingVats = new Dictionary<string, SupplierListItem>();
+            foreach (var s in existing.Where(s => !string.IsNullOrEmpty(s.VatNumber)))
+            {
+                var vat = s.VatNumber.Trim();
+                if (!existingVats.ContainsKey(vat))
+                    existingVats[vat] = s;
+            }
 
             foreach (var sup in easyfattSuppliers)
             {
@@ -192,6 +197,210 @@ public class ImportController : ControllerBase
         catch (Exception ex)
         {
             return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Colonne di una tabella Easyfatt
+    /// </summary>
+    [HttpGet("easyfatt/columns")]
+    public IActionResult GetColumns([FromQuery] string filePath, [FromQuery] string tableName)
+    {
+        try
+        {
+            var connStr = BuildConnectionString(filePath);
+            using var conn = new FbConnection(connStr);
+            conn.Open();
+            var colsData = conn.GetSchema("Columns", new[] { null, null, tableName, null });
+            var columns = new List<object>();
+            foreach (System.Data.DataRow colRow in colsData.Rows)
+            {
+                columns.Add(new
+                {
+                    Name = colRow["COLUMN_NAME"]?.ToString(),
+                    Type = colRow["COLUMN_DATA_TYPE"]?.ToString(),
+                    Size = colRow["COLUMN_SIZE"]
+                });
+            }
+            return Ok(ApiResponse<object>.Ok(columns));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Legge gli articoli da Easyfatt e li confronta con il catalogo ATEC PM
+    /// </summary>
+    [HttpGet("easyfatt/articles")]
+    public IActionResult GetEasyfattArticles([FromQuery] string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+            return BadRequest("filePath richiesto");
+
+        try
+        {
+            var connStr = BuildConnectionString(filePath);
+            using var fbConn = new FbConnection(connStr);
+            fbConn.Open();
+
+            using var cmd = new FbCommand(@"
+                SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", 
+                       ""NomeSottocategoria"", ""Udm"", ""PrezzoNetto1"", 
+                       ""PrezzoNettoForn"", ""IDFornitore"", ""CodArticoloForn"",
+                       ""Produttore"", ""CodBarre"", ""Note""
+                FROM ""TArticoli""
+                ORDER BY ""CodArticolo""", fbConn);
+
+            using var reader = cmd.ExecuteReader();
+
+            var articles = new List<EasyfattArticleDto>();
+            while (reader.Read())
+            {
+                articles.Add(new EasyfattArticleDto
+                {
+                    EasyfattId = reader["IDArticolo"] != DBNull.Value ? Convert.ToInt32(reader["IDArticolo"]) : 0,
+                    Code = reader["CodArticolo"]?.ToString() ?? "",
+                    Description = reader["Desc"]?.ToString() ?? "",
+                    Category = reader["NomeCategoria"]?.ToString() ?? "",
+                    Subcategory = reader["NomeSottocategoria"]?.ToString() ?? "",
+                    Unit = reader["Udm"]?.ToString() ?? "PZ",
+                    ListPrice = reader["PrezzoNetto1"] != DBNull.Value ? Convert.ToDecimal(reader["PrezzoNetto1"]) : 0,
+                    UnitCost = reader["PrezzoNettoForn"] != DBNull.Value ? Convert.ToDecimal(reader["PrezzoNettoForn"]) : 0,
+                    EasyfattSupplierId = reader["IDFornitore"] != DBNull.Value ? Convert.ToInt32(reader["IDFornitore"]) : 0,
+                    SupplierCode = reader["CodArticoloForn"]?.ToString() ?? "",
+                    Manufacturer = reader["Produttore"]?.ToString() ?? "",
+                    Barcode = reader["CodBarre"]?.ToString() ?? "",
+                    Notes = reader["Note"]?.ToString() ?? ""
+                });
+            }
+            fbConn.Close();
+
+            // Mappa IDFornitore Easyfatt → supplier_id ATEC PM tramite easyfatt_id o P.IVA
+            // Prima leggiamo il mapping IDAnagr → PartitaIva da Easyfatt
+            using var fbConn2 = new FbConnection(connStr);
+            fbConn2.Open();
+            using var cmd2 = new FbCommand(@"
+                SELECT ""IDAnagr"", ""Nome"", ""PartitaIva""
+                FROM ""TAnagrafica"" WHERE ""Fornitore"" = 1", fbConn2);
+            using var reader2 = cmd2.ExecuteReader();
+
+            var easyfattSupplierMap = new Dictionary<int, (string Name, string Vat)>();
+            while (reader2.Read())
+            {
+                int id = Convert.ToInt32(reader2["IDAnagr"]);
+                string name = reader2["Nome"]?.ToString() ?? "";
+                string vat = reader2["PartitaIva"]?.ToString()?.Trim() ?? "";
+                easyfattSupplierMap[id] = (name, vat);
+            }
+            fbConn2.Close();
+
+            // Leggi fornitori ATEC PM per match su P.IVA
+            using var mysqlConn = _db.Open();
+            var atecSuppliers = mysqlConn.Query<SupplierListItem>(
+                "SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM suppliers").ToList();
+            var vatToSupplier = new Dictionary<string, SupplierListItem>();
+            foreach (var s in atecSuppliers.Where(s => !string.IsNullOrEmpty(s.VatNumber)))
+            {
+                var vat = s.VatNumber.Trim();
+                if (!vatToSupplier.ContainsKey(vat))
+                    vatToSupplier[vat] = s;
+            }
+
+            // Leggi catalogo esistente per confronto duplicati
+            var existingCatalog = mysqlConn.Query<dynamic>(
+                "SELECT id, code FROM catalog_items").ToList();
+            var existingCodes = new HashSet<string>(
+                existingCatalog.Select(c => (string)(c.code ?? "")).Where(c => !string.IsNullOrEmpty(c)));
+
+            foreach (var art in articles)
+            {
+                // Risolvi fornitore
+                if (art.EasyfattSupplierId > 0 && easyfattSupplierMap.ContainsKey(art.EasyfattSupplierId))
+                {
+                    var (name, vat) = easyfattSupplierMap[art.EasyfattSupplierId];
+                    art.ResolvedSupplierName = name;
+                    if (!string.IsNullOrEmpty(vat) && vatToSupplier.ContainsKey(vat))
+                    {
+                        art.ResolvedSupplierId = vatToSupplier[vat].Id;
+                    }
+                }
+
+                // Confronto duplicati su codice articolo
+                if (!string.IsNullOrEmpty(art.Code) && existingCodes.Contains(art.Code))
+                {
+                    art.Status = "DUPLICATO";
+                }
+                else
+                {
+                    art.Status = "NUOVO";
+                }
+            }
+
+            var summary = new
+            {
+                TotalFound = articles.Count,
+                NewCount = articles.Count(a => a.Status == "NUOVO"),
+                DuplicateCount = articles.Count(a => a.Status == "DUPLICATO"),
+                WithSupplier = articles.Count(a => a.ResolvedSupplierId.HasValue),
+                Articles = articles
+            };
+
+            return Ok(ApiResponse<object>.Ok(summary));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Importa gli articoli selezionati nel catalogo ATEC PM
+    /// </summary>
+    [HttpPost("easyfatt/articles")]
+    public IActionResult ImportArticles([FromBody] ImportArticlesRequest req)
+    {
+        try
+        {
+            using var c = _db.Open();
+            int imported = 0;
+            int updated = 0;
+            int skipped = 0;
+
+            foreach (var art in req.Articles)
+            {
+                if (art.Action == "SKIP")
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (art.Action == "UPDATE" && art.ExistingId > 0)
+                {
+                    c.Execute(@"UPDATE catalog_items SET code=@Code, description=@Description, 
+                        category=@Category, subcategory=@Subcategory, unit=@Unit, 
+                        unit_cost=@UnitCost, list_price=@ListPrice, supplier_id=@ResolvedSupplierId,
+                        supplier_code=@SupplierCode, manufacturer=@Manufacturer, 
+                        barcode=@Barcode, notes=@Notes, easyfatt_id=@EasyfattId
+                        WHERE id=@ExistingId", art);
+                    updated++;
+                }
+                else
+                {
+                    c.Execute(@"INSERT INTO catalog_items (code, description, category, subcategory, unit, 
+                        unit_cost, list_price, supplier_id, supplier_code, manufacturer, barcode, notes, is_active, easyfatt_id) 
+                        VALUES (@Code, @Description, @Category, @Subcategory, @Unit, 
+                        @UnitCost, @ListPrice, @ResolvedSupplierId, @SupplierCode, @Manufacturer, @Barcode, @Notes, 1, @EasyfattId)", art);
+                    imported++;
+                }
+            }
+
+            return Ok(ApiResponse<object>.Ok(new { Imported = imported, Updated = updated, Skipped = skipped }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore import: {ex.Message}"));
         }
     }
 

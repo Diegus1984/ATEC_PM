@@ -1,0 +1,121 @@
+<Window x:Class="ATEC.PM.Client.Views.EasyfattArticlesImportDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Importa Articoli da Easyfatt" Width="1200" Height="700"
+        WindowStartupLocation="CenterOwner" Background="#F7F8FA">
+    <Window.Resources>
+        <Style x:Key="FlatBtn" TargetType="Button">
+            <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="13"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/><Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bd" Property="Opacity" Value="0.85"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <TextBlock Text="File .eft:" VerticalAlignment="Center" FontSize="13" Foreground="#374151" Margin="0,0,8,0"/>
+                    <TextBox x:Name="txtFilePath" Width="400" Height="34" Padding="8,6" FontSize="13" BorderBrush="#E4E7EC"
+                             Text="C:\ATEC_Commesse\Srl-2020-2021.eft"/>
+                    <Button Content="Carica" Background="#4F6EF7" Foreground="White" Style="{StaticResource FlatBtn}" Margin="8,0,0,0" Click="BtnLoad_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <Button x:Name="btnImport" Content="Importa selezionati" Background="#059669" Foreground="White" Style="{StaticResource FlatBtn}" Click="BtnImport_Click" IsEnabled="False"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <TextBlock x:Name="txtSummary" Text="" FontSize="13" Foreground="#374151" VerticalAlignment="Center"/>
+                    <TextBlock Text="  |  Filtra:" FontSize="12" Foreground="#6B7280" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                    <RadioButton x:Name="rbAll" Content="Tutti" IsChecked="True" VerticalAlignment="Center" Margin="0,0,12,0" Checked="Filter_Changed"/>
+                    <RadioButton x:Name="rbNew" Content="Nuovi" VerticalAlignment="Center" Margin="0,0,12,0" Checked="Filter_Changed"/>
+                    <RadioButton x:Name="rbDup" Content="Duplicati" VerticalAlignment="Center" Margin="0,0,12,0" Checked="Filter_Changed"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <TextBlock Text="Cerca:" FontSize="12" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox x:Name="txtSearch" Width="200" Height="30" Padding="8,4" FontSize="13" BorderBrush="#E4E7EC" TextChanged="TxtSearch_Changed"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,6">
+            <DockPanel>
+                <TextBlock x:Name="txtStatus" Text="Inserire il percorso del file .eft e premere Carica" FontSize="12" Foreground="#6B7280"/>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <Button Content="Seleziona tutti" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Click="BtnSelectAll_Click" Padding="12,0" Height="28"/>
+                    <Button Content="Deseleziona tutti" Background="#F3F4F6" Foreground="#374151" Style="{StaticResource FlatBtn}" Click="BtnDeselectAll_Click" Padding="12,0" Height="28" Margin="6,0,0,0"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <DataGrid x:Name="dgImport" AutoGenerateColumns="False" IsReadOnly="False"
+                  Background="White" BorderThickness="0" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
+                  RowHeight="36" ColumnHeaderHeight="38" FontSize="12" CanUserAddRows="False">
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#F9FAFB"/><Setter Property="Foreground" Value="#6B7280"/>
+                    <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="8,0"/><Setter Property="BorderBrush" Value="#E4E7EC"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="White"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Status}" Value="DUPLICATO">
+                            <Setter Property="Background" Value="#FEF9C3"/>
+                        </DataTrigger>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#EEF2FF"/></Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Padding" Value="8,0"/><Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="DataGridCell">
+                                <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </DataGrid.CellStyle>
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="Sel." Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="40"/>
+                <DataGridTextColumn Header="Codice" Binding="{Binding Code}" Width="110" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Descrizione" Binding="{Binding Description}" Width="*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Categoria" Binding="{Binding Category}" Width="120" IsReadOnly="True"/>
+                <DataGridTextColumn Header="UdM" Binding="{Binding Unit}" Width="50" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Prezzo Acq." Binding="{Binding UnitCost, StringFormat='{}{0:N4}'}" Width="90" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Fornitore" Binding="{Binding ResolvedSupplierName}" Width="140" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Produttore" Binding="{Binding Manufacturer}" Width="120" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Stato" Binding="{Binding Status}" Width="80" IsReadOnly="True"/>
+                <DataGridComboBoxColumn Header="Azione" SelectedValueBinding="{Binding Action, UpdateSourceTrigger=PropertyChanged}" Width="90">
+                    <DataGridComboBoxColumn.ItemsSource>
+                        <x:Array Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                            <sys:String>INSERT</sys:String>
+                            <sys:String>UPDATE</sys:String>
+                            <sys:String>SKIP</sys:String>
+                        </x:Array>
+                    </DataGridComboBoxColumn.ItemsSource>
+                </DataGridComboBoxColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

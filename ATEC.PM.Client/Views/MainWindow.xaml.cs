@@ -41,6 +41,9 @@ public partial class MainWindow : Window
             case "Fornitori":
                 PageContent.Navigate(new SuppliersPage());
                 break;
+            case "Catalogo":
+                PageContent.Navigate(new CatalogPage());
+                break;
             default:
                 PageContent.Content = null;
                 break;

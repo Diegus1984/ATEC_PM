@@ -159,10 +159,32 @@ public class DbService
             FOREIGN KEY (project_phase_id) REFERENCES project_phases(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        c.Execute(@"CREATE TABLE IF NOT EXISTS catalog_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(100) DEFAULT '',
+            description VARCHAR(2000) DEFAULT '',
+            category VARCHAR(255) DEFAULT '',
+            subcategory VARCHAR(255) DEFAULT '',
+            unit VARCHAR(50) DEFAULT 'PZ',
+            unit_cost DECIMAL(10,4) DEFAULT 0,
+            list_price DECIMAL(10,4) DEFAULT 0,
+            supplier_id INT NULL,
+            supplier_code VARCHAR(100) DEFAULT '',
+            manufacturer VARCHAR(255) DEFAULT '',
+            barcode VARCHAR(50) DEFAULT '',
+            notes TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            easyfatt_id INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS bom_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
             project_phase_id INT NULL,
+            catalog_item_id INT NULL,
             part_number VARCHAR(100) DEFAULT '',
             description VARCHAR(300) DEFAULT '',
             unit VARCHAR(50) DEFAULT 'PZ',
@@ -177,7 +199,8 @@ public class DbService
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
+            FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS documents (

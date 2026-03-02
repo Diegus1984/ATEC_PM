@@ -161,6 +161,11 @@
                         Content="  Fornitori"
                         Style="{StaticResource NavBtn}"
                         Tag="Fornitori" />
+                    <Button
+                        Click="Nav_Click"
+                        Content="  Catalogo Articoli"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Catalogo" />
 
                     <TextBlock
                         Margin="12,24,0,8"
