@@ -8,6 +8,7 @@ namespace ATEC.PM.Client.Views;
 
 public partial class SuppliersPage : Page
 {
+    private List<SupplierListItem> _allSuppliers = new();
     private List<SupplierListItem> _suppliers = new();
 
     public SuppliersPage()
@@ -25,14 +26,39 @@ public partial class SuppliersPage : Page
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
-                _suppliers = JsonSerializer.Deserialize<List<SupplierListItem>>(
+                _allSuppliers = JsonSerializer.Deserialize<List<SupplierListItem>>(
                     doc.RootElement.GetProperty("data").GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                dgSuppliers.ItemsSource = _suppliers;
-                txtStatus.Text = $"{_suppliers.Count} fornitori";
+                ApplyFilter();
             }
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void ApplyFilter()
+    {
+        string filter = txtSearch.Text.Trim().ToLower();
+        List<SupplierListItem> filtered = string.IsNullOrEmpty(filter)
+            ? _allSuppliers
+            : _allSuppliers.Where(s =>
+                (s.CompanyName?.ToLower().Contains(filter) ?? false) ||
+                (s.ContactName?.ToLower().Contains(filter) ?? false) ||
+                (s.Email?.ToLower().Contains(filter) ?? false) ||
+                (s.Phone?.ToLower().Contains(filter) ?? false) ||
+                (s.VatNumber?.ToLower().Contains(filter) ?? false) ||
+                (s.FiscalCode?.ToLower().Contains(filter) ?? false)
+            ).ToList();
+
+        _suppliers = filtered;
+        dgSuppliers.ItemsSource = _suppliers;
+        txtStatus.Text = $"{_suppliers.Count} fornitori" + (string.IsNullOrEmpty(filter) ? "" : $" (filtrati da {_allSuppliers.Count})");
+    }
+
+    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text)
+            ? Visibility.Visible : Visibility.Collapsed;
+        if (_allSuppliers.Count > 0) ApplyFilter();
     }
 
     private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)
