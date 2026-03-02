@@ -19,7 +19,7 @@ public class SuppliersController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<SupplierListItem>(
-            "SELECT id, company_name AS CompanyName, contact_name AS ContactName, email, phone, vat_number AS VatNumber, is_active AS IsActive FROM suppliers ORDER BY company_name").ToList();
+            "SELECT id, company_name AS CompanyName, contact_name AS ContactName, email, phone, vat_number AS VatNumber, fiscal_code AS FiscalCode, is_active AS IsActive FROM suppliers ORDER BY company_name").ToList();
         return Ok(ApiResponse<List<SupplierListItem>>.Ok(rows));
     }
 
@@ -28,7 +28,7 @@ public class SuppliersController : ControllerBase
     {
         using var c = _db.Open();
         var s = c.QueryFirstOrDefault<SupplierSaveRequest>(
-            "SELECT id, company_name AS CompanyName, contact_name AS ContactName, email, phone, address, vat_number AS VatNumber, notes, is_active AS IsActive FROM suppliers WHERE id=@Id", new { Id = id });
+            "SELECT id, company_name AS CompanyName, contact_name AS ContactName, email, phone, address, vat_number AS VatNumber, fiscal_code AS FiscalCode, notes, is_active AS IsActive FROM suppliers WHERE id=@Id", new { Id = id });
         if (s == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
         return Ok(ApiResponse<SupplierSaveRequest>.Ok(s));
     }
@@ -38,7 +38,7 @@ public class SuppliersController : ControllerBase
     {
         using var c = _db.Open();
         var newId = c.ExecuteScalar<int>(
-            "INSERT INTO suppliers (company_name,contact_name,email,phone,address,vat_number,notes,is_active) VALUES (@CompanyName,@ContactName,@Email,@Phone,@Address,@VatNumber,@Notes,@IsActive); SELECT LAST_INSERT_ID()", req);
+            "INSERT INTO suppliers (company_name,contact_name,email,phone,address,vat_number,fiscal_code,notes,is_active) VALUES (@CompanyName,@ContactName,@Email,@Phone,@Address,@VatNumber,@FiscalCode,@Notes,@IsActive); SELECT LAST_INSERT_ID()", req);
         return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
@@ -47,7 +47,7 @@ public class SuppliersController : ControllerBase
     {
         using var c = _db.Open();
         req.Id = id;
-        c.Execute("UPDATE suppliers SET company_name=@CompanyName,contact_name=@ContactName,email=@Email,phone=@Phone,address=@Address,vat_number=@VatNumber,notes=@Notes,is_active=@IsActive WHERE id=@Id", req);
+        c.Execute("UPDATE suppliers SET company_name=@CompanyName,contact_name=@ContactName,email=@Email,phone=@Phone,address=@Address,vat_number=@VatNumber,fiscal_code=@FiscalCode,notes=@Notes,is_active=@IsActive WHERE id=@Id", req);
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 

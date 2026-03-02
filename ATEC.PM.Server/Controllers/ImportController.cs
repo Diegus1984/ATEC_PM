@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FirebirdSql.Data.FirebirdClient;
-using System.Data;
+using Dapper;
 using ATEC.PM.Shared.DTOs;
+using ATEC.PM.Server.Services;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -12,209 +13,152 @@ namespace ATEC.PM.Server.Controllers;
 public class ImportController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly DbService _db;
 
-    public ImportController(IConfiguration config)
+    public ImportController(IConfiguration config, DbService db)
     {
         _config = config;
+        _db = db;
     }
 
     /// <summary>
-    /// Cerca il file .eft in C:\ATEC_Commesse
+    /// Legge i fornitori da Easyfatt e li confronta con quelli esistenti in ATEC PM
     /// </summary>
-    [HttpGet("easyfatt/find")]
-    public IActionResult FindEasyfattDb()
-    {
-        var searchPath = _config["Easyfatt:SearchPath"] ?? @"C:\ATEC_Commesse";
-
-        try
-        {
-            var files = Directory.GetFiles(searchPath, "*.eft", SearchOption.AllDirectories);
-            if (files.Length == 0)
-                return Ok(ApiResponse<object>.Fail("Nessun file .eft trovato in " + searchPath));
-
-            var result = files.Select(f => new
-            {
-                Path = f,
-                Name = Path.GetFileName(f),
-                Size = new FileInfo(f).Length,
-                Modified = new FileInfo(f).LastWriteTime
-            }).ToList();
-
-            return Ok(ApiResponse<object>.Ok(result));
-        }
-        catch (Exception ex)
-        {
-            return Ok(ApiResponse<object>.Fail($"Errore ricerca: {ex.Message}"));
-        }
-    }
-
-    /// <summary>
-    /// Cerca fbembed.dll sul PC per la connessione embedded
-    /// </summary>
-    [HttpGet("easyfatt/find-firebird")]
-    public IActionResult FindFirebird()
-    {
-        var searchPaths = new[]
-        {
-            @"C:\Program Files (x86)\Danea Easyfatt",
-            @"C:\Program Files\Danea Easyfatt",
-            @"C:\Program Files (x86)\Danea",
-            @"C:\Program Files\Danea",
-            @"C:\Danea Easyfatt",
-            @"C:\Windows\Firebird-2.5.9.27139-0_x64_embed",
-            @"C:\Windows\Firebird-2.5.8.27089-0_x64_embed"
-        };
-
-        var found = new List<string>();
-
-        foreach (var path in searchPaths)
-        {
-            if (!Directory.Exists(path)) continue;
-            try
-            {
-                var files = Directory.GetFiles(path, "fbembed.dll", SearchOption.AllDirectories);
-                found.AddRange(files);
-            }
-            catch { }
-        }
-
-        if (found.Count == 0)
-            return Ok(ApiResponse<object>.Fail("fbembed.dll non trovata. Percorsi cercati: " + string.Join(", ", searchPaths)));
-
-        return Ok(ApiResponse<object>.Ok(found));
-    }
-
-    /// <summary>
-    /// Legge la struttura del database .eft (tabelle e colonne)
-    /// </summary>
-    [HttpGet("easyfatt/structure")]
-    public IActionResult GetStructure([FromQuery] string filePath)
+    [HttpGet("easyfatt/suppliers")]
+    public IActionResult GetEasyfattSuppliers([FromQuery] string filePath)
     {
         if (string.IsNullOrEmpty(filePath))
             return BadRequest("filePath richiesto");
 
-        if (!System.IO.File.Exists(filePath))
-            return Ok(ApiResponse<object>.Fail("File non trovato: " + filePath));
-
         try
         {
             var connStr = BuildConnectionString(filePath);
-            using var conn = new FbConnection(connStr);
-            conn.Open();
+            using var fbConn = new FbConnection(connStr);
+            fbConn.Open();
 
-            // Leggi elenco tabelle
-            var tablesData = conn.GetSchema("Tables");
-            var tables = new List<object>();
+            using var cmd = new FbCommand(@"
+                SELECT ""Nome"", ""Referente"", ""Email"", ""Tel"", 
+                       ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"", 
+                       ""PartitaIva"", ""CodiceFiscale"", ""Note""
+                FROM ""TAnagrafica"" 
+                WHERE ""Fornitore"" = 1
+                ORDER BY ""Nome""", fbConn);
 
-            foreach (DataRow row in tablesData.Rows)
+            using var reader = cmd.ExecuteReader();
+
+            var easyfattSuppliers = new List<EasyfattSupplierDto>();
+            while (reader.Read())
             {
-                var tableName = row["TABLE_NAME"]?.ToString() ?? "";
-                var tableType = row["TABLE_TYPE"]?.ToString() ?? "";
+                var indirizzo = reader["Indirizzo"]?.ToString() ?? "";
+                var cap = reader["Cap"]?.ToString() ?? "";
+                var citta = reader["Citta"]?.ToString() ?? "";
+                var prov = reader["Prov"]?.ToString() ?? "";
+                var address = $"{indirizzo}, {cap} {citta} ({prov})".Trim(' ', ',');
 
-                // Solo tabelle utente (non di sistema)
-                if (tableType != "TABLE" && tableType != "SYSTEM TABLE") continue;
-                if (tableName.StartsWith("RDB$") || tableName.StartsWith("MON$")) continue;
-
-                // Leggi colonne
-                var colsData = conn.GetSchema("Columns", new[] { null, null, tableName, null });
-                var columns = new List<object>();
-
-                foreach (DataRow colRow in colsData.Rows)
+                easyfattSuppliers.Add(new EasyfattSupplierDto
                 {
-                    columns.Add(new
-                    {
-                        Name = colRow["COLUMN_NAME"]?.ToString(),
-                        Type = colRow["COLUMN_DATA_TYPE"]?.ToString(),
-                        Size = colRow["COLUMN_SIZE"]
-                    });
-                }
-
-                // Conta righe
-                int rowCount = 0;
-                try
-                {
-                    using var cmd = new FbCommand($"SELECT COUNT(*) FROM \"{tableName}\"", conn);
-                    rowCount = Convert.ToInt32(cmd.ExecuteScalar());
-                }
-                catch { }
-
-                tables.Add(new
-                {
-                    TableName = tableName,
-                    ColumnCount = columns.Count,
-                    RowCount = rowCount,
-                    Columns = columns
+                    CompanyName = reader["Nome"]?.ToString() ?? "",
+                    ContactName = reader["Referente"]?.ToString() ?? "",
+                    Email = reader["Email"]?.ToString() ?? "",
+                    Phone = reader["Tel"]?.ToString() ?? "",
+                    Address = address,
+                    VatNumber = reader["PartitaIva"]?.ToString() ?? "",
+                    FiscalCode = reader["CodiceFiscale"]?.ToString() ?? "",
+                    Notes = reader["Note"]?.ToString() ?? ""
                 });
             }
+            fbConn.Close();
 
-            return Ok(ApiResponse<object>.Ok(tables));
+            // Confronto duplicati con fornitori esistenti
+            using var mysqlConn = _db.Open();
+            var existing = mysqlConn.Query<SupplierListItem>(
+                "SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM suppliers").ToList();
+
+            var existingVats = existing
+                .Where(s => !string.IsNullOrEmpty(s.VatNumber))
+                .ToDictionary(s => s.VatNumber.Trim(), s => s);
+
+            foreach (var sup in easyfattSuppliers)
+            {
+                var vat = sup.VatNumber?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(vat) && existingVats.ContainsKey(vat))
+                {
+                    sup.Status = "DUPLICATO";
+                    sup.ExistingId = existingVats[vat].Id;
+                    sup.ExistingName = existingVats[vat].CompanyName;
+                }
+                else
+                {
+                    sup.Status = "NUOVO";
+                }
+            }
+
+            var summary = new
+            {
+                TotalFound = easyfattSuppliers.Count,
+                NewCount = easyfattSuppliers.Count(s => s.Status == "NUOVO"),
+                DuplicateCount = easyfattSuppliers.Count(s => s.Status == "DUPLICATO"),
+                Suppliers = easyfattSuppliers
+            };
+
+            return Ok(ApiResponse<object>.Ok(summary));
         }
         catch (Exception ex)
         {
-            return Ok(ApiResponse<object>.Fail($"Errore lettura DB: {ex.Message}"));
+            return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
         }
     }
 
     /// <summary>
-    /// Legge un campione di righe da una tabella specifica
+    /// Importa i fornitori selezionati in ATEC PM
     /// </summary>
-    [HttpGet("easyfatt/preview")]
-    public IActionResult PreviewTable([FromQuery] string filePath, [FromQuery] string tableName, [FromQuery] int maxRows = 10)
+    [HttpPost("easyfatt/suppliers")]
+    public IActionResult ImportSuppliers([FromBody] ImportSuppliersRequest req)
     {
-        if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(tableName))
-            return BadRequest("filePath e tableName richiesti");
-
-        if (!System.IO.File.Exists(filePath))
-            return Ok(ApiResponse<object>.Fail("File non trovato"));
-
         try
         {
-            var connStr = BuildConnectionString(filePath);
-            using var conn = new FbConnection(connStr);
-            conn.Open();
+            using var c = _db.Open();
+            int imported = 0;
+            int updated = 0;
+            int skipped = 0;
 
-            using var cmd = new FbCommand($"SELECT FIRST {maxRows} * FROM \"{tableName}\"", conn);
-            using var reader = cmd.ExecuteReader();
-
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
-                columns.Add(reader.GetName(i));
-
-            var rows = new List<Dictionary<string, object?>>();
-            while (reader.Read())
+            foreach (var sup in req.Suppliers)
             {
-                var dict = new Dictionary<string, object?>();
-                foreach (var col in columns)
+                if (sup.Action == "SKIP")
                 {
-                    var val = reader[col];
-                    dict[col] = val == DBNull.Value ? null : val;
+                    skipped++;
+                    continue;
                 }
-                rows.Add(dict);
+
+                if (sup.Action == "UPDATE" && sup.ExistingId > 0)
+                {
+                    c.Execute(@"UPDATE suppliers SET company_name=@CompanyName, contact_name=@ContactName, 
+                        email=@Email, phone=@Phone, address=@Address, vat_number=@VatNumber, 
+                        fiscal_code=@FiscalCode, notes=@Notes WHERE id=@ExistingId", sup);
+                    updated++;
+                }
+                else // INSERT
+                {
+                    c.Execute(@"INSERT INTO suppliers (company_name, contact_name, email, phone, address, vat_number, fiscal_code, notes, is_active) 
+                        VALUES (@CompanyName, @ContactName, @Email, @Phone, @Address, @VatNumber, @FiscalCode, @Notes, 1)", sup);
+                    imported++;
+                }
             }
 
-            return Ok(ApiResponse<object>.Ok(new { Columns = columns, RowCount = rows.Count, Rows = rows }));
+            return Ok(ApiResponse<object>.Ok(new { Imported = imported, Updated = updated, Skipped = skipped }));
         }
         catch (Exception ex)
         {
-            return Ok(ApiResponse<object>.Fail($"Errore lettura tabella: {ex.Message}"));
+            return Ok(ApiResponse<object>.Fail($"Errore import: {ex.Message}"));
         }
     }
 
     private string BuildConnectionString(string filePath)
     {
-        // Cerca fbclient.dll nella sottocartella Firebird accanto all'eseguibile
         var appDir = AppContext.BaseDirectory;
         var fbClientPath = _config["Easyfatt:FirebirdClientPath"]
             ?? Path.Combine(appDir, "Firebird", "fbclient.dll");
 
-        return new FbConnectionStringBuilder
-        {
-            Database = filePath,
-            ServerType = FbServerType.Embedded,
-            UserID = "SYSDBA",
-            Password = "masterkey",
-            Charset = "NONE",
-            ClientLibrary = fbClientPath
-        }.ToString();
+        return $"Database={filePath};ServerType=1;User=SYSDBA;Password=masterkey;ClientLibrary={fbClientPath}";
     }
 }

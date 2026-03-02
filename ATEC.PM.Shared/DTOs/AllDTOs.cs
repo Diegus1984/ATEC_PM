@@ -92,6 +92,7 @@ public class SupplierListItem
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
     public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
     public bool IsActive { get; set; }
 }
 
@@ -104,6 +105,7 @@ public class SupplierSaveRequest
     public string Phone { get; set; } = "";
     public string Address { get; set; } = "";
     public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
     public string Notes { get; set; } = "";
     public bool IsActive { get; set; } = true;
 }
@@ -243,4 +245,26 @@ public class FileTreeItem
     public string RelativePath { get; set; } = "";
     public DateTime? Modified { get; set; }
     public List<FileTreeItem> Children { get; set; } = new();
+}
+
+// === IMPORT EASYFATT ===
+public class EasyfattSupplierDto
+{
+    public string CompanyName { get; set; } = "";
+    public string ContactName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string Status { get; set; } = "NUOVO";  // NUOVO o DUPLICATO
+    public int ExistingId { get; set; }
+    public string ExistingName { get; set; } = "";
+    public string Action { get; set; } = "";  // INSERT, UPDATE, SKIP
+}
+
+public class ImportSuppliersRequest
+{
+    public List<EasyfattSupplierDto> Suppliers { get; set; } = new();
 }
