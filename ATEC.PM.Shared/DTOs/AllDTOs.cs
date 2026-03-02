@@ -65,8 +65,12 @@ public class CustomerListItem
     public string CompanyName { get; set; } = "";
     public string ContactName { get; set; } = "";
     public string Email { get; set; } = "";
+    public string Pec { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string Cell { get; set; } = "";
     public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
+    public string SdiCode { get; set; } = "";
     public bool IsActive { get; set; }
 }
 
@@ -76,9 +80,14 @@ public class CustomerSaveRequest
     public string CompanyName { get; set; } = "";
     public string ContactName { get; set; } = "";
     public string Email { get; set; } = "";
+    public string Pec { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string Cell { get; set; } = "";
     public string Address { get; set; } = "";
     public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
+    public string PaymentTerms { get; set; } = "";
+    public string SdiCode { get; set; } = "";
     public string Notes { get; set; } = "";
     public bool IsActive { get; set; } = true;
 }
@@ -267,6 +276,34 @@ public class EasyfattSupplierDto
 public class ImportSuppliersRequest
 {
     public List<EasyfattSupplierDto> Suppliers { get; set; } = new();
+}
+
+// === IMPORT CLIENTI EASYFATT ===
+public class EasyfattCustomerDto
+{
+    public int EasyfattId { get; set; }
+    public string EasyfattCode { get; set; } = "";
+    public string CompanyName { get; set; } = "";
+    public string ContactName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Pec { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Cell { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string VatNumber { get; set; } = "";
+    public string FiscalCode { get; set; } = "";
+    public string PaymentTerms { get; set; } = "";
+    public string SdiCode { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string Status { get; set; } = "NUOVO";
+    public int ExistingId { get; set; }
+    public string ExistingName { get; set; } = "";
+    public string Action { get; set; } = "";
+}
+
+public class ImportCustomersRequest
+{
+    public List<EasyfattCustomerDto> Customers { get; set; } = new();
 }
 
 // === CATALOGO ARTICOLI ===

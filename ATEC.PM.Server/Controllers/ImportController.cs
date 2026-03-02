@@ -399,6 +399,156 @@ public class ImportController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Legge i clienti da Easyfatt e li confronta con quelli esistenti in ATEC PM
+    /// </summary>
+    [HttpGet("easyfatt/customers")]
+    public IActionResult GetEasyfattCustomers([FromQuery] string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+            return BadRequest("filePath richiesto");
+
+        try
+        {
+            var connStr = BuildConnectionString(filePath);
+            using var fbConn = new FbConnection(connStr);
+            fbConn.Open();
+
+            using var cmd = new FbCommand(@"
+                SELECT ""IDAnagr"", ""CodAnagr"", ""Nome"", ""Referente"", ""Email"", ""Pec"", 
+                       ""Tel"", ""Cell"", ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"", 
+                       ""PartitaIva"", ""CodiceFiscale"", ""PagamentoDefault"", 
+                       ""FE_CodUfficio"", ""Note""
+                FROM ""TAnagrafica"" 
+                WHERE ""Cliente"" = 1
+                ORDER BY ""Nome""", fbConn);
+
+            using var reader = cmd.ExecuteReader();
+
+            var easyfattCustomers = new List<EasyfattCustomerDto>();
+            while (reader.Read())
+            {
+                var indirizzo = reader["Indirizzo"]?.ToString() ?? "";
+                var cap = reader["Cap"]?.ToString() ?? "";
+                var citta = reader["Citta"]?.ToString() ?? "";
+                var prov = reader["Prov"]?.ToString() ?? "";
+                var address = $"{indirizzo}, {cap} {citta} ({prov})".Trim(' ', ',');
+
+                easyfattCustomers.Add(new EasyfattCustomerDto
+                {
+                    EasyfattId = reader["IDAnagr"] != DBNull.Value ? Convert.ToInt32(reader["IDAnagr"]) : 0,
+                    EasyfattCode = reader["CodAnagr"]?.ToString()?.Trim() ?? "",
+                    CompanyName = reader["Nome"]?.ToString()?.Trim() ?? "",
+                    ContactName = reader["Referente"]?.ToString()?.Trim() ?? "",
+                    Email = reader["Email"]?.ToString()?.Trim() ?? "",
+                    Pec = reader["Pec"]?.ToString()?.Trim() ?? "",
+                    Phone = reader["Tel"]?.ToString()?.Trim() ?? "",
+                    Cell = reader["Cell"]?.ToString()?.Trim() ?? "",
+                    Address = address,
+                    VatNumber = reader["PartitaIva"]?.ToString()?.Trim() ?? "",
+                    FiscalCode = reader["CodiceFiscale"]?.ToString()?.Trim() ?? "",
+                    PaymentTerms = reader["PagamentoDefault"]?.ToString()?.Trim() ?? "",
+                    SdiCode = reader["FE_CodUfficio"]?.ToString()?.Trim() ?? "",
+                    Notes = reader["Note"]?.ToString() ?? ""
+                });
+            }
+            fbConn.Close();
+
+            using var mysqlConn = _db.Open();
+            var existing = mysqlConn.Query<CustomerListItem>(
+                "SELECT id, company_name AS CompanyName, vat_number AS VatNumber FROM customers").ToList();
+
+            var existingVats = new Dictionary<string, CustomerListItem>();
+            foreach (var s in existing.Where(s => !string.IsNullOrEmpty(s.VatNumber)))
+            {
+                var vat = s.VatNumber.Trim();
+                if (!existingVats.ContainsKey(vat))
+                    existingVats[vat] = s;
+            }
+
+            foreach (var cust in easyfattCustomers)
+            {
+                var vat = cust.VatNumber?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(vat) && existingVats.TryGetValue(vat, out var match))
+                {
+                    cust.Status = "DUPLICATO";
+                    cust.ExistingId = match.Id;
+                    cust.ExistingName = match.CompanyName;
+                    cust.Action = "SKIP";
+                }
+                else
+                {
+                    cust.Status = "NUOVO";
+                    cust.Action = "INSERT";
+                }
+            }
+
+            var summary = new
+            {
+                TotalFound = easyfattCustomers.Count,
+                NewCount = easyfattCustomers.Count(c => c.Status == "NUOVO"),
+                DuplicateCount = easyfattCustomers.Count(c => c.Status == "DUPLICATO"),
+                Customers = easyfattCustomers
+            };
+
+            return Ok(ApiResponse<object>.Ok(summary));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Importa i clienti selezionati in ATEC PM
+    /// </summary>
+    [HttpPost("easyfatt/customers")]
+    public IActionResult ImportCustomers([FromBody] ImportCustomersRequest req)
+    {
+        try
+        {
+            using var c = _db.Open();
+            int imported = 0;
+            int updated = 0;
+            int skipped = 0;
+
+            foreach (var cust in req.Customers)
+            {
+                if (cust.Action == "SKIP")
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (cust.Action == "UPDATE" && cust.ExistingId > 0)
+                {
+                    c.Execute(@"UPDATE customers SET company_name=@CompanyName, contact_name=@ContactName, 
+                        email=@Email, pec=@Pec, phone=@Phone, cell=@Cell, address=@Address, 
+                        vat_number=@VatNumber, fiscal_code=@FiscalCode, payment_terms=@PaymentTerms, 
+                        sdi_code=@SdiCode, easyfatt_code=@EasyfattCode, easyfatt_id=@EasyfattId, 
+                        notes=@Notes WHERE id=@ExistingId", cust);
+                    updated++;
+                }
+                else
+                {
+                    c.Execute(@"INSERT INTO customers (company_name, contact_name, email, pec, phone, cell, 
+                        address, vat_number, fiscal_code, payment_terms, sdi_code, easyfatt_code, 
+                        easyfatt_id, notes, is_active) 
+                        VALUES (@CompanyName, @ContactName, @Email, @Pec, @Phone, @Cell, 
+                        @Address, @VatNumber, @FiscalCode, @PaymentTerms, @SdiCode, @EasyfattCode, 
+                        @EasyfattId, @Notes, 1)", cust);
+                    imported++;
+                }
+            }
+
+            return Ok(ApiResponse<object>.Ok(new { Imported = imported, Updated = updated, Skipped = skipped }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<object>.Fail($"Errore import: {ex.Message}"));
+        }
+    }
+
     private string BuildConnectionString(string filePath)
     {
         var appDir = AppContext.BaseDirectory;

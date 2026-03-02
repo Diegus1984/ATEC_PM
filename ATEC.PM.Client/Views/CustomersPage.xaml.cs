@@ -71,4 +71,10 @@ public partial class CustomersPage : Page
     }
 
     private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await Load();
+
+    private void BtnImportEasyfatt_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new EasyfattCustomersImportDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true) _ = Load();
+    }
 }

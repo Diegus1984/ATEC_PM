@@ -74,6 +74,15 @@
                     DockPanel.Dock="Right"
                     Foreground="#374151"
                     Style="{StaticResource FlatBtn}" />
+                <Button
+                    Margin="0,0,8,0"
+                    HorizontalAlignment="Right"
+                    Background="#FFF7ED"
+                    Click="BtnImportEasyfatt_Click"
+                    Content="Importa da Easyfatt"
+                    DockPanel.Dock="Right"
+                    Foreground="#C2410C"
+                    Style="{StaticResource FlatBtn}" />
             </DockPanel>
         </Border>
 
