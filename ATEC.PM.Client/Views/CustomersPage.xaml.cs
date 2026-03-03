@@ -1,6 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,7 +13,9 @@ namespace ATEC.PM.Client.Views;
 
 public partial class CustomersPage : Page
 {
-    private List<CustomerListItem> _customers = new();
+    private List<CustomerListItem> _allItems = new();
+    private Dictionary<string, TextBox> _filterBoxes = new();
+    private CancellationTokenSource? _filterCts;
 
     public CustomersPage()
     {
@@ -24,18 +28,61 @@ public partial class CustomersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            var json = await ApiClient.GetAsync("/api/customers");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            string json = await ApiClient.GetAsync("/api/customers");
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var response = JsonSerializer.Deserialize<ApiResponse<List<CustomerListItem>>>(json, options);
+
+            if (response != null && response.Success)
             {
-                _customers = JsonSerializer.Deserialize<List<CustomerListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                dgCustomers.ItemsSource = _customers;
-                txtStatus.Text = $"{_customers.Count} clienti";
+                _allItems = response.Data ?? new();
+                ApplyFilter();
             }
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void Filter_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.Tag != null)
+            _filterBoxes[tb.Tag.ToString()!] = tb;
+    }
+
+    private async void Filter_Changed(object sender, TextChangedEventArgs e)
+    {
+        _filterCts?.Cancel();
+        _filterCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _filterCts.Token);
+            ApplyFilter();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void ApplyFilter()
+    {
+        if (_allItems == null) return;
+
+        string fName = _filterBoxes.GetValueOrDefault("Name")?.Text.Trim().ToLower() ?? "";
+        string fContact = _filterBoxes.GetValueOrDefault("Contact")?.Text.Trim().ToLower() ?? "";
+        string fVat = _filterBoxes.GetValueOrDefault("Vat")?.Text.Trim().ToLower() ?? "";
+        string fEmail = _filterBoxes.GetValueOrDefault("Email")?.Text.Trim().ToLower() ?? "";
+
+        var filtered = _allItems.Where(c =>
+            (string.IsNullOrEmpty(fName) || (c.CompanyName?.ToLower().Contains(fName) ?? false)) &&
+            (string.IsNullOrEmpty(fContact) || (c.ContactName?.ToLower().Contains(fContact) ?? false)) &&
+            (string.IsNullOrEmpty(fVat) || (c.VatNumber?.ToLower().Contains(fVat) ?? false)) &&
+            (string.IsNullOrEmpty(fEmail) || (c.Email?.ToLower().Contains(fEmail) ?? false))
+        ).ToList();
+
+        dgCustomers.ItemsSource = filtered;
+        txtStatus.Text = $"{filtered.Count} clienti trovati su {_allItems.Count}";
+    }
+
+    private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var tb in _filterBoxes.Values) tb.Clear();
+        ApplyFilter();
     }
 
     private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)

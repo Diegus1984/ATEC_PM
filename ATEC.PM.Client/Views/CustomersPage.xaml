@@ -1,93 +1,75 @@
-﻿<Page
+<Page
     x:Class="ATEC.PM.Client.Views.CustomersPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    MinWidth="800"
     Background="#F7F8FA">
-
-    <Page.Resources>
-        <Style x:Key="FlatBtn" TargetType="Button">
-            <Setter Property="Height" Value="34" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border
-                            x:Name="bd"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Opacity" Value="0.85" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Page.Resources>
 
     <DockPanel>
         <Border
-            Padding="16,10"
+            Padding="20,15"
             Background="White"
             BorderBrush="#E4E7EC"
             BorderThickness="0,0,0,1"
             DockPanel.Dock="Top">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
                     <Button
-                        Background="#4F6EF7"
+                        x:Name="btnNew"
+                        Background="#2E90FA"
                         Click="BtnNew_Click"
-                        Content="+ Nuovo"
+                        Content="+ Nuovo Cliente"
                         Foreground="White"
                         Style="{StaticResource FlatBtn}" />
+
                     <Button
                         x:Name="btnEdit"
-                        Margin="8,0,0,0"
-                        Background="#F3F4F6"
                         Click="BtnEdit_Click"
                         Content="Modifica"
-                        Foreground="#374151"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
+
                     <Button
                         x:Name="btnDelete"
-                        Margin="8,0,0,0"
-                        Background="#FEE2E2"
+                        Background="#FEF3F2"
+                        BorderBrush="#FECDCA"
                         Click="BtnDelete_Click"
                         Content="Elimina"
-                        Foreground="#DC2626"
+                        Foreground="#B42318"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
+
+                    <Separator
+                        Width="1"
+                        Margin="5,0"
+                        Background="#E4E7EC" />
+
+                    <Button
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="BtnClearFilters_Click"
+                        Content="Pulisci Filtri"
+                        Foreground="#667085"
+                        Style="{StaticResource FlatBtn}" />
+
+                    <Button
+                        Click="BtnRefresh_Click"
+                        Content="Aggiorna"
+                        Style="{StaticResource FlatBtn}" />
                 </StackPanel>
+
                 <Button
                     HorizontalAlignment="Right"
-                    Background="#F3F4F6"
-                    Click="BtnRefresh_Click"
-                    Content="Aggiorna"
-                    DockPanel.Dock="Right"
-                    Foreground="#374151"
-                    Style="{StaticResource FlatBtn}" />
-                <Button
-                    Margin="0,0,8,0"
-                    HorizontalAlignment="Right"
-                    Background="#FFF7ED"
+                    Background="#12B76A"
                     Click="BtnImportEasyfatt_Click"
                     Content="Importa da Easyfatt"
-                    DockPanel.Dock="Right"
-                    Foreground="#C2410C"
+                    Foreground="White"
                     Style="{StaticResource FlatBtn}" />
-            </DockPanel>
+            </Grid>
         </Border>
 
         <Border
-            Padding="16,6"
+            Padding="20,10"
             Background="White"
             BorderBrush="#E4E7EC"
             BorderThickness="0,1,0,0"
@@ -95,89 +77,134 @@
             <TextBlock
                 x:Name="txtStatus"
                 FontSize="12"
-                Foreground="#6B7280"
-                Text="Caricamento..." />
+                Foreground="#667085"
+                Text="Pronto" />
         </Border>
 
         <DataGrid
             x:Name="dgCustomers"
-            AutoGenerateColumns="False"
-            Background="White"
-            BorderThickness="0"
-            ColumnHeaderHeight="40"
-            FontSize="13"
-            GridLinesVisibility="Horizontal"
-            HorizontalGridLinesBrush="#F3F4F6"
+            Margin="20"
             IsReadOnly="True"
             MouseDoubleClick="Dg_DoubleClick"
-            RowHeight="40"
             SelectionChanged="Dg_SelectionChanged"
-            SelectionMode="Single">
-            <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="#F9FAFB" />
-                    <Setter Property="Foreground" Value="#6B7280" />
-                    <Setter Property="FontSize" Value="12" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                    <Setter Property="Padding" Value="12,0" />
-                    <Setter Property="BorderBrush" Value="#E4E7EC" />
-                    <Setter Property="BorderThickness" Value="0,0,0,1" />
-                </Style>
-            </DataGrid.ColumnHeaderStyle>
-            <DataGrid.RowStyle>
-                <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="White" />
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#EEF2FF" />
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="#F9FAFB" />
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.RowStyle>
-            <DataGrid.CellStyle>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Padding" Value="12,0" />
-                    <Setter Property="BorderThickness" Value="0" />
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="DataGridCell">
-                                <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                    <ContentPresenter VerticalAlignment="Center" />
-                                </Border>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Foreground" Value="#1A1D26" />
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.CellStyle>
+            Style="{StaticResource ModernDataGrid}">
+
             <DataGrid.Columns>
-                <DataGridTextColumn
-                    Width="*"
-                    Binding="{Binding CompanyName}"
-                    Header="Ragione Sociale" />
-                <DataGridTextColumn
-                    Width="160"
-                    Binding="{Binding ContactName}"
-                    Header="Referente" />
-                <DataGridTextColumn
-                    Width="180"
-                    Binding="{Binding Email}"
-                    Header="Email" />
+                <DataGridTemplateColumn Width="*" MinWidth="150">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Ragione Sociale" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Name"
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontWeight="Medium"
+                                Text="{Binding CompanyName}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="140" MinWidth="100">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Referente" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Contact"
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding ContactName}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="140" MinWidth="100">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="P.IVA" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Vat"
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding VatNumber}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="180" MinWidth="120">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Email" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Email"
+                                    TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Email}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
                 <DataGridTextColumn
                     Width="120"
+                    MinWidth="80"
                     Binding="{Binding Phone}"
                     Header="Telefono" />
                 <DataGridTextColumn
-                    Width="140"
-                    Binding="{Binding VatNumber}"
-                    Header="P.IVA" />
+                    Width="120"
+                    MinWidth="80"
+                    Binding="{Binding Pec}"
+                    Header="PEC" />
+                <DataGridTextColumn
+                    Width="100"
+                    MinWidth="70"
+                    Binding="{Binding FiscalCode}"
+                    Header="C.F." />
+                <DataGridTextColumn
+                    Width="80"
+                    MinWidth="60"
+                    Binding="{Binding SdiCode}"
+                    Header="SDI" />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

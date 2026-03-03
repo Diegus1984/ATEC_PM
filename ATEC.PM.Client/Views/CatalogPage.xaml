@@ -87,7 +87,8 @@
             Style="{StaticResource ModernDataGrid}">
 
             <DataGrid.Columns>
-                <DataGridTemplateColumn Width="120">
+                <DataGridTemplateColumn Width="*" MinWidth="100">
+                    <!--  Codice  -->
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
@@ -113,7 +114,8 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Width="*">
+                <DataGridTemplateColumn Width="2*" MinWidth="200">
+                    <!--  Descrizione (doppio spazio)  -->
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
@@ -139,7 +141,8 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Width="180">
+                <DataGridTemplateColumn Width="*" MinWidth="120">
+                    <!--  Fornitore  -->
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
@@ -162,7 +165,8 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Width="150">
+                <DataGridTemplateColumn Width="*" MinWidth="120">
+                    <!--  Produttore  -->
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
@@ -186,15 +190,18 @@
                 </DataGridTemplateColumn>
 
                 <DataGridTextColumn
-                    Width="130"
+                    Width="*"
+                    MinWidth="100"
                     Binding="{Binding Category}"
                     Header="Categoria" />
                 <DataGridTextColumn
-                    Width="50"
+                    Width="0.5*"
+                    MinWidth="50"
                     Binding="{Binding Unit}"
                     Header="UdM" />
                 <DataGridTextColumn
-                    Width="100"
+                    Width="*"
+                    MinWidth="80"
                     Binding="{Binding UnitCost, StringFormat='{}{0:N2} €'}"
                     Header="Acquisto">
                     <DataGridTextColumn.ElementStyle>
@@ -205,7 +212,8 @@
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
                 <DataGridTextColumn
-                    Width="100"
+                    Width="*"
+                    MinWidth="80"
                     Binding="{Binding ListPrice, StringFormat='{}{0:N2} €'}"
                     Header="Listino">
                     <DataGridTextColumn.ElementStyle>
