@@ -11,6 +11,13 @@ namespace ATEC.PM.Client.Views;
 public partial class ProjectsPage : Page
 {
     private List<ProjectListItem> _allProjects = new();
+    private TextBlock? _ddpSummaryText;
+    private ComboBox? _filterStatus;
+    private ComboBox? _filterSupplier;
+    private ComboBox? _filterManufacturer;
+    private ComboBox? _filterDestination;
+    private ComboBox? _filterRequestedBy;
+    private List<BomItemListItem> _ddpItemsFull = new();
 
     public ProjectsPage()
     {
@@ -356,27 +363,6 @@ public partial class ProjectsPage : Page
             SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}", Foreground = System.Windows.Media.Brushes.Red };
         }
     }
-
-    private DataGrid CreateStyledDataGrid()
-    {
-        return new DataGrid
-        {
-            AutoGenerateColumns = false,
-            IsReadOnly = true,
-            Background = System.Windows.Media.Brushes.White,
-            BorderThickness = new Thickness(1),
-            BorderBrush = Brush("#E4E7EC"),
-            GridLinesVisibility = DataGridGridLinesVisibility.All,
-            HorizontalGridLinesBrush = Brush("#F3F4F6"),
-            VerticalGridLinesBrush = Brush("#F3F4F6"),
-            RowHeight = 30,
-            ColumnHeaderHeight = 32,
-            FontSize = 12,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
-        };
-    }
-
     private void AddInfoRow(Grid grid, int row, string label, string value)
     {
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -572,6 +558,10 @@ public partial class ProjectsPage : Page
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
+            for (int i = 0; i < _ddpItems.Count; i++)
+                _ddpItems[i].RowNumber = i + 1;
+
+            _ddpItemsFull = new List<BomItemListItem>(_ddpItems);
             BuildDdpGrid();
         }
         catch (Exception ex)
@@ -593,16 +583,17 @@ public partial class ProjectsPage : Page
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(12, 8, 12, 8)
         };
-        summaryBar.Child = new TextBlock
+        _ddpSummaryText = new TextBlock
         {
             Text = $"{_ddpItems.Count} righe  |  Totale: {totalCost:N2} €",
             FontSize = 13,
             FontWeight = FontWeights.SemiBold
         };
+        summaryBar.Child = _ddpSummaryText;
         DockPanel.SetDock(summaryBar, Dock.Top);
         mainPanel.Children.Add(summaryBar);
 
-        // Bottone elimina riga
+        // Toolbar
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 6) };
         var btnDelete = new Button
         {
@@ -616,8 +607,64 @@ public partial class ProjectsPage : Page
         };
         btnDelete.Click += async (s, e) => await DeleteDdpItem();
         toolbar.Children.Add(btnDelete);
+
+        var btnClearFilter = new Button
+        {
+            Content = "✕ Pulisci filtri",
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(12, 0, 0, 0),
+            Background = System.Windows.Media.Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            FontSize = 12,
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+        btnClearFilter.Click += (s, e) => ClearDdpFilters();
+        toolbar.Children.Add(btnClearFilter);
+
         DockPanel.SetDock(toolbar, Dock.Top);
         mainPanel.Children.Add(toolbar);
+
+        // Riga filtri
+        var filterGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(45) });   // #
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(85) });   // Data
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });   // Rich.
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Codice
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Desc
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });   // Qtà
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(45) });   // UM
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });  // Fornitore
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Produttore
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Stato
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });   // Rif Danea
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Data Prev
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Dest
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });  // Note
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });   // € Unit
+        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });   // € Tot
+
+        _filterRequestedBy = CreateFilterCombo(_ddpItemsFull.Select(i => i.RequestedBy).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
+        Grid.SetColumn(_filterRequestedBy, 2);
+        filterGrid.Children.Add(_filterRequestedBy);
+
+        _filterSupplier = CreateFilterCombo(_ddpItemsFull.Select(i => i.SupplierName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
+        Grid.SetColumn(_filterSupplier, 7);
+        filterGrid.Children.Add(_filterSupplier);
+
+        _filterManufacturer = CreateFilterCombo(_ddpItemsFull.Select(i => i.Manufacturer).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
+        Grid.SetColumn(_filterManufacturer, 8);
+        filterGrid.Children.Add(_filterManufacturer);
+
+        _filterStatus = CreateFilterCombo(GetStatusList().Select(kv => kv.Value));
+        Grid.SetColumn(_filterStatus, 9);
+        filterGrid.Children.Add(_filterStatus);
+
+        _filterDestination = CreateFilterCombo(_ddpItemsFull.Select(i => i.Destination).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
+        Grid.SetColumn(_filterDestination, 12);
+        filterGrid.Children.Add(_filterDestination);
+
+        DockPanel.SetDock(filterGrid, Dock.Top);
+        mainPanel.Children.Add(filterGrid);
 
         // DataGrid
         _ddpGrid = new DataGrid
@@ -630,82 +677,47 @@ public partial class ProjectsPage : Page
             GridLinesVisibility = DataGridGridLinesVisibility.All,
             HorizontalGridLinesBrush = Brush("#F3F4F6"),
             VerticalGridLinesBrush = Brush("#F3F4F6"),
-            RowHeight = 34,
+            MinRowHeight = 34,
             ColumnHeaderHeight = 34,
-            FontSize = 12,
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
             SelectionMode = DataGridSelectionMode.Single,
             CanUserAddRows = false,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
         };
 
+        var rowStyle = new Style(typeof(DataGridRow));
+
+        // Trigger per ogni stato
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_ORDER", System.Windows.Media.Color.FromRgb(255, 0, 0), System.Windows.Media.Colors.White));           // rosso
+        rowStyle.Triggers.Add(CreateStatusTrigger("ORDERED", System.Windows.Media.Color.FromRgb(255, 255, 0), System.Windows.Media.Colors.Black));           // giallo
+        rowStyle.Triggers.Add(CreateStatusTrigger("DELIVERED", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White));          // verde
+        rowStyle.Triggers.Add(CreateStatusTrigger("PARTIAL", System.Windows.Media.Color.FromRgb(112, 48, 160), System.Windows.Media.Colors.White));          // viola
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_BUILD", System.Windows.Media.Color.FromRgb(128, 128, 128), System.Windows.Media.Colors.White));        // grigio
+        rowStyle.Triggers.Add(CreateStatusTrigger("RFQ", System.Windows.Media.Color.FromRgb(255, 192, 0), System.Windows.Media.Colors.Black));               // arancione
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_CHECK", System.Windows.Media.Color.FromRgb(0, 176, 240), System.Windows.Media.Colors.White));          // azzurro
+        rowStyle.Triggers.Add(CreateStatusTrigger("CANCELLED", System.Windows.Media.Color.FromRgb(64, 64, 64), System.Windows.Media.Colors.White));          // grigio scuro
+        rowStyle.Triggers.Add(CreateStatusTrigger("ASSIGNED", System.Windows.Media.Color.FromRgb(0, 80, 180), System.Windows.Media.Colors.White));           // blu
+        rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(0, 150, 150), System.Windows.Media.Colors.White));           // teal
+        rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(200, 50, 120), System.Windows.Media.Colors.White));       // rosa scuro
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(34, 139, 34), System.Windows.Media.Colors.White));         // verde foresta
+
+        _ddpGrid.RowStyle = rowStyle;
         // Colonne readonly
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "#",
-            Binding = new System.Windows.Data.Binding("Id"),
-            Width = 45,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Data",
-            Binding = new System.Windows.Data.Binding("CreatedAt") { StringFormat = "dd/MM/yyyy" },
-            Width = 85,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Rich.",
-            Binding = new System.Windows.Data.Binding("RequestedBy"),
-            Width = 80,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Codice",
-            Binding = new System.Windows.Data.Binding("PartNumber"),
-            Width = 110,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Descrizione",
-            Binding = new System.Windows.Data.Binding("Description"),
-            Width = new DataGridLength(1, DataGridLengthUnitType.Star),
-            IsReadOnly = true
-        });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "#", Binding = new System.Windows.Data.Binding("RowNumber"), Width = 45, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Data", Binding = new System.Windows.Data.Binding("CreatedAt") { StringFormat = "dd/MM/yyyy" }, Width = 85, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Rich.", Binding = new System.Windows.Data.Binding("RequestedBy"), Width = 80, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Codice", Binding = new System.Windows.Data.Binding("PartNumber"), Width = 110, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Descrizione", Binding = new System.Windows.Data.Binding("Description"), Width = new DataGridLength(1, DataGridLengthUnitType.Star), IsReadOnly = true });
 
         // Colonne editabili
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Qtà",
-            Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "N0", UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus },
-            Width = 55
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "UM",
-            Binding = new System.Windows.Data.Binding("Unit"),
-            Width = 45,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Fornitore",
-            Binding = new System.Windows.Data.Binding("SupplierName"),
-            Width = 120,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Produttore",
-            Binding = new System.Windows.Data.Binding("Manufacturer"),
-            Width = 110,
-            IsReadOnly = true
-        });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Qtà", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "N0", UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 55 });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "UM", Binding = new System.Windows.Data.Binding("Unit"), Width = 45, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Fornitore", Binding = new System.Windows.Data.Binding("SupplierName"), Width = 120, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Produttore", Binding = new System.Windows.Data.Binding("Manufacturer"), Width = 110, IsReadOnly = true });
 
-        // Stato - ComboBox
+        // Stato ComboBox
         var statusCol = new DataGridComboBoxColumn
         {
             Header = "Stato",
@@ -717,94 +729,196 @@ public partial class ProjectsPage : Page
         statusCol.ItemsSource = GetStatusList();
         _ddpGrid.Columns.Add(statusCol);
 
-        _ddpGrid.Columns.Add(new DataGridTextColumn
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Rif. Danea", Binding = new System.Windows.Data.Binding("DaneaRef") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 90 });
+
+        // Data Prev con DatePicker
+        var dateCol = new DataGridTemplateColumn { Header = "Data Prev.", Width = 110 };
+        var displayFactory = new FrameworkElementFactory(typeof(TextBlock));
+        displayFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("DateNeeded") { StringFormat = "dd/MM/yyyy" });
+        displayFactory.SetValue(TextBlock.MarginProperty, new Thickness(4, 0, 0, 0));
+        displayFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+        dateCol.CellTemplate = new DataTemplate { VisualTree = displayFactory };
+        var editFactory = new FrameworkElementFactory(typeof(DatePicker));
+        editFactory.SetBinding(DatePicker.SelectedDateProperty, new System.Windows.Data.Binding("DateNeeded") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Mode = System.Windows.Data.BindingMode.TwoWay });
+        editFactory.SetValue(DatePicker.FontSizeProperty, 11.0);
+        editFactory.AddHandler(DatePicker.SelectedDateChangedEvent, new EventHandler<SelectionChangedEventArgs>((s, ev) =>
         {
-            Header = "Rif. Danea",
-            Binding = new System.Windows.Data.Binding("DaneaRef") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus },
-            Width = 90
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Data Prev.",
-            Binding = new System.Windows.Data.Binding("DateNeeded") { StringFormat = "dd/MM/yyyy", UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus },
-            Width = 90
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Destinazione",
-            Binding = new System.Windows.Data.Binding("Destination") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus },
-            Width = 110
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "Note",
-            Binding = new System.Windows.Data.Binding("Notes") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus },
-            Width = 150
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "€ Unit.",
-            Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "N2" },
-            Width = 70,
-            IsReadOnly = true
-        });
-        _ddpGrid.Columns.Add(new DataGridTextColumn
-        {
-            Header = "€ Totale",
-            Binding = new System.Windows.Data.Binding("TotalCost") { StringFormat = "N2" },
-            Width = 80,
-            IsReadOnly = true
-        });
+            if (s is DatePicker dp && dp.SelectedDate.HasValue && dp.SelectedDate.Value.Date < DateTime.Today)
+            {
+                dp.SelectedDate = DateTime.Today;
+                MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }));
+        dateCol.CellEditingTemplate = new DataTemplate { VisualTree = editFactory };
+        _ddpGrid.Columns.Add(dateCol);
+
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Destinazione", Binding = new System.Windows.Data.Binding("Destination") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 110 });
+        var noteCol = new DataGridTemplateColumn { Header = "Note", Width = 250 };
+
+        // Template visualizzazione - wrap
+        var noteDisplayFactory = new FrameworkElementFactory(typeof(TextBlock));
+        noteDisplayFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Notes"));
+        noteDisplayFactory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+        noteDisplayFactory.SetValue(TextBlock.MarginProperty, new Thickness(4, 4, 4, 4));
+        noteDisplayFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Top);
+        noteCol.CellTemplate = new DataTemplate { VisualTree = noteDisplayFactory };
+
+        // Template editing - TextBox multilinea
+        var noteEditFactory = new FrameworkElementFactory(typeof(TextBox));
+        noteEditFactory.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Notes") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus, Mode = System.Windows.Data.BindingMode.TwoWay });
+        noteEditFactory.SetValue(TextBox.AcceptsReturnProperty, true);
+        noteEditFactory.SetValue(TextBox.TextWrappingProperty, TextWrapping.Wrap);
+        noteEditFactory.SetValue(TextBox.MinHeightProperty, 60.0);
+        noteEditFactory.SetValue(TextBox.MaxHeightProperty, 150.0);
+        noteEditFactory.SetValue(TextBox.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        noteEditFactory.SetValue(TextBox.FontSizeProperty, 12.0);
+        noteCol.CellEditingTemplate = new DataTemplate { VisualTree = noteEditFactory };
+
+        _ddpGrid.Columns.Add(noteCol);
+
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "€ Unit.", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "N2" }, Width = 70, IsReadOnly = true });
+        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "€ Totale", Binding = new System.Windows.Data.Binding("TotalCost") { StringFormat = "N2" }, Width = 80, IsReadOnly = true });
+
+        // Eventi
+        SubscribeDdpEvents();
 
         _ddpGrid.ItemsSource = _ddpItems;
         _ddpGrid.SelectionChanged += (s, e) => { btnDelete.IsEnabled = _ddpGrid.SelectedItem != null; };
         _ddpGrid.CellEditEnding += DdpGrid_CellEditEnding;
-        _ddpGrid.LoadingRow += DdpGrid_LoadingRow;
 
         mainPanel.Children.Add(_ddpGrid);
         SectionContent.Content = mainPanel;
     }
 
-    private void DdpGrid_LoadingRow(object? sender, DataGridRowEventArgs e)
+
+    private static DataTrigger CreateStatusTrigger(string status, System.Windows.Media.Color bgColor, System.Windows.Media.Color fgColor)
     {
-        if (e.Row.Item is BomItemListItem item)
+        var trigger = new DataTrigger
         {
-            e.Row.Background = GetStatusBrush(item.ItemStatus);
+            Binding = new System.Windows.Data.Binding("ItemStatus"),
+            Value = status
+        };
+        var bgBrush = new System.Windows.Media.SolidColorBrush(bgColor);
+        bgBrush.Freeze();
+        var fgBrush = new System.Windows.Media.SolidColorBrush(fgColor);
+        fgBrush.Freeze();
+        trigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, bgBrush));
+        trigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, fgBrush));
+        return trigger;
+    }
+
+
+    private void SubscribeDdpEvents()
+    {
+        foreach (var item in _ddpItems)
+        {
+            item.PropertyChanged += (s, ev) =>
+            {
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (ev.PropertyName is nameof(BomItemListItem.ItemStatus)
+                        or nameof(BomItemListItem.TotalCost)
+                        or nameof(BomItemListItem.Quantity))
+                    {
+                        UpdateDdpSummary();
+                    }
+                });
+            };
         }
     }
 
-    private static System.Windows.Media.SolidColorBrush GetStatusBrush(string status)
+    private ComboBox CreateFilterCombo(IEnumerable<string> values)
     {
-        return status switch
+        var combo = new ComboBox
         {
-            "TO_ORDER" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 0, 0)),       // rosso chiaro
-            "ORDERED" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 0)),     // giallo chiaro
-            "DELIVERED" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 176, 80)),     // verde chiaro
-            "PARTIAL" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 112, 48, 160)),    // viola chiaro
-            "TO_BUILD" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 180, 180, 180)),   // grigio chiaro
-            "RFQ" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 192, 0)),     // arancione chiaro
-            "TO_CHECK" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 176, 240)),     // azzurro chiaro
-            "CANCELLED" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 128, 128, 128)),   // grigio
-            "ASSIGNED" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 100, 100, 200)),   // blu chiaro
-            "SHIPPED" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 200, 200)),     // teal chiaro
-            _ => System.Windows.Media.Brushes.White
+            FontSize = 11,
+            Margin = new Thickness(1, 0, 1, 0),
+            IsEditable = false,
+            VerticalContentAlignment = VerticalAlignment.Center
         };
+        combo.Items.Add(new ComboBoxItem { Content = "(Tutti)", IsSelected = true });
+        foreach (var val in values)
+            combo.Items.Add(new ComboBoxItem { Content = val });
+        combo.SelectionChanged += (s, e) => ApplyDdpFilters();
+        return combo;
     }
 
+    private void ApplyDdpFilters()
+    {
+        if (_ddpGrid == null || _ddpItemsFull == null) return;
+
+        var filtered = _ddpItemsFull.AsEnumerable();
+
+        string fStatus = GetFilterValue(_filterStatus);
+        string fSupplier = GetFilterValue(_filterSupplier);
+        string fManufacturer = GetFilterValue(_filterManufacturer);
+        string fDestination = GetFilterValue(_filterDestination);
+        string fRequestedBy = GetFilterValue(_filterRequestedBy);
+
+        if (!string.IsNullOrEmpty(fStatus))
+        {
+            // Trova la chiave dallo stato visualizzato
+            var statusKey = GetStatusList().FirstOrDefault(kv => kv.Value == fStatus).Key;
+            if (!string.IsNullOrEmpty(statusKey))
+                filtered = filtered.Where(i => i.ItemStatus == statusKey);
+        }
+        if (!string.IsNullOrEmpty(fSupplier))
+            filtered = filtered.Where(i => i.SupplierName == fSupplier);
+        if (!string.IsNullOrEmpty(fManufacturer))
+            filtered = filtered.Where(i => i.Manufacturer == fManufacturer);
+        if (!string.IsNullOrEmpty(fDestination))
+            filtered = filtered.Where(i => i.Destination == fDestination);
+        if (!string.IsNullOrEmpty(fRequestedBy))
+            filtered = filtered.Where(i => i.RequestedBy == fRequestedBy);
+
+        _ddpItems = filtered.ToList();
+        _ddpGrid.ItemsSource = _ddpItems;
+        UpdateDdpSummary();
+        SubscribeDdpEvents();
+    }
+
+    private static string GetFilterValue(ComboBox? combo)
+    {
+        if (combo?.SelectedItem is ComboBoxItem item)
+        {
+            string val = item.Content?.ToString() ?? "";
+            return val == "(Tutti)" ? "" : val;
+        }
+        return "";
+    }
+
+    private void ClearDdpFilters()
+    {
+        if (_filterStatus != null) _filterStatus.SelectedIndex = 0;
+        if (_filterSupplier != null) _filterSupplier.SelectedIndex = 0;
+        if (_filterManufacturer != null) _filterManufacturer.SelectedIndex = 0;
+        if (_filterDestination != null) _filterDestination.SelectedIndex = 0;
+        if (_filterRequestedBy != null) _filterRequestedBy.SelectedIndex = 0;
+    }
+
+    private void UpdateDdpSummary()
+    {
+        if (_ddpSummaryText == null) return;
+        var activeItems = _ddpItems.Where(i => i.ItemStatus != "CANCELLED").ToList();
+        var totalCost = activeItems.Sum(i => i.TotalCost);
+        _ddpSummaryText.Text = $"{_ddpItems.Count} righe ({activeItems.Count} attive)  |  Totale: {totalCost:N2} €";
+    }
     private static List<KeyValuePair<string, string>> GetStatusList()
     {
         return new List<KeyValuePair<string, string>>
     {
         new("TO_ORDER", "DO - Da Ordinare"),
         new("ORDERED", "IO - In Ordine"),
-        new("DELIVERED", "CON - Consegnato"),
+        new("DELIVERED", "CON - Consegnato/Disp."),
         new("PARTIAL", "PAR - Parziale"),
         new("TO_BUILD", "DC - Da Costruire"),
         new("RFQ", "RO - Rich. Offerta"),
-        new("TO_CHECK", "VER - Verificare"),
-        new("CANCELLED", "ANN - Annullato"),
-        new("ASSIGNED", "ASS - Assegnato"),
-        new("SHIPPED", "SPED - Spedito")
+        new("TO_CHECK", "VER - Verificare Mag."),
+        new("CANCELLED", "ANN - Ann./Sosp./Sost."),
+        new("ASSIGNED", "ASS - Assegnato Mont."),
+        new("SHIPPED", "SPED - Spedito"),
+        new("TECH_CHECK", "CHEK - Controllo Tecn./Comm."),
+        new("TO_MODULA", "MOD - Inviato a Modula")
     };
     }
 
@@ -813,8 +927,21 @@ public partial class ProjectsPage : Page
         if (e.EditAction == DataGridEditAction.Cancel) return;
         if (e.Row.Item is not BomItemListItem item) return;
 
-        // Piccolo delay per permettere al binding di aggiornarsi
         await Task.Delay(100);
+
+        // Validazione quantità
+        if (item.Quantity <= 0)
+        {
+            item.Quantity = 1;
+            MessageBox.Show("La quantità deve essere maggiore di zero.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        // Validazione data
+        if (item.DateNeeded.HasValue && item.DateNeeded.Value.Date < DateTime.Today)
+        {
+            item.DateNeeded = DateTime.Today;
+            MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
 
         try
         {
@@ -832,9 +959,7 @@ public partial class ProjectsPage : Page
 
             string body = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"/api/projects/{_ddpProjectId}/ddp/{item.Id}", body);
-            // Aggiorna colore riga
-            if (_ddpGrid?.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
-                row.Background = GetStatusBrush(item.ItemStatus);
+            UpdateDdpSummary();
         }
         catch { /* silenzioso per auto-save */ }
     }

@@ -1,92 +1,186 @@
-﻿<Window x:Class="ATEC.PM.Client.Views.CatalogPickerWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Seleziona Articolo dal Catalogo" 
-        Width="1100" Height="650"
-        WindowStartupLocation="CenterOwner"
-        Background="#F7F8FA">
+﻿<Window
+    x:Class="ATEC.PM.Client.Views.CatalogPickerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Seleziona Articolo dal Catalogo"
+    Width="1100"
+    Height="650"
+    Background="#F7F8FA"
+    WindowStartupLocation="CenterOwner">
 
     <DockPanel Margin="16">
-        <!-- Header -->
-        <TextBlock DockPanel.Dock="Top" Text="Doppio click per aggiungere alla DDP (Qtà = 1)"
-                   FontSize="13" Foreground="Gray" Margin="0,0,0,12"/>
+        <!--  Header  -->
+        <TextBlock
+            Margin="0,0,0,12"
+            DockPanel.Dock="Top"
+            FontSize="13"
+            Foreground="Gray"
+            Text="Doppio click per aggiungere alla DDP (Qtà = 1)" />
 
-        <!-- Filtri -->
-        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" 
-                BorderThickness="1" Padding="12,8" Margin="0,0,0,8">
+        <!--  Filtri  -->
+        <Border
+            Margin="0,0,0,8"
+            Padding="12,8"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="1"
+            DockPanel.Dock="Top">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Tag="Code" Loaded="Filter_Loaded" TextChanged="Filter_Changed"
-                         ToolTip="Filtra per codice" FontSize="13"/>
-                <TextBox Grid.Column="2" Tag="Desc" Loaded="Filter_Loaded" TextChanged="Filter_Changed"
-                         ToolTip="Filtra per descrizione" FontSize="13"/>
-                <TextBox Grid.Column="4" Tag="Supp" Loaded="Filter_Loaded" TextChanged="Filter_Changed"
-                         ToolTip="Filtra per fornitore" FontSize="13"/>
-                <TextBox Grid.Column="6" Tag="Man" Loaded="Filter_Loaded" TextChanged="Filter_Changed"
-                         ToolTip="Filtra per produttore" FontSize="13"/>
-                <Button Grid.Column="8" Content="✕" Width="32" Height="28" 
-                        Click="BtnClearFilters_Click" ToolTip="Pulisci filtri"
-                        Background="Transparent" BorderThickness="0" FontSize="14" Cursor="Hand"/>
+                <TextBox
+                    Grid.Column="0"
+                    FontSize="13"
+                    Loaded="Filter_Loaded"
+                    Tag="Code"
+                    TextChanged="Filter_Changed"
+                    ToolTip="Filtra per codice" />
+                <TextBox
+                    Grid.Column="2"
+                    FontSize="13"
+                    Loaded="Filter_Loaded"
+                    Tag="Desc"
+                    TextChanged="Filter_Changed"
+                    ToolTip="Filtra per descrizione" />
+                <TextBox
+                    Grid.Column="4"
+                    FontSize="13"
+                    Loaded="Filter_Loaded"
+                    Tag="Supp"
+                    TextChanged="Filter_Changed"
+                    ToolTip="Filtra per fornitore" />
+                <TextBox
+                    Grid.Column="6"
+                    FontSize="13"
+                    Loaded="Filter_Loaded"
+                    Tag="Man"
+                    TextChanged="Filter_Changed"
+                    ToolTip="Filtra per produttore" />
+                <Button
+                    Grid.Column="8"
+                    Width="32"
+                    Height="28"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="BtnClearFilters_Click"
+                    Content="✕"
+                    Cursor="Hand"
+                    FontSize="14"
+                    ToolTip="Pulisci filtri" />
             </Grid>
         </Border>
 
-        <!-- Intestazioni filtri -->
-        <Border DockPanel.Dock="Top" Margin="0,0,0,4">
+        <!--  Intestazioni filtri  -->
+        <Border Margin="0,0,0,4" DockPanel.Dock="Top">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="CODICE" FontSize="10" FontWeight="SemiBold" Foreground="Gray"/>
-                <TextBlock Grid.Column="2" Text="DESCRIZIONE" FontSize="10" FontWeight="SemiBold" Foreground="Gray"/>
-                <TextBlock Grid.Column="4" Text="FORNITORE" FontSize="10" FontWeight="SemiBold" Foreground="Gray"/>
-                <TextBlock Grid.Column="6" Text="PRODUTTORE" FontSize="10" FontWeight="SemiBold" Foreground="Gray"/>
+                <TextBlock
+                    Grid.Column="0"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="Gray"
+                    Text="CODICE" />
+                <TextBlock
+                    Grid.Column="2"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="Gray"
+                    Text="DESCRIZIONE" />
+                <TextBlock
+                    Grid.Column="4"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="Gray"
+                    Text="FORNITORE" />
+                <TextBlock
+                    Grid.Column="6"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="Gray"
+                    Text="PRODUTTORE" />
             </Grid>
         </Border>
 
-        <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom" Padding="0,8,0,0">
+        <!--  Status bar  -->
+        <Border Padding="0,8,0,0" DockPanel.Dock="Bottom">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="txtStatus" FontSize="12" Foreground="Gray"/>
-                <TextBlock Grid.Column="1" x:Name="txtAdded" FontSize="12" Foreground="#4F6EF7" FontWeight="SemiBold"/>
+                <TextBlock
+                    x:Name="txtStatus"
+                    FontSize="12"
+                    Foreground="Gray" />
+                <TextBlock
+                    x:Name="txtAdded"
+                    Grid.Column="1"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="#4F6EF7" />
             </Grid>
         </Border>
 
-        <!-- DataGrid -->
-        <DataGrid x:Name="dgCatalog" AutoGenerateColumns="False" IsReadOnly="True"
-                  Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
-                  GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
-                  RowHeight="32" ColumnHeaderHeight="34" FontSize="13"
-                  SelectionMode="Single" CanUserSortColumns="True"
-                  MouseDoubleClick="Dg_DoubleClick">
+        <!--  DataGrid  -->
+        <DataGrid
+            x:Name="dgCatalog"
+            AutoGenerateColumns="False"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="1"
+            CanUserSortColumns="True"
+            ColumnHeaderHeight="34"
+            FontSize="13"
+            GridLinesVisibility="Horizontal"
+            HorizontalGridLinesBrush="#F3F4F6"
+            IsReadOnly="True"
+            MouseDoubleClick="Dg_DoubleClick"
+            RowHeight="32"
+            SelectionMode="Single">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Codice" Binding="{Binding Code}" Width="120"/>
-                <DataGridTextColumn Header="Descrizione" Binding="{Binding Description}" Width="*"/>
-                <DataGridTextColumn Header="UM" Binding="{Binding Unit}" Width="50"/>
-                <DataGridTextColumn Header="Fornitore" Binding="{Binding SupplierName}" Width="160"/>
-                <DataGridTextColumn Header="Produttore" Binding="{Binding Manufacturer}" Width="140"/>
-                <DataGridTextColumn Header="Costo" Binding="{Binding UnitCost, StringFormat=N2}" Width="80"/>
+                <DataGridTextColumn
+                    Width="120"
+                    Binding="{Binding Code}"
+                    Header="Codice" />
+                <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Description}"
+                    Header="Descrizione" />
+                <DataGridTextColumn
+                    Width="50"
+                    Binding="{Binding Unit}"
+                    Header="UM" />
+                <DataGridTextColumn
+                    Width="160"
+                    Binding="{Binding SupplierName}"
+                    Header="Fornitore" />
+                <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding Manufacturer}"
+                    Header="Produttore" />
+                <DataGridTextColumn
+                    Width="80"
+                    Binding="{Binding UnitCost, StringFormat=N2}"
+                    Header="Costo" />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

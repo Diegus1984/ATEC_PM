@@ -51,4 +51,17 @@ public partial class LoginWindow : Window
             btnLogin.Content = "Accedi";
         }
     }
+
+    private void txtPassword_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            if (string.IsNullOrWhiteSpace(txtUsername.Text))
+            {
+                txtUsername.Focus();
+                return;
+            }
+            BtnLogin_Click(sender, e);
+        }
+    }
 }

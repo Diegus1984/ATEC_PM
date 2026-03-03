@@ -99,6 +99,48 @@ public partial class CatalogPickerWindow : Window
 
         try
         {
+            // Controlla se esiste già nella DDP
+            string checkJson = await ApiClient.GetAsync($"/api/projects/{_projectId}/ddp?type={_ddpType}");
+            var checkDoc = JsonDocument.Parse(checkJson);
+            if (checkDoc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var existing = JsonSerializer.Deserialize<List<BomItemListItem>>(
+                    checkDoc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+                var duplicate = existing.FirstOrDefault(x => x.CatalogItemId == item.Id);
+                if (duplicate != null)
+                {
+                    var result = MessageBox.Show(
+                        $"L'articolo {item.Code} è già presente nella DDP (Qtà attuale: {duplicate.Quantity}).\n\nVuoi aggiungere +1 alla quantità?",
+                        "Articolo già presente",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        var updateReq = new BomItemSaveRequest
+                        {
+                            Id = duplicate.Id,
+                            ProjectId = _projectId,
+                            Quantity = duplicate.Quantity + 1,
+                            ItemStatus = duplicate.ItemStatus,
+                            DaneaRef = duplicate.DaneaRef,
+                            DateNeeded = duplicate.DateNeeded,
+                            Destination = duplicate.Destination,
+                            Notes = duplicate.Notes
+                        };
+                        string updateBody = JsonSerializer.Serialize(updateReq, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                        await ApiClient.PutAsync($"/api/projects/{_projectId}/ddp/{duplicate.Id}", updateBody);
+                        _addedCount++;
+                        txtAdded.Text = $"✓ Qtà aggiornata per {item.Code}";
+                        ItemAdded?.Invoke();
+                    }
+                    return;
+                }
+            }
+
+            // Inserimento nuovo
             var req = new BomItemSaveRequest
             {
                 ProjectId = _projectId,
