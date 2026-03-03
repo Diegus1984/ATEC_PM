@@ -414,3 +414,49 @@ public class TemplateFileInfo
     public string FileName { get; set; } = "";
     public long SizeBytes { get; set; }
 }
+
+// === DDP (Distinta Di Produzione) ===
+public class BomItemListItem
+{
+    public int Id { get; set; }
+    public int ProjectId { get; set; }
+    public int? CatalogItemId { get; set; }
+    public string PartNumber { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public decimal Quantity { get; set; }
+    public decimal UnitCost { get; set; }
+    public decimal TotalCost => Quantity * UnitCost;
+    public string SupplierName { get; set; } = "";
+    public string Manufacturer { get; set; } = "";
+    public string ItemStatus { get; set; } = "TO_ORDER";
+    public string RequestedBy { get; set; } = "";
+    public string DaneaRef { get; set; } = "";
+    public DateTime? DateNeeded { get; set; }
+    public string Destination { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string DdpType { get; set; } = "COMMERCIAL";
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class BomItemSaveRequest
+{
+    public int Id { get; set; }
+    public int ProjectId { get; set; }
+    public int? CatalogItemId { get; set; }
+    public string PartNumber { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Unit { get; set; } = "PZ";
+    public decimal Quantity { get; set; } = 1;
+    public decimal UnitCost { get; set; }
+    public int? SupplierId { get; set; }
+    public string Manufacturer { get; set; } = "";
+    public string ItemStatus { get; set; } = "TO_ORDER";
+    public string RequestedBy { get; set; } = "";
+    public string DaneaRef { get; set; } = "";
+    public DateTime? DateNeeded { get; set; }
+    public string Destination { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string DdpType { get; set; } = "COMMERCIAL";
+}
+

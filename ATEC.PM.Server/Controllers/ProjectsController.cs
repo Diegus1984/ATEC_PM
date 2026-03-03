@@ -424,21 +424,24 @@ public class ProjectsController : ControllerBase
                     int startCol = ws.Dimension.Start.Column;
                     int dimEndCol = ws.Dimension.End.Column;
 
-                    // Trova l'ultima colonna realmente usata (max 100 per sicurezza)
+                    // Trova l'ultima colonna realmente usata (scansiona tutte le righe fino a max 200 colonne)
                     int endCol = startCol;
-                    for (int col = startCol; col <= Math.Min(dimEndCol, 200); col++)
+                    int scanRows = Math.Min(dimEndRow, 50); // scansiona prime 50 righe per trovare colonne
+                    for (int col = Math.Min(dimEndCol, 200); col >= startCol; col--)
                     {
-                        for (int row = startRow; row <= Math.Min(dimEndRow, 5); row++)
+                        bool found = false;
+                        for (int row = startRow; row <= scanRows; row++)
                         {
                             if (!string.IsNullOrEmpty(ws.Cells[row, col].Text))
                             {
-                                endCol = col;
+                                found = true;
                                 break;
                             }
                         }
+                        if (found) { endCol = col; break; }
                     }
 
-                    // Trova l'ultima riga realmente usata (scansiona solo le prime colonne)
+                    // Trova l'ultima riga realmente usata (scansiona da fondo verso alto)
                     int endRow = startRow;
                     for (int row = dimEndRow; row >= startRow; row--)
                     {
@@ -454,7 +457,7 @@ public class ProjectsController : ControllerBase
                         if (hasData) { endRow = row; break; }
                     }
 
-                    // Limiti di sicurezza per evitare HTML enormi
+                    // Limiti di sicurezza
                     endRow = Math.Min(endRow, startRow + 500);
                     endCol = Math.Min(endCol, startCol + 50);
 
@@ -639,4 +642,99 @@ public class ProjectsController : ControllerBase
             System.IO.File.Copy(file, destFile, overwrite: false);
         }
     }
+
+    // --- DDP (Distinta Di Produzione) ---
+    [HttpGet("{id}/ddp")]
+    public IActionResult GetDdpItems(int id, [FromQuery] string type = "COMMERCIAL")
+    {
+        try
+        {
+            using var c = _db.Open();
+            var rows = c.Query<BomItemListItem>(@"
+            SELECT b.id, b.project_id AS ProjectId, b.catalog_item_id AS CatalogItemId,
+                   b.part_number AS PartNumber, b.description, b.unit, b.quantity,
+                   b.unit_cost AS UnitCost,
+                   COALESCE(s.company_name, '') AS SupplierName,
+                   b.manufacturer, b.item_status AS ItemStatus,
+                   b.requested_by AS RequestedBy, b.danea_ref AS DaneaRef,
+                   b.date_needed AS DateNeeded, b.destination, b.notes,
+                   b.ddp_type AS DdpType, b.created_at AS CreatedAt
+            FROM bom_items b
+            LEFT JOIN suppliers s ON s.id = b.supplier_id
+            WHERE b.project_id = @Id AND b.ddp_type = @Type
+            ORDER BY b.id", new { Id = id, Type = type }).ToList();
+
+            return Ok(ApiResponse<List<BomItemListItem>>.Ok(rows));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<List<BomItemListItem>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("{id}/ddp")]
+    public IActionResult AddDdpItem(int id, [FromBody] BomItemSaveRequest req)
+    {
+        try
+        {
+            using var c = _db.Open();
+            req.ProjectId = id;
+            var newId = c.ExecuteScalar<int>(@"
+            INSERT INTO bom_items 
+                (project_id, catalog_item_id, part_number, description, unit, quantity,
+                 unit_cost, supplier_id, manufacturer, item_status, requested_by,
+                 danea_ref, date_needed, destination, notes, ddp_type)
+            VALUES 
+                (@ProjectId, @CatalogItemId, @PartNumber, @Description, @Unit, @Quantity,
+                 @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, @RequestedBy,
+                 @DaneaRef, @DateNeeded, @Destination, @Notes, @DdpType);
+            SELECT LAST_INSERT_ID()", req);
+
+            return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<int>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPut("{id}/ddp/{itemId}")]
+    public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req)
+    {
+        try
+        {
+            using var c = _db.Open();
+            req.Id = itemId;
+            req.ProjectId = id;
+            c.Execute(@"
+            UPDATE bom_items SET 
+                quantity = @Quantity, item_status = @ItemStatus,
+                danea_ref = @DaneaRef, date_needed = @DateNeeded,
+                destination = @Destination, notes = @Notes
+            WHERE id = @Id AND project_id = @ProjectId", req);
+
+            return Ok(ApiResponse<bool>.Ok(true, "Aggiornato"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
+
+    [HttpDelete("{id}/ddp/{itemId}")]
+    public IActionResult DeleteDdpItem(int id, int itemId)
+    {
+        try
+        {
+            using var c = _db.Open();
+            c.Execute("DELETE FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            return Ok(ApiResponse<bool>.Ok(true, "Eliminato"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
+
 }
