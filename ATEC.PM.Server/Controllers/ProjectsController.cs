@@ -64,9 +64,9 @@ public class ProjectsController : ControllerBase
         try
         {
             var newId = c.ExecuteScalar<int>(@"
-                INSERT INTO projects (code,title,customer_id,pm_id,description,start_date,end_date_planned,budget_total,budget_hours_total,revenue,status,priority,server_path,notes)
-                VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,@ServerPath,@Notes);
-                SELECT LAST_INSERT_ID()", req, trx);
+            INSERT INTO projects (code,title,customer_id,pm_id,description,start_date,end_date_planned,budget_total,budget_hours_total,revenue,status,priority,server_path,notes)
+            VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,@ServerPath,@Notes);
+            SELECT LAST_INSERT_ID()", req, trx);
 
             // Crea fasi di default
             if (req.CreateDefaultPhases)
@@ -80,6 +80,16 @@ public class ProjectsController : ControllerBase
             }
 
             trx.Commit();
+
+            // Crea struttura cartelle da template (dopo il commit DB)
+            CopyTemplateToProject(req.Code);
+
+            // Aggiorna server_path nel DB
+            string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+            string year = DateTime.Now.Year.ToString();
+            string fullPath = Path.Combine(basePath, year, req.Code);
+            c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = newId });
+
             return Ok(ApiResponse<int>.Ok(newId, "Creato"));
         }
         catch
@@ -133,10 +143,16 @@ public class ProjectsController : ControllerBase
         using var c = _db.Open();
         var year = DateTime.Now.Year;
         var prefix = $"AT{year}";
-        var maxCode = c.ExecuteScalar<string?>($"SELECT MAX(code) FROM projects WHERE code LIKE '{prefix}%'");
+        // Cerchiamo l'ultimo numero progressivo per l'anno in corso
+        var maxCode = c.ExecuteScalar<string>("SELECT MAX(code) FROM projects WHERE code LIKE @Pref", new { Pref = prefix + "%" });
+
         int next = 1;
-        if (maxCode != null && maxCode.Length >= 9 && int.TryParse(maxCode.Substring(6), out var n))
-            next = n + 1;
+        if (!string.IsNullOrEmpty(maxCode) && maxCode.Length > prefix.Length)
+        {
+            var suffix = maxCode.Replace(prefix, "");
+            if (int.TryParse(suffix, out var n))
+                next = n + 1;
+        }
         return Ok(ApiResponse<string>.Ok($"{prefix}{next:D3}"));
     }
 
@@ -148,26 +164,16 @@ public class ProjectsController : ControllerBase
         var proj = c.QueryFirstOrDefault<dynamic>("SELECT code, server_path FROM projects WHERE id=@Id", new { Id = id });
         if (proj == null) return NotFound();
 
-        string basePath = "C:\\ATEC_Commesse";
-        string year = DateTime.Now.Year.ToString();
         string code = (string)proj.code;
+        string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+        string year = DateTime.Now.Year.ToString();
         string fullPath = Path.Combine(basePath, year, code);
 
         if (!Directory.Exists(fullPath))
         {
-            Directory.CreateDirectory(fullPath);
-            // Sottocartelle standard
-            Directory.CreateDirectory(Path.Combine(fullPath, "01_Offerta"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "02_Progettazione"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "03_Software"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "04_Acquisti"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "05_Produzione"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "06_Installazione"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "07_Collaudo"));
-            Directory.CreateDirectory(Path.Combine(fullPath, "08_Documentazione"));
+            CopyTemplateToProject(code);
         }
 
-        // Aggiorna server_path nel DB
         c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = id });
         return Ok(ApiResponse<string>.Ok(fullPath));
     }
@@ -177,25 +183,65 @@ public class ProjectsController : ControllerBase
     {
         using var c = _db.Open();
         var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
-        if (string.IsNullOrEmpty(serverPath)) return Ok(ApiResponse<List<FileItem>>.Ok(new()));
 
-        var targetPath = string.IsNullOrEmpty(subPath) ? serverPath : Path.Combine(serverPath, subPath);
-        if (!Directory.Exists(targetPath)) return Ok(ApiResponse<List<FileItem>>.Ok(new()));
+        if (string.IsNullOrEmpty(serverPath))
+            return Ok(ApiResponse<List<FileItem>>.Ok(new()));
+
+        // 1. Validazione del percorso di destinazione (Sicurezza)
+        var targetPath = serverPath;
+        if (!string.IsNullOrEmpty(subPath))
+        {
+            // Path.Combine pulisce automaticamente eventuali problemi di slash
+            targetPath = Path.GetFullPath(Path.Combine(serverPath, subPath));
+
+            // CONTROLLO DI SICUREZZA: Impedisce il "Path Traversal"
+            // Verifica che il percorso risultante sia ancora all'interno di serverPath
+            if (!targetPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(ApiResponse<string>.Fail("Accesso negato al percorso specificate fuori dalla root di progetto."));
+            }
+        }
+
+        if (!Directory.Exists(targetPath))
+            return Ok(ApiResponse<List<FileItem>>.Ok(new()));
 
         var items = new List<FileItem>();
 
-        foreach (var dir in Directory.GetDirectories(targetPath).OrderBy(d => d))
+        try
         {
-            var di = new DirectoryInfo(dir);
-            items.Add(new FileItem { Name = di.Name, IsFolder = true, RelativePath = Path.GetRelativePath(serverPath, dir) });
-        }
-        foreach (var file in Directory.GetFiles(targetPath).OrderBy(f => f))
-        {
-            var fi = new FileInfo(file);
-            items.Add(new FileItem { Name = fi.Name, IsFolder = false, Size = fi.Length, RelativePath = Path.GetRelativePath(serverPath, file), Modified = fi.LastWriteTime });
-        }
+            // 2. Lettura Directory
+            foreach (var dir in Directory.GetDirectories(targetPath).OrderBy(d => d))
+            {
+                var di = new DirectoryInfo(dir);
+                items.Add(new FileItem
+                {
+                    Name = di.Name,
+                    IsFolder = true,
+                    // Usiamo Replace per uniformare gli slash per il web/client
+                    RelativePath = Path.GetRelativePath(serverPath, dir).Replace("\\", "/")
+                });
+            }
 
-        return Ok(ApiResponse<List<FileItem>>.Ok(items));
+            // 3. Lettura File
+            foreach (var file in Directory.GetFiles(targetPath).OrderBy(f => f))
+            {
+                var fi = new FileInfo(file);
+                items.Add(new FileItem
+                {
+                    Name = fi.Name,
+                    IsFolder = false,
+                    Size = fi.Length,
+                    RelativePath = Path.GetRelativePath(serverPath, file).Replace("\\", "/"),
+                    Modified = fi.LastWriteTime
+                });
+            }
+
+            return Ok(ApiResponse<List<FileItem>>.Ok(items));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<List<FileItem>>.Fail($"Errore lettura file: {ex.Message}"));
+        }
     }
 
     [HttpGet("{id}/file-tree")]
@@ -300,5 +346,65 @@ public class ProjectsController : ControllerBase
         using var c = _db.Open();
         var rows = c.Query<LookupItem>("SELECT id AS Id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status='ACTIVE' ORDER BY last_name").ToList();
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
+    }
+    [HttpGet("template-structure")]
+    public IActionResult GetTemplateStructure()
+    {
+        string templatePath = @"C:\ATEC_Commesse\MASTER_TEMPLATE";
+
+        if (!Directory.Exists(templatePath))
+            return NotFound(ApiResponse<string>.Fail("Cartella MASTER_TEMPLATE non trovata"));
+
+        var result = new TemplateFolderInfo();
+
+        // Tutte le sottocartelle (percorsi relativi)
+        foreach (string dir in Directory.GetDirectories(templatePath, "*", SearchOption.AllDirectories))
+        {
+            result.Folders.Add(Path.GetRelativePath(templatePath, dir).Replace("\\", "/"));
+        }
+        result.Folders.Sort();
+
+        // Tutti i file (percorsi relativi + dimensione)
+        foreach (string file in Directory.GetFiles(templatePath, "*.*", SearchOption.AllDirectories))
+        {
+            FileInfo fi = new FileInfo(file);
+            result.Files.Add(new TemplateFileInfo
+            {
+                RelativePath = Path.GetRelativePath(templatePath, file).Replace("\\", "/"),
+                FileName = fi.Name,
+                SizeBytes = fi.Length
+            });
+        }
+
+        return Ok(ApiResponse<TemplateFolderInfo>.Ok(result));
+    }
+
+    private void CopyTemplateToProject(string projectCode)
+    {
+        string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+        string templatePath = _db.GetConfig("TemplatePath", @"C:\ATEC_Commesse\MASTER_TEMPLATE");
+        string year = DateTime.Now.Year.ToString();
+        string targetPath = Path.Combine(basePath, year, projectCode);
+
+        if (!Directory.Exists(templatePath))
+        {
+            Directory.CreateDirectory(targetPath);
+            return;
+        }
+
+        Directory.CreateDirectory(targetPath);
+
+        foreach (string dir in Directory.GetDirectories(templatePath, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(templatePath, dir);
+            Directory.CreateDirectory(Path.Combine(targetPath, relativePath));
+        }
+
+        foreach (string file in Directory.GetFiles(templatePath, "*.*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(templatePath, file);
+            string destFile = Path.Combine(targetPath, relativePath);
+            System.IO.File.Copy(file, destFile, overwrite: false);
+        }
     }
 }

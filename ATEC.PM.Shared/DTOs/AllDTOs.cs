@@ -401,3 +401,16 @@ public class ChangePasswordRequest
     public string OldPassword { get; set; } = "";
     public string NewPassword { get; set; } = "";
 }
+
+public class TemplateFolderInfo
+{
+    public List<string> Folders { get; set; } = new();
+    public List<TemplateFileInfo> Files { get; set; } = new();
+}
+
+public class TemplateFileInfo
+{
+    public string RelativePath { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public long SizeBytes { get; set; }
+}

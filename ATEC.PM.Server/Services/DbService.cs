@@ -19,9 +19,31 @@ public class DbService
         return conn;
     }
 
+    public string GetConfig(string key, string defaultValue = "")
+    {
+        using var c = Open();
+        return c.ExecuteScalar<string?>(
+            "SELECT config_value FROM app_config WHERE config_key=@Key", new { Key = key }) ?? defaultValue;
+    }
+
     public void InitDatabase()
     {
         using var c = Open();
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS app_config (
+            config_key VARCHAR(100) PRIMARY KEY,
+            config_value VARCHAR(500) DEFAULT '',
+            description VARCHAR(200) DEFAULT '',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Seed configurazioni default
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
+        {
+            c.Execute(@"INSERT INTO app_config (config_key, config_value, description) VALUES
+        ('BasePath', 'C:\\ATEC_Commesse', 'Percorso base cartelle commesse'),
+        ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
+        }
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS employees (
             id INT AUTO_INCREMENT PRIMARY KEY,
