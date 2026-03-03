@@ -46,4 +46,46 @@ public class AuthController : ControllerBase
         user.Token = new JwtSecurityTokenHandler().WriteToken(token);
         return Ok(ApiResponse<LoginResponse>.Ok(user));
     }
+
+[HttpPost("set-credentials")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "ADMIN")]
+    public IActionResult SetCredentials([FromBody] SetCredentialsRequest req)
+    {
+        using var c = _db.Open();
+
+        int exists = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM employees WHERE id=@EmployeeId AND status='ACTIVE'",
+            new { req.EmployeeId });
+
+        if (exists == 0)
+            return NotFound(ApiResponse<string>.Fail("Dipendente non trovato"));
+
+        c.Execute(
+            "UPDATE employees SET username=@Username, password_hash=SHA2(@Password,256) WHERE id=@EmployeeId",
+            req);
+
+        return Ok(ApiResponse<string>.Ok("Credenziali impostate"));
+    }
+
+    [HttpPost("change-password")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public IActionResult ChangePassword([FromBody] ChangePasswordRequest req)
+    {
+        int employeeId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+
+        using var c = _db.Open();
+
+        int valid = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM employees WHERE id=@Id AND password_hash=SHA2(@OldPassword,256)",
+            new { Id = employeeId, req.OldPassword });
+
+        if (valid == 0)
+            return BadRequest(ApiResponse<string>.Fail("Password attuale non corretta"));
+
+        c.Execute(
+            "UPDATE employees SET password_hash=SHA2(@NewPassword,256) WHERE id=@Id",
+            new { Id = employeeId, req.NewPassword });
+
+        return Ok(ApiResponse<string>.Ok("Password aggiornata"));
+    }
 }

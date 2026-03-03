@@ -38,6 +38,7 @@ public class EmployeeListItem
     public string Status { get; set; } = "";
     public decimal HourlyCost { get; set; }
     public decimal WeeklyHours { get; set; }
+    public string Username { get; set; } = "";
 }
 
 public class EmployeeSaveRequest
@@ -386,4 +387,17 @@ public class CatalogItem
     public string Barcode { get; set; } = "";
     public string Notes { get; set; } = "";
     public bool IsActive { get; set; } = true;
+}
+
+public class SetCredentialsRequest
+{
+    public int EmployeeId { get; set; }
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+}
+
+public class ChangePasswordRequest
+{
+    public string OldPassword { get; set; } = "";
+    public string NewPassword { get; set; } = "";
 }

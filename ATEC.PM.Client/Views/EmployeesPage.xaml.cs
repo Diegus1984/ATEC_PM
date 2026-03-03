@@ -75,6 +75,7 @@ public partial class EmployeesPage : Page
         var hasSelection = dgEmployees.SelectedItem != null;
         btnEdit.IsEnabled = hasSelection;
         btnDelete.IsEnabled = hasSelection;
+        btnCredentials.IsEnabled = hasSelection;
     }
 
     private void DgEmployees_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -133,5 +134,15 @@ public partial class EmployeesPage : Page
     private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
     {
         await LoadEmployees();
+    }
+
+    private void BtnCredentials_Click(object sender, RoutedEventArgs e)
+    {
+        if (dgEmployees.SelectedItem is EmployeeListItem emp)
+        {
+            var dlg = new CredentialsDialog(emp.Id, emp.FullName, emp.Username ?? "");
+            dlg.Owner = Window.GetWindow(this);
+            dlg.ShowDialog();
+        }
     }
 }

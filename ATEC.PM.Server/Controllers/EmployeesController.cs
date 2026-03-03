@@ -19,7 +19,7 @@ public class EmployeesController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<EmployeeListItem>(
-            "SELECT id, badge_number AS BadgeNumber, CONCAT(first_name,' ',last_name) AS FullName, email, phone, emp_type AS EmpType, status, hourly_cost AS HourlyCost, weekly_hours AS WeeklyHours FROM employees WHERE status<>'TERMINATED' ORDER BY last_name").ToList();
+            "SELECT id, badge_number AS BadgeNumber, CONCAT(first_name,' ',last_name) AS FullName, email, phone, emp_type AS EmpType, status, hourly_cost AS HourlyCost, weekly_hours AS WeeklyHours, username FROM employees WHERE status<>'TERMINATED' ORDER BY last_name").ToList();
         return Ok(ApiResponse<List<EmployeeListItem>>.Ok(rows));
     }
 

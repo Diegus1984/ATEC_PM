@@ -69,6 +69,21 @@
                         Foreground="#DC2626"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
+
+                    <Button
+                        x:Name="btnCredentials"
+                        Width="120"
+                        Height="32"
+                        Margin="8,0,0,0"
+                        Background="White"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="1"
+                        Click="BtnCredentials_Click"
+                        Content="🔑 Credenziali"
+                        Cursor="Hand"
+                        Style="{StaticResource FlatBtn}"
+                        FontSize="13"
+                        IsEnabled="False" />
                 </StackPanel>
                 <StackPanel
                     HorizontalAlignment="Right"
