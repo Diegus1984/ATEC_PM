@@ -4,6 +4,8 @@ using Microsoft.IdentityModel.Tokens;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server;
 
+ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Auto-cifratura: se non esiste il file criptato, lo genera da appsettings.json ---

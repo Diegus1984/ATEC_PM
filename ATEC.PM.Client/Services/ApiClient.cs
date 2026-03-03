@@ -63,4 +63,14 @@ public static class ApiClient
         var resp = await _http.SendAsync(req);
         return await resp.Content.ReadAsStringAsync();
     }
+
+    public static async Task<string> GetRawAsync(string endpoint)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, $"{App.ApiBaseUrl}{endpoint}");
+        if (!string.IsNullOrEmpty(App.Token))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", App.Token);
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync();
+    }
 }

@@ -331,6 +331,238 @@ public class ProjectsController : ControllerBase
         return File(stream, contentType, fileName);
     }
 
+
+    // --- PREVIEW EXCEL/CSV → HTML ---
+    [HttpGet("{id}/preview")]
+    public IActionResult PreviewFile(int id, [FromQuery] string path)
+    {
+        if (string.IsNullOrEmpty(path)) return BadRequest("Path richiesto");
+
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath)) return NotFound("Cartella non trovata");
+
+        var fullPath = Path.GetFullPath(Path.Combine(serverPath, path));
+        var normalizedRoot = Path.GetFullPath(serverPath);
+        if (!fullPath.StartsWith(normalizedRoot)) return BadRequest("Path non valido");
+        if (!System.IO.File.Exists(fullPath)) return NotFound("File non trovato");
+
+        var ext = Path.GetExtension(fullPath).ToLower();
+        if (ext is not (".xlsx" or ".xls" or ".csv")) return BadRequest("Tipo non supportato");
+
+        try
+        {
+            var fileName = Path.GetFileName(fullPath);
+            var sb = new System.Text.StringBuilder();
+
+            sb.Append(@"<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { font-family:Segoe UI,sans-serif; font-size:13px; background:#F7F8FA; padding:12px; }
+            .info { padding:8px 12px; background:#fff; border:1px solid #E4E7EC; margin-bottom:8px; font-weight:600; }
+            .tabs { display:flex; gap:2px; margin-bottom:8px; }
+            .tab { padding:6px 16px; background:#fff; border:1px solid #E4E7EC; cursor:pointer; font-size:12px; }
+            .tab.active { background:#4F6EF7; color:#fff; border-color:#4F6EF7; }
+            .sheet { display:none; }
+            .sheet.active { display:block; }
+            table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #E4E7EC; }
+            th { background:#F7F8FA; font-weight:600; font-size:12px; text-align:left;
+                 padding:6px 10px; border:1px solid #E4E7EC; position:sticky; top:0; }
+            td { padding:5px 10px; border:1px solid #F3F4F6; font-size:12px; white-space:nowrap; }
+            tr:hover td { background:#f0f4ff; }
+        </style></head><body>");
+
+            sb.Append($"<div class='info'>📗 {System.Web.HttpUtility.HtmlEncode(fileName)}</div>");
+
+            if (ext == ".csv")
+            {
+                var lines = System.IO.File.ReadAllLines(fullPath);
+                sb.Append("<table><thead><tr>");
+                if (lines.Length > 0)
+                {
+                    var sep = lines[0].Contains(';') ? ';' : ',';
+                    var headers = lines[0].Split(sep);
+                    foreach (var h in headers)
+                        sb.Append($"<th>{System.Web.HttpUtility.HtmlEncode(h.Trim().Trim('"'))}</th>");
+                    sb.Append("</tr></thead><tbody>");
+                    for (int i = 1; i < lines.Length; i++)
+                    {
+                        if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                        sb.Append("<tr>");
+                        foreach (var cell in lines[i].Split(sep))
+                            sb.Append($"<td>{System.Web.HttpUtility.HtmlEncode(cell.Trim().Trim('"'))}</td>");
+                        sb.Append("</tr>");
+                    }
+                }
+                sb.Append("</tbody></table>");
+            }
+            else
+            {
+                using var package = new ExcelPackage(new FileInfo(fullPath));
+                var sheets = package.Workbook.Worksheets;
+
+                if (sheets.Count > 1)
+                {
+                    sb.Append("<div class='tabs'>");
+                    for (int s = 0; s < sheets.Count; s++)
+                        sb.Append($"<div class='tab{(s == 0 ? " active" : "")}' onclick='showSheet({s})'>{System.Web.HttpUtility.HtmlEncode(sheets[s].Name)}</div>");
+                    sb.Append("</div>");
+                }
+
+                for (int s = 0; s < sheets.Count; s++)
+                {
+                    var ws = sheets[s];
+                    sb.Append($"<div class='sheet{(s == 0 ? " active" : "")}' id='s{s}'>");
+
+                    if (ws.Dimension == null)
+                    {
+                        sb.Append("<p>Foglio vuoto</p></div>");
+                        continue;
+                    }
+
+                    int startRow = ws.Dimension.Start.Row;
+                    int dimEndRow = ws.Dimension.End.Row;
+                    int startCol = ws.Dimension.Start.Column;
+                    int dimEndCol = ws.Dimension.End.Column;
+
+                    // Trova l'ultima colonna realmente usata (max 100 per sicurezza)
+                    int endCol = startCol;
+                    for (int col = startCol; col <= Math.Min(dimEndCol, 200); col++)
+                    {
+                        for (int row = startRow; row <= Math.Min(dimEndRow, 5); row++)
+                        {
+                            if (!string.IsNullOrEmpty(ws.Cells[row, col].Text))
+                            {
+                                endCol = col;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Trova l'ultima riga realmente usata (scansiona solo le prime colonne)
+                    int endRow = startRow;
+                    for (int row = dimEndRow; row >= startRow; row--)
+                    {
+                        bool hasData = false;
+                        for (int col = startCol; col <= endCol; col++)
+                        {
+                            if (!string.IsNullOrEmpty(ws.Cells[row, col].Text))
+                            {
+                                hasData = true;
+                                break;
+                            }
+                        }
+                        if (hasData) { endRow = row; break; }
+                    }
+
+                    // Limiti di sicurezza per evitare HTML enormi
+                    endRow = Math.Min(endRow, startRow + 500);
+                    endCol = Math.Min(endCol, startCol + 50);
+
+                    sb.Append("<table>");
+
+                    // Gestione merge: mappa delle celle mergiate
+                    var mergeMap = new Dictionary<string, (int rowSpan, int colSpan)>();
+                    var skipCells = new HashSet<string>();
+
+                    foreach (var merge in ws.MergedCells)
+                    {
+                        if (merge == null) continue;
+                        var addr = new ExcelAddress(merge);
+                        int mr1 = addr.Start.Row, mc1 = addr.Start.Column;
+                        int mr2 = addr.End.Row, mc2 = addr.End.Column;
+                        mergeMap[$"{mr1},{mc1}"] = (mr2 - mr1 + 1, mc2 - mc1 + 1);
+                        for (int r = mr1; r <= mr2; r++)
+                            for (int cc = mc1; cc <= mc2; cc++)
+                                if (r != mr1 || cc != mc1)
+                                    skipCells.Add($"{r},{cc}");
+                    }
+
+                    for (int row = startRow; row <= endRow; row++)
+                    {
+                        sb.Append(row == startRow ? "<thead><tr>" : "<tr>");
+
+                        for (int col = startCol; col <= endCol; col++)
+                        {
+                            var key = $"{row},{col}";
+                            if (skipCells.Contains(key)) continue;
+
+                            var cell = ws.Cells[row, col];
+                            var style = cell.Style;
+                            var cssStyle = new System.Text.StringBuilder();
+
+                            // Colore sfondo
+                            if (style.Fill.PatternType != OfficeOpenXml.Style.ExcelFillStyle.None &&
+                                !string.IsNullOrEmpty(style.Fill.BackgroundColor?.Rgb))
+                            {
+                                var rgb = style.Fill.BackgroundColor.Rgb;
+                                if (rgb.Length == 8) rgb = rgb.Substring(2); // rimuovi alpha
+                                cssStyle.Append($"background:#{rgb};");
+                            }
+
+                            // Colore testo
+                            if (!string.IsNullOrEmpty(style.Font.Color?.Rgb))
+                            {
+                                var rgb = style.Font.Color.Rgb;
+                                if (rgb.Length == 8) rgb = rgb.Substring(2);
+                                cssStyle.Append($"color:#{rgb};");
+                            }
+
+                            // Font
+                            if (style.Font.Bold) cssStyle.Append("font-weight:700;");
+                            if (style.Font.Italic) cssStyle.Append("font-style:italic;");
+                            if (style.Font.Size > 0) cssStyle.Append($"font-size:{style.Font.Size}px;");
+
+                            // Allineamento
+                            if (style.HorizontalAlignment == OfficeOpenXml.Style.ExcelHorizontalAlignment.Center)
+                                cssStyle.Append("text-align:center;");
+                            else if (style.HorizontalAlignment == OfficeOpenXml.Style.ExcelHorizontalAlignment.Right)
+                                cssStyle.Append("text-align:right;");
+
+                            // Valore cella
+                            var val = cell.Text ?? "";
+
+                            // Tag e attributi
+                            var tag = row == startRow ? "th" : "td";
+                            var attrs = new System.Text.StringBuilder();
+                            if (cssStyle.Length > 0) attrs.Append($" style='{cssStyle}'");
+                            if (mergeMap.TryGetValue(key, out var span))
+                            {
+                                if (span.rowSpan > 1) attrs.Append($" rowspan='{span.rowSpan}'");
+                                if (span.colSpan > 1) attrs.Append($" colspan='{span.colSpan}'");
+                            }
+
+                            sb.Append($"<{tag}{attrs}>{System.Web.HttpUtility.HtmlEncode(val)}</{tag}>");
+                        }
+
+                        sb.Append(row == startRow ? "</tr></thead><tbody>" : "</tr>");
+                    }
+
+                    sb.Append("</tbody></table></div>");
+                }
+
+                if (sheets.Count > 1)
+                {
+                    sb.Append(@"<script>
+            function showSheet(idx) {
+                document.querySelectorAll('.sheet').forEach(s => s.classList.remove('active'));
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.getElementById('s'+idx).classList.add('active');
+                document.querySelectorAll('.tab')[idx].classList.add('active');
+            }
+        </script>");
+                }
+            }
+
+            sb.Append("</body></html>");
+            return Content(sb.ToString(), "text/html");
+        }
+        catch (Exception ex)
+        {
+            return Content($"<html><body><p style='color:red'>Errore: {System.Web.HttpUtility.HtmlEncode(ex.Message)}</p></body></html>", "text/html");
+        }
+    }
+
+
     // --- LOOKUP ---
     [HttpGet("/api/lookup/customers")]
     public IActionResult LookupCustomers()

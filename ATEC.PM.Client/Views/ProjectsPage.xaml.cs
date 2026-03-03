@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -219,24 +220,23 @@ public partial class ProjectsPage : Page
 
         try
         {
+            // Anteprima PDF
             if (ext == ".pdf")
             {
-                // Scarica il PDF via API e mostra anteprima con WebView2
                 var encoded = Uri.EscapeDataString(relativePath);
                 var bytes = await ApiClient.DownloadAsync($"/api/projects/{projectId}/download?path={encoded}");
+
                 if (bytes == null || bytes.Length == 0)
                 {
                     SectionContent.Content = new TextBlock { Text = "Impossibile scaricare il file.", FontSize = 14, Foreground = System.Windows.Media.Brushes.Gray };
                     return;
                 }
 
-                // Salva in temp
                 var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
                 Directory.CreateDirectory(tempDir);
                 var tempFile = Path.Combine(tempDir, fileName);
                 File.WriteAllBytes(tempFile, bytes);
 
-                // Costruisci layout prima di inizializzare WebView2
                 var panel = new DockPanel();
                 var infoBar = new Border
                 {
@@ -245,14 +245,13 @@ public partial class ProjectsPage : Page
                     BorderThickness = new Thickness(0, 0, 0, 1),
                     Padding = new Thickness(12, 8, 12, 8)
                 };
-                var infoText = new TextBlock
+                infoBar.Child = new TextBlock
                 {
-                    Text = $"📕  {fileName}",
+                    Text = $"📕  {fileName} (Anteprima)",
                     FontSize = 14,
                     FontWeight = FontWeights.SemiBold,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                infoBar.Child = infoText;
                 DockPanel.SetDock(infoBar, Dock.Top);
                 panel.Children.Add(infoBar);
 
@@ -261,24 +260,59 @@ public partial class ProjectsPage : Page
                     Height = Math.Max(500, scrollContent.ActualHeight - 60)
                 };
                 panel.Children.Add(webView);
-
-                // Assegna al content PRIMA di inizializzare (deve essere nel visual tree)
                 SectionContent.Content = panel;
 
-                // Inizializza e naviga
                 await webView.EnsureCoreWebView2Async();
-                var fileUri = new Uri(tempFile).AbsoluteUri;
-                webView.CoreWebView2.Navigate(fileUri);
+                webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                webView.CoreWebView2.Navigate(new Uri(tempFile).AbsoluteUri);
                 return;
             }
+            else if (ext is ".xlsx" or ".xls" or ".csv")
+            {
+                try
+                {
+                    var encoded = Uri.EscapeDataString(relativePath);
+                    var html = await ApiClient.GetRawAsync($"/api/projects/{projectId}/preview?path={encoded}");
+
+                    if (string.IsNullOrEmpty(html))
+                    {
+                        SectionContent.Content = new TextBlock { Text = "HTML vuoto dal server", Foreground = System.Windows.Media.Brushes.Red };
+                        return;
+                    }
+
+                    // Salva HTML in file temp e naviga con URI
+                    var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
+                    Directory.CreateDirectory(tempDir);
+                    var tempHtml = Path.Combine(tempDir, $"preview_{projectId}.html");
+                    File.WriteAllText(tempHtml, html, System.Text.Encoding.UTF8);
+
+                    var webView = new Microsoft.Web.WebView2.Wpf.WebView2();
+                    SectionContent.Content = webView;
+
+                    await webView.EnsureCoreWebView2Async();
+                    webView.CoreWebView2.Navigate(new Uri(tempHtml).AbsoluteUri);
+                }
+                catch (Exception ex)
+                {
+                    SectionContent.Content = new TextBlock
+                    {
+                        Text = $"Errore preview: {ex.GetType().Name}: {ex.Message}",
+                        FontSize = 12,
+                        Foreground = System.Windows.Media.Brushes.Red,
+                        TextWrapping = TextWrapping.Wrap
+                    };
+                }
+                return;
+            }
+            // Anteprima immagini
             else if (ext is ".png" or ".jpg" or ".jpeg" or ".bmp")
             {
-                // Scarica e mostra immagine
                 var encoded = Uri.EscapeDataString(relativePath);
                 var bytes = await ApiClient.DownloadAsync($"/api/projects/{projectId}/download?path={encoded}");
+
                 if (bytes == null || bytes.Length == 0)
                 {
-                    SectionContent.Content = new TextBlock { Text = "Impossibile scaricare il file.", FontSize = 14, Foreground = System.Windows.Media.Brushes.Gray };
+                    SectionContent.Content = new TextBlock { Text = "Impossibile scaricare l'immagine.", FontSize = 14, Foreground = System.Windows.Media.Brushes.Gray };
                     return;
                 }
 
@@ -288,23 +322,17 @@ public partial class ProjectsPage : Page
                 bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                 bmp.EndInit();
 
-                var panel = new StackPanel();
-                panel.Children.Add(new TextBlock { Text = $"🖼  {fileName}", FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
-                panel.Children.Add(new System.Windows.Controls.Image { Source = bmp, MaxHeight = 500, Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left });
+                var imgPanel = new StackPanel();
+                imgPanel.Children.Add(new TextBlock { Text = $"🖼  {fileName}", FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
+                imgPanel.Children.Add(new System.Windows.Controls.Image { Source = bmp, MaxHeight = 500, Stretch = System.Windows.Media.Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Left });
 
-                SectionContent.Content = panel;
+                SectionContent.Content = imgPanel;
             }
+            // Info generico
             else
             {
-                // Info generiche per altri tipi di file
-                var panel = new StackPanel();
-                panel.Children.Add(new TextBlock
-                {
-                    Text = $"{GetFileIcon(fileName)}  {fileName}",
-                    FontSize = 18,
-                    FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 0, 0, 16)
-                });
+                var infoPanel = new StackPanel();
+                infoPanel.Children.Add(new TextBlock { Text = $"{GetFileIcon(fileName)}  {fileName}", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 16) });
 
                 var infoGrid = new Grid();
                 infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -313,13 +341,36 @@ public partial class ProjectsPage : Page
 
                 AddInfoRow(infoGrid, 0, "Percorso", relativePath);
                 AddInfoRow(infoGrid, 1, "Tipo", ext.TrimStart('.').ToUpper());
-                AddInfoRow(infoGrid, 2, "Azione", "Clicca 'Scarica' per aprire il file");
+                AddInfoRow(infoGrid, 2, "Azione", "File non visualizzabile in anteprima. Usa 'Scarica'.");
 
-                panel.Children.Add(infoGrid);
-                SectionContent.Content = panel;
+                infoPanel.Children.Add(infoGrid);
+                SectionContent.Content = infoPanel;
             }
         }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+        catch (Exception ex)
+        {
+            SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}", Foreground = System.Windows.Media.Brushes.Red };
+        }
+    }
+
+    private DataGrid CreateStyledDataGrid()
+    {
+        return new DataGrid
+        {
+            AutoGenerateColumns = false,
+            IsReadOnly = true,
+            Background = System.Windows.Media.Brushes.White,
+            BorderThickness = new Thickness(1),
+            BorderBrush = Brush("#E4E7EC"),
+            GridLinesVisibility = DataGridGridLinesVisibility.All,
+            HorizontalGridLinesBrush = Brush("#F3F4F6"),
+            VerticalGridLinesBrush = Brush("#F3F4F6"),
+            RowHeight = 30,
+            ColumnHeaderHeight = 32,
+            FontSize = 12,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
     }
 
     private void AddInfoRow(Grid grid, int row, string label, string value)
