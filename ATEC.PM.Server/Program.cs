@@ -4,7 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server;
 
-ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+ExcelPackage.License.SetNonCommercialOrganization("ATEC");
 
 var builder = WebApplication.CreateBuilder(args);
 

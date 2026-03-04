@@ -5,6 +5,8 @@ namespace ATEC.PM.Client.Views;
 
 public partial class MainWindow : Window
 {
+    private Button? _activeNavButton;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -18,8 +20,17 @@ public partial class MainWindow : Window
 
     private void Nav_Click(object sender, RoutedEventArgs e)
     {
-        var tag = ((Button)sender).Tag?.ToString() ?? "";
+        var btn = (Button)sender;
+        var tag = btn.Tag?.ToString() ?? "";
         txtPageTitle.Text = tag;
+
+        // Reset precedente
+        if (_activeNavButton != null)
+            _activeNavButton.IsEnabled = true;
+
+        // Segna attivo
+        btn.IsEnabled = false;
+        _activeNavButton = btn;
 
         switch (tag)
         {
@@ -47,6 +58,28 @@ public partial class MainWindow : Window
             default:
                 PageContent.Content = null;
                 break;
+        }
+    }
+
+    private void BtnLogout_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("Vuoi disconnetterti?", "Logout", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            App.Token = "";
+            App.UserFullName = "";
+            App.UserRole = "";
+            App.UserId = 0;
+
+            new LoginWindow().Show();
+            Close();
+        }
+    }
+
+    private void BtnExit_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("Vuoi uscire dall'applicazione?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            Application.Current.Shutdown();
         }
     }
 }

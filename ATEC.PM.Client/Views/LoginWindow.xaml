@@ -78,8 +78,8 @@
                     x:Name="txtPassword"
                     Height="36"
                     Padding="8,6"
-                    KeyDown="txtPassword_KeyDown"
-                    BorderBrush="#E4E7EC" />
+                    BorderBrush="#E4E7EC"
+                    KeyDown="txtPassword_KeyDown" />
 
                 <TextBlock
                     x:Name="txtError"

@@ -1,121 +1,47 @@
-using System.IO;
-using System.Net.Http;
-using System.Text.Json;
-using System.Windows;
-using System.Windows.Controls;
-using ATEC.PM.Client.Services;
-using ATEC.PM.Shared.DTOs;
-
+using ATEC.PM.Client.UserControls;
 namespace ATEC.PM.Client.Views;
 
 public partial class ProjectsPage : Page
 {
     private List<ProjectListItem> _allProjects = new();
-    private TextBlock? _ddpSummaryText;
-    private ComboBox? _filterStatus;
-    private ComboBox? _filterSupplier;
-    private ComboBox? _filterManufacturer;
-    private ComboBox? _filterDestination;
-    private ComboBox? _filterRequestedBy;
-    private List<BomItemListItem> _ddpItemsFull = new();
-
     public ProjectsPage()
     {
         InitializeComponent();
         Loaded += async (_, _) => await LoadTree();
     }
 
-    // === LOAD TREE ===
-    private async Task LoadTree()
+    private static System.Windows.Media.SolidColorBrush Brush(string hex) =>
+            new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+
+    private static string FormatSize(long bytes)
     {
-        txtStatus.Text = "Caricamento...";
-        try
-        {
-            var json = await ApiClient.GetAsync("/api/projects");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                _allProjects = JsonSerializer.Deserialize<List<ProjectListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                BuildTree(_allProjects);
-                txtStatus.Text = $"{_allProjects.Count} commesse";
-            }
-        }
-        catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:N0} KB";
+        return $"{bytes / 1024.0 / 1024.0:N1} MB";
     }
 
-    private void BuildTree(List<ProjectListItem> projects)
+    private static string GetFileIcon(string fileName)
     {
-        treeProjects.Items.Clear();
-        foreach (var p in projects)
+        var ext = Path.GetExtension(fileName).ToLower();
+        return ext switch
         {
-            var projNode = new TreeViewItem
-            {
-                Header = $"{p.Code} - {p.CustomerName}",
-                Tag = $"project|{p.Id}",
-                FontWeight = FontWeights.SemiBold
-            };
-
-            projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "📋 DDP Commerciali", Tag = $"ddp_commercial|{p.Id}" });
-
-            var docNode = new TreeViewItem { Header = "📁 Documenti", Tag = $"documents|{p.Id}" };
-            // Placeholder per lazy-load al primo expand
-            docNode.Items.Add(new TreeViewItem { Header = "Caricamento...", IsEnabled = false });
-            docNode.Expanded += DocNode_Expanded;
-            projNode.Items.Add(docNode);
-
-            treeProjects.Items.Add(projNode);
-        }
+            ".pdf" => "📕",
+            ".doc" or ".docx" => "📘",
+            ".xls" or ".xlsx" => "📗",
+            ".dwg" or ".dxf" => "📐",
+            ".jpg" or ".jpeg" or ".png" or ".bmp" => "🖼",
+            ".zip" or ".rar" or ".7z" => "📦",
+            ".txt" => "📝",
+            ".csv" => "📊",
+            _ => "📄"
+        };
     }
 
-    private async void DocNode_Expanded(object sender, RoutedEventArgs e)
+    // === HELPERS ===
+    private void AddField(StackPanel panel, string label, string? value)
     {
-        if (sender is not TreeViewItem docNode) return;
-        var tag = docNode.Tag?.ToString() ?? "";
-        if (!tag.StartsWith("documents|")) return;
-
-        // Evita ricaricamento se già popolato (controlla se c'è il placeholder)
-        if (docNode.Items.Count == 1 && docNode.Items[0] is TreeViewItem first && !first.IsEnabled)
-        {
-            var parts = tag.Split('|');
-            if (!int.TryParse(parts[1], out int projectId)) return;
-            await LoadFileTree(docNode, projectId);
-        }
-    }
-
-    private async Task LoadFileTree(TreeViewItem parentNode, int projectId)
-    {
-        parentNode.Items.Clear();
-        try
-        {
-            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/file-tree");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
-                return;
-            }
-
-            var items = JsonSerializer.Deserialize<List<FileTreeItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            if (items.Count == 0)
-            {
-                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
-                return;
-            }
-
-            AddFileTreeNodes(parentNode, items, projectId);
-        }
-        catch
-        {
-            parentNode.Items.Add(new TreeViewItem { Header = "Errore caricamento", IsEnabled = false });
-        }
+        panel.Children.Add(new TextBlock { Text = label.ToUpper(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 12, 0, 2) });
+        panel.Children.Add(new TextBlock { Text = value ?? "-", FontSize = 14, Foreground = Brush("#1A1D26"), TextWrapping = TextWrapping.Wrap });
     }
 
     private void AddFileTreeNodes(TreeViewItem parentNode, List<FileTreeItem> items, int projectId)
@@ -149,74 +75,346 @@ public partial class ProjectsPage : Page
         }
     }
 
-    private static string GetFileIcon(string fileName)
+    private void AddInfoRow(Grid grid, int row, string label, string value)
     {
-        var ext = Path.GetExtension(fileName).ToLower();
-        return ext switch
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var lbl = new TextBlock { Text = label.ToUpper(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 6, 0, 2) };
+        Grid.SetRow(lbl, row);
+        Grid.SetColumn(lbl, 0);
+        grid.Children.Add(lbl);
+
+        var val = new TextBlock { Text = value, FontSize = 13, Foreground = Brush("#1A1D26"), Margin = new Thickness(0, 6, 0, 2), TextWrapping = TextWrapping.Wrap };
+        Grid.SetRow(val, row);
+        Grid.SetColumn(val, 2);
+        grid.Children.Add(val);
+    }
+
+    // === ACTIONS ===
+    private async void BtnAction_Click(object sender, RoutedEventArgs e)
+    {
+        var tag = btnAction.Tag?.ToString() ?? "";
+        var parts = tag.Split('|');
+        if (parts[0] == "edit" && parts.Length > 1 && int.TryParse(parts[1], out var editId))
         {
-            ".pdf" => "📕",
-            ".doc" or ".docx" => "📘",
-            ".xls" or ".xlsx" => "📗",
-            ".dwg" or ".dxf" => "📐",
-            ".jpg" or ".jpeg" or ".png" or ".bmp" => "🖼",
-            ".zip" or ".rar" or ".7z" => "📦",
-            ".txt" => "📝",
-            ".csv" => "📊",
-            _ => "📄"
-        };
+            var dlg = new ProjectDialog(editId) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) await LoadTree();
+        }
+        else if (parts[0] == "createfolder" && parts.Length > 1 && int.TryParse(parts[1], out var cfId))
+        {
+            try
+            {
+                var json = await ApiClient.PostAsync($"/api/projects/{cfId}/create-folder", "{}");
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.GetProperty("success").GetBoolean())
+                {
+                    RefreshDocNode(cfId);
+                    ShowDocuments(cfId, "");
+                }
+            }
+            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        }
+        else if (parts[0] == "openfolder" && parts.Length > 1 && int.TryParse(parts[1], out var ofId))
+        {
+            var projJson = await ApiClient.GetAsync($"/api/projects/{ofId}");
+            var projDoc = JsonDocument.Parse(projJson);
+            var sp = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
+            var sub = parts.Length > 2 ? parts[2] : "";
+            var fullPath = string.IsNullOrEmpty(sub) ? sp : Path.Combine(sp, sub);
+            if (Directory.Exists(fullPath))
+                System.Diagnostics.Process.Start("explorer.exe", fullPath);
+        }
+        else if (parts[0] == "download" && parts.Length > 2 && int.TryParse(parts[1], out var dlId))
+        {
+            var relPath = parts[2];
+            var fileName = Path.GetFileName(relPath);
+            try
+            {
+                var encoded = Uri.EscapeDataString(relPath);
+                var bytes = await ApiClient.DownloadAsync($"/api/projects/{dlId}/download?path={encoded}");
+                if (bytes == null || bytes.Length == 0)
+                {
+                    MessageBox.Show("Impossibile scaricare il file.");
+                    return;
+                }
+                var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
+                Directory.CreateDirectory(tempDir);
+                var tempFile = Path.Combine(tempDir, fileName);
+                File.WriteAllBytes(tempFile, bytes);
+                OpenFile(tempFile);
+            }
+            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        }
     }
 
-    // === SEARCH ===
-    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private void BtnNew_Click(object sender, RoutedEventArgs e)
     {
-        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text) ? Visibility.Visible : Visibility.Collapsed;
-        var filter = txtSearch.Text.Trim().ToLower();
-        if (string.IsNullOrEmpty(filter))
-            BuildTree(_allProjects);
-        else
-            BuildTree(_allProjects.Where(p =>
-                p.Code.ToLower().Contains(filter) ||
-                p.Title.ToLower().Contains(filter) ||
-                p.CustomerName.ToLower().Contains(filter)
-            ).ToList());
+        var dlg = new ProjectDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true) _ = LoadTree();
     }
 
-    // === TREE SELECTION ===
-    private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await LoadTree();
+
+    private void BuildTree(List<ProjectListItem> projects)
     {
-        if (e.NewValue is TreeViewItem item && item.Tag is string tag)
+        treeProjects.Items.Clear();
+        foreach (var p in projects)
+        {
+            var projNode = new TreeViewItem
+            {
+                Header = $"{p.Code} - {p.CustomerName}",
+                Tag = $"project|{p.Id}",
+                FontWeight = FontWeights.SemiBold
+            };
+
+            projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "📋 DDP Commerciali", Tag = $"ddp_commercial|{p.Id}" });
+
+            var docNode = new TreeViewItem { Header = "📁 Documenti", Tag = $"documents|{p.Id}" };
+            // Placeholder per lazy-load al primo expand
+            docNode.Items.Add(new TreeViewItem { Header = "Caricamento...", IsEnabled = false });
+            docNode.Expanded += DocNode_Expanded;
+            projNode.Items.Add(docNode);
+
+            treeProjects.Items.Add(projNode);
+        }
+    }
+
+
+    private async void DocNode_Expanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem docNode) return;
+        var tag = docNode.Tag?.ToString() ?? "";
+        if (!tag.StartsWith("documents|")) return;
+
+        // Evita ricaricamento se già popolato (controlla se c'è il placeholder)
+        if (docNode.Items.Count == 1 && docNode.Items[0] is TreeViewItem first && !first.IsEnabled)
         {
             var parts = tag.Split('|');
-            if (parts.Length < 2 || !int.TryParse(parts[1], out var id)) return;
+            if (!int.TryParse(parts[1], out int projectId)) return;
+            await LoadFileTree(docNode, projectId);
+        }
+    }
 
-            switch (parts[0])
+
+    private async Task LoadFileTree(TreeViewItem parentNode, int projectId)
+    {
+        parentNode.Items.Clear();
+        try
+        {
+            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/file-tree");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean())
             {
-                case "project":
-                case "details":
-                    ShowDetails(id);
-                    break;
-                case "phases":
-                    ShowPhases(id);
-                    break;
-                case "timesheet":
-                    ShowTimesheet(id);
-                    break;
-                case "documents":
-                    ShowDocuments(id, "");
-                    break;
-                case "ddp_commercial":
-                    ShowDdpCommercial(id);
-                    break;
-                case "docfolder":
-                    var subPath = parts.Length > 2 ? parts[2] : "";
-                    ShowDocuments(id, subPath);
-                    break;
-                case "file":
-                    var filePath = parts.Length > 2 ? parts[2] : "";
-                    ShowFileInfo(id, filePath);
-                    break;
+                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
+                return;
+            }
+
+            var items = JsonSerializer.Deserialize<List<FileTreeItem>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            if (items.Count == 0)
+            {
+                parentNode.Items.Add(new TreeViewItem { Header = "Cartella non creata", IsEnabled = false, FontStyle = FontStyles.Italic });
+                return;
+            }
+
+            AddFileTreeNodes(parentNode, items, projectId);
+        }
+        catch
+        {
+            parentNode.Items.Add(new TreeViewItem { Header = "Errore caricamento", IsEnabled = false });
+        }
+    }
+
+    // === LOAD TREE ===
+    private async Task LoadTree()
+    {
+        txtStatus.Text = "Caricamento...";
+        try
+        {
+            var json = await ApiClient.GetAsync("/api/projects");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                _allProjects = JsonSerializer.Deserialize<List<ProjectListItem>>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                BuildTree(_allProjects);
+                txtStatus.Text = $"{_allProjects.Count} commesse";
             }
         }
+        catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+    }
+    private void OpenFile(string path)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show($"Impossibile aprire: {ex.Message}"); }
+    }
+
+    private async void RefreshDocNode(int projectId)
+    {
+        foreach (TreeViewItem projNode in treeProjects.Items)
+        {
+            if (projNode.Tag?.ToString() == $"project|{projectId}")
+            {
+                foreach (TreeViewItem child in projNode.Items)
+                {
+                    if (child.Tag?.ToString() == $"documents|{projectId}")
+                    {
+                        await LoadFileTree(child, projectId);
+                        child.IsExpanded = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    private void ShowDdpCommercial(int projectId)
+    {
+        txtSectionTitle.Text = "DDP Commerciali";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ddpControl = new DdpCommercialControl();
+        SectionContent.Content = ddpControl;
+        ddpControl.Load(projectId);
+    }
+
+    // === DETAILS ===
+    private async void ShowDetails(int projectId)
+    {
+        txtSectionTitle.Text = "Dettagli Commessa";
+        btnAction.Content = "Modifica";
+        btnAction.Visibility = Visibility.Visible;
+        btnAction.Tag = $"edit|{projectId}";
+
+        try
+        {
+            var json = await ApiClient.GetAsync($"/api/projects/{projectId}");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            var d = doc.RootElement.GetProperty("data");
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var left = new StackPanel();
+            var right = new StackPanel();
+
+            AddField(left, "Codice", d.GetProperty("code").GetString());
+            AddField(left, "Titolo", d.GetProperty("title").GetString());
+            AddField(left, "Stato", d.GetProperty("status").GetString());
+            AddField(left, "Priorità", d.GetProperty("priority").GetString());
+            if (d.TryGetProperty("startDate", out var sd) && sd.ValueKind != JsonValueKind.Null)
+                AddField(left, "Data Inizio", sd.GetDateTime().ToString("dd/MM/yyyy"));
+            if (d.TryGetProperty("endDatePlanned", out var ed) && ed.ValueKind != JsonValueKind.Null)
+                AddField(left, "Data Fine Prevista", ed.GetDateTime().ToString("dd/MM/yyyy"));
+
+            AddField(right, "Ricavo", d.GetProperty("revenue").GetDecimal().ToString("N0") + " €");
+            AddField(right, "Budget", d.GetProperty("budgetTotal").GetDecimal().ToString("N0") + " €");
+            AddField(right, "Ore Previste", d.GetProperty("budgetHoursTotal").GetDecimal().ToString("N0"));
+            var sp = d.GetProperty("serverPath").GetString() ?? "";
+            AddField(right, "Path Server", sp == "" ? "(non creata)" : sp);
+            if (d.TryGetProperty("notes", out var notes) && notes.ValueKind != JsonValueKind.Null)
+                AddField(right, "Note", notes.GetString());
+
+            Grid.SetColumn(left, 0);
+            Grid.SetColumn(right, 2);
+            grid.Children.Add(left);
+            grid.Children.Add(right);
+            SectionContent.Content = grid;
+        }
+        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+    }
+
+    // === DOCUMENTS ===
+    private async void ShowDocuments(int projectId, string subPath)
+    {
+        txtSectionTitle.Text = string.IsNullOrEmpty(subPath) ? "Documenti" : subPath;
+        btnAction.Content = "Apri Cartella";
+        btnAction.Visibility = Visibility.Visible;
+        btnAction.Tag = $"openfolder|{projectId}|{subPath}";
+
+        try
+        {
+            // Check if server_path exists
+            var projJson = await ApiClient.GetAsync($"/api/projects/{projectId}");
+            var projDoc = JsonDocument.Parse(projJson);
+            var serverPath = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
+
+            if (string.IsNullOrEmpty(serverPath))
+            {
+                btnAction.Content = "Crea Cartella Commessa";
+                btnAction.Tag = $"createfolder|{projectId}";
+                SectionContent.Content = new TextBlock
+                {
+                    Text = "La cartella per questa commessa non è ancora stata creata.\nClicca 'Crea Cartella Commessa' per generarla automaticamente.",
+                    FontSize = 14,
+                    Foreground = System.Windows.Media.Brushes.Gray,
+                    TextWrapping = TextWrapping.Wrap
+                };
+                return;
+            }
+
+            var encoded = Uri.EscapeDataString(subPath);
+            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/files?subPath={encoded}");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var items = JsonSerializer.Deserialize<List<FileItem>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            // Populate document sub-nodes in tree (now handled by file-tree)
+
+            var dg = new DataGrid
+            {
+                AutoGenerateColumns = false,
+                IsReadOnly = true,
+                Background = System.Windows.Media.Brushes.White,
+                BorderThickness = new Thickness(1),
+                BorderBrush = Brush("#E4E7EC"),
+                GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
+                HorizontalGridLinesBrush = Brush("#F3F4F6"),
+                RowHeight = 36,
+                ColumnHeaderHeight = 36,
+                FontSize = 13
+            };
+
+            dg.Columns.Add(new DataGridTextColumn { Header = "Tipo", Binding = new System.Windows.Data.Binding("TypeIcon"), Width = 50 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "Nome", Binding = new System.Windows.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+            dg.Columns.Add(new DataGridTextColumn { Header = "Dimensione", Binding = new System.Windows.Data.Binding("SizeDisplay"), Width = 100 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "Modificato", Binding = new System.Windows.Data.Binding("ModifiedDisplay"), Width = 140 });
+
+            var displayItems = items.Select(i => new
+            {
+                TypeIcon = i.IsFolder ? "📁" : "📄",
+                i.Name,
+                SizeDisplay = i.IsFolder ? "" : FormatSize(i.Size),
+                ModifiedDisplay = i.Modified?.ToString("dd/MM/yyyy HH:mm") ?? ""
+            }).ToList();
+
+            dg.ItemsSource = displayItems;
+            dg.MouseDoubleClick += (s, ev) =>
+            {
+                if (dg.SelectedIndex >= 0 && dg.SelectedIndex < items.Count)
+                {
+                    var sel = items[dg.SelectedIndex];
+                    if (sel.IsFolder)
+                        ShowDocuments(projectId, sel.RelativePath);
+                    else
+                        OpenFile(Path.Combine(serverPath, sel.RelativePath));
+                }
+            };
+
+            SectionContent.Content = dg;
+        }
+        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
     }
 
     // === FILE INFO ===
@@ -278,6 +476,68 @@ public partial class ProjectsPage : Page
                 webView.CoreWebView2.Navigate(new Uri(tempFile).AbsoluteUri);
                 return;
             }
+            // Anteprima Word
+            // Anteprima Word
+            else if (ext is ".doc" or ".docx")
+            {
+                if (ext == ".doc")
+                {
+                    // .doc binario: non supportato in anteprima, apri esterno
+                    var infoPanel = new StackPanel();
+                    infoPanel.Children.Add(new TextBlock
+                    {
+                        Text = $"📘  {fileName}",
+                        FontSize = 18,
+                        FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(0, 0, 0, 16)
+                    });
+                    infoPanel.Children.Add(new TextBlock
+                    {
+                        Text = "Il formato .doc (Word 97-2003) non supporta anteprima integrata.\nUsa il pulsante 'Scarica' per aprirlo con Word.",
+                        FontSize = 14,
+                        Foreground = System.Windows.Media.Brushes.Gray,
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                    SectionContent.Content = infoPanel;
+                    return;
+                }
+
+                // .docx: anteprima con Mammoth
+                try
+                {
+                    var encoded = Uri.EscapeDataString(relativePath);
+                    var html = await ApiClient.GetRawAsync($"/api/projects/{projectId}/preview?path={encoded}");
+
+                    if (string.IsNullOrEmpty(html))
+                    {
+                        SectionContent.Content = new TextBlock { Text = "HTML vuoto dal server", Foreground = System.Windows.Media.Brushes.Red };
+                        return;
+                    }
+
+                    var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
+                    Directory.CreateDirectory(tempDir);
+                    var tempHtml = Path.Combine(tempDir, $"preview_doc_{projectId}.html");
+                    File.WriteAllText(tempHtml, html, System.Text.Encoding.UTF8);
+
+                    var webView = new Microsoft.Web.WebView2.Wpf.WebView2();
+                    SectionContent.Content = webView;
+
+                    await webView.EnsureCoreWebView2Async();
+                    webView.CoreWebView2.Navigate(new Uri(tempHtml).AbsoluteUri);
+                }
+                catch (Exception ex)
+                {
+                    SectionContent.Content = new TextBlock
+                    {
+                        Text = $"Errore preview: {ex.GetType().Name}: {ex.Message}",
+                        FontSize = 12,
+                        Foreground = System.Windows.Media.Brushes.Red,
+                        TextWrapping = TextWrapping.Wrap
+                    };
+                }
+                return;
+            }
+            // Anteprima Excel / CSV
             else if (ext is ".xlsx" or ".xls" or ".csv")
             {
                 try
@@ -291,7 +551,6 @@ public partial class ProjectsPage : Page
                         return;
                     }
 
-                    // Salva HTML in file temp e naviga con URI
                     var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
                     Directory.CreateDirectory(tempDir);
                     var tempHtml = Path.Combine(tempDir, $"preview_{projectId}.html");
@@ -362,69 +621,6 @@ public partial class ProjectsPage : Page
         {
             SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}", Foreground = System.Windows.Media.Brushes.Red };
         }
-    }
-    private void AddInfoRow(Grid grid, int row, string label, string value)
-    {
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var lbl = new TextBlock { Text = label.ToUpper(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 6, 0, 2) };
-        Grid.SetRow(lbl, row);
-        Grid.SetColumn(lbl, 0);
-        grid.Children.Add(lbl);
-
-        var val = new TextBlock { Text = value, FontSize = 13, Foreground = Brush("#1A1D26"), Margin = new Thickness(0, 6, 0, 2), TextWrapping = TextWrapping.Wrap };
-        Grid.SetRow(val, row);
-        Grid.SetColumn(val, 2);
-        grid.Children.Add(val);
-    }
-
-    // === DETAILS ===
-    private async void ShowDetails(int projectId)
-    {
-        txtSectionTitle.Text = "Dettagli Commessa";
-        btnAction.Content = "Modifica";
-        btnAction.Visibility = Visibility.Visible;
-        btnAction.Tag = $"edit|{projectId}";
-
-        try
-        {
-            var json = await ApiClient.GetAsync($"/api/projects/{projectId}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-            var d = doc.RootElement.GetProperty("data");
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var left = new StackPanel();
-            var right = new StackPanel();
-
-            AddField(left, "Codice", d.GetProperty("code").GetString());
-            AddField(left, "Titolo", d.GetProperty("title").GetString());
-            AddField(left, "Stato", d.GetProperty("status").GetString());
-            AddField(left, "Priorità", d.GetProperty("priority").GetString());
-            if (d.TryGetProperty("startDate", out var sd) && sd.ValueKind != JsonValueKind.Null)
-                AddField(left, "Data Inizio", sd.GetDateTime().ToString("dd/MM/yyyy"));
-            if (d.TryGetProperty("endDatePlanned", out var ed) && ed.ValueKind != JsonValueKind.Null)
-                AddField(left, "Data Fine Prevista", ed.GetDateTime().ToString("dd/MM/yyyy"));
-
-            AddField(right, "Ricavo", d.GetProperty("revenue").GetDecimal().ToString("N0") + " €");
-            AddField(right, "Budget", d.GetProperty("budgetTotal").GetDecimal().ToString("N0") + " €");
-            AddField(right, "Ore Previste", d.GetProperty("budgetHoursTotal").GetDecimal().ToString("N0"));
-            var sp = d.GetProperty("serverPath").GetString() ?? "";
-            AddField(right, "Path Server", sp == "" ? "(non creata)" : sp);
-            if (d.TryGetProperty("notes", out var notes) && notes.ValueKind != JsonValueKind.Null)
-                AddField(right, "Note", notes.GetString());
-
-            Grid.SetColumn(left, 0);
-            Grid.SetColumn(right, 2);
-            grid.Children.Add(left);
-            grid.Children.Add(right);
-            SectionContent.Content = grid;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
     }
 
     // === PHASES ===
@@ -530,658 +726,56 @@ public partial class ProjectsPage : Page
         catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
     }
 
-    // === DDP COMMERCIALI ===
-    private List<BomItemListItem> _ddpItems = new();
-    private int _ddpProjectId;
-    private DataGrid? _ddpGrid;
-
-    private async void ShowDdpCommercial(int projectId)
+    // === TREE SELECTION ===
+    private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        _ddpProjectId = projectId;
-        txtSectionTitle.Text = "DDP Commerciali";
-        btnAction.Content = "➕ Aggiungi da Catalogo";
-        btnAction.Visibility = Visibility.Visible;
-        btnAction.Tag = $"ddp_add|{projectId}";
-
-        await LoadDdpData(projectId);
-    }
-
-    private async Task LoadDdpData(int projectId)
-    {
-        try
+        if (e.NewValue is TreeViewItem item && item.Tag is string tag)
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{projectId}/ddp?type=COMMERCIAL");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            var parts = tag.Split('|');
+            if (parts.Length < 2 || !int.TryParse(parts[1], out var id)) return;
 
-            _ddpItems = JsonSerializer.Deserialize<List<BomItemListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            for (int i = 0; i < _ddpItems.Count; i++)
-                _ddpItems[i].RowNumber = i + 1;
-
-            _ddpItemsFull = new List<BomItemListItem>(_ddpItems);
-            BuildDdpGrid();
-        }
-        catch (Exception ex)
-        {
-            SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}", Foreground = System.Windows.Media.Brushes.Red };
-        }
-    }
-
-    private void BuildDdpGrid()
-    {
-        var mainPanel = new DockPanel();
-
-        // Riepilogo
-        var totalCost = _ddpItems.Sum(i => i.TotalCost);
-        var summaryBar = new Border
-        {
-            Background = Brush("#F7F8FA"),
-            BorderBrush = Brush("#E4E7EC"),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(12, 8, 12, 8)
-        };
-        _ddpSummaryText = new TextBlock
-        {
-            Text = $"{_ddpItems.Count} righe  |  Totale: {totalCost:N2} €",
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold
-        };
-        summaryBar.Child = _ddpSummaryText;
-        DockPanel.SetDock(summaryBar, Dock.Top);
-        mainPanel.Children.Add(summaryBar);
-
-        // Toolbar
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 6) };
-        var btnDelete = new Button
-        {
-            Content = "🗑 Elimina riga",
-            Padding = new Thickness(10, 4, 10, 4),
-            Background = System.Windows.Media.Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            FontSize = 12,
-            Cursor = System.Windows.Input.Cursors.Hand,
-            IsEnabled = false
-        };
-        btnDelete.Click += async (s, e) => await DeleteDdpItem();
-        toolbar.Children.Add(btnDelete);
-
-        var btnClearFilter = new Button
-        {
-            Content = "✕ Pulisci filtri",
-            Padding = new Thickness(10, 4, 10, 4),
-            Margin = new Thickness(12, 0, 0, 0),
-            Background = System.Windows.Media.Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            FontSize = 12,
-            Cursor = System.Windows.Input.Cursors.Hand
-        };
-        btnClearFilter.Click += (s, e) => ClearDdpFilters();
-        toolbar.Children.Add(btnClearFilter);
-
-        DockPanel.SetDock(toolbar, Dock.Top);
-        mainPanel.Children.Add(toolbar);
-
-        // Riga filtri
-        var filterGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(45) });   // #
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(85) });   // Data
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });   // Rich.
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Codice
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Desc
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });   // Qtà
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(45) });   // UM
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });  // Fornitore
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Produttore
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Stato
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });   // Rif Danea
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Data Prev
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });  // Dest
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });  // Note
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });   // € Unit
-        filterGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });   // € Tot
-
-        _filterRequestedBy = CreateFilterCombo(_ddpItemsFull.Select(i => i.RequestedBy).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
-        Grid.SetColumn(_filterRequestedBy, 2);
-        filterGrid.Children.Add(_filterRequestedBy);
-
-        _filterSupplier = CreateFilterCombo(_ddpItemsFull.Select(i => i.SupplierName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
-        Grid.SetColumn(_filterSupplier, 7);
-        filterGrid.Children.Add(_filterSupplier);
-
-        _filterManufacturer = CreateFilterCombo(_ddpItemsFull.Select(i => i.Manufacturer).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
-        Grid.SetColumn(_filterManufacturer, 8);
-        filterGrid.Children.Add(_filterManufacturer);
-
-        _filterStatus = CreateFilterCombo(GetStatusList().Select(kv => kv.Value));
-        Grid.SetColumn(_filterStatus, 9);
-        filterGrid.Children.Add(_filterStatus);
-
-        _filterDestination = CreateFilterCombo(_ddpItemsFull.Select(i => i.Destination).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
-        Grid.SetColumn(_filterDestination, 12);
-        filterGrid.Children.Add(_filterDestination);
-
-        DockPanel.SetDock(filterGrid, Dock.Top);
-        mainPanel.Children.Add(filterGrid);
-
-        // DataGrid
-        _ddpGrid = new DataGrid
-        {
-            AutoGenerateColumns = false,
-            IsReadOnly = false,
-            Background = System.Windows.Media.Brushes.White,
-            BorderBrush = Brush("#E4E7EC"),
-            BorderThickness = new Thickness(1),
-            GridLinesVisibility = DataGridGridLinesVisibility.All,
-            HorizontalGridLinesBrush = Brush("#F3F4F6"),
-            VerticalGridLinesBrush = Brush("#F3F4F6"),
-            MinRowHeight = 34,
-            ColumnHeaderHeight = 34,
-            FontSize = 14,
-            FontWeight = FontWeights.SemiBold,
-            SelectionMode = DataGridSelectionMode.Single,
-            CanUserAddRows = false,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
-        };
-
-        var rowStyle = new Style(typeof(DataGridRow));
-
-        // Trigger per ogni stato
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_ORDER", System.Windows.Media.Color.FromRgb(255, 0, 0), System.Windows.Media.Colors.White));           // rosso
-        rowStyle.Triggers.Add(CreateStatusTrigger("ORDERED", System.Windows.Media.Color.FromRgb(255, 255, 0), System.Windows.Media.Colors.Black));           // giallo
-        rowStyle.Triggers.Add(CreateStatusTrigger("DELIVERED", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White));          // verde
-        rowStyle.Triggers.Add(CreateStatusTrigger("PARTIAL", System.Windows.Media.Color.FromRgb(112, 48, 160), System.Windows.Media.Colors.White));          // viola
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_BUILD", System.Windows.Media.Color.FromRgb(128, 128, 128), System.Windows.Media.Colors.White));        // grigio
-        rowStyle.Triggers.Add(CreateStatusTrigger("RFQ", System.Windows.Media.Color.FromRgb(255, 192, 0), System.Windows.Media.Colors.Black));               // arancione
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_CHECK", System.Windows.Media.Color.FromRgb(0, 176, 240), System.Windows.Media.Colors.White));          // azzurro
-        rowStyle.Triggers.Add(CreateStatusTrigger("CANCELLED", System.Windows.Media.Color.FromRgb(64, 64, 64), System.Windows.Media.Colors.White));          // grigio scuro
-        rowStyle.Triggers.Add(CreateStatusTrigger("ASSIGNED", System.Windows.Media.Color.FromRgb(0, 80, 180), System.Windows.Media.Colors.White));           // blu
-        rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(0, 150, 150), System.Windows.Media.Colors.White));           // teal
-        rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(200, 50, 120), System.Windows.Media.Colors.White));       // rosa scuro
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(34, 139, 34), System.Windows.Media.Colors.White));         // verde foresta
-
-        _ddpGrid.RowStyle = rowStyle;
-        // Colonne readonly
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "#", Binding = new System.Windows.Data.Binding("RowNumber"), Width = 45, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Data", Binding = new System.Windows.Data.Binding("CreatedAt") { StringFormat = "dd/MM/yyyy" }, Width = 85, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Rich.", Binding = new System.Windows.Data.Binding("RequestedBy"), Width = 80, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Codice", Binding = new System.Windows.Data.Binding("PartNumber"), Width = 110, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Descrizione", Binding = new System.Windows.Data.Binding("Description"), Width = new DataGridLength(1, DataGridLengthUnitType.Star), IsReadOnly = true });
-
-        // Colonne editabili
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Qtà", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "N0", UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 55 });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "UM", Binding = new System.Windows.Data.Binding("Unit"), Width = 45, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Fornitore", Binding = new System.Windows.Data.Binding("SupplierName"), Width = 120, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Produttore", Binding = new System.Windows.Data.Binding("Manufacturer"), Width = 110, IsReadOnly = true });
-
-        // Stato ComboBox
-        var statusCol = new DataGridComboBoxColumn
-        {
-            Header = "Stato",
-            Width = 110,
-            SelectedValueBinding = new System.Windows.Data.Binding("ItemStatus") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged },
-            SelectedValuePath = "Key",
-            DisplayMemberPath = "Value"
-        };
-        statusCol.ItemsSource = GetStatusList();
-        _ddpGrid.Columns.Add(statusCol);
-
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Rif. Danea", Binding = new System.Windows.Data.Binding("DaneaRef") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 90 });
-
-        // Data Prev con DatePicker
-        var dateCol = new DataGridTemplateColumn { Header = "Data Prev.", Width = 110 };
-        var displayFactory = new FrameworkElementFactory(typeof(TextBlock));
-        displayFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("DateNeeded") { StringFormat = "dd/MM/yyyy" });
-        displayFactory.SetValue(TextBlock.MarginProperty, new Thickness(4, 0, 0, 0));
-        displayFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
-        dateCol.CellTemplate = new DataTemplate { VisualTree = displayFactory };
-        var editFactory = new FrameworkElementFactory(typeof(DatePicker));
-        editFactory.SetBinding(DatePicker.SelectedDateProperty, new System.Windows.Data.Binding("DateNeeded") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Mode = System.Windows.Data.BindingMode.TwoWay });
-        editFactory.SetValue(DatePicker.FontSizeProperty, 11.0);
-        editFactory.AddHandler(DatePicker.SelectedDateChangedEvent, new EventHandler<SelectionChangedEventArgs>((s, ev) =>
-        {
-            if (s is DatePicker dp && dp.SelectedDate.HasValue && dp.SelectedDate.Value.Date < DateTime.Today)
+            switch (parts[0])
             {
-                dp.SelectedDate = DateTime.Today;
-                MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }));
-        dateCol.CellEditingTemplate = new DataTemplate { VisualTree = editFactory };
-        _ddpGrid.Columns.Add(dateCol);
-
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "Destinazione", Binding = new System.Windows.Data.Binding("Destination") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus }, Width = 110 });
-        var noteCol = new DataGridTemplateColumn { Header = "Note", Width = 250 };
-
-        // Template visualizzazione - wrap
-        var noteDisplayFactory = new FrameworkElementFactory(typeof(TextBlock));
-        noteDisplayFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Notes"));
-        noteDisplayFactory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
-        noteDisplayFactory.SetValue(TextBlock.MarginProperty, new Thickness(4, 4, 4, 4));
-        noteDisplayFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Top);
-        noteCol.CellTemplate = new DataTemplate { VisualTree = noteDisplayFactory };
-
-        // Template editing - TextBox multilinea
-        var noteEditFactory = new FrameworkElementFactory(typeof(TextBox));
-        noteEditFactory.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Notes") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus, Mode = System.Windows.Data.BindingMode.TwoWay });
-        noteEditFactory.SetValue(TextBox.AcceptsReturnProperty, true);
-        noteEditFactory.SetValue(TextBox.TextWrappingProperty, TextWrapping.Wrap);
-        noteEditFactory.SetValue(TextBox.MinHeightProperty, 60.0);
-        noteEditFactory.SetValue(TextBox.MaxHeightProperty, 150.0);
-        noteEditFactory.SetValue(TextBox.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
-        noteEditFactory.SetValue(TextBox.FontSizeProperty, 12.0);
-        noteCol.CellEditingTemplate = new DataTemplate { VisualTree = noteEditFactory };
-
-        _ddpGrid.Columns.Add(noteCol);
-
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "€ Unit.", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "N2" }, Width = 70, IsReadOnly = true });
-        _ddpGrid.Columns.Add(new DataGridTextColumn { Header = "€ Totale", Binding = new System.Windows.Data.Binding("TotalCost") { StringFormat = "N2" }, Width = 80, IsReadOnly = true });
-
-        // Eventi
-        SubscribeDdpEvents();
-
-        _ddpGrid.ItemsSource = _ddpItems;
-        _ddpGrid.SelectionChanged += (s, e) => { btnDelete.IsEnabled = _ddpGrid.SelectedItem != null; };
-        _ddpGrid.CellEditEnding += DdpGrid_CellEditEnding;
-
-        mainPanel.Children.Add(_ddpGrid);
-        SectionContent.Content = mainPanel;
-    }
-
-
-    private static DataTrigger CreateStatusTrigger(string status, System.Windows.Media.Color bgColor, System.Windows.Media.Color fgColor)
-    {
-        var trigger = new DataTrigger
-        {
-            Binding = new System.Windows.Data.Binding("ItemStatus"),
-            Value = status
-        };
-        var bgBrush = new System.Windows.Media.SolidColorBrush(bgColor);
-        bgBrush.Freeze();
-        var fgBrush = new System.Windows.Media.SolidColorBrush(fgColor);
-        fgBrush.Freeze();
-        trigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, bgBrush));
-        trigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, fgBrush));
-        return trigger;
-    }
-
-
-    private void SubscribeDdpEvents()
-    {
-        foreach (var item in _ddpItems)
-        {
-            item.PropertyChanged += (s, ev) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    if (ev.PropertyName is nameof(BomItemListItem.ItemStatus)
-                        or nameof(BomItemListItem.TotalCost)
-                        or nameof(BomItemListItem.Quantity))
-                    {
-                        UpdateDdpSummary();
-                    }
-                });
-            };
-        }
-    }
-
-    private ComboBox CreateFilterCombo(IEnumerable<string> values)
-    {
-        var combo = new ComboBox
-        {
-            FontSize = 11,
-            Margin = new Thickness(1, 0, 1, 0),
-            IsEditable = false,
-            VerticalContentAlignment = VerticalAlignment.Center
-        };
-        combo.Items.Add(new ComboBoxItem { Content = "(Tutti)", IsSelected = true });
-        foreach (var val in values)
-            combo.Items.Add(new ComboBoxItem { Content = val });
-        combo.SelectionChanged += (s, e) => ApplyDdpFilters();
-        return combo;
-    }
-
-    private void ApplyDdpFilters()
-    {
-        if (_ddpGrid == null || _ddpItemsFull == null) return;
-
-        var filtered = _ddpItemsFull.AsEnumerable();
-
-        string fStatus = GetFilterValue(_filterStatus);
-        string fSupplier = GetFilterValue(_filterSupplier);
-        string fManufacturer = GetFilterValue(_filterManufacturer);
-        string fDestination = GetFilterValue(_filterDestination);
-        string fRequestedBy = GetFilterValue(_filterRequestedBy);
-
-        if (!string.IsNullOrEmpty(fStatus))
-        {
-            // Trova la chiave dallo stato visualizzato
-            var statusKey = GetStatusList().FirstOrDefault(kv => kv.Value == fStatus).Key;
-            if (!string.IsNullOrEmpty(statusKey))
-                filtered = filtered.Where(i => i.ItemStatus == statusKey);
-        }
-        if (!string.IsNullOrEmpty(fSupplier))
-            filtered = filtered.Where(i => i.SupplierName == fSupplier);
-        if (!string.IsNullOrEmpty(fManufacturer))
-            filtered = filtered.Where(i => i.Manufacturer == fManufacturer);
-        if (!string.IsNullOrEmpty(fDestination))
-            filtered = filtered.Where(i => i.Destination == fDestination);
-        if (!string.IsNullOrEmpty(fRequestedBy))
-            filtered = filtered.Where(i => i.RequestedBy == fRequestedBy);
-
-        _ddpItems = filtered.ToList();
-        _ddpGrid.ItemsSource = _ddpItems;
-        UpdateDdpSummary();
-        SubscribeDdpEvents();
-    }
-
-    private static string GetFilterValue(ComboBox? combo)
-    {
-        if (combo?.SelectedItem is ComboBoxItem item)
-        {
-            string val = item.Content?.ToString() ?? "";
-            return val == "(Tutti)" ? "" : val;
-        }
-        return "";
-    }
-
-    private void ClearDdpFilters()
-    {
-        if (_filterStatus != null) _filterStatus.SelectedIndex = 0;
-        if (_filterSupplier != null) _filterSupplier.SelectedIndex = 0;
-        if (_filterManufacturer != null) _filterManufacturer.SelectedIndex = 0;
-        if (_filterDestination != null) _filterDestination.SelectedIndex = 0;
-        if (_filterRequestedBy != null) _filterRequestedBy.SelectedIndex = 0;
-    }
-
-    private void UpdateDdpSummary()
-    {
-        if (_ddpSummaryText == null) return;
-        var activeItems = _ddpItems.Where(i => i.ItemStatus != "CANCELLED").ToList();
-        var totalCost = activeItems.Sum(i => i.TotalCost);
-        _ddpSummaryText.Text = $"{_ddpItems.Count} righe ({activeItems.Count} attive)  |  Totale: {totalCost:N2} €";
-    }
-    private static List<KeyValuePair<string, string>> GetStatusList()
-    {
-        return new List<KeyValuePair<string, string>>
-    {
-        new("TO_ORDER", "DO - Da Ordinare"),
-        new("ORDERED", "IO - In Ordine"),
-        new("DELIVERED", "CON - Consegnato/Disp."),
-        new("PARTIAL", "PAR - Parziale"),
-        new("TO_BUILD", "DC - Da Costruire"),
-        new("RFQ", "RO - Rich. Offerta"),
-        new("TO_CHECK", "VER - Verificare Mag."),
-        new("CANCELLED", "ANN - Ann./Sosp./Sost."),
-        new("ASSIGNED", "ASS - Assegnato Mont."),
-        new("SHIPPED", "SPED - Spedito"),
-        new("TECH_CHECK", "CHEK - Controllo Tecn./Comm."),
-        new("TO_MODULA", "MOD - Inviato a Modula")
-    };
-    }
-
-    private async void DdpGrid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
-    {
-        if (e.EditAction == DataGridEditAction.Cancel) return;
-        if (e.Row.Item is not BomItemListItem item) return;
-
-        await Task.Delay(100);
-
-        // Validazione quantità
-        if (item.Quantity <= 0)
-        {
-            item.Quantity = 1;
-            MessageBox.Show("La quantità deve essere maggiore di zero.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-
-        // Validazione data
-        if (item.DateNeeded.HasValue && item.DateNeeded.Value.Date < DateTime.Today)
-        {
-            item.DateNeeded = DateTime.Today;
-            MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-
-        try
-        {
-            var req = new BomItemSaveRequest
-            {
-                Id = item.Id,
-                ProjectId = _ddpProjectId,
-                Quantity = item.Quantity,
-                ItemStatus = item.ItemStatus,
-                DaneaRef = item.DaneaRef,
-                DateNeeded = item.DateNeeded,
-                Destination = item.Destination,
-                Notes = item.Notes
-            };
-
-            string body = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"/api/projects/{_ddpProjectId}/ddp/{item.Id}", body);
-            UpdateDdpSummary();
-        }
-        catch { /* silenzioso per auto-save */ }
-    }
-
-    private async Task DeleteDdpItem()
-    {
-        if (_ddpGrid?.SelectedItem is not BomItemListItem item) return;
-
-        if (MessageBox.Show($"Eliminare riga {item.PartNumber} - {item.Description}?",
-            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-
-        try
-        {
-            await ApiClient.DeleteAsync($"/api/projects/{_ddpProjectId}/ddp/{item.Id}");
-            await LoadDdpData(_ddpProjectId);
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
-
-    // === DOCUMENTS ===
-    private async void ShowDocuments(int projectId, string subPath)
-    {
-        txtSectionTitle.Text = string.IsNullOrEmpty(subPath) ? "Documenti" : subPath;
-        btnAction.Content = "Apri Cartella";
-        btnAction.Visibility = Visibility.Visible;
-        btnAction.Tag = $"openfolder|{projectId}|{subPath}";
-
-        try
-        {
-            // Check if server_path exists
-            var projJson = await ApiClient.GetAsync($"/api/projects/{projectId}");
-            var projDoc = JsonDocument.Parse(projJson);
-            var serverPath = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
-
-            if (string.IsNullOrEmpty(serverPath))
-            {
-                btnAction.Content = "Crea Cartella Commessa";
-                btnAction.Tag = $"createfolder|{projectId}";
-                SectionContent.Content = new TextBlock
-                {
-                    Text = "La cartella per questa commessa non è ancora stata creata.\nClicca 'Crea Cartella Commessa' per generarla automaticamente.",
-                    FontSize = 14,
-                    Foreground = System.Windows.Media.Brushes.Gray,
-                    TextWrapping = TextWrapping.Wrap
-                };
-                return;
-            }
-
-            var encoded = Uri.EscapeDataString(subPath);
-            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/files?subPath={encoded}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var items = JsonSerializer.Deserialize<List<FileItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            // Populate document sub-nodes in tree (now handled by file-tree)
-
-            var dg = new DataGrid
-            {
-                AutoGenerateColumns = false,
-                IsReadOnly = true,
-                Background = System.Windows.Media.Brushes.White,
-                BorderThickness = new Thickness(1),
-                BorderBrush = Brush("#E4E7EC"),
-                GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-                HorizontalGridLinesBrush = Brush("#F3F4F6"),
-                RowHeight = 36,
-                ColumnHeaderHeight = 36,
-                FontSize = 13
-            };
-
-            dg.Columns.Add(new DataGridTextColumn { Header = "Tipo", Binding = new System.Windows.Data.Binding("TypeIcon"), Width = 50 });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Nome", Binding = new System.Windows.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Dimensione", Binding = new System.Windows.Data.Binding("SizeDisplay"), Width = 100 });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Modificato", Binding = new System.Windows.Data.Binding("ModifiedDisplay"), Width = 140 });
-
-            var displayItems = items.Select(i => new
-            {
-                TypeIcon = i.IsFolder ? "📁" : "📄",
-                i.Name,
-                SizeDisplay = i.IsFolder ? "" : FormatSize(i.Size),
-                ModifiedDisplay = i.Modified?.ToString("dd/MM/yyyy HH:mm") ?? ""
-            }).ToList();
-
-            dg.ItemsSource = displayItems;
-            dg.MouseDoubleClick += (s, ev) =>
-            {
-                if (dg.SelectedIndex >= 0 && dg.SelectedIndex < items.Count)
-                {
-                    var sel = items[dg.SelectedIndex];
-                    if (sel.IsFolder)
-                        ShowDocuments(projectId, sel.RelativePath);
-                    else
-                        OpenFile(Path.Combine(serverPath, sel.RelativePath));
-                }
-            };
-
-            SectionContent.Content = dg;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
-    }
-
-    // === ACTIONS ===
-    private async void BtnAction_Click(object sender, RoutedEventArgs e)
-    {
-        var tag = btnAction.Tag?.ToString() ?? "";
-        var parts = tag.Split('|');
-
-        if (parts[0] == "edit" && parts.Length > 1 && int.TryParse(parts[1], out var editId))
-        {
-            var dlg = new ProjectDialog(editId) { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) await LoadTree();
-        }
-        else if (parts[0] == "createfolder" && parts.Length > 1 && int.TryParse(parts[1], out var cfId))
-        {
-            try
-            {
-                var json = await ApiClient.PostAsync($"/api/projects/{cfId}/create-folder", "{}");
-                var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.GetProperty("success").GetBoolean())
-                {
-                    // Ricarica il nodo documenti nel tree
-                    RefreshDocNode(cfId);
-                    ShowDocuments(cfId, "");
-                }
-            }
-            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-        }
-        else if (parts[0] == "openfolder" && parts.Length > 1 && int.TryParse(parts[1], out var ofId))
-        {
-            var projJson = await ApiClient.GetAsync($"/api/projects/{ofId}");
-            var projDoc = JsonDocument.Parse(projJson);
-            var sp = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
-            var sub = parts.Length > 2 ? parts[2] : "";
-            var fullPath = string.IsNullOrEmpty(sub) ? sp : Path.Combine(sp, sub);
-            if (Directory.Exists(fullPath))
-                System.Diagnostics.Process.Start("explorer.exe", fullPath);
-        }
-        else if (parts[0] == "download" && parts.Length > 2 && int.TryParse(parts[1], out var dlId))
-        {
-            var relPath = parts[2];
-            var fileName = Path.GetFileName(relPath);
-            try
-            {
-                var encoded = Uri.EscapeDataString(relPath);
-                var bytes = await ApiClient.DownloadAsync($"/api/projects/{dlId}/download?path={encoded}");
-                if (bytes == null || bytes.Length == 0)
-                {
-                    MessageBox.Show("Impossibile scaricare il file.");
-                    return;
-                }
-
-                // Salva in temp e apri
-                var tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM");
-                Directory.CreateDirectory(tempDir);
-                var tempFile = Path.Combine(tempDir, fileName);
-                File.WriteAllBytes(tempFile, bytes);
-                OpenFile(tempFile);
-            }
-            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-        }
-        else if (parts[0] == "ddp_add" && parts.Length > 1 && int.TryParse(parts[1], out var ddpId))
-        {
-            var picker = new CatalogPickerWindow(ddpId, "COMMERCIAL", App.UserFullName)
-            {
-                Owner = Window.GetWindow(this)
-            };
-            picker.ItemAdded += async () => await LoadDdpData(ddpId);
-            picker.Show(); // Show non modale, così la griglia si aggiorna in background
-        }
-    }
-
-    private async void RefreshDocNode(int projectId)
-    {
-        foreach (TreeViewItem projNode in treeProjects.Items)
-        {
-            if (projNode.Tag?.ToString() == $"project|{projectId}")
-            {
-                foreach (TreeViewItem child in projNode.Items)
-                {
-                    if (child.Tag?.ToString() == $"documents|{projectId}")
-                    {
-                        await LoadFileTree(child, projectId);
-                        child.IsExpanded = true;
-                        break;
-                    }
-                }
-                break;
+                case "project":
+                case "details":
+                    ShowDetails(id);
+                    break;
+                case "phases":
+                    ShowPhases(id);
+                    break;
+                case "timesheet":
+                    ShowTimesheet(id);
+                    break;
+                case "documents":
+                    ShowDocuments(id, "");
+                    break;
+                case "ddp_commercial":
+                    ShowDdpCommercial(id);
+                    break;
+                case "docfolder":
+                    var subPath = parts.Length > 2 ? parts[2] : "";
+                    ShowDocuments(id, subPath);
+                    break;
+                case "file":
+                    var filePath = parts.Length > 2 ? parts[2] : "";
+                    ShowFileInfo(id, filePath);
+                    break;
             }
         }
     }
 
-    private void BtnNew_Click(object sender, RoutedEventArgs e)
+    // === SEARCH ===
+    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var dlg = new ProjectDialog { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true) _ = LoadTree();
-    }
-
-    private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await LoadTree();
-
-    // === HELPERS ===
-    private void AddField(StackPanel panel, string label, string? value)
-    {
-        panel.Children.Add(new TextBlock { Text = label.ToUpper(), FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 12, 0, 2) });
-        panel.Children.Add(new TextBlock { Text = value ?? "-", FontSize = 14, Foreground = Brush("#1A1D26"), TextWrapping = TextWrapping.Wrap });
-    }
-
-    private static System.Windows.Media.SolidColorBrush Brush(string hex) =>
-        new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:N0} KB";
-        return $"{bytes / 1024.0 / 1024.0:N1} MB";
-    }
-
-    private void OpenFile(string path)
-    {
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch (Exception ex) { MessageBox.Show($"Impossibile aprire: {ex.Message}"); }
+        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text) ? Visibility.Visible : Visibility.Collapsed;
+        var filter = txtSearch.Text.Trim().ToLower();
+        if (string.IsNullOrEmpty(filter))
+            BuildTree(_allProjects);
+        else
+            BuildTree(_allProjects.Where(p =>
+                p.Code.ToLower().Contains(filter) ||
+                p.Title.ToLower().Contains(filter) ||
+                p.CustomerName.ToLower().Contains(filter)
+            ).ToList());
     }
 }

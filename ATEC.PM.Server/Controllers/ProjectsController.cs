@@ -348,7 +348,7 @@ public class ProjectsController : ControllerBase
         if (!System.IO.File.Exists(fullPath)) return NotFound("File non trovato");
 
         var ext = Path.GetExtension(fullPath).ToLower();
-        if (ext is not (".xlsx" or ".xls" or ".csv")) return BadRequest("Tipo non supportato");
+        if (ext is not (".xlsx" or ".xls" or ".csv" or ".docx")) return BadRequest("Tipo non supportato");
 
         try
         {
@@ -356,23 +356,43 @@ public class ProjectsController : ControllerBase
             var sb = new System.Text.StringBuilder();
 
             sb.Append(@"<!DOCTYPE html><html><head><meta charset='utf-8'><style>
-            * { margin:0; padding:0; box-sizing:border-box; }
-            body { font-family:Segoe UI,sans-serif; font-size:13px; background:#F7F8FA; padding:12px; }
-            .info { padding:8px 12px; background:#fff; border:1px solid #E4E7EC; margin-bottom:8px; font-weight:600; }
-            .tabs { display:flex; gap:2px; margin-bottom:8px; }
-            .tab { padding:6px 16px; background:#fff; border:1px solid #E4E7EC; cursor:pointer; font-size:12px; }
-            .tab.active { background:#4F6EF7; color:#fff; border-color:#4F6EF7; }
-            .sheet { display:none; }
-            .sheet.active { display:block; }
-            table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #E4E7EC; }
-            th { background:#F7F8FA; font-weight:600; font-size:12px; text-align:left;
-                 padding:6px 10px; border:1px solid #E4E7EC; position:sticky; top:0; }
-            td { padding:5px 10px; border:1px solid #F3F4F6; font-size:12px; white-space:nowrap; }
-            tr:hover td { background:#f0f4ff; }
-        </style></head><body>");
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:Segoe UI,sans-serif; font-size:13px; background:#F7F8FA; padding:12px; }
+        .info { padding:8px 12px; background:#fff; border:1px solid #E4E7EC; margin-bottom:8px; font-weight:600; }
+        .tabs { display:flex; gap:2px; margin-bottom:8px; }
+        .tab { padding:6px 16px; background:#fff; border:1px solid #E4E7EC; cursor:pointer; font-size:12px; }
+        .tab.active { background:#4F6EF7; color:#fff; border-color:#4F6EF7; }
+        .sheet { display:none; }
+        .sheet.active { display:block; }
+        table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #E4E7EC; }
+        th { background:#F7F8FA; font-weight:600; font-size:12px; text-align:left;
+             padding:6px 10px; border:1px solid #E4E7EC; position:sticky; top:0; }
+        td { padding:5px 10px; border:1px solid #F3F4F6; font-size:12px; white-space:nowrap; }
+        tr:hover td { background:#f0f4ff; }
+        .doc-content { background:#fff; border:1px solid #E4E7EC; padding:24px; line-height:1.6; }
+        .doc-content h1 { font-size:20px; margin:16px 0 8px; }
+        .doc-content h2 { font-size:17px; margin:14px 0 6px; }
+        .doc-content h3 { font-size:15px; margin:12px 0 6px; }
+        .doc-content p { margin:6px 0; }
+        .doc-content table { margin:12px 0; }
+        .doc-content ul, .doc-content ol { margin:8px 0 8px 24px; }
+    </style></head><body>");
+
+            // === WORD ===
+            if (ext is ".doc" or ".docx")
+            {
+                sb.Append($"<div class='info'>📘 {System.Web.HttpUtility.HtmlEncode(fileName)}</div>");
+                using var docStream = System.IO.File.OpenRead(fullPath);
+                var converter = new Mammoth.DocumentConverter();
+                var result = converter.ConvertToHtml(docStream);
+                sb.Append($"<div class='doc-content'>{result.Value}</div>");
+                sb.Append("</body></html>");
+                return Content(sb.ToString(), "text/html");
+            }
 
             sb.Append($"<div class='info'>📗 {System.Web.HttpUtility.HtmlEncode(fileName)}</div>");
 
+            // === CSV ===
             if (ext == ".csv")
             {
                 var lines = System.IO.File.ReadAllLines(fullPath);
@@ -395,6 +415,7 @@ public class ProjectsController : ControllerBase
                 }
                 sb.Append("</tbody></table>");
             }
+            // === EXCEL ===
             else
             {
                 using var package = new ExcelPackage(new FileInfo(fullPath));
@@ -424,9 +445,8 @@ public class ProjectsController : ControllerBase
                     int startCol = ws.Dimension.Start.Column;
                     int dimEndCol = ws.Dimension.End.Column;
 
-                    // Trova l'ultima colonna realmente usata (scansiona tutte le righe fino a max 200 colonne)
                     int endCol = startCol;
-                    int scanRows = Math.Min(dimEndRow, 50); // scansiona prime 50 righe per trovare colonne
+                    int scanRows = Math.Min(dimEndRow, 50);
                     for (int col = Math.Min(dimEndCol, 200); col >= startCol; col--)
                     {
                         bool found = false;
@@ -441,7 +461,6 @@ public class ProjectsController : ControllerBase
                         if (found) { endCol = col; break; }
                     }
 
-                    // Trova l'ultima riga realmente usata (scansiona da fondo verso alto)
                     int endRow = startRow;
                     for (int row = dimEndRow; row >= startRow; row--)
                     {
@@ -457,13 +476,11 @@ public class ProjectsController : ControllerBase
                         if (hasData) { endRow = row; break; }
                     }
 
-                    // Limiti di sicurezza
                     endRow = Math.Min(endRow, startRow + 500);
                     endCol = Math.Min(endCol, startCol + 50);
 
                     sb.Append("<table>");
 
-                    // Gestione merge: mappa delle celle mergiate
                     var mergeMap = new Dictionary<string, (int rowSpan, int colSpan)>();
                     var skipCells = new HashSet<string>();
 
@@ -493,16 +510,14 @@ public class ProjectsController : ControllerBase
                             var style = cell.Style;
                             var cssStyle = new System.Text.StringBuilder();
 
-                            // Colore sfondo
                             if (style.Fill.PatternType != OfficeOpenXml.Style.ExcelFillStyle.None &&
                                 !string.IsNullOrEmpty(style.Fill.BackgroundColor?.Rgb))
                             {
                                 var rgb = style.Fill.BackgroundColor.Rgb;
-                                if (rgb.Length == 8) rgb = rgb.Substring(2); // rimuovi alpha
+                                if (rgb.Length == 8) rgb = rgb.Substring(2);
                                 cssStyle.Append($"background:#{rgb};");
                             }
 
-                            // Colore testo
                             if (!string.IsNullOrEmpty(style.Font.Color?.Rgb))
                             {
                                 var rgb = style.Font.Color.Rgb;
@@ -510,21 +525,16 @@ public class ProjectsController : ControllerBase
                                 cssStyle.Append($"color:#{rgb};");
                             }
 
-                            // Font
                             if (style.Font.Bold) cssStyle.Append("font-weight:700;");
                             if (style.Font.Italic) cssStyle.Append("font-style:italic;");
                             if (style.Font.Size > 0) cssStyle.Append($"font-size:{style.Font.Size}px;");
 
-                            // Allineamento
                             if (style.HorizontalAlignment == OfficeOpenXml.Style.ExcelHorizontalAlignment.Center)
                                 cssStyle.Append("text-align:center;");
                             else if (style.HorizontalAlignment == OfficeOpenXml.Style.ExcelHorizontalAlignment.Right)
                                 cssStyle.Append("text-align:right;");
 
-                            // Valore cella
                             var val = cell.Text ?? "";
-
-                            // Tag e attributi
                             var tag = row == startRow ? "th" : "td";
                             var attrs = new System.Text.StringBuilder();
                             if (cssStyle.Length > 0) attrs.Append($" style='{cssStyle}'");
@@ -546,13 +556,13 @@ public class ProjectsController : ControllerBase
                 if (sheets.Count > 1)
                 {
                     sb.Append(@"<script>
-            function showSheet(idx) {
-                document.querySelectorAll('.sheet').forEach(s => s.classList.remove('active'));
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.getElementById('s'+idx).classList.add('active');
-                document.querySelectorAll('.tab')[idx].classList.add('active');
-            }
-        </script>");
+        function showSheet(idx) {
+            document.querySelectorAll('.sheet').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('s'+idx).classList.add('active');
+            document.querySelectorAll('.tab')[idx].classList.add('active');
+        }
+    </script>");
                 }
             }
 
