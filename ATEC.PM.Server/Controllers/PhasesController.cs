@@ -42,6 +42,7 @@ public class PhasesController : ControllerBase
                    COALESCE(d.code,'') AS DepartmentCode,
                    COALESCE(d.name,'') AS DepartmentName,
                    pp.budget_hours AS BudgetHours, pp.budget_cost AS BudgetCost,
+                   pp.phase_template_id AS PhaseTemplateId, pp.custom_name AS CustomName,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
                    COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked
             FROM project_phases pp
@@ -83,7 +84,18 @@ public class PhasesController : ControllerBase
             VALUES
                 (@ProjectId, @PhaseTemplateId, @CustomName, @DepartmentId,
                  @BudgetHours, @BudgetCost, @Status, @ProgressPct, @SortOrder);
-            SELECT LAST_INSERT_ID()", req, tx);
+            SELECT LAST_INSERT_ID()", new
+        {
+            req.ProjectId,
+            req.PhaseTemplateId,
+            req.CustomName,
+            req.DepartmentId,
+            req.BudgetHours,
+            req.BudgetCost,
+            req.Status,
+            req.ProgressPct,
+            req.SortOrder
+        }, tx);
 
         SaveAssignments(c, tx, phaseId, req.Assignments);
         tx.Commit();
@@ -96,13 +108,22 @@ public class PhasesController : ControllerBase
         using var c = _db.Open();
         using System.Data.IDbTransaction tx = c.BeginTransaction();
 
-        req.Id = id;
         c.Execute(@"
             UPDATE project_phases SET
                 custom_name=@CustomName, department_id=@DepartmentId,
                 budget_hours=@BudgetHours, budget_cost=@BudgetCost,
                 status=@Status, progress_pct=@ProgressPct, sort_order=@SortOrder
-            WHERE id=@Id", req, tx);
+            WHERE id=@Id", new
+        {
+            req.CustomName,
+            req.DepartmentId,
+            req.BudgetHours,
+            req.BudgetCost,
+            req.Status,
+            req.ProgressPct,
+            req.SortOrder,
+            Id = id
+        }, tx);
 
         c.Execute("DELETE FROM phase_assignments WHERE project_phase_id=@Id", new { Id = id }, tx);
         SaveAssignments(c, tx, id, req.Assignments);

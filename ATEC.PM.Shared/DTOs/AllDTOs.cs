@@ -183,6 +183,8 @@ public class PhaseListItem
     public int SortOrder { get; set; }
     public decimal HoursWorked { get; set; }
     public List<PhaseAssignmentDto> Assignments { get; set; } = new();
+    public int PhaseTemplateId { get; set; }
+    public string CustomName { get; set; } = "";
 }
 
 public class PhaseAssignmentDto
