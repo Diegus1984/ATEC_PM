@@ -156,16 +156,57 @@ public class ProjectSaveRequest
     public bool CreateDefaultPhases { get; set; } = true;
 }
 
+public class PhaseTemplateDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Category { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public string DepartmentCode { get; set; } = "";
+    public string DepartmentName { get; set; } = "";
+    public int SortOrder { get; set; }
+    public bool IsDefault { get; set; }
+}
+
 public class PhaseListItem
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string Category { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public string DepartmentCode { get; set; } = "";
+    public string DepartmentName { get; set; } = "";
     public decimal BudgetHours { get; set; }
     public decimal BudgetCost { get; set; }
     public string Status { get; set; } = "";
     public int ProgressPct { get; set; }
     public int SortOrder { get; set; }
     public decimal HoursWorked { get; set; }
+    public List<PhaseAssignmentDto> Assignments { get; set; } = new();
+}
+
+public class PhaseAssignmentDto
+{
+    public int Id { get; set; }
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public string AssignRole { get; set; } = "MEMBER";
+    public decimal PlannedHours { get; set; }
+}
+
+public class PhaseSaveRequest
+{
+    public int Id { get; set; }
+    public int ProjectId { get; set; }
+    public int PhaseTemplateId { get; set; }
+    public string CustomName { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public decimal BudgetHours { get; set; }
+    public decimal BudgetCost { get; set; }
+    public string Status { get; set; } = "NOT_STARTED";
+    public int ProgressPct { get; set; }
+    public int SortOrder { get; set; }
+    public List<PhaseAssignmentDto> Assignments { get; set; } = new();
 }
 
 public class LookupItem
@@ -387,6 +428,92 @@ public class CatalogItem
     public string Barcode { get; set; } = "";
     public string Notes { get; set; } = "";
     public bool IsActive { get; set; } = true;
+}
+
+// === DEPARTMENTS ===
+public class DepartmentDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+// === USER MANAGEMENT ===
+public class UserListItem
+{
+    public int Id { get; set; }
+    public string BadgeNumber { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string UserRole { get; set; } = "";
+    public string Status { get; set; } = "";
+    public bool HasCredentials { get; set; }
+    public string Username { get; set; } = "";
+    public List<string> DepartmentCodes { get; set; } = new();
+    public List<string> CompetenceCodes { get; set; } = new();
+}
+
+public class UserDetailDto
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = "";
+    public string UserRole { get; set; } = "";
+    public string Username { get; set; } = "";
+    public List<EmployeeDepartmentDto> Departments { get; set; } = new();
+    public List<EmployeeCompetenceDto> Competences { get; set; } = new();
+}
+
+public class EmployeeDepartmentDto
+{
+    public int Id { get; set; }
+    public int DepartmentId { get; set; }
+    public string DepartmentCode { get; set; } = "";
+    public string DepartmentName { get; set; } = "";
+    public bool IsResponsible { get; set; }
+    public bool IsPrimary { get; set; }
+}
+
+public class EmployeeCompetenceDto
+{
+    public int Id { get; set; }
+    public int DepartmentId { get; set; }
+    public string DepartmentCode { get; set; } = "";
+    public string DepartmentName { get; set; } = "";
+    public string Notes { get; set; } = "";
+}
+
+public class SaveUserRoleRequest
+{
+    public int EmployeeId { get; set; }
+    public string UserRole { get; set; } = "";
+}
+
+public class SaveEmployeeDepartmentsRequest
+{
+    public int EmployeeId { get; set; }
+    public List<EmployeeDepartmentDto> Departments { get; set; } = new();
+}
+
+public class SaveEmployeeCompetencesRequest
+{
+    public int EmployeeId { get; set; }
+    public List<EmployeeCompetenceDto> Competences { get; set; } = new();
+}
+
+// === PERMISSION ENGINE ===
+public class UserContext
+{
+    public int EmployeeId { get; set; }
+    public string UserRole { get; set; } = "";
+    public List<string> DepartmentCodes { get; set; } = new();
+    public List<string> ResponsibleDepartmentCodes { get; set; } = new();
+    public List<string> CompetenceCodes { get; set; } = new();
+
+    public bool IsAdmin => UserRole == "ADMIN";
+    public bool IsPm => UserRole == "PM" || UserRole == "ADMIN";
+    public bool IsResponsible => UserRole == "RESP_REPARTO" || IsPm;
 }
 
 public class SetCredentialsRequest

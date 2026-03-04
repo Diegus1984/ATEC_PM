@@ -1,9 +1,8 @@
 <Page
-    x:Class="ATEC.PM.Client.Views.EmployeesPage"
+    x:Class="ATEC.PM.Client.Views.UsersPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#F7F8FA">
-
     <Page.Resources>
         <Style x:Key="FlatBtn" TargetType="Button">
             <Setter Property="Height" Value="34" />
@@ -15,10 +14,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border
-                            x:Name="bd"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}">
+                        <Border x:Name="bd" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -36,13 +32,8 @@
     </Page.Resources>
 
     <DockPanel>
-        <!--  TOOLBAR  -->
-        <Border
-            Padding="16,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
-            DockPanel.Dock="Top">
+        <!-- TOOLBAR -->
+        <Border Padding="16,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button
@@ -69,85 +60,43 @@
                         Foreground="#DC2626"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
-
-                    <Button
-                        x:Name="btnCredentials"
-                        Width="120"
-                        Height="32"
-                        Margin="8,0,0,0"
-                        Background="White"
-                        BorderBrush="#E4E7EC"
-                        BorderThickness="1"
-                        Click="BtnCredentials_Click"
-                        Content="🔑 Credenziali"
-                        Cursor="Hand"
-                        FontSize="13"
-                        IsEnabled="False"
-                        Style="{StaticResource FlatBtn}" />
                 </StackPanel>
-                <StackPanel
-                    HorizontalAlignment="Right"
-                    DockPanel.Dock="Right"
-                    Orientation="Horizontal">
+                <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
                     <TextBox
                         x:Name="txtSearch"
                         Width="200"
                         Height="34"
                         Padding="8,6"
                         BorderBrush="#E4E7EC"
-                        Text=""
                         TextChanged="TxtSearch_TextChanged" />
                     <TextBlock
                         x:Name="txtSearchPlaceholder"
                         Margin="-190,0,0,0"
                         VerticalAlignment="Center"
-                        FontSize="13"
                         Foreground="#9CA3AF"
                         IsHitTestVisible="False"
-                        Text="Cerca..." />
-                    <Button
-                        Margin="8,0,0,0"
-                        Background="#F3F4F6"
-                        Click="BtnRefresh_Click"
-                        Content="Aggiorna"
-                        Foreground="#374151"
-                        Style="{StaticResource FlatBtn}" />
+                        Text="  Cerca..." />
+                    <TextBlock x:Name="txtStatus" Margin="16,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!--  STATUS BAR  -->
-        <Border
-            Padding="16,6"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,1,0,0"
-            DockPanel.Dock="Bottom">
-            <TextBlock
-                x:Name="txtStatus"
-                FontSize="12"
-                Foreground="#6B7280"
-                Text="Caricamento..." />
-        </Border>
-
-        <!--  DATAGRID  -->
+        <!-- DATAGRID -->
         <DataGrid
-            x:Name="dgEmployees"
-            Margin="0"
+            x:Name="dgUsers"
             AutoGenerateColumns="False"
             Background="White"
             BorderThickness="0"
-            ColumnHeaderHeight="40"
-            FontFamily="Segoe UI"
-            FontSize="13"
+            CanUserAddRows="False"
+            CanUserDeleteRows="False"
             GridLinesVisibility="Horizontal"
+            HeadersVisibility="Column"
             HorizontalGridLinesBrush="#F3F4F6"
             IsReadOnly="True"
-            MouseDoubleClick="DgEmployees_DoubleClick"
+            MouseDoubleClick="DgUsers_DoubleClick"
             RowHeight="40"
-            SelectionChanged="DgEmployees_SelectionChanged"
+            SelectionChanged="DgUsers_SelectionChanged"
             SelectionMode="Single">
-
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
                     <Setter Property="Background" Value="#F9FAFB" />
@@ -159,7 +108,6 @@
                     <Setter Property="BorderThickness" Value="0,0,0,1" />
                 </Style>
             </DataGrid.ColumnHeaderStyle>
-
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Setter Property="Background" Value="White" />
@@ -173,12 +121,10 @@
                     </Style.Triggers>
                 </Style>
             </DataGrid.RowStyle>
-
             <DataGrid.CellStyle>
                 <Style TargetType="DataGridCell">
                     <Setter Property="Padding" Value="12,0" />
                     <Setter Property="BorderThickness" Value="0" />
-                    <Setter Property="VerticalAlignment" Value="Center" />
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="DataGridCell">
@@ -195,40 +141,25 @@
                     </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
-
             <DataGrid.Columns>
-                <DataGridTextColumn
-                    Width="80"
-                    Binding="{Binding BadgeNumber}"
-                    Header="Badge" />
-                <DataGridTextColumn
-                    Width="*"
-                    Binding="{Binding FullName}"
-                    Header="Nome Completo" />
-                <DataGridTextColumn
-                    Width="180"
-                    Binding="{Binding Email}"
-                    Header="Email" />
-                <DataGridTextColumn
-                    Width="120"
-                    Binding="{Binding Phone}"
-                    Header="Telefono" />
-                <DataGridTextColumn
-                    Width="90"
-                    Binding="{Binding EmpType}"
-                    Header="Tipo" />
-                <DataGridTextColumn
-                    Width="90"
-                    Binding="{Binding Status}"
-                    Header="Stato" />
-                <DataGridTextColumn
-                    Width="90"
-                    Binding="{Binding HourlyCost, StringFormat='{}{0:N2} €'}"
-                    Header="Costo/h" />
-                <DataGridTextColumn
-                    Width="70"
-                    Binding="{Binding WeeklyHours}"
-                    Header="Ore/sett" />
+                <DataGridTextColumn Width="80"  Binding="{Binding BadgeNumber}"          Header="Badge" />
+                <DataGridTextColumn Width="*"   Binding="{Binding FullName}"             Header="Nome" />
+                <DataGridTextColumn Width="120" Binding="{Binding UserRole}"             Header="Ruolo" />
+                <DataGridTextColumn Width="130" Binding="{Binding Username}"             Header="Username" />
+                <DataGridTextColumn Width="80"  Binding="{Binding Status}"              Header="Stato" />
+                <DataGridTemplateColumn Width="200" Header="Reparti">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                Padding="12,0"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#4F6EF7"
+                                Text="{Binding DepartmentCodesDisplay}"
+                                TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

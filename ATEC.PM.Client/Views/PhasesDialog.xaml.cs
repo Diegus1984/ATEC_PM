@@ -1,5 +1,8 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
@@ -8,34 +11,257 @@ namespace ATEC.PM.Client.Views;
 public partial class PhasesDialog : Window
 {
     private readonly int _projectId;
+    private readonly PhaseListItem? _existing;
+    private List<PhaseTemplateDto> _templates = new();
+    private List<DepartmentDto> _departments = new();
+    private List<LookupItem> _employees = new();
+    private ObservableCollection<PhaseAssignmentDto> _assignments = new();
 
-    public PhasesDialog(int projectId, string projectTitle)
+    public PhasesDialog(int projectId, PhaseListItem? existing = null)
     {
         InitializeComponent();
         _projectId = projectId;
-        Title = $"Fasi - {projectTitle}";
-        Loaded += async (_, _) => await Load();
+        _existing  = existing;
+        Title      = existing == null ? "Nuova Fase" : "Modifica Fase";
+        dgAssignments.ItemsSource = _assignments;
+        Loaded += async (_, _) => await InitAsync();
     }
 
-    private async Task Load()
+    private async Task InitAsync()
+    {
+        await LoadTemplates();
+        await LoadDepartments();
+        await LoadEmployees();
+        if (_existing != null) PopulateForm();
+    }
+
+    private async Task LoadTemplates()
     {
         try
         {
-            var json = await ApiClient.GetAsync($"/api/projects/{_projectId}/phases");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            string json = await ApiClient.GetAsync("/api/phases/templates");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            _templates = JsonSerializer.Deserialize<List<PhaseTemplateDto>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            // Raggruppa per reparto nel ComboBox
+            cmbTemplate.Items.Clear();
+            string lastCategory = "";
+            foreach (PhaseTemplateDto t in _templates.OrderBy(t => t.SortOrder))
             {
-                var phases = JsonSerializer.Deserialize<List<PhaseListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                dgPhases.ItemsSource = phases;
-                var totalBudget = phases.Sum(p => p.BudgetHours);
-                var totalWorked = phases.Sum(p => p.HoursWorked);
-                txtStatus.Text = $"{phases.Count} fasi | Ore previste: {totalBudget:N0} | Ore fatte: {totalWorked:N1}";
+                string cat = string.IsNullOrEmpty(t.DepartmentCode) ? "TRASVERSALE" : t.DepartmentCode;
+                if (cat != lastCategory)
+                {
+                    cmbTemplate.Items.Add(new ComboBoxItem
+                    {
+                        Content    = $"── {cat} ──",
+                        IsEnabled  = false,
+                        FontWeight = FontWeights.Bold,
+                        Foreground = System.Windows.Media.Brushes.Gray
+                    });
+                    lastCategory = cat;
+                }
+                cmbTemplate.Items.Add(new ComboBoxItem
+                {
+                    Content = t.Name,
+                    Tag     = t
+                });
             }
         }
-        catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+        catch { }
     }
 
-    private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+    private async Task LoadDepartments()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/departments");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            _departments = JsonSerializer.Deserialize<List<DepartmentDto>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            cmbDepartment.Items.Clear();
+            cmbDepartment.Items.Add(new ComboBoxItem { Content = "— Nessun reparto (trasversale) —", Tag = 0 });
+            foreach (DepartmentDto d in _departments)
+                cmbDepartment.Items.Add(new ComboBoxItem { Content = $"{d.Code} — {d.Name}", Tag = d.Id });
+            cmbDepartment.SelectedIndex = 0;
+        }
+        catch { }
+    }
+
+    private async Task LoadEmployees()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/employees");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            _employees = JsonSerializer.Deserialize<List<LookupItem>>(
+                doc.RootElement.GetProperty("data").GetRawText().Replace("\"fullName\"", "\"name\""),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            cmbEmployee.ItemsSource = _employees;
+            if (_employees.Count > 0) cmbEmployee.SelectedIndex = 0;
+        }
+        catch { }
+    }
+
+    private void PopulateForm()
+    {
+        if (_existing == null) return;
+
+        // Seleziona template
+        foreach (object item in cmbTemplate.Items)
+        {
+            if (item is ComboBoxItem ci && ci.Tag is PhaseTemplateDto t && t.Name == _existing.Name)
+            {
+                cmbTemplate.SelectedItem = ci;
+                break;
+            }
+        }
+
+        txtCustomName.Text   = "";
+        txtBudgetHours.Text  = _existing.BudgetHours.ToString("F1");
+        txtBudgetCost.Text   = _existing.BudgetCost.ToString("F2");
+        txtProgress.Text     = _existing.ProgressPct.ToString();
+        txtSortOrder.Text    = _existing.SortOrder.ToString();
+
+        SelectComboByTag(cmbStatus, _existing.Status);
+        SelectComboByTag(cmbDepartment, _existing.DepartmentId ?? 0);
+
+        _assignments.Clear();
+        foreach (PhaseAssignmentDto a in _existing.Assignments)
+            _assignments.Add(a);
+    }
+
+    private void CmbTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (cmbTemplate.SelectedItem is ComboBoxItem ci && ci.Tag is PhaseTemplateDto t)
+        {
+            // Auto-seleziona reparto dal template
+            SelectComboByTag(cmbDepartment, t.DepartmentId ?? 0);
+        }
+    }
+
+    private void BtnAddAssignment_Click(object sender, RoutedEventArgs e)
+    {
+        if (cmbEmployee.SelectedItem is not LookupItem emp) return;
+        if (_assignments.Any(a => a.EmployeeId == emp.Id))
+        {
+            txtError.Text = "Tecnico già aggiunto.";
+            return;
+        }
+        txtError.Text = "";
+        decimal.TryParse(txtPlannedHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hours);
+        _assignments.Add(new PhaseAssignmentDto
+        {
+            EmployeeId    = emp.Id,
+            EmployeeName  = emp.Name,
+            AssignRole    = (cmbAssignRole.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "MEMBER",
+            PlannedHours  = hours
+        });
+    }
+
+    private void BtnRemoveAssignment_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is PhaseAssignmentDto a)
+            _assignments.Remove(a);
+    }
+
+    private async void BtnSave_Click(object sender, RoutedEventArgs e)
+    {
+        txtError.Text = "";
+
+        if (cmbTemplate.SelectedItem is not ComboBoxItem ci || ci.Tag is not PhaseTemplateDto tmpl)
+        {
+            txtError.Text = "Seleziona un tipo di fase.";
+            return;
+        }
+
+        btnSave.IsEnabled = false;
+        btnSave.Content   = "Salvataggio...";
+
+        try
+        {
+            decimal.TryParse(txtBudgetHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal budgetHours);
+            decimal.TryParse(txtBudgetCost.Text,  NumberStyles.Any, CultureInfo.InvariantCulture, out decimal budgetCost);
+            int.TryParse(txtProgress.Text,  out int progress);
+            int.TryParse(txtSortOrder.Text, out int sortOrder);
+
+            int? deptId = (cmbDepartment.SelectedItem as ComboBoxItem)?.Tag is int d && d > 0 ? d : null;
+
+            PhaseSaveRequest req = new()
+            {
+                Id              = _existing?.Id ?? 0,
+                ProjectId       = _projectId,
+                PhaseTemplateId = tmpl.Id,
+                CustomName      = txtCustomName.Text.Trim(),
+                DepartmentId    = deptId,
+                BudgetHours     = budgetHours,
+                BudgetCost      = budgetCost,
+                Status          = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "NOT_STARTED",
+                ProgressPct     = progress,
+                SortOrder       = sortOrder,
+                Assignments     = _assignments.ToList()
+            };
+
+            string json = JsonSerializer.Serialize(req,
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+            string result;
+            if (_existing == null)
+                result = await ApiClient.PostAsync("/api/phases", json);
+            else
+                result = await ApiClient.PutAsync($"/api/phases/{_existing.Id}", json);
+
+            JsonDocument doc = JsonDocument.Parse(result);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+            }
+        }
+        catch (Exception ex)
+        {
+            txtError.Text = $"Errore: {ex.Message}";
+        }
+        finally
+        {
+            btnSave.IsEnabled = true;
+            btnSave.Content   = "Salva";
+        }
+    }
+
+    private void BtnCancel_Click(object sender, RoutedEventArgs e)
+    {
+        DialogResult = false;
+        Close();
+    }
+
+    private static void SelectComboByTag(ComboBox cmb, object tag)
+    {
+        foreach (object item in cmb.Items)
+            if (item is ComboBoxItem ci && ci.Tag?.Equals(tag) == true)
+            {
+                cmb.SelectedItem = ci;
+                return;
+            }
+    }
+
+    private static void SelectComboByContent(ComboBox cmb, string content)
+    {
+        foreach (object item in cmb.Items)
+            if (item is ComboBoxItem ci && ci.Content?.ToString() == content)
+            {
+                cmb.SelectedItem = ci;
+                return;
+            }
+    }
 }

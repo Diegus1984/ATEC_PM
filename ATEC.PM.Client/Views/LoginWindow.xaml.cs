@@ -21,17 +21,20 @@ public partial class LoginWindow : Window
         try
         {
             App.ApiBaseUrl = txtServer.Text.TrimEnd('/');
-            var result = await ApiClient.PostLogin(txtUsername.Text, txtPassword.Password);
-            var doc = JsonDocument.Parse(result);
-            var root = doc.RootElement;
+            string result = await ApiClient.PostLogin(txtUsername.Text, txtPassword.Password);
+            JsonDocument doc = JsonDocument.Parse(result);
+            JsonElement root = doc.RootElement;
 
             if (root.GetProperty("success").GetBoolean())
             {
-                var data = root.GetProperty("data");
+                JsonElement data = root.GetProperty("data");
                 App.Token = data.GetProperty("token").GetString() ?? "";
                 App.UserFullName = data.GetProperty("fullName").GetString() ?? "";
                 App.UserRole = data.GetProperty("userRole").GetString() ?? "";
                 App.UserId = data.GetProperty("employeeId").GetInt32();
+
+                // Carica reparti e competenze per il PermissionEngine
+                await LoadUserContextAsync();
 
                 new MainWindow().Show();
                 Close();
@@ -49,6 +52,46 @@ public partial class LoginWindow : Window
         {
             btnLogin.IsEnabled = true;
             btnLogin.Content = "Accedi";
+        }
+    }
+
+    private static async Task LoadUserContextAsync()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync($"/api/users/{App.UserId}");
+            JsonDocument doc = JsonDocument.Parse(json);
+            JsonElement root = doc.RootElement;
+
+            if (!root.GetProperty("success").GetBoolean()) return;
+
+            JsonElement data = root.GetProperty("data");
+
+            List<string> deptCodes = new();
+            List<string> respCodes = new();
+            List<string> compCodes = new();
+
+            foreach (JsonElement d in data.GetProperty("departments").EnumerateArray())
+            {
+                string code = d.GetProperty("departmentCode").GetString() ?? "";
+                deptCodes.Add(code);
+                if (d.GetProperty("isResponsible").GetBoolean())
+                    respCodes.Add(code);
+            }
+
+            foreach (JsonElement c in data.GetProperty("competences").EnumerateArray())
+                compCodes.Add(c.GetProperty("departmentCode").GetString() ?? "");
+
+            App.SetCurrentUser(App.UserId, App.UserRole, deptCodes, respCodes, compCodes);
+        }
+        catch
+        {
+            // Se fallisce (es. utente ADMIN appena creato senza reparti), UserContext rimane vuoto
+            // Il ruolo ADMIN bypassa comunque tutti i controlli
+            App.SetCurrentUser(App.UserId, App.UserRole,
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>());
         }
     }
 

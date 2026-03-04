@@ -1,53 +1,143 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Client.ViewModels;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
 public partial class EmployeeDialog : Window
 {
     private readonly int _employeeId;
+    private List<DepartmentDto> _departments = new();
+    private ObservableCollection<DeptMembershipRow> _deptRows = new();
+    private ObservableCollection<CompetenceRow> _compRows = new();
+
+    public int SavedEmployeeId { get; private set; }
 
     public EmployeeDialog(int employeeId = 0)
     {
         InitializeComponent();
         _employeeId = employeeId;
-        Title = employeeId == 0 ? "Nuovo Dipendente" : "Modifica Dipendente";
+        Title = employeeId == 0 ? "Nuovo Utente" : "Modifica Utente";
         dpHireDate.SelectedDate = DateTime.Today;
+        lstDeptMembership.ItemsSource = _deptRows;
+        lstCompetences.ItemsSource = _compRows;
 
-        if (employeeId > 0)
+        txtPasswordHint.Text = employeeId == 0
+            ? "Lascia vuoto per non impostare credenziali ora"
+            : "Lascia vuoto per non modificare la password";
+
+        Loaded += async (_, _) => await InitAsync();
+    }
+
+    private async Task InitAsync()
+    {
+        await LoadDepartments();
+        if (_employeeId > 0)
+            await LoadEmployee();
+    }
+
+    private async Task LoadDepartments()
+    {
+        try
         {
-            Loaded += async (_, _) => await LoadEmployee();
+            string json = await ApiClient.GetAsync("/api/departments");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            _departments = JsonSerializer.Deserialize<List<DepartmentDto>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            _deptRows.Clear();
+            _compRows.Clear();
+            foreach (DepartmentDto dept in _departments)
+            {
+                _deptRows.Add(new DeptMembershipRow
+                {
+                    DepartmentId   = dept.Id,
+                    DepartmentName = $"{dept.Code} — {dept.Name}"
+                });
+                _compRows.Add(new CompetenceRow
+                {
+                    DepartmentId   = dept.Id,
+                    DepartmentName = $"{dept.Code} — {dept.Name}"
+                });
+            }
         }
+        catch { }
     }
 
     private async Task LoadEmployee()
     {
         try
         {
-            var json = await ApiClient.GetAsync($"/api/employees/{_employeeId}");
-            var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (root.GetProperty("success").GetBoolean())
+            // Anagrafica
+            string jsonEmp = await ApiClient.GetAsync($"/api/employees/{_employeeId}");
+            JsonDocument docEmp = JsonDocument.Parse(jsonEmp);
+            if (docEmp.RootElement.GetProperty("success").GetBoolean())
             {
-                var d = root.GetProperty("data");
-                txtBadge.Text = d.GetProperty("badgeNumber").GetString() ?? "";
-                txtFirstName.Text = d.GetProperty("firstName").GetString() ?? "";
-                txtLastName.Text = d.GetProperty("lastName").GetString() ?? "";
-                txtEmail.Text = d.GetProperty("email").GetString() ?? "";
-                txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
-                txtHourlyCost.Text = d.GetProperty("hourlyCost").GetDecimal().ToString("F2");
+                JsonElement d = docEmp.RootElement.GetProperty("data");
+                txtBadge.Text       = d.GetProperty("badgeNumber").GetString() ?? "";
+                txtFirstName.Text   = d.GetProperty("firstName").GetString() ?? "";
+                txtLastName.Text    = d.GetProperty("lastName").GetString() ?? "";
+                txtEmail.Text       = d.GetProperty("email").GetString() ?? "";
+                txtPhone.Text       = d.GetProperty("phone").GetString() ?? "";
+                txtHourlyCost.Text  = d.GetProperty("hourlyCost").GetDecimal().ToString("F2");
                 txtWeeklyHours.Text = d.GetProperty("weeklyHours").GetDecimal().ToString("F0");
-                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
-
-                SelectComboItem(cmbType, d.GetProperty("empType").GetString() ?? "INTERNAL");
+                txtNotes.Text       = d.GetProperty("notes").GetString() ?? "";
+                SelectComboItem(cmbType,   d.GetProperty("empType").GetString() ?? "INTERNAL");
                 SelectComboItem(cmbStatus, d.GetProperty("status").GetString() ?? "ACTIVE");
-
-                if (d.TryGetProperty("hireDate", out var hd) && hd.ValueKind != JsonValueKind.Null)
+                if (d.TryGetProperty("hireDate", out JsonElement hd) && hd.ValueKind != JsonValueKind.Null)
                     dpHireDate.SelectedDate = hd.GetDateTime();
+            }
+
+            // Ruolo + reparti + competenze
+            string jsonUser = await ApiClient.GetAsync($"/api/users/{_employeeId}");
+            JsonDocument docUser = JsonDocument.Parse(jsonUser);
+            if (!docUser.RootElement.GetProperty("success").GetBoolean()) return;
+
+            JsonElement u = docUser.RootElement.GetProperty("data");
+
+            string role = u.GetProperty("userRole").GetString() ?? "TECH";
+            rbAdmin.IsChecked = role == "ADMIN";
+            rbPm.IsChecked    = role == "PM";
+            rbResp.IsChecked  = role == "RESP_REPARTO";
+            rbTech.IsChecked  = !new[] { "ADMIN", "PM", "RESP_REPARTO" }.Contains(role);
+
+            txtUsername.Text = u.GetProperty("username").GetString() ?? "";
+
+            List<EmployeeDepartmentDto> depts = JsonSerializer.Deserialize<List<EmployeeDepartmentDto>>(
+                u.GetProperty("departments").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            foreach (DeptMembershipRow row in _deptRows)
+            {
+                EmployeeDepartmentDto? existing = depts.FirstOrDefault(d => d.DepartmentId == row.DepartmentId);
+                if (existing != null)
+                {
+                    row.IsMember      = true;
+                    row.IsResponsible = existing.IsResponsible;
+                    row.IsPrimary     = existing.IsPrimary;
+                }
+            }
+
+            List<EmployeeCompetenceDto> comps = JsonSerializer.Deserialize<List<EmployeeCompetenceDto>>(
+                u.GetProperty("competences").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            foreach (CompetenceRow row in _compRows)
+            {
+                EmployeeCompetenceDto? existing = comps.FirstOrDefault(c => c.DepartmentId == row.DepartmentId);
+                if (existing != null)
+                {
+                    row.IsEnabled = true;
+                    row.Notes     = existing.Notes;
+                }
             }
         }
         catch (Exception ex)
@@ -59,13 +149,7 @@ public partial class EmployeeDialog : Window
     private void SelectComboItem(ComboBox cmb, string value)
     {
         foreach (ComboBoxItem item in cmb.Items)
-        {
-            if (item.Content?.ToString() == value)
-            {
-                item.IsSelected = true;
-                break;
-            }
-        }
+            if (item.Content?.ToString() == value) { item.IsSelected = true; break; }
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -78,51 +162,114 @@ public partial class EmployeeDialog : Window
             return;
         }
 
+        bool hasPassword = txtPassword.Password.Length > 0;
+        if (hasPassword)
+        {
+            if (txtPassword.Password.Length < 4)
+            {
+                txtError.Text = "Password minimo 4 caratteri.";
+                return;
+            }
+            if (txtPassword.Password != txtPasswordConfirm.Password)
+            {
+                txtError.Text = "Le password non coincidono.";
+                return;
+            }
+        }
+
         btnSave.IsEnabled = false;
-        btnSave.Content = "Salvataggio...";
+        btnSave.Content   = "Salvataggio...";
 
         try
         {
-            decimal.TryParse(txtHourlyCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var hourlyCost);
-            decimal.TryParse(txtWeeklyHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var weeklyHours);
+            decimal.TryParse(txtHourlyCost.Text,  NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost);
+            decimal.TryParse(txtWeeklyHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal weeklyHours);
 
-            var obj = new
+            // 1. Anagrafica
+            object empObj = new
             {
-                badgeNumber = txtBadge.Text,
-                firstName = txtFirstName.Text,
-                lastName = txtLastName.Text,
-                email = txtEmail.Text,
-                phone = txtPhone.Text,
-                empType = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "INTERNAL",
+                badgeNumber = txtBadge.Text.Trim(),
+                firstName   = txtFirstName.Text.Trim(),
+                lastName    = txtLastName.Text.Trim(),
+                email       = txtEmail.Text.Trim(),
+                phone       = txtPhone.Text.Trim(),
+                empType     = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "INTERNAL",
                 hourlyCost,
                 weeklyHours,
-                hireDate = dpHireDate.SelectedDate?.ToString("yyyy-MM-dd"),
-                status = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ACTIVE",
-                notes = txtNotes.Text
+                hireDate    = dpHireDate.SelectedDate?.ToString("yyyy-MM-dd"),
+                status      = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ACTIVE",
+                notes       = txtNotes.Text
             };
 
-            var jsonBody = JsonSerializer.Serialize(obj, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string empJson = JsonSerializer.Serialize(empObj,
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-            string result;
+            int employeeId = _employeeId;
             if (_employeeId == 0)
             {
-                result = await ApiClient.PostAsync("/api/employees", jsonBody);
+                string res = await ApiClient.PostAsync("/api/employees", empJson);
+                JsonDocument doc = JsonDocument.Parse(res);
+                if (!doc.RootElement.GetProperty("success").GetBoolean())
+                {
+                    txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                    return;
+                }
+                employeeId = doc.RootElement.GetProperty("data").GetInt32();
             }
             else
             {
-                result = await ApiClient.PutAsync($"/api/employees/{_employeeId}", jsonBody);
+                await ApiClient.PutAsync($"/api/employees/{_employeeId}", empJson);
             }
 
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            // 2. Ruolo
+            string role = rbAdmin.IsChecked == true ? "ADMIN"
+                        : rbPm.IsChecked    == true ? "PM"
+                        : rbResp.IsChecked  == true ? "RESP_REPARTO"
+                        : "TECH";
+
+            await ApiClient.PutAsync("/api/users/role",
+                JsonSerializer.Serialize(new { employeeId, userRole = role },
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+
+            // 3. Credenziali (solo se entrambi compilati)
+            if (!string.IsNullOrWhiteSpace(txtUsername.Text) && hasPassword)
             {
-                DialogResult = true;
-                Close();
+                await ApiClient.PostAsync("/api/auth/set-credentials",
+                    JsonSerializer.Serialize(
+                        new { employeeId, username = txtUsername.Text.Trim(), password = txtPassword.Password },
+                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             }
-            else
-            {
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
-            }
+
+            // 4. Reparti
+            List<EmployeeDepartmentDto> depts = _deptRows
+                .Where(r => r.IsMember)
+                .Select(r => new EmployeeDepartmentDto
+                {
+                    DepartmentId  = r.DepartmentId,
+                    IsResponsible = r.IsResponsible,
+                    IsPrimary     = r.IsPrimary
+                }).ToList();
+
+            await ApiClient.PutAsync("/api/users/departments",
+                JsonSerializer.Serialize(new { employeeId, departments = depts },
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+
+            // 5. Competenze
+            List<EmployeeCompetenceDto> comps = _compRows
+                .Where(r => r.IsEnabled)
+                .Select(r => new EmployeeCompetenceDto
+                {
+                    DepartmentId = r.DepartmentId,
+                    Notes        = r.Notes
+                }).ToList();
+
+            await ApiClient.PutAsync("/api/users/competences",
+                JsonSerializer.Serialize(new { employeeId, competences = comps },
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+
+            SavedEmployeeId = employeeId;
+            DialogResult = true;
+            Close();
         }
         catch (Exception ex)
         {
@@ -131,7 +278,7 @@ public partial class EmployeeDialog : Window
         finally
         {
             btnSave.IsEnabled = true;
-            btnSave.Content = "Salva";
+            btnSave.Content   = "Salva";
         }
     }
 
