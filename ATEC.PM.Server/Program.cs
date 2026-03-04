@@ -70,7 +70,18 @@ app.UseCors("All");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.Services.GetRequiredService<DbService>().InitDatabase();
+try
+{
+    app.Services.GetRequiredService<DbService>().InitDatabase();
+    Console.WriteLine("ATEC PM Server avviato");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ERRORE InitDatabase] {ex.Message}");
+    Console.WriteLine(ex.StackTrace);
+    Console.WriteLine("Premi un tasto per uscire...");
+    Console.ReadKey();
+    return;
+}
 
-Console.WriteLine("ATEC PM Server avviato");
 app.Run();

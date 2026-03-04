@@ -65,14 +65,12 @@ public class PhasesController : ControllerBase
         return Ok(ApiResponse<List<PhaseListItem>>.Ok(phases));
     }
 
-    // ── Crea fase ─────────────────────────────────────────────────────
     [HttpPost]
     public IActionResult Create([FromBody] PhaseSaveRequest req)
     {
         using var c = _db.Open();
-        using var tx = c.BeginTransaction();
+        using System.Data.IDbTransaction tx = c.BeginTransaction();
 
-        // Prendi department_id dal template se non specificato
         if (req.DepartmentId == null)
             req.DepartmentId = c.ExecuteScalar<int?>(
                 "SELECT department_id FROM phase_templates WHERE id=@Id",
@@ -88,17 +86,15 @@ public class PhasesController : ControllerBase
             SELECT LAST_INSERT_ID()", req, tx);
 
         SaveAssignments(c, tx, phaseId, req.Assignments);
-
         tx.Commit();
         return Ok(ApiResponse<int>.Ok(phaseId, "Fase creata"));
     }
 
-    // ── Aggiorna fase ─────────────────────────────────────────────────
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] PhaseSaveRequest req)
     {
         using var c = _db.Open();
-        using var tx = c.BeginTransaction();
+        using System.Data.IDbTransaction tx = c.BeginTransaction();
 
         req.Id = id;
         c.Execute(@"
@@ -110,7 +106,6 @@ public class PhasesController : ControllerBase
 
         c.Execute("DELETE FROM phase_assignments WHERE project_phase_id=@Id", new { Id = id }, tx);
         SaveAssignments(c, tx, id, req.Assignments);
-
         tx.Commit();
         return Ok(ApiResponse<bool>.Ok(true));
     }
@@ -142,8 +137,8 @@ public class PhasesController : ControllerBase
 
     // ── Helper assegnazioni ───────────────────────────────────────────
     private static void SaveAssignments(
-        MySqlConnector.MySqlConnection c,
-        MySqlConnector.MySqlTransaction tx,
+        System.Data.IDbConnection c,
+        System.Data.IDbTransaction tx,
         int phaseId,
         List<PhaseAssignmentDto> assignments)
     {
