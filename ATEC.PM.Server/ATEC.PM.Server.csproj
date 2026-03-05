@@ -15,6 +15,7 @@
 		<PackageReference Include="Mammoth" Version="1.11.0" />
 	</ItemGroup>
 	<ItemGroup>
+		<ProjectReference Include="..\ATEC.PM.Client\ATEC.PM.Client.csproj" />
 		<ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
 	</ItemGroup>
 	<ItemGroup>

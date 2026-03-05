@@ -194,6 +194,7 @@ public class PhaseAssignmentDto
     public string EmployeeName { get; set; } = "";
     public string AssignRole { get; set; } = "MEMBER";
     public decimal PlannedHours { get; set; }
+    public decimal HoursWorked { get; set; }
 }
 
 public class PhaseSaveRequest
@@ -625,3 +626,4 @@ public class FieldUpdateRequest
     public string Field { get; set; } = "";
     public string Value { get; set; } = "";
 }
+
