@@ -16,10 +16,15 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- TOP: Riepilogo + Ricerca + Azioni -->
-        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,10">
+        <!--  TOP: Riepilogo + Ricerca + Azioni  -->
+        <Border
+            Padding="16,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
             <StackPanel>
-                <!-- Riepilogo ore -->
+                <!--  Riepilogo ore  -->
                 <Grid Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -28,40 +33,99 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                        <TextBlock Text="FASI" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="txtTotalPhases" Text="0" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="SemiBold"
+                            Foreground="#6B7280"
+                            Text="FASI" />
+                        <TextBlock
+                            x:Name="txtTotalPhases"
+                            HorizontalAlignment="Center"
+                            FontSize="20"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="0" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                        <TextBlock Text="ORE BUDGET" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="txtTotalBudget" Text="0" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="SemiBold"
+                            Foreground="#6B7280"
+                            Text="ORE BUDGET" />
+                        <TextBlock
+                            x:Name="txtTotalBudget"
+                            HorizontalAlignment="Center"
+                            FontSize="20"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="0" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                        <TextBlock Text="ORE LAVORATE" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="txtTotalWorked" Text="0" FontSize="20" FontWeight="Bold" Foreground="#4F6EF7" HorizontalAlignment="Center" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="SemiBold"
+                            Foreground="#6B7280"
+                            Text="ORE LAVORATE" />
+                        <TextBlock
+                            x:Name="txtTotalWorked"
+                            HorizontalAlignment="Center"
+                            FontSize="20"
+                            FontWeight="Bold"
+                            Foreground="#4F6EF7"
+                            Text="0" />
                     </StackPanel>
                     <StackPanel Grid.Column="3" HorizontalAlignment="Center">
-                        <TextBlock Text="COSTO BUDGET" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
-                        <TextBlock x:Name="txtTotalCost" Text="0 €" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="SemiBold"
+                            Foreground="#6B7280"
+                            Text="COSTO BUDGET" />
+                        <TextBlock
+                            x:Name="txtTotalCost"
+                            HorizontalAlignment="Center"
+                            FontSize="20"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="0 €" />
                     </StackPanel>
                 </Grid>
 
-                <!-- Ricerca + Bottone aggiungi -->
+                <!--  Ricerca + Bottone aggiungi  -->
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Background="#4F6EF7" Foreground="White"
-                            Content="+ Aggiungi Fase" Style="{StaticResource FlatBtn}"
-                            Margin="8,0,0,0" Click="BtnAddPhase_Click" />
+                    <Button
+                        Margin="8,0,0,0"
+                        Background="#4F6EF7"
+                        Click="BtnAddPhase_Click"
+                        Content="+ Aggiungi Fase"
+                        DockPanel.Dock="Right"
+                        Foreground="White"
+                        Style="{StaticResource FlatBtn}" />
                     <Grid>
-                        <TextBox x:Name="txtSearch" Height="30" Padding="8,4" BorderBrush="#E4E7EC"
-                                 FontSize="13" TextChanged="TxtSearch_TextChanged" />
-                        <TextBlock x:Name="txtSearchPlaceholder" Text="Cerca fase..."
-                                   Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13"
-                                   Foreground="#9CA3AF" IsHitTestVisible="False" />
+                        <TextBox
+                            x:Name="txtSearch"
+                            Height="30"
+                            Padding="8,4"
+                            BorderBrush="#E4E7EC"
+                            FontSize="13"
+                            TextChanged="TxtSearch_TextChanged" />
+                        <TextBlock
+                            x:Name="txtSearchPlaceholder"
+                            Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            Foreground="#9CA3AF"
+                            IsHitTestVisible="False"
+                            Text="Cerca fase..." />
                     </Grid>
                 </DockPanel>
             </StackPanel>
         </Border>
 
-        <!-- CONTENT: Lista fasi raggruppate -->
+        <!--  CONTENT: Lista fasi raggruppate  -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="pnlPhases" Margin="16,8,16,16" />
         </ScrollViewer>

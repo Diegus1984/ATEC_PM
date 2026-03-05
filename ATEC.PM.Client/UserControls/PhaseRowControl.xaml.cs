@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
@@ -97,6 +98,8 @@ public partial class PhaseRowControl : UserControl
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
+        if (App.CurrentUser.IsPm)
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
 
         AddHeaderCell(header, 0, "TECNICO");
         AddHeaderCell(header, 1, "ORE PREV.");
@@ -112,42 +115,66 @@ public partial class PhaseRowControl : UserControl
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
+            if (App.CurrentUser.IsPm)
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
 
             // Nome
             TextBlock txtEmpName = new()
             {
-                Text = a.EmployeeName, FontSize = 12,
+                Text = a.EmployeeName,
+                FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center
             };
             Grid.SetColumn(txtEmpName, 0);
             row.Children.Add(txtEmpName);
 
-            // Ore pianificate
+            // Ore pianificate (TextBlock + TextBox nascosto per edit)
+            StackPanel hoursPanel = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             TextBlock txtPlanned = new()
             {
-                Text = $"{a.PlannedHours:N1} h", FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray
+                Text = $"{a.PlannedHours:N1} h",
+                FontSize = 12,
+                Foreground = Brushes.Gray,
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(txtPlanned, 1);
-            row.Children.Add(txtPlanned);
+            TextBox txtEditHours = new()
+            {
+                Text = a.PlannedHours.ToString("F1"),
+                FontSize = 12,
+                Width = 55,
+                Height = 22,
+                Padding = new Thickness(2, 1, 2, 1),
+                BorderBrush = HexBrush("#E4E7EC"),
+                BorderThickness = new Thickness(1),
+                Visibility = Visibility.Collapsed,
+                Tag = a
+            };
+            hoursPanel.Children.Add(txtPlanned);
+            hoursPanel.Children.Add(txtEditHours);
+            Grid.SetColumn(hoursPanel, 1);
+            row.Children.Add(hoursPanel);
 
             // Ore lavorate
             TextBlock txtEmpWorked = new()
             {
-                Text = $"{a.HoursWorked:N1} h", FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold,
+                Text = $"{a.HoursWorked:N1} h",
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = FontWeights.SemiBold,
                 Foreground = HexBrush("#4F6EF7")
             };
             Grid.SetColumn(txtEmpWorked, 2);
             row.Children.Add(txtEmpWorked);
 
-            // % avanzamento tecnico
+            // %
             decimal empPct = a.PlannedHours > 0
                 ? Math.Round(a.HoursWorked / a.PlannedHours * 100, 0)
                 : 0;
             TextBlock txtEmpPct = new()
             {
-                Text = $"{empPct}%", FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Text = $"{empPct}%",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = empPct > 100 ? HexBrush("#EF4444")
                            : empPct >= 100 ? HexBrush("#059669")
@@ -156,30 +183,91 @@ public partial class PhaseRowControl : UserControl
             Grid.SetColumn(txtEmpPct, 3);
             row.Children.Add(txtEmpPct);
 
-            // Bottone rimuovi (solo PM/ADMIN)
+            // Bottone rimuovi
             if (App.CurrentUser.IsPm)
             {
                 Button btnRem = new()
                 {
-                    Content = "✕", Width = 22, Height = 22, FontSize = 10,
-                    Background = HexBrush("#EF44441A"), Foreground = HexBrush("#EF4444"),
-                    BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand,
+                    Content = "✕",
+                    Width = 22,
+                    Height = 22,
+                    FontSize = 10,
+                    Background = HexBrush("#EF44441A"),
+                    Foreground = HexBrush("#EF4444"),
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
                     Tag = a.Id
                 };
                 btnRem.Click += BtnRemoveAssignment_Click;
                 Grid.SetColumn(btnRem, 4);
                 row.Children.Add(btnRem);
+
+                // Bottone modifica ore
+                Button btnEdit = new()
+                {
+                    Content = "✏",
+                    Width = 22,
+                    Height = 22,
+                    FontSize = 10,
+                    Background = HexBrush("#4F6EF71A"),
+                    Foreground = HexBrush("#4F6EF7"),
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    ToolTip = "Modifica ore pianificate"
+                };
+                btnEdit.Click += (s, ev) =>
+                {
+                    if (txtEditHours.Visibility == Visibility.Collapsed)
+                    {
+                        txtPlanned.Visibility = Visibility.Collapsed;
+                        txtEditHours.Visibility = Visibility.Visible;
+                        txtEditHours.Focus();
+                        txtEditHours.SelectAll();
+                    }
+                };
+                txtEditHours.LostFocus += async (s, ev) =>
+                {
+                    txtEditHours.Visibility = Visibility.Collapsed;
+                    txtPlanned.Visibility = Visibility.Visible;
+                    if (!decimal.TryParse(txtEditHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newHours)) return;
+                    if (newHours == a.PlannedHours) return;
+                    await UpdateAssignmentHours(a.Id, newHours);
+                };
+                txtEditHours.KeyDown += (s, ev) =>
+                {
+                    if (ev.Key == System.Windows.Input.Key.Enter)
+                    {
+                        // Forza LostFocus
+                        Keyboard.ClearFocus();
+                    }
+                };
+                Grid.SetColumn(btnEdit, 5);
+                row.Children.Add(btnEdit);
             }
 
             pnlAssignments.Children.Add(row);
         }
     }
 
+    private async Task UpdateAssignmentHours(int assignmentId, decimal newHours)
+    {
+        try
+        {
+            string jsonBody = JsonSerializer.Serialize(new { plannedHours = newHours },
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PatchAsync($"/api/phases/assignments/{assignmentId}/hours", jsonBody);
+            PhaseChanged?.Invoke();
+        }
+        catch { }
+    }
+
     private static void AddHeaderCell(Grid grid, int col, string text)
     {
         TextBlock tb = new()
         {
-            Text = text, FontSize = 9, FontWeight = FontWeights.SemiBold,
+            Text = text,
+            FontSize = 9,
+            FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9CA3AF")),
             VerticalAlignment = VerticalAlignment.Center
         };

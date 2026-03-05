@@ -56,12 +56,14 @@ public class PhasesController : ControllerBase
         foreach (PhaseListItem phase in phases)
         {
             phase.Assignments = c.Query<PhaseAssignmentDto>(@"
-                SELECT pa.id, pa.employee_id AS EmployeeId,
-                       CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
-                       pa.assign_role AS AssignRole, pa.planned_hours AS PlannedHours
-                FROM phase_assignments pa
-                JOIN employees e ON e.id = pa.employee_id
-                WHERE pa.project_phase_id = @PhaseId", new { PhaseId = phase.Id }).ToList();
+    SELECT pa.id, pa.employee_id AS EmployeeId,
+           CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
+           pa.assign_role AS AssignRole, pa.planned_hours AS PlannedHours,
+           COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te 
+                     WHERE te.project_phase_id = @PhaseId AND te.employee_id = pa.employee_id), 0) AS HoursWorked
+    FROM phase_assignments pa
+    JOIN employees e ON e.id = pa.employee_id
+    WHERE pa.project_phase_id = @PhaseId", new { PhaseId = phase.Id }).ToList();
         }
 
         return Ok(ApiResponse<List<PhaseListItem>>.Ok(phases));
@@ -232,5 +234,14 @@ public class PhasesController : ControllerBase
                 VALUES (@PhaseId, @EmployeeId, @AssignRole, @PlannedHours)",
                 new { PhaseId = phaseId, a.EmployeeId, a.AssignRole, a.PlannedHours }, tx);
         }
+    }
+
+    [HttpPatch("assignments/{id}/hours")]
+    public IActionResult UpdateAssignmentHours(int id, [FromBody] PlannedHoursUpdate req)
+    {
+        using var c = _db.Open();
+        c.Execute("UPDATE phase_assignments SET planned_hours=@Hours WHERE id=@Id",
+            new { Hours = req.PlannedHours, Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 }

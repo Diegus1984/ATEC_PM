@@ -3,9 +3,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:conv="clr-namespace:ATEC.PM.Client.Converters">
 
-    <conv:StatusToDisplayConverter  x:Key="StatusToDisplay" />
+    <conv:StatusToDisplayConverter x:Key="StatusToDisplay" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-    <conv:BoolToOpacityConverter    x:Key="BoolToOpacity" />
+    <conv:BoolToOpacityConverter x:Key="BoolToOpacity" />
     <conv:StringToVisibilityConverter x:Key="StringToVisibility" />
 
 </ResourceDictionary>

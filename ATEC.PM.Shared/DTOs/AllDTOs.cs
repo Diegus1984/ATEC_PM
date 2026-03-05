@@ -627,3 +627,7 @@ public class FieldUpdateRequest
     public string Value { get; set; } = "";
 }
 
+public class PlannedHoursUpdate
+{
+    public decimal PlannedHours { get; set; }
+}
