@@ -43,7 +43,7 @@ public class PhasesController : ControllerBase
                    pt.category, pp.department_id AS DepartmentId,
                    COALESCE(d.code,'') AS DepartmentCode,
                    COALESCE(d.name,'') AS DepartmentName,
-                   pp.budget_hours AS BudgetHours, pp.budget_cost AS BudgetCost,
+                   COALESCE((SELECT SUM(pa.planned_hours) FROM phase_assignments pa WHERE pa.project_phase_id = pp.id), 0) AS BudgetHours, pp.budget_cost AS BudgetCost,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
                    COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked
             FROM project_phases pp

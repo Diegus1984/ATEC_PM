@@ -14,6 +14,7 @@ public partial class PhaseRowControl : UserControl
     private PhaseListItem _phase = null!;
     private bool _employeesLoaded;
     private bool _initializing = true;
+    public event Action? SummaryChanged;
 
     /// <summary>Evento lanciato quando serve ricaricare la lista fasi dal server.</summary>
     public event Action? PhaseChanged;
@@ -49,8 +50,7 @@ public partial class PhaseRowControl : UserControl
         }
 
         // Ore budget
-        txtBudgetHours.Text = phase.BudgetHours.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-        txtBudgetHours.IsEnabled = App.CurrentUser.IsPm;
+        txtBudgetHours.Text = $"{phase.BudgetHours:N1} h";
 
         // Stato
         foreach (ComboBoxItem item in cmbStatus.Items)
@@ -70,7 +70,7 @@ public partial class PhaseRowControl : UserControl
         txtWorked.Text = $"{phase.HoursWorked:N1} h";
 
         // Costo budget
-        txtBudgetCost.Text = phase.BudgetCost.ToString("F2",System.Globalization.CultureInfo.InvariantCulture);
+        txtBudgetCost.Text = phase.BudgetCost.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         txtBudgetCost.IsEnabled = App.CurrentUser.IsPm;
 
         // Riga aggiunta tecnico: solo PM/ADMIN
@@ -256,10 +256,12 @@ public partial class PhaseRowControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { plannedHours = newHours },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PatchAsync($"/api/phases/assignments/{assignmentId}/hours", jsonBody);
-            // Aggiorna solo il dato locale e ri-renderizza le assegnazioni
             var assignment = _phase.Assignments.FirstOrDefault(a => a.Id == assignmentId);
             if (assignment != null) assignment.PlannedHours = newHours;
+            _phase.BudgetHours = _phase.Assignments.Sum(a => a.PlannedHours);
+            txtBudgetHours.Text = $"{_phase.BudgetHours:N1} h";
             RenderAssignments();
+            SummaryChanged?.Invoke();
         }
         catch { }
     }
@@ -332,16 +334,6 @@ public partial class PhaseRowControl : UserControl
     // INLINE SAVE HANDLERS
     // ═══════════════════════════════════════════════════════════════
 
-    private async void TxtBudgetHours_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (_initializing) return;
-        if (!decimal.TryParse(txtBudgetHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
-        if (val == _phase.BudgetHours) return;
-
-        _phase.BudgetHours = val;
-        await SaveField("budget_hours", val.ToString(CultureInfo.InvariantCulture));
-    }
-
     private async void TxtBudgetCost_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_initializing) return;
@@ -380,11 +372,15 @@ public partial class PhaseRowControl : UserControl
     private async void BtnAddAssignment_Click(object sender, RoutedEventArgs e)
     {
         if (cmbEmployee.SelectedItem is not LookupItem emp) return;
-
-        // Doppio check: no duplicati
         if (_phase.Assignments.Any(a => a.EmployeeId == emp.Id)) return;
 
         decimal.TryParse(txtPlannedHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hours);
+
+        if (hours <= 0)
+        {
+            MessageBox.Show("Le ore pianificate devono essere maggiori di 0.", "Attenzione");
+            return;
+        }
 
         try
         {
@@ -409,10 +405,12 @@ public partial class PhaseRowControl : UserControl
                     PlannedHours = hours,
                     HoursWorked = 0
                 });
+                _phase.BudgetHours = _phase.Assignments.Sum(a => a.PlannedHours);
+                txtBudgetHours.Text = $"{_phase.BudgetHours:N1} h";
                 RenderAssignments();
-                // Aggiorna dropdown (rimuovi il tecnico aggiunto)
                 _employeesLoaded = false;
                 await LoadEmployees();
+                SummaryChanged?.Invoke();
             }
         }
         catch { }
@@ -429,9 +427,12 @@ public partial class PhaseRowControl : UserControl
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 _phase.Assignments.RemoveAll(a => a.Id == assignmentId);
+                _phase.BudgetHours = _phase.Assignments.Sum(a => a.PlannedHours);
+                txtBudgetHours.Text = $"{_phase.BudgetHours:N1} h";
                 RenderAssignments();
                 _employeesLoaded = false;
                 await LoadEmployees();
+                SummaryChanged?.Invoke();
             }
         }
         catch { }

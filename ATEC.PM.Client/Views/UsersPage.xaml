@@ -14,7 +14,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                        <Border
+                            x:Name="bd"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -32,8 +35,13 @@
     </Page.Resources>
 
     <DockPanel>
-        <!-- TOOLBAR -->
-        <Border Padding="16,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" DockPanel.Dock="Top">
+        <!--  TOOLBAR  -->
+        <Border
+            Padding="16,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button
@@ -61,7 +69,10 @@
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
                 </StackPanel>
-                <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
                     <TextBox
                         x:Name="txtSearch"
                         Width="200"
@@ -76,12 +87,17 @@
                         Foreground="#9CA3AF"
                         IsHitTestVisible="False"
                         Text="  Cerca..." />
-                    <TextBlock x:Name="txtStatus" Margin="16,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" />
+                    <TextBlock
+                        x:Name="txtStatus"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#6B7280" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- DATAGRID -->
+        <!--  DATAGRID  -->
         <DataGrid
             x:Name="dgUsers"
             AutoGenerateColumns="False"
@@ -142,11 +158,26 @@
                 </Style>
             </DataGrid.CellStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Width="80"  Binding="{Binding BadgeNumber}"          Header="Badge" />
-                <DataGridTextColumn Width="*"   Binding="{Binding FullName}"             Header="Nome" />
-                <DataGridTextColumn Width="120" Binding="{Binding UserRole}"             Header="Ruolo" />
-                <DataGridTextColumn Width="130" Binding="{Binding Username}"             Header="Username" />
-                <DataGridTextColumn Width="80"  Binding="{Binding Status}"              Header="Stato" />
+                <DataGridTextColumn
+                    Width="80"
+                    Binding="{Binding BadgeNumber}"
+                    Header="Badge" />
+                <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding FullName}"
+                    Header="Nome" />
+                <DataGridTextColumn
+                    Width="120"
+                    Binding="{Binding UserRole}"
+                    Header="Ruolo" />
+                <DataGridTextColumn
+                    Width="130"
+                    Binding="{Binding Username}"
+                    Header="Username" />
+                <DataGridTextColumn
+                    Width="80"
+                    Binding="{Binding Status}"
+                    Header="Stato" />
                 <DataGridTemplateColumn Width="200" Header="Reparti">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

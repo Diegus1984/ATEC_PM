@@ -77,7 +77,7 @@ public partial class PhasesManagementControl : UserControl
         txtTotalPhases.Text = _allPhases.Count.ToString();
         txtTotalBudget.Text = $"{_allPhases.Sum(p => p.BudgetHours):N0} h";
         txtTotalWorked.Text = $"{_allPhases.Sum(p => p.HoursWorked):N1} h";
-        txtTotalCost.Text   = $"{_allPhases.Sum(p => p.BudgetCost):N0} €";
+        txtTotalCost.Text = $"{_allPhases.Sum(p => p.BudgetCost):N0} €";
     }
 
     private void RenderPhases()
@@ -96,23 +96,23 @@ public partial class PhasesManagementControl : UserControl
 
         foreach (var group in groups)
         {
-            string deptCode  = group.Key;
+            string deptCode = group.Key;
             string deptColor = DeptColors.TryGetValue(deptCode, out string? col) ? col : "#6B7280";
             string deptLabel = string.IsNullOrEmpty(deptCode) ? "TRASVERSALE" : deptCode;
 
             Border groupHeader = new()
             {
                 Background = Brush(deptColor),
-                Padding    = new Thickness(12, 6, 12, 6),
-                Margin     = new Thickness(0, 12, 0, 4)
+                Padding = new Thickness(12, 6, 12, 6),
+                Margin = new Thickness(0, 12, 0, 4)
             };
             decimal grpBudget = group.Sum(p => p.BudgetHours);
             decimal grpWorked = group.Sum(p => p.HoursWorked);
             groupHeader.Child = new TextBlock
             {
-                Text       = $"  {deptLabel}  —  {group.Count()} fasi  |  {grpWorked:N1} / {grpBudget:N0} h",
+                Text = $"  {deptLabel}  —  {group.Count()} fasi  |  {grpWorked:N1} / {grpBudget:N0} h",
                 Foreground = Brushes.White,
-                FontSize   = 12,
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold
             };
             pnlPhases.Children.Add(groupHeader);
@@ -122,6 +122,7 @@ public partial class PhasesManagementControl : UserControl
                 PhaseRowControl row = new();
                 row.Bind(phase, deptColor);
                 row.PhaseChanged += async () => await LoadPhases();
+                row.SummaryChanged += () => UpdateSummary();
                 pnlPhases.Children.Add(row);
             }
         }
@@ -130,7 +131,8 @@ public partial class PhasesManagementControl : UserControl
             pnlPhases.Children.Add(new TextBlock
             {
                 Text = "Nessuna fase trovata.",
-                FontSize = 13, Foreground = Brushes.Gray,
+                FontSize = 13,
+                Foreground = Brushes.Gray,
                 Margin = new Thickness(0, 20, 0, 0)
             });
     }

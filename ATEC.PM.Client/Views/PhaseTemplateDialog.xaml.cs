@@ -24,12 +24,25 @@ public partial class PhaseTemplateDialog : Window
         int? deptId = (cmbDepartment.SelectedItem as ComboBoxItem)?.Tag as int?;
         int.TryParse(txtSortOrder.Text, out int sortOrder);
 
+        // Categoria: se vuota, derivala dal reparto
+        string category = txtCategory.Text.Trim();
+        if (string.IsNullOrEmpty(category))
+        {
+            if (deptId == null)
+                category = "TRASV";
+            else
+            {
+                string deptContent = (cmbDepartment.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
+                category = deptContent.Contains('—') ? deptContent.Split('—')[0].Trim() : "TRASV";
+            }
+        }
+
         try
         {
             string jsonBody = JsonSerializer.Serialize(new
             {
                 name,
-                category = txtCategory.Text.Trim(),
+                category,
                 departmentId = deptId,
                 sortOrder,
                 isDefault = chkDefault.IsChecked == true

@@ -110,15 +110,15 @@ public partial class DdpCommercialControl : UserControl
         rowStyle.Triggers.Add(CreateStatusTrigger("ORDERED", System.Windows.Media.Color.FromRgb(255, 255, 0), System.Windows.Media.Colors.Black));
         rowStyle.Triggers.Add(CreateStatusTrigger("DELIVERED", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White));
         rowStyle.Triggers.Add(CreateStatusTrigger("PARTIAL", System.Windows.Media.Color.FromRgb(112, 48, 160), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_BUILD", System.Windows.Media.Color.FromRgb(128, 128, 128), System.Windows.Media.Colors.White));
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_BUILD", System.Windows.Media.Color.FromRgb(0, 100, 0), System.Windows.Media.Colors.White));
         rowStyle.Triggers.Add(CreateStatusTrigger("RFQ", System.Windows.Media.Color.FromRgb(255, 192, 0), System.Windows.Media.Colors.Black));
         rowStyle.Triggers.Add(CreateStatusTrigger("TO_CHECK", System.Windows.Media.Color.FromRgb(0, 176, 240), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("CANCELLED", System.Windows.Media.Color.FromRgb(64, 64, 64), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("ASSIGNED", System.Windows.Media.Color.FromRgb(0, 80, 180), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(0, 150, 150), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(200, 50, 120), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(34, 139, 34), System.Windows.Media.Colors.White));
-
+        rowStyle.Triggers.Add(CreateStatusTrigger("CANCELLED", System.Windows.Media.Color.FromRgb(0, 0, 0), System.Windows.Media.Colors.White));
+        rowStyle.Triggers.Add(CreateStatusTrigger("ASSIGNED", System.Windows.Media.Color.FromRgb(180, 180, 180), System.Windows.Media.Colors.Black));
+        rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(255, 182, 193), System.Windows.Media.Colors.Black));
+        rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(139, 0, 139), System.Windows.Media.Colors.White));
+        rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(173, 216, 230), System.Windows.Media.Colors.Black));
+        
         rowStyle.Triggers.Add(new Trigger
         {
             Property = DataGridRow.IsSelectedProperty,

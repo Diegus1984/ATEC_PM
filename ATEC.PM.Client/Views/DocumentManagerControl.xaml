@@ -2,53 +2,114 @@
     x:Class="ATEC.PM.Client.UserControls.DocumentManagerControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="#F7F8FA"
     AllowDrop="True"
-    Drop="OnDrop" DragOver="OnDragOver">
+    Background="#F7F8FA"
+    DragOver="OnDragOver"
+    Drop="OnDrop">
 
     <DockPanel>
-        <!-- TOOLBAR -->
-        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="12,8">
+        <!--  TOOLBAR  -->
+        <Border
+            Padding="12,8"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
             <DockPanel>
-                <!-- Breadcrumb -->
-                <StackPanel x:Name="pnlBreadcrumb" DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" />
+                <!--  Breadcrumb  -->
+                <StackPanel
+                    x:Name="pnlBreadcrumb"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal" />
 
-                <!-- Azioni -->
-                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right" Orientation="Horizontal">
-                    <Button Content="📁 Nuova Cartella" Height="30" Padding="10,0" Margin="0,0,4,0"
-                            Background="#F3F4F6" Foreground="#374151" FontSize="12"
-                            BorderThickness="0" Cursor="Hand" Click="BtnNewFolder_Click" />
-                    <Button Content="📤 Carica File" Height="30" Padding="10,0" Margin="0,0,4,0"
-                            Background="#4F6EF7" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                            BorderThickness="0" Cursor="Hand" Click="BtnUpload_Click" />
-                    <Button Content="📂 Apri in Explorer" Height="30" Padding="10,0"
-                            Background="#F3F4F6" Foreground="#374151" FontSize="12"
-                            BorderThickness="0" Cursor="Hand" Click="BtnOpenExplorer_Click" />
+                <!--  Azioni  -->
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        Height="30"
+                        Margin="0,0,4,0"
+                        Padding="10,0"
+                        Background="#F3F4F6"
+                        BorderThickness="0"
+                        Click="BtnNewFolder_Click"
+                        Content="📁 Nuova Cartella"
+                        Cursor="Hand"
+                        FontSize="12"
+                        Foreground="#374151" />
+                    <Button
+                        Height="30"
+                        Margin="0,0,4,0"
+                        Padding="10,0"
+                        Background="#4F6EF7"
+                        BorderThickness="0"
+                        Click="BtnUpload_Click"
+                        Content="📤 Carica File"
+                        Cursor="Hand"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="White" />
+                    <Button
+                        Height="30"
+                        Padding="10,0"
+                        Background="#F3F4F6"
+                        BorderThickness="0"
+                        Click="BtnOpenExplorer_Click"
+                        Content="📂 Apri in Explorer"
+                        Cursor="Hand"
+                        FontSize="12"
+                        Foreground="#374151" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- DROP ZONE OVERLAY -->
-        <Border x:Name="brdDropZone" Background="#4F6EF720" BorderBrush="#4F6EF7"
-                BorderThickness="2" Visibility="Collapsed" DockPanel.Dock="Top"
-                Padding="0,20">
-            <TextBlock Text="Rilascia i file qui per caricarli" FontSize="16"
-                       Foreground="#4F6EF7" FontWeight="SemiBold"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <!--  DROP ZONE OVERLAY  -->
+        <Border
+            x:Name="brdDropZone"
+            Padding="0,20"
+            Background="#4F6EF720"
+            BorderBrush="#4F6EF7"
+            BorderThickness="2"
+            DockPanel.Dock="Top"
+            Visibility="Collapsed">
+            <TextBlock
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="16"
+                FontWeight="SemiBold"
+                Foreground="#4F6EF7"
+                Text="Rilascia i file qui per caricarli" />
         </Border>
 
-        <!-- STATUS -->
-        <Border DockPanel.Dock="Bottom" Padding="12,6" Background="White"
-                BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
-            <TextBlock x:Name="txtStatus" FontSize="11" Foreground="#6B7280" />
+        <!--  STATUS  -->
+        <Border
+            Padding="12,6"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <TextBlock
+                x:Name="txtStatus"
+                FontSize="11"
+                Foreground="#6B7280" />
         </Border>
 
-        <!-- FILE LIST -->
-        <DataGrid x:Name="dgFiles" AutoGenerateColumns="False" Background="White"
-                  BorderThickness="0" ColumnHeaderHeight="36" FontSize="13"
-                  GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
-                  IsReadOnly="True" RowHeight="36" SelectionMode="Single"
-                  MouseDoubleClick="DgFiles_DoubleClick">
+        <!--  FILE LIST  -->
+        <DataGrid
+            x:Name="dgFiles"
+            AutoGenerateColumns="False"
+            Background="White"
+            BorderThickness="0"
+            ColumnHeaderHeight="36"
+            FontSize="13"
+            GridLinesVisibility="Horizontal"
+            HorizontalGridLinesBrush="#F3F4F6"
+            IsReadOnly="True"
+            MouseDoubleClick="DgFiles_DoubleClick"
+            RowHeight="36"
+            SelectionMode="Single">
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
                     <Setter Property="Background" Value="#F9FAFB" />
@@ -75,18 +136,33 @@
             </DataGrid.RowStyle>
             <DataGrid.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Scarica" Click="CtxDownload_Click" />
-                    <MenuItem Header="Rinomina" Click="CtxRename_Click" />
-                    <MenuItem Header="Sposta..." Click="CtxMove_Click" />
+                    <MenuItem Click="CtxDownload_Click" Header="Scarica" />
+                    <MenuItem Click="CtxRename_Click" Header="Rinomina" />
+                    <MenuItem Click="CtxMove_Click" Header="Sposta..." />
                     <Separator />
-                    <MenuItem Header="Elimina" Click="CtxDelete_Click" Foreground="#EF4444" />
+                    <MenuItem
+                        Click="CtxDelete_Click"
+                        Foreground="#EF4444"
+                        Header="Elimina" />
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
-                <DataGridTextColumn Width="40" Binding="{Binding TypeIcon}" Header="" />
-                <DataGridTextColumn Width="*" Binding="{Binding Name}" Header="Nome" />
-                <DataGridTextColumn Width="100" Binding="{Binding SizeDisplay}" Header="Dimensione" />
-                <DataGridTextColumn Width="140" Binding="{Binding ModifiedDisplay}" Header="Modificato" />
+                <DataGridTextColumn
+                    Width="40"
+                    Binding="{Binding TypeIcon}"
+                    Header="" />
+                <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Name}"
+                    Header="Nome" />
+                <DataGridTextColumn
+                    Width="100"
+                    Binding="{Binding SizeDisplay}"
+                    Header="Dimensione" />
+                <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding ModifiedDisplay}"
+                    Header="Modificato" />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>
