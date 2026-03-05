@@ -59,12 +59,12 @@ public partial class EmployeeDialog : Window
             {
                 _deptRows.Add(new DeptMembershipRow
                 {
-                    DepartmentId   = dept.Id,
+                    DepartmentId = dept.Id,
                     DepartmentName = $"{dept.Code} — {dept.Name}"
                 });
                 _compRows.Add(new CompetenceRow
                 {
-                    DepartmentId   = dept.Id,
+                    DepartmentId = dept.Id,
                     DepartmentName = $"{dept.Code} — {dept.Name}"
                 });
             }
@@ -82,15 +82,15 @@ public partial class EmployeeDialog : Window
             if (docEmp.RootElement.GetProperty("success").GetBoolean())
             {
                 JsonElement d = docEmp.RootElement.GetProperty("data");
-                txtBadge.Text       = d.GetProperty("badgeNumber").GetString() ?? "";
-                txtFirstName.Text   = d.GetProperty("firstName").GetString() ?? "";
-                txtLastName.Text    = d.GetProperty("lastName").GetString() ?? "";
-                txtEmail.Text       = d.GetProperty("email").GetString() ?? "";
-                txtPhone.Text       = d.GetProperty("phone").GetString() ?? "";
-                txtHourlyCost.Text  = d.GetProperty("hourlyCost").GetDecimal().ToString("F2");
-                txtWeeklyHours.Text = d.GetProperty("weeklyHours").GetDecimal().ToString("F0");
-                txtNotes.Text       = d.GetProperty("notes").GetString() ?? "";
-                SelectComboItem(cmbType,   d.GetProperty("empType").GetString() ?? "INTERNAL");
+                txtBadge.Text = d.GetProperty("badgeNumber").GetString() ?? "";
+                txtFirstName.Text = d.GetProperty("firstName").GetString() ?? "";
+                txtLastName.Text = d.GetProperty("lastName").GetString() ?? "";
+                txtEmail.Text = d.GetProperty("email").GetString() ?? "";
+                txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
+                txtHourlyCost.Text = d.GetProperty("hourlyCost").GetDecimal().ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                txtWeeklyHours.Text = d.GetProperty("weeklyHours").GetDecimal().ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
+                SelectComboItem(cmbType, d.GetProperty("empType").GetString() ?? "INTERNAL");
                 SelectComboItem(cmbStatus, d.GetProperty("status").GetString() ?? "ACTIVE");
                 if (d.TryGetProperty("hireDate", out JsonElement hd) && hd.ValueKind != JsonValueKind.Null)
                     dpHireDate.SelectedDate = hd.GetDateTime();
@@ -105,9 +105,9 @@ public partial class EmployeeDialog : Window
 
             string role = u.GetProperty("userRole").GetString() ?? "TECH";
             rbAdmin.IsChecked = role == "ADMIN";
-            rbPm.IsChecked    = role == "PM";
-            rbResp.IsChecked  = role == "RESP_REPARTO";
-            rbTech.IsChecked  = !new[] { "ADMIN", "PM", "RESP_REPARTO" }.Contains(role);
+            rbPm.IsChecked = role == "PM";
+            rbResp.IsChecked = role == "RESP_REPARTO";
+            rbTech.IsChecked = !new[] { "ADMIN", "PM", "RESP_REPARTO" }.Contains(role);
 
             txtUsername.Text = u.GetProperty("username").GetString() ?? "";
 
@@ -120,9 +120,9 @@ public partial class EmployeeDialog : Window
                 EmployeeDepartmentDto? existing = depts.FirstOrDefault(d => d.DepartmentId == row.DepartmentId);
                 if (existing != null)
                 {
-                    row.IsMember      = true;
+                    row.IsMember = true;
                     row.IsResponsible = existing.IsResponsible;
-                    row.IsPrimary     = existing.IsPrimary;
+                    row.IsPrimary = existing.IsPrimary;
                 }
             }
 
@@ -136,7 +136,7 @@ public partial class EmployeeDialog : Window
                 if (existing != null)
                 {
                     row.IsEnabled = true;
-                    row.Notes     = existing.Notes;
+                    row.Notes = existing.Notes;
                 }
             }
         }
@@ -178,27 +178,27 @@ public partial class EmployeeDialog : Window
         }
 
         btnSave.IsEnabled = false;
-        btnSave.Content   = "Salvataggio...";
+        btnSave.Content = "Salvataggio...";
 
         try
         {
-            decimal.TryParse(txtHourlyCost.Text,  NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost);
+            decimal.TryParse(txtHourlyCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost);
             decimal.TryParse(txtWeeklyHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal weeklyHours);
 
             // 1. Anagrafica
             object empObj = new
             {
                 badgeNumber = txtBadge.Text.Trim(),
-                firstName   = txtFirstName.Text.Trim(),
-                lastName    = txtLastName.Text.Trim(),
-                email       = txtEmail.Text.Trim(),
-                phone       = txtPhone.Text.Trim(),
-                empType     = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "INTERNAL",
+                firstName = txtFirstName.Text.Trim(),
+                lastName = txtLastName.Text.Trim(),
+                email = txtEmail.Text.Trim(),
+                phone = txtPhone.Text.Trim(),
+                empType = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "INTERNAL",
                 hourlyCost,
                 weeklyHours,
-                hireDate    = dpHireDate.SelectedDate?.ToString("yyyy-MM-dd"),
-                status      = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ACTIVE",
-                notes       = txtNotes.Text
+                hireDate = dpHireDate.SelectedDate?.ToString("yyyy-MM-dd"),
+                status = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ACTIVE",
+                notes = txtNotes.Text
             };
 
             string empJson = JsonSerializer.Serialize(empObj,
@@ -223,8 +223,8 @@ public partial class EmployeeDialog : Window
 
             // 2. Ruolo
             string role = rbAdmin.IsChecked == true ? "ADMIN"
-                        : rbPm.IsChecked    == true ? "PM"
-                        : rbResp.IsChecked  == true ? "RESP_REPARTO"
+                        : rbPm.IsChecked == true ? "PM"
+                        : rbResp.IsChecked == true ? "RESP_REPARTO"
                         : "TECH";
 
             await ApiClient.PutAsync("/api/users/role",
@@ -245,9 +245,9 @@ public partial class EmployeeDialog : Window
                 .Where(r => r.IsMember)
                 .Select(r => new EmployeeDepartmentDto
                 {
-                    DepartmentId  = r.DepartmentId,
+                    DepartmentId = r.DepartmentId,
                     IsResponsible = r.IsResponsible,
-                    IsPrimary     = r.IsPrimary
+                    IsPrimary = r.IsPrimary
                 }).ToList();
 
             await ApiClient.PutAsync("/api/users/departments",
@@ -260,7 +260,7 @@ public partial class EmployeeDialog : Window
                 .Select(r => new EmployeeCompetenceDto
                 {
                     DepartmentId = r.DepartmentId,
-                    Notes        = r.Notes
+                    Notes = r.Notes
                 }).ToList();
 
             await ApiClient.PutAsync("/api/users/competences",
@@ -278,7 +278,7 @@ public partial class EmployeeDialog : Window
         finally
         {
             btnSave.IsEnabled = true;
-            btnSave.Content   = "Salva";
+            btnSave.Content = "Salva";
         }
     }
 

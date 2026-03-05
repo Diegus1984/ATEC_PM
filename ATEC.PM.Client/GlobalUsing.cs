@@ -7,5 +7,6 @@ global using System.Windows.Controls;
 global using System.Text.Json;
 global using System.Windows.Input;
 global using System.Windows.Media;
+global using ATEC.PM.Client.Services;
 global using ATEC.PM.Shared.DTOs;
 global using System.IO;

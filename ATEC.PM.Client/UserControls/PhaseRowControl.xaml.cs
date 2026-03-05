@@ -49,7 +49,7 @@ public partial class PhaseRowControl : UserControl
         }
 
         // Ore budget
-        txtBudgetHours.Text = phase.BudgetHours.ToString("F1");
+        txtBudgetHours.Text = phase.BudgetHours.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
         txtBudgetHours.IsEnabled = App.CurrentUser.IsPm;
 
         // Stato
@@ -70,7 +70,7 @@ public partial class PhaseRowControl : UserControl
         txtWorked.Text = $"{phase.HoursWorked:N1} h";
 
         // Costo budget
-        txtBudgetCost.Text = phase.BudgetCost.ToString("F2");
+        txtBudgetCost.Text = phase.BudgetCost.ToString("F2",System.Globalization.CultureInfo.InvariantCulture);
         txtBudgetCost.IsEnabled = App.CurrentUser.IsPm;
 
         // Riga aggiunta tecnico: solo PM/ADMIN
@@ -139,7 +139,7 @@ public partial class PhaseRowControl : UserControl
             };
             TextBox txtEditHours = new()
             {
-                Text = a.PlannedHours.ToString("F1"),
+                Text = a.PlannedHours.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
                 FontSize = 12,
                 Width = 55,
                 Height = 22,
@@ -256,7 +256,10 @@ public partial class PhaseRowControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { plannedHours = newHours },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PatchAsync($"/api/phases/assignments/{assignmentId}/hours", jsonBody);
-            PhaseChanged?.Invoke();
+            // Aggiorna solo il dato locale e ri-renderizza le assegnazioni
+            var assignment = _phase.Assignments.FirstOrDefault(a => a.Id == assignmentId);
+            if (assignment != null) assignment.PlannedHours = newHours;
+            RenderAssignments();
         }
         catch { }
     }
@@ -395,7 +398,22 @@ public partial class PhaseRowControl : UserControl
             string result = await ApiClient.PostAsync($"/api/phases/{_phase.Id}/assignments", jsonBody);
             JsonDocument doc = JsonDocument.Parse(result);
             if (doc.RootElement.GetProperty("success").GetBoolean())
-                PhaseChanged?.Invoke();
+            {
+                int newId = doc.RootElement.GetProperty("data").GetInt32();
+                _phase.Assignments.Add(new PhaseAssignmentDto
+                {
+                    Id = newId,
+                    EmployeeId = emp.Id,
+                    EmployeeName = emp.Name,
+                    AssignRole = "MEMBER",
+                    PlannedHours = hours,
+                    HoursWorked = 0
+                });
+                RenderAssignments();
+                // Aggiorna dropdown (rimuovi il tecnico aggiunto)
+                _employeesLoaded = false;
+                await LoadEmployees();
+            }
         }
         catch { }
     }
@@ -409,7 +427,12 @@ public partial class PhaseRowControl : UserControl
             string result = await ApiClient.DeleteAsync($"/api/phases/assignments/{assignmentId}");
             JsonDocument doc = JsonDocument.Parse(result);
             if (doc.RootElement.GetProperty("success").GetBoolean())
-                PhaseChanged?.Invoke();
+            {
+                _phase.Assignments.RemoveAll(a => a.Id == assignmentId);
+                RenderAssignments();
+                _employeesLoaded = false;
+                await LoadEmployees();
+            }
         }
         catch { }
     }

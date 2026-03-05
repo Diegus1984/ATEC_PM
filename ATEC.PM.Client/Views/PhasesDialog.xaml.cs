@@ -138,8 +138,8 @@ public partial class PhasesDialog : Window
         }
 
         txtCustomName.Text   = _existing.CustomName;
-        txtBudgetHours.Text  = _existing.BudgetHours.ToString("F1");
-        txtBudgetCost.Text   = _existing.BudgetCost.ToString("F2");
+        txtBudgetHours.Text  = _existing.BudgetHours.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+        txtBudgetCost.Text   = _existing.BudgetCost.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         txtProgress.Text     = _existing.ProgressPct.ToString();
         txtSortOrder.Text    = _existing.SortOrder.ToString();
 
