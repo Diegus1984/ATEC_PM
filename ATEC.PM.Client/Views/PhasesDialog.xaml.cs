@@ -21,8 +21,8 @@ public partial class PhasesDialog : Window
     {
         InitializeComponent();
         _projectId = projectId;
-        _existing = existing;
-        Title = existing == null ? "Nuova Fase" : "Modifica Fase";
+        _existing  = existing;
+        Title      = existing == null ? "Nuova Fase" : "Modifica Fase";
         dgAssignments.ItemsSource = _assignments;
         Loaded += async (_, _) => await InitAsync();
     }
@@ -31,8 +31,9 @@ public partial class PhasesDialog : Window
     {
         await LoadTemplates();
         await LoadDepartments();
-        await LoadEmployees();
         if (_existing != null) PopulateForm();
+        // Carica tecnici per il reparto attualmente selezionato
+        await LoadEmployeesForCurrentDepartment();
     }
 
     private async Task LoadTemplates()
@@ -56,8 +57,8 @@ public partial class PhasesDialog : Window
                 {
                     cmbTemplate.Items.Add(new ComboBoxItem
                     {
-                        Content = $"── {cat} ──",
-                        IsEnabled = false,
+                        Content    = $"── {cat} ──",
+                        IsEnabled  = false,
                         FontWeight = FontWeights.Bold,
                         Foreground = System.Windows.Media.Brushes.Gray
                     });
@@ -66,7 +67,7 @@ public partial class PhasesDialog : Window
                 cmbTemplate.Items.Add(new ComboBoxItem
                 {
                     Content = t.Name,
-                    Tag = t
+                    Tag     = t
                 });
             }
         }
@@ -93,15 +94,21 @@ public partial class PhasesDialog : Window
         catch { }
     }
 
-    private async Task LoadEmployees()
+    /// <summary>
+    /// Carica i tecnici filtrati per il reparto attualmente selezionato.
+    /// Fase trasversale (deptId=0/null) → tutti i tecnici.
+    /// </summary>
+    private async Task LoadEmployeesForCurrentDepartment()
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/employees");
+            int deptId = GetSelectedDepartmentId();
+            string url = $"/api/employees/by-department?departmentId={deptId}";
+            string json = await ApiClient.GetAsync(url);
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
             _employees = JsonSerializer.Deserialize<List<LookupItem>>(
-                doc.RootElement.GetProperty("data").GetRawText().Replace("\"fullName\"", "\"name\""),
+                doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             cmbEmployee.ItemsSource = _employees;
             if (_employees.Count > 0) cmbEmployee.SelectedIndex = 0;
@@ -109,11 +116,18 @@ public partial class PhasesDialog : Window
         catch { }
     }
 
+    private int GetSelectedDepartmentId()
+    {
+        if (cmbDepartment.SelectedItem is ComboBoxItem ci && ci.Tag is int d)
+            return d;
+        return 0;
+    }
+
     private void PopulateForm()
     {
         if (_existing == null) return;
 
-        // Seleziona template per ID, non per nome
+        // Seleziona template per ID
         foreach (object item in cmbTemplate.Items)
         {
             if (item is ComboBoxItem ci && ci.Tag is PhaseTemplateDto t && t.Id == _existing.PhaseTemplateId)
@@ -123,11 +137,11 @@ public partial class PhasesDialog : Window
             }
         }
 
-        txtCustomName.Text = _existing.CustomName;
-        txtBudgetHours.Text = _existing.BudgetHours.ToString("F1");
-        txtBudgetCost.Text = _existing.BudgetCost.ToString("F2");
-        txtProgress.Text = _existing.ProgressPct.ToString();
-        txtSortOrder.Text = _existing.SortOrder.ToString();
+        txtCustomName.Text   = _existing.CustomName;
+        txtBudgetHours.Text  = _existing.BudgetHours.ToString("F1");
+        txtBudgetCost.Text   = _existing.BudgetCost.ToString("F2");
+        txtProgress.Text     = _existing.ProgressPct.ToString();
+        txtSortOrder.Text    = _existing.SortOrder.ToString();
 
         SelectComboByTag(cmbStatus, _existing.Status);
         SelectComboByTag(cmbDepartment, _existing.DepartmentId ?? 0);
@@ -137,13 +151,21 @@ public partial class PhasesDialog : Window
             _assignments.Add(a);
     }
 
-    private void CmbTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CmbTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (cmbTemplate.SelectedItem is ComboBoxItem ci && ci.Tag is PhaseTemplateDto t)
         {
             // Auto-seleziona reparto dal template
             SelectComboByTag(cmbDepartment, t.DepartmentId ?? 0);
+            // Ricarica tecnici per il nuovo reparto
+            await LoadEmployeesForCurrentDepartment();
         }
+    }
+
+    private async void CmbDepartment_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Ricarica tecnici quando si cambia reparto manualmente
+        await LoadEmployeesForCurrentDepartment();
     }
 
     private void BtnAddAssignment_Click(object sender, RoutedEventArgs e)
@@ -158,10 +180,10 @@ public partial class PhasesDialog : Window
         decimal.TryParse(txtPlannedHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hours);
         _assignments.Add(new PhaseAssignmentDto
         {
-            EmployeeId = emp.Id,
-            EmployeeName = emp.Name,
-            AssignRole = (cmbAssignRole.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "MEMBER",
-            PlannedHours = hours
+            EmployeeId    = emp.Id,
+            EmployeeName  = emp.Name,
+            AssignRole    = (cmbAssignRole.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "MEMBER",
+            PlannedHours  = hours
         });
     }
 
@@ -182,30 +204,30 @@ public partial class PhasesDialog : Window
         }
 
         btnSave.IsEnabled = false;
-        btnSave.Content = "Salvataggio...";
+        btnSave.Content   = "Salvataggio...";
 
         try
         {
             decimal.TryParse(txtBudgetHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal budgetHours);
-            decimal.TryParse(txtBudgetCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal budgetCost);
-            int.TryParse(txtProgress.Text, out int progress);
+            decimal.TryParse(txtBudgetCost.Text,  NumberStyles.Any, CultureInfo.InvariantCulture, out decimal budgetCost);
+            int.TryParse(txtProgress.Text,  out int progress);
             int.TryParse(txtSortOrder.Text, out int sortOrder);
 
             int? deptId = (cmbDepartment.SelectedItem as ComboBoxItem)?.Tag is int d && d > 0 ? d : null;
 
             PhaseSaveRequest req = new()
             {
-                Id = _existing?.Id ?? 0,
-                ProjectId = _projectId,
+                Id              = _existing?.Id ?? 0,
+                ProjectId       = _projectId,
                 PhaseTemplateId = tmpl.Id,
-                CustomName = txtCustomName.Text.Trim(),
-                DepartmentId = deptId,
-                BudgetHours = budgetHours,
-                BudgetCost = budgetCost,
-                Status = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "NOT_STARTED",
-                ProgressPct = progress,
-                SortOrder = sortOrder,
-                Assignments = _assignments.ToList()
+                CustomName      = txtCustomName.Text.Trim(),
+                DepartmentId    = deptId,
+                BudgetHours     = budgetHours,
+                BudgetCost      = budgetCost,
+                Status          = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "NOT_STARTED",
+                ProgressPct     = progress,
+                SortOrder       = sortOrder,
+                Assignments     = _assignments.ToList()
             };
 
             string json = JsonSerializer.Serialize(req,
@@ -235,7 +257,7 @@ public partial class PhasesDialog : Window
         finally
         {
             btnSave.IsEnabled = true;
-            btnSave.Content = "Salva";
+            btnSave.Content   = "Salva";
         }
     }
 

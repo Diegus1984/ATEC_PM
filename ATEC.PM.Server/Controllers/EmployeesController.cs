@@ -23,6 +23,37 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<List<EmployeeListItem>>.Ok(rows));
     }
 
+    /// <summary>
+    /// Tecnici che appartengono a un reparto (employee_departments).
+    /// Se departmentId è null/0 (fase trasversale) → restituisce tutti.
+    /// </summary>
+    [HttpGet("by-department")]
+    public IActionResult GetByDepartment([FromQuery] int? departmentId)
+    {
+        using var c = _db.Open();
+        List<LookupItem> rows;
+
+        if (departmentId == null || departmentId == 0)
+        {
+            // Fase trasversale: tutti i dipendenti attivi
+            rows = c.Query<LookupItem>(
+                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' ORDER BY last_name").ToList();
+        }
+        else
+        {
+            // Solo tecnici che appartengono al reparto
+            rows = c.Query<LookupItem>(@"
+                SELECT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name
+                FROM employees e
+                JOIN employee_departments ed ON ed.employee_id = e.id
+                WHERE e.status <> 'TERMINATED' AND ed.department_id = @DeptId
+                ORDER BY e.last_name",
+                new { DeptId = departmentId }).ToList();
+        }
+
+        return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
+    }
+
     [HttpGet("{id}")]
     public IActionResult GetById(int id)
     {

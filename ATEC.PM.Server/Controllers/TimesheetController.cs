@@ -50,8 +50,8 @@ public class TimesheetController : ControllerBase
 
         // Recupera ruolo utente
         string? role = c.QueryFirstOrDefault<string>(
-            "SELECT u.role FROM users u WHERE u.employee_id = @EmpId",
-            new { EmpId = employeeId });
+    "SELECT user_role FROM employees WHERE id = @EmpId",
+    new { EmpId = employeeId });
 
         bool isPm = role == "ADMIN" || role == "PM";
 

@@ -9,10 +9,14 @@ namespace ATEC.PM.Client.Views;
 
 public partial class TimesheetEntryDialog : Window
 {
-    public TimesheetEntryDialog(DateTime weekStart)
+    private readonly TimesheetEntryDto? _existing;
+
+    public TimesheetEntryDialog(DateTime weekStart, TimesheetEntryDto? existing = null)
     {
         InitializeComponent();
-        dpDate.SelectedDate = DateTime.Today;
+        _existing = existing;
+        dpDate.SelectedDate = existing?.WorkDate ?? DateTime.Today;
+        Title = existing == null ? "Registra Ore" : "Modifica Ore";
         Loaded += async (_, _) => await LoadPhases();
     }
 
@@ -28,7 +32,27 @@ public partial class TimesheetEntryDialog : Window
                     doc.RootElement.GetProperty("data").GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
                 cmbPhase.ItemsSource = phases;
-                if (phases.Count > 0) cmbPhase.SelectedIndex = 0;
+
+                if (_existing != null)
+                {
+                    // Seleziona la fase corrente
+                    cmbPhase.SelectedValue = _existing.ProjectPhaseId;
+                    txtHours.Text = _existing.Hours.ToString("G", CultureInfo.InvariantCulture);
+                    txtNotes.Text = _existing.Notes;
+                    // Seleziona il tipo
+                    foreach (ComboBoxItem item in cmbType.Items)
+                    {
+                        if (item.Content?.ToString() == _existing.EntryType)
+                        {
+                            cmbType.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+                else if (phases.Count > 0)
+                {
+                    cmbPhase.SelectedIndex = 0;
+                }
             }
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
@@ -46,7 +70,7 @@ public partial class TimesheetEntryDialog : Window
         {
             var obj = new
             {
-                id = 0,
+                id = _existing?.Id ?? 0,
                 employeeId = App.UserId,
                 projectPhaseId = (int)cmbPhase.SelectedValue,
                 workDate = dpDate.SelectedDate.Value.ToString("yyyy-MM-dd"),

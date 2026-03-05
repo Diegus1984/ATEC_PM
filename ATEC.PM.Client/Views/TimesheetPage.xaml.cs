@@ -55,4 +55,33 @@ public partial class TimesheetPage : Page
         var dlg = new TimesheetEntryDialog(_weekStart) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) _ = Load();
     }
+
+    private void BtnEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is TimesheetEntryDto entry)
+        {
+            var dlg = new TimesheetEntryDialog(_weekStart, entry) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) _ = Load();
+        }
+    }
+
+    private async void BtnDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not TimesheetEntryDto entry) return;
+
+        if (MessageBox.Show($"Eliminare la registrazione di {entry.Hours:N1}h del {entry.WorkDate:dd/MM/yyyy}?",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            var result = await ApiClient.DeleteAsync($"/api/timesheet/{entry.Id}");
+            var doc = JsonDocument.Parse(result);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+                _ = Load();
+            else
+                MessageBox.Show("Errore durante l'eliminazione.");
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
 }

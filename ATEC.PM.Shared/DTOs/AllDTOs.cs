@@ -614,3 +614,14 @@ public class BomItemSaveRequest
     public string DdpType { get; set; } = "COMMERCIAL";
 }
 
+public class BulkPhaseRequest
+{
+    public int ProjectId { get; set; }
+    public List<int> TemplateIds { get; set; } = new();
+}
+
+public class FieldUpdateRequest
+{
+    public string Field { get; set; } = "";
+    public string Value { get; set; } = "";
+}

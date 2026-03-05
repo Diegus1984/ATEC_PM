@@ -628,138 +628,14 @@ public partial class ProjectsPage : Page
     }
 
     // === PHASES ===
-    private async void ShowPhases(int projectId)
+    private void ShowPhases(int projectId)
     {
         txtSectionTitle.Text = "Fasi e Avanzamento";
-        btnAction.Content = "+ Aggiungi Fase";
-        btnAction.Visibility = Visibility.Visible;
-        btnAction.Tag = $"addphase|{projectId}";
-
-        try
-        {
-            var json = await ApiClient.GetAsync($"/api/phases/project/{projectId}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var phases = JsonSerializer.Deserialize<List<PhaseListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            var panel = new StackPanel();
-
-            if (phases.Count == 0)
-            {
-                panel.Children.Add(new TextBlock
-                {
-                    Text = "Nessuna fase presente per questa commessa.\nClicca '+ Aggiungi Fase' per iniziare.",
-                    FontSize = 13,
-                    Foreground = System.Windows.Media.Brushes.Gray,
-                    Margin = new Thickness(0, 0, 0, 16)
-                });
-            }
-            else
-            {
-                var totalBudget = phases.Sum(p => p.BudgetHours);
-                var totalWorked = phases.Sum(p => p.HoursWorked);
-                panel.Children.Add(new TextBlock
-                {
-                    Text = $"Ore previste: {totalBudget:N0} | Ore lavorate: {totalWorked:N1}",
-                    FontSize = 13,
-                    Foreground = System.Windows.Media.Brushes.Gray,
-                    Margin = new Thickness(0, 0, 0, 16)
-                });
-
-                foreach (var phase in phases)
-                {
-                    var card = new Border
-                    {
-                        Background = System.Windows.Media.Brushes.White,
-                        BorderBrush = Brush("#E4E7EC"),
-                        BorderThickness = new Thickness(1),
-                        Padding = new Thickness(16, 12, 16, 12),
-                        Margin = new Thickness(0, 0, 0, 8)
-                    };
-
-                    var cg = new Grid();
-                    cg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    cg.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                    var cl = new StackPanel();
-                    cl.Children.Add(new TextBlock { Text = phase.Name, FontSize = 14, FontWeight = FontWeights.SemiBold });
-                    cl.Children.Add(new TextBlock { Text = $"Stato: {phase.Status} | Progresso: {phase.ProgressPct}%", FontSize = 12, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 4, 0, 0) });
-
-                    if (phase.Assignments != null && phase.Assignments.Any())
-                    {
-                        var tecnici = string.Join(", ", phase.Assignments.Select(a => a.EmployeeName));
-                        cl.Children.Add(new TextBlock { Text = $"👷 {tecnici}", FontSize = 11, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 3, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
-                    }
-
-                    var pgGrid = new Grid { Margin = new Thickness(0, 6, 0, 0) };
-                    pgGrid.Children.Add(new Border { Background = Brush("#F3F4F6"), Height = 6 });
-                    pgGrid.Children.Add(new Border { Background = Brush("#4F6EF7"), Height = 6, HorizontalAlignment = HorizontalAlignment.Left, Width = Math.Max(0, Math.Min(300, 300.0 * phase.ProgressPct / 100.0)) });
-                    cl.Children.Add(pgGrid);
-
-                    cl.Children.Add(new TextBlock { Text = $"{phase.HoursWorked:N1} / {phase.BudgetHours:N0} h", FontSize = 11, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(0, 4, 0, 0) });
-
-                    Grid.SetColumn(cl, 0);
-
-                    // Pulsanti modifica + elimina
-                    var buttonsPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Orientation = Orientation.Horizontal };
-
-                    var capturedPhase = phase;
-                    var capturedProjectId = projectId;
-
-                    var btnEdit = new Button
-                    {
-                        Content = "✏", Width = 30, Height = 30, Margin = new Thickness(4, 0, 0, 0),
-                        Background = Brush("#4F6EF71A"), Foreground = Brush("#4F6EF7"),
-                        BorderThickness = new Thickness(0), FontSize = 13, Cursor = System.Windows.Input.Cursors.Hand,
-                        ToolTip = "Modifica fase"
-                    };
-                    btnEdit.Click += (s, ev) =>
-                    {
-                        var dlg = new PhasesDialog(capturedProjectId, capturedPhase) { Owner = Window.GetWindow(this) };
-                        if (dlg.ShowDialog() == true) ShowPhases(capturedProjectId);
-                    };
-
-                    var btnDel = new Button
-                    {
-                        Content = "✕", Width = 30, Height = 30, Margin = new Thickness(4, 0, 0, 0),
-                        Background = Brush("#EF44441A"), Foreground = Brush("#EF4444"),
-                        BorderThickness = new Thickness(0), FontSize = 13, Cursor = System.Windows.Input.Cursors.Hand,
-                        ToolTip = "Elimina fase"
-                    };
-                    btnDel.Click += async (s, ev) =>
-                    {
-                        if (MessageBox.Show($"Eliminare la fase \"{capturedPhase.Name}\"?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-                        try
-                        {
-                            var res = await ApiClient.DeleteAsync($"/api/phases/{capturedPhase.Id}");
-                            var delDoc = JsonDocument.Parse(res);
-                            if (delDoc.RootElement.GetProperty("success").GetBoolean())
-                                ShowPhases(capturedProjectId);
-                            else
-                                MessageBox.Show(delDoc.RootElement.GetProperty("message").GetString(), "Errore");
-                        }
-                        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-                    };
-
-                    buttonsPanel.Children.Add(btnEdit);
-                    buttonsPanel.Children.Add(btnDel);
-                    Grid.SetColumn(buttonsPanel, 1);
-
-                    cg.Children.Add(cl);
-                    cg.Children.Add(buttonsPanel);
-                    card.Child = cg;
-                    panel.Children.Add(card);
-                }
-            }
-
-            SectionContent.Content = panel;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new PhasesManagementControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
     }
-
     // === TIMESHEET ===
     private async void ShowTimesheet(int projectId)
     {

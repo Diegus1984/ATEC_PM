@@ -63,7 +63,8 @@
                                      ToolTip="Lascia vuoto per usare il nome del template" />
 
                             <TextBlock Style="{StaticResource FieldLabel}" Text="REPARTO" />
-                            <ComboBox x:Name="cmbDepartment" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" />
+                            <ComboBox x:Name="cmbDepartment" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13"
+                                      SelectionChanged="CmbDepartment_SelectionChanged" />
 
                             <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>

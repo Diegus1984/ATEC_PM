@@ -37,12 +37,13 @@ public class PhasesController : ControllerBase
         using var c = _db.Open();
 
         List<PhaseListItem> phases = c.Query<PhaseListItem>(@"
-            SELECT pp.id, COALESCE(NULLIF(pp.custom_name,''), pt.name) AS Name,
+            SELECT pp.id, pp.phase_template_id AS PhaseTemplateId,
+                   pp.custom_name AS CustomName,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS Name,
                    pt.category, pp.department_id AS DepartmentId,
                    COALESCE(d.code,'') AS DepartmentCode,
                    COALESCE(d.name,'') AS DepartmentName,
                    pp.budget_hours AS BudgetHours, pp.budget_cost AS BudgetCost,
-                   pp.phase_template_id AS PhaseTemplateId, pp.custom_name AS CustomName,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
                    COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked
             FROM project_phases pp
@@ -66,6 +67,7 @@ public class PhasesController : ControllerBase
         return Ok(ApiResponse<List<PhaseListItem>>.Ok(phases));
     }
 
+    // ── Crea singola fase ─────────────────────────────────────────────
     [HttpPost]
     public IActionResult Create([FromBody] PhaseSaveRequest req)
     {
@@ -102,6 +104,30 @@ public class PhasesController : ControllerBase
         return Ok(ApiResponse<int>.Ok(phaseId, "Fase creata"));
     }
 
+    // ── Inserimento multiplo fasi da template ─────────────────────────
+    [HttpPost("bulk")]
+    public IActionResult BulkCreate([FromBody] BulkPhaseRequest req)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+
+        foreach (int tplId in req.TemplateIds)
+        {
+            var tpl = c.QueryFirstOrDefault<dynamic>(
+                "SELECT id, department_id, sort_order FROM phase_templates WHERE id=@Id",
+                new { Id = tplId }, tx);
+            if (tpl == null) continue;
+
+            c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, department_id, sort_order)
+                VALUES (@ProjId, @TplId, @DeptId, @Sort)",
+                new { ProjId = req.ProjectId, TplId = (int)tpl.id, DeptId = (int?)tpl.department_id, Sort = (int)tpl.sort_order }, tx);
+        }
+
+        tx.Commit();
+        return Ok(ApiResponse<bool>.Ok(true, $"{req.TemplateIds.Count} fasi aggiunte"));
+    }
+
+    // ── Modifica fase completa ────────────────────────────────────────
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] PhaseSaveRequest req)
     {
@@ -131,6 +157,20 @@ public class PhasesController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
+    // ── Aggiorna singolo campo inline ─────────────────────────────────
+    [HttpPatch("{id}/field")]
+    public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
+    {
+        using var c = _db.Open();
+        string[] allowed = { "budget_hours", "budget_cost", "status", "progress_pct", "custom_name", "sort_order" };
+        if (!allowed.Contains(req.Field))
+            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non modificabile."));
+
+        c.Execute($"UPDATE project_phases SET {req.Field}=@Value WHERE id=@Id",
+            new { Value = req.Value, Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
     // ── Elimina fase ──────────────────────────────────────────────────
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
@@ -153,6 +193,28 @@ public class PhasesController : ControllerBase
         using var c = _db.Open();
         c.Execute("UPDATE project_phases SET progress_pct=@P WHERE id=@Id",
             new { P = progressPct, Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    // ── Aggiungi singola assegnazione ─────────────────────────────────
+    [HttpPost("{phaseId}/assignments")]
+    public IActionResult AddAssignment(int phaseId, [FromBody] PhaseAssignmentDto req)
+    {
+        using var c = _db.Open();
+        int newId = c.ExecuteScalar<int>(@"
+            INSERT INTO phase_assignments (project_phase_id, employee_id, assign_role, planned_hours)
+            VALUES (@PhaseId, @EmployeeId, @AssignRole, @PlannedHours);
+            SELECT LAST_INSERT_ID()",
+            new { PhaseId = phaseId, req.EmployeeId, req.AssignRole, req.PlannedHours });
+        return Ok(ApiResponse<int>.Ok(newId));
+    }
+
+    // ── Rimuovi singola assegnazione ──────────────────────────────────
+    [HttpDelete("assignments/{id}")]
+    public IActionResult RemoveAssignment(int id)
+    {
+        using var c = _db.Open();
+        c.Execute("DELETE FROM phase_assignments WHERE id=@Id", new { Id = id });
         return Ok(ApiResponse<bool>.Ok(true));
     }
 

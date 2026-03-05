@@ -174,6 +174,22 @@
                     Width="200"
                     Binding="{Binding Notes}"
                     Header="Note" />
+                <DataGridTemplateColumn Width="80" Header="">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="✏" Background="#4F6EF71A" Foreground="#4F6EF7"
+                                        Width="28" Height="28" BorderThickness="0" FontSize="12"
+                                        Cursor="Hand" ToolTip="Modifica"
+                                        Click="BtnEdit_Click" Tag="{Binding}" />
+                                <Button Content="✕" Background="#EF44441A" Foreground="#EF4444"
+                                        Width="28" Height="28" Margin="4,0,0,0" BorderThickness="0"
+                                        FontSize="12" Cursor="Hand" ToolTip="Elimina"
+                                        Click="BtnDelete_Click" Tag="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

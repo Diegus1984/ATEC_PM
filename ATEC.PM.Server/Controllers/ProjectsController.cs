@@ -71,11 +71,12 @@ public class ProjectsController : ControllerBase
             // Crea fasi di default
             if (req.CreateDefaultPhases)
             {
-                var templates = c.Query("SELECT id, name, sort_order FROM phase_templates WHERE is_default=1 ORDER BY sort_order", transaction: trx);
+                var templates = c.Query("SELECT id, department_id, sort_order FROM phase_templates WHERE is_default=1 ORDER BY sort_order", transaction: trx);
                 foreach (var t in templates)
                 {
-                    c.Execute("INSERT INTO project_phases (project_id,phase_template_id,custom_name,sort_order) VALUES (@ProjId,@TplId,@Name,@Sort)",
-                        new { ProjId = newId, TplId = (int)t.id, Name = (string)t.name, Sort = (int)t.sort_order }, trx);
+                    c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, department_id, sort_order)
+                        VALUES (@ProjId, @TplId, @DeptId, @Sort)",
+                        new { ProjId = newId, TplId = (int)t.id, DeptId = (int?)t.department_id, Sort = (int)t.sort_order }, trx);
                 }
             }
 

@@ -1,0 +1,69 @@
+<UserControl
+    x:Class="ATEC.PM.Client.UserControls.PhasesManagementControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
+
+    <UserControl.Resources>
+        <Style x:Key="FlatBtn" TargetType="Button">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- TOP: Riepilogo + Ricerca + Azioni -->
+        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,10">
+            <StackPanel>
+                <!-- Riepilogo ore -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                        <TextBlock Text="FASI" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="txtTotalPhases" Text="0" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                        <TextBlock Text="ORE BUDGET" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="txtTotalBudget" Text="0" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                        <TextBlock Text="ORE LAVORATE" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="txtTotalWorked" Text="0" FontSize="20" FontWeight="Bold" Foreground="#4F6EF7" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                        <TextBlock Text="COSTO BUDGET" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="txtTotalCost" Text="0 €" FontSize="20" FontWeight="Bold" Foreground="#1A1D26" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Ricerca + Bottone aggiungi -->
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Background="#4F6EF7" Foreground="White"
+                            Content="+ Aggiungi Fase" Style="{StaticResource FlatBtn}"
+                            Margin="8,0,0,0" Click="BtnAddPhase_Click" />
+                    <Grid>
+                        <TextBox x:Name="txtSearch" Height="30" Padding="8,4" BorderBrush="#E4E7EC"
+                                 FontSize="13" TextChanged="TxtSearch_TextChanged" />
+                        <TextBlock x:Name="txtSearchPlaceholder" Text="Cerca fase..."
+                                   Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13"
+                                   Foreground="#9CA3AF" IsHitTestVisible="False" />
+                    </Grid>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- CONTENT: Lista fasi raggruppate -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="pnlPhases" Margin="16,8,16,16" />
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

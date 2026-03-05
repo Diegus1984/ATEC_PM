@@ -45,6 +45,16 @@ public static class ApiClient
         return await resp.Content.ReadAsStringAsync();
     }
 
+    public static async Task<string> PatchAsync(string endpoint, string jsonBody)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"{App.ApiBaseUrl}{endpoint}");
+        req.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+        if (!string.IsNullOrEmpty(App.Token))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", App.Token);
+        var resp = await _http.SendAsync(req);
+        return await resp.Content.ReadAsStringAsync();
+    }
+
     public static async Task<byte[]?> DownloadAsync(string endpoint)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, $"{App.ApiBaseUrl}{endpoint}");
