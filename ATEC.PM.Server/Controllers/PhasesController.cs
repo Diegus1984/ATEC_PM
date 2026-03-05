@@ -244,4 +244,45 @@ public class PhasesController : ControllerBase
             new { Hours = req.PlannedHours, Id = id });
         return Ok(ApiResponse<bool>.Ok(true));
     }
+
+
+    [HttpPost("templates")]
+    public IActionResult CreateTemplate([FromBody] PhaseTemplateSaveRequest req)
+    {
+        using var c = _db.Open();
+        int newId = c.ExecuteScalar<int>(@"
+            INSERT INTO phase_templates (name, category, department_id, sort_order, is_default)
+            VALUES (@Name, @Category, @DepartmentId, @SortOrder, @IsDefault);
+            SELECT LAST_INSERT_ID()",
+            new { req.Name, req.Category, req.DepartmentId, req.SortOrder, IsDefault = req.IsDefault ? 1 : 0 });
+        return Ok(ApiResponse<int>.Ok(newId, "Template creato"));
+    }
+
+    [HttpPatch("templates/{id}/field")]
+    public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
+    {
+        using var c = _db.Open();
+        string[] allowed = { "name", "category", "department_id", "sort_order", "is_default" };
+        if (!allowed.Contains(req.Field))
+            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non modificabile."));
+
+        c.Execute($"UPDATE phase_templates SET {req.Field}=@Value WHERE id=@Id",
+            new { Value = req.Value, Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    [HttpDelete("templates/{id}")]
+    public IActionResult DeleteTemplate(int id)
+    {
+        using var c = _db.Open();
+        // Controlla se ci sono fasi che usano questo template
+        int inUse = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM project_phases WHERE phase_template_id=@Id", new { Id = id });
+        if (inUse > 0)
+            return BadRequest(ApiResponse<string>.Fail($"Impossibile eliminare: {inUse} fasi usano questo template."));
+
+        c.Execute("DELETE FROM phase_templates WHERE id=@Id", new { Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
 }

@@ -26,24 +26,28 @@ public partial class MainWindow : Window
         var u = App.CurrentUser;
 
         // Sezione GESTIONE
-        btnClienti.Visibility     = PermissionEngine.CanAccessClienti(u)      ? Visibility.Visible : Visibility.Collapsed;
-        btnFornitori.Visibility   = PermissionEngine.CanAccessFornitori(u)    ? Visibility.Visible : Visibility.Collapsed;
-        btnCatalogo.Visibility    = PermissionEngine.CanAccessCatalogo(u)     ? Visibility.Visible : Visibility.Collapsed;
+        btnClienti.Visibility = PermissionEngine.CanAccessClienti(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnFornitori.Visibility = PermissionEngine.CanAccessFornitori(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnCatalogo.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
+
+        // Sezione GESTIONE AVANZATA
+        btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
+        lblAvanzata.Visibility = btnFasiTemplate.Visibility;
 
         // Sezione REPORT / ADMIN
-        btnReport.Visibility      = PermissionEngine.CanAccessReport(u)       ? Visibility.Visible : Visibility.Collapsed;
+        btnReport.Visibility = PermissionEngine.CanAccessReport(u) ? Visibility.Visible : Visibility.Collapsed;
         btnImpostazioni.Visibility = PermissionEngine.CanAccessImpostazioni(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnUtenti.Visibility      = PermissionEngine.CanAccessUtenti(u)       ? Visibility.Visible : Visibility.Collapsed;
+        btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
 
         // Nascondi label sezione se tutti i bottoni sono collassati
-        bool anyGestione = btnClienti.Visibility    == Visibility.Visible ||
-                           btnFornitori.Visibility  == Visibility.Visible ||
-                           btnCatalogo.Visibility   == Visibility.Visible;
+        bool anyGestione = btnClienti.Visibility == Visibility.Visible ||
+                           btnFornitori.Visibility == Visibility.Visible ||
+                           btnCatalogo.Visibility == Visibility.Visible;
         lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
-        bool anyAdmin = btnReport.Visibility      == Visibility.Visible ||
+        bool anyAdmin = btnReport.Visibility == Visibility.Visible ||
                         btnImpostazioni.Visibility == Visibility.Visible ||
-                        btnUtenti.Visibility       == Visibility.Visible;
+                        btnUtenti.Visibility == Visibility.Visible;
         lblAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -61,14 +65,15 @@ public partial class MainWindow : Window
 
         switch (tag)
         {
-            case "Dashboard":     PageContent.Navigate(new DashboardPage()); break;
-            case "Commesse":      PageContent.Navigate(new ProjectsPage()); break;
-            case "Timesheet":     PageContent.Navigate(new TimesheetPage()); break;
-            case "Clienti":       PageContent.Navigate(new CustomersPage()); break;
-            case "Fornitori":     PageContent.Navigate(new SuppliersPage()); break;
-            case "Catalogo":      PageContent.Navigate(new CatalogPage()); break;
-            case "Utenti":        PageContent.Navigate(new UsersPage()); break;
-            default:              PageContent.Content = null; break;
+            case "Dashboard": PageContent.Navigate(new DashboardPage()); break;
+            case "Commesse": PageContent.Navigate(new ProjectsPage()); break;
+            case "Timesheet": PageContent.Navigate(new TimesheetPage()); break;
+            case "Clienti": PageContent.Navigate(new CustomersPage()); break;
+            case "Fornitori": PageContent.Navigate(new SuppliersPage()); break;
+            case "Catalogo": PageContent.Navigate(new CatalogPage()); break;
+            case "Utenti": PageContent.Navigate(new UsersPage()); break;
+            case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
+            default: PageContent.Content = null; break;
         }
     }
 

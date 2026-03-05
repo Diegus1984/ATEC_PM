@@ -631,3 +631,74 @@ public class PlannedHoursUpdate
 {
     public decimal PlannedHours { get; set; }
 }
+
+public class PhaseTemplateSaveRequest
+{
+    public string Name { get; set; } = "";
+    public string Category { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsDefault { get; set; }
+}
+
+public class ProjectDashboardData
+{
+    // Info commessa
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string CustomerName { get; set; } = "";
+    public string PmName { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Priority { get; set; } = "";
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDatePlanned { get; set; }
+    public string ServerPath { get; set; } = "";
+    public string Notes { get; set; } = "";
+
+    // KPI globali
+    public decimal BudgetTotal { get; set; }
+    public decimal BudgetHoursTotal { get; set; }
+    public decimal Revenue { get; set; }
+    public decimal HoursWorked { get; set; }
+    public decimal CostWorked { get; set; }  // ore lavorate × costo orario tecnico
+    public int TotalPhases { get; set; }
+    public int CompletedPhases { get; set; }
+
+    // Per reparto
+    public List<DeptSummary> DepartmentSummaries { get; set; } = new();
+
+    // Ultimi timesheet
+    public List<RecentTimesheetEntry> RecentEntries { get; set; } = new();
+
+    // Tecnici attivi
+    public List<ActiveTechSummary> ActiveTechnicians { get; set; } = new();
+}
+
+public class DeptSummary
+{
+    public string DepartmentCode { get; set; } = "";
+    public string DepartmentName { get; set; } = "";
+    public decimal BudgetHours { get; set; }
+    public decimal HoursWorked { get; set; }
+    public int TotalPhases { get; set; }
+    public int CompletedPhases { get; set; }
+}
+
+public class RecentTimesheetEntry
+{
+    public string EmployeeName { get; set; } = "";
+    public string PhaseName { get; set; } = "";
+    public DateTime WorkDate { get; set; }
+    public decimal Hours { get; set; }
+    public string EntryType { get; set; } = "";
+}
+
+public class ActiveTechSummary
+{
+    public string EmployeeName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
+    public decimal TotalHours { get; set; }
+    public int PhaseCount { get; set; }
+}
+
+

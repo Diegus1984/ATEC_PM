@@ -289,52 +289,16 @@ public partial class ProjectsPage : Page
     }
 
     // === DETAILS ===
-    private async void ShowDetails(int projectId)
+    private void ShowDetails(int projectId)
     {
-        txtSectionTitle.Text = "Dettagli Commessa";
+        txtSectionTitle.Text = "Dashboard Commessa";
         btnAction.Content = "Modifica";
         btnAction.Visibility = Visibility.Visible;
         btnAction.Tag = $"edit|{projectId}";
 
-        try
-        {
-            var json = await ApiClient.GetAsync($"/api/projects/{projectId}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-            var d = doc.RootElement.GetProperty("data");
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var left = new StackPanel();
-            var right = new StackPanel();
-
-            AddField(left, "Codice", d.GetProperty("code").GetString());
-            AddField(left, "Titolo", d.GetProperty("title").GetString());
-            AddField(left, "Stato", d.GetProperty("status").GetString());
-            AddField(left, "Priorità", d.GetProperty("priority").GetString());
-            if (d.TryGetProperty("startDate", out var sd) && sd.ValueKind != JsonValueKind.Null)
-                AddField(left, "Data Inizio", sd.GetDateTime().ToString("dd/MM/yyyy"));
-            if (d.TryGetProperty("endDatePlanned", out var ed) && ed.ValueKind != JsonValueKind.Null)
-                AddField(left, "Data Fine Prevista", ed.GetDateTime().ToString("dd/MM/yyyy"));
-
-            AddField(right, "Ricavo", d.GetProperty("revenue").GetDecimal().ToString("N0") + " €");
-            AddField(right, "Budget", d.GetProperty("budgetTotal").GetDecimal().ToString("N0") + " €");
-            AddField(right, "Ore Previste", d.GetProperty("budgetHoursTotal").GetDecimal().ToString("N0"));
-            var sp = d.GetProperty("serverPath").GetString() ?? "";
-            AddField(right, "Path Server", sp == "" ? "(non creata)" : sp);
-            if (d.TryGetProperty("notes", out var notes) && notes.ValueKind != JsonValueKind.Null)
-                AddField(right, "Note", notes.GetString());
-
-            Grid.SetColumn(left, 0);
-            Grid.SetColumn(right, 2);
-            grid.Children.Add(left);
-            grid.Children.Add(right);
-            SectionContent.Content = grid;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+        var dashboard = new ProjectDashboardControl();
+        SectionContent.Content = dashboard;
+        dashboard.Load(projectId);
     }
 
     // === DOCUMENTS ===

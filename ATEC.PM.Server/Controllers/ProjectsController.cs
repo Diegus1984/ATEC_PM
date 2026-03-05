@@ -748,4 +748,90 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    [HttpGet("{id}/dashboard")]
+    public IActionResult GetDashboard(int id)
+    {
+        using var c = _db.Open();
+
+        // Info commessa + cliente + PM
+        var data = c.QueryFirstOrDefault<ProjectDashboardData>(@"
+            SELECT p.code AS Code, p.title AS Title, p.status, p.priority,
+                   p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
+                   p.budget_total AS BudgetTotal, p.budget_hours_total AS BudgetHoursTotal,
+                   p.revenue AS Revenue, p.server_path AS ServerPath, p.notes AS Notes,
+                   COALESCE(cust.company_name, '') AS CustomerName,
+                   COALESCE(CONCAT(pm.first_name,' ',pm.last_name), '') AS PmName
+            FROM projects p
+            LEFT JOIN customers cust ON cust.id = p.customer_id
+            LEFT JOIN employees pm ON pm.id = p.pm_id
+            WHERE p.id = @Id", new { Id = id });
+
+        if (data == null) return NotFound(ApiResponse<string>.Fail("Commessa non trovata"));
+
+        // Ore lavorate totali + costo consuntivo
+        var totals = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT COALESCE(SUM(te.hours), 0) AS HoursWorked,
+                   COALESCE(SUM(te.hours * e.hourly_cost), 0) AS CostWorked
+            FROM timesheet_entries te
+            JOIN employees e ON e.id = te.employee_id
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            WHERE pp.project_id = @Id", new { Id = id });
+
+        data.HoursWorked = (decimal)(totals?.HoursWorked ?? 0m);
+        data.CostWorked = (decimal)(totals?.CostWorked ?? 0m);
+
+        // Conteggio fasi
+        var phaseCounts = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT COUNT(*) AS Total,
+                   SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END) AS Completed
+            FROM project_phases WHERE project_id = @Id", new { Id = id });
+
+        data.TotalPhases = (int)(phaseCounts?.Total ?? 0);
+        data.CompletedPhases = (int)(phaseCounts?.Completed ?? 0);
+
+        // Riepilogo per reparto
+        data.DepartmentSummaries = c.Query<DeptSummary>(@"
+            SELECT COALESCE(d.code, 'TRASV') AS DepartmentCode,
+                   COALESCE(d.name, 'Trasversale') AS DepartmentName,
+                   SUM(pp.budget_hours) AS BudgetHours,
+                   COALESCE(SUM((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id)), 0) AS HoursWorked,
+                   COUNT(*) AS TotalPhases,
+                   SUM(CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END) AS CompletedPhases
+            FROM project_phases pp
+            LEFT JOIN departments d ON d.id = pp.department_id
+            WHERE pp.project_id = @Id
+            GROUP BY d.code, d.name
+            ORDER BY d.code", new { Id = id }).ToList();
+
+        // Ultimi 10 inserimenti timesheet
+        data.RecentEntries = c.Query<RecentTimesheetEntry>(@"
+            SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+                   te.work_date AS WorkDate, te.hours, te.entry_type AS EntryType
+            FROM timesheet_entries te
+            JOIN employees e ON e.id = te.employee_id
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            WHERE pp.project_id = @Id
+            ORDER BY te.work_date DESC, te.id DESC
+            LIMIT 10", new { Id = id }).ToList();
+
+        // Tecnici attivi con ore totali
+        data.ActiveTechnicians = c.Query<ActiveTechSummary>(@"
+            SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
+                   COALESCE(d.code, '') AS DepartmentCode,
+                   SUM(te.hours) AS TotalHours,
+                   COUNT(DISTINCT te.project_phase_id) AS PhaseCount
+            FROM timesheet_entries te
+            JOIN employees e ON e.id = te.employee_id
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            LEFT JOIN departments d ON d.id = pp.department_id
+            WHERE pp.project_id = @Id
+            GROUP BY e.id, e.first_name, e.last_name, d.code
+            ORDER BY SUM(te.hours) DESC", new { Id = id }).ToList();
+
+        return Ok(ApiResponse<ProjectDashboardData>.Ok(data));
+    }
+
+
 }

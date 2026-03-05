@@ -22,7 +22,10 @@
             <DockPanel>
                 <StackPanel Margin="16,20,16,24" DockPanel.Dock="Top">
                     <StackPanel Orientation="Horizontal">
-                        <Border Width="32" Height="32" Background="#4F6EF7">
+                        <Border
+                            Width="32"
+                            Height="32"
+                            Background="#4F6EF7">
                             <TextBlock
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
@@ -39,7 +42,10 @@
                             Foreground="White"
                             Text="ATEC PM" />
                     </StackPanel>
-                    <Border Height="1" Margin="0,16,0,0" Background="#2A2D36" />
+                    <Border
+                        Height="1"
+                        Margin="0,16,0,0"
+                        Background="#2A2D36" />
                 </StackPanel>
 
                 <Border
@@ -48,7 +54,10 @@
                     BorderThickness="0,1,0,0"
                     DockPanel.Dock="Bottom">
                     <StackPanel Orientation="Horizontal">
-                        <Border Width="34" Height="34" Background="#4F6EF7">
+                        <Border
+                            Width="34"
+                            Height="34"
+                            Background="#4F6EF7">
                             <TextBlock
                                 x:Name="txtInitials"
                                 HorizontalAlignment="Center"
@@ -58,25 +67,44 @@
                                 Foreground="White" />
                         </Border>
                         <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="txtUserName" FontSize="13" FontWeight="SemiBold" Foreground="White" />
-                            <TextBlock x:Name="txtRole" FontSize="11" Foreground="#6B7280" />
+                            <TextBlock
+                                x:Name="txtUserName"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="White" />
+                            <TextBlock
+                                x:Name="txtRole"
+                                FontSize="11"
+                                Foreground="#6B7280" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <StackPanel Margin="8,0">
-                    <!-- PRINCIPALE -->
+                    <!--  PRINCIPALE  -->
                     <TextBlock
                         Margin="12,0,0,8"
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="#4A4D56"
                         Text="PRINCIPALE" />
-                    <Button Click="Nav_Click" Content="  Dashboard" Style="{StaticResource NavBtn}" Tag="Dashboard" />
-                    <Button Click="Nav_Click" Content="  Commesse"  Style="{StaticResource NavBtn}" Tag="Commesse" />
-                    <Button Click="Nav_Click" Content="  Timesheet"  Style="{StaticResource NavBtn}" Tag="Timesheet" />
+                    <Button
+                        Click="Nav_Click"
+                        Content="  Dashboard"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Dashboard" />
+                    <Button
+                        Click="Nav_Click"
+                        Content="  Commesse"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Commesse" />
+                    <Button
+                        Click="Nav_Click"
+                        Content="  Timesheet"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Timesheet" />
 
-                    <!-- GESTIONE -->
+                    <!--  GESTIONE  -->
                     <TextBlock
                         x:Name="lblGestione"
                         Margin="12,24,0,8"
@@ -84,11 +112,26 @@
                         FontWeight="SemiBold"
                         Foreground="#4A4D56"
                         Text="GESTIONE" />
-                    <Button x:Name="btnClienti"    Click="Nav_Click" Content="  Clienti"          Style="{StaticResource NavBtn}" Tag="Clienti" />
-                    <Button x:Name="btnFornitori"  Click="Nav_Click" Content="  Fornitori"        Style="{StaticResource NavBtn}" Tag="Fornitori" />
-                    <Button x:Name="btnCatalogo"   Click="Nav_Click" Content="  Catalogo Articoli" Style="{StaticResource NavBtn}" Tag="Catalogo" />
+                    <Button
+                        x:Name="btnClienti"
+                        Click="Nav_Click"
+                        Content="  Clienti"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Clienti" />
+                    <Button
+                        x:Name="btnFornitori"
+                        Click="Nav_Click"
+                        Content="  Fornitori"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Fornitori" />
+                    <Button
+                        x:Name="btnCatalogo"
+                        Click="Nav_Click"
+                        Content="  Catalogo Articoli"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Catalogo" />
 
-                    <!-- AMMINISTRAZIONE -->
+                    <!--  AMMINISTRAZIONE  -->
                     <TextBlock
                         x:Name="lblAdmin"
                         Margin="12,24,0,8"
@@ -96,19 +139,54 @@
                         FontWeight="SemiBold"
                         Foreground="#4A4D56"
                         Text="AMMINISTRAZIONE" />
-                    <Button x:Name="btnUtenti"       Click="Nav_Click" Content="  Utenti"       Style="{StaticResource NavBtn}" Tag="Utenti" />
-                    <Button x:Name="btnReport"       Click="Nav_Click" Content="  Report"       Style="{StaticResource NavBtn}" Tag="Report" />
-                    <Button x:Name="btnImpostazioni" Click="Nav_Click" Content="  Impostazioni" Style="{StaticResource NavBtn}" Tag="Impostazioni" />
+                    <Button
+                        x:Name="btnUtenti"
+                        Click="Nav_Click"
+                        Content="  Utenti"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Utenti" />
+                    <Button
+                        x:Name="btnReport"
+                        Click="Nav_Click"
+                        Content="  Report"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Report" />
+                    <Button
+                        x:Name="btnImpostazioni"
+                        Click="Nav_Click"
+                        Content="  Impostazioni"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Impostazioni" />
+                    <!--  GESTIONE AVANZATA  -->
+                    <TextBlock
+                        x:Name="lblAvanzata"
+                        Margin="12,24,0,8"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="#4A4D56"
+                        Text="GESTIONE AVANZATA" />
+                    <Button
+                        x:Name="btnFasiTemplate"
+                        Click="Nav_Click"
+                        Content="  Fasi Template"
+                        Style="{StaticResource NavBtn}"
+                        Tag="FasiTemplate" />
 
-                    <!-- SESSIONE -->
+                    <!--  SESSIONE  -->
                     <TextBlock
                         Margin="12,24,0,8"
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="#4A4D56"
                         Text="SESSIONE" />
-                    <Button Click="BtnLogout_Click" Content="  Logout" Style="{StaticResource NavBtn}" />
-                    <Button Click="BtnExit_Click"   Content="  Esci"   Style="{StaticResource NavBtn}" />
+                    <Button
+                        Click="BtnLogout_Click"
+                        Content="  Logout"
+                        Style="{StaticResource NavBtn}" />
+                    <Button
+                        Click="BtnExit_Click"
+                        Content="  Esci"
+                        Style="{StaticResource NavBtn}" />
                 </StackPanel>
             </DockPanel>
         </Border>
