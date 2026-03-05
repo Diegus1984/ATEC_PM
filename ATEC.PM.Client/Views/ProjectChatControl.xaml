@@ -1,0 +1,169 @@
+<UserControl
+    x:Class="ATEC.PM.Client.UserControls.ProjectChatControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!--  SINISTRA: Lista chat  -->
+        <Border
+            Grid.Column="0"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,1,0">
+            <DockPanel>
+                <!--  Header + bottone nuova chat  -->
+                <Border
+                    Padding="12,10"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="Chat" />
+                        <Button
+                            Width="28"
+                            Height="28"
+                            HorizontalAlignment="Right"
+                            Background="#4F6EF7"
+                            BorderThickness="0"
+                            Click="BtnNewChat_Click"
+                            Content="+"
+                            Cursor="Hand"
+                            DockPanel.Dock="Right"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            ToolTip="Nuova chat" />
+                    </DockPanel>
+                </Border>
+
+                <!--  Lista  -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="pnlChatList" />
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!--  DESTRA: Messaggi  -->
+        <Border Grid.Column="1">
+            <DockPanel>
+                <!--  Header chat selezionata  -->
+                <Border
+                    Padding="16,10"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock
+                            x:Name="txtChatTitle"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="#1A1D26"
+                            Text="Seleziona una chat" />
+                        <StackPanel
+                            HorizontalAlignment="Right"
+                            DockPanel.Dock="Right"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                x:Name="txtParticipants"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="#6B7280" />
+                            <Button
+                                x:Name="btnDeleteChat"
+                                Width="28"
+                                Height="28"
+                                Background="#EF44441A"
+                                BorderThickness="0"
+                                Click="BtnDeleteChat_Click"
+                                Content="🗑"
+                                Cursor="Hand"
+                                FontSize="12"
+                                Foreground="#EF4444"
+                                ToolTip="Elimina chat"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!--  Input messaggio  -->
+                <Border
+                    Padding="12,8"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,1,0,0"
+                    DockPanel.Dock="Bottom">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            x:Name="btnAttach"
+                            Grid.Column="0"
+                            Width="34"
+                            Height="34"
+                            Background="#F3F4F6"
+                            BorderThickness="0"
+                            Click="BtnAttach_Click"
+                            Content="📎"
+                            Cursor="Hand"
+                            FontSize="16"
+                            Foreground="#374151"
+                            IsEnabled="False"
+                            ToolTip="Allega file" />
+                        <TextBox
+                            x:Name="txtMessage"
+                            Grid.Column="2"
+                            Height="34"
+                            Padding="10,6"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1"
+                            FontSize="13"
+                            IsEnabled="False"
+                            KeyDown="TxtMessage_KeyDown"
+                            TextChanged="TxtMessage_TextChanged" />
+                        <Button
+                            x:Name="btnSend"
+                            Grid.Column="4"
+                            Height="34"
+                            Padding="16,0"
+                            Background="#4F6EF7"
+                            BorderThickness="0"
+                            Click="BtnSend_Click"
+                            Content="Invia"
+                            Cursor="Hand"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="White"
+                            IsEnabled="False" />
+                    </Grid>
+                </Border>
+
+                <!--  Area messaggi  -->
+                <ScrollViewer
+                    x:Name="scrollMessages"
+                    Background="#F7F8FA"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="pnlMessages" Margin="16,8,16,8" />
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

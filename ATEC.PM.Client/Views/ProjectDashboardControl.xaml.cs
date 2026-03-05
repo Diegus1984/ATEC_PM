@@ -57,7 +57,8 @@ public partial class ProjectDashboardControl : UserControl
         // ═══ HEADER COMMESSA ═══
         Border header = new()
         {
-            Background = B("#1A1D26"), Padding = new Thickness(24, 16, 24, 16),
+            Background = B("#1A1D26"),
+            Padding = new Thickness(24, 16, 24, 16),
             Margin = new Thickness(0, 0, 0, 16)
         };
         StackPanel headerContent = new();
@@ -103,46 +104,49 @@ public partial class ProjectDashboardControl : UserControl
         header.Child = headerContent;
         pnlContent.Children.Add(header);
 
-        // ═══ KPI CARDS ═══
-        Grid kpiGrid = new() { Margin = new Thickness(0, 0, 0, 16) };
-
-        int cols = isPm ? 5 : 3;
-        for (int i = 0; i < cols; i++)
+        // ═══ KPI CARDS — RIGA 1 (tutti) ═══
+        Grid kpiRow1 = new() { Margin = new Thickness(0, 0, 0, 12) };
+        for (int i = 0; i < 4; i++)
         {
-            kpiGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            if (i < cols - 1)
-                kpiGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) }); // spacer
+            kpiRow1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            if (i < 3) kpiRow1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
         }
 
-        int colIdx = 0;
-
-        // Avanzamento globale
         decimal globalPct = d.TotalPhases > 0 ? Math.Round((decimal)d.CompletedPhases / d.TotalPhases * 100, 0) : 0;
-        AddKpiCard(kpiGrid, colIdx, "AVANZAMENTO", $"{globalPct}%", $"{d.CompletedPhases}/{d.TotalPhases} fasi", "#4F6EF7");
-        colIdx += 2;
+        AddKpiCard(kpiRow1, 0, "AVANZAMENTO", $"{globalPct}%", $"{d.CompletedPhases}/{d.TotalPhases} fasi", "#4F6EF7");
 
-        // Ore
         decimal hoursPct = d.BudgetHoursTotal > 0 ? Math.Round(d.HoursWorked / d.BudgetHoursTotal * 100, 0) : 0;
         string hoursColor = hoursPct > 100 ? "#EF4444" : "#059669";
-        AddKpiCard(kpiGrid, colIdx, "ORE", $"{d.HoursWorked:N1} h", $"su {d.BudgetHoursTotal:N0} h budget ({hoursPct}%)", hoursColor);
-        colIdx += 2;
+        AddKpiCard(kpiRow1, 2, "ORE", $"{d.HoursWorked:N1} h", $"su {d.BudgetHoursTotal:N0} h budget ({hoursPct}%)", hoursColor);
 
-        // Tecnici attivi
-        AddKpiCard(kpiGrid, colIdx, "TECNICI ATTIVI", d.ActiveTechnicians.Count.ToString(), "su questa commessa", "#7C3AED");
-        colIdx += 2;
+        AddKpiCard(kpiRow1, 4, "TECNICI ATTIVI", d.ActiveTechnicians.Count.ToString(), "su questa commessa", "#7C3AED");
 
+        AddKpiCard(kpiRow1, 6, "FASI COMPLETATE", $"{d.CompletedPhases}/{d.TotalPhases}", $"{globalPct}% completamento", globalPct >= 100 ? "#059669" : "#4F6EF7");
+
+        pnlContent.Children.Add(kpiRow1);
+
+        // ═══ KPI CARDS — RIGA 2 (solo PM/ADMIN) ═══
         if (isPm)
         {
-            // Budget
-            AddKpiCard(kpiGrid, colIdx, "COSTO CONSUNTIVO", $"{d.CostWorked:N0} €", $"su {d.BudgetTotal:N0} € budget", d.CostWorked > d.BudgetTotal ? "#EF4444" : "#059669");
-            colIdx += 2;
+            Grid kpiRow2 = new() { Margin = new Thickness(0, 0, 0, 16) };
+            for (int i = 0; i < 4; i++)
+            {
+                kpiRow2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                if (i < 3) kpiRow2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            }
 
-            // Ricavo
-            decimal margin = d.Revenue - d.CostWorked;
-            AddKpiCard(kpiGrid, colIdx, "RICAVO", $"{d.Revenue:N0} €", $"Margine: {margin:N0} €", margin >= 0 ? "#059669" : "#EF4444");
+            AddKpiCard(kpiRow2, 0, "COSTO ORE", $"{d.CostWorked:N0} €", "manodopera", "#D97706");
+
+            AddKpiCard(kpiRow2, 2, "COSTO MATERIALI", $"{d.MaterialCost:N0} €", "da DDP", "#0891B2");
+
+            string totalColor = d.TotalCost > d.BudgetTotal ? "#EF4444" : "#059669";
+            AddKpiCard(kpiRow2, 4, "COSTO TOTALE", $"{d.TotalCost:N0} €", $"su {d.BudgetTotal:N0} € budget", totalColor);
+
+            decimal margin = d.Revenue - d.TotalCost;
+            AddKpiCard(kpiRow2, 6, "MARGINE", $"{margin:N0} €", $"Ricavo: {d.Revenue:N0} €", margin >= 0 ? "#059669" : "#EF4444");
+
+            pnlContent.Children.Add(kpiRow2);
         }
-
-        pnlContent.Children.Add(kpiGrid);
 
         // ═══ ORE PER REPARTO (barre orizzontali) ═══
         if (d.DepartmentSummaries.Any())
@@ -156,16 +160,31 @@ public partial class ProjectDashboardControl : UserControl
 
             foreach (DeptSummary ds in d.DepartmentSummaries)
             {
+
+
                 string color = DeptColors.TryGetValue(ds.DepartmentCode, out string? c) ? c : "#6B7280";
                 decimal pct = ds.BudgetHours > 0 ? Math.Round(ds.HoursWorked / ds.BudgetHours * 100, 0) : 0;
 
                 StackPanel row = new() { Margin = new Thickness(0, 6, 0, 6) };
 
+
+                if (isPm && ds.MaterialCost > 0)
+                {
+                    row.Children.Add(new TextBlock
+                    {
+                        Text = $"    Materiali: {ds.MaterialCost:N0} €",
+                        FontSize = 11,
+                        Foreground = B("#0891B2"),
+                        Margin = new Thickness(0, 2, 0, 0)
+                    });
+                }
+
                 // Label riga
                 DockPanel labelRow = new();
                 Border deptBadge = new()
                 {
-                    Background = B(color), Padding = new Thickness(8, 2, 8, 2),
+                    Background = B(color),
+                    Padding = new Thickness(8, 2, 8, 2),
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 deptBadge.Child = new TextBlock { Text = ds.DepartmentCode, FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
@@ -173,7 +192,9 @@ public partial class ProjectDashboardControl : UserControl
                 labelRow.Children.Add(new TextBlock
                 {
                     Text = $"  {ds.HoursWorked:N1} / {ds.BudgetHours:N0} h  ({pct}%)  —  {ds.CompletedPhases}/{ds.TotalPhases} fasi",
-                    FontSize = 12, Foreground = B("#374151"), VerticalAlignment = VerticalAlignment.Center
+                    FontSize = 12,
+                    Foreground = B("#374151"),
+                    VerticalAlignment = VerticalAlignment.Center
                 });
                 row.Children.Add(labelRow);
 
@@ -327,7 +348,9 @@ public partial class ProjectDashboardControl : UserControl
 
     private static TextBlock SectionTitle(string text) => new()
     {
-        Text = text, FontSize = 14, FontWeight = FontWeights.Bold,
+        Text = text,
+        FontSize = 14,
+        FontWeight = FontWeights.Bold,
         Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1D26")),
         Margin = new Thickness(0, 8, 0, 6)
     };
@@ -345,9 +368,12 @@ public partial class ProjectDashboardControl : UserControl
     {
         TextBlock tb = new()
         {
-            Text = text, FontSize = 9, FontWeight = FontWeights.SemiBold,
+            Text = text,
+            FontSize = 9,
+            FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9CA3AF")),
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 4)
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4)
         };
         Grid.SetColumn(tb, col);
         grid.Children.Add(tb);
@@ -357,9 +383,12 @@ public partial class ProjectDashboardControl : UserControl
     {
         TextBlock tb = new()
         {
-            Text = text, FontSize = 12, FontWeight = weight ?? FontWeights.Normal,
+            Text = text,
+            FontSize = 12,
+            FontWeight = weight ?? FontWeights.Normal,
             Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 0, 4)
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 4)
         };
         Grid.SetColumn(tb, col);
         grid.Children.Add(tb);

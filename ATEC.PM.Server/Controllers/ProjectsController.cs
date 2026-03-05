@@ -780,6 +780,14 @@ public class ProjectsController : ControllerBase
         data.HoursWorked = (decimal)(totals?.HoursWorked ?? 0m);
         data.CostWorked = (decimal)(totals?.CostWorked ?? 0m);
 
+        // Costo materiali DDP
+        decimal materialCost = c.ExecuteScalar<decimal>(@"
+            SELECT COALESCE(SUM(quantity * unit_cost), 0)
+            FROM bom_items WHERE project_id = @Id AND item_status <> 'CANCELLED'", new { Id = id });
+
+        data.MaterialCost = materialCost;
+        data.TotalCost = data.CostWorked + materialCost;
+
         // Conteggio fasi
         var phaseCounts = c.QueryFirstOrDefault<dynamic>(@"
             SELECT COUNT(*) AS Total,
@@ -792,11 +800,12 @@ public class ProjectsController : ControllerBase
         // Riepilogo per reparto
         data.DepartmentSummaries = c.Query<DeptSummary>(@"
             SELECT COALESCE(d.code, 'TRASV') AS DepartmentCode,
-                   COALESCE(d.name, 'Trasversale') AS DepartmentName,
-                   SUM(pp.budget_hours) AS BudgetHours,
-                   COALESCE(SUM((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id)), 0) AS HoursWorked,
-                   COUNT(*) AS TotalPhases,
-                   SUM(CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END) AS CompletedPhases
+                    COALESCE(d.name, 'Trasversale') AS DepartmentName,
+                    SUM(pp.budget_hours) AS BudgetHours,
+                    COALESCE(SUM((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id)), 0) AS HoursWorked,
+                    COUNT(*) AS TotalPhases,
+                    SUM(CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END) AS CompletedPhases,
+                    COALESCE(SUM((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED')), 0) AS MaterialCost
             FROM project_phases pp
             LEFT JOIN departments d ON d.id = pp.department_id
             WHERE pp.project_id = @Id
@@ -816,19 +825,21 @@ public class ProjectsController : ControllerBase
             ORDER BY te.work_date DESC, te.id DESC
             LIMIT 10", new { Id = id }).ToList();
 
-        // Tecnici attivi con ore totali
+        // Tecnici assegnati alle fasi (non dal timesheet)
         data.ActiveTechnicians = c.Query<ActiveTechSummary>(@"
             SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
                    COALESCE(d.code, '') AS DepartmentCode,
-                   SUM(te.hours) AS TotalHours,
-                   COUNT(DISTINCT te.project_phase_id) AS PhaseCount
-            FROM timesheet_entries te
-            JOIN employees e ON e.id = te.employee_id
-            JOIN project_phases pp ON pp.id = te.project_phase_id
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te 
+                             WHERE te.employee_id = e.id 
+                             AND te.project_phase_id IN (SELECT pp2.id FROM project_phases pp2 WHERE pp2.project_id = @Id)), 0) AS TotalHours,
+                   COUNT(DISTINCT pa.project_phase_id) AS PhaseCount
+            FROM phase_assignments pa
+            JOIN employees e ON e.id = pa.employee_id
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
             LEFT JOIN departments d ON d.id = pp.department_id
             WHERE pp.project_id = @Id
             GROUP BY e.id, e.first_name, e.last_name, d.code
-            ORDER BY SUM(te.hours) DESC", new { Id = id }).ToList();
+            ORDER BY e.last_name", new { Id = id }).ToList();
 
         return Ok(ApiResponse<ProjectDashboardData>.Ok(data));
     }

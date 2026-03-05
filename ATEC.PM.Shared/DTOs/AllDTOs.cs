@@ -663,6 +663,8 @@ public class ProjectDashboardData
     public decimal CostWorked { get; set; }  // ore lavorate × costo orario tecnico
     public int TotalPhases { get; set; }
     public int CompletedPhases { get; set; }
+    public decimal MaterialCost { get; set; }        // totale DDP (quantity × unit_cost)
+    public decimal TotalCost { get; set; }            // CostWorked (ore) + MaterialCost
 
     // Per reparto
     public List<DeptSummary> DepartmentSummaries { get; set; } = new();
@@ -682,6 +684,7 @@ public class DeptSummary
     public decimal HoursWorked { get; set; }
     public int TotalPhases { get; set; }
     public int CompletedPhases { get; set; }
+    public decimal MaterialCost { get; set; }
 }
 
 public class RecentTimesheetEntry

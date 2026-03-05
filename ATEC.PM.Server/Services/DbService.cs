@@ -30,6 +30,40 @@ public class DbService
     {
         using var c = Open();
 
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_chats (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            created_by INT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES employees(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_chat_participants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            chat_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            last_read_message_id INT DEFAULT 0,
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_ChatPart (chat_id, employee_id),
+            FOREIGN KEY (chat_id) REFERENCES project_chats(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_chat_messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            chat_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            message TEXT NOT NULL,
+            has_attachment BOOLEAN DEFAULT FALSE,
+            attachment_name VARCHAR(300) DEFAULT '',
+            attachment_path VARCHAR(500) DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chat_id) REFERENCES project_chats(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS app_config (
             config_key VARCHAR(100) PRIMARY KEY,
             config_value VARCHAR(500) DEFAULT '',

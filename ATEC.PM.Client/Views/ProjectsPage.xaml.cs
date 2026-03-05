@@ -175,6 +175,7 @@ public partial class ProjectsPage : Page
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "📋 DDP Commerciali", Tag = $"ddp_commercial|{p.Id}" });
 
             var docNode = new TreeViewItem { Header = "📁 Documenti", Tag = $"documents|{p.Id}" };
@@ -384,6 +385,16 @@ public partial class ProjectsPage : Page
             SectionContent.Content = dg;
         }
         catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+    }
+
+    // === CHAT === 
+    private void ShowChat(int projectId)
+    {
+        txtSectionTitle.Text = "Chat";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new ProjectChatControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
     }
 
     // === FILE INFO ===
@@ -655,6 +666,9 @@ public partial class ProjectsPage : Page
                     break;
                 case "timesheet":
                     ShowTimesheet(id);
+                    break;
+                case "chat":
+                    ShowChat(id);
                     break;
                 case "documents":
                     ShowDocuments(id, "");

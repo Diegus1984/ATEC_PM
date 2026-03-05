@@ -10,3 +10,4 @@ global using System.Windows.Media;
 global using ATEC.PM.Client.Services;
 global using ATEC.PM.Shared.DTOs;
 global using System.IO;
+global using System.Windows.Controls.Primitives;
