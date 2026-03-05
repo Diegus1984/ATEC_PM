@@ -83,4 +83,41 @@ public static class ApiClient
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadAsStringAsync();
     }
+
+    public static async Task<string> UploadFileAsync(string endpoint, string filePath)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{App.ApiBaseUrl}{endpoint}");
+        if (!string.IsNullOrEmpty(App.Token))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", App.Token);
+
+        var content = new MultipartFormDataContent();
+        var fileBytes = System.IO.File.ReadAllBytes(filePath);
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Add(fileContent, "file", System.IO.Path.GetFileName(filePath));
+        req.Content = content;
+
+        var resp = await _http.SendAsync(req);
+        return await resp.Content.ReadAsStringAsync();
+    }
+
+    public static async Task<string> UploadFilesAsync(string endpoint, string[] filePaths)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{App.ApiBaseUrl}{endpoint}");
+        if (!string.IsNullOrEmpty(App.Token))
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", App.Token);
+
+        var content = new MultipartFormDataContent();
+        foreach (string path in filePaths)
+        {
+            var fileBytes = System.IO.File.ReadAllBytes(path);
+            var fileContent = new ByteArrayContent(fileBytes);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(fileContent, "files", System.IO.Path.GetFileName(path));
+        }
+        req.Content = content;
+
+        var resp = await _http.SendAsync(req);
+        return await resp.Content.ReadAsStringAsync();
+    }
 }

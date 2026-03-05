@@ -303,90 +303,15 @@ public partial class ProjectsPage : Page
     }
 
     // === DOCUMENTS ===
-    private async void ShowDocuments(int projectId, string subPath)
+    private void ShowDocuments(int projectId, string subPath)
     {
         txtSectionTitle.Text = string.IsNullOrEmpty(subPath) ? "Documenti" : subPath;
-        btnAction.Content = "Apri Cartella";
-        btnAction.Visibility = Visibility.Visible;
-        btnAction.Tag = $"openfolder|{projectId}|{subPath}";
-
-        try
-        {
-            // Check if server_path exists
-            var projJson = await ApiClient.GetAsync($"/api/projects/{projectId}");
-            var projDoc = JsonDocument.Parse(projJson);
-            var serverPath = projDoc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
-
-            if (string.IsNullOrEmpty(serverPath))
-            {
-                btnAction.Content = "Crea Cartella Commessa";
-                btnAction.Tag = $"createfolder|{projectId}";
-                SectionContent.Content = new TextBlock
-                {
-                    Text = "La cartella per questa commessa non è ancora stata creata.\nClicca 'Crea Cartella Commessa' per generarla automaticamente.",
-                    FontSize = 14,
-                    Foreground = System.Windows.Media.Brushes.Gray,
-                    TextWrapping = TextWrapping.Wrap
-                };
-                return;
-            }
-
-            var encoded = Uri.EscapeDataString(subPath);
-            var json = await ApiClient.GetAsync($"/api/projects/{projectId}/files?subPath={encoded}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var items = JsonSerializer.Deserialize<List<FileItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            // Populate document sub-nodes in tree (now handled by file-tree)
-
-            var dg = new DataGrid
-            {
-                AutoGenerateColumns = false,
-                IsReadOnly = true,
-                Background = System.Windows.Media.Brushes.White,
-                BorderThickness = new Thickness(1),
-                BorderBrush = Brush("#E4E7EC"),
-                GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-                HorizontalGridLinesBrush = Brush("#F3F4F6"),
-                RowHeight = 36,
-                ColumnHeaderHeight = 36,
-                FontSize = 13
-            };
-
-            dg.Columns.Add(new DataGridTextColumn { Header = "Tipo", Binding = new System.Windows.Data.Binding("TypeIcon"), Width = 50 });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Nome", Binding = new System.Windows.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Dimensione", Binding = new System.Windows.Data.Binding("SizeDisplay"), Width = 100 });
-            dg.Columns.Add(new DataGridTextColumn { Header = "Modificato", Binding = new System.Windows.Data.Binding("ModifiedDisplay"), Width = 140 });
-
-            var displayItems = items.Select(i => new
-            {
-                TypeIcon = i.IsFolder ? "📁" : "📄",
-                i.Name,
-                SizeDisplay = i.IsFolder ? "" : FormatSize(i.Size),
-                ModifiedDisplay = i.Modified?.ToString("dd/MM/yyyy HH:mm") ?? ""
-            }).ToList();
-
-            dg.ItemsSource = displayItems;
-            dg.MouseDoubleClick += (s, ev) =>
-            {
-                if (dg.SelectedIndex >= 0 && dg.SelectedIndex < items.Count)
-                {
-                    var sel = items[dg.SelectedIndex];
-                    if (sel.IsFolder)
-                        ShowDocuments(projectId, sel.RelativePath);
-                    else
-                        OpenFile(Path.Combine(serverPath, sel.RelativePath));
-                }
-            };
-
-            SectionContent.Content = dg;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new DocumentManagerControl();
+        ctrl.FilesChanged += () => RefreshDocNode(projectId);
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId, subPath);
     }
-
     // === CHAT === 
     private void ShowChat(int projectId)
     {

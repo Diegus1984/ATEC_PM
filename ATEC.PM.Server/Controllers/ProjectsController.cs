@@ -214,6 +214,7 @@ public class ProjectsController : ControllerBase
             foreach (var dir in Directory.GetDirectories(targetPath).OrderBy(d => d))
             {
                 var di = new DirectoryInfo(dir);
+                if (di.Name.Equals("Chat", StringComparison.OrdinalIgnoreCase)) continue;
                 items.Add(new FileItem
                 {
                     Name = di.Name,
@@ -264,6 +265,8 @@ public class ProjectsController : ControllerBase
         foreach (var dir in Directory.GetDirectories(currentPath).OrderBy(d => d))
         {
             var di = new DirectoryInfo(dir);
+            if (di.Name.Equals("Chat", StringComparison.OrdinalIgnoreCase)) continue;
+
             var node = new FileTreeItem
             {
                 Name = di.Name,
@@ -845,4 +848,208 @@ public class ProjectsController : ControllerBase
     }
 
 
+    // --- UPLOAD FILE ---
+    [HttpPost("{id}/upload")]
+    public async Task<IActionResult> UploadFile(int id, [FromQuery] string? subPath, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(ApiResponse<string>.Fail("Nessun file selezionato."));
+
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string targetDir = string.IsNullOrEmpty(subPath)
+            ? serverPath
+            : Path.GetFullPath(Path.Combine(serverPath, subPath));
+
+        if (!targetDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        LongPathHelper.CreateDirectory(targetDir);
+
+        string filePath = Path.Combine(targetDir, file.FileName);
+        if (LongPathHelper.FileExists(filePath))
+        {
+            string name = Path.GetFileNameWithoutExtension(file.FileName);
+            string ext = Path.GetExtension(file.FileName);
+            int counter = 1;
+            do { filePath = Path.Combine(targetDir, $"{name}_{counter}{ext}"); counter++; }
+            while (LongPathHelper.FileExists(filePath));
+        }
+
+        using (var stream = LongPathHelper.CreateFileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        return Ok(ApiResponse<string>.Ok(Path.GetFileName(filePath), "File caricato."));
+    }
+
+    // --- UPLOAD MULTIPLO ---
+    [HttpPost("{id}/upload-multiple")]
+    public async Task<IActionResult> UploadMultiple(int id, [FromQuery] string? subPath, List<IFormFile> files)
+    {
+        if (files == null || !files.Any())
+            return BadRequest(ApiResponse<string>.Fail("Nessun file selezionato."));
+
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string targetDir = string.IsNullOrEmpty(subPath)
+            ? serverPath
+            : Path.GetFullPath(Path.Combine(serverPath, subPath));
+
+        if (!targetDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        LongPathHelper.CreateDirectory(targetDir);
+
+        int count = 0;
+        foreach (var file in files)
+        {
+            string filePath = Path.Combine(targetDir, file.FileName);
+            if (LongPathHelper.FileExists(filePath))
+            {
+                string name = Path.GetFileNameWithoutExtension(file.FileName);
+                string ext = Path.GetExtension(file.FileName);
+                int counter = 1;
+                do { filePath = Path.Combine(targetDir, $"{name}_{counter}{ext}"); counter++; }
+                while (LongPathHelper.FileExists(filePath));
+            }
+            using var stream = LongPathHelper.CreateFileStream(filePath, FileMode.Create);
+            await file.CopyToAsync(stream);
+            count++;
+        }
+
+        return Ok(ApiResponse<string>.Ok($"{count} file caricati."));
+    }
+
+    // --- CREA SOTTOCARTELLA ---
+    [HttpPost("{id}/create-subfolder")]
+    public IActionResult CreateSubfolder(int id, [FromBody] SubfolderRequest req)
+    {
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string parentDir = string.IsNullOrEmpty(req.SubPath)
+            ? serverPath
+            : Path.GetFullPath(Path.Combine(serverPath, req.SubPath));
+
+        if (!parentDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        string newFolder = Path.Combine(parentDir, req.FolderName);
+        if (LongPathHelper.DirectoryExists(newFolder))
+            return BadRequest(ApiResponse<string>.Fail("La cartella esiste già."));
+
+        LongPathHelper.CreateDirectory(newFolder);
+        return Ok(ApiResponse<string>.Ok(req.FolderName, "Cartella creata."));
+    }
+
+    // --- RINOMINA FILE/CARTELLA ---
+    [HttpPost("{id}/rename")]
+    public IActionResult RenameItem(int id, [FromBody] RenameRequest req)
+    {
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string oldPath = Path.GetFullPath(Path.Combine(serverPath, req.OldPath));
+        string parentDir = Path.GetDirectoryName(oldPath) ?? serverPath;
+        string newPath = Path.Combine(parentDir, req.NewName);
+
+        if (!oldPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        if (LongPathHelper.DirectoryExists(oldPath))
+        {
+            if (LongPathHelper.DirectoryExists(newPath))
+                return BadRequest(ApiResponse<string>.Fail("Una cartella con questo nome esiste già."));
+            LongPathHelper.MoveDirectory(oldPath, newPath);
+        }
+        else if (LongPathHelper.FileExists(oldPath))
+        {
+            if (LongPathHelper.FileExists(newPath))
+                return BadRequest(ApiResponse<string>.Fail("Un file con questo nome esiste già."));
+            LongPathHelper.MoveFile(oldPath, newPath);
+        }
+        else
+            return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
+
+        return Ok(ApiResponse<string>.Ok(req.NewName, "Rinominato."));
+    }
+
+    // --- ELIMINA FILE/CARTELLA ---
+    [HttpPost("{id}/delete-item")]
+    public IActionResult DeleteItem(int id, [FromBody] DeleteItemRequest req)
+    {
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string fullPath = Path.GetFullPath(Path.Combine(serverPath, req.ItemPath));
+
+        if (!fullPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        if (Path.GetFullPath(fullPath) == Path.GetFullPath(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Non è possibile eliminare la cartella root."));
+
+        if (LongPathHelper.DirectoryExists(fullPath))
+            LongPathHelper.DeleteDirectory(fullPath, true);
+        else if (LongPathHelper.FileExists(fullPath))
+            LongPathHelper.DeleteFile(fullPath);
+        else
+            return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
+
+        return Ok(ApiResponse<bool>.Ok(true, "Eliminato."));
+    }
+
+    // --- SPOSTA FILE/CARTELLA ---
+    [HttpPost("{id}/move-item")]
+    public IActionResult MoveItem(int id, [FromBody] MoveItemRequest req)
+    {
+        using var c = _db.Open();
+        var serverPath = c.ExecuteScalar<string?>("SELECT server_path FROM projects WHERE id=@Id", new { Id = id });
+        if (string.IsNullOrEmpty(serverPath))
+            return BadRequest(ApiResponse<string>.Fail("Cartella commessa non creata."));
+
+        string sourcePath = Path.GetFullPath(Path.Combine(serverPath, req.SourcePath));
+        string destDir = Path.GetFullPath(Path.Combine(serverPath, req.DestinationFolder));
+        string fileName = Path.GetFileName(sourcePath);
+        string destPath = Path.Combine(destDir, fileName);
+
+        string rootFull = Path.GetFullPath(serverPath);
+        if (!sourcePath.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase) ||
+            !destDir.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
+
+        if (!LongPathHelper.DirectoryExists(destDir))
+            return BadRequest(ApiResponse<string>.Fail("Cartella destinazione non trovata."));
+
+        if (LongPathHelper.DirectoryExists(sourcePath))
+        {
+            if (LongPathHelper.DirectoryExists(destPath))
+                return BadRequest(ApiResponse<string>.Fail("Una cartella con questo nome esiste già nella destinazione."));
+            LongPathHelper.MoveDirectory(sourcePath, destPath);
+        }
+        else if (LongPathHelper.FileExists(sourcePath))
+        {
+            if (LongPathHelper.FileExists(destPath))
+                return BadRequest(ApiResponse<string>.Fail("Un file con questo nome esiste già nella destinazione."));
+            LongPathHelper.MoveFile(sourcePath, destPath);
+        }
+        else
+            return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
+
+        return Ok(ApiResponse<bool>.Ok(true, "Spostato."));
+    }
 }
