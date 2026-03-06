@@ -71,19 +71,15 @@ public class TimesheetController : ControllerBase
         }
         else
         {
-            // Tecnico: fasi del suo reparto + competenze + trasversali
+            // Tecnico/Esterno: solo fasi dove è fisicamente assegnato
             phases = c.Query<TimesheetPhaseOption>(@"
                 SELECT pp.id AS PhaseId,
                        CONCAT(p.code,' - ',COALESCE(NULLIF(pp.custom_name,''), pt.name)) AS Display
                 FROM project_phases pp
                 JOIN phase_templates pt ON pt.id = pp.phase_template_id
                 JOIN projects p ON p.id = pp.project_id
+                JOIN phase_assignments pa ON pa.project_phase_id = pp.id AND pa.employee_id = @EmpId
                 WHERE p.status IN ('ACTIVE','DRAFT') AND pp.status <> 'COMPLETED'
-                  AND (
-                      pp.department_id IS NULL
-                      OR pp.department_id IN (SELECT department_id FROM employee_departments WHERE employee_id = @EmpId)
-                      OR pp.department_id IN (SELECT department_id FROM employee_competences WHERE employee_id = @EmpId)
-                  )
                 ORDER BY p.code, pp.sort_order",
                 new { EmpId = employeeId }).ToList();
         }
@@ -141,5 +137,52 @@ public class TimesheetController : ControllerBase
             new { EmpId = employeeId, Start = start, End = end }).ToList();
 
         return Ok(ApiResponse<List<TimesheetSummaryRow>>.Ok(rows));
+    }
+
+    /// <summary>
+    /// Lista dipendenti per cui l'utente corrente può registrare ore.
+    /// Restituisce: se stesso + dipendenti EXTERNAL dei propri reparti.
+    /// PM/ADMIN: se stesso + tutti gli EXTERNAL.
+    /// </summary>
+    [HttpGet("registrable-employees")]
+    public IActionResult GetRegistrableEmployees()
+    {
+        using var c = _db.Open();
+        int empId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+        string? role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        bool isPm = role == "ADMIN" || role == "PM";
+
+        var list = new List<LookupItem>();
+
+        // Aggiungi se stesso per primo
+        var me = c.QueryFirstOrDefault<LookupItem>(
+            "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE id=@Id",
+            new { Id = empId });
+        if (me != null) list.Add(me);
+
+        if (isPm)
+        {
+            // PM/ADMIN: tutti gli EXTERNAL attivi
+            var externals = c.Query<LookupItem>(@"
+                SELECT id, CONCAT(first_name,' ',last_name,' (EXT)') AS Name 
+                FROM employees 
+                WHERE emp_type='EXTERNAL' AND status='ACTIVE' AND id <> @Id
+                ORDER BY last_name", new { Id = empId }).ToList();
+            list.AddRange(externals);
+        }
+        else if (role == "RESP_REPARTO")
+        {
+            // RESP: EXTERNAL dei propri reparti
+            var externals = c.Query<LookupItem>(@"
+                SELECT DISTINCT e.id, CONCAT(e.first_name,' ',e.last_name,' (EXT)') AS Name 
+                FROM employees e
+                JOIN employee_departments ed ON ed.employee_id = e.id
+                WHERE e.emp_type='EXTERNAL' AND e.status='ACTIVE' AND e.id <> @Id
+                  AND ed.department_id IN (SELECT department_id FROM employee_departments WHERE employee_id = @Id)
+                ORDER BY e.last_name", new { Id = empId }).ToList();
+            list.AddRange(externals);
+        }
+
+        return Ok(ApiResponse<List<LookupItem>>.Ok(list));
     }
 }

@@ -17,14 +17,46 @@ public partial class TimesheetEntryDialog : Window
         _existing = existing;
         dpDate.SelectedDate = existing?.WorkDate ?? DateTime.Today;
         Title = existing == null ? "Registra Ore" : "Modifica Ore";
-        Loaded += async (_, _) => await LoadPhases();
+        Loaded += async (_, _) =>
+        {
+            await LoadEmployeeDropdown();
+            await LoadPhases();
+        };
+    }
+
+    private async Task LoadEmployeeDropdown()
+    {
+        // Solo RESP_REPARTO, PM, ADMIN vedono il dropdown
+        if (!App.CurrentUser.IsPm && App.CurrentUser.UserRole != "RESP_REPARTO")
+            return;
+
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/timesheet/registrable-employees");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var employees = JsonSerializer.Deserialize<List<LookupItem>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            if (employees.Count > 1) // se c'è solo te stesso, non serve il dropdown
+            {
+                cmbEmployee.ItemsSource = employees;
+                cmbEmployee.SelectedValue = _existing?.EmployeeId ?? App.UserId;
+                cmbEmployee.Visibility = Visibility.Visible;
+                lblRegistraPer.Visibility = Visibility.Visible;
+            }
+        }
+        catch { }
     }
 
     private async Task LoadPhases()
     {
         try
         {
-            var json = await ApiClient.GetAsync($"/api/timesheet/phases-for-employee?employeeId={App.UserId}");
+            int empId = GetSelectedEmployeeId();
+            var json = await ApiClient.GetAsync($"/api/timesheet/phases-for-employee?employeeId={empId}");
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
@@ -35,11 +67,9 @@ public partial class TimesheetEntryDialog : Window
 
                 if (_existing != null)
                 {
-                    // Seleziona la fase corrente
                     cmbPhase.SelectedValue = _existing.ProjectPhaseId;
                     txtHours.Text = _existing.Hours.ToString("G", CultureInfo.InvariantCulture);
                     txtNotes.Text = _existing.Notes;
-                    // Seleziona il tipo
                     foreach (ComboBoxItem item in cmbType.Items)
                     {
                         if (item.Content?.ToString() == _existing.EntryType)
@@ -58,6 +88,19 @@ public partial class TimesheetEntryDialog : Window
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }
 
+    private int GetSelectedEmployeeId()
+    {
+        if (cmbEmployee.Visibility == Visibility.Visible && cmbEmployee.SelectedValue is int id)
+            return id;
+        return App.UserId;
+    }
+
+    private async void CmbEmployee_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (cmbEmployee.SelectedValue == null) return;
+        await LoadPhases();
+    }
+
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
         if (cmbPhase.SelectedValue == null) { txtError.Text = "Seleziona una commessa/fase."; return; }
@@ -71,7 +114,7 @@ public partial class TimesheetEntryDialog : Window
             var obj = new
             {
                 id = _existing?.Id ?? 0,
-                employeeId = App.UserId,
+                employeeId = GetSelectedEmployeeId(),
                 projectPhaseId = (int)cmbPhase.SelectedValue,
                 workDate = dpDate.SelectedDate.Value.ToString("yyyy-MM-dd"),
                 hours,
