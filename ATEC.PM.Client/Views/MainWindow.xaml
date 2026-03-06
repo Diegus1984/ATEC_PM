@@ -171,6 +171,12 @@
                         Content="  Fasi Template"
                         Style="{StaticResource NavBtn}"
                         Tag="FasiTemplate" />
+                    <Button
+                        x:Name="btnReparti"
+                        Click="Nav_Click"
+                        Content="  Reparti"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Reparti" />
 
                     <!--  SESSIONE  -->
                     <TextBlock

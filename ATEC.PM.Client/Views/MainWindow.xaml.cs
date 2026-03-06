@@ -32,7 +32,9 @@ public partial class MainWindow : Window
 
         // Sezione GESTIONE AVANZATA
         btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
-        lblAvanzata.Visibility = btnFasiTemplate.Visibility;
+        btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || btnReparti.Visibility == Visibility.Visible)
+            ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnReport.Visibility = PermissionEngine.CanAccessReport(u) ? Visibility.Visible : Visibility.Collapsed;
@@ -73,6 +75,7 @@ public partial class MainWindow : Window
             case "Catalogo": PageContent.Navigate(new CatalogPage()); break;
             case "Utenti": PageContent.Navigate(new UsersPage()); break;
             case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
+            case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
             default: PageContent.Content = null; break;
         }
     }
