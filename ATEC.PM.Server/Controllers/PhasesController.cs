@@ -284,5 +284,13 @@ public class PhasesController : ControllerBase
         c.Execute("DELETE FROM phase_templates WHERE id=@Id", new { Id = id });
         return Ok(ApiResponse<bool>.Ok(true));
     }
-
+    [HttpGet("{id}/project-id")]
+    public IActionResult GetProjectId(int id)
+    {
+        using var c = _db.Open();
+        int? projectId = c.ExecuteScalar<int?>(
+            "SELECT project_id FROM project_phases WHERE id=@Id", new { Id = id });
+        if (projectId == null) return NotFound(ApiResponse<string>.Fail("Fase non trovata"));
+        return Ok(ApiResponse<int>.Ok(projectId.Value));
+    }
 }

@@ -10,6 +10,7 @@ namespace ATEC.PM.Client.Views;
 public partial class TimesheetEntryDialog : Window
 {
     private readonly TimesheetEntryDto? _existing;
+    private bool _loading = true;
 
     public TimesheetEntryDialog(DateTime weekStart, TimesheetEntryDto? existing = null)
     {
@@ -20,13 +21,13 @@ public partial class TimesheetEntryDialog : Window
         Loaded += async (_, _) =>
         {
             await LoadEmployeeDropdown();
-            await LoadPhases();
+            await LoadProjects();
+            _loading = false;
         };
     }
 
     private async Task LoadEmployeeDropdown()
     {
-        // Solo RESP_REPARTO, PM, ADMIN vedono il dropdown
         if (!App.CurrentUser.IsPm && App.CurrentUser.UserRole != "RESP_REPARTO")
             return;
 
@@ -40,7 +41,7 @@ public partial class TimesheetEntryDialog : Window
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            if (employees.Count > 1) // se c'è solo te stesso, non serve il dropdown
+            if (employees.Count > 1)
             {
                 cmbEmployee.ItemsSource = employees;
                 cmbEmployee.SelectedValue = _existing?.EmployeeId ?? App.UserId;
@@ -51,41 +52,87 @@ public partial class TimesheetEntryDialog : Window
         catch { }
     }
 
-    private async Task LoadPhases()
+    private async Task LoadProjects()
     {
         try
         {
             int empId = GetSelectedEmployeeId();
-            var json = await ApiClient.GetAsync($"/api/timesheet/phases-for-employee?employeeId={empId}");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var phases = JsonSerializer.Deserialize<List<TimesheetPhaseOption>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                cmbPhase.ItemsSource = phases;
+            string json = await ApiClient.GetAsync($"/api/timesheet/projects-for-employee?employeeId={empId}");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
-                if (_existing != null)
+            var projects = JsonSerializer.Deserialize<List<TimesheetProjectOption>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            cmbProject.ItemsSource = projects;
+
+            if (_existing != null)
+            {
+                int existingProjectId = await GetProjectIdForPhase(_existing.ProjectPhaseId);
+                cmbProject.SelectedValue = existingProjectId;
+            }
+            else if (projects.Count > 0)
+            {
+                cmbProject.SelectedIndex = 0;
+            }
+
+            // Carica le fasi per la commessa selezionata
+            await LoadPhases();
+        }
+        catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task LoadPhases()
+    {
+        try
+        {
+            if (cmbProject.SelectedValue is not int projectId) return;
+
+            int empId = GetSelectedEmployeeId();
+            string json = await ApiClient.GetAsync($"/api/timesheet/phases-for-employee?employeeId={empId}&projectId={projectId}");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var phases = JsonSerializer.Deserialize<List<TimesheetPhaseOption>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            cmbPhase.ItemsSource = phases;
+
+            if (_existing != null)
+            {
+                cmbPhase.SelectedValue = _existing.ProjectPhaseId;
+                txtHours.Text = _existing.Hours.ToString("G", CultureInfo.InvariantCulture);
+                txtNotes.Text = _existing.Notes;
+                foreach (ComboBoxItem item in cmbType.Items)
                 {
-                    cmbPhase.SelectedValue = _existing.ProjectPhaseId;
-                    txtHours.Text = _existing.Hours.ToString("G", CultureInfo.InvariantCulture);
-                    txtNotes.Text = _existing.Notes;
-                    foreach (ComboBoxItem item in cmbType.Items)
+                    if (item.Content?.ToString() == _existing.EntryType)
                     {
-                        if (item.Content?.ToString() == _existing.EntryType)
-                        {
-                            cmbType.SelectedItem = item;
-                            break;
-                        }
+                        cmbType.SelectedItem = item;
+                        break;
                     }
                 }
-                else if (phases.Count > 0)
-                {
-                    cmbPhase.SelectedIndex = 0;
-                }
+            }
+            else if (phases.Count > 0)
+            {
+                cmbPhase.SelectedIndex = 0;
             }
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task<int> GetProjectIdForPhase(int phaseId)
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync($"/api/phases/{phaseId}/project-id");
+            JsonDocument doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+                return doc.RootElement.GetProperty("data").GetInt32();
+        }
+        catch { }
+        return 0;
     }
 
     private int GetSelectedEmployeeId()
@@ -97,13 +144,19 @@ public partial class TimesheetEntryDialog : Window
 
     private async void CmbEmployee_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (cmbEmployee.SelectedValue == null) return;
+        if (_loading || cmbEmployee.SelectedValue == null) return;
+        await LoadProjects();
+    }
+
+    private async void CmbProject_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || cmbProject.SelectedValue == null) return;
         await LoadPhases();
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
-        if (cmbPhase.SelectedValue == null) { txtError.Text = "Seleziona una commessa/fase."; return; }
+        if (cmbPhase.SelectedValue == null) { txtError.Text = "Seleziona una fase."; return; }
         if (dpDate.SelectedDate == null) { txtError.Text = "Seleziona una data."; return; }
         if (!decimal.TryParse(txtHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var hours) || hours <= 0)
         { txtError.Text = "Ore non valide."; return; }

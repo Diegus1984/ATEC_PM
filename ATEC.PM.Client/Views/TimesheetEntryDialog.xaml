@@ -62,7 +62,16 @@
                 SelectionChanged="CmbEmployee_SelectionChanged"
                 Visibility="Collapsed" />
 
-            <TextBlock Style="{StaticResource Lbl}" Text="COMMESSA / FASE *" />
+            <TextBlock Style="{StaticResource Lbl}" Text="COMMESSA *" />
+            <ComboBox
+                x:Name="cmbProject"
+                Height="34"
+                DisplayMemberPath="Display"
+                FontSize="13"
+                SelectedValuePath="ProjectId"
+                SelectionChanged="CmbProject_SelectionChanged" />
+
+            <TextBlock Style="{StaticResource Lbl}" Text="FASE *" />
             <ComboBox
                 x:Name="cmbPhase"
                 Height="34"

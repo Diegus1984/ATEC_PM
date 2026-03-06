@@ -36,52 +36,73 @@ public class TimesheetController : ControllerBase
         return Ok(ApiResponse<List<TimesheetEntryDto>>.Ok(entries));
     }
 
-    /// <summary>
-    /// Restituisce le fasi su cui il tecnico può registrare ore.
-    /// - ADMIN/PM: tutte le fasi di commesse aperte
-    /// - TECH/RESP_REPARTO: solo fasi del proprio reparto (employee_departments),
-    ///   fasi dei reparti di competenza (employee_competences),
-    ///   e fasi trasversali (department_id IS NULL)
-    /// </summary>
-    [HttpGet("phases-for-employee")]
-    public IActionResult GetPhasesForEmployee([FromQuery] int employeeId)
+    [HttpGet("projects-for-employee")]
+    public IActionResult GetProjectsForEmployee([FromQuery] int employeeId)
     {
         using var c = _db.Open();
-
-        // Recupera ruolo utente
         string? role = c.QueryFirstOrDefault<string>(
-    "SELECT user_role FROM employees WHERE id = @EmpId",
-    new { EmpId = employeeId });
+            "SELECT user_role FROM employees WHERE id = @EmpId", new { EmpId = employeeId });
+        bool isPm = role == "ADMIN" || role == "PM";
 
+        List<TimesheetProjectOption> projects;
+
+        if (isPm)
+        {
+            projects = c.Query<TimesheetProjectOption>(@"
+                SELECT DISTINCT p.id AS ProjectId, CONCAT(p.code,' - ',p.title) AS Display
+                FROM projects p
+                WHERE p.status IN ('ACTIVE','DRAFT')
+                ORDER BY p.code").ToList();
+        }
+        else
+        {
+            projects = c.Query<TimesheetProjectOption>(@"
+                SELECT DISTINCT p.id AS ProjectId, CONCAT(p.code,' - ',p.title) AS Display
+                FROM projects p
+                JOIN project_phases pp ON pp.project_id = p.id
+                JOIN phase_assignments pa ON pa.project_phase_id = pp.id AND pa.employee_id = @EmpId
+                WHERE p.status IN ('ACTIVE','DRAFT')
+                ORDER BY p.code", new { EmpId = employeeId }).ToList();
+        }
+
+        return Ok(ApiResponse<List<TimesheetProjectOption>>.Ok(projects));
+    }
+
+    /// <summary>
+    /// Fasi di una commessa assegnate al dipendente. PM/ADMIN vedono tutte.
+    /// </summary>
+    [HttpGet("phases-for-employee")]
+    public IActionResult GetPhasesForEmployee([FromQuery] int employeeId, [FromQuery] int projectId)
+    {
+        using var c = _db.Open();
+        string? role = c.QueryFirstOrDefault<string>(
+            "SELECT user_role FROM employees WHERE id = @EmpId", new { EmpId = employeeId });
         bool isPm = role == "ADMIN" || role == "PM";
 
         List<TimesheetPhaseOption> phases;
 
         if (isPm)
         {
-            // PM/ADMIN vedono tutte le fasi di commesse attive
             phases = c.Query<TimesheetPhaseOption>(@"
                 SELECT pp.id AS PhaseId,
-                       CONCAT(p.code,' - ',COALESCE(NULLIF(pp.custom_name,''), pt.name)) AS Display
+                       COALESCE(NULLIF(pp.custom_name,''), pt.name) AS Display
                 FROM project_phases pp
                 JOIN phase_templates pt ON pt.id = pp.phase_template_id
-                JOIN projects p ON p.id = pp.project_id
-                WHERE p.status IN ('ACTIVE','DRAFT') AND pp.status <> 'COMPLETED'
-                ORDER BY p.code, pp.sort_order").ToList();
+                WHERE pp.project_id = @ProjectId AND pp.status <> 'COMPLETED'
+                ORDER BY pp.sort_order",
+                new { ProjectId = projectId }).ToList();
         }
         else
         {
-            // Tecnico/Esterno: solo fasi dove è fisicamente assegnato
             phases = c.Query<TimesheetPhaseOption>(@"
                 SELECT pp.id AS PhaseId,
-                       CONCAT(p.code,' - ',COALESCE(NULLIF(pp.custom_name,''), pt.name)) AS Display
+                       COALESCE(NULLIF(pp.custom_name,''), pt.name) AS Display
                 FROM project_phases pp
                 JOIN phase_templates pt ON pt.id = pp.phase_template_id
-                JOIN projects p ON p.id = pp.project_id
                 JOIN phase_assignments pa ON pa.project_phase_id = pp.id AND pa.employee_id = @EmpId
-                WHERE p.status IN ('ACTIVE','DRAFT') AND pp.status <> 'COMPLETED'
-                ORDER BY p.code, pp.sort_order",
-                new { EmpId = employeeId }).ToList();
+                WHERE pp.project_id = @ProjectId AND pp.status <> 'COMPLETED'
+                ORDER BY pp.sort_order",
+                new { EmpId = employeeId, ProjectId = projectId }).ToList();
         }
 
         return Ok(ApiResponse<List<TimesheetPhaseOption>>.Ok(phases));
