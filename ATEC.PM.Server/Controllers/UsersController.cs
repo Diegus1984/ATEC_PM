@@ -21,7 +21,7 @@ public class UsersController : ControllerBase
         using var c = _db.Open();
 
         var employees = c.Query<UserListItem>(
-            @"SELECT id, badge_number AS BadgeNumber,
+            @"SELECT id,
                      CONCAT(first_name,' ',last_name) AS FullName,
                      email, user_role AS UserRole, status,
                      username,

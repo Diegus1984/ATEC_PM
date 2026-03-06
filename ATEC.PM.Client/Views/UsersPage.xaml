@@ -159,10 +159,6 @@
             </DataGrid.CellStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn
-                    Width="80"
-                    Binding="{Binding BadgeNumber}"
-                    Header="Badge" />
-                <DataGridTextColumn
                     Width="*"
                     Binding="{Binding FullName}"
                     Header="Nome" />

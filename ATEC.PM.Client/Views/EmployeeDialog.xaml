@@ -37,29 +37,66 @@
     </Window.Resources>
 
     <DockPanel>
-        <!-- BOTTOM BUTTONS -->
-        <Border Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
+        <!--  BOTTOM BUTTONS  -->
+        <Border
+            Padding="16,12"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
             <DockPanel>
-                <TextBlock x:Name="txtError" VerticalAlignment="Center" FontSize="12" Foreground="#EF4444" TextWrapping="Wrap" DockPanel.Dock="Left" MaxWidth="300" />
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button Width="90" Height="34" Background="#F3F4F6" BorderThickness="0" Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" Foreground="#374151" />
-                    <Button x:Name="btnSave" Width="110" Height="34" Margin="8,0,0,0" Background="#4F6EF7" BorderThickness="0" Click="BtnSave_Click" Content="Salva" Cursor="Hand" FontWeight="SemiBold" Foreground="White" />
+                <TextBlock
+                    x:Name="txtError"
+                    MaxWidth="300"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
+                    FontSize="12"
+                    Foreground="#EF4444"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        Width="90"
+                        Height="34"
+                        Background="#F3F4F6"
+                        BorderThickness="0"
+                        Click="BtnCancel_Click"
+                        Content="Annulla"
+                        Cursor="Hand"
+                        Foreground="#374151" />
+                    <Button
+                        x:Name="btnSave"
+                        Width="110"
+                        Height="34"
+                        Margin="8,0,0,0"
+                        Background="#4F6EF7"
+                        BorderThickness="0"
+                        Click="BtnSave_Click"
+                        Content="Salva"
+                        Cursor="Hand"
+                        FontWeight="SemiBold"
+                        Foreground="White" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- FORM -->
+        <!--  FORM  -->
         <ScrollViewer Padding="16,12,16,8" VerticalScrollBarVisibility="Auto">
             <StackPanel>
 
-                <!-- ═══ ANAGRAFICA ═══ -->
-                <Expander x:Name="expAnagrafica" IsExpanded="True" Margin="0,0,0,8">
+                <!--  ═══ ANAGRAFICA ═══  -->
+                <Expander
+                    x:Name="expAnagrafica"
+                    Margin="0,0,0,8"
+                    IsExpanded="True">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="👤  ANAGRAFICA" />
                         </Border>
                     </Expander.Header>
-                    <Border Style="{StaticResource ExpBorder}" Padding="16,4,16,12">
+                    <Border Padding="16,4,16,12" Style="{StaticResource ExpBorder}">
                         <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -78,84 +115,79 @@
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="12" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="BADGE" />
-                                    <TextBox x:Name="txtBadge" Style="{StaticResource FieldInput}" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="EMAIL" />
                                     <TextBox x:Name="txtEmail" Style="{StaticResource FieldInput}" />
                                 </StackPanel>
-                            </Grid>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="TELEFONO" />
-                                    <TextBox x:Name="txtPhone" Style="{StaticResource FieldInput}" />
-                                </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="TIPO" />
-                                    <ComboBox x:Name="cmbType" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13">
+                                    <ComboBox
+                                        x:Name="cmbType"
+                                        Height="32"
+                                        Padding="8,5"
+                                        BorderBrush="#E4E7EC"
+                                        FontSize="13">
                                         <ComboBoxItem Content="INTERNAL" IsSelected="True" />
                                         <ComboBoxItem Content="EXTERNAL" />
                                     </ComboBox>
                                 </StackPanel>
                             </Grid>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="COSTO/H (€)" />
-                                    <TextBox x:Name="txtHourlyCost" Style="{StaticResource FieldInput}" Text="0" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="ORE/SETT" />
-                                    <TextBox x:Name="txtWeeklyHours" Style="{StaticResource FieldInput}" Text="40" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="4">
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="DATA ASSUNZIONE" />
-                                    <DatePicker x:Name="dpHireDate" Height="32" BorderBrush="#E4E7EC" FontSize="13" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="NOTE" />
-                            <TextBox x:Name="txtNotes" Height="52" Padding="8,5" AcceptsReturn="True" BorderBrush="#E4E7EC" FontSize="13" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
                         </StackPanel>
                     </Border>
                 </Expander>
 
-                <!-- ═══ ACCESSO E RUOLO ═══ -->
-                <Expander x:Name="expAccesso" IsExpanded="True" Margin="0,0,0,8">
+                <!--  ═══ ACCESSO E RUOLO ═══  -->
+                <Expander
+                    x:Name="expAccesso"
+                    Margin="0,0,0,8"
+                    IsExpanded="True">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="🔐  ACCESSO E RUOLO" />
                         </Border>
                     </Expander.Header>
-                    <Border Style="{StaticResource ExpBorder}" Padding="16,8,16,12">
+                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
                         <StackPanel>
-                            <!-- Ruolo -->
+                            <!--  Ruolo  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="RUOLO SISTEMA" />
-                            <Border Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" Padding="12,8">
+                            <Border
+                                Padding="12,8"
+                                Background="#F9FAFB"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1">
                                 <UniformGrid Columns="2" Rows="2">
-                                    <RadioButton x:Name="rbTech"  Content="TECH — Tecnico operativo"       FontSize="12" GroupName="Role" Margin="0,3" IsChecked="True" />
-                                    <RadioButton x:Name="rbResp"  Content="RESP — Responsabile reparto"    FontSize="12" GroupName="Role" Margin="0,3" />
-                                    <RadioButton x:Name="rbPm"    Content="PM — Project Manager"           FontSize="12" GroupName="Role" Margin="0,3" />
-                                    <RadioButton x:Name="rbAdmin" Content="ADMIN — Accesso totale"         FontSize="12" GroupName="Role" Margin="0,3" />
+                                    <RadioButton
+                                        x:Name="rbTech"
+                                        Margin="0,3"
+                                        Content="TECH — Tecnico operativo"
+                                        FontSize="12"
+                                        GroupName="Role"
+                                        IsChecked="True" />
+                                    <RadioButton
+                                        x:Name="rbResp"
+                                        Margin="0,3"
+                                        Content="RESP — Responsabile reparto"
+                                        FontSize="12"
+                                        GroupName="Role" />
+                                    <RadioButton
+                                        x:Name="rbPm"
+                                        Margin="0,3"
+                                        Content="PM — Project Manager"
+                                        FontSize="12"
+                                        GroupName="Role" />
+                                    <RadioButton
+                                        x:Name="rbAdmin"
+                                        Margin="0,3"
+                                        Content="ADMIN — Accesso totale"
+                                        FontSize="12"
+                                        GroupName="Role" />
                                 </UniformGrid>
                             </Border>
-                            <!-- Credenziali -->
+                            <!--  Credenziali  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="USERNAME" />
                             <TextBox x:Name="txtUsername" Style="{StaticResource FieldInput}" />
                             <Grid Margin="0,0,0,0">
@@ -166,17 +198,39 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="PASSWORD" />
-                                    <PasswordBox x:Name="txtPassword" Height="32" Padding="8,5" FontSize="13" BorderBrush="#E4E7EC" BorderThickness="1" />
+                                    <PasswordBox
+                                        x:Name="txtPassword"
+                                        Height="32"
+                                        Padding="8,5"
+                                        BorderBrush="#E4E7EC"
+                                        BorderThickness="1"
+                                        FontSize="13" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="CONFERMA PASSWORD" />
-                                    <PasswordBox x:Name="txtPasswordConfirm" Height="32" Padding="8,5" FontSize="13" BorderBrush="#E4E7EC" BorderThickness="1" />
+                                    <PasswordBox
+                                        x:Name="txtPasswordConfirm"
+                                        Height="32"
+                                        Padding="8,5"
+                                        BorderBrush="#E4E7EC"
+                                        BorderThickness="1"
+                                        FontSize="13" />
                                 </StackPanel>
                             </Grid>
-                            <TextBlock x:Name="txtPasswordHint" Margin="0,4,0,0" FontSize="11" Foreground="#9CA3AF" Text="Lascia vuoto per non modificare la password" />
-                            <!-- Stato -->
+                            <TextBlock
+                                x:Name="txtPasswordHint"
+                                Margin="0,4,0,0"
+                                FontSize="11"
+                                Foreground="#9CA3AF"
+                                Text="Lascia vuoto per non modificare la password" />
+                            <!--  Stato  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="STATO" />
-                            <ComboBox x:Name="cmbStatus" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13">
+                            <ComboBox
+                                x:Name="cmbStatus"
+                                Height="32"
+                                Padding="8,5"
+                                BorderBrush="#E4E7EC"
+                                FontSize="13">
                                 <ComboBoxItem Content="ACTIVE" IsSelected="True" />
                                 <ComboBoxItem Content="ON_LEAVE" />
                                 <ComboBoxItem Content="SICK" />
@@ -186,14 +240,17 @@
                     </Border>
                 </Expander>
 
-                <!-- ═══ REPARTI ═══ -->
-                <Expander x:Name="expReparti" IsExpanded="False" Margin="0,0,0,8">
+                <!--  ═══ REPARTI ═══  -->
+                <Expander
+                    x:Name="expReparti"
+                    Margin="0,0,0,8"
+                    IsExpanded="False">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="🏭  REPARTI DI APPARTENENZA" />
                         </Border>
                     </Expander.Header>
-                    <Border Style="{StaticResource ExpBorder}" Padding="16,8,16,12">
+                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
                         <StackPanel>
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
@@ -202,24 +259,58 @@
                                     <ColumnDefinition Width="80" />
                                     <ColumnDefinition Width="80" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="1" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Text="REPARTO" />
-                                <TextBlock Grid.Column="2" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Center" Text="★ RESP." />
-                                <TextBlock Grid.Column="3" FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Center" Text="◆ PRIM." />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="#9CA3AF"
+                                    Text="REPARTO" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    HorizontalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="#9CA3AF"
+                                    Text="★ RESP." />
+                                <TextBlock
+                                    Grid.Column="3"
+                                    HorizontalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="#9CA3AF"
+                                    Text="◆ PRIM." />
                             </Grid>
                             <ItemsControl x:Name="lstDeptMembership">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid Margin="0,3" Height="28">
+                                        <Grid Height="28" Margin="0,3">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="24" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="80" />
                                                 <ColumnDefinition Width="80" />
                                             </Grid.ColumnDefinitions>
-                                            <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsMember}" />
-                                            <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" Text="{Binding DepartmentName}" />
-                                            <CheckBox Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" IsChecked="{Binding IsResponsible}" IsEnabled="{Binding IsMember}" />
-                                            <CheckBox Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" IsChecked="{Binding IsPrimary}" IsEnabled="{Binding IsMember}" />
+                                            <CheckBox
+                                                Grid.Column="0"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding IsMember}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                FontSize="13"
+                                                Text="{Binding DepartmentName}" />
+                                            <CheckBox
+                                                Grid.Column="2"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding IsResponsible}"
+                                                IsEnabled="{Binding IsMember}" />
+                                            <CheckBox
+                                                Grid.Column="3"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding IsPrimary}"
+                                                IsEnabled="{Binding IsMember}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -228,24 +319,34 @@
                     </Border>
                 </Expander>
 
-                <!-- ═══ COMPETENZE ═══ -->
-                <Expander x:Name="expCompetenze" IsExpanded="False" Margin="0,0,0,8">
+                <!--  ═══ COMPETENZE ═══  -->
+                <Expander
+                    x:Name="expCompetenze"
+                    Margin="0,0,0,8"
+                    IsExpanded="False">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="⚙️  COMPETENZE TECNICHE" />
                         </Border>
                     </Expander.Header>
-                    <Border Style="{StaticResource ExpBorder}" Padding="16,8,16,12">
+                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
                         <StackPanel>
-                            <TextBlock FontSize="11" Foreground="#9CA3AF" Margin="0,0,0,8" Text="Reparti su cui è tecnicamente abilitato (anche senza appartenenza formale)" />
+                            <TextBlock
+                                Margin="0,0,0,8"
+                                FontSize="11"
+                                Foreground="#9CA3AF"
+                                Text="Reparti su cui è tecnicamente abilitato (anche senza appartenenza formale)" />
                             <ItemsControl x:Name="lstCompetences">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="0,3">
-                                            <CheckBox Content="{Binding DepartmentName}" IsChecked="{Binding IsEnabled}" FontSize="13" />
+                                            <CheckBox
+                                                Content="{Binding DepartmentName}"
+                                                FontSize="13"
+                                                IsChecked="{Binding IsEnabled}" />
                                             <TextBox
-                                                Margin="22,2,0,0"
                                                 Height="28"
+                                                Margin="22,2,0,0"
                                                 Padding="6,4"
                                                 BorderBrush="#E4E7EC"
                                                 FontSize="11"

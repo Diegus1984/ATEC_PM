@@ -23,7 +23,6 @@ public partial class EmployeeDialog : Window
         InitializeComponent();
         _employeeId = employeeId;
         Title = employeeId == 0 ? "Nuovo Utente" : "Modifica Utente";
-        dpHireDate.SelectedDate = DateTime.Today;
         lstDeptMembership.ItemsSource = _deptRows;
         lstCompetences.ItemsSource = _compRows;
 
@@ -82,18 +81,11 @@ public partial class EmployeeDialog : Window
             if (docEmp.RootElement.GetProperty("success").GetBoolean())
             {
                 JsonElement d = docEmp.RootElement.GetProperty("data");
-                txtBadge.Text = d.GetProperty("badgeNumber").GetString() ?? "";
                 txtFirstName.Text = d.GetProperty("firstName").GetString() ?? "";
                 txtLastName.Text = d.GetProperty("lastName").GetString() ?? "";
                 txtEmail.Text = d.GetProperty("email").GetString() ?? "";
-                txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
-                txtHourlyCost.Text = d.GetProperty("hourlyCost").GetDecimal().ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
-                txtWeeklyHours.Text = d.GetProperty("weeklyHours").GetDecimal().ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
-                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
                 SelectComboItem(cmbType, d.GetProperty("empType").GetString() ?? "INTERNAL");
                 SelectComboItem(cmbStatus, d.GetProperty("status").GetString() ?? "ACTIVE");
-                if (d.TryGetProperty("hireDate", out JsonElement hd) && hd.ValueKind != JsonValueKind.Null)
-                    dpHireDate.SelectedDate = hd.GetDateTime();
             }
 
             // Ruolo + reparti + competenze
@@ -182,23 +174,20 @@ public partial class EmployeeDialog : Window
 
         try
         {
-            decimal.TryParse(txtHourlyCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost);
-            decimal.TryParse(txtWeeklyHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal weeklyHours);
-
             // 1. Anagrafica
             object empObj = new
             {
-                badgeNumber = txtBadge.Text.Trim(),
+                badgeNumber = "",
                 firstName = txtFirstName.Text.Trim(),
                 lastName = txtLastName.Text.Trim(),
                 email = txtEmail.Text.Trim(),
-                phone = txtPhone.Text.Trim(),
+                phone = "",
                 empType = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "INTERNAL",
-                hourlyCost,
-                weeklyHours,
-                hireDate = dpHireDate.SelectedDate?.ToString("yyyy-MM-dd"),
+                hourlyCost = 0m,
+                weeklyHours = 40m,
+                hireDate = (string?)null,
                 status = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ACTIVE",
-                notes = txtNotes.Text
+                notes = ""
             };
 
             string empJson = JsonSerializer.Serialize(empObj,

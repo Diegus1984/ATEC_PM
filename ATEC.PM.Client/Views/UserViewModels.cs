@@ -10,7 +10,6 @@ namespace ATEC.PM.Client.ViewModels;
 public class UserRow
 {
     public int Id { get; set; }
-    public string BadgeNumber { get; set; } = "";
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string UserRole { get; set; } = "";
