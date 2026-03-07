@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ATEC.PM.Shared.DTOs;
 
@@ -26,6 +27,7 @@ public class ProjectCostSectionDto
     public string GroupName { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
+    public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
     public decimal TotalHours => Resources?.Sum(r => r.TotalHours) ?? 0;
@@ -37,6 +39,7 @@ public class ProjectCostResourceDto
 {
     public int Id { get; set; }
     public int SectionId { get; set; }
+    public int? EmployeeId { get; set; }
     public string ResourceName { get; set; } = "";
     public decimal WorkDays { get; set; }
     public decimal HoursPerDay { get; set; }
@@ -62,6 +65,7 @@ public class ProjectCostResourceSaveRequest
 {
     public int Id { get; set; }
     public int SectionId { get; set; }
+    public int? EmployeeId { get; set; }
     public string ResourceName { get; set; } = "";
     public decimal WorkDays { get; set; }
     public decimal HoursPerDay { get; set; }
@@ -101,7 +105,6 @@ public class ProjectMaterialItemDto
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
     public int SortOrder { get; set; }
-    // Calcolato
     public decimal TotalCost => Quantity * UnitCost;
 }
 
@@ -124,6 +127,15 @@ public class ProjectPricingDto
     public decimal ContingencyPct { get; set; } = 0.050m;
     public decimal RiskWarrantyPct { get; set; } = 0.050m;
     public decimal NegotiationMarginPct { get; set; } = 0.100m;
+}
+
+// === DIPENDENTE PER COMBO ===
+public class EmployeeCostLookup
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
+    public decimal HourlyCost { get; set; }
 }
 
 // === RIEPILOGO COMPLETO CONFIGURA COMMESSA ===

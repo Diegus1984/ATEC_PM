@@ -1,14 +1,57 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
-namespace ATEC.PM.Client.UserControls;
+namespace ATEC.PM.Client.Views;
+
+// ViewModel per riga risorsa editabile nella DataGrid
+public class CostResourceRow : INotifyPropertyChanged
+{
+    public int Id { get; set; }
+    public int SectionId { get; set; }
+    public int? EmployeeId { get; set; }
+    public string ResourceName { get; set; } = "";
+
+    private decimal _workDays;
+    public decimal WorkDays { get => _workDays; set { _workDays = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); } }
+
+    private decimal _hoursPerDay;
+    public decimal HoursPerDay { get => _hoursPerDay; set { _hoursPerDay = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); } }
+
+    private decimal _hourlyCost;
+    public decimal HourlyCost { get => _hourlyCost; set { _hourlyCost = value; Notify(); Notify(nameof(TotalCost)); } }
+
+    public decimal TotalHours => WorkDays * HoursPerDay;
+    public decimal TotalCost => TotalHours * HourlyCost;
+
+    // Trasferta
+    public int NumTrips { get; set; }
+    public decimal KmPerTrip { get; set; }
+    public decimal CostPerKm { get; set; } = 0.90m;
+    public decimal DailyFood { get; set; }
+    public decimal DailyHotel { get; set; }
+    public decimal AllowanceDays { get; set; }
+    public decimal DailyAllowance { get; set; }
+
+    public decimal TravelTotal => NumTrips * KmPerTrip * CostPerKm;
+    public decimal AccommodationTotal => WorkDays * (DailyFood + DailyHotel);
+    public decimal AllowanceTotal => AllowanceDays * DailyAllowance;
+
+    public bool IsDirty { get; set; }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
 
 public partial class ProjectCostingControl : UserControl
 {
     private int _projectId;
     private ProjectCostingData _data = new();
+    private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
@@ -85,31 +128,35 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // TAB RISORSE
+    // TAB RISORSE — DataGrid inline
     // ══════════════════════════════════════════════════════════════
-    private void RenderRisorse()
+    private async void RenderRisorse()
     {
+        // Precarica cache dipendenti per tutte le sezioni
+        _sectionEmployeesCache.Clear();
+        foreach (var sec in _data.CostSections.Where(s => s.IsEnabled))
+        {
+            var emps = await LoadEmployeesForSection(sec.Id);
+            _sectionEmployeesCache[sec.Id] = emps;
+        }
+
         string lastGroup = "";
         decimal grandTotalCost = 0;
         decimal grandTotalHours = 0;
 
-        foreach (ProjectCostSectionDto sec in _data.CostSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
+        foreach (var sec in _data.CostSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
         {
-            // Header gruppo
             if (sec.GroupName != lastGroup)
             {
                 string color = GroupColors.TryGetValue(sec.GroupName, out string? c) ? c : "#6B7280";
                 pnlContent.Children.Add(MakeGroupHeader(sec.GroupName, color));
                 lastGroup = sec.GroupName;
             }
-
-            // Sezione espandibile
-            pnlContent.Children.Add(MakeResourceSection(sec));
+            pnlContent.Children.Add(MakeResourceSectionWithGrid(sec));
             grandTotalCost += sec.TotalCost;
             grandTotalHours += sec.TotalHours;
         }
 
-        // Totale globale
         pnlContent.Children.Add(MakeTotalBar("TOTALE RISORSE", grandTotalHours, grandTotalCost));
         txtStatus.Text = $"{_data.CostSections.Count(s => s.IsEnabled)} sezioni — {grandTotalHours:N1} ore — {grandTotalCost:N2} €";
     }
@@ -132,27 +179,21 @@ public partial class ProjectCostingControl : UserControl
         return header;
     }
 
-    private Border MakeResourceSection(ProjectCostSectionDto sec)
+    private Border MakeResourceSectionWithGrid(ProjectCostSectionDto sec)
     {
         Border card = new()
         {
             Background = Brushes.White,
             BorderBrush = Brush("#E4E7EC"),
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(0, 0, 0, 4),
-            Padding = new Thickness(0)
+            Margin = new Thickness(0, 0, 0, 4)
         };
 
         StackPanel sp = new();
 
         // Header sezione
-        DockPanel headerDp = new()
-        {
-            Background = Brush("#F9FAFB"),
-            LastChildFill = true
-        };
+        DockPanel headerDp = new() { Background = Brush("#F9FAFB") };
 
-        // Bottone + aggiungi risorsa (a destra)
         Button btnAdd = new()
         {
             Content = "+ Risorsa",
@@ -166,12 +207,7 @@ public partial class ProjectCostingControl : UserControl
             Margin = new Thickness(0, 6, 8, 6)
         };
         DockPanel.SetDock(btnAdd, Dock.Right);
-        int sectionId = sec.Id;
-        string sectionType = sec.SectionType;
-        btnAdd.Click += async (s, e) => await AddResource(sectionId, sectionType);
-        headerDp.Children.Add(btnAdd);
 
-        // Tipo badge
         string typeColor = sec.SectionType == "DA_CLIENTE" ? "#D97706" : "#059669";
         string typeLabel = sec.SectionType == "DA_CLIENTE" ? "CLIENTE" : "SEDE";
         Border typeBadge = new()
@@ -183,9 +219,7 @@ public partial class ProjectCostingControl : UserControl
         };
         typeBadge.Child = new TextBlock { Text = typeLabel, FontSize = 9, FontWeight = FontWeights.Bold, Foreground = Brush(typeColor) };
         DockPanel.SetDock(typeBadge, Dock.Right);
-        headerDp.Children.Add(typeBadge);
 
-        // Totali
         TextBlock txtTotals = new()
         {
             Text = $"{sec.TotalHours:N1} h  |  {sec.TotalCost:N2} €",
@@ -196,9 +230,11 @@ public partial class ProjectCostingControl : UserControl
             Margin = new Thickness(0, 0, 12, 0)
         };
         DockPanel.SetDock(txtTotals, Dock.Right);
+
+        headerDp.Children.Add(btnAdd);
+        headerDp.Children.Add(typeBadge);
         headerDp.Children.Add(txtTotals);
 
-        // Nome sezione
         TextBlock txtName = new()
         {
             Text = sec.Name,
@@ -209,152 +245,264 @@ public partial class ProjectCostingControl : UserControl
             Padding = new Thickness(12, 8, 0, 8)
         };
         headerDp.Children.Add(txtName);
-
         sp.Children.Add(headerDp);
 
-        // Righe risorsa
-        if (sec.Resources.Any())
+        // DataGrid
+        DataGrid dg = new()
         {
-            // Header colonne
-            sp.Children.Add(MakeResourceColumnHeader(sec.SectionType));
+            AutoGenerateColumns = false,
+            CanUserAddRows = false,
+            CanUserDeleteRows = false,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
+            HorizontalGridLinesBrush = Brush("#F3F4F6"),
+            Background = Brushes.White,
+            BorderThickness = new Thickness(0),
+            RowHeight = 32,
+            ColumnHeaderHeight = 28,
+            FontSize = 12,
+            SelectionMode = DataGridSelectionMode.Single,
+            Margin = new Thickness(8, 0, 8, 8)
+        };
 
-            foreach (ProjectCostResourceDto res in sec.Resources.OrderBy(r => r.SortOrder))
-                sp.Children.Add(MakeResourceRow(res, sec.SectionType));
+        Style headerStyle = new(typeof(DataGridColumnHeader));
+        headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brush("#F9FAFB")));
+        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brush("#6B7280")));
+        headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, 10.0));
+        headerStyle.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
+        headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 0, 6, 0)));
+        dg.ColumnHeaderStyle = headerStyle;
+
+        // Col 0: RISORSA — ComboBox con dipendenti
+        DataGridTemplateColumn empCol = new() { Header = "RISORSA", Width = new DataGridLength(1, DataGridLengthUnitType.Star) };
+
+        // CellTemplate (visualizzazione): mostra nome
+        FrameworkElementFactory displayFactory = new(typeof(TextBlock));
+        displayFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("ResourceName"));
+        displayFactory.SetValue(TextBlock.PaddingProperty, new Thickness(6, 0, 0, 0));
+        displayFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+        empCol.CellTemplate = new DataTemplate { VisualTree = displayFactory };
+
+        // CellEditingTemplate: ComboBox
+        FrameworkElementFactory comboFactory = new(typeof(ComboBox));
+        comboFactory.SetValue(ComboBox.DisplayMemberPathProperty, "FullName");
+        comboFactory.SetValue(ComboBox.FontSizeProperty, 12.0);
+        comboFactory.SetValue(ComboBox.BorderThicknessProperty, new Thickness(0));
+        comboFactory.AddHandler(ComboBox.LoadedEvent, new RoutedEventHandler((s, ev) =>
+        {
+            if (s is not ComboBox combo) return;
+            if (combo.DataContext is not CostResourceRow row) return;
+
+            // Carica dipendenti disponibili (escludi già presenti nella sezione)
+            int sectionId = row.SectionId;
+            if (!_sectionEmployeesCache.TryGetValue(sectionId, out var allEmployees))
+                return;
+
+            // Filtra: escludi chi è già nella sezione (tranne la riga corrente)
+            var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue && r.Id != row.Id).Select(r => r.EmployeeId!.Value).ToHashSet();
+            var available = allEmployees.Where(e => !usedIds.Contains(e.Id)).ToList();
+
+            combo.ItemsSource = available;
+
+            // Seleziona corrente
+            if (row.EmployeeId.HasValue)
+                combo.SelectedItem = available.FirstOrDefault(e => e.Id == row.EmployeeId);
+        }));
+        comboFactory.AddHandler(ComboBox.SelectionChangedEvent, new SelectionChangedEventHandler(async (s, ev) =>
+        {
+            if (s is not ComboBox combo) return;
+            if (combo.DataContext is not CostResourceRow row) return;
+            if (combo.SelectedItem is not EmployeeCostLookup emp) return;
+
+            row.EmployeeId = emp.Id;
+            row.ResourceName = emp.FullName;
+            row.HourlyCost = emp.HourlyCost;
+
+            if (row.Id > 0)
+                await SaveResource(row);
+        }));
+        empCol.CellEditingTemplate = new DataTemplate { VisualTree = comboFactory };
+        dg.Columns.Add(empCol);
+
+        // Altre colonne
+        dg.Columns.Add(new DataGridTextColumn { Header = "GG", Binding = new System.Windows.Data.Binding("WorkDays") { StringFormat = "F0" }, Width = 50 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "ORE/G", Binding = new System.Windows.Data.Binding("HoursPerDay") { StringFormat = "F0" }, Width = 55 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "TOT ORE", Binding = new System.Windows.Data.Binding("TotalHours") { StringFormat = "F1" }, Width = 65, IsReadOnly = true });
+        dg.Columns.Add(new DataGridTextColumn { Header = "€/H", Binding = new System.Windows.Data.Binding("HourlyCost") { StringFormat = "F2" }, Width = 60, IsReadOnly = true });
+        dg.Columns.Add(new DataGridTextColumn { Header = "TOT €", Binding = new System.Windows.Data.Binding("TotalCost") { StringFormat = "N2" }, Width = 80, IsReadOnly = true });
+
+        if (sec.SectionType == "DA_CLIENTE")
+        {
+            dg.Columns.Add(new DataGridTextColumn { Header = "VIAGGI", Binding = new System.Windows.Data.Binding("NumTrips"), Width = 50 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "KM", Binding = new System.Windows.Data.Binding("KmPerTrip") { StringFormat = "F0" }, Width = 50 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "€/KM", Binding = new System.Windows.Data.Binding("CostPerKm") { StringFormat = "F2" }, Width = 50 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "VITTO/G", Binding = new System.Windows.Data.Binding("DailyFood") { StringFormat = "F0" }, Width = 55 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "HOTEL/G", Binding = new System.Windows.Data.Binding("DailyHotel") { StringFormat = "F0" }, Width = 55 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "GG IND.", Binding = new System.Windows.Data.Binding("AllowanceDays") { StringFormat = "F0" }, Width = 55 });
+            dg.Columns.Add(new DataGridTextColumn { Header = "€/G IND.", Binding = new System.Windows.Data.Binding("DailyAllowance") { StringFormat = "F0" }, Width = 55 });
         }
 
+        // Bottone elimina
+        DataGridTemplateColumn delCol = new() { Header = "", Width = 30 };
+        FrameworkElementFactory btnFactory = new(typeof(Button));
+        btnFactory.SetValue(Button.ContentProperty, "✕");
+        btnFactory.SetValue(Button.WidthProperty, 20.0);
+        btnFactory.SetValue(Button.HeightProperty, 20.0);
+        btnFactory.SetValue(Button.FontSizeProperty, 9.0);
+        btnFactory.SetValue(Button.BackgroundProperty, Brush("#EF44441A"));
+        btnFactory.SetValue(Button.ForegroundProperty, Brush("#EF4444"));
+        btnFactory.SetValue(Button.BorderThicknessProperty, new Thickness(0));
+        btnFactory.SetValue(Button.CursorProperty, System.Windows.Input.Cursors.Hand);
+        btnFactory.AddHandler(Button.ClickEvent, new RoutedEventHandler(async (s, ev) =>
+        {
+            if (s is Button btn && btn.DataContext is CostResourceRow row && row.Id > 0)
+            {
+                await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/resources/{row.Id}");
+                await LoadData();
+            }
+        }));
+        delCol.CellTemplate = new DataTemplate { VisualTree = btnFactory };
+        dg.Columns.Add(delCol);
+
+        // Popola dati
+        ObservableCollection<CostResourceRow> rows = new();
+        foreach (var res in sec.Resources.OrderBy(r => r.SortOrder))
+        {
+            rows.Add(new CostResourceRow
+            {
+                Id = res.Id,
+                SectionId = res.SectionId,
+                EmployeeId = res.EmployeeId,
+                ResourceName = res.ResourceName,
+                WorkDays = res.WorkDays,
+                HoursPerDay = res.HoursPerDay,
+                HourlyCost = res.HourlyCost,
+                NumTrips = res.NumTrips,
+                KmPerTrip = res.KmPerTrip,
+                CostPerKm = res.CostPerKm,
+                DailyFood = res.DailyFood,
+                DailyHotel = res.DailyHotel,
+                AllowanceDays = res.AllowanceDays,
+                DailyAllowance = res.DailyAllowance
+            });
+        }
+        dg.ItemsSource = rows;
+
+        // Salva su CellEditEnding
+        dg.CellEditEnding += async (s, ev) =>
+        {
+            await Task.Delay(100);
+            if (ev.Row.Item is CostResourceRow row && row.Id > 0)
+                await SaveResource(row);
+        };
+
+        // + Risorsa: crea riga vuota sul server, poi ricarica
+        int secId = sec.Id;
+        btnAdd.Click += async (s, e) =>
+        {
+            // Carica dipendenti se non in cache
+            if (!_sectionEmployeesCache.ContainsKey(secId))
+            {
+                var emps = await LoadEmployeesForSection(secId);
+                _sectionEmployeesCache[secId] = emps;
+            }
+
+            var allEmps = _sectionEmployeesCache[secId];
+            var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
+            var available = allEmps.Where(e => !usedIds.Contains(e.Id)).ToList();
+
+            if (available.Count == 0)
+            {
+                MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
+                return;
+            }
+
+            // Prendi il primo disponibile come default
+            var first = available.First();
+            var req = new ProjectCostResourceSaveRequest
+            {
+                SectionId = secId,
+                EmployeeId = first.Id,
+                ResourceName = first.FullName,
+                HourlyCost = first.HourlyCost,
+                HoursPerDay = 8,
+                CostPerKm = 0.90m
+            };
+
+            string json = System.Text.Json.JsonSerializer.Serialize(req,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/resources", json);
+            await LoadData();
+        };
+
+        sp.Children.Add(dg);
         card.Child = sp;
         return card;
     }
 
-    private Grid MakeResourceColumnHeader(string sectionType)
+    private async Task SaveResource(CostResourceRow row)
     {
-        Grid g = new() { Margin = new Thickness(12, 4, 12, 2) };
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });   // Risorsa
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });    // GG
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });    // Ore/g
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });    // Tot Ore
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });    // €/H
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });    // Totale €
-        if (sectionType == "DA_CLIENTE")
+        try
         {
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });  // Viaggi
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });  // Vitto+Hotel
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });  // Indennità
+            var req = new ProjectCostResourceSaveRequest
+            {
+                Id = row.Id,
+                SectionId = row.SectionId,
+                EmployeeId = row.EmployeeId,
+                ResourceName = row.ResourceName,
+                WorkDays = row.WorkDays,
+                HoursPerDay = row.HoursPerDay,
+                HourlyCost = row.HourlyCost,
+                NumTrips = row.NumTrips,
+                KmPerTrip = row.KmPerTrip,
+                CostPerKm = row.CostPerKm,
+                DailyFood = row.DailyFood,
+                DailyHotel = row.DailyHotel,
+                AllowanceDays = row.AllowanceDays,
+                DailyAllowance = row.DailyAllowance
+            };
+            string json = System.Text.Json.JsonSerializer.Serialize(req,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/resources/{row.Id}", json);
         }
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });    // Del
-
-        string[] headers = sectionType == "DA_CLIENTE"
-            ? new[] { "RISORSA", "GG", "ORE/G", "TOT ORE", "€/H", "TOT €", "VIAGGI €", "VITTO €", "INDENN. €", "" }
-            : new[] { "RISORSA", "GG", "ORE/G", "TOT ORE", "€/H", "TOT €", "" };
-
-        for (int i = 0; i < headers.Length; i++)
-        {
-            TextBlock tb = new() { Text = headers[i], FontSize = 9, FontWeight = FontWeights.SemiBold, Foreground = Brush("#9CA3AF"), VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(tb, i);
-            g.Children.Add(tb);
-        }
-        return g;
+        catch { }
     }
 
-    private Grid MakeResourceRow(ProjectCostResourceDto res, string sectionType)
+    private async Task<List<EmployeeCostLookup>> LoadEmployeesForSection(int sectionId)
     {
-        Grid g = new() { Margin = new Thickness(12, 1, 12, 1), Height = 28 };
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-        if (sectionType == "DA_CLIENTE")
+        try
         {
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/sections/{sectionId}/employees");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+                return System.Text.Json.JsonSerializer.Deserialize<List<EmployeeCostLookup>>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
         }
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
-
-        int col = 0;
-        AddLabel(g, col++, res.ResourceName, 12);
-        AddLabel(g, col++, res.WorkDays > 0 ? res.WorkDays.ToString("F0") : "", 11);
-        AddLabel(g, col++, res.HoursPerDay > 0 ? res.HoursPerDay.ToString("F0") : "", 11);
-        AddLabel(g, col++, res.TotalHours > 0 ? res.TotalHours.ToString("F1") : "", 11, FontWeights.SemiBold);
-        AddLabel(g, col++, res.HourlyCost > 0 ? res.HourlyCost.ToString("F2") : "", 11);
-        AddLabel(g, col++, res.TotalCost > 0 ? res.TotalCost.ToString("N2") : "", 11, FontWeights.SemiBold, "#4F6EF7");
-
-        if (sectionType == "DA_CLIENTE")
-        {
-            AddLabel(g, col++, res.TravelTotal > 0 ? res.TravelTotal.ToString("N0") : "", 11);
-            AddLabel(g, col++, res.AccommodationTotal > 0 ? res.AccommodationTotal.ToString("N0") : "", 11);
-            AddLabel(g, col++, res.AllowanceTotal > 0 ? res.AllowanceTotal.ToString("N0") : "", 11);
-        }
-
-        // Bottone elimina
-        Button btnDel = new()
-        {
-            Content = "✕",
-            Width = 20,
-            Height = 20,
-            FontSize = 9,
-            Background = Brush("#EF44441A"),
-            Foreground = Brush("#EF4444"),
-            BorderThickness = new Thickness(0),
-            Cursor = System.Windows.Input.Cursors.Hand
-        };
-        int resId = res.Id;
-        btnDel.Click += async (s, e) => await DeleteResource(resId);
-        Grid.SetColumn(btnDel, col);
-        g.Children.Add(btnDel);
-
-        return g;
-    }
-
-    private void AddLabel(Grid g, int col, string text, double fontSize, FontWeight? weight = null, string? color = null)
-    {
-        TextBlock tb = new()
-        {
-            Text = text,
-            FontSize = fontSize,
-            FontWeight = weight ?? FontWeights.Normal,
-            Foreground = color != null ? Brush(color) : Brush("#374151"),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        Grid.SetColumn(tb, col);
-        g.Children.Add(tb);
+        catch { }
+        return new();
     }
 
     // ══════════════════════════════════════════════════════════════
-    // TAB MATERIALI
+    // TAB MATERIALI — stessa logica con DataGrid
     // ══════════════════════════════════════════════════════════════
     private void RenderMateriali()
     {
         decimal grandTotalCost = 0;
         decimal grandTotalSale = 0;
 
-        foreach (ProjectMaterialSectionDto sec in _data.MaterialSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
+        foreach (var sec in _data.MaterialSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
         {
-            pnlContent.Children.Add(MakeMaterialSection(sec));
+            pnlContent.Children.Add(MakeMaterialSectionWithGrid(sec));
             grandTotalCost += sec.TotalCost;
             grandTotalSale += sec.TotalSale;
         }
 
-        // Totale
-        Border bar = new()
-        {
-            Background = Brush("#1A1D26"),
-            Padding = new Thickness(16, 10, 16, 10),
-            Margin = new Thickness(0, 8, 0, 0)
-        };
-        StackPanel sp = new() { Orientation = Orientation.Horizontal };
-        sp.Children.Add(new TextBlock { Text = "TOTALE MATERIALI", FontSize = 14, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Width = 200 });
-        sp.Children.Add(new TextBlock { Text = $"Costo: {grandTotalCost:N2} €", FontSize = 13, Foreground = Brush("#9CA3AF"), Margin = new Thickness(20, 0, 0, 0) });
-        sp.Children.Add(new TextBlock { Text = $"Vendita: {grandTotalSale:N2} €", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#4F6EF7"), Margin = new Thickness(20, 0, 0, 0) });
-        bar.Child = sp;
-        pnlContent.Children.Add(bar);
-
+        pnlContent.Children.Add(MakeTotalBar2("TOTALE MATERIALI", grandTotalCost, grandTotalSale));
         txtStatus.Text = $"{_data.MaterialSections.Count(s => s.IsEnabled)} categorie — Costo {grandTotalCost:N2} € — Vendita {grandTotalSale:N2} €";
     }
 
-    private Border MakeMaterialSection(ProjectMaterialSectionDto sec)
+    private Border MakeMaterialSectionWithGrid(ProjectMaterialSectionDto sec)
     {
         Border card = new()
         {
@@ -382,11 +530,7 @@ public partial class ProjectCostingControl : UserControl
             Margin = new Thickness(0, 6, 8, 6)
         };
         DockPanel.SetDock(btnAdd, Dock.Right);
-        int sectionId = sec.Id;
-        btnAdd.Click += async (s, e) => await AddMaterialItem(sectionId);
-        headerDp.Children.Add(btnAdd);
 
-        // K badge
         Border kBadge = new()
         {
             Background = Brush("#05966920"),
@@ -396,9 +540,7 @@ public partial class ProjectCostingControl : UserControl
         };
         kBadge.Child = new TextBlock { Text = $"K {sec.MarkupValue:F2}", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Brush("#059669") };
         DockPanel.SetDock(kBadge, Dock.Right);
-        headerDp.Children.Add(kBadge);
 
-        // Totali
         TextBlock txtTotals = new()
         {
             Text = $"Costo {sec.TotalCost:N2} €  →  Vendita {sec.TotalSale:N2} €",
@@ -409,6 +551,9 @@ public partial class ProjectCostingControl : UserControl
             Margin = new Thickness(0, 0, 12, 0)
         };
         DockPanel.SetDock(txtTotals, Dock.Right);
+
+        headerDp.Children.Add(btnAdd);
+        headerDp.Children.Add(kBadge);
         headerDp.Children.Add(txtTotals);
 
         TextBlock txtName = new()
@@ -421,97 +566,132 @@ public partial class ProjectCostingControl : UserControl
             Padding = new Thickness(12, 8, 0, 8)
         };
         headerDp.Children.Add(txtName);
-
         sp.Children.Add(headerDp);
 
-        // Righe materiale
-        if (sec.Items.Any())
+        // DataGrid materiali
+        DataGrid dg = new()
         {
-            // Header colonne
-            Grid hdr = new() { Margin = new Thickness(12, 4, 12, 2) };
-            hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-            hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
-            hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
-            hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
-            AddLabel(hdr, 0, "DESCRIZIONE", 9, FontWeights.SemiBold, "#9CA3AF");
-            AddLabel(hdr, 1, "QTÀ", 9, FontWeights.SemiBold, "#9CA3AF");
-            AddLabel(hdr, 2, "COSTO UNIT.", 9, FontWeights.SemiBold, "#9CA3AF");
-            AddLabel(hdr, 3, "TOTALE", 9, FontWeights.SemiBold, "#9CA3AF");
-            sp.Children.Add(hdr);
+            AutoGenerateColumns = false,
+            CanUserAddRows = false,
+            CanUserDeleteRows = false,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
+            HorizontalGridLinesBrush = Brush("#F3F4F6"),
+            Background = Brushes.White,
+            BorderThickness = new Thickness(0),
+            RowHeight = 32,
+            ColumnHeaderHeight = 28,
+            FontSize = 12,
+            SelectionMode = DataGridSelectionMode.Single,
+            Margin = new Thickness(8, 0, 8, 8)
+        };
 
-            foreach (ProjectMaterialItemDto item in sec.Items.OrderBy(i => i.SortOrder))
+        Style headerStyle = new(typeof(DataGridColumnHeader));
+        headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brush("#F9FAFB")));
+        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brush("#6B7280")));
+        headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, 10.0));
+        headerStyle.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
+        headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 0, 6, 0)));
+        dg.ColumnHeaderStyle = headerStyle;
+
+        dg.Columns.Add(new DataGridTextColumn { Header = "DESCRIZIONE", Binding = new System.Windows.Data.Binding("Description"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        dg.Columns.Add(new DataGridTextColumn { Header = "QTÀ", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "F0" }, Width = 60 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "COSTO UNIT.", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "N2" }, Width = 90 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "TOTALE", Binding = new System.Windows.Data.Binding("TotalCost") { StringFormat = "N2" }, Width = 90, IsReadOnly = true });
+
+        // Bottone elimina
+        DataGridTemplateColumn delCol = new() { Header = "", Width = 30 };
+        FrameworkElementFactory btnFactory = new(typeof(Button));
+        btnFactory.SetValue(Button.ContentProperty, "✕");
+        btnFactory.SetValue(Button.WidthProperty, 20.0);
+        btnFactory.SetValue(Button.HeightProperty, 20.0);
+        btnFactory.SetValue(Button.FontSizeProperty, 9.0);
+        btnFactory.SetValue(Button.BackgroundProperty, Brush("#EF44441A"));
+        btnFactory.SetValue(Button.ForegroundProperty, Brush("#EF4444"));
+        btnFactory.SetValue(Button.BorderThicknessProperty, new Thickness(0));
+        btnFactory.SetValue(Button.CursorProperty, System.Windows.Input.Cursors.Hand);
+        btnFactory.AddHandler(Button.ClickEvent, new RoutedEventHandler(async (s, ev) =>
+        {
+            if (s is Button btn && btn.DataContext is MaterialItemRow row && row.Id > 0)
             {
-                Grid row = new() { Margin = new Thickness(12, 1, 12, 1), Height = 26 };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
-
-                AddLabel(row, 0, item.Description, 12);
-                AddLabel(row, 1, item.Quantity.ToString("F0"), 11);
-                AddLabel(row, 2, item.UnitCost.ToString("N2") + " €", 11);
-                AddLabel(row, 3, item.TotalCost.ToString("N2") + " €", 11, FontWeights.SemiBold, "#4F6EF7");
-
-                Button btnDel = new()
-                {
-                    Content = "✕",
-                    Width = 20,
-                    Height = 20,
-                    FontSize = 9,
-                    Background = Brush("#EF44441A"),
-                    Foreground = Brush("#EF4444"),
-                    BorderThickness = new Thickness(0),
-                    Cursor = System.Windows.Input.Cursors.Hand
-                };
-                int itemId = item.Id;
-                btnDel.Click += async (s, e) => await DeleteMaterialItem(itemId);
-                Grid.SetColumn(btnDel, 4);
-                row.Children.Add(btnDel);
-
-                sp.Children.Add(row);
+                await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/material-items/{row.Id}");
+                await LoadData();
             }
-        }
+        }));
+        delCol.CellTemplate = new DataTemplate { VisualTree = btnFactory };
+        dg.Columns.Add(delCol);
 
+        ObservableCollection<MaterialItemRow> rows = new();
+        foreach (var item in sec.Items.OrderBy(i => i.SortOrder))
+            rows.Add(new MaterialItemRow { Id = item.Id, SectionId = item.SectionId, Description = item.Description, Quantity = item.Quantity, UnitCost = item.UnitCost });
+        dg.ItemsSource = rows;
+
+        dg.CellEditEnding += async (s, ev) =>
+        {
+            await Task.Delay(100);
+            if (ev.Row.Item is MaterialItemRow row && row.Id > 0)
+                await SaveMaterialItem(row);
+        };
+
+        int secId = sec.Id;
+        btnAdd.Click += async (s, e) =>
+        {
+            var req = new ProjectMaterialItemSaveRequest { SectionId = secId, Description = "Nuova voce", Quantity = 1, UnitCost = 0 };
+            string json = System.Text.Json.JsonSerializer.Serialize(req,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
+            await LoadData();
+        };
+
+        sp.Children.Add(dg);
         card.Child = sp;
         return card;
     }
 
+    private async Task SaveMaterialItem(MaterialItemRow row)
+    {
+        try
+        {
+            var req = new ProjectMaterialItemSaveRequest
+            {
+                Id = row.Id,
+                SectionId = row.SectionId,
+                Description = row.Description,
+                Quantity = row.Quantity,
+                UnitCost = row.UnitCost
+            };
+            string json = System.Text.Json.JsonSerializer.Serialize(req,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/material-items/{row.Id}", json);
+        }
+        catch { }
+    }
+
     // ══════════════════════════════════════════════════════════════
-    // TAB RIEPILOGO E PREZZI
+    // TAB RIEPILOGO
     // ══════════════════════════════════════════════════════════════
     private void RenderRiepilogo()
     {
-        // Calcoli
         decimal totalResourceCost = _data.CostSections.Where(s => s.IsEnabled).Sum(s => s.TotalCost);
         decimal totalResourceTravel = _data.CostSections.Where(s => s.IsEnabled).Sum(s => s.TotalTravel);
         decimal totalMaterialCost = _data.MaterialSections.Where(s => s.IsEnabled).Sum(s => s.TotalCost);
         decimal totalMaterialSale = _data.MaterialSections.Where(s => s.IsEnabled).Sum(s => s.TotalSale);
 
-        // Vendita risorse: applica K dai markup locali
         decimal totalResourceSale = 0;
         foreach (var sec in _data.CostSections.Where(s => s.IsEnabled))
-        {
             foreach (var res in sec.Resources)
             {
-                // Trova K dalla lista markup
-                decimal k = 1.45m; // default
-                var mk = _data.Markups.FirstOrDefault(m => m.CoefficientType == "RESOURCE");
-                if (mk != null) k = mk.MarkupValue;
+                decimal k = _data.Markups.FirstOrDefault(m => m.CoefficientType == "RESOURCE")?.MarkupValue ?? 1.45m;
                 totalResourceSale += res.TotalCost * k;
             }
-        }
 
-        // Trasferte con K
         decimal kTrasferta = _data.Markups.FirstOrDefault(m => m.OriginalCode == "K9_TRASFERTA")?.MarkupValue ?? 1.1m;
         decimal totalTravelSale = totalResourceTravel * kTrasferta;
 
         decimal totalCost = totalResourceCost + totalResourceTravel + totalMaterialCost;
         decimal netPrice = totalResourceSale + totalTravelSale + totalMaterialSale;
 
-        // Pricing
-        ProjectPricingDto p = _data.Pricing;
+        var p = _data.Pricing;
         decimal structureCosts = netPrice * p.StructureCostsPct;
         decimal contingency = netPrice * p.ContingencyPct;
         decimal riskWarranty = netPrice * p.RiskWarrantyPct;
@@ -519,29 +699,23 @@ public partial class ProjectCostingControl : UserControl
         decimal negotiationMargin = netPrice * p.NegotiationMarginPct;
         decimal finalPrice = offerPrice + negotiationMargin;
 
-        // Render
         AddSummaryRow("COSTO RISORSE", totalResourceCost, null);
         AddSummaryRow("COSTO TRASFERTE", totalResourceTravel, null);
         AddSummaryRow("COSTO MATERIALI", totalMaterialCost, null);
         AddSeparator();
         AddSummaryRow("TOTALE COSTI", totalCost, null, true);
-
         pnlContent.Children.Add(new Border { Height = 16 });
-
         AddSummaryRow("VENDITA RISORSE (con K)", null, totalResourceSale);
         AddSummaryRow("VENDITA TRASFERTE (con K)", null, totalTravelSale);
         AddSummaryRow("VENDITA MATERIALI (con K)", null, totalMaterialSale);
         AddSeparator();
         AddSummaryRow("NET PRICE", null, netPrice, true);
-
         pnlContent.Children.Add(new Border { Height = 16 });
-
         AddSummaryRow($"Costi fissi struttura ({p.StructureCostsPct * 100:F1}%)", null, structureCosts);
         AddSummaryRow($"Contingency ({p.ContingencyPct * 100:F1}%)", null, contingency);
         AddSummaryRow($"Rischi & Garanzie ({p.RiskWarrantyPct * 100:F1}%)", null, riskWarranty);
         AddSeparator();
         AddSummaryRow("OFFER PRICE", null, offerPrice, true);
-
         pnlContent.Children.Add(new Border { Height = 8 });
         AddSummaryRow($"Margine trattativa ({p.NegotiationMarginPct * 100:F1}%)", null, negotiationMargin);
         AddSeparator();
@@ -550,6 +724,10 @@ public partial class ProjectCostingControl : UserControl
         decimal margin = totalCost > 0 ? (finalPrice - totalCost) / totalCost * 100 : 0;
         txtStatus.Text = $"Costo {totalCost:N2} € → Prezzo finale {finalPrice:N2} € — Margine {margin:N1}%";
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // HELPERS
+    // ══════════════════════════════════════════════════════════════
 
     private void AddSummaryRow(string label, decimal? costValue, decimal? saleValue, bool bold = false, string? color = null)
     {
@@ -562,84 +740,62 @@ public partial class ProjectCostingControl : UserControl
         double fs = bold ? 14 : 13;
         string fg = color ?? "#1A1D26";
 
-        TextBlock tbLabel = new() { Text = label, FontSize = fs, FontWeight = fw, Foreground = Brush(fg), VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(tbLabel, 0);
-        g.Children.Add(tbLabel);
+        TextBlock tbLabel = new() { Text = label, FontSize = fs, FontWeight = fw, Foreground = Brush(fg) };
+        Grid.SetColumn(tbLabel, 0); g.Children.Add(tbLabel);
 
         if (costValue.HasValue)
         {
-            TextBlock tbCost = new() { Text = $"{costValue.Value:N2} €", FontSize = fs, FontWeight = fw, Foreground = Brush("#DC2626"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(tbCost, 1);
-            g.Children.Add(tbCost);
+            TextBlock tbCost = new() { Text = $"{costValue.Value:N2} €", FontSize = fs, FontWeight = fw, Foreground = Brush("#DC2626"), HorizontalAlignment = HorizontalAlignment.Right };
+            Grid.SetColumn(tbCost, 1); g.Children.Add(tbCost);
         }
-
         if (saleValue.HasValue)
         {
-            TextBlock tbSale = new() { Text = $"{saleValue.Value:N2} €", FontSize = fs, FontWeight = fw, Foreground = Brush(color ?? "#059669"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(tbSale, 2);
-            g.Children.Add(tbSale);
+            TextBlock tbSale = new() { Text = $"{saleValue.Value:N2} €", FontSize = fs, FontWeight = fw, Foreground = Brush(color ?? "#059669"), HorizontalAlignment = HorizontalAlignment.Right };
+            Grid.SetColumn(tbSale, 2); g.Children.Add(tbSale);
         }
-
         pnlContent.Children.Add(g);
     }
 
-    private void AddSeparator()
-    {
-        pnlContent.Children.Add(new Border { Height = 1, Background = Brush("#E4E7EC"), Margin = new Thickness(0, 4, 0, 4) });
-    }
+    private void AddSeparator() => pnlContent.Children.Add(new Border { Height = 1, Background = Brush("#E4E7EC"), Margin = new Thickness(0, 4, 0, 4) });
 
     private Border MakeTotalBar(string label, decimal hours, decimal cost)
     {
-        Border bar = new()
-        {
-            Background = Brush("#1A1D26"),
-            Padding = new Thickness(16, 10, 16, 10),
-            Margin = new Thickness(0, 8, 0, 0)
-        };
+        Border bar = new() { Background = Brush("#1A1D26"), Padding = new Thickness(16, 10, 16, 10), Margin = new Thickness(0, 8, 0, 0) };
         StackPanel sp = new() { Orientation = Orientation.Horizontal };
         sp.Children.Add(new TextBlock { Text = label, FontSize = 14, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Width = 200 });
         sp.Children.Add(new TextBlock { Text = $"{hours:N1} ore", FontSize = 13, Foreground = Brush("#9CA3AF"), Margin = new Thickness(20, 0, 0, 0) });
         sp.Children.Add(new TextBlock { Text = $"{cost:N2} €", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#4F6EF7"), Margin = new Thickness(20, 0, 0, 0) });
-        bar.Child = sp;
-        return bar;
+        bar.Child = sp; return bar;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // CRUD HELPERS
-    // ══════════════════════════════════════════════════════════════
-
-    private async Task AddResource(int sectionId, string sectionType)
+    private Border MakeTotalBar2(string label, decimal cost, decimal sale)
     {
-        // Dialog semplice per aggiungere risorsa
-        var dlg = new CostResourceDialog(_projectId, sectionId, sectionType) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true) await LoadData();
+        Border bar = new() { Background = Brush("#1A1D26"), Padding = new Thickness(16, 10, 16, 10), Margin = new Thickness(0, 8, 0, 0) };
+        StackPanel sp = new() { Orientation = Orientation.Horizontal };
+        sp.Children.Add(new TextBlock { Text = label, FontSize = 14, FontWeight = FontWeights.Bold, Foreground = Brushes.White, Width = 200 });
+        sp.Children.Add(new TextBlock { Text = $"Costo: {cost:N2} €", FontSize = 13, Foreground = Brush("#9CA3AF"), Margin = new Thickness(20, 0, 0, 0) });
+        sp.Children.Add(new TextBlock { Text = $"Vendita: {sale:N2} €", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brush("#4F6EF7"), Margin = new Thickness(20, 0, 0, 0) });
+        bar.Child = sp; return bar;
     }
+}
 
-    private async Task DeleteResource(int resourceId)
-    {
-        if (MessageBox.Show("Eliminare questa risorsa?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        try
-        {
-            await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/resources/{resourceId}");
-            await LoadData();
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
+// ViewModel per riga materiale
+public class MaterialItemRow : INotifyPropertyChanged
+{
+    public int Id { get; set; }
+    public int SectionId { get; set; }
 
-    private async Task AddMaterialItem(int sectionId)
-    {
-        var dlg = new CostMaterialItemDialog(_projectId, sectionId) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true) await LoadData();
-    }
+    private string _description = "";
+    public string Description { get => _description; set { _description = value; Notify(); } }
 
-    private async Task DeleteMaterialItem(int itemId)
-    {
-        if (MessageBox.Show("Eliminare questa voce?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        try
-        {
-            await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/material-items/{itemId}");
-            await LoadData();
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
+    private decimal _quantity = 1;
+    public decimal Quantity { get => _quantity; set { _quantity = value; Notify(); Notify(nameof(TotalCost)); } }
+
+    private decimal _unitCost;
+    public decimal UnitCost { get => _unitCost; set { _unitCost = value; Notify(); Notify(nameof(TotalCost)); } }
+
+    public decimal TotalCost => Quantity * UnitCost;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

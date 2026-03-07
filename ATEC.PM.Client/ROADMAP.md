@@ -1,6 +1,6 @@
 # ATEC PM — Stato Progetto e Roadmap
 
-**Ultimo aggiornamento:** 05 Marzo 2026  
+**Ultimo aggiornamento:** 07 Marzo 2026  
 **Repository:** https://github.com/Diegus1984/ATEC_PM.git
 
 ---
@@ -25,12 +25,12 @@
 - RESP_REPARTO — vede il suo reparto
 - TECH — vede solo le commesse con fasi del suo reparto
 
-### Reparti
-ELE, MEC, PLC, ROB, UTC, ACQ, AMM
+### Reparti (aggiornati)
+PM, UTM, UTE, MEC, INS, PLC, ROB, ACQ, AMM
 
 ### Funzionalità
 - Auth JWT (login, token, credenziali)
-- `employees` con `user_role`, `username`, `password_hash`
+- `employees` semplificato: nome, cognome, email, tipo (INTERNAL/EXTERNAL)
 - `employee_departments` — appartenenza reparti (con flag `is_responsible`, `is_primary`)
 - `employee_competences` — bivalenze tecniche (visibilità, NON assegnazione)
 - `PermissionEngine` centralizzato in Shared
@@ -41,6 +41,7 @@ ELE, MEC, PLC, ROB, UTC, ACQ, AMM
 ### Regole chiave
 - Appartenenza reparto (`employee_departments`) → il tecnico CI LAVORA, può essere assegnato
 - Competenza (`employee_competences`) → il tecnico CAPISCE, vede fasi/timesheet ma NON viene assegnato
+- Costo orario dipendente → derivato dal reparto di appartenenza via `departments.hourly_cost`
 
 ---
 
@@ -129,6 +130,86 @@ ELE, MEC, PLC, ROB, UTC, ACQ, AMM
 
 ---
 
+## BLOCCO 7 — Configura Commessa (Preventivazione) 🔧 IN CORSO
+
+### Concetto
+Traduzione del foglio Excel di preventivazione in modulo software. Ogni commessa ha la propria configurazione costi locale, inizializzata da template globali configurabili. Il PM compila sezioni risorse e materiali, il sistema calcola costi, vendite e prezzo finale.
+
+### Tabelle di configurazione globale (GESTIONE AVANZATA)
+
+#### Reparti ✅
+- `departments` con `hourly_cost` e `markup_code`
+- `DepartmentsPage` — CRUD, costo orario editabile inline, ComboBox markup associato
+- `DepartmentDialog` — creazione/modifica con selezione markup
+- Reparti: PM, UTM, UTE, MEC, INS, PLC, ROB, ACQ, AMM
+- Ogni reparto punta a un coefficiente risorsa (K_IMP, K_TEC, K_INST)
+
+#### K Ricarico ✅
+- `markup_coefficients` — coefficienti globali (MATERIAL + RESOURCE)
+- `MarkupPage` — lista raggruppata (MATERIALI verde, RISORSE blu), editabile inline
+- `MarkupDialog` — creazione nuovi coefficienti
+- 12 K materiali (robot, commerciali, quadri, PLC, trasferte, provvigioni, ecc.)
+- 3 K risorse (Impiegati €45/h K=1.45, Tecnici €50/h K=1.80, Installatori €38/h K=1.45)
+
+#### Sezioni Costo Template ✅
+- `cost_section_groups` — macro-gruppi configurabili (GESTIONE, PRESCHIERAMENTO, INSTALLAZIONE, OPZIONE)
+- `cost_section_templates` — 15 sezioni template con tipo IN_SEDE / DA_CLIENTE
+- `cost_section_template_departments` — relazione N-a-N sezione ↔ reparti di pertinenza
+- `CostSectionsPage` — gestione gruppi + sezioni con checkbox reparti per sezione
+- `CostSectionTemplateDialog` — creazione nuove sezioni con selezione tipo/gruppo/reparti
+
+#### Categorie Materiali ✅
+- `material_categories` — 14 categorie con `markup_code` associato
+- `MaterialCategoriesPage` — lista con ComboBox markup, K valore visualizzato
+- `MaterialCategoryDialog` — creazione nuove categorie
+- Categorie: Robot nuovi/usati, Allestimenti, Commerciali, Fornitura Atec, Materia prima, Quadri, PLC, Extra, Trasferte, Indennità, Provvigioni
+
+### Tabelle per-commessa
+
+#### Struttura DB ✅
+- `project_markup_values` — copia locale K ricarico (modificabili per commessa)
+- `project_cost_sections` — sezioni costo copiate dai template
+- `project_cost_section_departments` — reparti associati alle sezioni (copiati)
+- `project_cost_resources` — righe risorsa per sezione (con `employee_id`)
+- `project_material_sections` — categorie materiali copiate
+- `project_material_items` — righe materiale per categoria
+- `project_pricing` — percentuali scheda prezzi (struttura, contingency, rischi, margine)
+
+#### API ✅
+- `ProjectCostingController` con endpoint:
+  - `POST init` — inizializza commessa copiando template + reparti + K + categorie
+  - `GET` — caricamento completo (markup, sezioni, risorse, materiali, pricing)
+  - `GET sections/{id}/employees` — dipendenti filtrati per reparti della sezione
+  - CRUD risorse, materiali, sezioni, pricing
+
+#### UI — ProjectCostingControl 🔧 IN CORSO
+- Tab "Configura Commessa" nel TreeView commessa
+- 3 sotto-tab: **Impegno Risorse**, **Materiali**, **Riepilogo e Prezzi**
+- Inizializzazione al primo accesso (copia template default)
+- **Impegno Risorse**: sezioni raggruppate per macro-gruppo, DataGrid editabile inline per ogni sezione
+  - Colonna RISORSA = ComboBox con dipendenti filtrati per reparti della sezione
+  - Selezione dipendente → costo/h precompilato dal reparto
+  - Dipendente esclusivo per sezione (non selezionabile se già presente)
+  - Campi: GG, Ore/G, Tot Ore (calcolato), €/H (auto), Tot € (calcolato)
+  - Sezioni DA_CLIENTE: campi aggiuntivi trasferta (viaggi, km, vitto, hotel, indennità)
+  - Salvataggio automatico su CellEditEnding
+- **Materiali**: categorie con DataGrid inline (descrizione, qtà, costo unitario, totale)
+  - K ricarico visualizzato per categoria
+  - Totale costo e vendita calcolati
+- **Riepilogo e Prezzi**: calcolo automatico
+  - Suddivisione: costi risorse, trasferte, materiali
+  - Vendita con K applicati
+  - Scheda prezzi: Net Price + Costi fissi struttura % + Contingency % + Rischi/Garanzie % + Margine trattativa %
+  - FINAL OFFER PRICE calcolato
+
+### Da completare
+- Editing inline ComboBox dipendenti nella DataGrid (fix duplicati multi-reparto)
+- Possibilità di aggiungere sezioni extra nella commessa (non solo template)
+- Override K ricarico per singola commessa dalla UI
+- Export Excel/PDF del preventivo
+
+---
+
 ## Altre Funzionalità
 
 ### Commesse
@@ -162,10 +243,14 @@ ELE, MEC, PLC, ROB, UTC, ACQ, AMM
 - Clienti con import Easyfatt
 - Fornitori con import Easyfatt
 - Catalogo articoli con import Easyfatt
-- Dipendenti con reparti, competenze, credenziali
+- Dipendenti semplificati (nome, cognome, email, tipo)
 
 ### API Client
 - `ApiClient` con GET, POST, PUT, PATCH, DELETE, Upload singolo/multiplo, Download
+
+### Organizzazione codice
+- DTOs separati per categoria (13 file): Core, Employee, Customer, Supplier, Project, Phase, Timesheet, Dashboard, Department, User, Catalog, Import, Bom, Markup, MaterialCategory, CostSection, ProjectCosting
+- Models separati per categoria (5 file): Department, Employee, Anagrafica, Project, Phase
 
 ---
 
@@ -188,9 +273,10 @@ ELE, MEC, PLC, ROB, UTC, ACQ, AMM
 
 ---
 
-## Prossimi Passi Consigliati
+## Prossimi Passi
 
-1. Report ed export Excel/PDF (Blocco 6)
-2. Dashboard principale sidebar (riassunto tutte le commesse)
-3. Notifiche mail + heartbeat (Blocco 4)
-4. Deploy su server produzione
+1. **Completare Blocco 7** — fix DataGrid dipendenti, sezioni extra, override K per commessa
+2. **Dashboard principale sidebar** — riassunto tutte le commesse attive
+3. **Notifiche mail + heartbeat** (Blocco 4)
+4. **Report ed export Excel/PDF** (Blocco 6)
+5. **Deploy su server produzione**

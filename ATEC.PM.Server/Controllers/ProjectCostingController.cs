@@ -14,10 +14,6 @@ public class ProjectCostingController : ControllerBase
     private readonly DbService _db;
     public ProjectCostingController(DbService db) => _db = db;
 
-    // ══════════════════════════════════════════════════════════════
-    // INIT — copia template nella commessa
-    // ══════════════════════════════════════════════════════════════
-
     [HttpPost("init")]
     public IActionResult Initialize(int projectId)
     {
@@ -26,21 +22,20 @@ public class ProjectCostingController : ControllerBase
 
         try
         {
-            // Check se già inizializzato
             int exists = c.ExecuteScalar<int>(
                 "SELECT COUNT(*) FROM project_markup_values WHERE project_id=@projectId",
                 new { projectId }, tx);
             if (exists > 0)
                 return BadRequest(ApiResponse<string>.Fail("Configurazione già inizializzata"));
 
-            // 1. Copia K ricarico globali
+            // 1. Copia K ricarico
             c.Execute(@"
                 INSERT INTO project_markup_values (project_id, original_code, description, coefficient_type, markup_value, hourly_cost, sort_order)
                 SELECT @projectId, code, description, coefficient_type, markup_value, hourly_cost, sort_order
                 FROM markup_coefficients WHERE is_active=1 ORDER BY sort_order",
                 new { projectId }, tx);
 
-            // 2. Copia sezioni costo (template default)
+            // 2. Copia sezioni costo + reparti associati
             var templates = c.Query<dynamic>(@"
                 SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
                 FROM cost_section_templates t
@@ -50,10 +45,18 @@ public class ProjectCostingController : ControllerBase
 
             foreach (var tmpl in templates)
             {
-                c.Execute(@"
+                int newSectionId = (int)c.ExecuteScalar<long>(@"
                     INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
-                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1)",
+                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1);
+                    SELECT LAST_INSERT_ID();",
                     new { projectId, tmpl.id, tmpl.name, tmpl.section_type, tmpl.group_name, tmpl.sort_order }, tx);
+
+                c.Execute(@"
+                    INSERT INTO project_cost_section_departments (project_cost_section_id, department_id)
+                    SELECT @newSectionId, department_id
+                    FROM cost_section_template_departments
+                    WHERE section_template_id = @templateId",
+                    new { newSectionId, templateId = (int)tmpl.id }, tx);
             }
 
             // 3. Copia categorie materiali
@@ -61,8 +64,7 @@ public class ProjectCostingController : ControllerBase
                 SELECT mc.id, mc.name, mc.markup_code, COALESCE(mk.markup_value, 1.000) AS markup_value, mc.sort_order
                 FROM material_categories mc
                 LEFT JOIN markup_coefficients mk ON mk.code = mc.markup_code
-                WHERE mc.is_active=1
-                ORDER BY mc.sort_order", transaction: tx).ToList();
+                WHERE mc.is_active=1 ORDER BY mc.sort_order", transaction: tx).ToList();
 
             foreach (var cat in categories)
             {
@@ -72,10 +74,8 @@ public class ProjectCostingController : ControllerBase
                     new { projectId, cat.id, cat.name, cat.markup_code, cat.markup_value, cat.sort_order }, tx);
             }
 
-            // 4. Crea scheda prezzi default
-            c.Execute(@"
-                INSERT INTO project_pricing (project_id) VALUES (@projectId)",
-                new { projectId }, tx);
+            // 4. Scheda prezzi default
+            c.Execute("INSERT INTO project_pricing (project_id) VALUES (@projectId)", new { projectId }, tx);
 
             tx.Commit();
             return Ok(ApiResponse<string>.Ok("", "Configurazione inizializzata"));
@@ -87,23 +87,17 @@ public class ProjectCostingController : ControllerBase
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // GET COMPLETO
-    // ══════════════════════════════════════════════════════════════
-
     [HttpGet]
     public IActionResult GetAll(int projectId)
     {
         using var c = _db.Open();
 
-        // Check inizializzato
         int mkCount = c.ExecuteScalar<int>(
             "SELECT COUNT(*) FROM project_markup_values WHERE project_id=@projectId", new { projectId });
 
         if (mkCount == 0)
             return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData { ProjectId = projectId, IsInitialized = false }));
 
-        // Markup
         var markups = c.Query<ProjectMarkupValueDto>(@"
             SELECT id, project_id AS ProjectId, original_code AS OriginalCode, description,
                    coefficient_type AS CoefficientType, markup_value AS MarkupValue,
@@ -111,7 +105,6 @@ public class ProjectCostingController : ControllerBase
             FROM project_markup_values WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
-        // Sezioni costo + risorse
         var sections = c.Query<ProjectCostSectionDto>(@"
             SELECT id, project_id AS ProjectId, template_id AS TemplateId, name,
                    section_type AS SectionType, group_name AS GroupName,
@@ -119,8 +112,19 @@ public class ProjectCostingController : ControllerBase
             FROM project_cost_sections WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
+        // Reparti per sezione
+        var sectionDepts = c.Query<(int SectionId, int DepartmentId)>(@"
+            SELECT project_cost_section_id AS SectionId, department_id AS DepartmentId
+            FROM project_cost_section_departments psd
+            JOIN project_cost_sections ps ON ps.id = psd.project_cost_section_id
+            WHERE ps.project_id=@projectId", new { projectId }).ToList();
+
+        foreach (var sec in sections)
+            sec.DepartmentIds = sectionDepts.Where(d => d.SectionId == sec.Id).Select(d => d.DepartmentId).ToList();
+
         var allResources = c.Query<ProjectCostResourceDto>(@"
-            SELECT r.id, r.section_id AS SectionId, r.resource_name AS ResourceName,
+            SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId,
+                   r.resource_name AS ResourceName,
                    r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay, r.hourly_cost AS HourlyCost,
                    r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm,
                    r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel,
@@ -134,7 +138,6 @@ public class ProjectCostingController : ControllerBase
         foreach (var sec in sections)
             sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
 
-        // Sezioni materiali + items
         var matSections = c.Query<ProjectMaterialSectionDto>(@"
             SELECT id, project_id AS ProjectId, category_id AS CategoryId, name,
                    markup_code AS MarkupCode, markup_value AS MarkupValue,
@@ -153,7 +156,6 @@ public class ProjectCostingController : ControllerBase
         foreach (var ms in matSections)
             ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
 
-        // Pricing
         var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
             SELECT id, project_id AS ProjectId, structure_costs_pct AS StructureCostsPct,
                    contingency_pct AS ContingencyPct, risk_warranty_pct AS RiskWarrantyPct,
@@ -173,7 +175,30 @@ public class ProjectCostingController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
-    // MARKUP — aggiorna valore locale
+    // DIPENDENTI PER SEZIONE (filtrati per reparti associati)
+    // ══════════════════════════════════════════════════════════════
+
+    [HttpGet("sections/{sectionId}/employees")]
+    public IActionResult GetEmployeesForSection(int projectId, int sectionId)
+    {
+        using var c = _db.Open();
+        var rows = c.Query<EmployeeCostLookup>(@"
+            SELECT e.id, CONCAT(e.first_name,' ',e.last_name) AS FullName,
+                   MAX(d.code) AS DepartmentCode, MAX(d.hourly_cost) AS HourlyCost
+            FROM employees e
+            JOIN employee_departments ed ON ed.employee_id = e.id
+            JOIN departments d ON d.id = ed.department_id
+            JOIN project_cost_section_departments psd ON psd.department_id = d.id
+            WHERE psd.project_cost_section_id = @sectionId
+              AND e.status <> 'TERMINATED'
+            GROUP BY e.id, e.first_name, e.last_name
+            ORDER BY e.last_name",
+            new { sectionId }).ToList();
+        return Ok(ApiResponse<List<EmployeeCostLookup>>.Ok(rows));
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // MARKUP
     // ══════════════════════════════════════════════════════════════
 
     [HttpPatch("markup/{id}")]
@@ -190,7 +215,7 @@ public class ProjectCostingController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
-    // SEZIONI COSTO — CRUD risorse
+    // SEZIONI COSTO
     // ══════════════════════════════════════════════════════════════
 
     [HttpPost("sections")]
@@ -226,14 +251,18 @@ public class ProjectCostingController : ControllerBase
         return Ok(ApiResponse<string>.Ok("", "Sezione eliminata"));
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // RISORSE
+    // ══════════════════════════════════════════════════════════════
+
     [HttpPost("resources")]
     public IActionResult AddResource(int projectId, [FromBody] ProjectCostResourceSaveRequest req)
     {
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(@"
-            INSERT INTO project_cost_resources (section_id, resource_name, work_days, hours_per_day, hourly_cost,
+            INSERT INTO project_cost_resources (section_id, employee_id, resource_name, work_days, hours_per_day, hourly_cost,
                 num_trips, km_per_trip, cost_per_km, daily_food, daily_hotel, allowance_days, daily_allowance, sort_order)
-            VALUES (@SectionId, @ResourceName, @WorkDays, @HoursPerDay, @HourlyCost,
+            VALUES (@SectionId, @EmployeeId, @ResourceName, @WorkDays, @HoursPerDay, @HourlyCost,
                 @NumTrips, @KmPerTrip, @CostPerKm, @DailyFood, @DailyHotel, @AllowanceDays, @DailyAllowance, @SortOrder);
             SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Risorsa aggiunta"));
@@ -245,8 +274,8 @@ public class ProjectCostingController : ControllerBase
         using var c = _db.Open();
         req.Id = id;
         c.Execute(@"
-            UPDATE project_cost_resources SET resource_name=@ResourceName, work_days=@WorkDays,
-                hours_per_day=@HoursPerDay, hourly_cost=@HourlyCost,
+            UPDATE project_cost_resources SET employee_id=@EmployeeId, resource_name=@ResourceName,
+                work_days=@WorkDays, hours_per_day=@HoursPerDay, hourly_cost=@HourlyCost,
                 num_trips=@NumTrips, km_per_trip=@KmPerTrip, cost_per_km=@CostPerKm,
                 daily_food=@DailyFood, daily_hotel=@DailyHotel,
                 allowance_days=@AllowanceDays, daily_allowance=@DailyAllowance, sort_order=@SortOrder
@@ -263,7 +292,7 @@ public class ProjectCostingController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
-    // SEZIONI MATERIALI — CRUD items
+    // MATERIALI
     // ══════════════════════════════════════════════════════════════
 
     [HttpPost("material-sections")]
