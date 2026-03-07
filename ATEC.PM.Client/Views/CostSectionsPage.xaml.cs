@@ -6,6 +6,7 @@ public partial class CostSectionsPage : Page
 {
     private List<CostSectionGroupDto> _groups = new();
     private List<CostSectionTemplateDto> _templates = new();
+    private List<DepartmentDto> _departments = new();
 
     private static readonly Dictionary<string, string> GroupColors = new()
     {
@@ -26,6 +27,14 @@ public partial class CostSectionsPage : Page
     {
         try
         {
+            // Carica reparti
+            string dJson = await ApiClient.GetAsync("/api/departments");
+            JsonDocument dDoc = JsonDocument.Parse(dJson);
+            if (dDoc.RootElement.GetProperty("success").GetBoolean())
+                _departments = JsonSerializer.Deserialize<List<DepartmentDto>>(
+                    dDoc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
             // Carica gruppi
             string gJson = await ApiClient.GetAsync("/api/cost-sections/groups");
             JsonDocument gDoc = JsonDocument.Parse(gJson);
@@ -59,10 +68,8 @@ public partial class CostSectionsPage : Page
                 .Where(t => t.GroupId == group.Id)
                 .OrderBy(t => t.SortOrder).ToList();
 
-            // Header gruppo (editabile)
             pnlSections.Children.Add(BuildGroupHeader(group, groupTemplates.Count));
 
-            // Template di questo gruppo
             foreach (CostSectionTemplateDto tmpl in groupTemplates)
                 pnlSections.Children.Add(BuildTemplateRow(tmpl));
         }
@@ -83,18 +90,15 @@ public partial class CostSectionsPage : Page
 
         DockPanel dp = new();
 
-        // Nome gruppo + conteggio
         TextBlock txt = new()
         {
             Text = $"  {group.Name}  —  {count} sezioni",
             Foreground = Brushes.White,
-            FontSize = 12,
-            FontWeight = FontWeights.SemiBold,
+            FontSize = 12, FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
         dp.Children.Add(txt);
 
-        // Bottoni edit/delete gruppo
         StackPanel actions = new()
         {
             Orientation = Orientation.Horizontal,
@@ -103,7 +107,6 @@ public partial class CostSectionsPage : Page
         };
         DockPanel.SetDock(actions, Dock.Right);
 
-        // Ordine editabile
         TextBox txtSort = new()
         {
             Text = group.SortOrder.ToString(),
@@ -121,7 +124,6 @@ public partial class CostSectionsPage : Page
         };
         actions.Children.Add(txtSort);
 
-        // Rinomina
         Button btnEdit = new()
         {
             Content = "✏", Width = 22, Height = 22, FontSize = 10,
@@ -138,7 +140,6 @@ public partial class CostSectionsPage : Page
         };
         actions.Children.Add(btnEdit);
 
-        // Elimina
         Button btnDel = new()
         {
             Content = "✕", Width = 22, Height = 22, FontSize = 10,
@@ -149,7 +150,7 @@ public partial class CostSectionsPage : Page
         };
         btnDel.Click += async (s, e) =>
         {
-            if (MessageBox.Show($"Eliminare il gruppo \"{group.Name}\"?\nTutte le sezioni associate verranno eliminate.",
+            if (MessageBox.Show($"Eliminare il gruppo \"{group.Name}\"?",
                 "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try
             {
@@ -180,13 +181,15 @@ public partial class CostSectionsPage : Page
             Margin = new Thickness(0, 0, 0, 2)
         };
 
+        StackPanel outer = new();
+
+        // Riga principale
         Grid grid = new();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });   // Default
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Nome
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });  // Tipo
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });   // Ordine
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });   // Del
 
         // Col 0: Checkbox default
         CheckBox chkDefault = new()
@@ -216,7 +219,7 @@ public partial class CostSectionsPage : Page
         Grid.SetColumn(txtName, 1);
         grid.Children.Add(txtName);
 
-        // Col 2: Tipo (badge)
+        // Col 2: Tipo badge
         string typeColor = tmpl.SectionType == "DA_CLIENTE" ? "#D97706" : "#059669";
         string typeLabel = tmpl.SectionType == "DA_CLIENTE" ? "DA CLIENTE" : "IN SEDE";
         Border typeBadge = new()
@@ -226,26 +229,11 @@ public partial class CostSectionsPage : Page
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Left
         };
-        typeBadge.Child = new TextBlock
-        {
-            Text = typeLabel, FontSize = 10, FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(typeColor)
-        };
+        typeBadge.Child = new TextBlock { Text = typeLabel, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brush(typeColor) };
         Grid.SetColumn(typeBadge, 2);
         grid.Children.Add(typeBadge);
 
-        // Col 3: Gruppo
-        TextBlock txtGroup = new()
-        {
-            Text = tmpl.GroupName,
-            FontSize = 11,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = Brushes.Gray
-        };
-        Grid.SetColumn(txtGroup, 3);
-        grid.Children.Add(txtGroup);
-
-        // Col 4: Sort order
+        // Col 3: Sort order
         TextBox txtSort = new()
         {
             Text = tmpl.SortOrder.ToString(),
@@ -262,10 +250,10 @@ public partial class CostSectionsPage : Page
             await UpdateTemplateField(tmpl.Id, "sort_order", val.ToString());
             tmpl.SortOrder = val;
         };
-        Grid.SetColumn(txtSort, 4);
+        Grid.SetColumn(txtSort, 3);
         grid.Children.Add(txtSort);
 
-        // Col 5: Elimina
+        // Col 4: Elimina
         Button btnDel = new()
         {
             Content = "✕", Width = 24, Height = 24, FontSize = 11,
@@ -290,10 +278,42 @@ public partial class CostSectionsPage : Page
             }
             catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
         };
-        Grid.SetColumn(btnDel, 5);
+        Grid.SetColumn(btnDel, 4);
         grid.Children.Add(btnDel);
 
-        row.Child = grid;
+        outer.Children.Add(grid);
+
+        // Riga reparti — checkbox per ogni reparto
+        WrapPanel wpDepts = new() { Margin = new Thickness(50, 4, 0, 2) };
+        foreach (DepartmentDto dept in _departments.Where(d => d.IsActive).OrderBy(d => d.SortOrder))
+        {
+            CheckBox chk = new()
+            {
+                Content = dept.Code,
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 12, 0),
+                IsChecked = tmpl.DepartmentIds.Contains(dept.Id),
+                Tag = dept.Id,
+                Foreground = Brush("#374151")
+            };
+            int templateId = tmpl.Id;
+            chk.Click += async (s, e) =>
+            {
+                // Raccogli tutti i checked
+                List<int> selectedIds = new();
+                foreach (var child in wpDepts.Children)
+                {
+                    if (child is CheckBox cb && cb.IsChecked == true && cb.Tag is int dId)
+                        selectedIds.Add(dId);
+                }
+                await SaveTemplateDepartments(templateId, selectedIds);
+                tmpl.DepartmentIds = selectedIds;
+            };
+            wpDepts.Children.Add(chk);
+        }
+        outer.Children.Add(wpDepts);
+
+        row.Child = outer;
         return row;
     }
 
@@ -319,7 +339,7 @@ public partial class CostSectionsPage : Page
 
     private async void BtnAddTemplate_Click(object sender, RoutedEventArgs e)
     {
-        CostSectionTemplateDialog dlg = new(_groups) { Owner = Window.GetWindow(this) };
+        CostSectionTemplateDialog dlg = new(_groups, _departments) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) await LoadData();
     }
 
@@ -376,6 +396,17 @@ public partial class CostSectionsPage : Page
         {
             string json = JsonSerializer.Serialize(new { field, value });
             await ApiClient.PatchAsync($"/api/cost-sections/templates/{id}/field", json);
+        }
+        catch { }
+    }
+
+    private async Task SaveTemplateDepartments(int templateId, List<int> departmentIds)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(new { departmentIds },
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"/api/cost-sections/templates/{templateId}/departments", json);
         }
         catch { }
     }

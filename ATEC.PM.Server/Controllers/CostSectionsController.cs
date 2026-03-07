@@ -95,6 +95,20 @@ public class CostSectionsController : ControllerBase
               FROM cost_section_templates t
               JOIN cost_section_groups g ON g.id = t.group_id
               ORDER BY t.sort_order").ToList();
+
+        // Carica reparti per ogni template
+        var allDepts = c.Query<(int SectionTemplateId, int DepartmentId, string DepartmentCode)>(
+            @"SELECT sd.section_template_id AS SectionTemplateId, sd.department_id AS DepartmentId, d.code AS DepartmentCode
+              FROM cost_section_template_departments sd
+              JOIN departments d ON d.id = sd.department_id").ToList();
+
+        foreach (var tmpl in rows)
+        {
+            var depts = allDepts.Where(d => d.SectionTemplateId == tmpl.Id).ToList();
+            tmpl.DepartmentIds = depts.Select(d => d.DepartmentId).ToList();
+            tmpl.DepartmentCodes = depts.Select(d => d.DepartmentCode).ToList();
+        }
+
         return Ok(ApiResponse<List<CostSectionTemplateDto>>.Ok(rows));
     }
 
@@ -107,10 +121,21 @@ public class CostSectionsController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail("Gruppo obbligatorio"));
 
         using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+
         int id = (int)c.ExecuteScalar<long>(
             @"INSERT INTO cost_section_templates (name, section_type, group_id, is_default, sort_order, is_active)
               VALUES (@Name, @SectionType, @GroupId, @IsDefault, @SortOrder, @IsActive);
-              SELECT LAST_INSERT_ID();", req);
+              SELECT LAST_INSERT_ID();", req, tx);
+
+        // Salva reparti associati
+        foreach (int deptId in req.DepartmentIds)
+        {
+            c.Execute("INSERT INTO cost_section_template_departments (section_template_id, department_id) VALUES (@id, @deptId)",
+                new { id, deptId }, tx);
+        }
+
+        tx.Commit();
         return Ok(ApiResponse<int>.Ok(id, "Sezione template creata"));
     }
 
@@ -121,13 +146,48 @@ public class CostSectionsController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail("Nome obbligatorio"));
 
         using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+
         int rows = c.Execute(
             @"UPDATE cost_section_templates SET name=@Name, section_type=@SectionType,
               group_id=@GroupId, is_default=@IsDefault, sort_order=@SortOrder, is_active=@IsActive
               WHERE id=@id",
-            new { req.Name, req.SectionType, req.GroupId, req.IsDefault, req.SortOrder, req.IsActive, id });
-        if (rows == 0) return NotFound(ApiResponse<string>.Fail("Template non trovato"));
+            new { req.Name, req.SectionType, req.GroupId, req.IsDefault, req.SortOrder, req.IsActive, id }, tx);
+
+        if (rows == 0)
+        {
+            tx.Rollback();
+            return NotFound(ApiResponse<string>.Fail("Template non trovato"));
+        }
+
+        // Aggiorna reparti: delete + re-insert
+        c.Execute("DELETE FROM cost_section_template_departments WHERE section_template_id=@id", new { id }, tx);
+        foreach (int deptId in req.DepartmentIds)
+        {
+            c.Execute("INSERT INTO cost_section_template_departments (section_template_id, department_id) VALUES (@id, @deptId)",
+                new { id, deptId }, tx);
+        }
+
+        tx.Commit();
         return Ok(ApiResponse<string>.Ok("", "Template aggiornato"));
+    }
+
+    // Endpoint dedicato per aggiornare solo i reparti di una sezione
+    [HttpPut("templates/{id}/departments")]
+    public IActionResult UpdateTemplateDepartments(int id, [FromBody] SectionDepartmentsRequest req)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+
+        c.Execute("DELETE FROM cost_section_template_departments WHERE section_template_id=@id", new { id }, tx);
+        foreach (int deptId in req.DepartmentIds)
+        {
+            c.Execute("INSERT INTO cost_section_template_departments (section_template_id, department_id) VALUES (@id, @deptId)",
+                new { id, deptId }, tx);
+        }
+
+        tx.Commit();
+        return Ok(ApiResponse<string>.Ok("", "Reparti aggiornati"));
     }
 
     [HttpPatch("templates/{id}/field")]

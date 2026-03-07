@@ -173,6 +173,7 @@ public partial class ProjectsPage : Page
             };
 
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
@@ -586,6 +587,9 @@ public partial class ProjectsPage : Page
                 case "details":
                     ShowDetails(id);
                     break;
+                case "costing":
+                    ShowCosting(id);
+                    break;
                 case "phases":
                     ShowPhases(id);
                     break;
@@ -612,7 +616,14 @@ public partial class ProjectsPage : Page
             }
         }
     }
-
+    private void ShowCosting(int projectId)
+    {
+        txtSectionTitle.Text = "Configura Commessa";
+        btnAction.Visibility = Visibility.Collapsed;
+        var control = new ProjectCostingControl();
+        SectionContent.Content = control;
+        control.Load(projectId);
+    }
     // === SEARCH ===
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {

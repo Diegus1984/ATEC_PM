@@ -92,6 +92,7 @@
                         Header="Dettagli"
                         IsSelected="True"
                         Tag="details" />
+                    <TreeViewItem Header="Configura Commessa" Tag="costing" />
                     <TreeViewItem Header="Fasi e Avanzamento" Tag="phases" />
                     <TreeViewItem Header="Timesheet" Tag="timesheet" />
                     <TreeViewItem Header="Documenti" Tag="documents">

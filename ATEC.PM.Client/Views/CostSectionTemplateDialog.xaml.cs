@@ -2,14 +2,26 @@ namespace ATEC.PM.Client.Views;
 
 public partial class CostSectionTemplateDialog : Window
 {
-    public CostSectionTemplateDialog(List<CostSectionGroupDto> groups)
+    public CostSectionTemplateDialog(List<CostSectionGroupDto> groups, List<DepartmentDto> departments)
     {
         InitializeComponent();
 
         foreach (CostSectionGroupDto g in groups.OrderBy(g => g.SortOrder))
             cmbGroup.Items.Add(new ComboBoxItem { Content = g.Name, Tag = g.Id });
-
         if (cmbGroup.Items.Count > 0) cmbGroup.SelectedIndex = 0;
+
+        // Checkbox reparti
+        foreach (DepartmentDto dept in departments.Where(d => d.IsActive).OrderBy(d => d.SortOrder))
+        {
+            CheckBox chk = new()
+            {
+                Content = $"{dept.Code} — {dept.Name}",
+                FontSize = 12,
+                Margin = new Thickness(0, 3, 16, 3),
+                Tag = dept.Id
+            };
+            wpDepartments.Children.Add(chk);
+        }
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -30,6 +42,14 @@ public partial class CostSectionTemplateDialog : Window
         string sectionType = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "IN_SEDE";
         int.TryParse(txtSortOrder.Text, out int sortOrder);
 
+        // Raccogli reparti selezionati
+        List<int> deptIds = new();
+        foreach (var child in wpDepartments.Children)
+        {
+            if (child is CheckBox chk && chk.IsChecked == true && chk.Tag is int dId)
+                deptIds.Add(dId);
+        }
+
         try
         {
             string json = JsonSerializer.Serialize(new
@@ -39,7 +59,8 @@ public partial class CostSectionTemplateDialog : Window
                 groupId,
                 isDefault = chkDefault.IsChecked == true,
                 sortOrder,
-                isActive = true
+                isActive = true,
+                departmentIds = deptIds
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync("/api/cost-sections/templates", json);
