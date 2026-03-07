@@ -36,11 +36,10 @@ public partial class MainWindow : Window
         lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || 
                                   btnReparti.Visibility == Visibility.Visible || 
                                   btnMarkup.Visibility == Visibility.Visible ||
+                                  btnMaterialCat.Visibility == Visibility.Visible ||
                                   btnCostSections.Visibility == Visibility.Visible ) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
-        btnReport.Visibility = PermissionEngine.CanAccessReport(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnImpostazioni.Visibility = PermissionEngine.CanAccessImpostazioni(u) ? Visibility.Visible : Visibility.Collapsed;
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
         btnMarkup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
         btnCostSections.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
@@ -52,9 +51,7 @@ public partial class MainWindow : Window
                            btnCatalogo.Visibility == Visibility.Visible;
         lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
-        bool anyAdmin = btnReport.Visibility == Visibility.Visible ||
-                        btnImpostazioni.Visibility == Visibility.Visible ||
-                        btnUtenti.Visibility == Visibility.Visible;
+        bool anyAdmin =  btnUtenti.Visibility == Visibility.Visible;
         lblAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -82,6 +79,8 @@ public partial class MainWindow : Window
             case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
             case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
             case "Markup": PageContent.Navigate(new MarkupPage()); break;
+            case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
+            case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             default: PageContent.Content = null; break;
         }
     }

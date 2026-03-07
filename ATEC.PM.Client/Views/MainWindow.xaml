@@ -145,18 +145,6 @@
                         Content="  Utenti"
                         Style="{StaticResource NavBtn}"
                         Tag="Utenti" />
-                    <Button
-                        x:Name="btnReport"
-                        Click="Nav_Click"
-                        Content="  Report"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Report" />
-                    <Button
-                        x:Name="btnImpostazioni"
-                        Click="Nav_Click"
-                        Content="  Impostazioni"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Impostazioni" />
                     <!--  GESTIONE AVANZATA  -->
                     <TextBlock
                         x:Name="lblAvanzata"
@@ -189,6 +177,12 @@
                         Content="  Sezioni Costo"
                         Style="{StaticResource NavBtn}"
                         Tag="SezioniCosto" />
+                    <Button
+                        x:Name="btnMaterialCat"
+                        Click="Nav_Click"
+                        Content="  Categorie Materiali"
+                        Style="{StaticResource NavBtn}"
+                        Tag="CategorieMateriali" />
                     <!--  SESSIONE  -->
                     <TextBlock
                         Margin="12,24,0,8"
