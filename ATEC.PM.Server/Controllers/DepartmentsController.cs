@@ -19,7 +19,7 @@ public class DepartmentsController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<DepartmentDto>(
-            @"SELECT id, code, name, hourly_cost AS HourlyCost, sort_order AS SortOrder, is_active AS IsActive 
+            @"SELECT id, code, name, hourly_cost AS HourlyCost,markup_code AS MarkupCode, sort_order AS SortOrder, is_active AS IsActive 
               FROM departments ORDER BY sort_order").ToList();
         return Ok(ApiResponse<List<DepartmentDto>>.Ok(rows));
     }
@@ -29,7 +29,7 @@ public class DepartmentsController : ControllerBase
     {
         using var c = _db.Open();
         var row = c.QueryFirstOrDefault<DepartmentDto>(
-            @"SELECT id, code, name, hourly_cost AS HourlyCost, sort_order AS SortOrder, is_active AS IsActive 
+            @"SELECT id, code, name, hourly_cost AS HourlyCost,markup_code AS MarkupCode, sort_order AS SortOrder, is_active AS IsActive 
               FROM departments WHERE id=@id", new { id });
         if (row == null) return NotFound(ApiResponse<string>.Fail("Reparto non trovato"));
         return Ok(ApiResponse<DepartmentDto>.Ok(row));
@@ -50,9 +50,9 @@ public class DepartmentsController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail($"Codice '{req.Code}' già esistente"));
 
         int id = (int)c.ExecuteScalar<long>(
-            @"INSERT INTO departments (code, name, hourly_cost, sort_order, is_active) 
-              VALUES (@Code, @Name, @HourlyCost, @SortOrder, @IsActive);
-              SELECT LAST_INSERT_ID();", req);
+    @"INSERT INTO departments (code, name, hourly_cost, markup_code, sort_order, is_active) 
+      VALUES (@Code, @Name, @HourlyCost, @MarkupCode, @SortOrder, @IsActive);
+      SELECT LAST_INSERT_ID();", req);
 
         return Ok(ApiResponse<int>.Ok(id, "Reparto creato"));
     }
@@ -73,9 +73,9 @@ public class DepartmentsController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail($"Codice '{req.Code}' già esistente"));
 
         int rows = c.Execute(
-            @"UPDATE departments SET code=@Code, name=@Name, hourly_cost=@HourlyCost, 
-              sort_order=@SortOrder, is_active=@IsActive WHERE id=@id",
-            new { req.Code, req.Name, req.HourlyCost, req.SortOrder, req.IsActive, id });
+    @"UPDATE departments SET code=@Code, name=@Name, hourly_cost=@HourlyCost,
+      markup_code=@MarkupCode, sort_order=@SortOrder, is_active=@IsActive WHERE id=@id",
+    new { req.Code, req.Name, req.HourlyCost, req.MarkupCode, req.SortOrder, req.IsActive, id });
 
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Reparto non trovato"));
         return Ok(ApiResponse<string>.Ok("", "Reparto aggiornato"));
@@ -84,7 +84,7 @@ public class DepartmentsController : ControllerBase
     [HttpPatch("{id}/field")]
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "code", "name", "hourly_cost", "sort_order", "is_active" };
+        var allowed = new HashSet<string> { "code", "name", "hourly_cost", "markup_code", "sort_order", "is_active" };
         if (!allowed.Contains(req.Field))
             return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
 

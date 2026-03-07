@@ -1,5 +1,5 @@
 <Page
-    x:Class="ATEC.PM.Client.Views.DepartmentsPage"
+    x:Class="ATEC.PM.Client.Views.MarkupPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#F7F8FA">
@@ -19,7 +19,7 @@
                         FontSize="16"
                         FontWeight="Bold"
                         Foreground="#1A1D26"
-                        Text="Gestione Reparti" />
+                        Text="K Ricarico — Coefficienti" />
                     <TextBlock
                         x:Name="txtCount"
                         Margin="16,0,0,0"
@@ -37,7 +37,7 @@
                         Background="#4F6EF7"
                         BorderThickness="0"
                         Click="BtnAdd_Click"
-                        Content="+ Nuovo Reparto"
+                        Content="+ Nuovo Coefficiente"
                         Cursor="Hand"
                         FontSize="13"
                         FontWeight="SemiBold"
@@ -55,21 +55,23 @@
             DockPanel.Dock="Top">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="130" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="100" />
-                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="60" />
                     <ColumnDefinition Width="60" />
                     <ColumnDefinition Width="50" />
-                    <ColumnDefinition Width="70" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="CODICE" />
-                <TextBlock Grid.Column="1" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME" />
-                <TextBlock Grid.Column="2" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO ORARIO €" />
-                <TextBlock Grid.Column="3" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="MARKUP" />
-                <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDINE" />
-                <TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ATTIVO" />
-                <TextBlock Grid.Column="6" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="" />
+                <TextBlock Grid.Column="1" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="DESCRIZIONE" />
+                <TextBlock Grid.Column="2" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="TIPO" />
+                <TextBlock Grid.Column="3" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="K VALORE" />
+                <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO/H €" />
+                <TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VENDITA/H" />
+                <TextBlock Grid.Column="6" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDINE" />
+                <TextBlock Grid.Column="7" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="" />
             </Grid>
         </Border>
 
@@ -88,7 +90,7 @@
 
         <!--  LISTA  -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="pnlDepartments" Margin="16,8,16,16" />
+            <StackPanel x:Name="pnlMarkup" Margin="16,8,16,16" />
         </ScrollViewer>
 
     </DockPanel>

@@ -33,13 +33,18 @@ public partial class MainWindow : Window
         // Sezione GESTIONE AVANZATA
         btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
         btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || btnReparti.Visibility == Visibility.Visible)
-            ? Visibility.Visible : Visibility.Collapsed;
+        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || 
+                                  btnReparti.Visibility == Visibility.Visible || 
+                                  btnMarkup.Visibility == Visibility.Visible ||
+                                  btnCostSections.Visibility == Visibility.Visible ) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnReport.Visibility = PermissionEngine.CanAccessReport(u) ? Visibility.Visible : Visibility.Collapsed;
         btnImpostazioni.Visibility = PermissionEngine.CanAccessImpostazioni(u) ? Visibility.Visible : Visibility.Collapsed;
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnMarkup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        btnCostSections.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+
 
         // Nascondi label sezione se tutti i bottoni sono collassati
         bool anyGestione = btnClienti.Visibility == Visibility.Visible ||
@@ -76,6 +81,7 @@ public partial class MainWindow : Window
             case "Utenti": PageContent.Navigate(new UsersPage()); break;
             case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
             case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
+            case "Markup": PageContent.Navigate(new MarkupPage()); break;
             default: PageContent.Content = null; break;
         }
     }

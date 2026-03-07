@@ -5,6 +5,7 @@ namespace ATEC.PM.Client.Views;
 public partial class DepartmentsPage : Page
 {
     private List<DepartmentDto> _departments = new();
+    private List<MarkupCoefficientDto> _markups = new();
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
@@ -19,6 +20,15 @@ public partial class DepartmentsPage : Page
     {
         try
         {
+            // Carica markup (solo RESOURCE per la combo)
+            string mkJson = await ApiClient.GetAsync("/api/markup");
+            JsonDocument mkDoc = JsonDocument.Parse(mkJson);
+            if (mkDoc.RootElement.GetProperty("success").GetBoolean())
+                _markups = JsonSerializer.Deserialize<List<MarkupCoefficientDto>>(
+                    mkDoc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            // Carica departments
             string json = await ApiClient.GetAsync("/api/departments");
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
@@ -58,12 +68,13 @@ public partial class DepartmentsPage : Page
         Grid grid = new();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
 
-        // Codice (badge colorato)
+        // Col 0: Codice (badge)
         Border codeBadge = new()
         {
             Background = Brush("#4F6EF720"),
@@ -81,7 +92,7 @@ public partial class DepartmentsPage : Page
         Grid.SetColumn(codeBadge, 0);
         grid.Children.Add(codeBadge);
 
-        // Nome
+        // Col 1: Nome
         TextBlock txtName = new()
         {
             Text = dept.Name,
@@ -92,16 +103,13 @@ public partial class DepartmentsPage : Page
         Grid.SetColumn(txtName, 1);
         grid.Children.Add(txtName);
 
-        // Costo orario (editabile)
+        // Col 2: Costo orario (editabile)
         TextBox txtCost = new()
         {
             Text = dept.HourlyCost.ToString("F2"),
-            FontSize = 12,
-            Width = 80,
-            Height = 24,
+            FontSize = 12, Width = 80, Height = 24,
             Padding = new Thickness(4, 2, 4, 2),
-            BorderBrush = Brush("#E4E7EC"),
-            BorderThickness = new Thickness(1),
+            BorderBrush = Brush("#E4E7EC"), BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
             HorizontalContentAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center
@@ -117,16 +125,42 @@ public partial class DepartmentsPage : Page
         Grid.SetColumn(txtCost, 2);
         grid.Children.Add(txtCost);
 
-        // Sort order (editabile)
+        // Col 3: Markup code (ComboBox)
+        ComboBox cmbMarkup = new()
+        {
+            Height = 24, Width = 110,
+            FontSize = 11,
+            Padding = new Thickness(4, 2, 4, 2),
+            BorderBrush = Brush("#E4E7EC"),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        cmbMarkup.Items.Add(new ComboBoxItem { Content = "— nessuno —", Tag = "" });
+        int selectedIdx = 0;
+        int idx = 1;
+        foreach (MarkupCoefficientDto mk in _markups.Where(m => m.CoefficientType == "RESOURCE").OrderBy(m => m.SortOrder))
+        {
+            cmbMarkup.Items.Add(new ComboBoxItem { Content = mk.Code, Tag = mk.Code });
+            if (mk.Code == dept.MarkupCode) selectedIdx = idx;
+            idx++;
+        }
+        cmbMarkup.SelectedIndex = selectedIdx;
+        cmbMarkup.SelectionChanged += async (s, e) =>
+        {
+            string newCode = (cmbMarkup.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
+            if (newCode == dept.MarkupCode) return;
+            await UpdateField(dept.Id, "markup_code", newCode);
+            dept.MarkupCode = newCode;
+        };
+        Grid.SetColumn(cmbMarkup, 3);
+        grid.Children.Add(cmbMarkup);
+
+        // Col 4: Sort order (editabile)
         TextBox txtSort = new()
         {
             Text = dept.SortOrder.ToString(),
-            FontSize = 12,
-            Width = 50,
-            Height = 24,
+            FontSize = 12, Width = 40, Height = 24,
             Padding = new Thickness(4, 2, 4, 2),
-            BorderBrush = Brush("#E4E7EC"),
-            BorderThickness = new Thickness(1),
+            BorderBrush = Brush("#E4E7EC"), BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
@@ -138,10 +172,10 @@ public partial class DepartmentsPage : Page
             await UpdateField(dept.Id, "sort_order", newSort.ToString());
             dept.SortOrder = newSort;
         };
-        Grid.SetColumn(txtSort, 3);
+        Grid.SetColumn(txtSort, 4);
         grid.Children.Add(txtSort);
 
-        // Checkbox attivo
+        // Col 5: Checkbox attivo
         CheckBox chkActive = new()
         {
             IsChecked = dept.IsActive,
@@ -155,10 +189,10 @@ public partial class DepartmentsPage : Page
             dept.IsActive = newVal;
             RenderList();
         };
-        Grid.SetColumn(chkActive, 4);
+        Grid.SetColumn(chkActive, 5);
         grid.Children.Add(chkActive);
 
-        // Bottoni modifica + elimina
+        // Col 6: Bottoni modifica + elimina
         StackPanel actions = new()
         {
             Orientation = Orientation.Horizontal,
@@ -168,28 +202,22 @@ public partial class DepartmentsPage : Page
 
         Button btnEdit = new()
         {
-            Content = "✏",
-            Width = 24, Height = 24,
-            FontSize = 11,
-            Background = Brush("#4F6EF71A"),
-            Foreground = Brush("#4F6EF7"),
+            Content = "✏", Width = 24, Height = 24, FontSize = 11,
+            Background = Brush("#4F6EF71A"), Foreground = Brush("#4F6EF7"),
             BorderThickness = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
             ToolTip = "Modifica reparto"
         };
         btnEdit.Click += async (s, e) =>
         {
-            DepartmentDialog dlg = new(dept) { Owner = Window.GetWindow(this) };
+            DepartmentDialog dlg = new(dept, _markups) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) await LoadData();
         };
 
         Button btnDel = new()
         {
-            Content = "✕",
-            Width = 24, Height = 24,
-            FontSize = 11,
-            Background = Brush("#EF44441A"),
-            Foreground = Brush("#EF4444"),
+            Content = "✕", Width = 24, Height = 24, FontSize = 11,
+            Background = Brush("#EF44441A"), Foreground = Brush("#EF4444"),
             BorderThickness = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
             Margin = new Thickness(4, 0, 0, 0),
@@ -213,7 +241,7 @@ public partial class DepartmentsPage : Page
 
         actions.Children.Add(btnEdit);
         actions.Children.Add(btnDel);
-        Grid.SetColumn(actions, 5);
+        Grid.SetColumn(actions, 6);
         grid.Children.Add(actions);
 
         row.Child = grid;
@@ -222,7 +250,7 @@ public partial class DepartmentsPage : Page
 
     private async void BtnAdd_Click(object sender, RoutedEventArgs e)
     {
-        DepartmentDialog dlg = new() { Owner = Window.GetWindow(this) };
+        DepartmentDialog dlg = new(_markups) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) await LoadData();
     }
 

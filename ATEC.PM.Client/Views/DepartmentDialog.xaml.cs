@@ -5,15 +5,16 @@ public partial class DepartmentDialog : Window
     private readonly DepartmentDto? _existing;
 
     // Nuovo reparto
-    public DepartmentDialog()
+    public DepartmentDialog(List<MarkupCoefficientDto> markups)
     {
         InitializeComponent();
         _existing = null;
         txtDialogTitle.Text = "Nuovo Reparto";
+        PopulateMarkupCombo(markups, "");
     }
 
     // Modifica reparto esistente
-    public DepartmentDialog(DepartmentDto dept)
+    public DepartmentDialog(DepartmentDto dept, List<MarkupCoefficientDto> markups)
     {
         InitializeComponent();
         _existing = dept;
@@ -22,6 +23,21 @@ public partial class DepartmentDialog : Window
         txtName.Text = dept.Name;
         txtHourlyCost.Text = dept.HourlyCost.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         txtSortOrder.Text = dept.SortOrder.ToString();
+        PopulateMarkupCombo(markups, dept.MarkupCode);
+    }
+
+    private void PopulateMarkupCombo(List<MarkupCoefficientDto> markups, string currentCode)
+    {
+        cmbMarkup.Items.Add(new ComboBoxItem { Content = "— nessuno —", Tag = "" });
+        int selectedIdx = 0;
+        int idx = 1;
+        foreach (MarkupCoefficientDto mk in markups.Where(m => m.CoefficientType == "RESOURCE").OrderBy(m => m.SortOrder))
+        {
+            cmbMarkup.Items.Add(new ComboBoxItem { Content = $"{mk.Code} — {mk.Description}", Tag = mk.Code });
+            if (mk.Code == currentCode) selectedIdx = idx;
+            idx++;
+        }
+        cmbMarkup.SelectedIndex = selectedIdx;
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -48,11 +64,14 @@ public partial class DepartmentDialog : Window
         if (!int.TryParse(txtSortOrder.Text, out int sortOrder))
             sortOrder = 0;
 
+        string markupCode = (cmbMarkup.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
+
         DepartmentSaveRequest req = new()
         {
             Code = code,
             Name = name,
             HourlyCost = hourlyCost,
+            MarkupCode = markupCode,
             SortOrder = sortOrder,
             IsActive = true
         };

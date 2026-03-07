@@ -30,12 +30,48 @@ public class DbService
     {
         using var c = Open();
 
+        // ── SEZIONI COSTO ────────────────────────────────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_groups (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_templates (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
+            group_id INT NOT NULL,
+            is_default BOOLEAN NOT NULL DEFAULT TRUE,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES cost_section_groups(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ── K RICARICO ───────────────────────────────────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS markup_coefficients (
+            id              INT AUTO_INCREMENT PRIMARY KEY,
+            code            VARCHAR(30) NOT NULL UNIQUE,
+            description     VARCHAR(200) NOT NULL DEFAULT '',
+            coefficient_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
+            markup_value    DECIMAL(6,3) NOT NULL DEFAULT 1.000,
+            hourly_cost     DECIMAL(8,2) NULL,
+            sort_order      INT NOT NULL DEFAULT 0,
+            is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ── REPARTI ──────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS departments (
             id INT AUTO_INCREMENT PRIMARY KEY,
             code VARCHAR(10) NOT NULL UNIQUE,
             name VARCHAR(100) NOT NULL,
             hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
+            markup_code VARCHAR(30) NULL,
             sort_order INT DEFAULT 0,
             is_active BOOLEAN DEFAULT TRUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
