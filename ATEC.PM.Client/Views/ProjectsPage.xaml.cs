@@ -1,5 +1,6 @@
 using ATEC.PM.Client.UserControls;
 namespace ATEC.PM.Client.Views;
+using ATEC.PM.Client.Views.Costing;
 
 public partial class ProjectsPage : Page
 {
@@ -654,7 +655,7 @@ public partial class ProjectsPage : Page
         }
     }
 
-   
+
     // === SEARCH ===
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
