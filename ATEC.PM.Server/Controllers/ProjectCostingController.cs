@@ -61,17 +61,16 @@ public class ProjectCostingController : ControllerBase
 
             // 3. Copia categorie materiali
             var categories = c.Query<dynamic>(@"
-                SELECT mc.id, mc.name, mc.markup_code, COALESCE(mk.markup_value, 1.000) AS markup_value, mc.sort_order
-                FROM material_categories mc
-                LEFT JOIN markup_coefficients mk ON mk.code = mc.markup_code
-                WHERE mc.is_active=1 ORDER BY mc.sort_order", transaction: tx).ToList();
+                SELECT id, name, default_markup, default_commission_markup, sort_order
+                FROM material_categories
+                WHERE is_active=1 ORDER BY sort_order", transaction: tx).ToList();
 
             foreach (var cat in categories)
             {
                 c.Execute(@"
-                    INSERT INTO project_material_sections (project_id, category_id, name, markup_code, markup_value, sort_order, is_enabled)
-                    VALUES (@projectId, @id, @name, @markup_code, @markup_value, @sort_order, 1)",
-                    new { projectId, cat.id, cat.name, cat.markup_code, cat.markup_value, cat.sort_order }, tx);
+                    INSERT INTO project_material_sections (project_id, category_id, name, markup_value, commission_markup, sort_order, is_enabled)
+                    VALUES (@projectId, @id, @name, @default_markup, @default_commission_markup, @sort_order, 1)",
+                    new { projectId, cat.id, cat.name, cat.default_markup, cat.default_commission_markup, cat.sort_order }, tx);
             }
 
             // 4. Scheda prezzi default
@@ -141,14 +140,16 @@ public class ProjectCostingController : ControllerBase
 
         var matSections = c.Query<ProjectMaterialSectionDto>(@"
             SELECT id, project_id AS ProjectId, category_id AS CategoryId, name,
-                   markup_code AS MarkupCode, markup_value AS MarkupValue,
+                   markup_value AS MarkupValue, commission_markup AS CommissionMarkup,
                    sort_order AS SortOrder, is_enabled AS IsEnabled
             FROM project_material_sections WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
         var allItems = c.Query<ProjectMaterialItemDto>(@"
             SELECT i.id, i.section_id AS SectionId, i.description AS Description,
-                   i.quantity AS Quantity, i.unit_cost AS UnitCost, i.sort_order AS SortOrder
+                   i.quantity AS Quantity, i.unit_cost AS UnitCost,
+                   i.markup_value AS MarkupValue, i.item_type AS ItemType,
+                   i.sort_order AS SortOrder
             FROM project_material_items i
             JOIN project_material_sections s ON s.id = i.section_id
             WHERE s.project_id=@projectId ORDER BY i.sort_order",
@@ -334,8 +335,8 @@ public class ProjectCostingController : ControllerBase
     {
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(@"
-            INSERT INTO project_material_items (section_id, description, quantity, unit_cost, sort_order)
-            VALUES (@SectionId, @Description, @Quantity, @UnitCost, @SortOrder);
+            INSERT INTO project_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
+            VALUES (@SectionId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder);
             SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Materiale aggiunto"));
     }
@@ -347,7 +348,7 @@ public class ProjectCostingController : ControllerBase
         req.Id = id;
         c.Execute(@"
             UPDATE project_material_items SET description=@Description, quantity=@Quantity,
-                unit_cost=@UnitCost, sort_order=@SortOrder
+                unit_cost=@UnitCost, markup_value=@MarkupValue, item_type=@ItemType, sort_order=@SortOrder
             WHERE id=@Id", req);
         return Ok(ApiResponse<string>.Ok("", "Materiale aggiornato"));
     }

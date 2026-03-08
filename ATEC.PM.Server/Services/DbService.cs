@@ -33,7 +33,9 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(200) NOT NULL,
-            markup_code VARCHAR(30) NOT NULL,
+            markup_code VARCHAR(30) NOT NULL DEFAULT '',
+            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            default_commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
             sort_order INT NOT NULL DEFAULT 0,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

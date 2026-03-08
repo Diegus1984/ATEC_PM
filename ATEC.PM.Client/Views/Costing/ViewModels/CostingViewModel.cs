@@ -15,27 +15,43 @@ public class CostingViewModel : INotifyPropertyChanged
     private string _statusText = "";
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
 
+    // Risorse
     public ObservableCollection<CostGroupVM> Groups { get; set; } = new();
 
-    // Totali generali
     private decimal _grandTotalCost;
-    public decimal GrandTotalCost { get => _grandTotalCost; private set { _grandTotalCost = value; Notify(); } }
+    public decimal GrandTotalCost { get => _grandTotalCost; private set { _grandTotalCost = value; Notify(); Notify(nameof(TotalCombinedCost)); } }
 
     private decimal _grandTotalSale;
-    public decimal GrandTotalSale { get => _grandTotalSale; private set { _grandTotalSale = value; Notify(); } }
+    public decimal GrandTotalSale { get => _grandTotalSale; private set { _grandTotalSale = value; Notify(); Notify(nameof(TotalCombinedSale)); } }
+
+    // Materiali
+    public ObservableCollection<MaterialSectionVM> MaterialSections { get; set; } = new();
+
+    private decimal _grandMaterialCost;
+    public decimal GrandMaterialCost { get => _grandMaterialCost; private set { _grandMaterialCost = value; Notify(); Notify(nameof(TotalCombinedCost)); } }
+
+    private decimal _grandMaterialSale;
+    public decimal GrandMaterialSale { get => _grandMaterialSale; private set { _grandMaterialSale = value; Notify(); Notify(nameof(TotalCombinedSale)); } }
+
+    // Totali combinati (risorse + materiali)
+    public decimal TotalCombinedCost => GrandTotalCost + GrandMaterialCost;
+    public decimal TotalCombinedSale => GrandTotalSale + GrandMaterialSale;
 
     public void RecalcGrandTotals()
     {
         GrandTotalCost = Groups.Sum(g => g.TotalCost);
         GrandTotalSale = Groups.Sum(g => g.TotalSale);
-        StatusText = $"{Groups.Sum(g => g.Sections.Count)} sezioni — Netto {GrandTotalCost:N2} € — Vendita {GrandTotalSale:N2} €";
+        GrandMaterialCost = MaterialSections.Sum(s => s.TotalCost);
+        GrandMaterialSale = MaterialSections.Sum(s => s.TotalSale);
+
+        int secCount = Groups.Sum(g => g.Sections.Count);
+        StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
+                     $"Netto {TotalCombinedCost:N2} € — Vendita {TotalCombinedSale:N2} €";
     }
 
-    /// <summary>
-    /// Connette tutti i PropertyChanged a cascata: risorsa → sezione → gruppo → totali
-    /// </summary>
     public void WireAllChanges()
     {
+        // Risorse: risorsa → sezione → gruppo → totali
         foreach (var group in Groups)
         {
             foreach (var sec in group.Sections)
@@ -52,12 +68,23 @@ public class CostingViewModel : INotifyPropertyChanged
                     RecalcGrandTotals();
             };
         }
+
+        // Materiali: item → sezione → totali
+        foreach (var matSec in MaterialSections)
+        {
+            matSec.WireItemChanges();
+            matSec.RecalcTotals();
+
+            matSec.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName is nameof(MaterialSectionVM.TotalCost) or nameof(MaterialSectionVM.TotalSale))
+                    RecalcGrandTotals();
+            };
+        }
+
         RecalcGrandTotals();
     }
 
-    /// <summary>
-    /// Popola i VM dai DTO ricevuti dal server
-    /// </summary>
     public static CostingViewModel FromData(ProjectCostingData data)
     {
         var vm = new CostingViewModel { IsInitialized = data.IsInitialized };
@@ -69,6 +96,7 @@ public class CostingViewModel : INotifyPropertyChanged
             { "INSTALLAZIONE", "#D97706" }, { "OPZIONE", "#DC2626" }
         };
 
+        // ── Risorse ──
         var groups = data.CostSections
             .Where(s => s.IsEnabled)
             .GroupBy(s => s.GroupName)
@@ -119,6 +147,35 @@ public class CostingViewModel : INotifyPropertyChanged
             }
 
             vm.Groups.Add(groupVM);
+        }
+
+        // ── Materiali ──
+        foreach (var matSec in data.MaterialSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
+        {
+            var matVM = new MaterialSectionVM
+            {
+                Id = matSec.Id,
+                CategoryId = matSec.CategoryId,
+                Name = matSec.Name,
+                DefaultMarkup = matSec.MarkupValue,
+                DefaultCommissionMarkup = matSec.CommissionMarkup
+            };
+
+            foreach (var item in matSec.Items.OrderBy(i => i.SortOrder))
+            {
+                matVM.Items.Add(new MaterialItemVM
+                {
+                    Id = item.Id,
+                    SectionId = item.SectionId,
+                    Description = item.Description,
+                    Quantity = item.Quantity,
+                    UnitCost = item.UnitCost,
+                    MarkupValue = item.MarkupValue,
+                    ItemType = item.ItemType
+                });
+            }
+
+            vm.MaterialSections.Add(matVM);
         }
 
         vm.WireAllChanges();

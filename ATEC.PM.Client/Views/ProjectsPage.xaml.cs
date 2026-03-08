@@ -5,7 +5,7 @@ using ATEC.PM.Client.Views.Costing;
 public partial class ProjectsPage : Page
 {
     private List<ProjectListItem> _allProjects = new();
-    private ProjectCostingControl? _costingControl;
+    private Costing.ProjectCostingControl? _costingControl;
 
     private int _costingProjectId;
 
@@ -312,7 +312,7 @@ public partial class ProjectsPage : Page
 
         if (_costingControl == null || _costingProjectId != projectId)
         {
-            _costingControl = new ProjectCostingControl();
+            _costingControl = new Costing.ProjectCostingControl();
             _costingProjectId = projectId;
         }
 

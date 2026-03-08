@@ -7,6 +7,7 @@ public partial class ProjectCostingControl : UserControl
 {
     private int _projectId;
     private CostingViewModel _vm = new();
+    private ProjectCostingData _data = new(); // per riepilogo/materiali
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
 
     public ProjectCostingControl()
@@ -37,7 +38,7 @@ public partial class ProjectCostingControl : UserControl
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
-            var data = JsonSerializer.Deserialize<ProjectCostingData>(
+            _data = JsonSerializer.Deserialize<ProjectCostingData>(
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
@@ -47,7 +48,7 @@ public partial class ProjectCostingControl : UserControl
                 .SelectMany(g => g.Sections)
                 .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
 
-            _vm = CostingViewModel.FromData(data);
+            _vm = CostingViewModel.FromData(_data);
 
             // Ripristina stato espansione
             foreach (var g in _vm.Groups)
@@ -61,7 +62,7 @@ public partial class ProjectCostingControl : UserControl
 
             DataContext = _vm;
 
-            // Precarica dipendenti per sezioni abilitate
+            // Precarica dipendenti
             _sectionEmployeesCache.Clear();
             foreach (var g in _vm.Groups)
                 foreach (var sec in g.Sections)
@@ -94,43 +95,81 @@ public partial class ProjectCostingControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
-    /// <summary>
-    /// Click riga sommario sezione → toggle dettaglio (ignora click su TextBox K)
-    /// </summary>
     private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox)
             return;
-
         if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
             sec.IsDetailExpanded = !sec.IsDetailExpanded;
     }
 
-    /// <summary>
-    /// Salva risorsa quando si esce da una cella editata nella DataGrid
-    /// </summary>
     private async void ResourceGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction == DataGridEditAction.Cancel) return;
-
         await Task.Delay(100);
         if (e.Row.Item is CostResourceVM row && row.Id > 0)
             await SaveResource(row);
     }
 
+    // ── ComboBox dipendente ──
+
+    private void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ComboBox combo) return;
+        if (combo.DataContext is not CostResourceVM row) return;
+
+        if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees))
+            return;
+
+        // Trova la sezione nel VM per escludere dipendenti già assegnati
+        CostSectionVM? sec = FindSection(row.SectionId);
+        var usedIds = sec?.Resources
+            .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
+            .Select(r => r.EmployeeId!.Value)
+            .ToHashSet() ?? new();
+
+        var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+        combo.ItemsSource = available;
+
+        if (row.EmployeeId.HasValue)
+            combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
+    }
+
+    private async void EmployeeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox combo) return;
+        if (combo.DataContext is not CostResourceVM row) return;
+        if (combo.SelectedItem is not EmployeeCostLookup emp) return;
+
+        row.EmployeeId = emp.Id;
+        row.ResourceName = emp.FullName;
+        row.HourlyCost = emp.HourlyCost;
+
+        if (row.Id > 0)
+            await SaveResource(row);
+    }
+
+    // ── Elimina risorsa ──
+
+    private async void BtnDeleteResource_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int resourceId || resourceId <= 0)
+            return;
+
+        await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/resources/{resourceId}");
+        await LoadData();
+    }
+
+    // ── K Ricarico ──
+
     private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is TextBox tb)
-        {
-            tb.Focus();
-            e.Handled = true;
-        }
+        if (sender is TextBox tb) { tb.Focus(); e.Handled = true; }
     }
 
     private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox tb)
-            tb.SelectAll();
+        if (sender is TextBox tb) tb.SelectAll();
     }
 
     private async void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -159,16 +198,13 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
+    // ── + Risorsa ──
+
     private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
 
-        CostSectionVM? sec = null;
-        foreach (var g in _vm.Groups)
-        {
-            sec = g.Sections.FirstOrDefault(s => s.Id == secId);
-            if (sec != null) break;
-        }
+        CostSectionVM? sec = FindSection(secId);
         if (sec == null) return;
 
         if (!_sectionEmployeesCache.ContainsKey(secId))
@@ -208,7 +244,21 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // SAVE HELPERS
+    // HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    private CostSectionVM? FindSection(int sectionId)
+    {
+        foreach (var g in _vm.Groups)
+        {
+            var sec = g.Sections.FirstOrDefault(s => s.Id == sectionId);
+            if (sec != null) return sec;
+        }
+        return null;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // SAVE
     // ══════════════════════════════════════════════════════════════
 
     private async Task SaveSectionMarkup(int sectionId, decimal markupValue)

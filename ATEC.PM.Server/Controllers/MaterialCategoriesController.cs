@@ -19,12 +19,12 @@ public class MaterialCategoriesController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<MaterialCategoryDto>(
-            @"SELECT mc.id, mc.name, mc.markup_code AS MarkupCode,
-                     COALESCE(mk.markup_value, 1.000) AS MarkupValue,
-                     mc.sort_order AS SortOrder, mc.is_active AS IsActive
-              FROM material_categories mc
-              LEFT JOIN markup_coefficients mk ON mk.code = mc.markup_code
-              ORDER BY mc.sort_order").ToList();
+            @"SELECT id, name, markup_code AS MarkupCode,
+                     default_markup AS DefaultMarkup,
+                     default_commission_markup AS DefaultCommissionMarkup,
+                     sort_order AS SortOrder, is_active AS IsActive
+              FROM material_categories
+              ORDER BY sort_order").ToList();
         return Ok(ApiResponse<List<MaterialCategoryDto>>.Ok(rows));
     }
 
@@ -33,13 +33,11 @@ public class MaterialCategoriesController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.Name))
             return BadRequest(ApiResponse<string>.Fail("Nome obbligatorio"));
-        if (string.IsNullOrWhiteSpace(req.MarkupCode))
-            return BadRequest(ApiResponse<string>.Fail("Markup code obbligatorio"));
 
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(
-            @"INSERT INTO material_categories (name, markup_code, sort_order, is_active)
-              VALUES (@Name, @MarkupCode, @SortOrder, @IsActive);
+            @"INSERT INTO material_categories (name, markup_code, default_markup, default_commission_markup, sort_order, is_active)
+              VALUES (@Name, '', @DefaultMarkup, @DefaultCommissionMarkup, @SortOrder, @IsActive);
               SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Categoria creata"));
     }
@@ -52,9 +50,10 @@ public class MaterialCategoriesController : ControllerBase
 
         using var c = _db.Open();
         int rows = c.Execute(
-            @"UPDATE material_categories SET name=@Name, markup_code=@MarkupCode,
+            @"UPDATE material_categories SET name=@Name,
+              default_markup=@DefaultMarkup, default_commission_markup=@DefaultCommissionMarkup,
               sort_order=@SortOrder, is_active=@IsActive WHERE id=@id",
-            new { req.Name, req.MarkupCode, req.SortOrder, req.IsActive, id });
+            new { req.Name, req.DefaultMarkup, req.DefaultCommissionMarkup, req.SortOrder, req.IsActive, id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Categoria non trovata"));
         return Ok(ApiResponse<string>.Ok("", "Categoria aggiornata"));
     }
@@ -62,7 +61,7 @@ public class MaterialCategoriesController : ControllerBase
     [HttpPatch("{id}/field")]
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "markup_code", "sort_order", "is_active" };
+        var allowed = new HashSet<string> { "name", "default_markup", "default_commission_markup", "sort_order", "is_active" };
         if (!allowed.Contains(req.Field))
             return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
 

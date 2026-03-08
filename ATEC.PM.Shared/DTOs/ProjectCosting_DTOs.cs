@@ -88,14 +88,14 @@ public class ProjectMaterialSectionDto
     public int ProjectId { get; set; }
     public int? CategoryId { get; set; }
     public string Name { get; set; } = "";
-    public string MarkupCode { get; set; } = "";
-    public decimal MarkupValue { get; set; } = 1.0m;
+    public decimal MarkupValue { get; set; } = 1.300m;       // K default materiale
+    public decimal CommissionMarkup { get; set; } = 1.100m;   // K default provvigione
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
     public List<ProjectMaterialItemDto> Items { get; set; } = new();
-    // Calcolati
+    // Calcolati dalle righe
     public decimal TotalCost => Items?.Sum(i => i.Quantity * i.UnitCost) ?? 0;
-    public decimal TotalSale => Items?.Sum(i => i.Quantity * i.UnitCost * MarkupValue) ?? 0;
+    public decimal TotalSale => Items?.Sum(i => i.Quantity * i.UnitCost * i.MarkupValue) ?? 0;
 }
 
 public class ProjectMaterialItemDto
@@ -105,8 +105,11 @@ public class ProjectMaterialItemDto
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
+    public decimal MarkupValue { get; set; } = 1.300m;
+    public string ItemType { get; set; } = "MATERIAL"; // MATERIAL o COMMISSION
     public int SortOrder { get; set; }
     public decimal TotalCost => Quantity * UnitCost;
+    public decimal TotalSale => Quantity * UnitCost * MarkupValue;
 }
 
 public class ProjectMaterialItemSaveRequest
@@ -116,8 +119,11 @@ public class ProjectMaterialItemSaveRequest
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
+    public decimal MarkupValue { get; set; } = 1.300m;
+    public string ItemType { get; set; } = "MATERIAL";
     public int SortOrder { get; set; }
 }
+
 
 // === SCHEDA PREZZI ===
 public class ProjectPricingDto

@@ -15,7 +15,6 @@
         <conv:MarkupToStringConverter x:Key="MarkupToString" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!--  Stili DataGrid condivisi  -->
         <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F9FAFB" />
             <Setter Property="Foreground" Value="#6B7280" />
@@ -27,6 +26,21 @@
         <Style x:Key="CostingCell" TargetType="DataGridCell">
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+
+        <!--  Bottone elimina risorsa (riusato in entrambi i template)  -->
+        <DataTemplate x:Key="DeleteButtonTemplate">
+            <Button
+                Width="20"
+                Height="20"
+                Background="#EF44441A"
+                BorderThickness="0"
+                Click="BtnDeleteResource_Click"
+                Content="✕"
+                Cursor="Hand"
+                FontSize="9"
+                Foreground="#EF4444"
+                Tag="{Binding Id}" />
+        </DataTemplate>
 
         <!--  ═══════════════════════════════════════════════  -->
         <!--  DataGrid risorse IN_SEDE  -->
@@ -49,11 +63,27 @@
                 RowHeight="32"
                 SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTextColumn
-                        Width="*"
-                        Binding="{Binding ResourceName}"
-                        Header="RISORSA"
-                        IsReadOnly="True" />
+                    <!--  RISORSA: TextBlock in display, ComboBox in editing  -->
+                    <DataGridTemplateColumn Width="*" Header="RISORSA">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    Padding="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding ResourceName}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate>
+                                <ComboBox
+                                    BorderThickness="0"
+                                    DisplayMemberPath="FullName"
+                                    FontSize="12"
+                                    Loaded="EmployeeCombo_Loaded"
+                                    SelectionChanged="EmployeeCombo_SelectionChanged" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn
                         Width="50"
                         Binding="{Binding WorkDays, StringFormat=F0}"
@@ -77,6 +107,10 @@
                         Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
                         Header="TOT €"
                         IsReadOnly="True" />
+                    <DataGridTemplateColumn
+                        Width="30"
+                        CellTemplate="{StaticResource DeleteButtonTemplate}"
+                        Header="" />
                 </DataGrid.Columns>
             </DataGrid>
         </DataTemplate>
@@ -103,11 +137,26 @@
                     RowHeight="32"
                     SelectionMode="Single">
                     <DataGrid.Columns>
-                        <DataGridTextColumn
-                            Width="*"
-                            Binding="{Binding ResourceName}"
-                            Header="RISORSA"
-                            IsReadOnly="True" />
+                        <DataGridTemplateColumn Width="*" Header="RISORSA">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        Padding="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding ResourceName}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                            <DataGridTemplateColumn.CellEditingTemplate>
+                                <DataTemplate>
+                                    <ComboBox
+                                        BorderThickness="0"
+                                        DisplayMemberPath="FullName"
+                                        FontSize="12"
+                                        Loaded="EmployeeCombo_Loaded"
+                                        SelectionChanged="EmployeeCombo_SelectionChanged" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellEditingTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn
                             Width="50"
                             Binding="{Binding WorkDays, StringFormat=F0}"
@@ -173,6 +222,10 @@
                                 </Style>
                             </DataGridComboBoxColumn.EditingElementStyle>
                         </DataGridComboBoxColumn>
+                        <DataGridTemplateColumn
+                            Width="30"
+                            CellTemplate="{StaticResource DeleteButtonTemplate}"
+                            Header="" />
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -385,7 +438,6 @@
                                                 BorderBrush="#E4E7EC"
                                                 BorderThickness="1">
                                                 <StackPanel>
-
                                                     <!--  RIGA SOMMARIO  -->
                                                     <Grid
                                                         Background="#FAFBFC"
@@ -520,7 +572,6 @@
                                                                 Tag="{Binding Id}" />
                                                         </StackPanel>
                                                     </Border>
-
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
