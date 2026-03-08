@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace ATEC.PM.Client.Views;
 
 public partial class DepartmentDialog : Window
@@ -5,39 +7,24 @@ public partial class DepartmentDialog : Window
     private readonly DepartmentDto? _existing;
 
     // Nuovo reparto
-    public DepartmentDialog(List<MarkupCoefficientDto> markups)
+    public DepartmentDialog()
     {
         InitializeComponent();
         _existing = null;
         txtDialogTitle.Text = "Nuovo Reparto";
-        PopulateMarkupCombo(markups, "");
     }
 
     // Modifica reparto esistente
-    public DepartmentDialog(DepartmentDto dept, List<MarkupCoefficientDto> markups)
+    public DepartmentDialog(DepartmentDto dept)
     {
         InitializeComponent();
         _existing = dept;
         txtDialogTitle.Text = $"Modifica Reparto — {dept.Code}";
         txtCode.Text = dept.Code;
         txtName.Text = dept.Name;
-        txtHourlyCost.Text = dept.HourlyCost.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        txtHourlyCost.Text = dept.HourlyCost.ToString("F2", CultureInfo.InvariantCulture);
+        txtDefaultMarkup.Text = dept.DefaultMarkup.ToString("F3", CultureInfo.InvariantCulture);
         txtSortOrder.Text = dept.SortOrder.ToString();
-        PopulateMarkupCombo(markups, dept.MarkupCode);
-    }
-
-    private void PopulateMarkupCombo(List<MarkupCoefficientDto> markups, string currentCode)
-    {
-        cmbMarkup.Items.Add(new ComboBoxItem { Content = "— nessuno —", Tag = "" });
-        int selectedIdx = 0;
-        int idx = 1;
-        foreach (MarkupCoefficientDto mk in markups.Where(m => m.CoefficientType == "RESOURCE").OrderBy(m => m.SortOrder))
-        {
-            cmbMarkup.Items.Add(new ComboBoxItem { Content = $"{mk.Code} — {mk.Description}", Tag = mk.Code });
-            if (mk.Code == currentCode) selectedIdx = idx;
-            idx++;
-        }
-        cmbMarkup.SelectedIndex = selectedIdx;
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -55,23 +42,25 @@ public partial class DepartmentDialog : Window
             MessageBox.Show("Nome obbligatorio.", "Attenzione");
             return;
         }
-        if (!decimal.TryParse(txtHourlyCost.Text, System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out decimal hourlyCost))
+        if (!decimal.TryParse(txtHourlyCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost))
         {
             MessageBox.Show("Costo orario non valido.", "Attenzione");
             return;
         }
+        if (!decimal.TryParse(txtDefaultMarkup.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal defaultMarkup))
+        {
+            MessageBox.Show("K Ricarico non valido.", "Attenzione");
+            return;
+        }
         if (!int.TryParse(txtSortOrder.Text, out int sortOrder))
             sortOrder = 0;
-
-        string markupCode = (cmbMarkup.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
 
         DepartmentSaveRequest req = new()
         {
             Code = code,
             Name = name,
             HourlyCost = hourlyCost,
-            MarkupCode = markupCode,
+            DefaultMarkup = defaultMarkup,
             SortOrder = sortOrder,
             IsActive = true
         };

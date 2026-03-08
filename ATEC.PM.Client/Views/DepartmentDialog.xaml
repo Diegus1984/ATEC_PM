@@ -11,79 +11,29 @@
     <DockPanel>
 
         <!--  HEADER  -->
-        <Border
-            Padding="20,14"
-            Background="#1A1D26"
-            DockPanel.Dock="Top">
-            <TextBlock
-                x:Name="txtDialogTitle"
-                FontSize="15"
-                FontWeight="Bold"
-                Foreground="White"
-                Text="Nuovo Reparto" />
+        <Border Padding="20,14" Background="#1A1D26" DockPanel.Dock="Top">
+            <TextBlock x:Name="txtDialogTitle" FontSize="15" FontWeight="Bold" Foreground="White" Text="Nuovo Reparto" />
         </Border>
 
         <!--  BUTTONS  -->
-        <Border
-            Padding="20,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,1,0,0"
-            DockPanel.Dock="Bottom">
+        <Border Padding="20,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button
-                    Width="90"
-                    Height="32"
-                    Background="#F3F4F6"
-                    BorderThickness="0"
-                    Click="BtnCancel_Click"
-                    Content="Annulla"
-                    Cursor="Hand"
-                    FontSize="13" />
-                <Button
-                    Width="90"
-                    Height="32"
-                    Margin="8,0,0,0"
-                    Background="#4F6EF7"
-                    BorderThickness="0"
-                    Click="BtnSave_Click"
-                    Content="Salva"
-                    Cursor="Hand"
-                    FontSize="13"
-                    FontWeight="SemiBold"
-                    Foreground="White" />
+                <Button Width="90" Height="32" Background="#F3F4F6" BorderThickness="0"
+                        Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" FontSize="13" />
+                <Button Width="90" Height="32" Margin="8,0,0,0" Background="#4F6EF7" BorderThickness="0"
+                        Click="BtnSave_Click" Content="Salva" Cursor="Hand" FontSize="13" FontWeight="SemiBold" Foreground="White" />
             </StackPanel>
         </Border>
 
         <!--  FORM  -->
         <StackPanel Margin="20,16">
-            <TextBlock
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
-                Text="CODICE *" />
-            <TextBox
-                x:Name="txtCode"
-                Height="32"
-                Margin="0,4,0,12"
-                Padding="8,4"
-                BorderBrush="#E4E7EC"
-                CharacterCasing="Upper"
-                FontSize="13"
-                MaxLength="10" />
+            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="CODICE *" />
+            <TextBox x:Name="txtCode" Height="32" Margin="0,4,0,12" Padding="8,4"
+                     BorderBrush="#E4E7EC" CharacterCasing="Upper" FontSize="13" MaxLength="10" />
 
-            <TextBlock
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
-                Text="NOME *" />
-            <TextBox
-                x:Name="txtName"
-                Height="32"
-                Margin="0,4,0,12"
-                Padding="8,4"
-                BorderBrush="#E4E7EC"
-                FontSize="13" />
+            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME *" />
+            <TextBox x:Name="txtName" Height="32" Margin="0,4,0,12" Padding="8,4"
+                     BorderBrush="#E4E7EC" FontSize="13" />
 
             <Grid Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
@@ -92,49 +42,20 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#6B7280"
-                        Text="COSTO ORARIO €" />
-                    <TextBox
-                        x:Name="txtHourlyCost"
-                        Height="32"
-                        Margin="0,4,0,0"
-                        Padding="8,4"
-                        BorderBrush="#E4E7EC"
-                        FontSize="13"
-                        Text="0.00" />
+                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO ORARIO €" />
+                    <TextBox x:Name="txtHourlyCost" Height="32" Margin="0,4,0,0" Padding="8,4"
+                             BorderBrush="#E4E7EC" FontSize="13" Text="0.00" />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#6B7280"
-                        Text="MARKUP CODE" />
-                    <ComboBox
-                        x:Name="cmbMarkup"
-                        Height="32"
-                        Margin="0,4,0,0"
-                        Padding="8,4"
-                        BorderBrush="#E4E7EC"
-                        FontSize="13" />
+                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="K RICARICO" />
+                    <TextBox x:Name="txtDefaultMarkup" Height="32" Margin="0,4,0,0" Padding="8,4"
+                             BorderBrush="#E4E7EC" FontSize="13" Text="1.450" />
                 </StackPanel>
             </Grid>
 
-            <TextBlock
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
-                Text="ORDINE" />
-            <TextBox
-                x:Name="txtSortOrder"
-                Height="32"
-                Margin="0,4,0,0"
-                Padding="8,4"
-                BorderBrush="#E4E7EC"
-                FontSize="13"
-                Text="0" />
+            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDINE" />
+            <TextBox x:Name="txtSortOrder" Height="32" Margin="0,4,0,0" Padding="8,4"
+                     BorderBrush="#E4E7EC" FontSize="13" Text="0" />
         </StackPanel>
 
     </DockPanel>

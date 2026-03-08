@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows.Media;
 
 namespace ATEC.PM.Client.Views;
@@ -5,7 +6,6 @@ namespace ATEC.PM.Client.Views;
 public partial class DepartmentsPage : Page
 {
     private List<DepartmentDto> _departments = new();
-    private List<MarkupCoefficientDto> _markups = new();
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
@@ -20,15 +20,6 @@ public partial class DepartmentsPage : Page
     {
         try
         {
-            // Carica markup (solo RESOURCE per la combo)
-            string mkJson = await ApiClient.GetAsync("/api/markup");
-            JsonDocument mkDoc = JsonDocument.Parse(mkJson);
-            if (mkDoc.RootElement.GetProperty("success").GetBoolean())
-                _markups = JsonSerializer.Deserialize<List<MarkupCoefficientDto>>(
-                    mkDoc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            // Carica departments
             string json = await ApiClient.GetAsync("/api/departments");
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
@@ -66,13 +57,13 @@ public partial class DepartmentsPage : Page
         };
 
         Grid grid = new();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });  // Codice
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Nome
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) }); // Costo orario
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });  // K Ricarico
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });  // Ordine
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });  // Attivo
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });  // Azioni
 
         // Col 0: Codice (badge)
         Border codeBadge = new()
@@ -106,7 +97,7 @@ public partial class DepartmentsPage : Page
         // Col 2: Costo orario (editabile)
         TextBox txtCost = new()
         {
-            Text = dept.HourlyCost.ToString("F2"),
+            Text = dept.HourlyCost.ToString("F2", CultureInfo.InvariantCulture),
             FontSize = 12, Width = 80, Height = 24,
             Padding = new Thickness(4, 2, 4, 2),
             BorderBrush = Brush("#E4E7EC"), BorderThickness = new Thickness(1),
@@ -116,43 +107,37 @@ public partial class DepartmentsPage : Page
         };
         txtCost.LostFocus += async (s, e) =>
         {
-            if (!decimal.TryParse(txtCost.Text, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out decimal newCost)) return;
+            if (!decimal.TryParse(txtCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newCost)) return;
             if (newCost == dept.HourlyCost) return;
-            await UpdateField(dept.Id, "hourly_cost", newCost.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            await UpdateField(dept.Id, "hourly_cost", newCost.ToString(CultureInfo.InvariantCulture));
             dept.HourlyCost = newCost;
         };
         Grid.SetColumn(txtCost, 2);
         grid.Children.Add(txtCost);
 
-        // Col 3: Markup code (ComboBox)
-        ComboBox cmbMarkup = new()
+        // Col 3: K Ricarico (editabile direttamente)
+        TextBox txtMarkup = new()
         {
-            Height = 24, Width = 110,
-            FontSize = 11,
+            Text = dept.DefaultMarkup.ToString("F3", CultureInfo.InvariantCulture),
+            FontSize = 12, Width = 70, Height = 24,
             Padding = new Thickness(4, 2, 4, 2),
-            BorderBrush = Brush("#E4E7EC"),
-            VerticalAlignment = VerticalAlignment.Center
+            BorderBrush = Brush("#E4E7EC"), BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brush("#059669")
         };
-        cmbMarkup.Items.Add(new ComboBoxItem { Content = "— nessuno —", Tag = "" });
-        int selectedIdx = 0;
-        int idx = 1;
-        foreach (MarkupCoefficientDto mk in _markups.Where(m => m.CoefficientType == "RESOURCE").OrderBy(m => m.SortOrder))
+        txtMarkup.LostFocus += async (s, e) =>
         {
-            cmbMarkup.Items.Add(new ComboBoxItem { Content = mk.Code, Tag = mk.Code });
-            if (mk.Code == dept.MarkupCode) selectedIdx = idx;
-            idx++;
-        }
-        cmbMarkup.SelectedIndex = selectedIdx;
-        cmbMarkup.SelectionChanged += async (s, e) =>
-        {
-            string newCode = (cmbMarkup.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
-            if (newCode == dept.MarkupCode) return;
-            await UpdateField(dept.Id, "markup_code", newCode);
-            dept.MarkupCode = newCode;
+            if (!decimal.TryParse(txtMarkup.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK)) return;
+            if (newK == dept.DefaultMarkup) return;
+            await UpdateField(dept.Id, "default_markup", newK.ToString(CultureInfo.InvariantCulture));
+            dept.DefaultMarkup = newK;
         };
-        Grid.SetColumn(cmbMarkup, 3);
-        grid.Children.Add(cmbMarkup);
+        txtMarkup.GotFocus += (s, e) => txtMarkup.SelectAll();
+        Grid.SetColumn(txtMarkup, 3);
+        grid.Children.Add(txtMarkup);
 
         // Col 4: Sort order (editabile)
         TextBox txtSort = new()
@@ -210,7 +195,7 @@ public partial class DepartmentsPage : Page
         };
         btnEdit.Click += async (s, e) =>
         {
-            DepartmentDialog dlg = new(dept, _markups) { Owner = Window.GetWindow(this) };
+            DepartmentDialog dlg = new(dept) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) await LoadData();
         };
 
@@ -250,7 +235,7 @@ public partial class DepartmentsPage : Page
 
     private async void BtnAdd_Click(object sender, RoutedEventArgs e)
     {
-        DepartmentDialog dlg = new(_markups) { Owner = Window.GetWindow(this) };
+        DepartmentDialog dlg = new() { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) await LoadData();
     }
 
