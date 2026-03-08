@@ -56,6 +56,7 @@ public class DbService
             is_default BOOLEAN NOT NULL DEFAULT TRUE,
             sort_order INT NOT NULL DEFAULT 0,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.450,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (group_id) REFERENCES cost_section_groups(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");

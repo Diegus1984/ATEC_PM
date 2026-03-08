@@ -31,13 +31,47 @@
     </Window.Resources>
 
     <DockPanel>
-        <!-- BOTTOM BUTTONS -->
-        <Border Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
+        <!--  BOTTOM BUTTONS  -->
+        <Border
+            Padding="16,12"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
             <DockPanel>
-                <TextBlock x:Name="txtError" VerticalAlignment="Center" FontSize="12" Foreground="#EF4444" TextWrapping="Wrap" DockPanel.Dock="Left" MaxWidth="340" />
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button Width="90" Height="34" Background="#F3F4F6" BorderThickness="0" Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" Foreground="#374151" />
-                    <Button x:Name="btnSave" Width="110" Height="34" Margin="8,0,0,0" Background="#4F6EF7" BorderThickness="0" Click="BtnSave_Click" Content="Salva" Cursor="Hand" FontWeight="SemiBold" Foreground="White" />
+                <TextBlock
+                    x:Name="txtError"
+                    MaxWidth="340"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
+                    FontSize="12"
+                    Foreground="#EF4444"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        Width="90"
+                        Height="34"
+                        Background="#F3F4F6"
+                        BorderThickness="0"
+                        Click="BtnCancel_Click"
+                        Content="Annulla"
+                        Cursor="Hand"
+                        Foreground="#374151" />
+                    <Button
+                        x:Name="btnSave"
+                        Width="110"
+                        Height="34"
+                        Margin="8,0,0,0"
+                        Background="#4F6EF7"
+                        BorderThickness="0"
+                        Click="BtnSave_Click"
+                        Content="Salva"
+                        Cursor="Hand"
+                        FontWeight="SemiBold"
+                        Foreground="White" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -45,26 +79,43 @@
         <ScrollViewer Padding="16,12,16,8" VerticalScrollBarVisibility="Auto">
             <StackPanel>
 
-                <!-- FASE -->
-                <Expander IsExpanded="True" Margin="0,0,0,8">
+                <!--  FASE  -->
+                <Expander Margin="0,0,0,8" IsExpanded="True">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="📋  FASE" />
                         </Border>
                     </Expander.Header>
-                    <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,0,8" Padding="16,4,16,12">
+                    <Border
+                        Margin="0,0,0,8"
+                        Padding="16,4,16,12"
+                        Background="White"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="1">
                         <StackPanel>
                             <TextBlock Style="{StaticResource FieldLabel}" Text="TIPO FASE *" />
-                            <ComboBox x:Name="cmbTemplate" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13"
-                                      SelectionChanged="CmbTemplate_SelectionChanged" />
+                            <ComboBox
+                                x:Name="cmbTemplate"
+                                Height="32"
+                                Padding="8,5"
+                                BorderBrush="#E4E7EC"
+                                FontSize="13"
+                                SelectionChanged="CmbTemplate_SelectionChanged" />
 
                             <TextBlock Style="{StaticResource FieldLabel}" Text="NOME PERSONALIZZATO (opzionale)" />
-                            <TextBox x:Name="txtCustomName" Style="{StaticResource FieldInput}"
-                                     ToolTip="Lascia vuoto per usare il nome del template" />
+                            <TextBox
+                                x:Name="txtCustomName"
+                                Style="{StaticResource FieldInput}"
+                                ToolTip="Lascia vuoto per usare il nome del template" />
 
                             <TextBlock Style="{StaticResource FieldLabel}" Text="REPARTO" />
-                            <ComboBox x:Name="cmbDepartment" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13"
-                                      SelectionChanged="CmbDepartment_SelectionChanged" />
+                            <ComboBox
+                                x:Name="cmbDepartment"
+                                Height="32"
+                                Padding="8,5"
+                                BorderBrush="#E4E7EC"
+                                FontSize="13"
+                                SelectionChanged="CmbDepartment_SelectionChanged" />
 
                             <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
@@ -76,15 +127,24 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="ORE BUDGET" />
-                                    <TextBox x:Name="txtBudgetHours" Style="{StaticResource FieldInput}" Text="0" />
+                                    <TextBox
+                                        x:Name="txtBudgetHours"
+                                        Style="{StaticResource FieldInput}"
+                                        Text="0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="COSTO BUDGET (€)" />
-                                    <TextBox x:Name="txtBudgetCost" Style="{StaticResource FieldInput}" Text="0" />
+                                    <TextBox
+                                        x:Name="txtBudgetCost"
+                                        Style="{StaticResource FieldInput}"
+                                        Text="0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="4">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="AVANZAMENTO %" />
-                                    <TextBox x:Name="txtProgress" Style="{StaticResource FieldInput}" Text="0" />
+                                    <TextBox
+                                        x:Name="txtProgress"
+                                        Style="{StaticResource FieldInput}"
+                                        Text="0" />
                                 </StackPanel>
                             </Grid>
 
@@ -96,7 +156,12 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="STATO" />
-                                    <ComboBox x:Name="cmbStatus" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13">
+                                    <ComboBox
+                                        x:Name="cmbStatus"
+                                        Height="32"
+                                        Padding="8,5"
+                                        BorderBrush="#E4E7EC"
+                                        FontSize="13">
                                         <ComboBoxItem Content="NOT_STARTED" IsSelected="True" />
                                         <ComboBoxItem Content="IN_PROGRESS" />
                                         <ComboBoxItem Content="COMPLETED" />
@@ -105,21 +170,29 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="ORDINAMENTO" />
-                                    <TextBox x:Name="txtSortOrder" Style="{StaticResource FieldInput}" Text="0" />
+                                    <TextBox
+                                        x:Name="txtSortOrder"
+                                        Style="{StaticResource FieldInput}"
+                                        Text="0" />
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
                     </Border>
                 </Expander>
 
-                <!-- TECNICI ASSEGNATI -->
-                <Expander IsExpanded="True" Margin="0,0,0,8">
+                <!--  TECNICI ASSEGNATI  -->
+                <Expander Margin="0,0,0,8" IsExpanded="True">
                     <Expander.Header>
-                        <Border Background="Transparent" Padding="0,6">
+                        <Border Padding="0,6" Background="Transparent">
                             <TextBlock Style="{StaticResource ExpHeader}" Text="👷  TECNICI ASSEGNATI" />
                         </Border>
                     </Expander.Header>
-                    <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,0,0,8" Padding="16,8,16,12">
+                    <Border
+                        Margin="0,0,0,8"
+                        Padding="16,8,16,12"
+                        Background="White"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="1">
                         <StackPanel>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -131,40 +204,88 @@
                                     <ColumnDefinition Width="12" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <ComboBox x:Name="cmbEmployee" Grid.Column="0" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" DisplayMemberPath="Name" />
-                                <ComboBox x:Name="cmbAssignRole" Grid.Column="2" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13">
+                                <ComboBox
+                                    x:Name="cmbEmployee"
+                                    Grid.Column="0"
+                                    Height="32"
+                                    Padding="8,5"
+                                    BorderBrush="#E4E7EC"
+                                    DisplayMemberPath="Name"
+                                    FontSize="13" />
+                                <ComboBox
+                                    x:Name="cmbAssignRole"
+                                    Grid.Column="2"
+                                    Height="32"
+                                    Padding="8,5"
+                                    BorderBrush="#E4E7EC"
+                                    FontSize="13">
                                     <ComboBoxItem Content="MEMBER" IsSelected="True" />
                                     <ComboBoxItem Content="LEAD" />
                                 </ComboBox>
-                                <TextBox x:Name="txtPlannedHours" Grid.Column="4" Height="32" Padding="8,5" FontSize="13" BorderBrush="#E4E7EC" BorderThickness="1" Text="0" ToolTip="Ore pianificate" />
-                                <Button Grid.Column="6" Height="32" Padding="12,0" Background="#4F6EF7" BorderThickness="0" Click="BtnAddAssignment_Click" Content="+ Aggiungi" Cursor="Hand" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                <TextBox
+                                    x:Name="txtPlannedHours"
+                                    Grid.Column="4"
+                                    Height="32"
+                                    Padding="8,5"
+                                    BorderBrush="#E4E7EC"
+                                    BorderThickness="1"
+                                    FontSize="13"
+                                    Text="0"
+                                    ToolTip="Ore pianificate" />
+                                <Button
+                                    Grid.Column="6"
+                                    Height="32"
+                                    Padding="12,0"
+                                    Background="#4F6EF7"
+                                    BorderThickness="0"
+                                    Click="BtnAddAssignment_Click"
+                                    Content="+ Aggiungi"
+                                    Cursor="Hand"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Foreground="White" />
                             </Grid>
 
                             <DataGrid
                                 x:Name="dgAssignments"
+                                MaxHeight="200"
                                 AutoGenerateColumns="False"
                                 Background="White"
-                                BorderThickness="1"
                                 BorderBrush="#E4E7EC"
+                                BorderThickness="1"
                                 CanUserAddRows="False"
                                 CanUserDeleteRows="False"
                                 GridLinesVisibility="Horizontal"
-                                HorizontalGridLinesBrush="#F3F4F6"
                                 HeadersVisibility="Column"
+                                HorizontalGridLinesBrush="#F3F4F6"
                                 IsReadOnly="True"
-                                MaxHeight="200"
                                 RowHeight="36"
                                 SelectionMode="Single">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Width="*"   Binding="{Binding EmployeeName}" Header="Tecnico" />
-                                    <DataGridTextColumn Width="80"  Binding="{Binding AssignRole}"   Header="Ruolo" />
-                                    <DataGridTextColumn Width="80"  Binding="{Binding PlannedHours}" Header="Ore pian." />
+                                    <DataGridTextColumn
+                                        Width="*"
+                                        Binding="{Binding EmployeeName}"
+                                        Header="Tecnico" />
+                                    <DataGridTextColumn
+                                        Width="80"
+                                        Binding="{Binding AssignRole}"
+                                        Header="Ruolo" />
+                                    <DataGridTextColumn
+                                        Width="80"
+                                        Binding="{Binding PlannedHours}"
+                                        Header="Ore pian." />
                                     <DataGridTemplateColumn Width="60" Header="">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Button Content="✕" Background="Transparent" BorderThickness="0"
-                                                        Cursor="Hand" FontSize="12" Foreground="#EF4444"
-                                                        Click="BtnRemoveAssignment_Click" Tag="{Binding}" />
+                                                <Button
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Click="BtnRemoveAssignment_Click"
+                                                    Content="✕"
+                                                    Cursor="Hand"
+                                                    FontSize="12"
+                                                    Foreground="#EF4444"
+                                                    Tag="{Binding}" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>

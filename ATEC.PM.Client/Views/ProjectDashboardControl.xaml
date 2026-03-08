@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#F7F8FA">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+    <ScrollViewer Padding="0,0,8,0" VerticalScrollBarVisibility="Auto">
         <StackPanel x:Name="pnlContent" Margin="0,0,0,16" />
     </ScrollViewer>
 </UserControl>

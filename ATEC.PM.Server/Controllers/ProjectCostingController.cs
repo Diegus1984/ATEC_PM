@@ -35,9 +35,9 @@ public class ProjectCostingController : ControllerBase
                 FROM markup_coefficients WHERE is_active=1 ORDER BY sort_order",
                 new { projectId }, tx);
 
-            // 2. Copia sezioni costo + reparti associati
+            // 2. Copia sezioni costo + reparti associati + K da template
             var templates = c.Query<dynamic>(@"
-                SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
+                SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order, t.default_markup
                 FROM cost_section_templates t
                 JOIN cost_section_groups g ON g.id = t.group_id
                 WHERE t.is_default=1 AND t.is_active=1
@@ -46,10 +46,10 @@ public class ProjectCostingController : ControllerBase
             foreach (var tmpl in templates)
             {
                 int newSectionId = (int)c.ExecuteScalar<long>(@"
-                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
-                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1);
+                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled, markup_value)
+                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1, @default_markup);
                     SELECT LAST_INSERT_ID();",
-                    new { projectId, tmpl.id, tmpl.name, tmpl.section_type, tmpl.group_name, tmpl.sort_order }, tx);
+                    new { projectId, tmpl.id, tmpl.name, tmpl.section_type, tmpl.group_name, tmpl.sort_order, tmpl.default_markup }, tx);
 
                 c.Execute(@"
                     INSERT INTO project_cost_section_departments (project_cost_section_id, department_id)
@@ -108,7 +108,8 @@ public class ProjectCostingController : ControllerBase
         var sections = c.Query<ProjectCostSectionDto>(@"
             SELECT id, project_id AS ProjectId, template_id AS TemplateId, name,
                    section_type AS SectionType, group_name AS GroupName,
-                   sort_order AS SortOrder, is_enabled AS IsEnabled
+                   sort_order AS SortOrder, is_enabled AS IsEnabled,
+                   markup_value AS MarkupValue
             FROM project_cost_sections WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
@@ -223,17 +224,17 @@ public class ProjectCostingController : ControllerBase
     {
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(@"
-            INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
-            VALUES (@ProjectId, @TemplateId, @Name, @SectionType, @GroupName, @SortOrder, @IsEnabled);
+            INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled, markup_value)
+            VALUES (@ProjectId, @TemplateId, @Name, @SectionType, @GroupName, @SortOrder, @IsEnabled, @MarkupValue);
             SELECT LAST_INSERT_ID();",
-            new { ProjectId = projectId, req.TemplateId, req.Name, req.SectionType, req.GroupName, req.SortOrder, req.IsEnabled });
+            new { ProjectId = projectId, req.TemplateId, req.Name, req.SectionType, req.GroupName, req.SortOrder, req.IsEnabled, req.MarkupValue });
         return Ok(ApiResponse<int>.Ok(id, "Sezione aggiunta"));
     }
 
     [HttpPatch("sections/{id}/field")]
     public IActionResult UpdateSectionField(int projectId, int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "is_enabled", "sort_order" };
+        var allowed = new HashSet<string> { "name", "is_enabled", "sort_order", "markup_value" };
         if (!allowed.Contains(req.Field))
             return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
 

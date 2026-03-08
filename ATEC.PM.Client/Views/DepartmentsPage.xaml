@@ -63,13 +63,50 @@
                     <ColumnDefinition Width="50" />
                     <ColumnDefinition Width="70" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="CODICE" />
-                <TextBlock Grid.Column="1" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME" />
-                <TextBlock Grid.Column="2" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO ORARIO €" />
-                <TextBlock Grid.Column="3" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="MARKUP" />
-                <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDINE" />
-                <TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ATTIVO" />
-                <TextBlock Grid.Column="6" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="" />
+                <TextBlock
+                    Grid.Column="0"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="CODICE" />
+                <TextBlock
+                    Grid.Column="1"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="NOME" />
+                <TextBlock
+                    Grid.Column="2"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="COSTO ORARIO €" />
+                <TextBlock
+                    Grid.Column="3"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="MARKUP" />
+                <TextBlock
+                    Grid.Column="4"
+                    HorizontalAlignment="Center"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="ORDINE" />
+                <TextBlock
+                    Grid.Column="5"
+                    HorizontalAlignment="Center"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="ATTIVO" />
+                <TextBlock
+                    Grid.Column="6"
+                    FontSize="10"
+                    FontWeight="SemiBold"
+                    Foreground="#6B7280"
+                    Text="" />
             </Grid>
         </Border>
 

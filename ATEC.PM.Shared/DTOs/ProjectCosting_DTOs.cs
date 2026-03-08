@@ -27,12 +27,13 @@ public class ProjectCostSectionDto
     public string GroupName { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
+    public decimal MarkupValue { get; set; } = 1.450m;
     public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
     public decimal TotalHours => Resources?.Sum(r => r.TotalHours) ?? 0;
-    public decimal TotalCost => Resources?.Sum(r => r.TotalCost) ?? 0;
-    public decimal TotalTravel => Resources?.Sum(r => r.TravelTotal + r.AccommodationTotal + r.AllowanceTotal) ?? 0;
+    public decimal TotalCost => Resources?.Sum(r => r.TotalCost + r.TravelTotal + r.AccommodationTotal + r.AllowanceTotal) ?? 0;
+    public decimal TotalSale => TotalCost * MarkupValue;
 }
 
 public class ProjectCostResourceDto
