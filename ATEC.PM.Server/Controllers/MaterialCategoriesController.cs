@@ -19,7 +19,7 @@ public class MaterialCategoriesController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<MaterialCategoryDto>(
-            @"SELECT id, name, markup_code AS MarkupCode,
+            @"SELECT id, name,
                      default_markup AS DefaultMarkup,
                      default_commission_markup AS DefaultCommissionMarkup,
                      sort_order AS SortOrder, is_active AS IsActive

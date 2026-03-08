@@ -41,6 +41,8 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
+    // ── Aggiungi sezione a gruppo esistente ──
+
     private async void AllowanceMarkup_LostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is TextBox tb && decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != _vm.AllowanceMarkup)
@@ -70,6 +72,45 @@ public partial class ProjectCostingControl : UserControl
         await LoadData();
     }
 
+    private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/available-templates");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var data = doc.RootElement.GetProperty("data");
+
+            var availableGroups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
+                data.GetProperty("groups").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            var availableTemplates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
+                data.GetProperty("templates").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            // Filtra: gruppi non ancora nella commessa
+            var existingGroupNames = _vm.Groups.Select(g => g.Name).ToHashSet();
+            var newGroups = availableGroups.Where(g => !existingGroupNames.Contains(g.Name)).ToList();
+
+            if (newGroups.Count == 0 && availableTemplates.Count == 0)
+            {
+                MessageBox.Show("Tutti i gruppi template sono già presenti nella commessa.\nPuoi creare un gruppo personalizzato.", "Info");
+            }
+
+            var dlg = new AddCostGroupDialog(_projectId, newGroups, availableTemplates)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (dlg.ShowDialog() == true)
+                await LoadData();
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    // ── Aggiungi gruppo ──
     private async void BtnAddMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
@@ -128,6 +169,41 @@ public partial class ProjectCostingControl : UserControl
         await LoadData();
     }
 
+    private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not string groupName) return;
+
+        try
+        {
+            // Carica template disponibili
+            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/available-templates");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var data = doc.RootElement.GetProperty("data");
+
+            var allTemplates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
+                data.GetProperty("templates").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            // Filtra per il gruppo corrente
+            var groupTemplates = allTemplates.Where(t => t.GroupName == groupName).ToList();
+
+            if (groupTemplates.Count == 0)
+            {
+                // Nessun template disponibile, ma permetti sezione personalizzata
+            }
+
+            var dlg = new AddCostSectionDialog(_projectId, groupName, groupTemplates)
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (dlg.ShowDialog() == true)
+                await LoadData();
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
     private async void BtnDeleteMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int itemId || itemId <= 0) return;

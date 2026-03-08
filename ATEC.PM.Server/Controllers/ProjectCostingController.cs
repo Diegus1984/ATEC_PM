@@ -79,6 +79,71 @@ public class ProjectCostingController : ControllerBase
         }
     }
 
+    [HttpPut("sections/{sectionId}/departments")]
+    public IActionResult SetSectionDepartments(int projectId, int sectionId, [FromBody] SectionDepartmentsRequest req)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+
+        c.Execute("DELETE FROM project_cost_section_departments WHERE project_cost_section_id=@sectionId",
+            new { sectionId }, tx);
+
+        foreach (int deptId in req.DepartmentIds)
+        {
+            c.Execute("INSERT INTO project_cost_section_departments (project_cost_section_id, department_id) VALUES (@sectionId, @deptId)",
+                new { sectionId, deptId }, tx);
+        }
+
+        tx.Commit();
+        return Ok(ApiResponse<string>.Ok("", "Reparti aggiornati"));
+    }
+
+    [HttpGet("available-templates")]
+    public IActionResult GetAvailableTemplates(int projectId)
+    {
+        using var c = _db.Open();
+
+        // Gruppi template attivi
+        var allGroups = c.Query<CostSectionGroupDto>(
+            "SELECT id, name, sort_order AS SortOrder, is_active AS IsActive FROM cost_section_groups WHERE is_active=1 ORDER BY sort_order").ToList();
+
+        // Sezioni template attive (tutte, non solo is_default)
+        var allTemplates = c.Query<CostSectionTemplateDto>(@"
+            SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId,
+                   g.name AS GroupName, t.is_default AS IsDefault, t.sort_order AS SortOrder
+            FROM cost_section_templates t
+            JOIN cost_section_groups g ON g.id = t.group_id
+            WHERE t.is_active=1
+            ORDER BY t.sort_order").ToList();
+
+        // Sezioni già presenti nella commessa (per template_id)
+        var usedTemplateIds = c.Query<int?>(
+            "SELECT template_id FROM project_cost_sections WHERE project_id=@projectId AND template_id IS NOT NULL",
+            new { projectId }).Where(id => id.HasValue).Select(id => id!.Value).ToHashSet();
+
+        // Gruppi già presenti nella commessa
+        var usedGroupNames = c.Query<string>(
+            "SELECT DISTINCT group_name FROM project_cost_sections WHERE project_id=@projectId",
+            new { projectId }).ToHashSet();
+
+        // Filtra: template non ancora usati
+        var availableTemplates = allTemplates.Where(t => !usedTemplateIds.Contains(t.Id)).ToList();
+
+        // Gruppi che hanno almeno un template disponibile O non sono ancora nella commessa
+        var availableGroups = allGroups.Where(g =>
+            !usedGroupNames.Contains(g.Name) ||
+            availableTemplates.Any(t => t.GroupId == g.Id)
+        ).ToList();
+
+        return Ok(ApiResponse<object>.Ok(new
+        {
+            Groups = availableGroups,
+            Templates = availableTemplates
+        }));
+    }
+
+
+
     [HttpGet]
     public IActionResult GetAll(int projectId)
     {

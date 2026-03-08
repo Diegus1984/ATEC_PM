@@ -1,0 +1,45 @@
+<Window
+    x:Class="ATEC.PM.Client.Views.Costing.AddCostGroupDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Aggiungi Gruppo"
+    Width="420"
+    Height="300"
+    Background="#F7F8FA"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner">
+    <DockPanel>
+
+        <!--  HEADER  -->
+        <Border Padding="20,14" Background="#1A1D26" DockPanel.Dock="Top">
+            <TextBlock FontSize="15" FontWeight="Bold" Foreground="White" Text="Aggiungi Gruppo alla Commessa" />
+        </Border>
+
+        <!--  BUTTONS  -->
+        <Border Padding="20,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
+            <DockPanel>
+                <TextBlock x:Name="txtError" VerticalAlignment="Center" FontSize="12" Foreground="#EF4444" />
+                <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Width="90" Height="32" Background="#F3F4F6" BorderThickness="0"
+                            Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" FontSize="13" />
+                    <Button Width="90" Height="32" Margin="8,0,0,0" Background="#4F6EF7" BorderThickness="0"
+                            Click="BtnSave_Click" Content="Aggiungi" Cursor="Hand" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!--  FORM  -->
+        <StackPanel Margin="20,16">
+            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="GRUPPO *" />
+            <ComboBox x:Name="cmbGroup" Height="32" Margin="0,4,0,12" Padding="8,4"
+                      BorderBrush="#E4E7EC" FontSize="13" SelectionChanged="CmbGroup_SelectionChanged" />
+
+            <TextBlock x:Name="lblCustomName" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME GRUPPO *" Visibility="Collapsed" />
+            <TextBox x:Name="txtCustomName" Height="32" Margin="0,4,0,12" Padding="8,4"
+                     BorderBrush="#E4E7EC" FontSize="13" CharacterCasing="Upper" Visibility="Collapsed" />
+
+            <TextBlock x:Name="txtInfo" Margin="0,8,0,0" FontSize="12" Foreground="#6B7280" TextWrapping="Wrap" />
+        </StackPanel>
+
+    </DockPanel>
+</Window>
