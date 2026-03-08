@@ -7,7 +7,7 @@ public partial class ProjectCostingControl : UserControl
 {
     private int _projectId;
     private CostingViewModel _vm = new();
-    private ProjectCostingData _data = new(); // per riepilogo/materiali
+    private ProjectCostingData _data = new();
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
 
     public ProjectCostingControl()
@@ -47,6 +47,8 @@ public partial class ProjectCostingControl : UserControl
             var sectionStates = _vm.Groups
                 .SelectMany(g => g.Sections)
                 .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
+            var matSectionStates = _vm.MaterialSections
+                .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
 
             _vm = CostingViewModel.FromData(_data);
 
@@ -59,6 +61,9 @@ public partial class ProjectCostingControl : UserControl
                     if (sectionStates.TryGetValue(s.Id, out bool secExpanded))
                         s.IsDetailExpanded = secExpanded;
             }
+            foreach (var ms in _vm.MaterialSections)
+                if (matSectionStates.TryGetValue(ms.Id, out bool matExpanded))
+                    ms.IsDetailExpanded = matExpanded;
 
             DataContext = _vm;
 
@@ -78,7 +83,7 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // EVENT HANDLERS
+    // EVENT HANDLERS — GENERALI
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnInit_Click(object sender, RoutedEventArgs e)
@@ -94,6 +99,10 @@ public partial class ProjectCostingControl : UserControl
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // EVENT HANDLERS — RISORSE
+    // ══════════════════════════════════════════════════════════════
 
     private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -111,17 +120,12 @@ public partial class ProjectCostingControl : UserControl
             await SaveResource(row);
     }
 
-    // ── ComboBox dipendente ──
-
     private void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is not ComboBox combo) return;
         if (combo.DataContext is not CostResourceVM row) return;
+        if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees)) return;
 
-        if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees))
-            return;
-
-        // Trova la sezione nel VM per escludere dipendenti già assegnati
         CostSectionVM? sec = FindSection(row.SectionId);
         var usedIds = sec?.Resources
             .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
@@ -130,7 +134,6 @@ public partial class ProjectCostingControl : UserControl
 
         var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
         combo.ItemsSource = available;
-
         if (row.EmployeeId.HasValue)
             combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
     }
@@ -140,27 +143,53 @@ public partial class ProjectCostingControl : UserControl
         if (sender is not ComboBox combo) return;
         if (combo.DataContext is not CostResourceVM row) return;
         if (combo.SelectedItem is not EmployeeCostLookup emp) return;
-
         row.EmployeeId = emp.Id;
         row.ResourceName = emp.FullName;
         row.HourlyCost = emp.HourlyCost;
-
-        if (row.Id > 0)
-            await SaveResource(row);
+        if (row.Id > 0) await SaveResource(row);
     }
-
-    // ── Elimina risorsa ──
 
     private async void BtnDeleteResource_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button btn || btn.Tag is not int resourceId || resourceId <= 0)
-            return;
-
+        if (sender is not Button btn || btn.Tag is not int resourceId || resourceId <= 0) return;
         await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/resources/{resourceId}");
         await LoadData();
     }
 
-    // ── K Ricarico ──
+    private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int secId) return;
+        CostSectionVM? sec = FindSection(secId);
+        if (sec == null) return;
+
+        if (!_sectionEmployeesCache.ContainsKey(secId))
+        {
+            var emps = await LoadEmployeesForSection(secId);
+            _sectionEmployeesCache[secId] = emps;
+        }
+
+        var allEmps = _sectionEmployeesCache[secId];
+        var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
+        var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+
+        if (available.Count == 0)
+        {
+            MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
+            return;
+        }
+
+        var first = available.First();
+        var req = new ProjectCostResourceSaveRequest
+        {
+            SectionId = secId, EmployeeId = first.Id, ResourceName = first.FullName,
+            HourlyCost = first.HourlyCost, HoursPerDay = 8, CostPerKm = 0.90m
+        };
+        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/resources", json);
+        await LoadData();
+    }
+
+    // ── K Ricarico risorse ──
 
     private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -198,48 +227,68 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
-    // ── + Risorsa ──
+    // ══════════════════════════════════════════════════════════════
+    // EVENT HANDLERS — MATERIALI
+    // ══════════════════════════════════════════════════════════════
 
-    private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
+    private void MaterialSectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is Grid grid && grid.DataContext is MaterialSectionVM sec)
+            sec.IsDetailExpanded = !sec.IsDetailExpanded;
+    }
+
+    private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction == DataGridEditAction.Cancel) return;
+        await Task.Delay(100);
+        if (e.Row.Item is MaterialItemVM row && row.Id > 0)
+            await SaveMaterialItem(row);
+    }
+
+    private async void BtnAddMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
-
-        CostSectionVM? sec = FindSection(secId);
+        MaterialSectionVM? sec = FindMaterialSection(secId);
         if (sec == null) return;
 
-        if (!_sectionEmployeesCache.ContainsKey(secId))
-        {
-            var emps = await LoadEmployeesForSection(secId);
-            _sectionEmployeesCache[secId] = emps;
-        }
-
-        var allEmps = _sectionEmployeesCache[secId];
-        var usedIds = sec.Resources
-            .Where(r => r.EmployeeId.HasValue)
-            .Select(r => r.EmployeeId!.Value)
-            .ToHashSet();
-        var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
-
-        if (available.Count == 0)
-        {
-            MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
-            return;
-        }
-
-        var first = available.First();
-        var req = new ProjectCostResourceSaveRequest
+        var req = new ProjectMaterialItemSaveRequest
         {
             SectionId = secId,
-            EmployeeId = first.Id,
-            ResourceName = first.FullName,
-            HourlyCost = first.HourlyCost,
-            HoursPerDay = 8,
-            CostPerKm = 0.90m
+            Description = "",
+            Quantity = 1,
+            UnitCost = 0,
+            MarkupValue = sec.DefaultMarkup,
+            ItemType = "MATERIAL"
         };
+        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
+        await LoadData();
+    }
 
-        string json = JsonSerializer.Serialize(req,
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/resources", json);
+    private async void BtnAddCommission_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int secId) return;
+        MaterialSectionVM? sec = FindMaterialSection(secId);
+        if (sec == null) return;
+
+        var req = new ProjectMaterialItemSaveRequest
+        {
+            SectionId = secId,
+            Description = "Provvigione",
+            Quantity = 1,
+            UnitCost = 0,
+            MarkupValue = sec.DefaultCommissionMarkup,
+            ItemType = "COMMISSION"
+        };
+        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
+        await LoadData();
+    }
+
+    private async void BtnDeleteMaterialItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int itemId || itemId <= 0) return;
+        await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/material-items/{itemId}");
         await LoadData();
     }
 
@@ -257,6 +306,11 @@ public partial class ProjectCostingControl : UserControl
         return null;
     }
 
+    private MaterialSectionVM? FindMaterialSection(int sectionId)
+    {
+        return _vm.MaterialSections.FirstOrDefault(s => s.Id == sectionId);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // SAVE
     // ══════════════════════════════════════════════════════════════
@@ -266,8 +320,7 @@ public partial class ProjectCostingControl : UserControl
         try
         {
             var req = new { Field = "markup_value", Value = markupValue.ToString(CultureInfo.InvariantCulture) };
-            string json = JsonSerializer.Serialize(req,
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PatchAsync($"/api/projects/{_projectId}/costing/sections/{sectionId}/field", json);
         }
         catch { }
@@ -279,24 +332,30 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new ProjectCostResourceSaveRequest
             {
-                Id = row.Id,
-                SectionId = row.SectionId,
-                EmployeeId = row.EmployeeId,
-                ResourceName = row.ResourceName,
-                WorkDays = row.WorkDays,
-                HoursPerDay = row.HoursPerDay,
-                HourlyCost = row.HourlyCost,
-                NumTrips = row.NumTrips,
-                KmPerTrip = row.KmPerTrip,
-                CostPerKm = row.CostPerKm,
-                DailyFood = row.DailyFood,
-                DailyHotel = row.DailyHotel,
-                AllowanceDays = row.AllowanceDays,
-                DailyAllowance = row.DailyAllowance
+                Id = row.Id, SectionId = row.SectionId, EmployeeId = row.EmployeeId,
+                ResourceName = row.ResourceName, WorkDays = row.WorkDays, HoursPerDay = row.HoursPerDay,
+                HourlyCost = row.HourlyCost, NumTrips = row.NumTrips, KmPerTrip = row.KmPerTrip,
+                CostPerKm = row.CostPerKm, DailyFood = row.DailyFood, DailyHotel = row.DailyHotel,
+                AllowanceDays = row.AllowanceDays, DailyAllowance = row.DailyAllowance
             };
-            string json = JsonSerializer.Serialize(req,
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/resources/{row.Id}", json);
+        }
+        catch { }
+    }
+
+    private async Task SaveMaterialItem(MaterialItemVM row)
+    {
+        try
+        {
+            var req = new ProjectMaterialItemSaveRequest
+            {
+                Id = row.Id, SectionId = row.SectionId, Description = row.Description,
+                Quantity = row.Quantity, UnitCost = row.UnitCost,
+                MarkupValue = row.MarkupValue, ItemType = row.ItemType
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/material-items/{row.Id}", json);
         }
         catch { }
     }
