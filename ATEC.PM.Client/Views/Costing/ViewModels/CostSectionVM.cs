@@ -36,7 +36,7 @@ public class CostSectionVM : INotifyPropertyChanged
     public ObservableCollection<CostResourceVM> Resources { get; set; } = new();
     public List<int> DepartmentIds { get; set; } = new();
 
-    // Totali calcolati — si aggiornano via RecalcTotals()
+    // Totali calcolati
     private decimal _totalHours;
     public decimal TotalHours { get => _totalHours; private set { _totalHours = value; Notify(); } }
 
@@ -52,10 +52,15 @@ public class CostSectionVM : INotifyPropertyChanged
     private decimal _totalIndennita;
     public decimal TotalIndennita { get => _totalIndennita; private set { _totalIndennita = value; Notify(); } }
 
+    // TotalCost = SOLO ORE (trasferte vanno nella sezione materiali)
     private decimal _totalCost;
     public decimal TotalCost { get => _totalCost; private set { _totalCost = value; Notify(); Notify(nameof(TotalSale)); } }
 
     public decimal TotalSale => TotalCost * MarkupValue;
+
+    // Totale trasferte (per essere letto dal CostingViewModel)
+    public decimal TotalTravelExpenses => TotalViaggi + TotalAlloggio;
+    public decimal TotalAllowanceExpenses => TotalIndennita;
 
     private int _resourceCount;
     public int ResourceCount { get => _resourceCount; private set { _resourceCount = value; Notify(); } }
@@ -67,13 +72,13 @@ public class CostSectionVM : INotifyPropertyChanged
         TotalViaggi = Resources.Sum(r => r.TravelTotal);
         TotalAlloggio = Resources.Sum(r => r.AccommodationTotal);
         TotalIndennita = Resources.Sum(r => r.AllowanceTotal);
-        TotalCost = TotalCostOre + TotalViaggi + TotalAlloggio + TotalIndennita;
+        // Solo ore nel costo sezione — trasferte calcolate a parte
+        TotalCost = TotalCostOre;
         ResourceCount = Resources.Count;
+        Notify(nameof(TotalTravelExpenses));
+        Notify(nameof(TotalAllowanceExpenses));
     }
 
-    /// <summary>
-    /// Sottoscrive PropertyChanged di ogni risorsa per ricalcolo automatico
-    /// </summary>
     public void WireResourceChanges()
     {
         foreach (var r in Resources)

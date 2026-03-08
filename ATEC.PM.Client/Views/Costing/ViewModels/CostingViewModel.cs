@@ -33,9 +33,40 @@ public class CostingViewModel : INotifyPropertyChanged
     private decimal _grandMaterialSale;
     public decimal GrandMaterialSale { get => _grandMaterialSale; private set { _grandMaterialSale = value; Notify(); Notify(nameof(TotalCombinedSale)); } }
 
-    // Totali combinati (risorse + materiali)
-    public decimal TotalCombinedCost => GrandTotalCost + GrandMaterialCost;
-    public decimal TotalCombinedSale => GrandTotalSale + GrandMaterialSale;
+    // Trasferte calcolate dalle risorse DA_CLIENTE
+    private decimal _totalTravelCost;
+    public decimal TotalTravelCost { get => _totalTravelCost; private set { _totalTravelCost = value; Notify(); Notify(nameof(TotalTravelSale)); Notify(nameof(HasTravel)); Notify(nameof(TotalCombinedCost)); } }
+
+    private decimal _totalAllowanceCost;
+    public decimal TotalAllowanceCost { get => _totalAllowanceCost; private set { _totalAllowanceCost = value; Notify(); Notify(nameof(TotalAllowanceSale)); Notify(nameof(HasAllowance)); Notify(nameof(TotalCombinedCost)); } }
+
+    private decimal _travelMarkup = 1.000m;
+    public decimal TravelMarkup
+    {
+        get => _travelMarkup;
+        set { _travelMarkup = value; Notify(); Notify(nameof(TotalTravelSale)); Notify(nameof(GrandMaterialSaleWithTravel)); Notify(nameof(TotalCombinedSale)); }
+    }
+
+    private decimal _allowanceMarkup = 1.000m;
+    public decimal AllowanceMarkup
+    {
+        get => _allowanceMarkup;
+        set { _allowanceMarkup = value; Notify(); Notify(nameof(TotalAllowanceSale)); Notify(nameof(GrandMaterialSaleWithTravel)); Notify(nameof(TotalCombinedSale)); }
+    }
+
+    public decimal TotalTravelSale => TotalTravelCost * TravelMarkup;
+    public decimal TotalAllowanceSale => TotalAllowanceCost * AllowanceMarkup;
+
+    public bool HasTravel => TotalTravelCost > 0;
+    public bool HasAllowance => TotalAllowanceCost > 0;
+
+    // Totale materiali + trasferte
+    public decimal GrandMaterialCostWithTravel => GrandMaterialCost + TotalTravelCost + TotalAllowanceCost;
+    public decimal GrandMaterialSaleWithTravel => GrandMaterialSale + TotalTravelSale + TotalAllowanceSale;
+
+    // Totali combinati
+    public decimal TotalCombinedCost => GrandTotalCost + GrandMaterialCostWithTravel;
+    public decimal TotalCombinedSale => GrandTotalSale + GrandMaterialSaleWithTravel;
 
     public void RecalcGrandTotals()
     {
@@ -44,6 +75,19 @@ public class CostingViewModel : INotifyPropertyChanged
         GrandMaterialCost = MaterialSections.Sum(s => s.TotalCost);
         GrandMaterialSale = MaterialSections.Sum(s => s.TotalSale);
 
+        // Trasferte dalle risorse DA_CLIENTE
+        TotalTravelCost = Groups.SelectMany(g => g.Sections)
+            .Where(s => s.IsDaCliente)
+            .Sum(s => s.TotalTravelExpenses);
+        TotalAllowanceCost = Groups.SelectMany(g => g.Sections)
+            .Where(s => s.IsDaCliente)
+            .Sum(s => s.TotalAllowanceExpenses);
+
+        Notify(nameof(GrandMaterialCostWithTravel));
+        Notify(nameof(GrandMaterialSaleWithTravel));
+        Notify(nameof(TotalCombinedCost));
+        Notify(nameof(TotalCombinedSale));
+
         int secCount = Groups.Sum(g => g.Sections.Count);
         StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
                      $"Netto {TotalCombinedCost:N2} € — Vendita {TotalCombinedSale:N2} €";
@@ -51,7 +95,7 @@ public class CostingViewModel : INotifyPropertyChanged
 
     public void WireAllChanges()
     {
-        // Risorse: risorsa → sezione → gruppo → totali
+        // Risorse
         foreach (var group in Groups)
         {
             foreach (var sec in group.Sections)
@@ -69,7 +113,7 @@ public class CostingViewModel : INotifyPropertyChanged
             };
         }
 
-        // Materiali: item → sezione → totali
+        // Materiali
         foreach (var matSec in MaterialSections)
         {
             matSec.WireItemChanges();
@@ -90,13 +134,17 @@ public class CostingViewModel : INotifyPropertyChanged
         var vm = new CostingViewModel { IsInitialized = data.IsInitialized };
         if (!data.IsInitialized) return vm;
 
+        // K trasferta dal pricing
+        vm.TravelMarkup = data.Pricing.TravelMarkup;
+        vm.AllowanceMarkup = data.Pricing.AllowanceMarkup;
+
         var colorMap = new Dictionary<string, string>
         {
             { "GESTIONE", "#2563EB" }, { "PRESCHIERAMENTO", "#7C3AED" },
             { "INSTALLAZIONE", "#D97706" }, { "OPZIONE", "#DC2626" }
         };
 
-        // ── Risorse ──
+        // Risorse
         var groups = data.CostSections
             .Where(s => s.IsEnabled)
             .GroupBy(s => s.GroupName)
@@ -126,20 +174,11 @@ public class CostingViewModel : INotifyPropertyChanged
                 {
                     secVM.Resources.Add(new CostResourceVM
                     {
-                        Id = res.Id,
-                        SectionId = res.SectionId,
-                        EmployeeId = res.EmployeeId,
-                        ResourceName = res.ResourceName,
-                        WorkDays = res.WorkDays,
-                        HoursPerDay = res.HoursPerDay,
-                        HourlyCost = res.HourlyCost,
-                        NumTrips = res.NumTrips,
-                        KmPerTrip = res.KmPerTrip,
-                        CostPerKm = res.CostPerKm,
-                        DailyFood = res.DailyFood,
-                        DailyHotel = res.DailyHotel,
-                        AllowanceDays = res.AllowanceDays,
-                        DailyAllowance = res.DailyAllowance
+                        Id = res.Id, SectionId = res.SectionId, EmployeeId = res.EmployeeId,
+                        ResourceName = res.ResourceName, WorkDays = res.WorkDays, HoursPerDay = res.HoursPerDay,
+                        HourlyCost = res.HourlyCost, NumTrips = res.NumTrips, KmPerTrip = res.KmPerTrip,
+                        CostPerKm = res.CostPerKm, DailyFood = res.DailyFood, DailyHotel = res.DailyHotel,
+                        AllowanceDays = res.AllowanceDays, DailyAllowance = res.DailyAllowance
                     });
                 }
 
@@ -149,29 +188,22 @@ public class CostingViewModel : INotifyPropertyChanged
             vm.Groups.Add(groupVM);
         }
 
-        // ── Materiali ──
+        // Materiali
         foreach (var matSec in data.MaterialSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
         {
             var matVM = new MaterialSectionVM
             {
-                Id = matSec.Id,
-                CategoryId = matSec.CategoryId,
-                Name = matSec.Name,
-                DefaultMarkup = matSec.MarkupValue,
-                DefaultCommissionMarkup = matSec.CommissionMarkup
+                Id = matSec.Id, CategoryId = matSec.CategoryId, Name = matSec.Name,
+                DefaultMarkup = matSec.MarkupValue, DefaultCommissionMarkup = matSec.CommissionMarkup
             };
 
             foreach (var item in matSec.Items.OrderBy(i => i.SortOrder))
             {
                 matVM.Items.Add(new MaterialItemVM
                 {
-                    Id = item.Id,
-                    SectionId = item.SectionId,
-                    Description = item.Description,
-                    Quantity = item.Quantity,
-                    UnitCost = item.UnitCost,
-                    MarkupValue = item.MarkupValue,
-                    ItemType = item.ItemType
+                    Id = item.Id, SectionId = item.SectionId, Description = item.Description,
+                    Quantity = item.Quantity, UnitCost = item.UnitCost,
+                    MarkupValue = item.MarkupValue, ItemType = item.ItemType
                 });
             }
 

@@ -161,7 +161,8 @@ public class ProjectCostingController : ControllerBase
         var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
             SELECT id, project_id AS ProjectId, structure_costs_pct AS StructureCostsPct,
                    contingency_pct AS ContingencyPct, risk_warranty_pct AS RiskWarrantyPct,
-                   negotiation_margin_pct AS NegotiationMarginPct
+                   negotiation_margin_pct AS NegotiationMarginPct,
+                   travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup
             FROM project_pricing WHERE project_id=@projectId",
             new { projectId }) ?? new ProjectPricingDto { ProjectId = projectId };
 
@@ -372,9 +373,19 @@ public class ProjectCostingController : ControllerBase
         c.Execute(@"
             UPDATE project_pricing SET structure_costs_pct=@StructureCostsPct,
                 contingency_pct=@ContingencyPct, risk_warranty_pct=@RiskWarrantyPct,
-                negotiation_margin_pct=@NegotiationMarginPct
+                negotiation_margin_pct=@NegotiationMarginPct,
+                travel_markup=@TravelMarkup, allowance_markup=@AllowanceMarkup
             WHERE project_id=@projectId",
-            new { req.StructureCostsPct, req.ContingencyPct, req.RiskWarrantyPct, req.NegotiationMarginPct, projectId });
+            new
+            {
+                req.StructureCostsPct,
+                req.ContingencyPct,
+                req.RiskWarrantyPct,
+                req.NegotiationMarginPct,
+                req.TravelMarkup,
+                req.AllowanceMarkup,
+                projectId
+            });
         return Ok(ApiResponse<string>.Ok("", "Prezzi aggiornati"));
     }
 }
