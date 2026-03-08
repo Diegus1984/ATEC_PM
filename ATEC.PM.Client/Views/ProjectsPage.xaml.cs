@@ -4,6 +4,10 @@ namespace ATEC.PM.Client.Views;
 public partial class ProjectsPage : Page
 {
     private List<ProjectListItem> _allProjects = new();
+    private ProjectCostingControl? _costingControl;
+
+    private int _costingProjectId;
+
     public ProjectsPage()
     {
         InitializeComponent();
@@ -173,7 +177,11 @@ public partial class ProjectsPage : Page
             };
 
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}" });
+            var costingNode = new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}", IsExpanded = false };
+            costingNode.Items.Add(new TreeViewItem { Header = "Impegno Risorse", Tag = $"costing_risorse|{p.Id}" });
+            costingNode.Items.Add(new TreeViewItem { Header = "Materiali", Tag = $"costing_materiali|{p.Id}" });
+            costingNode.Items.Add(new TreeViewItem { Header = "Riepilogo e Prezzi", Tag = $"costing_riepilogo|{p.Id}" });
+            projNode.Items.Add(costingNode);
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
@@ -281,6 +289,36 @@ public partial class ProjectsPage : Page
             }
         }
     }
+    // === CHAT === 
+    private void ShowChat(int projectId)
+    {
+        txtSectionTitle.Text = "Chat";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new ProjectChatControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
+    }
+
+    private void ShowCosting(int projectId, string tab = "risorse")
+    {
+        txtSectionTitle.Text = tab switch
+        {
+            "materiali" => "Configura Commessa — Materiali",
+            "riepilogo" => "Configura Commessa — Riepilogo e Prezzi",
+            _ => "Configura Commessa — Impegno Risorse"
+        };
+        btnAction.Visibility = Visibility.Collapsed;
+
+        if (_costingControl == null || _costingProjectId != projectId)
+        {
+            _costingControl = new ProjectCostingControl();
+            _costingProjectId = projectId;
+        }
+
+        SectionContent.Content = _costingControl;
+        _costingControl.Load(projectId, tab);
+    }
+
     private void ShowDdpCommercial(int projectId)
     {
         txtSectionTitle.Text = "DDP Commerciali";
@@ -313,16 +351,6 @@ public partial class ProjectsPage : Page
         SectionContent.Content = ctrl;
         ctrl.Load(projectId, subPath);
     }
-    // === CHAT === 
-    private void ShowChat(int projectId)
-    {
-        txtSectionTitle.Text = "Chat";
-        btnAction.Visibility = Visibility.Collapsed;
-        var ctrl = new ProjectChatControl();
-        SectionContent.Content = ctrl;
-        ctrl.Load(projectId);
-    }
-
     // === FILE INFO ===
     private async void ShowFileInfo(int projectId, string relativePath)
     {
@@ -588,7 +616,16 @@ public partial class ProjectsPage : Page
                     ShowDetails(id);
                     break;
                 case "costing":
-                    ShowCosting(id);
+                    ShowCosting(id, "risorse");
+                    break;
+                case "costing_risorse":
+                    ShowCosting(id, "risorse");
+                    break;
+                case "costing_materiali":
+                    ShowCosting(id, "materiali");
+                    break;
+                case "costing_riepilogo":
+                    ShowCosting(id, "riepilogo");
                     break;
                 case "phases":
                     ShowPhases(id);
@@ -616,14 +653,8 @@ public partial class ProjectsPage : Page
             }
         }
     }
-    private void ShowCosting(int projectId)
-    {
-        txtSectionTitle.Text = "Configura Commessa";
-        btnAction.Visibility = Visibility.Collapsed;
-        var control = new ProjectCostingControl();
-        SectionContent.Content = control;
-        control.Load(projectId);
-    }
+
+   
     // === SEARCH ===
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {

@@ -52,6 +52,7 @@ public partial class ProjectCostingControl : UserControl
     private int _projectId;
     private ProjectCostingData _data = new();
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
+    private Dictionary<string, bool> _expanderStates = new();
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
@@ -65,12 +66,6 @@ public partial class ProjectCostingControl : UserControl
     public ProjectCostingControl()
     {
         InitializeComponent();
-    }
-
-    public void Load(int projectId)
-    {
-        _projectId = projectId;
-        _ = LoadData();
     }
 
     private async Task LoadData()
@@ -116,23 +111,30 @@ public partial class ProjectCostingControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
-    private void Tab_Changed(object sender, RoutedEventArgs e) => ShowCurrentTab();
+    private string _currentTab = "risorse";
 
+    public void Load(int projectId, string tab = "risorse")
+    {
+        _projectId = projectId;
+        _currentTab = tab;
+        _ = LoadData();
+    }
     private void ShowCurrentTab()
     {
         if (pnlContent == null || !_data.IsInitialized) return;
         pnlContent.Children.Clear();
-        if (tabRisorse.IsChecked == true) RenderRisorse();
-        else if (tabMateriali.IsChecked == true) RenderMateriali();
-        else if (tabRiepilogo.IsChecked == true) RenderRiepilogo();
+        switch (_currentTab)
+        {
+            case "risorse": RenderRisorse(); break;
+            case "materiali": RenderMateriali(); break;
+            case "riepilogo": RenderRiepilogo(); break;
+        }
     }
-
     // ══════════════════════════════════════════════════════════════
     // TAB RISORSE — DataGrid inline
     // ══════════════════════════════════════════════════════════════
     private async void RenderRisorse()
     {
-        // Precarica cache dipendenti per tutte le sezioni
         _sectionEmployeesCache.Clear();
         foreach (var sec in _data.CostSections.Where(s => s.IsEnabled))
         {
@@ -140,43 +142,86 @@ public partial class ProjectCostingControl : UserControl
             _sectionEmployeesCache[sec.Id] = emps;
         }
 
-        string lastGroup = "";
         decimal grandTotalCost = 0;
         decimal grandTotalHours = 0;
 
-        foreach (var sec in _data.CostSections.Where(s => s.IsEnabled).OrderBy(s => s.SortOrder))
+        var groups = _data.CostSections
+            .Where(s => s.IsEnabled)
+            .GroupBy(s => s.GroupName)
+            .OrderBy(g => _data.CostSections.Where(s => s.GroupName == g.Key).Min(s => s.SortOrder));
+
+        foreach (var group in groups)
         {
-            if (sec.GroupName != lastGroup)
-            {
-                string color = GroupColors.TryGetValue(sec.GroupName, out string? c) ? c : "#6B7280";
-                pnlContent.Children.Add(MakeGroupHeader(sec.GroupName, color));
-                lastGroup = sec.GroupName;
-            }
-            pnlContent.Children.Add(MakeResourceSectionWithGrid(sec));
-            grandTotalCost += sec.TotalCost;
-            grandTotalHours += sec.TotalHours;
+            string color = GroupColors.TryGetValue(group.Key, out string? c) ? c : "#6B7280";
+            List<ProjectCostSectionDto> groupSections = group.ToList();
+
+            pnlContent.Children.Add(MakeGroupExpander(group.Key, color, groupSections));
+
+            grandTotalCost += groupSections.Sum(s => s.TotalCost);
+            grandTotalHours += groupSections.Sum(s => s.TotalHours);
         }
 
         pnlContent.Children.Add(MakeTotalBar("TOTALE RISORSE", grandTotalHours, grandTotalCost));
         txtStatus.Text = $"{_data.CostSections.Count(s => s.IsEnabled)} sezioni — {grandTotalHours:N1} ore — {grandTotalCost:N2} €";
     }
 
-    private Border MakeGroupHeader(string name, string color)
+    private Expander MakeGroupExpander(string name, string color, List<ProjectCostSectionDto> groupSections)
     {
-        Border header = new()
+        decimal groupHours = groupSections.Sum(s => s.TotalHours);
+        decimal groupCost = groupSections.Sum(s => s.TotalCost);
+
+        bool isExpanded = _expanderStates.TryGetValue(name, out bool saved) ? saved : true;
+
+        Expander exp = new()
+        {
+            IsExpanded = isExpanded,
+            Margin = new Thickness(0, 12, 0, 0)
+        };
+        if (Application.Current.TryFindResource("SmoothExpander") is Style smoothStyle)
+            exp.Style = smoothStyle;
+
+        string groupKey = name;
+        exp.Expanded += (s, e) => _expanderStates[groupKey] = true;
+        exp.Collapsed += (s, e) => _expanderStates[groupKey] = false;
+
+        // Header
+        Border headerBorder = new()
         {
             Background = Brush(color),
-            Padding = new Thickness(12, 6, 12, 6),
-            Margin = new Thickness(0, 12, 0, 4)
+            Padding = new Thickness(12, 6, 12, 6)
         };
-        header.Child = new TextBlock
+        DockPanel dp = new();
+
+        TextBlock txtTotals = new()
+        {
+            Text = $"{groupHours:N1} h  |  {groupCost:N2} €",
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        DockPanel.SetDock(txtTotals, Dock.Right);
+        dp.Children.Add(txtTotals);
+
+        dp.Children.Add(new TextBlock
         {
             Text = $"  {name}",
             Foreground = Brushes.White,
             FontSize = 12,
-            FontWeight = FontWeights.SemiBold
-        };
-        return header;
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        headerBorder.Child = dp;
+        exp.Header = headerBorder;
+
+        // Content: le sezioni di questo gruppo
+        StackPanel content = new();
+        foreach (var sec in groupSections.OrderBy(s => s.SortOrder))
+            content.Children.Add(MakeResourceSectionWithGrid(sec));
+
+        exp.Content = content;
+        return exp;
     }
 
     private Border MakeResourceSectionWithGrid(ProjectCostSectionDto sec)
@@ -225,7 +270,7 @@ public partial class ProjectCostingControl : UserControl
             Text = $"{sec.TotalHours:N1} h  |  {sec.TotalCost:N2} €",
             FontSize = 11,
             Foreground = Brush("#4F6EF7"),
-            FontWeight = FontWeights.SemiBold,
+            FontWeight = FontWeights.Bold,  // era SemiBold
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 12, 0)
         };

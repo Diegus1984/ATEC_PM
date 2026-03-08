@@ -10,7 +10,7 @@
                 <ResourceDictionary Source="/Resources/ButtonStyles.xaml" />
                 <ResourceDictionary Source="/Resources/GridStyles.xaml" />
                 <ResourceDictionary Source="/Resources/Converters.xaml" />
-                <ResourceDictionary Source="/Resources/Converters.xaml" />
+                <ResourceDictionary Source="/Resources/ExpanderStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
