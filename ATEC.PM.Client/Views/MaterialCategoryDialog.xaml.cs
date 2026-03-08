@@ -1,15 +1,12 @@
+using System.Globalization;
+
 namespace ATEC.PM.Client.Views;
 
 public partial class MaterialCategoryDialog : Window
 {
-    public MaterialCategoryDialog(List<MarkupCoefficientDto> markups)
+    public MaterialCategoryDialog()
     {
         InitializeComponent();
-
-        foreach (MarkupCoefficientDto mk in markups.Where(m => m.CoefficientType == "MATERIAL").OrderBy(m => m.SortOrder))
-            cmbMarkup.Items.Add(new ComboBoxItem { Content = $"{mk.Code} — {mk.Description}", Tag = mk.Code });
-
-        if (cmbMarkup.Items.Count > 0) cmbMarkup.SelectedIndex = 0;
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -21,9 +18,15 @@ public partial class MaterialCategoryDialog : Window
             return;
         }
 
-        if (cmbMarkup.SelectedItem is not ComboBoxItem mkItem || mkItem.Tag is not string mkCode || string.IsNullOrEmpty(mkCode))
+        if (!decimal.TryParse(txtKMaterial.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal kMat))
         {
-            txtError.Text = "Seleziona un markup.";
+            txtError.Text = "K Materiale non valido.";
+            return;
+        }
+
+        if (!decimal.TryParse(txtKCommission.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal kComm))
+        {
+            txtError.Text = "K Provvigione non valido.";
             return;
         }
 
@@ -34,7 +37,8 @@ public partial class MaterialCategoryDialog : Window
             string json = JsonSerializer.Serialize(new
             {
                 name,
-                markupCode = mkCode,
+                defaultMarkup = kMat,
+                defaultCommissionMarkup = kComm,
                 sortOrder,
                 isActive = true
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });

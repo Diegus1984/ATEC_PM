@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Nuova Categoria Materiale"
     Width="420"
-    Height="300"
+    Height="320"
     Background="#F7F8FA"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner">
@@ -26,76 +26,41 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
                     <Button
-                        Width="90"
-                        Height="34"
-                        Background="#F3F4F6"
-                        BorderThickness="0"
-                        Click="BtnCancel_Click"
-                        Content="Annulla"
-                        Cursor="Hand"
-                        Foreground="#374151" />
+                        Width="90" Height="34"
+                        Background="#F3F4F6" BorderThickness="0"
+                        Click="BtnCancel_Click" Content="Annulla"
+                        Cursor="Hand" Foreground="#374151" />
                     <Button
-                        Width="90"
-                        Height="34"
-                        Margin="8,0,0,0"
-                        Background="#4F6EF7"
-                        BorderThickness="0"
-                        Click="BtnSave_Click"
-                        Content="Salva"
-                        Cursor="Hand"
-                        FontWeight="SemiBold"
-                        Foreground="White" />
+                        Width="90" Height="34" Margin="8,0,0,0"
+                        Background="#4F6EF7" BorderThickness="0"
+                        Click="BtnSave_Click" Content="Salva"
+                        Cursor="Hand" FontWeight="SemiBold" Foreground="White" />
                 </StackPanel>
             </DockPanel>
         </Border>
         <StackPanel Margin="24,16,24,8">
-            <TextBlock
-                Margin="0,0,0,4"
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
-                Text="NOME CATEGORIA *" />
-            <TextBox
-                x:Name="txtName"
-                Height="32"
-                Padding="8,5"
-                BorderBrush="#E4E7EC"
-                FontSize="13" />
+            <TextBlock Margin="0,0,0,4" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME CATEGORIA *" />
+            <TextBox x:Name="txtName" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" />
 
             <Grid Margin="0,12,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
                     <ColumnDefinition Width="80" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock
-                        Margin="0,0,0,4"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#6B7280"
-                        Text="MARKUP CODE *" />
-                    <ComboBox
-                        x:Name="cmbMarkup"
-                        Height="32"
-                        Padding="8,5"
-                        BorderBrush="#E4E7EC"
-                        FontSize="13" />
+                    <TextBlock Margin="0,0,0,4" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="K MATERIALE" />
+                    <TextBox x:Name="txtKMaterial" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" Text="1.300" />
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock
-                        Margin="0,0,0,4"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#6B7280"
-                        Text="ORDINE" />
-                    <TextBox
-                        x:Name="txtSortOrder"
-                        Height="32"
-                        Padding="8,5"
-                        BorderBrush="#E4E7EC"
-                        FontSize="13"
-                        Text="0" />
+                    <TextBlock Margin="0,0,0,4" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="K PROVVIGIONE" />
+                    <TextBox x:Name="txtKCommission" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" Text="1.100" />
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                    <TextBlock Margin="0,0,0,4" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDINE" />
+                    <TextBox x:Name="txtSortOrder" Height="32" Padding="8,5" BorderBrush="#E4E7EC" FontSize="13" Text="0" />
                 </StackPanel>
             </Grid>
         </StackPanel>

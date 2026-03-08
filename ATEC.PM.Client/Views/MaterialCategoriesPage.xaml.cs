@@ -6,7 +6,6 @@ namespace ATEC.PM.Client.Views;
 public partial class MaterialCategoriesPage : Page
 {
     private List<MaterialCategoryDto> _categories = new();
-    private List<MarkupCoefficientDto> _markups = new();
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
@@ -21,15 +20,6 @@ public partial class MaterialCategoriesPage : Page
     {
         try
         {
-            // Carica markup (tutti, per la combo)
-            string mkJson = await ApiClient.GetAsync("/api/markup");
-            JsonDocument mkDoc = JsonDocument.Parse(mkJson);
-            if (mkDoc.RootElement.GetProperty("success").GetBoolean())
-                _markups = JsonSerializer.Deserialize<List<MarkupCoefficientDto>>(
-                    mkDoc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            // Carica categorie
             string json = await ApiClient.GetAsync("/api/material-categories");
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
@@ -67,8 +57,8 @@ public partial class MaterialCategoriesPage : Page
 
         Grid grid = new();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
 
@@ -83,50 +73,60 @@ public partial class MaterialCategoriesPage : Page
         Grid.SetColumn(txtName, 0);
         grid.Children.Add(txtName);
 
-        // Col 1: Markup ComboBox
-        ComboBox cmbMarkup = new()
+        // Col 1: K Materiale (editabile)
+        TextBox txtKMat = new()
         {
-            Height = 24, Width = 130,
-            FontSize = 11,
+            Text = cat.DefaultMarkup.ToString("F3", CultureInfo.InvariantCulture),
+            FontSize = 12,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brush("#4F6EF7"),
+            Width = 60, Height = 24,
             Padding = new Thickness(4, 2, 4, 2),
             BorderBrush = Brush("#E4E7EC"),
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        int selectedIdx = 0;
-        int idx = 0;
-        foreach (MarkupCoefficientDto mk in _markups.Where(m => m.CoefficientType == "MATERIAL").OrderBy(m => m.SortOrder))
+        int catId = cat.Id;
+        txtKMat.LostFocus += async (s, e) =>
         {
-            cmbMarkup.Items.Add(new ComboBoxItem { Content = mk.Code, Tag = mk.Code });
-            if (mk.Code == cat.MarkupCode) selectedIdx = idx;
-            idx++;
-        }
-        cmbMarkup.SelectedIndex = selectedIdx;
-        cmbMarkup.SelectionChanged += async (s, e) =>
-        {
-            string newCode = (cmbMarkup.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
-            if (newCode == cat.MarkupCode) return;
-            await UpdateField(cat.Id, "markup_code", newCode);
-            cat.MarkupCode = newCode;
-            // Aggiorna K value display
-            MarkupCoefficientDto? mk = _markups.FirstOrDefault(m => m.Code == newCode);
-            if (mk != null) cat.MarkupValue = mk.MarkupValue;
-            UpdateKDisplay(grid, cat);
+            if (decimal.TryParse(txtKMat.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val) && val != cat.DefaultMarkup)
+            {
+                await UpdateField(catId, "default_markup", val.ToString(CultureInfo.InvariantCulture));
+                cat.DefaultMarkup = val;
+            }
         };
-        Grid.SetColumn(cmbMarkup, 1);
-        grid.Children.Add(cmbMarkup);
+        txtKMat.GotFocus += (s, e) => txtKMat.SelectAll();
+        Grid.SetColumn(txtKMat, 1);
+        grid.Children.Add(txtKMat);
 
-        // Col 2: K valore (read-only, calcolato)
-        TextBlock txtK = new()
+        // Col 2: K Provvigione (editabile)
+        TextBox txtKComm = new()
         {
-            Text = cat.MarkupValue.ToString("F3", CultureInfo.InvariantCulture),
-            FontSize = 12, FontWeight = FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
+            Text = cat.DefaultCommissionMarkup.ToString("F3", CultureInfo.InvariantCulture),
+            FontSize = 12,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brush("#059669"),
+            Width = 60, Height = 24,
+            Padding = new Thickness(4, 2, 4, 2),
+            BorderBrush = Brush("#E4E7EC"),
+            BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Foreground = Brush("#4F6EF7"),
-            Tag = "kvalue"
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
         };
-        Grid.SetColumn(txtK, 2);
-        grid.Children.Add(txtK);
+        txtKComm.LostFocus += async (s, e) =>
+        {
+            if (decimal.TryParse(txtKComm.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val) && val != cat.DefaultCommissionMarkup)
+            {
+                await UpdateField(catId, "default_commission_markup", val.ToString(CultureInfo.InvariantCulture));
+                cat.DefaultCommissionMarkup = val;
+            }
+        };
+        txtKComm.GotFocus += (s, e) => txtKComm.SelectAll();
+        Grid.SetColumn(txtKComm, 2);
+        grid.Children.Add(txtKComm);
 
         // Col 3: Sort order
         TextBox txtSort = new()
@@ -142,7 +142,7 @@ public partial class MaterialCategoriesPage : Page
         txtSort.LostFocus += async (s, e) =>
         {
             if (!int.TryParse(txtSort.Text, out int val) || val == cat.SortOrder) return;
-            await UpdateField(cat.Id, "sort_order", val.ToString());
+            await UpdateField(catId, "sort_order", val.ToString());
             cat.SortOrder = val;
         };
         Grid.SetColumn(txtSort, 3);
@@ -180,21 +180,9 @@ public partial class MaterialCategoriesPage : Page
         return row;
     }
 
-    private void UpdateKDisplay(Grid grid, MaterialCategoryDto cat)
-    {
-        foreach (var child in grid.Children)
-        {
-            if (child is TextBlock tb && tb.Tag?.ToString() == "kvalue")
-            {
-                tb.Text = cat.MarkupValue.ToString("F3", CultureInfo.InvariantCulture);
-                break;
-            }
-        }
-    }
-
     private async void BtnAdd_Click(object sender, RoutedEventArgs e)
     {
-        MaterialCategoryDialog dlg = new(_markups) { Owner = Window.GetWindow(this) };
+        MaterialCategoryDialog dlg = new() { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) await LoadData();
     }
 

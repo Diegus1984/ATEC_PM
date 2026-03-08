@@ -302,17 +302,17 @@ public class ProjectCostingController : ControllerBase
     {
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(@"
-            INSERT INTO project_material_sections (project_id, category_id, name, markup_code, markup_value, sort_order, is_enabled)
-            VALUES (@ProjectId, @CategoryId, @Name, @MarkupCode, @MarkupValue, @SortOrder, @IsEnabled);
+            INSERT INTO project_material_sections (project_id, category_id, name, markup_value, commission_markup, sort_order, is_enabled)
+            VALUES (@ProjectId, @CategoryId, @Name, @MarkupValue, @CommissionMarkup, @SortOrder, @IsEnabled);
             SELECT LAST_INSERT_ID();",
-            new { ProjectId = projectId, req.CategoryId, req.Name, req.MarkupCode, req.MarkupValue, req.SortOrder, req.IsEnabled });
+            new { ProjectId = projectId, req.CategoryId, req.Name, req.MarkupValue, req.CommissionMarkup, req.SortOrder, req.IsEnabled });
         return Ok(ApiResponse<int>.Ok(id, "Sezione materiale aggiunta"));
     }
 
     [HttpPatch("material-sections/{id}/field")]
     public IActionResult UpdateMaterialSectionField(int projectId, int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "markup_value", "is_enabled", "sort_order" };
+        var allowed = new HashSet<string> { "name", "markup_value", "commission_markup", "is_enabled", "sort_order" };
         if (!allowed.Contains(req.Field))
             return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
 
