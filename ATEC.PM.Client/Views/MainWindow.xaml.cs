@@ -35,13 +35,11 @@ public partial class MainWindow : Window
         btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
         lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || 
                                   btnReparti.Visibility == Visibility.Visible || 
-                                  btnMarkup.Visibility == Visibility.Visible ||
                                   btnMaterialCat.Visibility == Visibility.Visible ||
                                   btnCostSections.Visibility == Visibility.Visible ) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnMarkup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
         btnCostSections.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
 
 
@@ -78,7 +76,6 @@ public partial class MainWindow : Window
             case "Utenti": PageContent.Navigate(new UsersPage()); break;
             case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
             case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
-            case "Markup": PageContent.Navigate(new MarkupPage()); break;
             case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             default: PageContent.Content = null; break;

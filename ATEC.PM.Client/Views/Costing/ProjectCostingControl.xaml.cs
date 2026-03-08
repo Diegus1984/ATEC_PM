@@ -119,6 +119,7 @@ public partial class ProjectCostingControl : UserControl
             EmployeeId = first.Id,
             ResourceName = first.FullName,
             HourlyCost = first.HourlyCost,
+            MarkupValue = first.DefaultMarkup,
             HoursPerDay = 8,
             CostPerKm = 0.90m
         };
@@ -181,6 +182,7 @@ public partial class ProjectCostingControl : UserControl
         row.EmployeeId = emp.Id;
         row.ResourceName = emp.FullName;
         row.HourlyCost = emp.HourlyCost;
+        row.MarkupValue = emp.DefaultMarkup;
         if (row.Id > 0) await SaveResource(row);
     }
 
@@ -274,37 +276,9 @@ public partial class ProjectCostingControl : UserControl
         if (sender is TextBox tb) tb.SelectAll();
     }
 
-    private async void MarkupTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CostSectionVM sec)
-        {
-            e.Handled = true;
-            if (decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != sec.MarkupValue)
-            {
-                sec.MarkupValue = newK;
-                await SaveSectionMarkup(sec.Id, newK);
-            }
-            Keyboard.ClearFocus();
-        }
-    }
-
-    private async void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox tb && tb.DataContext is CostSectionVM sec)
-        {
-            if (decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != sec.MarkupValue)
-            {
-                sec.MarkupValue = newK;
-                await SaveSectionMarkup(sec.Id, newK);
-            }
-        }
-    }
-
-    private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is TextBox tb) { tb.Focus(); e.Handled = true; }
-    }
-
+    private void MarkupTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { }
     private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction == DataGridEditAction.Cancel) return;
@@ -379,6 +353,7 @@ public partial class ProjectCostingControl : UserControl
                 WorkDays = row.WorkDays,
                 HoursPerDay = row.HoursPerDay,
                 HourlyCost = row.HourlyCost,
+                MarkupValue = row.MarkupValue,
                 NumTrips = row.NumTrips,
                 KmPerTrip = row.KmPerTrip,
                 CostPerKm = row.CostPerKm,
@@ -392,18 +367,6 @@ public partial class ProjectCostingControl : UserControl
         }
         catch { }
     }
-
-    private async Task SaveSectionMarkup(int sectionId, decimal markupValue)
-    {
-        try
-        {
-            var req = new { Field = "markup_value", Value = markupValue.ToString(CultureInfo.InvariantCulture) };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PatchAsync($"/api/projects/{_projectId}/costing/sections/{sectionId}/field", json);
-        }
-        catch { }
-    }
-
     private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox)

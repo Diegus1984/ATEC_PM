@@ -166,7 +166,6 @@ public class CostingViewModel : INotifyPropertyChanged
                     TemplateId = sec.TemplateId,
                     Name = sec.Name,
                     SectionType = sec.SectionType,
-                    MarkupValue = sec.MarkupValue,
                     DepartmentIds = sec.DepartmentIds
                 };
 
@@ -174,11 +173,21 @@ public class CostingViewModel : INotifyPropertyChanged
                 {
                     secVM.Resources.Add(new CostResourceVM
                     {
-                        Id = res.Id, SectionId = res.SectionId, EmployeeId = res.EmployeeId,
-                        ResourceName = res.ResourceName, WorkDays = res.WorkDays, HoursPerDay = res.HoursPerDay,
-                        HourlyCost = res.HourlyCost, NumTrips = res.NumTrips, KmPerTrip = res.KmPerTrip,
-                        CostPerKm = res.CostPerKm, DailyFood = res.DailyFood, DailyHotel = res.DailyHotel,
-                        AllowanceDays = res.AllowanceDays, DailyAllowance = res.DailyAllowance
+                        Id = res.Id,
+                        SectionId = res.SectionId,
+                        EmployeeId = res.EmployeeId,
+                        ResourceName = res.ResourceName,
+                        WorkDays = res.WorkDays,
+                        HoursPerDay = res.HoursPerDay,
+                        HourlyCost = res.HourlyCost,
+                        MarkupValue = res.MarkupValue,
+                        NumTrips = res.NumTrips,
+                        KmPerTrip = res.KmPerTrip,
+                        CostPerKm = res.CostPerKm,
+                        DailyFood = res.DailyFood,
+                        DailyHotel = res.DailyHotel,
+                        AllowanceDays = res.AllowanceDays,
+                        DailyAllowance = res.DailyAllowance
                     });
                 }
 
@@ -193,17 +202,24 @@ public class CostingViewModel : INotifyPropertyChanged
         {
             var matVM = new MaterialSectionVM
             {
-                Id = matSec.Id, CategoryId = matSec.CategoryId, Name = matSec.Name,
-                DefaultMarkup = matSec.MarkupValue, DefaultCommissionMarkup = matSec.CommissionMarkup
+                Id = matSec.Id,
+                CategoryId = matSec.CategoryId,
+                Name = matSec.Name,
+                DefaultMarkup = matSec.MarkupValue,
+                DefaultCommissionMarkup = matSec.CommissionMarkup
             };
 
             foreach (var item in matSec.Items.OrderBy(i => i.SortOrder))
             {
                 matVM.Items.Add(new MaterialItemVM
                 {
-                    Id = item.Id, SectionId = item.SectionId, Description = item.Description,
-                    Quantity = item.Quantity, UnitCost = item.UnitCost,
-                    MarkupValue = item.MarkupValue, ItemType = item.ItemType
+                    Id = item.Id,
+                    SectionId = item.SectionId,
+                    Description = item.Description,
+                    Quantity = item.Quantity,
+                    UnitCost = item.UnitCost,
+                    MarkupValue = item.MarkupValue,
+                    ItemType = item.ItemType
                 });
             }
 

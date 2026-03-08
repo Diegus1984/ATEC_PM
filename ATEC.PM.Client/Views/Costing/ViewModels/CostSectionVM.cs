@@ -19,12 +19,7 @@ public class CostSectionVM : INotifyPropertyChanged
     public string TypeLabel => IsDaCliente ? "CLIENTE" : "SEDE";
     public string TypeColor => IsDaCliente ? "#D97706" : "#059669";
 
-    private decimal _markupValue = 1.450m;
-    public decimal MarkupValue
-    {
-        get => _markupValue;
-        set { _markupValue = value; Notify(); Notify(nameof(TotalSale)); }
-    }
+    // NO MarkupValue sulla sezione — il K è sulla singola risorsa
 
     private bool _isDetailExpanded;
     public bool IsDetailExpanded
@@ -52,13 +47,15 @@ public class CostSectionVM : INotifyPropertyChanged
     private decimal _totalIndennita;
     public decimal TotalIndennita { get => _totalIndennita; private set { _totalIndennita = value; Notify(); } }
 
-    // TotalCost = SOLO ORE (trasferte vanno nella sezione materiali)
+    // TotalCost = solo ore
     private decimal _totalCost;
-    public decimal TotalCost { get => _totalCost; private set { _totalCost = value; Notify(); Notify(nameof(TotalSale)); } }
+    public decimal TotalCost { get => _totalCost; private set { _totalCost = value; Notify(); } }
 
-    public decimal TotalSale => TotalCost * MarkupValue;
+    // TotalSale = somma dei singoli TotalSale per riga (ogni risorsa ha il suo K)
+    private decimal _totalSale;
+    public decimal TotalSale { get => _totalSale; private set { _totalSale = value; Notify(); } }
 
-    // Totale trasferte (per essere letto dal CostingViewModel)
+    // Trasferte (per CostingViewModel)
     public decimal TotalTravelExpenses => TotalViaggi + TotalAlloggio;
     public decimal TotalAllowanceExpenses => TotalIndennita;
 
@@ -72,8 +69,8 @@ public class CostSectionVM : INotifyPropertyChanged
         TotalViaggi = Resources.Sum(r => r.TravelTotal);
         TotalAlloggio = Resources.Sum(r => r.AccommodationTotal);
         TotalIndennita = Resources.Sum(r => r.AllowanceTotal);
-        // Solo ore nel costo sezione — trasferte calcolate a parte
         TotalCost = TotalCostOre;
+        TotalSale = Resources.Sum(r => r.TotalSale);
         ResourceCount = Resources.Count;
         Notify(nameof(TotalTravelExpenses));
         Notify(nameof(TotalAllowanceExpenses));

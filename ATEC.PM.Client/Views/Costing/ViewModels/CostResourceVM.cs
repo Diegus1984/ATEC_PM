@@ -16,25 +16,33 @@ public class CostResourceVM : INotifyPropertyChanged
     public decimal WorkDays
     {
         get => _workDays;
-        set { _workDays = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); Notify(nameof(AccommodationTotal)); }
+        set { _workDays = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); Notify(nameof(TotalSale)); Notify(nameof(AccommodationTotal)); }
     }
 
     private decimal _hoursPerDay;
     public decimal HoursPerDay
     {
         get => _hoursPerDay;
-        set { _hoursPerDay = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); }
+        set { _hoursPerDay = value; Notify(); Notify(nameof(TotalHours)); Notify(nameof(TotalCost)); Notify(nameof(TotalSale)); }
     }
 
     private decimal _hourlyCost;
     public decimal HourlyCost
     {
         get => _hourlyCost;
-        set { _hourlyCost = value; Notify(); Notify(nameof(TotalCost)); }
+        set { _hourlyCost = value; Notify(); Notify(nameof(TotalCost)); Notify(nameof(TotalSale)); }
+    }
+
+    private decimal _markupValue = 1.450m;
+    public decimal MarkupValue
+    {
+        get => _markupValue;
+        set { _markupValue = value; Notify(); Notify(nameof(TotalSale)); }
     }
 
     public decimal TotalHours => WorkDays * HoursPerDay;
     public decimal TotalCost => TotalHours * HourlyCost;
+    public decimal TotalSale => TotalCost * MarkupValue;
 
     // Trasferta
     private int _numTrips;
@@ -89,9 +97,7 @@ public class CostResourceVM : INotifyPropertyChanged
     public decimal TravelTotal => NumTrips * KmPerTrip * CostPerKm;
     public decimal AccommodationTotal => WorkDays * (DailyFood + DailyHotel);
     public decimal AllowanceTotal => AllowanceDays * DailyAllowance;
-    public decimal GrandTotal => TotalCost + TravelTotal + AccommodationTotal + AllowanceTotal;
 
-    // Lista indennità per ComboBox
     public static decimal[] AllowanceOptions => new[] { 0m, 20m, 40m, 60m };
 
     public event PropertyChangedEventHandler? PropertyChanged;

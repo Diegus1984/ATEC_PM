@@ -3,20 +3,7 @@ using System.Linq;
 
 namespace ATEC.PM.Shared.DTOs;
 
-// === K LOCALI COMMESSA ===
-public class ProjectMarkupValueDto
-{
-    public int Id { get; set; }
-    public int ProjectId { get; set; }
-    public string OriginalCode { get; set; } = "";
-    public string Description { get; set; } = "";
-    public string CoefficientType { get; set; } = "MATERIAL";
-    public decimal MarkupValue { get; set; } = 1.0m;
-    public decimal? HourlyCost { get; set; }
-    public int SortOrder { get; set; }
-}
 
-// === SEZIONI COSTO RISORSE ===
 public class ProjectCostSectionDto
 {
     public int Id { get; set; }
@@ -27,13 +14,14 @@ public class ProjectCostSectionDto
     public string GroupName { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
-    public decimal MarkupValue { get; set; } = 1.450m;
+    // NO MarkupValue — il K è sulla singola risorsa
     public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
     public decimal TotalHours => Resources?.Sum(r => r.TotalHours) ?? 0;
-    public decimal TotalCost => Resources?.Sum(r => r.TotalCost + r.TravelTotal + r.AccommodationTotal + r.AllowanceTotal) ?? 0;
-    public decimal TotalSale => TotalCost * MarkupValue;
+    public decimal TotalCost => Resources?.Sum(r => r.TotalCost) ?? 0;
+    public decimal TotalSale => Resources?.Sum(r => r.TotalSale) ?? 0;
+    public decimal TotalTravel => Resources?.Sum(r => r.TravelTotal + r.AccommodationTotal + r.AllowanceTotal) ?? 0;
 }
 
 public class ProjectCostResourceDto
@@ -45,6 +33,7 @@ public class ProjectCostResourceDto
     public decimal WorkDays { get; set; }
     public decimal HoursPerDay { get; set; }
     public decimal HourlyCost { get; set; }
+    public decimal MarkupValue { get; set; } = 1.450m;
     // Trasferta
     public int NumTrips { get; set; }
     public decimal KmPerTrip { get; set; }
@@ -57,6 +46,7 @@ public class ProjectCostResourceDto
     // Calcolati
     public decimal TotalHours => WorkDays * HoursPerDay;
     public decimal TotalCost => TotalHours * HourlyCost;
+    public decimal TotalSale => TotalCost * MarkupValue;
     public decimal TravelTotal => NumTrips * KmPerTrip * CostPerKm;
     public decimal AccommodationTotal => WorkDays * (DailyFood + DailyHotel);
     public decimal AllowanceTotal => AllowanceDays * DailyAllowance;
@@ -71,6 +61,7 @@ public class ProjectCostResourceSaveRequest
     public decimal WorkDays { get; set; }
     public decimal HoursPerDay { get; set; }
     public decimal HourlyCost { get; set; }
+    public decimal MarkupValue { get; set; } = 1.450m;
     public int NumTrips { get; set; }
     public decimal KmPerTrip { get; set; }
     public decimal CostPerKm { get; set; } = 0.90m;
@@ -145,13 +136,14 @@ public class EmployeeCostLookup
     public string FullName { get; set; } = "";
     public string DepartmentCode { get; set; } = "";
     public decimal HourlyCost { get; set; }
+    public decimal DefaultMarkup { get; set; } = 1.450m;
 }
+
 
 // === RIEPILOGO COMPLETO CONFIGURA COMMESSA ===
 public class ProjectCostingData
 {
     public int ProjectId { get; set; }
-    public List<ProjectMarkupValueDto> Markups { get; set; } = new();
     public List<ProjectCostSectionDto> CostSections { get; set; } = new();
     public List<ProjectMaterialSectionDto> MaterialSections { get; set; } = new();
     public ProjectPricingDto Pricing { get; set; } = new();

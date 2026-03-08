@@ -33,7 +33,6 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(200) NOT NULL,
-            markup_code VARCHAR(30) NOT NULL DEFAULT '',
             default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.300,
             default_commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
             sort_order INT NOT NULL DEFAULT 0,
@@ -63,27 +62,12 @@ public class DbService
             FOREIGN KEY (group_id) REFERENCES cost_section_groups(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── K RICARICO ───────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS markup_coefficients (
-            id              INT AUTO_INCREMENT PRIMARY KEY,
-            code            VARCHAR(30) NOT NULL UNIQUE,
-            description     VARCHAR(200) NOT NULL DEFAULT '',
-            coefficient_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
-            markup_value    DECIMAL(6,3) NOT NULL DEFAULT 1.000,
-            hourly_cost     DECIMAL(8,2) NULL,
-            sort_order      INT NOT NULL DEFAULT 0,
-            is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
         // ── REPARTI ──────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS departments (
             id INT AUTO_INCREMENT PRIMARY KEY,
             code VARCHAR(10) NOT NULL UNIQUE,
             name VARCHAR(100) NOT NULL,
             hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
-            markup_code VARCHAR(30) NULL,
             sort_order INT DEFAULT 0,
             is_active BOOLEAN DEFAULT TRUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");

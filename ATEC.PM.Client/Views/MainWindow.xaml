@@ -166,12 +166,6 @@
                         Style="{StaticResource NavBtn}"
                         Tag="Reparti" />
                     <Button
-                        x:Name="btnMarkup"
-                        Click="Nav_Click"
-                        Content="  K Ricarico"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Markup" />
-                    <Button
                         x:Name="btnCostSections"
                         Click="Nav_Click"
                         Content="  Sezioni Costo"
