@@ -94,7 +94,7 @@
                         Tag="details" />
                     <TreeViewItem Header="Configura Commessa" Tag="costing" />
                     <TreeViewItem Header="Fasi e Avanzamento" Tag="phases" />
-                    <TreeViewItem Header="Timesheet" Tag="timesheet" />
+                    <TreeViewItem Header="Preventivo vs Consuntivo" Tag="budget_vs_actual" />
                     <TreeViewItem Header="Documenti" Tag="documents">
                         <!--  Sub-folders will be populated dynamically  -->
                     </TreeViewItem>

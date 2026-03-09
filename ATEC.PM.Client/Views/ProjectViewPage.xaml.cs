@@ -37,10 +37,10 @@ public partial class ProjectViewPage : Page
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 JsonElement d = doc.RootElement.GetProperty("data");
-                txtCode.Text   = d.GetProperty("code").GetString() ?? "";
-                txtTitle.Text  = d.GetProperty("title").GetString() ?? "";
+                txtCode.Text = d.GetProperty("code").GetString() ?? "";
+                txtTitle.Text = d.GetProperty("title").GetString() ?? "";
                 txtStatus.Text = d.GetProperty("status").GetString() ?? "";
-                _serverPath    = d.GetProperty("serverPath").GetString() ?? "";
+                _serverPath = d.GetProperty("serverPath").GetString() ?? "";
 
                 int custId = d.GetProperty("customerId").GetInt32();
                 string custJson = await ApiClient.GetAsync($"/api/customers/{custId}");
@@ -90,12 +90,12 @@ public partial class ProjectViewPage : Page
         if (e.NewValue is TreeViewItem item && item.Tag != null)
         {
             string tag = item.Tag.ToString() ?? "";
-            if      (tag == "details")           { _currentSection = "details";    ShowDetailsFromServer(); }
-            else if (tag == "phases")            { _currentSection = "phases";     _ = ShowPhases(); }
-            else if (tag == "timesheet")         { _currentSection = "timesheet";  ShowTimesheet(); }
-            else if (tag == "documents")         { _currentSection = "documents";  ShowDocuments(""); }
-            else if (tag == "doc_nocreated")     { _currentSection = tag;          ShowCreateFolder(); }
-            else if (tag.StartsWith("docfolder|")) { _currentSection = tag;        ShowDocuments(tag[10..]); }
+            if (tag == "details") { _currentSection = "details"; ShowDetailsFromServer(); }
+            else if (tag == "phases") { _currentSection = "phases"; _ = ShowPhases(); }
+            else if (tag == "budget_vs_actual") { _currentSection = "budget_vs_actual"; ShowBudgetVsActual(); }
+            else if (tag == "documents") { _currentSection = "documents"; ShowDocuments(""); }
+            else if (tag == "doc_nocreated") { _currentSection = tag; ShowCreateFolder(); }
+            else if (tag.StartsWith("docfolder|")) { _currentSection = tag; ShowDocuments(tag[10..]); }
         }
     }
 
@@ -110,12 +110,19 @@ public partial class ProjectViewPage : Page
             ShowDetails(doc.RootElement.GetProperty("data"));
     }
 
+    private void ShowBudgetVsActual()
+    {
+        txtSectionTitle.Text = "Preventivo vs Consuntivo";
+        btnSectionAction.Visibility = Visibility.Collapsed;
+        SectionContent.Content = new Views.Costing.BudgetVsActualControl(_projectId);
+    }
+
     private void ShowDetails(JsonElement d)
     {
-        txtSectionTitle.Text             = "Dettagli Commessa";
-        btnSectionAction.Content         = "Modifica";
-        btnSectionAction.Visibility      = Visibility.Visible;
-        btnSectionAction.Tag             = "edit_project";
+        txtSectionTitle.Text = "Dettagli Commessa";
+        btnSectionAction.Content = "Modifica";
+        btnSectionAction.Visibility = Visibility.Visible;
+        btnSectionAction.Tag = "edit_project";
 
         Grid grid = new();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -124,27 +131,27 @@ public partial class ProjectViewPage : Page
 
         StackPanel left = new(); StackPanel right = new();
 
-        AddField(left, "Codice",           d.GetProperty("code").GetString());
-        AddField(left, "Titolo",           d.GetProperty("title").GetString());
-        AddField(left, "Stato",            d.GetProperty("status").GetString());
-        AddField(left, "Priorità",         d.GetProperty("priority").GetString());
-        if (d.TryGetProperty("startDate",     out JsonElement sd) && sd.ValueKind != JsonValueKind.Null)
-            AddField(left, "Data Inizio",        sd.GetDateTime().ToString("dd/MM/yyyy"));
+        AddField(left, "Codice", d.GetProperty("code").GetString());
+        AddField(left, "Titolo", d.GetProperty("title").GetString());
+        AddField(left, "Stato", d.GetProperty("status").GetString());
+        AddField(left, "Priorità", d.GetProperty("priority").GetString());
+        if (d.TryGetProperty("startDate", out JsonElement sd) && sd.ValueKind != JsonValueKind.Null)
+            AddField(left, "Data Inizio", sd.GetDateTime().ToString("dd/MM/yyyy"));
         if (d.TryGetProperty("endDatePlanned", out JsonElement ed) && ed.ValueKind != JsonValueKind.Null)
             AddField(left, "Data Fine Prevista", ed.GetDateTime().ToString("dd/MM/yyyy"));
 
         // Dati economici — solo PM/ADMIN
         if (App.CurrentUser.IsPm)
         {
-            AddField(right, "Ricavo",      d.GetProperty("revenue").GetDecimal().ToString("N0") + " €");
-            AddField(right, "Budget",      d.GetProperty("budgetTotal").GetDecimal().ToString("N0") + " €");
+            AddField(right, "Ricavo", d.GetProperty("revenue").GetDecimal().ToString("N0") + " €");
+            AddField(right, "Budget", d.GetProperty("budgetTotal").GetDecimal().ToString("N0") + " €");
         }
-        AddField(right, "Ore Previste",    d.GetProperty("budgetHoursTotal").GetDecimal().ToString("N0"));
-        AddField(right, "Path Server",     _serverPath == "" ? "(non creata)" : _serverPath);
+        AddField(right, "Ore Previste", d.GetProperty("budgetHoursTotal").GetDecimal().ToString("N0"));
+        AddField(right, "Path Server", _serverPath == "" ? "(non creata)" : _serverPath);
         if (d.TryGetProperty("notes", out JsonElement notes) && notes.ValueKind != JsonValueKind.Null)
-            AddField(right, "Note",        notes.GetString());
+            AddField(right, "Note", notes.GetString());
 
-        Grid.SetColumn(left,  0);
+        Grid.SetColumn(left, 0);
         Grid.SetColumn(right, 2);
         grid.Children.Add(left);
         grid.Children.Add(right);
@@ -162,10 +169,10 @@ public partial class ProjectViewPage : Page
     // ═══════════════════════════════════════════════════════════════
     private async Task ShowPhases()
     {
-        txtSectionTitle.Text        = "Fasi e Avanzamento";
-        btnSectionAction.Content    = "+ Aggiungi Fase";
+        txtSectionTitle.Text = "Fasi e Avanzamento";
+        btnSectionAction.Content = "+ Aggiungi Fase";
         btnSectionAction.Visibility = Visibility.Visible;
-        btnSectionAction.Tag        = "add_phase";
+        btnSectionAction.Tag = "add_phase";
 
         try
         {
@@ -192,22 +199,22 @@ public partial class ProjectViewPage : Page
 
             foreach (IGrouping<string, PhaseListItem> group in groups)
             {
-                string deptCode  = group.Key;
+                string deptCode = group.Key;
                 string deptColor = DeptColors.TryGetValue(deptCode, out string? col) ? col : "#6B7280";
                 string deptLabel = string.IsNullOrEmpty(deptCode) ? "TRASVERSALE" : deptCode;
 
                 // Header gruppo
                 Border groupHeader = new()
                 {
-                    Background      = new SolidColorBrush((Color)ColorConverter.ConvertFromString(deptColor)),
-                    Padding         = new Thickness(12, 6, 12, 6),
-                    Margin          = new Thickness(0, 16, 0, 4)
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(deptColor)),
+                    Padding = new Thickness(12, 6, 12, 6),
+                    Margin = new Thickness(0, 16, 0, 4)
                 };
                 groupHeader.Child = new TextBlock
                 {
-                    Text       = $"  {deptLabel}  —  {group.Count()} fasi  |  {group.Sum(p => p.HoursWorked):N1} / {group.Sum(p => p.BudgetHours):N0} h",
+                    Text = $"  {deptLabel}  —  {group.Count()} fasi  |  {group.Sum(p => p.HoursWorked):N1} / {group.Sum(p => p.BudgetHours):N0} h",
                     Foreground = Brushes.White,
-                    FontSize   = 12,
+                    FontSize = 12,
                     FontWeight = FontWeights.SemiBold
                 };
                 root.Children.Add(groupHeader);
@@ -229,11 +236,11 @@ public partial class ProjectViewPage : Page
     {
         Border bar = new()
         {
-            Background      = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F9FAFB")),
-            BorderBrush     = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E4E7EC")),
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F9FAFB")),
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E4E7EC")),
             BorderThickness = new Thickness(1),
-            Padding         = new Thickness(16, 10, 16, 10),
-            Margin          = new Thickness(0, 0, 0, 4)
+            Padding = new Thickness(16, 10, 16, 10),
+            Margin = new Thickness(0, 0, 0, 4)
         };
 
         Grid g = new();
@@ -243,9 +250,9 @@ public partial class ProjectViewPage : Page
 
         decimal pct = totalBudget > 0 ? Math.Min(100, totalWorked / totalBudget * 100) : 0;
 
-        AddSummaryCell(g, 0, "FASI TOTALI",      phaseCount.ToString());
-        AddSummaryCell(g, 1, "ORE LAVORATE",     $"{totalWorked:N1} h");
-        AddSummaryCell(g, 2, "BUDGET ORE",       $"{totalBudget:N0} h  ({pct:N0}%)");
+        AddSummaryCell(g, 0, "FASI TOTALI", phaseCount.ToString());
+        AddSummaryCell(g, 1, "ORE LAVORATE", $"{totalWorked:N1} h");
+        AddSummaryCell(g, 2, "BUDGET ORE", $"{totalBudget:N0} h  ({pct:N0}%)");
 
         bar.Child = g;
         return bar;
@@ -255,7 +262,7 @@ public partial class ProjectViewPage : Page
     {
         StackPanel sp = new() { HorizontalAlignment = HorizontalAlignment.Center };
         sp.Children.Add(new TextBlock { Text = label, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brushes.Gray, HorizontalAlignment = HorizontalAlignment.Center });
-        sp.Children.Add(new TextBlock { Text = value, FontSize = 18, FontWeight = FontWeights.Bold,    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1D26")), HorizontalAlignment = HorizontalAlignment.Center });
+        sp.Children.Add(new TextBlock { Text = value, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1D26")), HorizontalAlignment = HorizontalAlignment.Center });
         Grid.SetColumn(sp, col);
         g.Children.Add(sp);
     }
@@ -264,11 +271,11 @@ public partial class ProjectViewPage : Page
     {
         Border card = new()
         {
-            Background      = Brushes.White,
-            BorderBrush     = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E4E7EC")),
+            Background = Brushes.White,
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E4E7EC")),
             BorderThickness = new Thickness(1),
-            Padding         = new Thickness(0),
-            Margin          = new Thickness(0, 0, 0, 6)
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 0, 6)
         };
 
         // Striscia colorata sinistra
@@ -293,9 +300,9 @@ public partial class ProjectViewPage : Page
         nameRow.Children.Add(new TextBlock { Text = phase.Name, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1D26")) });
         Border statusBadge = new()
         {
-            Background      = GetStatusBrush(phase.Status),
-            Padding         = new Thickness(6, 2, 6, 2),
-            Margin          = new Thickness(8, 0, 0, 0),
+            Background = GetStatusBrush(phase.Status),
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center
         };
         statusBadge.Child = new TextBlock { Text = phase.Status, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White };
@@ -309,10 +316,10 @@ public partial class ProjectViewPage : Page
             string tecnici = string.Join(", ", phase.Assignments.Select(a => a.EmployeeName));
             left.Children.Add(new TextBlock
             {
-                Text       = $"👷 {tecnici}",
-                FontSize   = 11,
+                Text = $"👷 {tecnici}",
+                FontSize = 11,
                 Foreground = Brushes.Gray,
-                Margin     = new Thickness(0, 3, 0, 0),
+                Margin = new Thickness(0, 3, 0, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
         }
@@ -329,18 +336,18 @@ public partial class ProjectViewPage : Page
             : (phase.ProgressPct / 100.0);
         progressGrid.Children.Add(new Border
         {
-            Background          = new SolidColorBrush((Color)ColorConverter.ConvertFromString(accentColor)),
-            Height              = 5,
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(accentColor)),
+            Height = 5,
             HorizontalAlignment = HorizontalAlignment.Left,
-            Width               = Double.NaN // Gestita con binding in una vera app; qui usiamo il tag
+            Width = Double.NaN // Gestita con binding in una vera app; qui usiamo il tag
         });
         // Nota: la progress bar visiva richiede un layout pass — usiamo testo %
         left.Children.Add(new TextBlock
         {
-            Text       = $"Avanzamento: {phase.ProgressPct}%  |  {phase.HoursWorked:N1} / {phase.BudgetHours:N0} h lavorate",
-            FontSize   = 11,
+            Text = $"Avanzamento: {phase.ProgressPct}%  |  {phase.HoursWorked:N1} / {phase.BudgetHours:N0} h lavorate",
+            FontSize = 11,
             Foreground = Brushes.Gray,
-            Margin     = new Thickness(0, 4, 0, 0)
+            Margin = new Thickness(0, 4, 0, 0)
         });
         Grid.SetColumn(left, 0);
 
@@ -349,8 +356,8 @@ public partial class ProjectViewPage : Page
 
         Button btnEdit = MakeIconButton("✏", "#4F6EF7");
         btnEdit.ToolTip = "Modifica fase";
-        btnEdit.Tag     = phase;
-        btnEdit.Click  += async (s, e) =>
+        btnEdit.Tag = phase;
+        btnEdit.Click += async (s, e) =>
         {
             PhasesDialog dlg = new(_projectId, phase) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) await ShowPhases();
@@ -358,8 +365,8 @@ public partial class ProjectViewPage : Page
 
         Button btnDel = MakeIconButton("✕", "#EF4444");
         btnDel.ToolTip = "Elimina fase";
-        btnDel.Tag     = phase;
-        btnDel.Click  += async (s, e) =>
+        btnDel.Tag = phase;
+        btnDel.Click += async (s, e) =>
         {
             if (MessageBox.Show($"Eliminare la fase \"{phase.Name}\"?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try
@@ -390,24 +397,24 @@ public partial class ProjectViewPage : Page
     {
         return new Button
         {
-            Content         = icon,
-            Width           = 30,
-            Height          = 30,
-            Margin          = new Thickness(4, 0, 0, 0),
-            Background      = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color + "1A")),
-            Foreground      = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+            Content = icon,
+            Width = 30,
+            Height = 30,
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color + "1A")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
             BorderThickness = new Thickness(0),
-            FontSize        = 13,
-            Cursor          = System.Windows.Input.Cursors.Hand
+            FontSize = 13,
+            Cursor = System.Windows.Input.Cursors.Hand
         };
     }
 
     private static Brush GetStatusBrush(string status) => status switch
     {
         "IN_PROGRESS" => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2563EB")),
-        "COMPLETED"   => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#059669")),
-        "ON_HOLD"     => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D97706")),
-        _             => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B7280"))
+        "COMPLETED" => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#059669")),
+        "ON_HOLD" => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D97706")),
+        _ => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B7280"))
     };
 
     // ═══════════════════════════════════════════════════════════════
@@ -415,7 +422,7 @@ public partial class ProjectViewPage : Page
     // ═══════════════════════════════════════════════════════════════
     private async void ShowTimesheet()
     {
-        txtSectionTitle.Text        = "Timesheet Commessa";
+        txtSectionTitle.Text = "Timesheet Commessa";
         btnSectionAction.Visibility = Visibility.Collapsed;
 
         try
@@ -457,17 +464,17 @@ public partial class ProjectViewPage : Page
     // ═══════════════════════════════════════════════════════════════
     private async void ShowDocuments(string subPath)
     {
-        txtSectionTitle.Text        = string.IsNullOrEmpty(subPath) ? "Documenti" : subPath;
-        btnSectionAction.Content    = "Apri Cartella";
+        txtSectionTitle.Text = string.IsNullOrEmpty(subPath) ? "Documenti" : subPath;
+        btnSectionAction.Content = "Apri Cartella";
         btnSectionAction.Visibility = Visibility.Visible;
-        btnSectionAction.Tag        = $"open_folder|{subPath}";
+        btnSectionAction.Tag = $"open_folder|{subPath}";
 
         if (string.IsNullOrEmpty(_serverPath)) { ShowCreateFolder(); return; }
 
         try
         {
             string encoded = Uri.EscapeDataString(subPath);
-            string json    = await ApiClient.GetAsync($"/api/projects/{_projectId}/files?subPath={encoded}");
+            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/files?subPath={encoded}");
             JsonDocument doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
@@ -477,22 +484,26 @@ public partial class ProjectViewPage : Page
 
                 DataGrid dg = new()
                 {
-                    AutoGenerateColumns = false, IsReadOnly = true,
-                    Background = Brushes.White, BorderThickness = new Thickness(1),
+                    AutoGenerateColumns = false,
+                    IsReadOnly = true,
+                    Background = Brushes.White,
+                    BorderThickness = new Thickness(1),
                     BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E4E7EC")),
                     GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-                    RowHeight = 36, ColumnHeaderHeight = 36, FontSize = 13
+                    RowHeight = 36,
+                    ColumnHeaderHeight = 36,
+                    FontSize = 13
                 };
-                dg.Columns.Add(new DataGridTextColumn { Header = "Tipo",       Binding = new System.Windows.Data.Binding("TypeIcon"),       Width = 40 });
-                dg.Columns.Add(new DataGridTextColumn { Header = "Nome",       Binding = new System.Windows.Data.Binding("Name"),           Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-                dg.Columns.Add(new DataGridTextColumn { Header = "Dimensione", Binding = new System.Windows.Data.Binding("SizeDisplay"),    Width = 100 });
+                dg.Columns.Add(new DataGridTextColumn { Header = "Tipo", Binding = new System.Windows.Data.Binding("TypeIcon"), Width = 40 });
+                dg.Columns.Add(new DataGridTextColumn { Header = "Nome", Binding = new System.Windows.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+                dg.Columns.Add(new DataGridTextColumn { Header = "Dimensione", Binding = new System.Windows.Data.Binding("SizeDisplay"), Width = 100 });
                 dg.Columns.Add(new DataGridTextColumn { Header = "Modificato", Binding = new System.Windows.Data.Binding("ModifiedDisplay"), Width = 140 });
 
                 dg.ItemsSource = items.Select(i => new
                 {
-                    TypeIcon       = i.IsFolder ? "📁" : "📄",
+                    TypeIcon = i.IsFolder ? "📁" : "📄",
                     i.Name,
-                    SizeDisplay    = i.IsFolder ? "" : FormatSize(i.Size),
+                    SizeDisplay = i.IsFolder ? "" : FormatSize(i.Size),
                     ModifiedDisplay = i.Modified?.ToString("dd/MM/yyyy HH:mm") ?? ""
                 }).ToList();
 
@@ -513,14 +524,17 @@ public partial class ProjectViewPage : Page
 
     private void ShowCreateFolder()
     {
-        txtSectionTitle.Text        = "Documenti";
-        btnSectionAction.Content    = "Crea Cartella Commessa";
+        txtSectionTitle.Text = "Documenti";
+        btnSectionAction.Content = "Crea Cartella Commessa";
         btnSectionAction.Visibility = Visibility.Visible;
-        btnSectionAction.Tag        = "create_folder";
-        SectionContent.Content      = new TextBlock
+        btnSectionAction.Tag = "create_folder";
+        SectionContent.Content = new TextBlock
         {
             Text = "La cartella per questa commessa non è ancora stata creata.\nClicca 'Crea Cartella Commessa' per generarla automaticamente.",
-            FontSize = 14, Foreground = Brushes.Gray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 20, 0, 0)
+            FontSize = 14,
+            Foreground = Brushes.Gray,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 20, 0, 0)
         };
     }
 
@@ -558,7 +572,7 @@ public partial class ProjectViewPage : Page
         }
         else if (tag.StartsWith("open_folder|"))
         {
-            string sub      = tag[12..];
+            string sub = tag[12..];
             string fullPath = string.IsNullOrEmpty(sub) ? _serverPath : Path.Combine(_serverPath, sub);
             if (Directory.Exists(fullPath))
                 System.Diagnostics.Process.Start("explorer.exe", fullPath);
@@ -580,8 +594,8 @@ public partial class ProjectViewPage : Page
 
     private static string FormatSize(long bytes)
     {
-        if (bytes < 1024)            return $"{bytes} B";
-        if (bytes < 1024 * 1024)    return $"{bytes / 1024.0:N0} KB";
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:N0} KB";
         return $"{bytes / 1024.0 / 1024.0:N1} MB";
     }
 }
