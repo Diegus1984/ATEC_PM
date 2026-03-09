@@ -23,9 +23,12 @@ public class PhasesController : ControllerBase
             SELECT pt.id, pt.name, pt.category, pt.department_id AS DepartmentId,
                    COALESCE(d.code,'') AS DepartmentCode,
                    COALESCE(d.name,'') AS DepartmentName,
+                   pt.cost_section_template_id AS CostSectionTemplateId,
+                   COALESCE(cst.name,'') AS CostSectionName,
                    pt.sort_order AS SortOrder, pt.is_default AS IsDefault
             FROM phase_templates pt
             LEFT JOIN departments d ON d.id = pt.department_id
+            LEFT JOIN cost_section_templates cst ON cst.id = pt.cost_section_template_id
             ORDER BY pt.sort_order").ToList();
         return Ok(ApiResponse<List<PhaseTemplateDto>>.Ok(rows));
     }
@@ -251,10 +254,10 @@ public class PhasesController : ControllerBase
     {
         using var c = _db.Open();
         int newId = c.ExecuteScalar<int>(@"
-            INSERT INTO phase_templates (name, category, department_id, sort_order, is_default)
-            VALUES (@Name, @Category, @DepartmentId, @SortOrder, @IsDefault);
+            INSERT INTO phase_templates (name, category, department_id, cost_section_template_id, sort_order, is_default)
+            VALUES (@Name, @Category, @DepartmentId, @CostSectionTemplateId, @SortOrder, @IsDefault);
             SELECT LAST_INSERT_ID()",
-            new { req.Name, req.Category, req.DepartmentId, req.SortOrder, IsDefault = req.IsDefault ? 1 : 0 });
+            new { req.Name, req.Category, req.DepartmentId, req.CostSectionTemplateId, req.SortOrder, IsDefault = req.IsDefault ? 1 : 0 });
         return Ok(ApiResponse<int>.Ok(newId, "Template creato"));
     }
 
@@ -262,7 +265,7 @@ public class PhasesController : ControllerBase
     public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
     {
         using var c = _db.Open();
-        string[] allowed = { "name", "category", "department_id", "sort_order", "is_default" };
+        string[] allowed = { "name", "category", "department_id", "cost_section_template_id", "sort_order", "is_default" };
         if (!allowed.Contains(req.Field))
             return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non modificabile."));
 

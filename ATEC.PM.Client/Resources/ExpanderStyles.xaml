@@ -38,7 +38,7 @@
                                             Storyboard.TargetName="ContentPanel"
                                             Storyboard.TargetProperty="(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)"
                                             To="0"
-                                            Duration="0:0:0.2">
+                                            Duration="0:0:0.5">
                                             <DoubleAnimation.EasingFunction>
                                                 <CubicEase EasingMode="EaseOut" />
                                             </DoubleAnimation.EasingFunction>
@@ -67,7 +67,7 @@
                                             Storyboard.TargetName="ContentPanel"
                                             Storyboard.TargetProperty="Opacity"
                                             To="1"
-                                            Duration="0:0:0.2" />
+                                            Duration="0:0:0.5" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>

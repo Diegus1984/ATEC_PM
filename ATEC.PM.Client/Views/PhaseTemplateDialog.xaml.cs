@@ -2,14 +2,24 @@ namespace ATEC.PM.Client.Views;
 
 public partial class PhaseTemplateDialog : Window
 {
-    public PhaseTemplateDialog(List<DepartmentDto> departments)
+    public PhaseTemplateDialog(List<DepartmentDto> departments, List<CostSectionTemplateDto> costSections)
     {
         InitializeComponent();
 
+        // Popola combo reparti
         cmbDepartment.Items.Add(new ComboBoxItem { Content = "— Nessuno (trasversale) —", Tag = (int?)null });
         foreach (DepartmentDto d in departments)
             cmbDepartment.Items.Add(new ComboBoxItem { Content = $"{d.Code} — {d.Name}", Tag = (int?)d.Id });
         cmbDepartment.SelectedIndex = 0;
+
+        // Popola combo sezioni costo
+        cmbCostSection.Items.Add(new ComboBoxItem { Content = "— Nessuna —", Tag = (int?)null });
+        foreach (var cs in costSections.OrderBy(c => c.SortOrder))
+        {
+            string groupLabel = string.IsNullOrEmpty(cs.GroupName) ? "" : $"[{cs.GroupName}] ";
+            cmbCostSection.Items.Add(new ComboBoxItem { Content = $"{groupLabel}{cs.Name}", Tag = (int?)cs.Id });
+        }
+        cmbCostSection.SelectedIndex = 0;
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -22,9 +32,9 @@ public partial class PhaseTemplateDialog : Window
         }
 
         int? deptId = (cmbDepartment.SelectedItem as ComboBoxItem)?.Tag as int?;
+        int? costSectionId = (cmbCostSection.SelectedItem as ComboBoxItem)?.Tag as int?;
         int.TryParse(txtSortOrder.Text, out int sortOrder);
 
-        // Categoria: se vuota, derivala dal reparto
         string category = txtCategory.Text.Trim();
         if (string.IsNullOrEmpty(category))
         {
@@ -44,6 +54,7 @@ public partial class PhaseTemplateDialog : Window
                 name,
                 category,
                 departmentId = deptId,
+                costSectionTemplateId = costSectionId,
                 sortOrder,
                 isDefault = chkDefault.IsChecked == true
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });

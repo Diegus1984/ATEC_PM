@@ -10,6 +10,8 @@ public class PhaseTemplateDto
     public int? DepartmentId { get; set; }
     public string DepartmentCode { get; set; } = "";
     public string DepartmentName { get; set; } = "";
+    public int? CostSectionTemplateId { get; set; }
+    public string CostSectionName { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsDefault { get; set; }
 }
@@ -63,6 +65,7 @@ public class PhaseTemplateSaveRequest
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
     public int? DepartmentId { get; set; }
+    public int? CostSectionTemplateId { get; set; }
     public int SortOrder { get; set; }
     public bool IsDefault { get; set; }
 }

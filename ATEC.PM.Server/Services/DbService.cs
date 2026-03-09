@@ -174,9 +174,11 @@ public class DbService
             name VARCHAR(100) NOT NULL,
             category VARCHAR(50) DEFAULT '',
             department_id INT NULL,
+            cost_section_template_id INT NULL,
             sort_order INT DEFAULT 0,
             is_default BOOLEAN DEFAULT TRUE,
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+            FOREIGN KEY (cost_section_template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ── COMMESSE ─────────────────────────────────────────────────

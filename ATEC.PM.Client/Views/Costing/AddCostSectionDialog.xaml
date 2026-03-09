@@ -11,32 +11,90 @@
     <DockPanel>
 
         <!--  HEADER  -->
-        <Border Padding="20,14" Background="#1A1D26" DockPanel.Dock="Top">
-            <TextBlock FontSize="15" FontWeight="Bold" Foreground="White" Text="Aggiungi Sezione alla Commessa" />
+        <Border
+            Padding="20,14"
+            Background="#1A1D26"
+            DockPanel.Dock="Top">
+            <TextBlock
+                FontSize="15"
+                FontWeight="Bold"
+                Foreground="White"
+                Text="Aggiungi Sezione alla Commessa" />
         </Border>
 
         <!--  BUTTONS  -->
-        <Border Padding="20,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
+        <Border
+            Padding="20,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
             <DockPanel>
-                <TextBlock x:Name="txtError" VerticalAlignment="Center" FontSize="12" Foreground="#EF4444" />
-                <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Width="90" Height="32" Background="#F3F4F6" BorderThickness="0"
-                            Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" FontSize="13" />
-                    <Button Width="90" Height="32" Margin="8,0,0,0" Background="#4F6EF7" BorderThickness="0"
-                            Click="BtnSave_Click" Content="Aggiungi" Cursor="Hand" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                <TextBlock
+                    x:Name="txtError"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="#EF4444" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        Width="90"
+                        Height="32"
+                        Background="#F3F4F6"
+                        BorderThickness="0"
+                        Click="BtnCancel_Click"
+                        Content="Annulla"
+                        Cursor="Hand"
+                        FontSize="13" />
+                    <Button
+                        Width="90"
+                        Height="32"
+                        Margin="8,0,0,0"
+                        Background="#4F6EF7"
+                        BorderThickness="0"
+                        Click="BtnSave_Click"
+                        Content="Aggiungi"
+                        Cursor="Hand"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="White" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
         <!--  FORM  -->
         <StackPanel Margin="20,16">
-            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE *" />
-            <ComboBox x:Name="cmbTemplate" Height="32" Margin="0,4,0,12" Padding="8,4"
-                      BorderBrush="#E4E7EC" FontSize="13" SelectionChanged="CmbTemplate_SelectionChanged" />
+            <TextBlock
+                FontSize="11"
+                FontWeight="SemiBold"
+                Foreground="#6B7280"
+                Text="SEZIONE *" />
+            <ComboBox
+                x:Name="cmbTemplate"
+                Height="32"
+                Margin="0,4,0,12"
+                Padding="8,4"
+                BorderBrush="#E4E7EC"
+                FontSize="13"
+                SelectionChanged="CmbTemplate_SelectionChanged" />
 
-            <TextBlock x:Name="lblCustomName" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="NOME SEZIONE *" Visibility="Collapsed" />
-            <TextBox x:Name="txtCustomName" Height="32" Margin="0,4,0,12" Padding="8,4"
-                     BorderBrush="#E4E7EC" FontSize="13" Visibility="Collapsed" />
+            <TextBlock
+                x:Name="lblCustomName"
+                FontSize="11"
+                FontWeight="SemiBold"
+                Foreground="#6B7280"
+                Text="NOME SEZIONE *"
+                Visibility="Collapsed" />
+            <TextBox
+                x:Name="txtCustomName"
+                Height="32"
+                Margin="0,4,0,12"
+                Padding="8,4"
+                BorderBrush="#E4E7EC"
+                FontSize="13"
+                Visibility="Collapsed" />
 
             <Grid Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
@@ -45,18 +103,39 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
-                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="TIPO" />
-                    <ComboBox x:Name="cmbType" Height="32" Margin="0,4,0,0" Padding="8,4"
-                              BorderBrush="#E4E7EC" FontSize="13">
-                        <ComboBoxItem Content="In Sede" Tag="IN_SEDE" IsSelected="True" />
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="#6B7280"
+                        Text="TIPO" />
+                    <ComboBox
+                        x:Name="cmbType"
+                        Height="32"
+                        Margin="0,4,0,0"
+                        Padding="8,4"
+                        BorderBrush="#E4E7EC"
+                        FontSize="13">
+                        <ComboBoxItem
+                            Content="In Sede"
+                            IsSelected="True"
+                            Tag="IN_SEDE" />
                         <ComboBoxItem Content="Da Cliente" Tag="DA_CLIENTE" />
                     </ComboBox>
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="GRUPPO" />
-                    <TextBlock x:Name="txtGroupName" Height="32" Margin="0,4,0,0" Padding="8,6"
-                               Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
-                               FontSize="13" Foreground="#6B7280" />
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="#6B7280"
+                        Text="GRUPPO" />
+                    <TextBlock
+                        x:Name="txtGroupName"
+                        Height="32"
+                        Margin="0,4,0,0"
+                        Padding="8,6"
+                        Background="White"
+                        FontSize="13"
+                        Foreground="#6B7280" />
                 </StackPanel>
             </Grid>
         </StackPanel>
