@@ -68,6 +68,76 @@ public class CostingViewModel : INotifyPropertyChanged
     public decimal TotalCombinedCost => GrandTotalCost + GrandMaterialCostWithTravel;
     public decimal TotalCombinedSale => GrandTotalSale + GrandMaterialSaleWithTravel;
 
+    // ══════════════════════════════════════════════════════════════
+    // SCHEDA PREZZI — NET → OFFER → FINAL
+    // ══════════════════════════════════════════════════════════════
+
+    private decimal _structureCostsPct = 0.020m;
+    public decimal StructureCostsPct
+    {
+        get => _structureCostsPct;
+        set
+        {
+            _structureCostsPct = value;
+            Notify(); Notify(nameof(StructureCostsAmount));
+            Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+        }
+    }
+
+    private decimal _contingencyPct = 0.050m;
+    public decimal ContingencyPct
+    {
+        get => _contingencyPct;
+        set
+        {
+            _contingencyPct = value;
+            Notify(); Notify(nameof(ContingencyAmount));
+            Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+        }
+    }
+
+    private decimal _riskWarrantyPct = 0.050m;
+    public decimal RiskWarrantyPct
+    {
+        get => _riskWarrantyPct;
+        set
+        {
+            _riskWarrantyPct = value;
+            Notify(); Notify(nameof(RiskWarrantyAmount));
+            Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+        }
+    }
+
+    private decimal _negotiationMarginPct = 0.100m;
+    public decimal NegotiationMarginPct
+    {
+        get => _negotiationMarginPct;
+        set
+        {
+            _negotiationMarginPct = value;
+            Notify(); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+        }
+    }
+
+    // NET PRICE = totale vendita combinato
+    public decimal NetPrice => TotalCombinedSale;
+
+    // Importi calcolati dalle %
+    public decimal StructureCostsAmount => NetPrice * StructureCostsPct;
+    public decimal ContingencyAmount => NetPrice * ContingencyPct;
+    public decimal RiskWarrantyAmount => NetPrice * RiskWarrantyPct;
+
+    // OFFER = NET + struttura + contingency + rischi
+    public decimal OfferPrice => NetPrice + StructureCostsAmount + ContingencyAmount + RiskWarrantyAmount;
+
+    // Margine trattativa
+    public decimal NegotiationMarginAmount => OfferPrice * NegotiationMarginPct;
+
+    // FINAL = OFFER + margine
+    public decimal FinalOfferPrice => OfferPrice + NegotiationMarginAmount;
+
+    // ══════════════════════════════════════════════════════════════
+
     public void RecalcGrandTotals()
     {
         GrandTotalCost = Groups.Sum(g => g.TotalCost);
@@ -87,6 +157,15 @@ public class CostingViewModel : INotifyPropertyChanged
         Notify(nameof(GrandMaterialSaleWithTravel));
         Notify(nameof(TotalCombinedCost));
         Notify(nameof(TotalCombinedSale));
+
+        // Scheda prezzi — ricalcolo a cascata
+        Notify(nameof(NetPrice));
+        Notify(nameof(StructureCostsAmount));
+        Notify(nameof(ContingencyAmount));
+        Notify(nameof(RiskWarrantyAmount));
+        Notify(nameof(OfferPrice));
+        Notify(nameof(NegotiationMarginAmount));
+        Notify(nameof(FinalOfferPrice));
 
         int secCount = Groups.Sum(g => g.Sections.Count);
         StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
@@ -137,6 +216,12 @@ public class CostingViewModel : INotifyPropertyChanged
         // K trasferta dal pricing
         vm.TravelMarkup = data.Pricing.TravelMarkup;
         vm.AllowanceMarkup = data.Pricing.AllowanceMarkup;
+
+        // Scheda prezzi dal pricing
+        vm.StructureCostsPct = data.Pricing.StructureCostsPct;
+        vm.ContingencyPct = data.Pricing.ContingencyPct;
+        vm.RiskWarrantyPct = data.Pricing.RiskWarrantyPct;
+        vm.NegotiationMarginPct = data.Pricing.NegotiationMarginPct;
 
         var colorMap = new Dictionary<string, string>
         {

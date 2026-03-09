@@ -131,9 +131,10 @@
                         </StackPanel>
                     </DockPanel>
                 </Border>
-                <ScrollViewer x:Name="scrollContent">
+                <!--<ScrollViewer x:Name="scrollContent">
                     <ContentControl x:Name="SectionContent" />
-                </ScrollViewer>
+                </ScrollViewer>-->
+                <ContentControl x:Name="SectionContent" />
             </DockPanel>
         </Border>
     </Grid>

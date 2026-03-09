@@ -11,4 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Views\BudgetVsCosting\Converters\" />
+  </ItemGroup>
 </Project>

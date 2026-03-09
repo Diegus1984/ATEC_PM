@@ -12,6 +12,7 @@ public partial class ProjectCostingControl : UserControl
     public ProjectCostingControl()
     {
         InitializeComponent();
+        VerticalAlignment = System.Windows.VerticalAlignment.Stretch;
     }
 
     public void Load(int projectId, string tab = "risorse")
@@ -49,6 +50,47 @@ public partial class ProjectCostingControl : UserControl
         {
             _vm.AllowanceMarkup = newK;
             await SavePricingMarkups();
+        }
+    }
+
+    // ── Scheda Prezzi — handler % editabili ──
+
+    private async void PricingPct_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb)
+        {
+            e.Handled = true;
+            ApplyPricingPct(tb);
+            await SavePricingMarkups();
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private async void PricingPct_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+        {
+            ApplyPricingPct(tb);
+            await SavePricingMarkups();
+        }
+    }
+
+    private void ApplyPricingPct(TextBox tb)
+    {
+        string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
+        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
+
+        // L'utente digita "5.0" → il PctToStringConverter fa ConvertBack → 0.050
+        // Ma se arriva qui dal KeyDown/LostFocus diretto, convertiamo manualmente
+        if (val > 1m) val /= 100m;
+
+        string tag = tb.Tag?.ToString() ?? "";
+        switch (tag)
+        {
+            case "structure": _vm.StructureCostsPct = val; break;
+            case "contingency": _vm.ContingencyPct = val; break;
+            case "risk": _vm.RiskWarrantyPct = val; break;
+            case "negotiation": _vm.NegotiationMarginPct = val; break;
         }
     }
 
@@ -403,10 +445,10 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new
             {
-                structureCostsPct = _data.Pricing.StructureCostsPct,
-                contingencyPct = _data.Pricing.ContingencyPct,
-                riskWarrantyPct = _data.Pricing.RiskWarrantyPct,
-                negotiationMarginPct = _data.Pricing.NegotiationMarginPct,
+                structureCostsPct = _vm.StructureCostsPct,
+                contingencyPct = _vm.ContingencyPct,
+                riskWarrantyPct = _vm.RiskWarrantyPct,
+                negotiationMarginPct = _vm.NegotiationMarginPct,
                 travelMarkup = _vm.TravelMarkup,
                 allowanceMarkup = _vm.AllowanceMarkup
             };

@@ -92,7 +92,6 @@ public partial class ProjectViewPage : Page
             string tag = item.Tag.ToString() ?? "";
             if (tag == "details") { _currentSection = "details"; ShowDetailsFromServer(); }
             else if (tag == "phases") { _currentSection = "phases"; _ = ShowPhases(); }
-            else if (tag == "budget_vs_actual") { _currentSection = "budget_vs_actual"; ShowBudgetVsActual(); }
             else if (tag == "documents") { _currentSection = "documents"; ShowDocuments(""); }
             else if (tag == "doc_nocreated") { _currentSection = tag; ShowCreateFolder(); }
             else if (tag.StartsWith("docfolder|")) { _currentSection = tag; ShowDocuments(tag[10..]); }
@@ -108,13 +107,6 @@ public partial class ProjectViewPage : Page
         JsonDocument doc = JsonDocument.Parse(json);
         if (doc.RootElement.GetProperty("success").GetBoolean())
             ShowDetails(doc.RootElement.GetProperty("data"));
-    }
-
-    private void ShowBudgetVsActual()
-    {
-        txtSectionTitle.Text = "Preventivo vs Consuntivo";
-        btnSectionAction.Visibility = Visibility.Collapsed;
-        SectionContent.Content = new Views.Costing.BudgetVsActualControl(_projectId);
     }
 
     private void ShowDetails(JsonElement d)

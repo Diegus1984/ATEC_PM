@@ -42,7 +42,7 @@ public class BvaSectionDto
     // --- Consuntivo (da timesheet_entries via phase_templates.cost_section_template_id) ---
     public decimal ActualHours { get; set; }
     public decimal ActualCost { get; set; }
-    public List<BvaActualEntryDto> ActualEntries { get; set; } = new();
+    public List<BvaActualEmployeeDto> ActualEmployees { get; set; } = new();
 
     // Delta
     public decimal DeltaHours => ActualHours - BudgetHours;
@@ -72,3 +72,23 @@ public class BvaActualEntryDto
     public decimal HourlyCost { get; set; }
     public decimal TotalCost { get; set; }
 }
+
+/// <summary>Raggruppamento per dipendente con dettaglio entry</summary>
+public class BvaActualEmployeeDto
+{
+    public string EmployeeName { get; set; } = "";
+    public decimal TotalHours { get; set; }
+    public decimal TotalCost { get; set; }
+    public List<BvaActualDetailDto> Details { get; set; } = new();
+}
+
+public class BvaActualDetailDto
+{
+    public DateTime WorkDate { get; set; }
+    public string PhaseName { get; set; } = "";
+    public string EntryType { get; set; } = "";
+    public decimal Hours { get; set; }
+    public decimal HourlyCost { get; set; }
+    public decimal TotalCost { get; set; }
+}
+

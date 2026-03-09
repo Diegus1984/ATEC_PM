@@ -44,21 +44,25 @@ public class BudgetVsActualController : ControllerBase
         var resourcesBySection = resources.GroupBy(r => (int)r.SectionId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // ── CONSUNTIVO: ore timesheet aggregate per sezione costo ──
-        // Catena: timesheet_entries → project_phases → phase_templates.cost_section_template_id
-        //         cost_section_template_id → cost_section_templates.id = project_cost_sections.template_id
+        // ── CONSUNTIVO: singole entry timesheet ────────────────────
         var actuals = c.Query<dynamic>(@"
             SELECT pcs.id AS CostSectionId,
+                   emp.id AS EmployeeId,
                    CONCAT(emp.first_name, ' ', emp.last_name) AS EmployeeName,
                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
                    te.entry_type AS EntryType,
-                   SUM(te.hours) AS Hours,
+                   te.work_date AS WorkDate,
+                   te.hours AS Hours,
                    COALESCE(d.hourly_cost, 0) AS HourlyCost
             FROM timesheet_entries te
             JOIN project_phases pp ON pp.id = te.project_phase_id
             JOIN phase_templates pt ON pt.id = pp.phase_template_id
             JOIN employees emp ON emp.id = te.employee_id
-            LEFT JOIN employee_departments ed ON ed.employee_id = emp.id
+            LEFT JOIN (
+                SELECT employee_id, MIN(department_id) AS department_id 
+                FROM employee_departments 
+                GROUP BY employee_id
+            ) ed ON ed.employee_id = emp.id
             LEFT JOIN departments d ON d.id = ed.department_id
             JOIN project_cost_sections pcs 
                  ON pcs.project_id = pp.project_id 
@@ -66,29 +70,31 @@ public class BudgetVsActualController : ControllerBase
             WHERE pp.project_id = @pid
               AND pt.cost_section_template_id IS NOT NULL
               AND pcs.is_enabled = 1
-            GROUP BY pcs.id, emp.id, emp.first_name, emp.last_name, 
-                     pp.id, pp.custom_name, pt.name, te.entry_type, d.hourly_cost
-            ORDER BY emp.last_name, pt.name, te.entry_type",
+            ORDER BY emp.last_name, te.work_date, pt.name",
             new { pid = projectId }).ToList();
 
         // Ore orfane (fasi senza cost_section_template_id)
         var orphanActuals = c.Query<dynamic>(@"
-            SELECT CONCAT(emp.first_name, ' ', emp.last_name) AS EmployeeName,
+            SELECT emp.id AS EmployeeId,
+                   CONCAT(emp.first_name, ' ', emp.last_name) AS EmployeeName,
                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
                    te.entry_type AS EntryType,
-                   SUM(te.hours) AS Hours,
+                   te.work_date AS WorkDate,
+                   te.hours AS Hours,
                    COALESCE(d.hourly_cost, 0) AS HourlyCost
             FROM timesheet_entries te
             JOIN project_phases pp ON pp.id = te.project_phase_id
             JOIN phase_templates pt ON pt.id = pp.phase_template_id
             JOIN employees emp ON emp.id = te.employee_id
-            LEFT JOIN employee_departments ed ON ed.employee_id = emp.id
+            LEFT JOIN (
+                SELECT employee_id, MIN(department_id) AS department_id 
+                FROM employee_departments 
+                GROUP BY employee_id
+            ) ed ON ed.employee_id = emp.id
             LEFT JOIN departments d ON d.id = ed.department_id
             WHERE pp.project_id = @pid
               AND pt.cost_section_template_id IS NULL
-            GROUP BY emp.id, emp.first_name, emp.last_name, 
-                     pp.id, pp.custom_name, pt.name, te.entry_type, d.hourly_cost
-            ORDER BY emp.last_name, pt.name",
+            ORDER BY emp.last_name, te.work_date, pt.name",
             new { pid = projectId }).ToList();
 
         var actualsBySection = actuals.GroupBy(a => (int)a.CostSectionId)
@@ -147,24 +153,7 @@ public class BudgetVsActualController : ControllerBase
 
                 // Consuntivo
                 if (actualsBySection.TryGetValue(secId, out var actList))
-                {
-                    foreach (var a in actList)
-                    {
-                        decimal hours = (decimal)a.Hours;
-                        decimal hCost = (decimal)a.HourlyCost;
-                        sectionDto.ActualEntries.Add(new BvaActualEntryDto
-                        {
-                            EmployeeName = (string)a.EmployeeName,
-                            PhaseName = (string)a.PhaseName,
-                            EntryType = (string)a.EntryType,
-                            Hours = hours,
-                            HourlyCost = hCost,
-                            TotalCost = hours * hCost
-                        });
-                    }
-                    sectionDto.ActualHours = sectionDto.ActualEntries.Sum(e => e.Hours);
-                    sectionDto.ActualCost = sectionDto.ActualEntries.Sum(e => e.TotalCost);
-                }
+                    BuildActualEmployees(sectionDto, actList);
 
                 groupDto.Sections.Add(sectionDto);
             }
@@ -176,27 +165,12 @@ public class BudgetVsActualController : ControllerBase
             result.Groups.Add(groupDto);
         }
 
-        // Sezione orfana (fasi senza sezione costo)
+        // Sezione orfana
         if (orphanActuals.Any())
         {
             var orphanGroup = new BvaGroupDto { GroupName = "NON ASSEGNATO", SortOrder = 999 };
             var orphanSection = new BvaSectionDto { SectionName = "Fasi senza sezione costo" };
-            foreach (var a in orphanActuals)
-            {
-                decimal hours = (decimal)a.Hours;
-                decimal hCost = (decimal)a.HourlyCost;
-                orphanSection.ActualEntries.Add(new BvaActualEntryDto
-                {
-                    EmployeeName = (string)a.EmployeeName,
-                    PhaseName = (string)a.PhaseName,
-                    EntryType = (string)a.EntryType,
-                    Hours = hours,
-                    HourlyCost = hCost,
-                    TotalCost = hours * hCost
-                });
-            }
-            orphanSection.ActualHours = orphanSection.ActualEntries.Sum(e => e.Hours);
-            orphanSection.ActualCost = orphanSection.ActualEntries.Sum(e => e.TotalCost);
+            BuildActualEmployees(orphanSection, orphanActuals);
             orphanGroup.Sections.Add(orphanSection);
             orphanGroup.ActualHours = orphanSection.ActualHours;
             orphanGroup.ActualCost = orphanSection.ActualCost;
@@ -209,5 +183,39 @@ public class BudgetVsActualController : ControllerBase
         result.TotalActualCost = result.Groups.Sum(g => g.ActualCost);
 
         return Ok(ApiResponse<BudgetVsActualData>.Ok(result));
+    }
+
+    /// <summary>
+    /// Raggruppa le entry per dipendente e popola ActualEmployees della sezione
+    /// </summary>
+    private static void BuildActualEmployees(BvaSectionDto sectionDto, IEnumerable<dynamic> entries)
+    {
+        var byEmployee = entries.GroupBy(a => (int)a.EmployeeId);
+        foreach (var empGroup in byEmployee)
+        {
+            var empDto = new BvaActualEmployeeDto
+            {
+                EmployeeName = (string)empGroup.First().EmployeeName
+            };
+            foreach (var a in empGroup)
+            {
+                decimal hours = (decimal)a.Hours;
+                decimal hCost = (decimal)a.HourlyCost;
+                empDto.Details.Add(new BvaActualDetailDto
+                {
+                    WorkDate = (DateTime)a.WorkDate,
+                    PhaseName = (string)a.PhaseName,
+                    EntryType = (string)a.EntryType,
+                    Hours = hours,
+                    HourlyCost = hCost,
+                    TotalCost = hours * hCost
+                });
+            }
+            empDto.TotalHours = empDto.Details.Sum(d => d.Hours);
+            empDto.TotalCost = empDto.Details.Sum(d => d.TotalCost);
+            sectionDto.ActualEmployees.Add(empDto);
+        }
+        sectionDto.ActualHours = sectionDto.ActualEmployees.Sum(e => e.TotalHours);
+        sectionDto.ActualCost = sectionDto.ActualEmployees.Sum(e => e.TotalCost);
     }
 }

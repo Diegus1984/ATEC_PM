@@ -95,6 +95,28 @@ public class MarkupToStringConverter : IValueConverter
         return 1.450m;
     }
 }
+
+/// <summary>
+/// Decimal percentuale (0.020) ↔ stringa utente ("2.0")
+/// VM salva 0.020, utente vede/edita 2.0
+/// </summary>
+public class PctToStringConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is decimal d)
+            return (d * 100m).ToString("F1", CultureInfo.InvariantCulture);
+        return "0.0";
+    }
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        string raw = value?.ToString()?.Replace("%", "").Replace(",", ".").Trim() ?? "0";
+        if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal result))
+            return result / 100m;
+        return 0m;
+    }
+}
+
 public class ItemTypeToBadgeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

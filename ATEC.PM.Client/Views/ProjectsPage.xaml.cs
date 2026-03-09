@@ -1,5 +1,6 @@
 using ATEC.PM.Client.UserControls;
 namespace ATEC.PM.Client.Views;
+
 using ATEC.PM.Client.Views.Costing;
 
 public partial class ProjectsPage : Page
@@ -184,7 +185,7 @@ public partial class ProjectsPage : Page
             costingNode.Items.Add(new TreeViewItem { Header = "Riepilogo e Prezzi", Tag = $"costing_riepilogo|{p.Id}" });
             projNode.Items.Add(costingNode);
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "Timesheet", Tag = $"timesheet|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "📊 Preventivo vs Consuntivo", Tag = $"budget_vs_actual|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "📋 DDP Commerciali", Tag = $"ddp_commercial|{p.Id}" });
 
@@ -401,7 +402,7 @@ public partial class ProjectsPage : Page
 
                 var webView = new Microsoft.Web.WebView2.Wpf.WebView2
                 {
-                    Height = Math.Max(500, scrollContent.ActualHeight - 60)
+                    Height = Math.Max(500, SectionContent.ActualHeight - 60)
                 };
                 panel.Children.Add(webView);
                 SectionContent.Content = panel;
@@ -631,8 +632,8 @@ public partial class ProjectsPage : Page
                 case "phases":
                     ShowPhases(id);
                     break;
-                case "timesheet":
-                    ShowTimesheet(id);
+                case "budget_vs_actual":
+                    ShowBudgetVsActual(id);
                     break;
                 case "chat":
                     ShowChat(id);
@@ -669,5 +670,15 @@ public partial class ProjectsPage : Page
                 p.Title.ToLower().Contains(filter) ||
                 p.CustomerName.ToLower().Contains(filter)
             ).ToList());
+    }
+
+
+    private void ShowBudgetVsActual(int projectId)
+    {
+        txtSectionTitle.Text = "Preventivo vs Consuntivo";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new BudgetVsCosting.BudgetVsActualControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
     }
 }
