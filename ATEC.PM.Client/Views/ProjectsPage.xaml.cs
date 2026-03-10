@@ -179,6 +179,7 @@ public partial class ProjectsPage : Page
             };
 
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
+            projNode.Items.Add(new TreeViewItem { Header = "💰 Flusso di Cassa", Tag = $"cashflow|{p.Id}" });
             var costingNode = new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}", IsExpanded = false };
             costingNode.Items.Add(new TreeViewItem { Header = "Impegno Risorse", Tag = $"costing_risorse|{p.Id}" });
             costingNode.Items.Add(new TreeViewItem { Header = "Materiali", Tag = $"costing_materiali|{p.Id}" });
@@ -568,40 +569,6 @@ public partial class ProjectsPage : Page
         ctrl.Load(projectId);
     }
     // === TIMESHEET ===
-    private async void ShowTimesheet(int projectId)
-    {
-        txtSectionTitle.Text = "Timesheet Commessa";
-        btnAction.Visibility = Visibility.Collapsed;
-
-        try
-        {
-            var json = await ApiClient.GetAsync($"/api/phases/project/{projectId}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var phases = JsonSerializer.Deserialize<List<PhaseListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            var panel = new StackPanel();
-            var totalH = phases.Sum(p => p.HoursWorked);
-            panel.Children.Add(new TextBlock { Text = $"Totale ore registrate: {totalH:N1}", FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 16) });
-
-            foreach (var p in phases.Where(p => p.HoursWorked > 0))
-            {
-                var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-                row.Children.Add(new TextBlock { Text = p.Name, FontSize = 13, Width = 300 });
-                row.Children.Add(new TextBlock { Text = $"{p.HoursWorked:N1} h", FontSize = 13, FontWeight = FontWeights.SemiBold });
-                panel.Children.Add(row);
-            }
-
-            if (totalH == 0)
-                panel.Children.Add(new TextBlock { Text = "Nessuna ora registrata su questa commessa.", FontSize = 13, Foreground = System.Windows.Media.Brushes.Gray });
-
-            SectionContent.Content = panel;
-        }
-        catch (Exception ex) { SectionContent.Content = new TextBlock { Text = $"Errore: {ex.Message}" }; }
-    }
 
     // === TREE SELECTION ===
     private void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -619,6 +586,9 @@ public partial class ProjectsPage : Page
                     break;
                 case "costing":
                     ShowCosting(id, "risorse");
+                    break;
+                case "cashflow":
+                    ShowCashFlow(id);
                     break;
                 case "costing_risorse":
                     ShowCosting(id, "risorse");
@@ -678,6 +648,15 @@ public partial class ProjectsPage : Page
         txtSectionTitle.Text = "Preventivo vs Consuntivo";
         btnAction.Visibility = Visibility.Collapsed;
         var ctrl = new BudgetVsCosting.BudgetVsActualControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
+    }
+
+    private void ShowCashFlow(int projectId)
+    {
+        txtSectionTitle.Text = "Flusso di Cassa";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new CashFlow.CashFlowControl();
         SectionContent.Content = ctrl;
         ctrl.Load(projectId);
     }

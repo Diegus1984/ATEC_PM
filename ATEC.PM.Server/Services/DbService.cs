@@ -29,6 +29,41 @@ public class DbService
     public void InitDatabase()
     {
         using var c = Open();
+
+        // ── FLUSSO CASSA ───────────────────────────────────────────
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL UNIQUE,
+            payment_amount DECIMAL(12,2) DEFAULT 0,
+            month_count INT DEFAULT 13,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow_categories (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            name VARCHAR(200) NOT NULL,
+            total_amount DECIMAL(12,2) DEFAULT 0,
+            notes VARCHAR(500) DEFAULT '',
+            sort_order INT DEFAULT 0,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow_data (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            data_type VARCHAR(20) NOT NULL,
+            ref_id INT DEFAULT 0,
+            month_number INT NOT NULL,
+            num_value DECIMAL(12,2) DEFAULT 0,
+            date_value DATE NULL,
+            UNIQUE KEY UQ_CfData (project_id, data_type, ref_id, month_number),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ── CATEGORIE MATERIALI ──────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
             id INT AUTO_INCREMENT PRIMARY KEY,
