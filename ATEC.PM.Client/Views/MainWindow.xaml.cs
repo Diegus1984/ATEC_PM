@@ -29,14 +29,15 @@ public partial class MainWindow : Window
         btnClienti.Visibility = PermissionEngine.CanAccessClienti(u) ? Visibility.Visible : Visibility.Collapsed;
         btnFornitori.Visibility = PermissionEngine.CanAccessFornitori(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCatalogo.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnCodex.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione GESTIONE AVANZATA
         btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
         btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible || 
-                                  btnReparti.Visibility == Visibility.Visible || 
+        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible ||
+                                  btnReparti.Visibility == Visibility.Visible ||
                                   btnMaterialCat.Visibility == Visibility.Visible ||
-                                  btnCostSections.Visibility == Visibility.Visible ) ? Visibility.Visible : Visibility.Collapsed;
+                                  btnCostSections.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
@@ -45,11 +46,12 @@ public partial class MainWindow : Window
 
         // Nascondi label sezione se tutti i bottoni sono collassati
         bool anyGestione = btnClienti.Visibility == Visibility.Visible ||
-                           btnFornitori.Visibility == Visibility.Visible ||
-                           btnCatalogo.Visibility == Visibility.Visible;
+                   btnFornitori.Visibility == Visibility.Visible ||
+                   btnCatalogo.Visibility == Visibility.Visible ||
+                   btnCodex.Visibility == Visibility.Visible;
         lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
-        bool anyAdmin =  btnUtenti.Visibility == Visibility.Visible;
+        bool anyAdmin = btnUtenti.Visibility == Visibility.Visible;
         lblAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -78,6 +80,7 @@ public partial class MainWindow : Window
             case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
             case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
+            case "Codex": PageContent.Navigate(new CodexPage()); break;
             default: PageContent.Content = null; break;
         }
     }

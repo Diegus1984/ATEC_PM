@@ -1,0 +1,200 @@
+<Page
+    x:Class="ATEC.PM.Client.Views.CodexPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    MinWidth="800"
+    Background="#F7F8FA">
+
+    <DockPanel>
+        <!-- TOOLBAR -->
+        <Border
+            Padding="20,15"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <Button
+                        x:Name="btnSync"
+                        Background="#12B76A"
+                        Click="BtnSync_Click"
+                        Content="⟳ Sincronizza"
+                        Foreground="White"
+                        Style="{StaticResource FlatBtn}" />
+
+                    <Separator
+                        Width="1"
+                        Margin="5,0"
+                        Background="#E4E7EC" />
+
+                    <Button
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="BtnClearFilters_Click"
+                        Content="Pulisci Filtri"
+                        Foreground="#667085"
+                        Style="{StaticResource FlatBtn}" />
+
+                    <Button
+                        Click="BtnRefresh_Click"
+                        Content="Aggiorna"
+                        Style="{StaticResource FlatBtn}" />
+                </StackPanel>
+
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <TextBlock
+                        x:Name="txtSyncStatus"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#667085"
+                        Text="" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- STATUS BAR -->
+        <Border
+            Padding="20,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <TextBlock
+                x:Name="txtStatus"
+                FontSize="12"
+                Foreground="#667085"
+                Text="Pronto" />
+        </Border>
+
+        <!-- DATAGRID -->
+        <DataGrid
+            x:Name="dgCodex"
+            Margin="20"
+            IsReadOnly="True"
+            Style="{StaticResource ModernDataGrid}">
+
+            <DataGrid.Columns>
+                <!-- CODICE -->
+                <DataGridTemplateColumn Width="120" MinWidth="80">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Codice" />
+                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Codice" TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding Codice}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- DESCRIZIONE -->
+                <DataGridTemplateColumn Width="*" MinWidth="200">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Descrizione" />
+                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Descr" TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Descr}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- FORNITORE -->
+                <DataGridTemplateColumn Width="150" MinWidth="100">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Fornitore" />
+                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Fornitore" TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Fornitore}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- PRODUTTORE -->
+                <DataGridTemplateColumn Width="150" MinWidth="100">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Produttore" />
+                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Produttore" TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Produttore}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- CATEGORIA -->
+                <DataGridTemplateColumn Width="140" MinWidth="100">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Categoria" />
+                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Categoria" TextChanged="Filter_Changed" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" Text="{Binding Categoria}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- PREZZO -->
+                <DataGridTextColumn
+                    Width="90"
+                    MinWidth="70"
+                    Binding="{Binding PrezzoForn, StringFormat=N2}"
+                    Header="Prezzo €" />
+
+                <!-- COD. FORNITORE -->
+                <DataGridTextColumn
+                    Width="120"
+                    MinWidth="80"
+                    Binding="{Binding CodeForn}"
+                    Header="Cod. Forn." />
+
+                <!-- COD. PRODUTTORE -->
+                <DataGridTextColumn
+                    Width="120"
+                    MinWidth="80"
+                    Binding="{Binding CodeProd}"
+                    Header="Cod. Prod." />
+
+                <!-- UM -->
+                <DataGridTextColumn
+                    Width="60"
+                    MinWidth="40"
+                    Binding="{Binding Um}"
+                    Header="UM" />
+
+                <!-- UBICAZIONE -->
+                <DataGridTextColumn
+                    Width="120"
+                    MinWidth="80"
+                    Binding="{Binding Ubicazione}"
+                    Header="Ubicazione" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Page>

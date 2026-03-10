@@ -411,6 +411,38 @@ public class DbService
                 ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
         }
 
+        // ── CODEX (clone DB remoto SERVER-CODEX) ────────────────
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            remote_id INT NOT NULL,
+            codice VARCHAR(15) NOT NULL DEFAULT '',
+            code_forn VARCHAR(200) NOT NULL DEFAULT '',
+            fornitore VARCHAR(40) NOT NULL DEFAULT '',
+            prezzo_forn DECIMAL(7,2) NOT NULL DEFAULT 0,
+            iva VARCHAR(3) NOT NULL DEFAULT '',
+            produttore VARCHAR(100) NOT NULL DEFAULT '',
+            data DATE NULL,
+            descr VARCHAR(200) NOT NULL DEFAULT '',
+            note TEXT,
+            categoria VARCHAR(200) NOT NULL DEFAULT '',
+            barcode VARCHAR(200) NOT NULL DEFAULT '',
+            tipologia VARCHAR(200) NOT NULL DEFAULT '',
+            extra1 VARCHAR(200) NOT NULL DEFAULT '',
+            extra2 VARCHAR(200) NOT NULL DEFAULT '',
+            extra3 VARCHAR(200) NOT NULL DEFAULT '',
+            code_prod VARCHAR(200) NOT NULL DEFAULT '',
+            spec VARCHAR(200) NOT NULL DEFAULT '',
+            oper INT NOT NULL DEFAULT 0,
+            um VARCHAR(10) NOT NULL DEFAULT '',
+            ubicazione VARCHAR(200) NOT NULL DEFAULT '',
+            codexforn VARCHAR(200) NOT NULL DEFAULT '',
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_codice (codice),
+            INDEX idx_fornitore (fornitore),
+            INDEX idx_categoria (categoria)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         Console.WriteLine("[DB] Inizializzato.");
     }
 }
