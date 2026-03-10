@@ -6,6 +6,7 @@
 - **Shared**: .NET 8 Class Library
 - **Database**: MySQL (XAMPP) con Dapper ORM
 - **Auth**: JWT Bearer token
+- **Grafici**: LiveChartsCore.SkiaSharpView.WPF (LiveCharts2)
 - **GitHub**: github.com/Diegus1984/ATEC_PM
 
 ---
@@ -32,7 +33,7 @@
 | Fasi Template | ✅ | 43 fasi ATEC, raggruppate per categoria/reparto |
 | Fasi → Sezione Costo | ✅ | FK cost_section_template_id su phase_templates |
 | Fasi Commessa | ✅ | Copia da template, assegnazione tecnici |
-| Timesheet Settimanale | ✅ | Inserimento ore per fase, validazioni |
+| Timesheet Settimanale | ✅ | Inserimento ore per fase, validazioni, note visibili in dashboard |
 | Documenti Commessa | ✅ | Upload/download, preview Word via Mammoth |
 | DDP Commerciali (BOM) | ✅ | 12 colori stato, duplicati, filtri, preview Word |
 
@@ -65,7 +66,7 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Endpoint available-templates | ✅ | Filtra template non ancora nella commessa |
 | Endpoint set section departments | ✅ | PUT sections/{id}/departments |
 
-### 3c. Materiali
+### 3c. Materiali ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
@@ -76,18 +77,17 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Indennità trasferta calcolate | ✅ | Auto da risorse DA_CLIENTE, K editabile |
 | Autocomplete descrizioni da storico | ❌ | SELECT DISTINCT description FROM project_material_items |
 
-### 3d. Scheda Prezzi / Riepilogo
+### 3d. Scheda Prezzi / Riepilogo ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
 | Totale risorse + materiali + trasferte | ✅ | Barre nere + barra blu TOTALE GENERALE |
-| Tab Scheda Prezzi (NET → OFFER → FINAL) | ❌ | Struttura%, contingency%, rischi%, margine% |
-| Confronto preventivo vs consuntivo | ❌ | Via phase_template → cost_section_template |
+| Scheda Prezzi (NET → OFFER → FINAL) | ✅ | Struttura%, contingency%, rischi%, margine% — piè di pagina fisso |
 | Export Excel/PDF preventivo | ❌ | EPPlus per Excel |
 
 ---
 
-## Blocco 4 — Pulizia / Refactoring
+## Blocco 4 — Pulizia / Refactoring ✅ COMPLETATO
 
 | Funzionalità | Stato | Note |
 |---|---|---|
@@ -95,24 +95,71 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Eliminazione project_markup_values | ✅ | Non più usata |
 | Rimozione markup_code da departments | ✅ | Sostituito da default_markup |
 | Rimozione markup_value da sezioni costo | ✅ | K sulla riga risorsa, non sulla sezione |
-| Eliminazione MarkupPage/MarkupDialog | ✅ | Voce menu rimossa |
+| Eliminazione MarkupPage/MarkupDialog | ✅ | File e voci menu rimossi |
 | DepartmentsPage/Dialog con K diretto | ✅ | TextBox K verde al posto di ComboBox |
-| Eliminazione MarkupController | ❌ | File ancora presente nel server |
+| Eliminazione MarkupController | ✅ | Rimosso dal server + endpoint markup/{id} da ProjectCostingController |
 
 ---
 
-## Blocco 5 — Prossimi Step
+## Blocco 5 — Analisi & Reporting
+
+### 5a. Preventivo vs Consuntivo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| BudgetVsActualControl | ✅ | Views/BudgetVsCosting/ con SmoothExpander |
+| 4 gruppi (GESTIONE/PRESCHIERAMENTO/INSTALLAZIONE/OPZIONE) | ✅ | Expander colorati |
+| SX preventivo (risorse pianificate) | ✅ | Ore e costi da project_cost_resources |
+| DX consuntivo (ore versate per dipendente) | ✅ | Dettaglio timbrature da timesheet_entries |
+| Fix duplicati dipendenti (MIN department_id) | ✅ | Subquery in JOIN |
+
+### 5b. Flusso di Cassa ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Griglia tipo Excel | ✅ | DataGrid con TextBox sempre visibili, editing diretto |
+| Righe entrate (PAGAMENTO, %, ENTRATE, Aggiustamento) | ✅ | % distribuite per mese |
+| Righe uscite (categorie fornitore dinamiche CRUD) | ✅ | 8 default + aggiungi/rimuovi |
+| Righe totali (USCITE MESE, DIFFERENZA cumulativa, BANCA) | ✅ | Differenza cumulativa progressiva |
+| Colonne frozen A+B | ✅ | Etichetta + Importo fisse, mesi scrollabili |
+| Colori celle (verde editabile #92D050, giallo calcolato #FFE699) | ✅ | Via CellColor + RowTypeToBgConverter |
+| Rosso valori negativi | ✅ | CellForegroundConverter |
+| Cap % a 100% | ✅ | Automatico nel Recalculate |
+| Grafico LiveCharts2 | ✅ | Barre entrate/uscite + linea saldo cumulativo |
+| Grafico allineato a colonne griglia | ✅ | Margin calcolato da LayoutUpdated |
+| Scala Y dinamica | ✅ | MinStep auto-calcolato dai dati |
+| DB: 3 tabelle compatte | ✅ | project_cashflow, project_cashflow_categories, project_cashflow_data |
+| Endpoint unico PUT data (upsert generico) | ✅ | data_type: INCOME_PCT, ADJUSTMENT, CAT_PCT, BANK, SCHEDULE |
+
+---
+
+## Blocco 6 — Prossimi Step
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Scheda Prezzi (NET → FINAL OFFER) | ❌ | ALTA | In fondo alla pagina costing o tab dedicato |
-| Confronto preventivo vs consuntivo | ❌ | ALTA | Report per sezione costo: budget vs ore reali |
 | Dashboard principale | ❌ | MEDIA | KPI commesse, ore, costi, stato avanzamento |
 | Export Excel preventivo | ❌ | MEDIA | EPPlus, formato standard ATEC |
 | Export PDF offerta | ❌ | MEDIA | Documento offerta cliente |
 | Separazione ruoli ADMIN/PM vs TECH | ❌ | MEDIA | Menu/pagine visibili per ruolo |
+| Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
 | Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze, ore eccessive |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
+
+---
+
+## Struttura Navigazione TreeView Commessa
+
+```
+📁 AT2026001 - Cliente
+  ├── Dettagli                    → ProjectDashboardControl (KPI + ultime registrazioni con note)
+  ├── ⚙ Configura Commessa       → ProjectCostingControl (risorse + materiali + scheda prezzi)
+  ├── Fasi e Avanzamento          → PhasesManagementControl
+  ├── 📊 Preventivo vs Consuntivo → BudgetVsActualControl
+  ├── 💰 Flusso di Cassa          → CashFlowControl (griglia Excel + grafico)
+  ├── 💬 Chat                     → ProjectChatControl
+  ├── 📋 DDP Commerciali          → DdpCommercialControl
+  └── 📁 Documenti                → DocumentManagerControl (lazy-load, preview)
+```
 
 ---
 
@@ -121,7 +168,6 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 ### Reparti (centro costo)
 - `departments` → `hourly_cost` + `default_markup`
 - Quando selezioni dipendente nella commessa → precompila €/h e K dal suo reparto
-- Niente più tabelle K separate (markup_coefficients eliminata)
 
 ### Sezioni Costo → Reparti
 - `cost_section_template_departments` = quali reparti possono lavorare in quella sezione
@@ -130,7 +176,6 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 ### Fasi Template → Sezioni Costo
 - `phase_templates.cost_section_template_id` (many-to-one)
 - Permette confronto preventivo vs consuntivo raggruppando ore timesheet per sezione costo
-- Es: "Prog. schema elettrico" + "Prog. quadri" + "Cablaggio" → tutte puntano a "PROGETTAZIONE ELETTRICA"
 
 ### In Commessa
 - `project_cost_sections` = copia locale delle sezioni (indipendente dal template)
@@ -138,6 +183,12 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 - `project_material_sections` / `project_material_items` = materiali con K per riga
 - `project_pricing` = percentuali scheda prezzi + K trasferta/indennità
 - Trasferte: costo ore nella sezione risorse (K risorsa), spese viaggio/alloggio/indennità nella sezione materiali (K dedicato)
+
+### Flusso Cassa
+- `project_cashflow` = testata (payment_amount, month_count)
+- `project_cashflow_categories` = categorie fornitore CRUD
+- `project_cashflow_data` = unica tabella per tutti i valori mensili (data_type + ref_id + month_number)
+- Catena: timesheet_entries → project_phases → projects (no project_id diretto su timbrature)
 
 ### Calcolo Prezzo
 ```
@@ -147,33 +198,35 @@ Vendita Trasferte = (viaggi + alloggio) × K_trasferta
 Vendita Indennità = indennità × K_indennità
 ─────────────────
 NET PRICE = Σ tutto
-+ Costi struttura (2%)
-+ Contingency (5%)
-+ Rischi & Garanzie (5%)
++ Costi struttura (%)
++ Contingency (%)
++ Rischi & Garanzie (%)
 = OFFER PRICE
-+ Margine trattativa (10%)
++ Margine trattativa (%)
 = FINAL OFFER PRICE
 ```
 
 ---
 
-## Struttura File Costing (Views/Costing/)
+## Struttura File
 
 ```
 Views/Costing/
-  ProjectCostingControl.xaml          ← XAML completo risorse + materiali + trasferte + totali
-  ProjectCostingControl.xaml.cs       ← Code-behind snello (handler eventi)
-  AddCostSectionDialog.xaml/.cs       ← Dialog aggiungi sezione (da template o custom)
-  AddCostGroupDialog.xaml/.cs         ← Dialog aggiungi gruppo (da template o custom)
-  Converters/
-    CostingConverters.cs              ← HexToBrush, BoolToAngle, MarkupToString, ItemTypeToBadge, ecc.
-  ViewModels/
-    CostingViewModel.cs               ← Root VM, FromData(), WireAllChanges(), totali generali
-    CostGroupVM.cs                    ← Gruppo (GESTIONE, INSTALLAZIONE...), colore, totali
-    CostSectionVM.cs                  ← Sezione, tipo IN_SEDE/DA_CLIENTE, totali ore + trasferte
-    CostResourceVM.cs                 ← Riga risorsa con €/h, K, ore, trasferta, TotalSale
-    MaterialSectionVM.cs              ← Categoria materiale, DefaultMarkup, DefaultCommissionMarkup
-    MaterialItemVM.cs                 ← Riga materiale, ItemType MATERIAL/COMMISSION, TotalSale
+  ProjectCostingControl.xaml/.cs    ← Risorse + materiali + scheda prezzi
+  AddCostSectionDialog.xaml/.cs     ← Dialog aggiungi sezione
+  AddCostGroupDialog.xaml/.cs       ← Dialog aggiungi gruppo
+  Converters/CostingConverters.cs
+  ViewModels/CostingViewModel.cs, CostGroupVM.cs, CostSectionVM.cs,
+             CostResourceVM.cs, MaterialSectionVM.cs, MaterialItemVM.cs
+
+Views/CashFlow/
+  CashFlowControl.xaml/.cs          ← Griglia tipo Excel + grafico LiveCharts2
+  VM/CashFlowViewModel.cs           ← CfGridRow, CfRowType, Recalculate(), BuildChart()
+  Converters/CashFlowConverters.cs  ← NegativeToBrush, RowTypeToBg, SepValue, InvertBool, IntAmount, CellForeground
+
+Views/BudgetVsCosting/
+  BudgetVsActualControl.xaml/.cs
+  ViewModels/BvaCostingVM.cs
 ```
 
 ---
@@ -186,4 +239,9 @@ Views/Costing/
 - **Cache WPF**: cancellare bin/obj/.vs e Rebuild quando il designer mostra errori namespace fantasma
 - **Expander Content**: un solo figlio — usare StackPanel wrapper se servono più elementi
 - **Naming conflicts**: `System.IO.File` vs `ControllerBase.File()` → fully qualified
+- **DataGrid edit diretto**: TextBox nel CellTemplate con IsReadOnly bindato, niente CellEditingTemplate
+- **DataGrid refresh senza flash**: `decimal[]` con `Items.Refresh()` via Dispatcher, oppure senza Refresh se binding sufficiente
+- **LiveCharts2 YAxis**: MinStep, MinLimit, MaxLimit settabili solo da codice C#, non da XAML
+- **Grafico allineamento**: Margin calcolato da `LayoutUpdated` della DataGrid, con DrawMargin per asse Y
+- **StringFormat + ConvertBack**: StringFormat=N0 impedisce ConvertBack su TextBox — usare Converter dedicato (IntegerAmountConverter)
 - **L'utente comunica in italiano**
