@@ -180,11 +180,7 @@ public partial class ProjectsPage : Page
 
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💰 Flusso di Cassa", Tag = $"cashflow|{p.Id}" });
-            var costingNode = new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}", IsExpanded = false };
-            costingNode.Items.Add(new TreeViewItem { Header = "Impegno Risorse", Tag = $"costing_risorse|{p.Id}" });
-            costingNode.Items.Add(new TreeViewItem { Header = "Materiali", Tag = $"costing_materiali|{p.Id}" });
-            costingNode.Items.Add(new TreeViewItem { Header = "Riepilogo e Prezzi", Tag = $"costing_riepilogo|{p.Id}" });
-            projNode.Items.Add(costingNode);
+            projNode.Items.Add(new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "📊 Preventivo vs Consuntivo", Tag = $"budget_vs_actual|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
@@ -589,15 +585,6 @@ public partial class ProjectsPage : Page
                     break;
                 case "cashflow":
                     ShowCashFlow(id);
-                    break;
-                case "costing_risorse":
-                    ShowCosting(id, "risorse");
-                    break;
-                case "costing_materiali":
-                    ShowCosting(id, "materiali");
-                    break;
-                case "costing_riepilogo":
-                    ShowCosting(id, "riepilogo");
                     break;
                 case "phases":
                     ShowPhases(id);

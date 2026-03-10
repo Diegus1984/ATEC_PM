@@ -11,6 +11,7 @@
                 <ResourceDictionary Source="/Resources/GridStyles.xaml" />
                 <ResourceDictionary Source="/Resources/Converters.xaml" />
                 <ResourceDictionary Source="/Resources/ExpanderStyles.xaml" />
+                <ResourceDictionary Source="/Resources/TreeviewStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
@@ -43,240 +45,24 @@ public partial class CashFlowControl : UserControl
         catch (Exception ex) { txtLoading.Text = $"Errore: {ex.Message}"; }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // GENERA COLONNE MESE
-    // ═══════════════════════════════════════════════════════════════
-    private void BuildMonthColumns()
+    private void AmountTextBox_KeyDown(object sender, KeyEventArgs e)
     {
-        while (dgMain.Columns.Count > 2)
-            dgMain.Columns.RemoveAt(dgMain.Columns.Count - 1);
-
-        for (int m = 0; m < _vm.MonthCount; m++)
+        if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsAmountEditable)
         {
-            string header = $"{m + 1}\n{_vm.MonthLabels[m]}";
-            string bindingPath = $"Values[{m}]";
-
-            var col = new DataGridTemplateColumn
-            {
-                Header = header,
-                Width = 80
-            };
-
-            col.CellTemplate = BuildCellTemplate(bindingPath, isEditing: false);
-            col.CellEditingTemplate = BuildCellTemplate(bindingPath, isEditing: true);
-            dgMain.Columns.Add(col);
+            e.Handled = true;
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveCategoryAmount(row);
+            tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Down));
         }
     }
 
-    private DataTemplate BuildCellTemplate(string bindingPath, bool isEditing)
+    private void AmountTextBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        var template = new DataTemplate();
-
-        if (isEditing)
+        if (sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsAmountEditable)
         {
-            var tbFactory = new FrameworkElementFactory(typeof(TextBox));
-            tbFactory.SetBinding(TextBox.TextProperty, new Binding(bindingPath)
-            {
-                StringFormat = "N0",
-                UpdateSourceTrigger = UpdateSourceTrigger.LostFocus
-            });
-            tbFactory.SetValue(TextBox.FontSizeProperty, 11.0);
-            tbFactory.SetValue(TextBox.PaddingProperty, new Thickness(2, 0, 2, 0));
-            tbFactory.SetValue(TextBox.HorizontalContentAlignmentProperty, HorizontalAlignment.Right);
-            tbFactory.SetValue(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center);
-            tbFactory.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
-            tbFactory.SetBinding(TextBox.BackgroundProperty, new Binding("CellColor")
-            {
-                Converter = (IValueConverter)Resources["RowTypeToBg"]
-            });
-            template.VisualTree = tbFactory;
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveCategoryAmount(row);
         }
-        else
-        {
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.SetBinding(Border.BackgroundProperty, new Binding("CellColor")
-            {
-                Converter = (IValueConverter)Resources["RowTypeToBg"]
-            });
-            borderFactory.SetValue(Border.PaddingProperty, new Thickness(4, 0, 4, 0));
-
-            var txtFactory = new FrameworkElementFactory(typeof(TextBlock));
-            var multi = new MultiBinding
-            {
-                Converter = (IMultiValueConverter)FindResource("SepValueConv")
-            };
-            multi.Bindings.Add(new Binding(bindingPath));
-            multi.Bindings.Add(new Binding("IsSeparator"));
-            txtFactory.SetBinding(TextBlock.TextProperty, multi);
-            txtFactory.SetValue(TextBlock.FontSizeProperty, 11.0);
-            txtFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
-            txtFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Right);
-            txtFactory.SetBinding(TextBlock.ForegroundProperty, new Binding(bindingPath)
-            {
-                Converter = (IValueConverter)Resources["CellForegroundConverter"]
-            });
-
-            borderFactory.AppendChild(txtFactory);
-            template.VisualTree = borderFactory;
-        }
-
-        return template;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // CELLA — click singolo, tastiera, enter
-    // ═══════════════════════════════════════════════════════════════
-    private void DataGridCell_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is DataGridCell cell && !cell.IsEditing && !cell.IsReadOnly)
-        {
-            cell.Focus();
-            dgMain.BeginEdit();
-        }
-    }
-
-    private void DataGridCell_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
-    {
-        if (sender is DataGridCell cell && !cell.IsEditing && !cell.IsReadOnly)
-        {
-            cell.Focus();
-            dgMain.BeginEdit();
-
-            // Passa il carattere digitato alla TextBox
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                var textBox = FindVisualChild<TextBox>(cell);
-                if (textBox != null)
-                {
-                    textBox.Text = e.Text;
-                    textBox.CaretIndex = textBox.Text.Length;
-                }
-            }), System.Windows.Threading.DispatcherPriority.Input);
-        }
-    }
-
-    private void DataGridCell_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (sender is DataGridCell cell)
-        {
-            // In editing + Enter → conferma
-            if (cell.IsEditing && e.Key == System.Windows.Input.Key.Enter)
-            {
-                dgMain.CommitEdit();
-                e.Handled = true;
-                return;
-            }
-
-            // Non in editing → F2, Back, Delete entrano in edit
-            if (!cell.IsEditing && !cell.IsReadOnly)
-            {
-                if (e.Key == System.Windows.Input.Key.F2 ||
-                    e.Key == System.Windows.Input.Key.Back ||
-                    e.Key == System.Windows.Input.Key.Delete)
-                {
-                    cell.Focus();
-                    dgMain.BeginEdit();
-                }
-            }
-        }
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        int count = VisualTreeHelper.GetChildrenCount(parent);
-        for (int i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T t) return t;
-            var result = FindVisualChild<T>(child);
-            if (result != null) return result;
-        }
-        return null;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // BEGINNING EDIT — blocca celle non editabili
-    // ═══════════════════════════════════════════════════════════════
-    private void DgMain_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
-    {
-        if (e.Row.Item is CfGridRow row)
-        {
-            int colIndex = e.Column.DisplayIndex;
-
-            if (colIndex == 1)
-            {
-                bool canEditAmount = row.RowType is CfRowType.CategoryAmount or CfRowType.Payment;
-                if (!canEditAmount) e.Cancel = true;
-                return;
-            }
-
-            if (colIndex >= 2 && !row.IsEditable)
-                e.Cancel = true;
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // CELL EDIT ENDING — salva dato
-    // ═══════════════════════════════════════════════════════════════
-    private async void DgMain_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
-    {
-        if (e.EditAction == DataGridEditAction.Cancel) return;
-        await Task.Delay(100);
-        if (e.Row.Item is not CfGridRow row) return;
-
-        int colIndex = e.Column.DisplayIndex;
-
-        // Colonna B — importo categoria
-        if (colIndex == 1 && row.RowType == CfRowType.CategoryAmount && row.RefId > 0)
-        {
-            try
-            {
-                var req = new { name = row.Label, totalAmount = row.TotalAmount, notes = "" };
-                await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}",
-                    JsonSerializer.Serialize(req));
-            }
-            catch { }
-            _vm.Recalculate();
-            RefreshGrid();
-            return;
-        }
-
-        // Colonne mese
-        if (colIndex < 2 || !row.IsEditable) return;
-
-        int monthIndex = colIndex - 2;
-        int monthNumber = monthIndex + 1;
-        decimal value = row.Values[monthIndex];
-
-        string dataType = row.RowType switch
-        {
-            CfRowType.IncomePct => "INCOME_PCT",
-            CfRowType.Adjustment => "ADJUSTMENT",
-            CfRowType.CategoryPct => "CAT_PCT",
-            CfRowType.Bank => "BANK",
-            _ => ""
-        };
-        if (string.IsNullOrEmpty(dataType)) return;
-
-        int refId = row.RowType == CfRowType.CategoryPct ? row.RefId : 0;
-        await SaveData(dataType, refId, monthNumber, value);
-        _vm.Recalculate();
-        RefreshGrid();
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // INIT
-    // ═══════════════════════════════════════════════════════════════
-    private async void BtnInit_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            decimal defaultAmt = _vm.ProjectRevenue;
-            string json = JsonSerializer.Serialize(new { paymentAmount = defaultAmt, monthCount = 13 });
-            await ApiClient.PostAsync($"/api/projects/{_projectId}/cashflow/init", json);
-            Load(_projectId);
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -289,6 +75,21 @@ public partial class CashFlowControl : UserControl
             var req = new { name = "Nuova categoria", totalAmount = 0m, notes = "" };
             await ApiClient.PostAsync($"/api/projects/{_projectId}/cashflow/categories",
                 JsonSerializer.Serialize(req));
+            Load(_projectId);
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════════
+    private async void BtnInit_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            decimal defaultAmt = _vm.ProjectRevenue;
+            string json = JsonSerializer.Serialize(new { paymentAmount = defaultAmt, monthCount = 13 });
+            await ApiClient.PostAsync($"/api/projects/{_projectId}/cashflow/init", json);
             Load(_projectId);
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
@@ -307,12 +108,120 @@ public partial class CashFlowControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
+    private DataTemplate BuildCellTemplate(string bindingPath)
+    {
+        var template = new DataTemplate();
+
+        var borderFactory = new FrameworkElementFactory(typeof(Border));
+        borderFactory.SetBinding(Border.BackgroundProperty, new Binding("CellColor")
+        {
+            Converter = (IValueConverter)Resources["RowTypeToBg"]
+        });
+
+        var tbFactory = new FrameworkElementFactory(typeof(TextBox));
+        tbFactory.SetBinding(TextBox.TextProperty, new Binding(bindingPath)
+        {
+            StringFormat = "N0",
+            UpdateSourceTrigger = UpdateSourceTrigger.LostFocus
+        });
+        tbFactory.SetValue(TextBox.FontSizeProperty, 11.0);
+        tbFactory.SetValue(TextBox.PaddingProperty, new Thickness(2, 0, 2, 0));
+        tbFactory.SetValue(TextBox.HorizontalContentAlignmentProperty, HorizontalAlignment.Right);
+        tbFactory.SetValue(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center);
+        tbFactory.SetValue(TextBox.BorderThicknessProperty, new Thickness(0));
+        tbFactory.SetBinding(TextBox.BackgroundProperty, new Binding("CellColor")
+        {
+            Converter = (IValueConverter)Resources["RowTypeToBg"]
+        });
+        tbFactory.SetBinding(TextBox.IsReadOnlyProperty, new Binding("IsEditable")
+        {
+            Converter = new InvertBoolConverter()
+        });
+        tbFactory.SetBinding(TextBox.ForegroundProperty, new Binding(bindingPath)
+        {
+            Converter = (IValueConverter)Resources["CellForegroundConverter"]
+        });
+        tbFactory.AddHandler(TextBox.LostFocusEvent, new RoutedEventHandler(CellTextBox_LostFocus));
+        tbFactory.AddHandler(TextBox.KeyDownEvent, new KeyEventHandler(CellTextBox_KeyDown));
+
+        borderFactory.AppendChild(tbFactory);
+        template.VisualTree = borderFactory;
+        return template;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GENERA COLONNE MESE — TextBox sempre visibili
+    // ═══════════════════════════════════════════════════════════════
+    private void BuildMonthColumns()
+    {
+        while (dgMain.Columns.Count > 2)
+            dgMain.Columns.RemoveAt(dgMain.Columns.Count - 1);
+
+        for (int m = 0; m < _vm.MonthCount; m++)
+        {
+            string header = $"{m + 1}\n{_vm.MonthLabels[m]}";
+
+            var col = new DataGridTemplateColumn
+            {
+                Header = header,
+                Width = 80,
+                CellTemplate = BuildCellTemplate($"Values[{m}]")
+            };
+            dgMain.Columns.Add(col);
+        }
+
+        dgMain.LayoutUpdated -= DgMain_LayoutUpdated;
+        dgMain.LayoutUpdated += DgMain_LayoutUpdated;
+    }
+
+    private void DgMain_LayoutUpdated(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (dgMain.Columns.Count < 3) return;
+
+            double colA = dgMain.Columns[0].ActualWidth;
+
+            double monthsWidth = 0;
+            for (int i = 2; i < dgMain.Columns.Count; i++)
+                monthsWidth += dgMain.Columns[i].ActualWidth;
+
+            double colB = dgMain.Columns[1].ActualWidth;
+            double dgVisible = dgMain.ActualWidth;
+            double rightMargin = Math.Max(0, dgVisible - colA - colB - monthsWidth);
+
+            chartContainer.Margin = new Thickness(colA, 8, rightMargin, 0);
+        }
+        catch { }
+    }
+    private void CellTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsEditable)
+        {
+            e.Handled = true;
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveRowData(row, tb);
+            tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Down));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CELLE — salvataggio su LostFocus e Enter
+    // ═══════════════════════════════════════════════════════════════
+    private void CellTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsEditable)
+        {
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveRowData(row, tb);
+        }
+    }
     // ═══════════════════════════════════════════════════════════════
     // PAGAMENTO CLIENTE
     // ═══════════════════════════════════════════════════════════════
-    private void PaymentAmount_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void PaymentAmount_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Enter && sender is TextBox tb)
+        if (e.Key == Key.Enter && sender is TextBox tb)
         {
             e.Handled = true;
             tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
@@ -328,24 +237,21 @@ public partial class CashFlowControl : UserControl
             tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         await SavePaymentAndRefresh();
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // HELPERS
-    // ═══════════════════════════════════════════════════════════════
-    private void RefreshGrid()
+    private void SaveCategoryAmount(CfGridRow row)
     {
-        Dispatcher.BeginInvoke(new Action(() =>
+        if (row.RefId <= 0) return;
+        _ = Task.Run(async () =>
         {
             try
             {
-                if (!dgMain.IsKeyboardFocusWithin ||
-                    dgMain.CommitEdit(DataGridEditingUnit.Row, true))
-                {
-                    dgMain.Items.Refresh();
-                }
+                var req = new { name = row.Label, totalAmount = row.TotalAmount, notes = "" };
+                await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}",
+                    JsonSerializer.Serialize(req));
             }
             catch { }
-        }), System.Windows.Threading.DispatcherPriority.Background);
+        });
+        _vm.Recalculate();
+
     }
 
     private async Task SaveData(string dataType, int refId, int monthNumber, decimal numValue)
@@ -367,8 +273,34 @@ public partial class CashFlowControl : UserControl
             await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/header",
                 JsonSerializer.Serialize(req));
             _vm.Recalculate();
-            RefreshGrid();
+
         }
         catch { }
+    }
+
+    private void SaveRowData(CfGridRow row, TextBox tb)
+    {
+        var be = tb.GetBindingExpression(TextBox.TextProperty);
+        string path = be?.ParentBinding?.Path?.Path ?? "";
+        var match = Regex.Match(path, @"Values\[(\d+)\]");
+        if (!match.Success) return;
+
+        int monthIndex = int.Parse(match.Groups[1].Value);
+        int monthNumber = monthIndex + 1;
+
+        string dataType = row.RowType switch
+        {
+            CfRowType.IncomePct => "INCOME_PCT",
+            CfRowType.Adjustment => "ADJUSTMENT",
+            CfRowType.CategoryPct => "CAT_PCT",
+            CfRowType.Bank => "BANK",
+            _ => ""
+        };
+        if (string.IsNullOrEmpty(dataType)) return;
+
+        int refId = row.RowType == CfRowType.CategoryPct ? row.RefId : 0;
+        _ = SaveData(dataType, refId, monthNumber, row.Values[monthIndex]);
+        _vm.Recalculate();
+
     }
 }

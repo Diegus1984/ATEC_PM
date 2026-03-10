@@ -13,10 +13,10 @@
         <local:CellForegroundConverter x:Key="CellForegroundConverter" />
         <local:SeparatorValueConverter x:Key="SepValueConv" />
         <local:IntegerAmountConverter x:Key="IntAmount" />
+        <local:InvertBoolConverter x:Key="InvertBool" />
     </UserControl.Resources>
 
     <Grid>
-        <!--  Loading  -->
         <TextBlock
             x:Name="txtLoading"
             HorizontalAlignment="Center"
@@ -25,7 +25,6 @@
             Foreground="#9CA3AF"
             Text="Caricamento..." />
 
-        <!--  Init  -->
         <StackPanel
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
@@ -49,17 +48,15 @@
                 Foreground="White" />
         </StackPanel>
 
-        <!--  Content  -->
         <Grid Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="300" />
+                <RowDefinition Height="0.5*" />
             </Grid.RowDefinitions>
 
-            <!--  ═══ TESTATA ═══  -->
             <Border
                 Grid.Row="0"
                 Padding="16,10"
@@ -152,7 +149,6 @@
                 </Grid>
             </Border>
 
-            <!--  ═══ STATUS ═══  -->
             <Border
                 Grid.Row="1"
                 Padding="12,6"
@@ -165,17 +161,14 @@
                     Text="{Binding StatusText}" />
             </Border>
 
-            <!--  ═══ GRIGLIA EXCEL ═══  -->
             <DataGrid
                 x:Name="dgMain"
                 Grid.Row="2"
                 AutoGenerateColumns="False"
-                BeginningEdit="DgMain_BeginningEdit"
                 BorderThickness="0"
                 CanUserAddRows="False"
                 CanUserDeleteRows="False"
                 CanUserReorderColumns="False"
-                CellEditEnding="DgMain_CellEditEnding"
                 ColumnHeaderHeight="50"
                 FontSize="12"
                 FrozenColumnCount="2"
@@ -183,6 +176,7 @@
                 HeadersVisibility="Column"
                 HorizontalGridLinesBrush="#E4E7EC"
                 HorizontalScrollBarVisibility="Auto"
+                IsReadOnly="True"
                 ItemsSource="{Binding Rows}"
                 RowHeight="25"
                 SelectionMode="Single"
@@ -208,16 +202,8 @@
                         <Setter Property="Background" Value="White" />
                     </Style>
                 </DataGrid.RowStyle>
-                <DataGrid.CellStyle>
-                    <Style TargetType="DataGridCell">
-                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DataGridCell_PreviewMouseLeftButtonDown" />
-                        <EventSetter Event="PreviewTextInput" Handler="DataGridCell_PreviewTextInput" />
-                        <EventSetter Event="PreviewKeyDown" Handler="DataGridCell_PreviewKeyDown" />
-                    </Style>
-                </DataGrid.CellStyle>
-                <!--  Colonne A e B (frozen) — generate nello XAML  -->
+
                 <DataGrid.Columns>
-                    <!--  Col A: Etichetta  -->
                     <DataGridTextColumn
                         Width="160"
                         Binding="{Binding Label}"
@@ -234,45 +220,30 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <!--  Col B: Importo totale — editabile solo per PAGAMENTO e categorie  -->
                     <DataGridTemplateColumn Width="100" Header="IMPORTO">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Border Padding="4,0" Background="#F9FAFB">
-                                    <TextBlock
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
+                                    <TextBox
+                                        Padding="0"
+                                        HorizontalContentAlignment="Right"
+                                        VerticalContentAlignment="Center"
+                                        Background="#F9FAFB"
+                                        BorderThickness="0"
+                                        FontSize="12"
                                         FontWeight="SemiBold"
-                                        Foreground="#1A1D26">
-                                        <TextBlock.Text>
-                                            <MultiBinding Converter="{StaticResource SepValueConv}">
-                                                <Binding Path="TotalAmount" />
-                                                <Binding Path="IsSeparator" />
-                                            </MultiBinding>
-                                        </TextBlock.Text>
-                                    </TextBlock>
+                                        Foreground="#1A1D26"
+                                        IsReadOnly="{Binding IsAmountEditable, Converter={StaticResource InvertBool}}"
+                                        KeyDown="AmountTextBox_KeyDown"
+                                        LostFocus="AmountTextBox_LostFocus"
+                                        Text="{Binding TotalAmount, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
                                 </Border>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
-                        <DataGridTemplateColumn.CellEditingTemplate>
-                            <DataTemplate>
-                                <TextBox
-                                    Padding="4,0"
-                                    HorizontalContentAlignment="Right"
-                                    VerticalContentAlignment="Center"
-                                    Background="#92D050"
-                                    BorderThickness="0"
-                                    FontSize="12"
-                                    Text="{Binding TotalAmount, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellEditingTemplate>
                     </DataGridTemplateColumn>
-
-                    <!--  Colonne mese C..O generate da code-behind  -->
                 </DataGrid.Columns>
             </DataGrid>
 
-            <!--  ═══ TOTALI ═══  -->
             <Border
                 Grid.Row="3"
                 Padding="16,8"
@@ -284,14 +255,13 @@
                     Text="{Binding StatusText}" />
             </Border>
 
-            <!--  ═══ GRAFICO ═══  -->
             <Border
                 Grid.Row="4"
-                Padding="8"
                 Background="White"
                 BorderBrush="#E4E7EC"
                 BorderThickness="0,1,0,0">
                 <lvc:CartesianChart
+                    x:Name="chartContainer"
                     LegendPosition="Bottom"
                     Series="{Binding Series}"
                     TooltipPosition="Top"
