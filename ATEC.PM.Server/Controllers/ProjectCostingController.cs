@@ -251,23 +251,6 @@ public class ProjectCostingController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
-    // MARKUP
-    // ══════════════════════════════════════════════════════════════
-
-    [HttpPatch("markup/{id}")]
-    public IActionResult UpdateMarkup(int projectId, int id, [FromBody] FieldUpdateRequest req)
-    {
-        var allowed = new HashSet<string> { "markup_value", "hourly_cost" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-
-        using var c = _db.Open();
-        c.Execute($"UPDATE project_markup_values SET {req.Field}=@Value WHERE id=@id AND project_id=@projectId",
-            new { Value = req.Value, id, projectId });
-        return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
-    }
-
-    // ══════════════════════════════════════════════════════════════
     // SEZIONI COSTO
     // ══════════════════════════════════════════════════════════════
 

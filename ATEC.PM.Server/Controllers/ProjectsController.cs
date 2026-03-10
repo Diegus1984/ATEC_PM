@@ -817,16 +817,16 @@ public class ProjectsController : ControllerBase
 
         // Ultimi 10 inserimenti timesheet
         data.RecentEntries = c.Query<RecentTimesheetEntry>(@"
-            SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
-                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
-                   te.work_date AS WorkDate, te.hours, te.entry_type AS EntryType
-            FROM timesheet_entries te
-            JOIN employees e ON e.id = te.employee_id
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
-            WHERE pp.project_id = @Id
-            ORDER BY te.work_date DESC, te.id DESC
-            LIMIT 10", new { Id = id }).ToList();
+    SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
+           COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+           te.work_date AS WorkDate, te.hours, te.entry_type AS EntryType
+    FROM timesheet_entries te
+    JOIN employees e ON e.id = te.employee_id
+    JOIN project_phases pp ON pp.id = te.project_phase_id
+    JOIN phase_templates pt ON pt.id = pp.phase_template_id
+    WHERE pp.project_id = @Id
+    ORDER BY te.work_date DESC, te.id DESC
+    LIMIT 10", new { Id = id }).ToList();
 
         // Tecnici assegnati alle fasi (non dal timesheet)
         data.ActiveTechnicians = c.Query<ActiveTechSummary>(@"

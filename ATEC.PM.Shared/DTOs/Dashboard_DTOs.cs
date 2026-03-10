@@ -72,6 +72,7 @@ public class RecentTimesheetEntry
     public DateTime WorkDate { get; set; }
     public decimal Hours { get; set; }
     public string EntryType { get; set; } = "";
+    public string Notes { get; set; } = "";
 }
 
 public class ActiveTechSummary

@@ -279,23 +279,22 @@ public partial class ProjectDashboardControl : UserControl
         if (d.RecentEntries.Any())
         {
             pnlContent.Children.Add(SectionTitle("Ultime Registrazioni"));
-
             Border tsCard = MakeCard();
             StackPanel tsPanel = new();
 
-            // Header
             Grid tsHeader = new() { Margin = new Thickness(0, 0, 0, 6) };
             tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
             tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+            tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
             tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
             tsHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-
             AddHdrCell(tsHeader, 0, "DATA");
             AddHdrCell(tsHeader, 1, "TECNICO");
-            AddHdrCell(tsHeader, 2, "FASE");
-            AddHdrCell(tsHeader, 3, "ORE");
-            AddHdrCell(tsHeader, 4, "TIPO");
+            AddHdrCell(tsHeader, 2, "NOTE");
+            AddHdrCell(tsHeader, 3, "FASE");
+            AddHdrCell(tsHeader, 4, "ORE");
+            AddHdrCell(tsHeader, 5, "TIPO");
             tsPanel.Children.Add(tsHeader);
 
             foreach (RecentTimesheetEntry entry in d.RecentEntries)
@@ -307,15 +306,16 @@ public partial class ProjectDashboardControl : UserControl
                 };
                 tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
                 tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+                tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
                 tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
                 tsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-
                 AddCell(tsRow, 0, entry.WorkDate.ToString("dd/MM"));
                 AddCell(tsRow, 1, entry.EmployeeName);
-                AddCell(tsRow, 2, entry.PhaseName);
-                AddCell(tsRow, 3, $"{entry.Hours:N1}", FontWeights.SemiBold);
-                AddCell(tsRow, 4, entry.EntryType, FontWeights.Normal, "#6B7280");
+                AddCell(tsRow, 2, entry.Notes, FontWeights.Normal, "#9CA3AF");
+                AddCell(tsRow, 3, entry.PhaseName);
+                AddCell(tsRow, 4, $"{entry.Hours:N1}", FontWeights.SemiBold);
+                AddCell(tsRow, 5, entry.EntryType, FontWeights.Normal, "#6B7280");
                 tsPanel.Children.Add(tsRow);
             }
 
