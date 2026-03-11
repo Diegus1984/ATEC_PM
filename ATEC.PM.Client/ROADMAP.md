@@ -6,7 +6,7 @@
 - **Shared**: .NET 8 Class Library
 - **Database**: MySQL (XAMPP) con Dapper ORM
 - **Auth**: JWT Bearer token
-- **Grafici**: LiveChartsCore.SkiaSharpView.WPF (LiveCharts2)
+- **Grafici**: OxyPlot.Wpf 2.2 (migrato da LiveCharts2)
 - **GitHub**: github.com/Diegus1984/ATEC_PM
 
 ---
@@ -125,24 +125,91 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Colori celle (verde editabile #92D050, giallo calcolato #FFE699) | ✅ | Via CellColor + RowTypeToBgConverter |
 | Rosso valori negativi | ✅ | CellForegroundConverter |
 | Cap % a 100% | ✅ | Automatico nel Recalculate |
-| Grafico LiveCharts2 | ✅ | Barre entrate/uscite + linea saldo cumulativo |
-| Grafico allineato a colonne griglia | ✅ | Margin calcolato da LayoutUpdated |
-| Scala Y dinamica | ✅ | MinStep auto-calcolato dai dati |
+| Grafico OxyPlot | ✅ | Barre entrate/uscite (RectangleBarSeries) + linea saldo (LineSeries) |
+| Annotazioni valori sulle barre | ✅ | TextAnnotation sopra/sotto barre con importi |
 | DB: 3 tabelle compatte | ✅ | project_cashflow, project_cashflow_categories, project_cashflow_data |
 | Endpoint unico PUT data (upsert generico) | ✅ | data_type: INCOME_PCT, ADJUSTMENT, CAT_PCT, BANK, SCHEDULE |
 
+### 5c. Codex — Sync DB Remoto ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Tabella `codex_items` (clone locale) | ✅ | 22 colonne, indici su codice/fornitore/categoria |
+| `CodexSyncService` (BackgroundService) | ✅ | Sync all'avvio + schedulato ogni 6h + manuale |
+| `CodexController` | ✅ | GET lista, GET dettaglio, POST sync, GET sync-status |
+| `CodexPage` WPF | ✅ | DataGrid 21 filtri, popup "Seleziona colonne", preferenze JSON locale |
+| Encoding fix | ✅ | ConvertZeroDateTime + CharacterSet latin1/utf8mb4 |
+| Connessione remota | ✅ | SERVER-CODEX:3306, ConnectionTimeout=60 |
+
+### 5d. Catalogo Articoli — Miglioramenti ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Popup "Seleziona colonne" | ✅ | Stesso pattern CodexPage, preferenze in catalog_columns.json |
+| Filtro su Categoria aggiunto | ✅ | TextBox header come le altre colonne |
+
 ---
 
-## Blocco 6 — Prossimi Step
+## Blocco 6 — Sistema Notifiche & Dashboard ✅ COMPLETATO
+
+### 6a. Infrastruttura Notifiche ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Tabella `notifications` + `notification_recipients` | ✅ | Approccio B: 1 messaggio + N destinatari con is_read/read_at |
+| `NotificationsController` | ✅ | GET unread, GET all, GET badge, PUT read, PUT read-all, DELETE |
+| `NotificationService` (helper creazione) | ✅ | Create(), GetProjectPmIds(), GetAcqEmployeeIds() |
+| `NotificationBackgroundService` | ✅ | Check scadenze DDP ogni 6h + pulizia retention |
+| Trigger DDP_STATUS_CHANGED | ✅ | PUT ddp/{id} → confronta vecchio/nuovo stato → notifica PM+ACQ |
+| Trigger PHASE_ASSIGNED | ✅ | AddAssignment + SaveAssignments → notifica tecnico assegnato |
+| DdpStatusMap condiviso | ✅ | Classe statica in Bom_DTOs.cs, usata da server e client |
+| Claim fix ClaimTypes.NameIdentifier | ✅ | Corretto in NotificationsController, ProjectsController, PhasesController, ChatController |
+| Retention configurabile | ✅ | appsettings.json → Notifications:RetentionReadDays/RetentionUnreadDays |
+
+### 6b. Dashboard PM con Notifiche ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| KPI cards | ✅ | Commesse attive, ore settimana/mese, ricavo totale |
+| DataGrid alarm list stile VisiWin | ✅ | 4 severità colorate: ALARM rosso, WARNING arancio, INFO blu, SUCCESS verde |
+| Colonne: Icona, Data/Ora, Operatore, Commessa, Tipo, Titolo, Messaggio, Articolo, Letto | ✅ | Messaggi in italiano |
+| Righe lette → opacity 55% | ✅ | DataTrigger su IsRead |
+| Checkbox "Solo non lette" | ✅ | Default attivo |
+| Pulsante "Segna tutte lette" | ✅ | PUT read-all + refresh |
+| Bottone "→ Vai" per navigazione | ✅ | Click → naviga alla DDP della commessa nel TreeView |
+| Polling notifiche ogni 30s | ✅ | DispatcherTimer nella DashboardPage |
+| Badge contatore sidebar | ✅ | Cerchio rosso su voce Dashboard, polling 60s |
+| Commesse recenti | ✅ | DataGrid con codice, titolo, cliente, stato, ore |
+
+### 6c. Tipi Notifica implementati
+
+| Tipo | Severità | Destinatario | Trigger |
+|---|---|---|---|
+| `DDP_STATUS_CHANGED` | INFO/SUCCESS/WARNING | PM + ACQ (escluso chi modifica) | Cambio stato articolo DDP |
+| `DDP_OVERDUE` | ALARM | PM + ACQ | Background: date_needed < oggi, stato ≠ DELIVERED/CANCELLED |
+| `PHASE_ASSIGNED` | INFO | Tecnico assegnato | Assegnazione fase (singola e bulk) |
+
+### 6d. Migrazione Grafici ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| LiveCharts2 → OxyPlot.Wpf 2.2 | ✅ | Rimosso SkiaSharp, rendering molto più veloce |
+| RectangleBarSeries (barre verticali) | ✅ | Entrate verde + Uscite rosso |
+| LineSeries (saldo cumulativo) | ✅ | Linea blu con marker |
+| TextAnnotation valori sulle barre | ✅ | Importi visibili sopra/sotto barre |
+| Tracker tooltip su linea | ✅ | "Saldo cumulativo: N €" |
+
+---
+
+## Blocco 7 — Prossimi Step
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Dashboard principale | ❌ | MEDIA | KPI commesse, ore, costi, stato avanzamento |
+| Notifica TIMESHEET_ANOMALY | ❌ | ALTA | Ore giornaliere > 10h, fase sfora budget > 150% |
 | Export Excel preventivo | ❌ | MEDIA | EPPlus, formato standard ATEC |
 | Export PDF offerta | ❌ | MEDIA | Documento offerta cliente |
-| Separazione ruoli ADMIN/PM vs TECH | ❌ | MEDIA | Menu/pagine visibili per ruolo |
 | Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
-| Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze, ore eccessive |
+| Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze via email |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
 
 ---
@@ -155,7 +222,7 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
   ├── ⚙ Configura Commessa       → ProjectCostingControl (risorse + materiali + scheda prezzi)
   ├── Fasi e Avanzamento          → PhasesManagementControl
   ├── 📊 Preventivo vs Consuntivo → BudgetVsActualControl
-  ├── 💰 Flusso di Cassa          → CashFlowControl (griglia Excel + grafico)
+  ├── 💰 Flusso di Cassa          → CashFlowControl (griglia Excel + grafico OxyPlot)
   ├── 💬 Chat                     → ProjectChatControl
   ├── 📋 DDP Commerciali          → DdpCommercialControl
   └── 📁 Documenti                → DocumentManagerControl (lazy-load, preview)
@@ -184,11 +251,22 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 - `project_pricing` = percentuali scheda prezzi + K trasferta/indennità
 - Trasferte: costo ore nella sezione risorse (K risorsa), spese viaggio/alloggio/indennità nella sezione materiali (K dedicato)
 
+### Notifiche
+- `notifications` = messaggio unico (type, severity, title, message, reference_type/id, project_id, created_by)
+- `notification_recipients` = N destinatari per notifica (employee_id, is_read, read_at)
+- Retention: lette dopo 5gg, non lette dopo 30gg (configurabile in appsettings.json)
+- Destinatari: PM commessa + ruoli ADMIN/PM + reparto ACQ (escluso chi genera la notifica)
+
 ### Flusso Cassa
 - `project_cashflow` = testata (payment_amount, month_count)
 - `project_cashflow_categories` = categorie fornitore CRUD
 - `project_cashflow_data` = unica tabella per tutti i valori mensili (data_type + ref_id + month_number)
 - Catena: timesheet_entries → project_phases → projects (no project_id diretto su timbrature)
+
+### Codex
+- `codex_items` = clone locale di SERVER-CODEX:codex.codici
+- Sync: all'avvio (delay 5s) + ogni 6h + manuale via POST /api/codex/sync
+- Encoding: latin1/utf8mb4 + ConvertZeroDateTime
 
 ### Calcolo Prezzo
 ```
@@ -220,13 +298,25 @@ Views/Costing/
              CostResourceVM.cs, MaterialSectionVM.cs, MaterialItemVM.cs
 
 Views/CashFlow/
-  CashFlowControl.xaml/.cs          ← Griglia tipo Excel + grafico LiveCharts2
+  CashFlowControl.xaml/.cs          ← Griglia tipo Excel + grafico OxyPlot
   VM/CashFlowViewModel.cs           ← CfGridRow, CfRowType, Recalculate(), BuildChart()
   Converters/CashFlowConverters.cs  ← NegativeToBrush, RowTypeToBg, SepValue, InvertBool, IntAmount, CellForeground
 
 Views/BudgetVsCosting/
   BudgetVsActualControl.xaml/.cs
   ViewModels/BvaCostingVM.cs
+
+Views/Codex/
+  CodexPage.xaml/.cs                ← DataGrid 21 filtri + popup colonne + sync status
+
+Views/DashboardPage.xaml/.cs        ← KPI + alarm list notifiche + commesse recenti
+
+Services/
+  NotificationService.cs            ← Create() + NotificationBackgroundService (scadenze + retention)
+  CodexSyncService.cs               ← Sync DB remoto SERVER-CODEX
+
+Shared/DTOs/
+  DdpStatusMap                      ← Mappa stati DDP condivisa server/client (in Bom_DTOs.cs)
 ```
 
 ---
@@ -240,8 +330,11 @@ Views/BudgetVsCosting/
 - **Expander Content**: un solo figlio — usare StackPanel wrapper se servono più elementi
 - **Naming conflicts**: `System.IO.File` vs `ControllerBase.File()` → fully qualified
 - **DataGrid edit diretto**: TextBox nel CellTemplate con IsReadOnly bindato, niente CellEditingTemplate
-- **DataGrid refresh senza flash**: `decimal[]` con `Items.Refresh()` via Dispatcher, oppure senza Refresh se binding sufficiente
-- **LiveCharts2 YAxis**: MinStep, MinLimit, MaxLimit settabili solo da codice C#, non da XAML
-- **Grafico allineamento**: Margin calcolato da `LayoutUpdated` della DataGrid, con DrawMargin per asse Y
-- **StringFormat + ConvertBack**: StringFormat=N0 impedisce ConvertBack su TextBox — usare Converter dedicato (IntegerAmountConverter)
+- **DataGrid refresh senza flash**: `decimal[]` con `Items.Refresh()` via Dispatcher
+- **OxyPlot**: RectangleBarSeries per barre verticali, TrackerFormatString su LineSeries, TextAnnotation per valori fissi
+- **OxyPlot tracker**: RectangleBarSeries non supporta tracker standard — usare TextAnnotation
+- **JWT Claims**: usare `ClaimTypes.NameIdentifier` (non custom "employeeId") per GetCurrentEmployeeId()
+- **Codex encoding**: ConvertZeroDateTime=True + CharacterSet=latin1 nella connection string
+- **Column selector**: popup ToggleButton + Popup con CheckBox, preferenze in %AppData%/ATEC_PM/*.json
+- **Notifiche destinatari**: PM commessa + user_role IN ('ADMIN','PM') + reparto ACQ — Remove(currentEmpId)
 - **L'utente comunica in italiano**

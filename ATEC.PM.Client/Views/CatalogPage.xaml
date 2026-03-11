@@ -5,7 +5,7 @@
     Background="#F7F8FA">
 
     <DockPanel>
-        <!-- TOOLBAR -->
+        <!--  TOOLBAR  -->
         <Border
             Padding="16,10"
             Background="White"
@@ -36,7 +36,10 @@
                         Foreground="#B42318"
                         IsEnabled="False"
                         Style="{StaticResource FlatBtn}" />
-                    <Separator Width="1" Margin="4,0" Background="#E4E7EC" />
+                    <Separator
+                        Width="1"
+                        Margin="4,0"
+                        Background="#E4E7EC" />
                     <Button
                         Background="#12B76A"
                         Click="BtnImportEasyfatt_Click"
@@ -45,16 +48,25 @@
                         Style="{StaticResource FlatBtn}" />
                 </StackPanel>
 
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
-                    <!-- COLUMN SELECTOR -->
-                    <ToggleButton x:Name="btnColumnToggle" Margin="0,0,8,0" Style="{StaticResource ColumnSelectorToggle}" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <!--  COLUMN SELECTOR  -->
+                    <ToggleButton
+                        x:Name="btnColumnToggle"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource ColumnSelectorToggle}" />
                     <Popup
                         AllowsTransparency="True"
                         IsOpen="{Binding IsChecked, ElementName=btnColumnToggle}"
                         Placement="Bottom"
                         PlacementTarget="{Binding ElementName=btnColumnToggle}"
                         StaysOpen="False">
-                        <Border x:Name="popBorder" Style="{StaticResource ColumnSelectorPopup}" RenderTransformOrigin="0.5,0">
+                        <Border
+                            x:Name="popBorder"
+                            RenderTransformOrigin="0.5,0"
+                            Style="{StaticResource ColumnSelectorPopup}">
                             <Border.RenderTransform>
                                 <TranslateTransform x:Name="popTranslate" Y="-8" />
                             </Border.RenderTransform>
@@ -65,7 +77,8 @@
                                             <DoubleAnimation
                                                 Storyboard.TargetName="popBorder"
                                                 Storyboard.TargetProperty="Opacity"
-                                                From="0" To="1"
+                                                From="0"
+                                                To="1"
                                                 Duration="0:0:0.2">
                                                 <DoubleAnimation.EasingFunction>
                                                     <CubicEase EasingMode="EaseOut" />
@@ -74,7 +87,8 @@
                                             <DoubleAnimation
                                                 Storyboard.TargetName="popTranslate"
                                                 Storyboard.TargetProperty="Y"
-                                                From="-8" To="0"
+                                                From="-8"
+                                                To="0"
                                                 Duration="0:0:0.2">
                                                 <DoubleAnimation.EasingFunction>
                                                     <CubicEase EasingMode="EaseOut" />
@@ -88,7 +102,10 @@
                         </Border>
                     </Popup>
 
-                    <Separator Width="1" Margin="4,0" Background="#E4E7EC" />
+                    <Separator
+                        Width="1"
+                        Margin="4,0"
+                        Background="#E4E7EC" />
 
                     <Button
                         Background="Transparent"
@@ -105,7 +122,7 @@
             </DockPanel>
         </Border>
 
-        <!-- STATUS BAR -->
+        <!--  STATUS BAR  -->
         <Border
             Padding="16,6"
             Background="White"
@@ -119,7 +136,7 @@
                 Text="Pronto" />
         </Border>
 
-        <!-- DATAGRID -->
+        <!--  DATAGRID  -->
         <DataGrid
             x:Name="dgCatalog"
             Margin="16"
@@ -131,44 +148,80 @@
             Style="{StaticResource ModernDataGrid}">
 
             <DataGrid.Columns>
-                <DataGridTemplateColumn x:Name="colCode" Width="*" MinWidth="100">
+                <DataGridTemplateColumn
+                    x:Name="colCode"
+                    Width="*"
+                    MinWidth="100">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Codice" />
-                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Code" TextChanged="Filter_Changed" />
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Codice" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Code"
+                                    TextChanged="Filter_Changed" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding Code}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontWeight="Medium"
+                                Text="{Binding Code}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colDescription" Width="2*" MinWidth="200">
+                <DataGridTemplateColumn
+                    x:Name="colDescription"
+                    Width="2*"
+                    MinWidth="200">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Descrizione" />
-                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Desc" TextChanged="Filter_Changed" />
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Descrizione" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Desc"
+                                    TextChanged="Filter_Changed" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" Text="{Binding Description}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Text="{Binding Description}"
+                                TextTrimming="CharacterEllipsis" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colSupplier" Width="*" MinWidth="120">
+                <DataGridTemplateColumn
+                    x:Name="colSupplier"
+                    Width="*"
+                    MinWidth="120">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Fornitore" />
-                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Supp" TextChanged="Filter_Changed" />
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Fornitore" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Supp"
+                                    TextChanged="Filter_Changed" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
@@ -179,12 +232,22 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colManufacturer" Width="*" MinWidth="120">
+                <DataGridTemplateColumn
+                    x:Name="colManufacturer"
+                    Width="*"
+                    MinWidth="120">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Produttore" />
-                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Man" TextChanged="Filter_Changed" />
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Produttore" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Man"
+                                    TextChanged="Filter_Changed" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
@@ -195,12 +258,22 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colCategory" Width="*" MinWidth="100">
+                <DataGridTemplateColumn
+                    x:Name="colCategory"
+                    Width="*"
+                    MinWidth="100">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <StackPanel>
-                                <TextBlock FontWeight="Bold" Foreground="#667085" Text="Categoria" />
-                                <TextBox Loaded="Filter_Loaded" Style="{StaticResource HeaderSearchBox}" Tag="Cat" TextChanged="Filter_Changed" />
+                                <TextBlock
+                                    FontWeight="Bold"
+                                    Foreground="#667085"
+                                    Text="Categoria" />
+                                <TextBox
+                                    Loaded="Filter_Loaded"
+                                    Style="{StaticResource HeaderSearchBox}"
+                                    Tag="Cat"
+                                    TextChanged="Filter_Changed" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
@@ -211,10 +284,17 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colUnit" Width="0.5*" MinWidth="50">
+                <DataGridTemplateColumn
+                    x:Name="colUnit"
+                    Width="0.5*"
+                    MinWidth="50">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock FontWeight="Bold" Foreground="#667085" Text="UdM" Margin="0,0,0,30" />
+                            <TextBlock
+                                Margin="0,0,0,30"
+                                FontWeight="Bold"
+                                Foreground="#667085"
+                                Text="UdM" />
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
                     <DataGridTemplateColumn.CellTemplate>
@@ -224,30 +304,50 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colUnitCost" Width="*" MinWidth="80">
+                <DataGridTemplateColumn
+                    x:Name="colUnitCost"
+                    Width="*"
+                    MinWidth="80">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock FontWeight="Bold" Foreground="#667085" Text="Acquisto" Margin="0,0,0,30" />
+                            <TextBlock
+                                Margin="0,0,0,30"
+                                FontWeight="Bold"
+                                Foreground="#667085"
+                                Text="Acquisto" />
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Text="{Binding UnitCost, StringFormat='{}{0:N2} €'}" />
+                            <TextBlock
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Text="{Binding UnitCost, StringFormat='{}{0:N2} €'}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn x:Name="colListPrice" Width="*" MinWidth="80">
+                <DataGridTemplateColumn
+                    x:Name="colListPrice"
+                    Width="*"
+                    MinWidth="80">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock FontWeight="Bold" Foreground="#667085" Text="Listino" Margin="0,0,0,30" />
+                            <TextBlock
+                                Margin="0,0,0,30"
+                                FontWeight="Bold"
+                                Foreground="#667085"
+                                Text="Listino" />
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"
-                                       Text="{Binding ListPrice, StringFormat='{}{0:N2} €'}" />
+                            <TextBlock
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Text="{Binding ListPrice, StringFormat='{}{0:N2} €'}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
