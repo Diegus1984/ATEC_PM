@@ -90,9 +90,31 @@
                         Text="PRINCIPALE" />
                     <Button
                         Click="Nav_Click"
-                        Content="  Dashboard"
                         Style="{StaticResource NavBtn}"
-                        Tag="Dashboard" />
+                        Tag="Dashboard">
+                        <Grid>
+                            <TextBlock Text="  Dashboard" VerticalAlignment="Center" />
+                            <Border
+                                x:Name="badgeNotif"
+                                MinWidth="18"
+                                Height="18"
+                                Margin="0,0,0,0"
+                                Padding="4,0"
+                                HorizontalAlignment="Right"
+                                Background="#DC2626"
+                                CornerRadius="9"
+                                Visibility="Collapsed">
+                                <TextBlock
+                                    x:Name="txtBadgeCount"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="Bold"
+                                    Foreground="White"
+                                    Text="0" />
+                            </Border>
+                        </Grid>
+                    </Button>
                     <Button
                         Click="Nav_Click"
                         Content="  Commesse"

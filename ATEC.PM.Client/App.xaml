@@ -12,6 +12,7 @@
                 <ResourceDictionary Source="/Resources/Converters.xaml" />
                 <ResourceDictionary Source="/Resources/ExpanderStyles.xaml" />
                 <ResourceDictionary Source="/Resources/TreeviewStyles.xaml" />
+                <ResourceDictionary Source="/Resources/ComboStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

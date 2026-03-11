@@ -7,5 +7,5 @@
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:BoolToOpacityConverter x:Key="BoolToOpacity" />
     <conv:StringToVisibilityConverter x:Key="StringToVisibility" />
-
+    <conv:CodiceFormatConverter x:Key="CodiceFormatConverter" />
 </ResourceDictionary>

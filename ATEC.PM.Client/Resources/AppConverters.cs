@@ -13,23 +13,23 @@ public class StatusToDisplayConverter : IValueConverter
     {
         return (value?.ToString() ?? "") switch
         {
-            "ACTIVE"       => "Attivo",
-            "ON_LEAVE"     => "In ferie",
-            "SICK"         => "Malattia",
-            "TERMINATED"   => "Terminato",
-            "DRAFT"        => "Bozza",
-            "OPEN"         => "Aperta",
-            "IN_PROGRESS"  => "In corso",
-            "COMPLETED"    => "Completata",
-            "CANCELLED"    => "Annullata",
-            "NOT_STARTED"  => "Non iniziata",
-            "INTERNAL"     => "Interno",
-            "EXTERNAL"     => "Esterno",
-            "ADMIN"        => "Amministratore",
-            "PM"           => "Project Manager",
+            "ACTIVE" => "Attivo",
+            "ON_LEAVE" => "In ferie",
+            "SICK" => "Malattia",
+            "TERMINATED" => "Terminato",
+            "DRAFT" => "Bozza",
+            "OPEN" => "Aperta",
+            "IN_PROGRESS" => "In corso",
+            "COMPLETED" => "Completata",
+            "CANCELLED" => "Annullata",
+            "NOT_STARTED" => "Non iniziata",
+            "INTERNAL" => "Interno",
+            "EXTERNAL" => "Esterno",
+            "ADMIN" => "Amministratore",
+            "PM" => "Project Manager",
             "RESP_REPARTO" => "Resp. Reparto",
-            "TECH"         => "Tecnico",
-            var s          => s
+            "TECH" => "Tecnico",
+            var s => s
         };
     }
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -71,4 +71,19 @@ public class StringToVisibilityConverter : IValueConverter
         => string.IsNullOrEmpty(value?.ToString()) ? Visibility.Collapsed : Visibility.Visible;
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
+}
+
+//formattazione codice in ingresso da codex per gestione codex e ddp meccanica
+public class CodiceFormatConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        string s = value?.ToString() ?? "";
+        if (s.Length > 3)
+            return s[..^3] + "." + s[^3..];
+        return s;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

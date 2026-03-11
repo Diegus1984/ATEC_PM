@@ -411,6 +411,35 @@ public class DbService
                 ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
         }
 
+        // ── NOTIFICHE ────────────────────────────────────────────
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            notification_type VARCHAR(30) NOT NULL,
+            severity VARCHAR(10) NOT NULL DEFAULT 'INFO',
+            title VARCHAR(200) NOT NULL,
+            message VARCHAR(500) NOT NULL DEFAULT '',
+            reference_type VARCHAR(20) NOT NULL DEFAULT '',
+            reference_id INT NOT NULL DEFAULT 0,
+            project_id INT NULL,
+            created_by INT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_type (notification_type),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS notification_recipients (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            notification_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            read_at DATETIME NULL,
+            FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            INDEX idx_emp_unread (employee_id, is_read),
+            INDEX idx_notif (notification_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ── CODEX (clone DB remoto SERVER-CODEX) ────────────────
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (

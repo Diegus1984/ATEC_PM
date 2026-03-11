@@ -1,0 +1,156 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--  CODEX COLUMN SELECTOR POPUP STYLE  -->
+    <Style x:Key="ColumnSelectorToggle" TargetType="ToggleButton">
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="#D0D5DD" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border
+                        x:Name="bd"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        SnapsToDevicePixels="True">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#344054"
+                                Text="Seleziona colonne" />
+                            <TextBlock
+                                x:Name="arrow"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                FontSize="10"
+                                Foreground="#98A2B3"
+                                RenderTransformOrigin="0.5,0.5"
+                                Text="▼">
+                                <TextBlock.RenderTransform>
+                                    <RotateTransform x:Name="arrowRotate" Angle="0" />
+                                </TextBlock.RenderTransform>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="#4F6EF7" />
+                            <Setter TargetName="bd" Property="Background" Value="#F5F7FF" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="#4F6EF7" />
+                            <Setter TargetName="bd" Property="Background" Value="#EEF1FF" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="arrowRotate"
+                                            Storyboard.TargetProperty="Angle"
+                                            To="180"
+                                            Duration="0:0:1">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="arrowRotate"
+                                            Storyboard.TargetProperty="Angle"
+                                            To="0"
+                                            Duration="0:0:1">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  CODEX POPUP BORDER STYLE  -->
+    <Style x:Key="ColumnSelectorPopup" TargetType="Border">
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="#E4E7EC" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="MinWidth" Value="200" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect
+                BlurRadius="12"
+                Direction="270"
+                Opacity="0.15"
+                ShadowDepth="4"
+                Color="#000000" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  CODEX COLUMN CHECKBOX STYLE  -->
+    <Style x:Key="ColumnCheckBox" TargetType="CheckBox">
+        <Setter Property="Margin" Value="4,3" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="#344054" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border
+                        x:Name="row"
+                        Padding="{TemplateBinding Padding}"
+                        Background="Transparent">
+                        <StackPanel Orientation="Horizontal">
+                            <Border
+                                x:Name="box"
+                                Width="16"
+                                Height="16"
+                                Background="White"
+                                BorderBrush="#D0D5DD"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True">
+                                <TextBlock
+                                    x:Name="tick"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="White"
+                                    Text="✓"
+                                    Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                RecognizesAccessKey="True" />
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="box" Property="Background" Value="#4F6EF7" />
+                            <Setter TargetName="box" Property="BorderBrush" Value="#4F6EF7" />
+                            <Setter TargetName="tick" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="row" Property="Background" Value="#F5F7FF" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -20,16 +21,146 @@ public partial class CodexPage : Page
     private DispatcherTimer? _syncTimer;
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
 
+    // Mappa colonna → (x:Name, label per checkbox)
+    private readonly List<(string Key, string Label, DataGridColumn Column)> _columnDefs = new();
+    private Dictionary<string, bool> _columnVisibility = new();
+    private bool _suppressSave = false;
+
+    private static string SettingsPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "ATEC_PM", "codex_columns.json");
+
     public CodexPage()
     {
         InitializeComponent();
+        InitColumnDefs();
+        LoadColumnSettings();
+        BuildColumnCheckboxes();
+
         Loaded += async (_, _) =>
         {
             await LoadSyncStatus();
             await Load();
+            btnColumnToggle.Unchecked += (_, _) => { }; // Popup si chiude da solo con StaysOpen=False
         };
         Unloaded += (_, _) => _syncTimer?.Stop();
     }
+
+    // ── COLUMN VISIBILITY ─────────────────────────────────────────
+
+    private void InitColumnDefs()
+    {
+        _columnDefs.Add(("Codice", "Codice", colCodice));
+        _columnDefs.Add(("Descr", "Descrizione", colDescr));
+        _columnDefs.Add(("CodeForn", "Cod. Forn.", colCodeForn));
+        _columnDefs.Add(("Fornitore", "Fornitore", colFornitore));
+        _columnDefs.Add(("PrezzoForn", "Prezzo €", colPrezzoForn));
+        _columnDefs.Add(("Iva", "IVA", colIva));
+        _columnDefs.Add(("Produttore", "Produttore", colProduttore));
+        _columnDefs.Add(("Data", "Data", colData));
+        _columnDefs.Add(("Categoria", "Categoria", colCategoria));
+        _columnDefs.Add(("Barcode", "Barcode", colBarcode));
+        _columnDefs.Add(("Tipologia", "Tipologia", colTipologia));
+        _columnDefs.Add(("Extra1", "Extra1", colExtra1));
+        _columnDefs.Add(("Extra2", "Extra2", colExtra2));
+        _columnDefs.Add(("Extra3", "Extra3", colExtra3));
+        _columnDefs.Add(("CodeProd", "Cod. Prod.", colCodeProd));
+        _columnDefs.Add(("Spec", "Spec", colSpec));
+        _columnDefs.Add(("Oper", "Oper", colOper));
+        _columnDefs.Add(("Um", "UM", colUm));
+        _columnDefs.Add(("Ubicazione", "Ubicazione", colUbicazione));
+        _columnDefs.Add(("Codexforn", "Codex Forn.", colCodexforn));
+        _columnDefs.Add(("Note", "Note", colNote));
+    }
+
+    private void LoadColumnSettings()
+    {
+        // Default: colonne principali visibili, extra nascoste
+        HashSet<string> defaultHidden = new()
+        {
+            "Barcode", "Extra1", "Extra2", "Extra3", "Spec", "Oper", "Codexforn"
+        };
+
+        _columnVisibility = _columnDefs.ToDictionary(
+            c => c.Key,
+            c => !defaultHidden.Contains(c.Key));
+
+        try
+        {
+            if (File.Exists(SettingsPath))
+            {
+                string json = File.ReadAllText(SettingsPath);
+                var saved = JsonSerializer.Deserialize<Dictionary<string, bool>>(json);
+                if (saved != null)
+                {
+                    foreach (var kv in saved)
+                    {
+                        if (_columnVisibility.ContainsKey(kv.Key))
+                            _columnVisibility[kv.Key] = kv.Value;
+                    }
+                }
+            }
+        }
+        catch { /* ignora file corrotto, usa default */ }
+
+        ApplyColumnVisibility();
+    }
+
+    private void SaveColumnSettings()
+    {
+        try
+        {
+            string dir = Path.GetDirectoryName(SettingsPath)!;
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            string json = JsonSerializer.Serialize(_columnVisibility, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(SettingsPath, json);
+        }
+        catch { /* silenzioso */ }
+    }
+
+    private void BuildColumnCheckboxes()
+    {
+        _suppressSave = true;
+        wpColumns.Children.Clear();
+
+        foreach (var (key, label, _) in _columnDefs)
+        {
+            var cb = new CheckBox
+            {
+                Content = label,
+                IsChecked = _columnVisibility.GetValueOrDefault(key, true),
+                Tag = key,
+                Style = (Style)FindResource("ColumnCheckBox")
+            };
+            cb.Checked += ColumnCheckbox_Changed;
+            cb.Unchecked += ColumnCheckbox_Changed;
+            wpColumns.Children.Add(cb);
+        }
+
+        _suppressSave = false;
+    }
+
+    private void ColumnCheckbox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSave) return;
+        if (sender is CheckBox cb && cb.Tag is string key)
+        {
+            _columnVisibility[key] = cb.IsChecked == true;
+            ApplyColumnVisibility();
+            SaveColumnSettings();
+        }
+    }
+
+    private void ApplyColumnVisibility()
+    {
+        foreach (var (key, _, col) in _columnDefs)
+        {
+            bool visible = _columnVisibility.GetValueOrDefault(key, true);
+            col.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    // ── LOAD DATA ─────────────────────────────────────────────────
 
     private async Task Load()
     {
@@ -59,11 +190,9 @@ public partial class CodexPage : Page
             string json = await ApiClient.GetAsync("/api/codex/sync-status");
             var response = JsonSerializer.Deserialize<ApiResponse<CodexSyncStatus>>(json, _jsonOpt);
             if (response?.Success == true && response.Data != null)
-            {
                 UpdateSyncStatusUI(response.Data);
-            }
         }
-        catch { /* ignora */ }
+        catch { }
     }
 
     private void UpdateSyncStatusUI(CodexSyncStatus s)
@@ -109,7 +238,6 @@ public partial class CodexPage : Page
         _syncTimer.Tick += async (_, _) =>
         {
             await LoadSyncStatus();
-            // Se non sta più sincronizzando, ricarica i dati
             if (btnSync.IsEnabled)
             {
                 _syncTimer.Stop();
@@ -140,22 +268,60 @@ public partial class CodexPage : Page
         catch (TaskCanceledException) { }
     }
 
+    private string F(string tag) =>
+        _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
+
+    private static bool Match(string? value, string filter) =>
+        string.IsNullOrEmpty(filter) || (value?.ToLower().Contains(filter) ?? false);
+
     private void ApplyFilter()
     {
         if (_allItems == null) return;
 
-        string fCodice = _filterBoxes.GetValueOrDefault("Codice")?.Text.Trim().ToLower() ?? "";
-        string fDescr = _filterBoxes.GetValueOrDefault("Descr")?.Text.Trim().ToLower() ?? "";
-        string fForn = _filterBoxes.GetValueOrDefault("Fornitore")?.Text.Trim().ToLower() ?? "";
-        string fProd = _filterBoxes.GetValueOrDefault("Produttore")?.Text.Trim().ToLower() ?? "";
-        string fCat = _filterBoxes.GetValueOrDefault("Categoria")?.Text.Trim().ToLower() ?? "";
+        string fCodice = F("Codice");
+        string fDescr = F("Descr");
+        string fCodeForn = F("CodeForn");
+        string fFornitore = F("Fornitore");
+        string fPrezzoForn = F("PrezzoForn");
+        string fIva = F("Iva");
+        string fProduttore = F("Produttore");
+        string fData = F("Data");
+        string fCategoria = F("Categoria");
+        string fBarcode = F("Barcode");
+        string fTipologia = F("Tipologia");
+        string fExtra1 = F("Extra1");
+        string fExtra2 = F("Extra2");
+        string fExtra3 = F("Extra3");
+        string fCodeProd = F("CodeProd");
+        string fSpec = F("Spec");
+        string fOper = F("Oper");
+        string fUm = F("Um");
+        string fUbicazione = F("Ubicazione");
+        string fCodexforn = F("Codexforn");
+        string fNote = F("Note");
 
         var filtered = _allItems.Where(r =>
-            (string.IsNullOrEmpty(fCodice) || (r.Codice?.ToLower().Contains(fCodice) ?? false)) &&
-            (string.IsNullOrEmpty(fDescr) || (r.Descr?.ToLower().Contains(fDescr) ?? false)) &&
-            (string.IsNullOrEmpty(fForn) || (r.Fornitore?.ToLower().Contains(fForn) ?? false)) &&
-            (string.IsNullOrEmpty(fProd) || (r.Produttore?.ToLower().Contains(fProd) ?? false)) &&
-            (string.IsNullOrEmpty(fCat) || (r.Categoria?.ToLower().Contains(fCat) ?? false))
+            Match(r.Codice, fCodice) &&
+            Match(r.Descr, fDescr) &&
+            Match(r.CodeForn, fCodeForn) &&
+            Match(r.Fornitore, fFornitore) &&
+            Match(r.PrezzoForn.ToString("N2"), fPrezzoForn) &&
+            Match(r.Iva, fIva) &&
+            Match(r.Produttore, fProduttore) &&
+            Match(r.Data.ToString("dd/MM/yyyy"), fData) &&
+            Match(r.Categoria, fCategoria) &&
+            Match(r.Barcode, fBarcode) &&
+            Match(r.Tipologia, fTipologia) &&
+            Match(r.Extra1, fExtra1) &&
+            Match(r.Extra2, fExtra2) &&
+            Match(r.Extra3, fExtra3) &&
+            Match(r.CodeProd, fCodeProd) &&
+            Match(r.Spec, fSpec) &&
+            Match(r.Oper.ToString(), fOper) &&
+            Match(r.Um, fUm) &&
+            Match(r.Ubicazione, fUbicazione) &&
+            Match(r.Codexforn, fCodexforn) &&
+            Match(r.Note, fNote)
         ).ToList();
 
         dgCodex.ItemsSource = filtered;

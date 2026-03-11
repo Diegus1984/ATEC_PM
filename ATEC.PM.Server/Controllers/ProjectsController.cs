@@ -12,7 +12,11 @@ namespace ATEC.PM.Server.Controllers;
 public class ProjectsController : ControllerBase
 {
     private readonly DbService _db;
-    public ProjectsController(DbService db) => _db = db;
+    private readonly NotificationService _notif;
+    public ProjectsController(DbService db, NotificationService notif) { _db = db; _notif = notif; }
+
+    private int GetCurrentEmployeeId() =>
+        int.TryParse(User.FindFirst("employeeId")?.Value, out int id) ? id : 0;
 
     [HttpGet]
     public IActionResult GetAll()
@@ -718,6 +722,12 @@ public class ProjectsController : ControllerBase
         try
         {
             using var c = _db.Open();
+
+            // Leggi stato precedente per confronto
+            string? oldStatus = c.ExecuteScalar<string?>(
+                "SELECT item_status FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+
             req.Id = itemId;
             req.ProjectId = id;
             c.Execute(@"
@@ -726,6 +736,41 @@ public class ProjectsController : ControllerBase
                 danea_ref = @DaneaRef, date_needed = @DateNeeded,
                 destination = @Destination, notes = @Notes
             WHERE id = @Id AND project_id = @ProjectId", req);
+
+            // Trigger notifica se lo stato è cambiato
+            if (!string.IsNullOrEmpty(oldStatus) && oldStatus != req.ItemStatus)
+            {
+                try
+                {
+                    string partNum = c.ExecuteScalar<string?>(
+                        "SELECT part_number FROM bom_items WHERE id = @Id", new { Id = itemId }) ?? "";
+                    string projCode = c.ExecuteScalar<string?>(
+                        "SELECT code FROM projects WHERE id = @Id", new { Id = id }) ?? "";
+                    int currentEmpId = GetCurrentEmployeeId();
+                    string empName = c.ExecuteScalar<string?>(
+                        "SELECT CONCAT(first_name, ' ', last_name) FROM employees WHERE id = @Id",
+                        new { Id = currentEmpId }) ?? "Sistema";
+
+                    string severity = req.ItemStatus switch
+                    {
+                        "DELIVERED" => "SUCCESS",
+                        "CANCELLED" => "WARNING",
+                        "ORDERED" => "INFO",
+                        _ => "INFO"
+                    };
+
+                    string title = $"DDP {projCode} — Stato aggiornato";
+                    string msg = $"{partNum}: {oldStatus} → {req.ItemStatus} (da: {empName})";
+
+                    List<int> recipients = _notif.GetProjectPmIds(id);
+                    // Non notificare chi ha fatto la modifica
+                    recipients.Remove(currentEmpId);
+
+                    if (recipients.Count > 0)
+                        _notif.Create("DDP_STATUS_CHANGED", severity, title, msg, "BOM", itemId, id, currentEmpId, recipients);
+                }
+                catch { /* non bloccare l'update per errore notifica */ }
+            }
 
             return Ok(ApiResponse<bool>.Ok(true, "Aggiornato"));
         }

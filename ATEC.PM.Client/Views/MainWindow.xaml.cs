@@ -1,12 +1,17 @@
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
+using ATEC.PM.Client.Services;
 using ATEC.PM.Shared;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
 public partial class MainWindow : Window
 {
     private Button? _activeNavButton;
+    private DispatcherTimer? _badgeTimer;
 
     public MainWindow()
     {
@@ -19,6 +24,40 @@ public partial class MainWindow : Window
             : (App.UserFullName ?? "AT").Substring(0, Math.Min(2, (App.UserFullName ?? "").Length)).ToUpper();
 
         ApplySidebarPermissions();
+        StartBadgePolling();
+    }
+
+    private void StartBadgePolling()
+    {
+        _ = UpdateBadge();
+        _badgeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+        _badgeTimer.Tick += async (_, _) => await UpdateBadge();
+        _badgeTimer.Start();
+    }
+
+    private async Task UpdateBadge()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/notifications/badge");
+            var response = JsonSerializer.Deserialize<ApiResponse<NotificationBadge>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (response?.Success == true && response.Data != null)
+            {
+                int count = response.Data.UnreadCount;
+                if (count > 0)
+                {
+                    txtBadgeCount.Text = count > 99 ? "99+" : count.ToString();
+                    badgeNotif.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    badgeNotif.Visibility = Visibility.Collapsed;
+                }
+            }
+        }
+        catch { /* silenzioso — il server potrebbe non essere raggiungibile */ }
     }
 
     private void ApplySidebarPermissions()
