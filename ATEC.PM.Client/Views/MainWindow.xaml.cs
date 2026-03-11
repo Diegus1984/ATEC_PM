@@ -97,11 +97,13 @@ public partial class MainWindow : Window
         lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible ||
                                   btnReparti.Visibility == Visibility.Visible ||
                                   btnMaterialCat.Visibility == Visibility.Visible ||
-                                  btnCostSections.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
+                                  btnCostSections.Visibility == Visibility.Visible ||
+                                  btnDdpDest.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCostSections.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        btnDdpDest.Visibility = (u.IsPm || u.IsResponsible) ? Visibility.Visible : Visibility.Collapsed;
 
 
         // Nascondi label sezione se tutti i bottoni sono collassati
@@ -141,6 +143,7 @@ public partial class MainWindow : Window
             case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             case "Codex": PageContent.Navigate(new CodexPage()); break;
+            case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
             default: PageContent.Content = null; break;
         }
     }

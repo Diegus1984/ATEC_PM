@@ -205,6 +205,12 @@
                         Content="  Categorie Materiali"
                         Style="{StaticResource NavBtn}"
                         Tag="CategorieMateriali" />
+                    <Button
+                        x:Name="btnDdpDest"
+                        Click="Nav_Click"
+                        Content="  Destinazioni DDP"
+                        Style="{StaticResource NavBtn}"
+                        Tag="DestinazioniDdp" />
                     <!--  SESSIONE  -->
                     <TextBlock
                         Margin="12,24,0,8"
