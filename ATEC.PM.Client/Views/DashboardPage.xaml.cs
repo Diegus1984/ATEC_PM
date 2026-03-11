@@ -197,5 +197,24 @@ public partial class DashboardPage : Page
         _notifTimer.Tick += async (_, _) => await LoadNotifications();
         _notifTimer.Start();
     }
+
+    private async void BtnGoToReference_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        if (btn.DataContext is not NotificationListItem notif) return;
+
+        // Segna come letta
+        if (!notif.IsRead)
+        {
+            try { await ApiClient.PutAsync($"/api/notifications/{notif.Id}/read", "{}"); } catch { }
+        }
+
+        // Naviga alla commessa
+        if (notif.ProjectId.HasValue && notif.ProjectId > 0)
+        {
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            mainWindow?.NavigateToProject(notif.ProjectId.Value, notif.ReferenceType);
+        }
+    }
     // ── AZIONI NOTIFICHE ──────────────────────────────────────
 }

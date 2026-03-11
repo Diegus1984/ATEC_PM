@@ -91,11 +91,11 @@
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect
-                BlurRadius="12"
-                Direction="270"
-                Opacity="0.15"
-                ShadowDepth="4"
-                Color="#000000" />
+                    BlurRadius="12"
+                    Direction="270"
+                    Opacity="0.15"
+                    ShadowDepth="4"
+                    Color="#000000" />
             </Setter.Value>
         </Setter>
     </Style>

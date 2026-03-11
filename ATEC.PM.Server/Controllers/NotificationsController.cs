@@ -35,7 +35,7 @@ public class NotificationsController : ControllerBase
                    n.project_id AS ProjectId,
                    COALESCE(p.code, '') AS ProjectCode,
                    COALESCE(CONCAT(emp.first_name, ' ', emp.last_name), 'Sistema') AS CreatedByName,
-                   COALESCE(b.part_number, '') AS ReferenceLabel,
+                   COALESCE(CONCAT(b.part_number, ' - ', b.description), '') AS ReferenceLabel,
                    nr.is_read AS IsRead, nr.read_at AS ReadAt,
                    n.created_at AS CreatedAt
             FROM notification_recipients nr

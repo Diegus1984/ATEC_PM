@@ -10,14 +10,41 @@ public partial class ProjectsPage : Page
 
     private int _costingProjectId;
 
+    private int _pendingNavProjectId;
+
+    private string _pendingNavSection = "";
+
     public ProjectsPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await LoadTree();
+        Loaded += async (_, _) =>
+{
+    await LoadTree();
+    if (_pendingNavProjectId > 0)
+    {
+        int pid = _pendingNavProjectId;
+        string sec = _pendingNavSection;
+        _pendingNavProjectId = 0;
+        _pendingNavSection = "";
+
+        switch (sec)
+        {
+            case "ddp_commercial": ShowDdpCommercial(pid); break;
+            case "phases": ShowPhases(pid); break;
+            default: ShowDetails(pid); break;
+        }
+    }
+};
+    }
+
+    public void NavigateToSection(int projectId, string section)
+    {
+        _pendingNavProjectId = projectId;
+        _pendingNavSection = section;
     }
 
     private static System.Windows.Media.SolidColorBrush Brush(string hex) =>
-            new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+                new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
 
     private static string FormatSize(long bytes)
     {
@@ -42,7 +69,6 @@ public partial class ProjectsPage : Page
             _ => "📄"
         };
     }
-
     // === HELPERS ===
     private void AddField(StackPanel panel, string label, string? value)
     {
@@ -288,6 +314,24 @@ public partial class ProjectsPage : Page
             }
         }
     }
+    private void ShowBudgetVsActual(int projectId)
+    {
+        txtSectionTitle.Text = "Preventivo vs Consuntivo";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new BudgetVsCosting.BudgetVsActualControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
+    }
+
+    private void ShowCashFlow(int projectId)
+    {
+        txtSectionTitle.Text = "Flusso di Cassa";
+        btnAction.Visibility = Visibility.Collapsed;
+        var ctrl = new CashFlow.CashFlowControl();
+        SectionContent.Content = ctrl;
+        ctrl.Load(projectId);
+    }
+
     // === CHAT === 
     private void ShowChat(int projectId)
     {
@@ -627,24 +671,5 @@ public partial class ProjectsPage : Page
                 p.Title.ToLower().Contains(filter) ||
                 p.CustomerName.ToLower().Contains(filter)
             ).ToList());
-    }
-
-
-    private void ShowBudgetVsActual(int projectId)
-    {
-        txtSectionTitle.Text = "Preventivo vs Consuntivo";
-        btnAction.Visibility = Visibility.Collapsed;
-        var ctrl = new BudgetVsCosting.BudgetVsActualControl();
-        SectionContent.Content = ctrl;
-        ctrl.Load(projectId);
-    }
-
-    private void ShowCashFlow(int projectId)
-    {
-        txtSectionTitle.Text = "Flusso di Cassa";
-        btnAction.Visibility = Visibility.Collapsed;
-        var ctrl = new CashFlow.CashFlowControl();
-        SectionContent.Content = ctrl;
-        ctrl.Load(projectId);
     }
 }

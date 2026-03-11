@@ -60,6 +60,27 @@ public partial class MainWindow : Window
         catch { /* silenzioso — il server potrebbe non essere raggiungibile */ }
     }
 
+    public void NavigateToProject(int projectId, string referenceType = "")
+    {
+        txtPageTitle.Text = "Commesse";
+
+        if (_activeNavButton != null)
+            _activeNavButton.IsEnabled = true;
+        _activeNavButton = null;
+
+        string section = referenceType switch
+        {
+            "BOM" => "ddp_commercial",
+            "PHASE" => "phases",
+            "TIMESHEET" => "details",
+            _ => "details"
+        };
+
+        var projectsPage = new ProjectsPage();
+        PageContent.Navigate(projectsPage);
+        projectsPage.NavigateToSection(projectId, section);
+    }
+
     private void ApplySidebarPermissions()
     {
         var u = App.CurrentUser;
