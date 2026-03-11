@@ -65,6 +65,8 @@ builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 builder.Services.AddSingleton<CodexSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
+builder.Services.AddSingleton<DaneaSyncService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
 
 var app = builder.Build();
 
