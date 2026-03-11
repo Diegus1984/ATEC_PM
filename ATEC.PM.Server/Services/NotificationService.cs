@@ -45,7 +45,7 @@ public class NotificationService
             SELECT DISTINCT e.id FROM employees e
             WHERE e.status = 'ACTIVE' AND (
                 e.id = (SELECT pm_id FROM projects WHERE id = @Pid)
-                OR e.user_role = 'ADMIN'
+                OR e.user_role IN ('ADMIN', 'PM')
             )", new { Pid = projectId }).ToList();
     }
 

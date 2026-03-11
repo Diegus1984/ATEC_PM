@@ -15,28 +15,87 @@
         <StackPanel>
             <!--  STAT CARDS  -->
             <UniformGrid Margin="0,0,0,24" Columns="4">
-                <Border Margin="0,0,12,0" Padding="20" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Text="COMMESSE ATTIVE" />
-                        <TextBlock x:Name="txtActiveProjects" Margin="0,4,0,0" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Text="-" />
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="COMMESSE ATTIVE" />
+                        <TextBlock
+                            x:Name="txtActiveProjects"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Margin="0,0,12,0" Padding="20" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Text="ORE QUESTA SETTIMANA" />
-                        <TextBlock x:Name="txtHoursWeek" Margin="0,4,0,0" FontSize="28" FontWeight="Bold" Foreground="#4F6EF7" Text="-" />
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="ORE QUESTA SETTIMANA" />
+                        <TextBlock
+                            x:Name="txtHoursWeek"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#4F6EF7"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Margin="0,0,12,0" Padding="20" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                <Border
+                    Margin="0,0,12,0"
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Text="ORE QUESTO MESE" />
-                        <TextBlock x:Name="txtHoursMonth" Margin="0,4,0,0" FontSize="28" FontWeight="Bold" Foreground="#1A1D26" Text="-" />
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="ORE QUESTO MESE" />
+                        <TextBlock
+                            x:Name="txtHoursMonth"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="-" />
                     </StackPanel>
                 </Border>
-                <Border Padding="20" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                <Border
+                    Padding="20"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#9CA3AF" Text="RICAVO TOTALE" />
-                        <TextBlock x:Name="txtRevenue" Margin="0,4,0,0" FontSize="28" FontWeight="Bold" Foreground="#10B981" Text="-" />
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#9CA3AF"
+                            Text="RICAVO TOTALE" />
+                        <TextBlock
+                            x:Name="txtRevenue"
+                            Margin="0,4,0,0"
+                            FontSize="28"
+                            FontWeight="Bold"
+                            Foreground="#10B981"
+                            Text="-" />
                     </StackPanel>
                 </Border>
             </UniformGrid>
@@ -45,12 +104,15 @@
             <DockPanel Margin="0,0,0,8">
                 <TextBlock
                     VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
                     FontSize="16"
                     FontWeight="Bold"
                     Foreground="#1A1D26"
-                    Text="Notifiche"
-                    DockPanel.Dock="Left" />
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
+                    Text="Notifiche" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
                     <Button
                         x:Name="btnMarkAllRead"
                         Background="Transparent"
@@ -102,8 +164,11 @@
                 </DataGrid.ColumnHeaderStyle>
 
                 <DataGrid.Columns>
-                    <!--  ICONA SEVERITA  -->
-                    <DataGridTemplateColumn Width="40" Header="" IsReadOnly="True">
+                    <!--  ICONA  -->
+                    <DataGridTemplateColumn
+                        Width="40"
+                        Header=""
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock
@@ -115,60 +180,123 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!--  TIMESTAMP  -->
-                    <DataGridTemplateColumn Width="110" Header="Data/Ora" IsReadOnly="True">
+                    <!--  DATA/ORA  -->
+                    <DataGridTemplateColumn
+                        Width="110"
+                        Header="Data/Ora"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" FontSize="11" Text="{Binding CreatedAt, StringFormat=dd/MM HH:mm}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Text="{Binding CreatedAt, StringFormat=dd/MM HH:mm}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!--  OPERATORE  -->
+                    <DataGridTemplateColumn
+                        Width="130"
+                        Header="Operatore"
+                        IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontWeight="Medium"
+                                    Text="{Binding CreatedByName}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <!--  COMMESSA  -->
-                    <DataGridTemplateColumn Width="100" Header="Commessa" IsReadOnly="True">
+                    <DataGridTemplateColumn
+                        Width="100"
+                        Header="Commessa"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding ProjectCode}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontWeight="Medium"
+                                    Text="{Binding ProjectCode}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <!--  TIPO  -->
-                    <DataGridTemplateColumn Width="80" Header="Tipo" IsReadOnly="True">
+                    <DataGridTemplateColumn
+                        Width="80"
+                        Header="Tipo"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" FontSize="11" Text="{Binding NotificationType, Converter={StaticResource NotifTypeConverter}}" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Text="{Binding NotificationType, Converter={StaticResource NotifTypeConverter}}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <!--  TITOLO  -->
-                    <DataGridTemplateColumn Width="200" Header="Titolo" IsReadOnly="True">
+                    <DataGridTemplateColumn
+                        Width="200"
+                        Header="Titolo"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding Title}"
+                                    TextTrimming="CharacterEllipsis" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <!--  MESSAGGIO  -->
-                    <DataGridTemplateColumn Width="*" Header="Messaggio" IsReadOnly="True">
+                    <DataGridTemplateColumn
+                        Width="*"
+                        Header="Messaggio"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Message}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!--  ARTICOLO  -->
+                    <DataGridTemplateColumn
+                        Width="120"
+                        Header="Articolo"
+                        IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Text="{Binding ReferenceLabel}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <!--  LETTO  -->
-                    <DataGridTemplateColumn Width="40" Header="✓" IsReadOnly="True">
+                    <DataGridTemplateColumn
+                        Width="40"
+                        Header="✓"
+                        IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     FontSize="14"
-                                    Foreground="#12B76A"
                                     Text="{Binding IsRead, Converter={StaticResource ReadCheckConverter}}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
@@ -222,12 +350,30 @@
                     </Style>
                 </DataGrid.CellStyle>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Width="100" Binding="{Binding Code}" Header="Codice" />
-                    <DataGridTextColumn Width="*" Binding="{Binding Title}" Header="Titolo" />
-                    <DataGridTextColumn Width="160" Binding="{Binding CustomerName}" Header="Cliente" />
-                    <DataGridTextColumn Width="90" Binding="{Binding Status}" Header="Stato" />
-                    <DataGridTextColumn Width="80" Binding="{Binding HoursWorked, StringFormat='{}{0:N1}'}" Header="Ore Fatte" />
-                    <DataGridTextColumn Width="80" Binding="{Binding BudgetHours}" Header="Ore Prev." />
+                    <DataGridTextColumn
+                        Width="100"
+                        Binding="{Binding Code}"
+                        Header="Codice" />
+                    <DataGridTextColumn
+                        Width="*"
+                        Binding="{Binding Title}"
+                        Header="Titolo" />
+                    <DataGridTextColumn
+                        Width="160"
+                        Binding="{Binding CustomerName}"
+                        Header="Cliente" />
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding Status}"
+                        Header="Stato" />
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding HoursWorked, StringFormat='{}{0:N1}'}"
+                        Header="Ore Fatte" />
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding BudgetHours}"
+                        Header="Ore Prev." />
                 </DataGrid.Columns>
             </DataGrid>
         </StackPanel>

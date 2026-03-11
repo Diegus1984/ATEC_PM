@@ -93,11 +93,11 @@
                         Style="{StaticResource NavBtn}"
                         Tag="Dashboard">
                         <Grid>
-                            <TextBlock Text="  Dashboard" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center" Text="  Dashboard" />
                             <Border
                                 x:Name="badgeNotif"
-                                MinWidth="18"
                                 Height="18"
+                                MinWidth="18"
                                 Margin="0,0,0,0"
                                 Padding="4,0"
                                 HorizontalAlignment="Right"
@@ -243,6 +243,7 @@
                 <Frame
                     x:Name="PageContent"
                     Margin="5"
+                    JournalOwnership="OwnsJournal"
                     NavigationUIVisibility="Hidden" />
             </DockPanel>
         </Border>

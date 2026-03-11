@@ -70,3 +70,25 @@ public class BomItemSaveRequest
     public string Notes { get; set; } = "";
     public string DdpType { get; set; } = "COMMERCIAL";
 }
+
+public static class DdpStatusMap
+{
+    public static readonly Dictionary<string, string> Labels = new()
+    {
+        ["TO_ORDER"] = "Da Ordinare",
+        ["ORDERED"] = "In Ordine",
+        ["DELIVERED"] = "Consegnato",
+        ["PARTIAL"] = "Parziale",
+        ["TO_BUILD"] = "Da Costruire",
+        ["RFQ"] = "Rich. Offerta",
+        ["TO_CHECK"] = "Verificare",
+        ["CANCELLED"] = "Annullato",
+        ["ASSIGNED"] = "Assegnato",
+        ["SHIPPED"] = "Spedito",
+        ["TECH_CHECK"] = "Controllo",
+        ["TO_MODULA"] = "A Modula"
+    };
+
+    public static string ToLabel(string status) =>
+        Labels.TryGetValue(status, out string? label) ? label : status;
+}

@@ -16,7 +16,7 @@ public class ChatController : ControllerBase
     public ChatController(DbService db) => _db = db;
 
     private int GetCurrentEmployeeId() =>
-        int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
     private bool IsPmOrAdmin()
     {

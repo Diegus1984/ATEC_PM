@@ -10,8 +10,10 @@ public class NotificationListItem
     public string Message { get; set; } = "";
     public string ReferenceType { get; set; } = "";
     public int ReferenceId { get; set; }
+    public string ReferenceLabel { get; set; } = "";
     public int? ProjectId { get; set; }
     public string ProjectCode { get; set; } = "";
+    public string CreatedByName { get; set; } = "";
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public DateTime CreatedAt { get; set; }

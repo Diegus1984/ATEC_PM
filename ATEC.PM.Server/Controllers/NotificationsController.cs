@@ -16,7 +16,7 @@ public class NotificationsController : ControllerBase
     public NotificationsController(DbService db) => _db = db;
 
     private int GetCurrentEmployeeId() =>
-        int.TryParse(User.FindFirst("employeeId")?.Value, out int id) ? id : 0;
+        int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
     /// <summary>GET /api/notifications?unreadOnly=false&limit=50</summary>
     [HttpGet]
@@ -34,11 +34,15 @@ public class NotificationsController : ControllerBase
                    n.reference_type AS ReferenceType, n.reference_id AS ReferenceId,
                    n.project_id AS ProjectId,
                    COALESCE(p.code, '') AS ProjectCode,
+                   COALESCE(CONCAT(emp.first_name, ' ', emp.last_name), 'Sistema') AS CreatedByName,
+                   COALESCE(b.part_number, '') AS ReferenceLabel,
                    nr.is_read AS IsRead, nr.read_at AS ReadAt,
                    n.created_at AS CreatedAt
             FROM notification_recipients nr
             JOIN notifications n ON n.id = nr.notification_id
             LEFT JOIN projects p ON p.id = n.project_id
+            LEFT JOIN employees emp ON emp.id = n.created_by
+            LEFT JOIN bom_items b ON n.reference_type = 'BOM' AND b.id = n.reference_id
             WHERE nr.employee_id = @EmpId {where}
             ORDER BY n.created_at DESC
             LIMIT @Limit", new { EmpId = empId, Limit = limit }).ToList();

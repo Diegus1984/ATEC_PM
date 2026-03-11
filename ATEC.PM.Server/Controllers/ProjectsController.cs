@@ -16,7 +16,7 @@ public class ProjectsController : ControllerBase
     public ProjectsController(DbService db, NotificationService notif) { _db = db; _notif = notif; }
 
     private int GetCurrentEmployeeId() =>
-        int.TryParse(User.FindFirst("employeeId")?.Value, out int id) ? id : 0;
+        int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
     [HttpGet]
     public IActionResult GetAll()
@@ -744,12 +744,11 @@ public class ProjectsController : ControllerBase
                 {
                     string partNum = c.ExecuteScalar<string?>(
                         "SELECT part_number FROM bom_items WHERE id = @Id", new { Id = itemId }) ?? "";
+                    string descr = c.ExecuteScalar<string?>(
+                        "SELECT description FROM bom_items WHERE id = @Id", new { Id = itemId }) ?? "";
                     string projCode = c.ExecuteScalar<string?>(
                         "SELECT code FROM projects WHERE id = @Id", new { Id = id }) ?? "";
                     int currentEmpId = GetCurrentEmployeeId();
-                    string empName = c.ExecuteScalar<string?>(
-                        "SELECT CONCAT(first_name, ' ', last_name) FROM employees WHERE id = @Id",
-                        new { Id = currentEmpId }) ?? "Sistema";
 
                     string severity = req.ItemStatus switch
                     {
@@ -759,11 +758,11 @@ public class ProjectsController : ControllerBase
                         _ => "INFO"
                     };
 
-                    string title = $"DDP {projCode} — Stato aggiornato";
-                    string msg = $"{partNum}: {oldStatus} → {req.ItemStatus} (da: {empName})";
+                    string title = $"Cambio stato DDP — {projCode}";
+                    string msg = $"Stato modificato da {DdpStatusMap.ToLabel(oldStatus)} a {DdpStatusMap.ToLabel(req.ItemStatus)}";
 
                     List<int> recipients = _notif.GetProjectPmIds(id);
-                    // Non notificare chi ha fatto la modifica
+                    recipients.AddRange(_notif.GetAcqEmployeeIds());
                     recipients.Remove(currentEmpId);
 
                     if (recipients.Count > 0)
