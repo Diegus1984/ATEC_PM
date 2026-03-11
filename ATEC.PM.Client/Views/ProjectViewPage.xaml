@@ -2,6 +2,8 @@
     x:Class="ATEC.PM.Client.Views.ProjectViewPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    MinWidth="1920"
+    MinHeight="1080"
     Background="#F7F8FA">
     <Grid>
         <Grid.ColumnDefinitions>

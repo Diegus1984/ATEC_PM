@@ -5,7 +5,7 @@
     Background="#F7F8FA">
     <DockPanel>
 
-        <!-- TOOLBAR -->
+        <!--  TOOLBAR  -->
         <Border
             Padding="16,10"
             Background="White"
@@ -45,7 +45,7 @@
             </DockPanel>
         </Border>
 
-        <!-- STATUS BAR -->
+        <!--  STATUS BAR  -->
         <Border
             Padding="16,6"
             Background="White"
@@ -59,7 +59,7 @@
                 Text="Pronto" />
         </Border>
 
-        <!-- DATAGRID -->
+        <!--  DATAGRID  -->
         <DataGrid
             x:Name="dgDestinations"
             Margin="16"

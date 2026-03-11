@@ -4,19 +4,41 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Destinazione DDP"
     Width="400"
-    SizeToContent="Height"
+    Background="#F7F8FA"
     ResizeMode="NoResize"
-    WindowStartupLocation="CenterOwner"
-    Background="#F7F8FA">
+    SizeToContent="Height"
+    WindowStartupLocation="CenterOwner">
 
     <StackPanel Margin="24">
-        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#667085" Text="NOME DESTINAZIONE" />
-        <TextBox x:Name="txtName" Margin="0,4,0,16" Padding="8,6" FontSize="14" />
+        <TextBlock
+            FontSize="11"
+            FontWeight="SemiBold"
+            Foreground="#667085"
+            Text="NOME DESTINAZIONE" />
+        <TextBox
+            x:Name="txtName"
+            Margin="0,4,0,16"
+            Padding="8,6"
+            FontSize="14" />
 
-        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#667085" Text="ORDINE" />
-        <TextBox x:Name="txtSortOrder" Margin="0,4,0,16" Padding="8,6" FontSize="14" Text="0" />
+        <TextBlock
+            FontSize="11"
+            FontWeight="SemiBold"
+            Foreground="#667085"
+            Text="ORDINE" />
+        <TextBox
+            x:Name="txtSortOrder"
+            Margin="0,4,0,16"
+            Padding="8,6"
+            FontSize="14"
+            Text="0" />
 
-        <CheckBox x:Name="chkActive" Margin="0,0,0,20" Content="Attiva" FontSize="13" IsChecked="True" />
+        <CheckBox
+            x:Name="chkActive"
+            Margin="0,0,0,20"
+            Content="Attiva"
+            FontSize="13"
+            IsChecked="True" />
 
         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
             <Button

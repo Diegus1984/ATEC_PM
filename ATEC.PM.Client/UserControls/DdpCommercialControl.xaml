@@ -423,7 +423,10 @@
                     </DataGridTemplateColumn.CellTemplate>
                     <DataGridTemplateColumn.CellEditingTemplate>
                         <DataTemplate>
-                            <TextBox Text="{Binding Destination, UpdateSourceTrigger=LostFocus}" />
+                            <ComboBox
+                                IsDropDownOpen="True"
+                                Loaded="DestinationCombo_Loaded"
+                                SelectedValue="{Binding Destination, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellEditingTemplate>
                 </DataGridTemplateColumn>

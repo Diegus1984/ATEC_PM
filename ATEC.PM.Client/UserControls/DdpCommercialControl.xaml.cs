@@ -8,22 +8,23 @@ public partial class DdpCommercialControl : UserControl
     private List<BomItemListItem> _allItems = new();
     private List<BomItemListItem> _filteredItems = new();
     private Dictionary<string, ComboBox> _filterCombos = new();
+    private List<string> _destinations = new();
 
     private static readonly List<KeyValuePair<string, string>> StatusList = new()
-{
-    new("TO_ORDER", "Da Ordinare"),
-    new("ORDERED", "In Ordine"),
-    new("DELIVERED", "Consegnato"),
-    new("PARTIAL", "Parziale"),
-    new("TO_BUILD", "Da Costruire"),
-    new("RFQ", "Rich.Offerta"),
-    new("TO_CHECK", "Verificare"),
-    new("CANCELLED", "Annullato"),
-    new("ASSIGNED", "Assegnato"),
-    new("SHIPPED", "Spedito"),
-    new("TECH_CHECK", "Controllo"),
-    new("TO_MODULA", "A Modula")
-};
+    {
+        new("TO_ORDER", "Da Ordinare"),
+        new("ORDERED", "In Ordine"),
+        new("DELIVERED", "Consegnato"),
+        new("PARTIAL", "Parziale"),
+        new("TO_BUILD", "Da Costruire"),
+        new("RFQ", "Rich.Offerta"),
+        new("TO_CHECK", "Verificare"),
+        new("CANCELLED", "Annullato"),
+        new("ASSIGNED", "Assegnato"),
+        new("SHIPPED", "Spedito"),
+        new("TECH_CHECK", "Controllo"),
+        new("TO_MODULA", "A Modula")
+    };
 
     private static readonly Dictionary<string, string> StatusKeyToDisplay =
         StatusList.ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -37,7 +38,25 @@ public partial class DdpCommercialControl : UserControl
     public void Load(int projectId)
     {
         _projectId = projectId;
+        _ = LoadDestinations();
         _ = LoadData();
+    }
+
+    private async Task LoadDestinations()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/ddp-destinations/active");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var items = JsonSerializer.Deserialize<List<DdpDestinationItem>>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                _destinations = items.Select(d => d.Name).ToList();
+            }
+        }
+        catch { }
     }
 
     private async Task LoadData()
@@ -57,17 +76,11 @@ public partial class DdpCommercialControl : UserControl
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Numera righe
             for (int i = 0; i < _allItems.Count; i++)
                 _allItems[i].RowNumber = i + 1;
 
-            // Sottoscrivi eventi
             SubscribeItemEvents();
-
-            // Popola filtri
             PopulateFilters();
-
-            // Applica filtri (mostra tutto)
             ApplyFilters();
 
             txtStatus.Text = $"{_allItems.Count} righe caricate";
@@ -118,7 +131,7 @@ public partial class DdpCommercialControl : UserControl
         rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(255, 182, 193), System.Windows.Media.Colors.Black));
         rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(139, 0, 139), System.Windows.Media.Colors.White));
         rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(173, 216, 230), System.Windows.Media.Colors.Black));
-        
+
         rowStyle.Triggers.Add(new Trigger
         {
             Property = DataGridRow.IsSelectedProperty,
@@ -128,7 +141,6 @@ public partial class DdpCommercialControl : UserControl
 
         dgDdp.RowStyle = rowStyle;
 
-        // CellStyle da zero - non eredita da ModernCell che forza il Foreground nero
         var cellStyle = new Style(typeof(DataGridCell));
         cellStyle.Setters.Add(new Setter(DataGridCell.VerticalAlignmentProperty, VerticalAlignment.Center));
         cellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
@@ -185,7 +197,7 @@ public partial class DdpCommercialControl : UserControl
         PopulateCombo("SupplierName", _allItems.Select(i => i.SupplierName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
         PopulateCombo("Manufacturer", _allItems.Select(i => i.Manufacturer).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
         PopulateCombo("ItemStatus", StatusList.Select(kv => kv.Value));
-        PopulateCombo("Destination", _allItems.Select(i => i.Destination).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s));
+        PopulateCombo("Destination", _destinations);
     }
 
     private void PopulateCombo(string tag, IEnumerable<string> values)
@@ -290,14 +302,12 @@ public partial class DdpCommercialControl : UserControl
 
         await Task.Delay(100);
 
-        // Validazione quantità
         if (item.Quantity <= 0)
         {
             item.Quantity = 1;
             MessageBox.Show("La quantità deve essere maggiore di zero.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
-        // Validazione data
         if (item.DateNeeded.HasValue && item.DateNeeded.Value.Date < DateTime.Today)
         {
             item.DateNeeded = DateTime.Today;
@@ -322,13 +332,22 @@ public partial class DdpCommercialControl : UserControl
             await ApiClient.PutAsync($"/api/projects/{_projectId}/ddp/{item.Id}", body);
             UpdateSummary();
         }
-        catch { /* silenzioso per auto-save */ }
+        catch { }
     }
 
     private void StatusCombo_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is ComboBox cb)
             cb.ItemsSource = StatusList;
+    }
+
+    private void DestinationCombo_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ComboBox cb)
+        {
+            cb.ItemsSource = _destinations;
+            cb.SelectedItem = (cb.DataContext as BomItemListItem)?.Destination;
+        }
     }
 
     // === DATE PICKER VALIDATION ===
@@ -346,7 +365,16 @@ public partial class DdpCommercialControl : UserControl
     {
         return StatusKeyToDisplay.TryGetValue(key, out var display) ? display : key;
     }
+
+    private void DestinationCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox cb && cb.SelectedItem != null)
+        {
+            dgDdp.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+    }
 }
+
 public class StatusToDisplayConverter : System.Windows.Data.IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
