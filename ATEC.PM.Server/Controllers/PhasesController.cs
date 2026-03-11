@@ -12,7 +12,11 @@ namespace ATEC.PM.Server.Controllers;
 public class PhasesController : ControllerBase
 {
     private readonly DbService _db;
-    public PhasesController(DbService db) => _db = db;
+    private readonly NotificationService _notif;
+    public PhasesController(DbService db, NotificationService notif) { _db = db; _notif = notif; }
+
+    private int GetCurrentEmployeeId() =>
+        int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
     // ── Lista template disponibili (per picker) ───────────────────────
     [HttpGet("templates")]
@@ -104,7 +108,7 @@ public class PhasesController : ControllerBase
             req.SortOrder
         }, tx);
 
-        SaveAssignments(c, tx, phaseId, req.Assignments);
+        SaveAssignments(c, tx, phaseId, req.ProjectId, req.Assignments);
         tx.Commit();
         return Ok(ApiResponse<int>.Ok(phaseId, "Fase creata"));
     }
@@ -156,8 +160,17 @@ public class PhasesController : ControllerBase
             Id = id
         }, tx);
 
+        // Recupera vecchie assegnazioni per confronto
+        List<int> oldEmployeeIds = c.Query<int>(
+            "SELECT employee_id FROM phase_assignments WHERE project_phase_id=@Id",
+            new { Id = id }, tx).ToList();
+
         c.Execute("DELETE FROM phase_assignments WHERE project_phase_id=@Id", new { Id = id }, tx);
-        SaveAssignments(c, tx, id, req.Assignments);
+
+        int projectId = c.ExecuteScalar<int>(
+            "SELECT project_id FROM project_phases WHERE id=@Id", new { Id = id }, tx);
+
+        SaveAssignments(c, tx, id, projectId, req.Assignments);
         tx.Commit();
         return Ok(ApiResponse<bool>.Ok(true));
     }
@@ -211,6 +224,33 @@ public class PhasesController : ControllerBase
             VALUES (@PhaseId, @EmployeeId, @AssignRole, @PlannedHours);
             SELECT LAST_INSERT_ID()",
             new { PhaseId = phaseId, req.EmployeeId, req.AssignRole, req.PlannedHours });
+
+        // Notifica al tecnico assegnato
+        try
+        {
+            var info = c.QueryFirstOrDefault<dynamic>(@"
+                SELECT pp.project_id, p.code AS project_code,
+                       COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name
+                FROM project_phases pp
+                JOIN projects p ON p.id = pp.project_id
+                JOIN phase_templates pt ON pt.id = pp.phase_template_id
+                WHERE pp.id = @PhaseId", new { PhaseId = phaseId });
+
+            if (info != null)
+            {
+                int currentEmpId = GetCurrentEmployeeId();
+                if (req.EmployeeId != currentEmpId)
+                {
+                    _notif.Create("PHASE_ASSIGNED", "INFO",
+                        $"Nuova assegnazione — {(string)info.project_code}",
+                        $"Sei stato assegnato alla fase: {(string)info.phase_name}",
+                        "PHASE", phaseId, (int)info.project_id, currentEmpId,
+                        new[] { req.EmployeeId });
+                }
+            }
+        }
+        catch { }
+
         return Ok(ApiResponse<int>.Ok(newId));
     }
 
@@ -223,19 +263,45 @@ public class PhasesController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
-    // ── Helper assegnazioni ───────────────────────────────────────────
-    private static void SaveAssignments(
+    // ── Helper assegnazioni con notifiche ─────────────────────────────
+    private void SaveAssignments(
         System.Data.IDbConnection c,
         System.Data.IDbTransaction tx,
         int phaseId,
+        int projectId,
         List<PhaseAssignmentDto> assignments)
     {
+        // Recupera info fase per le notifiche
+        var info = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT p.code AS project_code,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name
+            FROM project_phases pp
+            JOIN projects p ON p.id = pp.project_id
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            WHERE pp.id = @PhaseId", new { PhaseId = phaseId }, tx);
+
+        int currentEmpId = GetCurrentEmployeeId();
+
         foreach (PhaseAssignmentDto a in assignments)
         {
             c.Execute(@"
                 INSERT INTO phase_assignments (project_phase_id, employee_id, assign_role, planned_hours)
                 VALUES (@PhaseId, @EmployeeId, @AssignRole, @PlannedHours)",
                 new { PhaseId = phaseId, a.EmployeeId, a.AssignRole, a.PlannedHours }, tx);
+
+            // Notifica al tecnico assegnato
+            if (info != null && a.EmployeeId != currentEmpId)
+            {
+                try
+                {
+                    _notif.Create("PHASE_ASSIGNED", "INFO",
+                        $"Nuova assegnazione — {(string)info.project_code}",
+                        $"Sei stato assegnato alla fase: {(string)info.phase_name}",
+                        "PHASE", phaseId, projectId, currentEmpId,
+                        new[] { a.EmployeeId });
+                }
+                catch { }
+            }
         }
     }
 
@@ -247,7 +313,6 @@ public class PhasesController : ControllerBase
             new { Hours = req.PlannedHours, Id = id });
         return Ok(ApiResponse<bool>.Ok(true));
     }
-
 
     [HttpPost("templates")]
     public IActionResult CreateTemplate([FromBody] PhaseTemplateSaveRequest req)
@@ -278,7 +343,6 @@ public class PhasesController : ControllerBase
     public IActionResult DeleteTemplate(int id)
     {
         using var c = _db.Open();
-        // Controlla se ci sono fasi che usano questo template
         int inUse = c.ExecuteScalar<int>(
             "SELECT COUNT(*) FROM project_phases WHERE phase_template_id=@Id", new { Id = id });
         if (inUse > 0)
@@ -287,6 +351,7 @@ public class PhasesController : ControllerBase
         c.Execute("DELETE FROM phase_templates WHERE id=@Id", new { Id = id });
         return Ok(ApiResponse<bool>.Ok(true));
     }
+
     [HttpGet("{id}/project-id")]
     public IActionResult GetProjectId(int id)
     {

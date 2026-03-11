@@ -24,8 +24,17 @@ public class NotificationService
             INSERT INTO notifications (notification_type, severity, title, message, reference_type, reference_id, project_id, created_by)
             VALUES (@Type, @Severity, @Title, @Message, @RefType, @RefId, @ProjectId, @CreatedBy);
             SELECT LAST_INSERT_ID()",
-            new { Type = type, Severity = severity, Title = title, Message = message,
-                  RefType = refType, RefId = refId, ProjectId = projectId, CreatedBy = createdBy });
+            new
+            {
+                Type = type,
+                Severity = severity,
+                Title = title,
+                Message = message,
+                RefType = refType,
+                RefId = refId,
+                ProjectId = projectId,
+                CreatedBy = createdBy
+            });
 
         foreach (int empId in recipientIds.Distinct())
         {
@@ -72,11 +81,15 @@ public class NotificationBackgroundService : BackgroundService
 {
     private readonly IServiceProvider _sp;
     private readonly ILogger<NotificationBackgroundService> _log;
+    private readonly int _retentionReadDays;
+    private readonly int _retentionUnreadDays;
 
-    public NotificationBackgroundService(IServiceProvider sp, ILogger<NotificationBackgroundService> log)
+    public NotificationBackgroundService(IServiceProvider sp, IConfiguration config, ILogger<NotificationBackgroundService> log)
     {
         _sp = sp;
         _log = log;
+        _retentionReadDays = int.TryParse(config["Notifications:RetentionReadDays"], out int r) ? r : 5;
+        _retentionUnreadDays = int.TryParse(config["Notifications:RetentionUnreadDays"], out int u) ? u : 30;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -154,20 +167,19 @@ public class NotificationBackgroundService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<DbService>();
         using var c = db.Open();
 
-        // Elimina recipient letti da più di 30 giorni
         int deletedRead = c.Execute(
-            "DELETE FROM notification_recipients WHERE is_read = TRUE AND read_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            "DELETE FROM notification_recipients WHERE is_read = TRUE AND read_at < DATE_SUB(NOW(), INTERVAL @Days DAY)",
+            new { Days = _retentionReadDays });
 
-        // Elimina recipient non letti da più di 90 giorni
         int deletedUnread = c.Execute(
-            "DELETE FROM notification_recipients WHERE is_read = FALSE AND notification_id IN (SELECT id FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY))");
+            "DELETE FROM notification_recipients WHERE is_read = FALSE AND notification_id IN (SELECT id FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL @Days DAY))",
+            new { Days = _retentionUnreadDays });
 
-        // Elimina notifiche orfane (senza più recipients)
         int deletedOrphan = c.Execute(
             "DELETE FROM notifications WHERE id NOT IN (SELECT DISTINCT notification_id FROM notification_recipients)");
 
         if (deletedRead + deletedUnread + deletedOrphan > 0)
-            _log.LogInformation($"[Notifications] Pulizia: {deletedRead} lette, {deletedUnread} non lette, {deletedOrphan} orfane rimosse.");
+            _log.LogInformation($"[Notifications] Pulizia: {deletedRead} lette (>{_retentionReadDays}gg), {deletedUnread} non lette (>{_retentionUnreadDays}gg), {deletedOrphan} orfane rimosse.");
 
         await Task.CompletedTask;
     }

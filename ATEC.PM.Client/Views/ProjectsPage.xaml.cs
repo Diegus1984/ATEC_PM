@@ -18,23 +18,39 @@ public partial class ProjectsPage : Page
     {
         InitializeComponent();
         Loaded += async (_, _) =>
-{
-    await LoadTree();
-    if (_pendingNavProjectId > 0)
-    {
-        int pid = _pendingNavProjectId;
-        string sec = _pendingNavSection;
-        _pendingNavProjectId = 0;
-        _pendingNavSection = "";
-
-        switch (sec)
         {
-            case "ddp_commercial": ShowDdpCommercial(pid); break;
-            case "phases": ShowPhases(pid); break;
-            default: ShowDetails(pid); break;
-        }
-    }
-};
+            await LoadTree();
+            if (_pendingNavProjectId > 0)
+            {
+                int pid = _pendingNavProjectId;
+                string sec = _pendingNavSection;
+                _pendingNavProjectId = 0;
+                _pendingNavSection = "";
+
+                // Trova e espandi il nodo della commessa nel TreeView
+                foreach (TreeViewItem projNode in treeProjects.Items)
+                {
+                    string tag = projNode.Tag?.ToString() ?? "";
+                    if (tag == $"project|{pid}")
+                    {
+                        projNode.IsExpanded = true;
+                        projNode.BringIntoView();
+
+                        // Trova e seleziona il sotto-nodo
+                        foreach (TreeViewItem child in projNode.Items)
+                        {
+                            string childTag = child.Tag?.ToString() ?? "";
+                            if (childTag == $"{sec}|{pid}")
+                            {
+                                child.IsSelected = true;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        };
     }
 
     public void NavigateToSection(int projectId, string section)

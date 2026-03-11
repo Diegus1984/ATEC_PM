@@ -302,27 +302,28 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
+
+                    <!--  VAI A  -->
+                    <DataGridTemplateColumn
+                        Width="60"
+                        Header=""
+                        IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button
+                                    Padding="6,2"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="BtnGoToReference_Click"
+                                    Content="→ Vai"
+                                    Cursor="Hand"
+                                    FontSize="10"
+                                    Foreground="White"
+                                    ToolTip="Apri elemento collegato" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
-                <!--  VAI A  -->
-                <DataGridTemplateColumn
-                    Width="60"
-                    Header=""
-                    IsReadOnly="True">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button
-                                Padding="6,2"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Click="BtnGoToReference_Click"
-                                Content="→ Vai"
-                                Cursor="Hand"
-                                FontSize="10"
-                                Foreground="White"
-                                ToolTip="Apri elemento collegato" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
             </DataGrid>
 
             <!--  RECENT PROJECTS  -->

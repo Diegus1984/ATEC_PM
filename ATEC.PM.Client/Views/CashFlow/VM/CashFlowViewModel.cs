@@ -1,10 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using LiveChartsCore;
-using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
-using SkiaSharp;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
 using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.CashFlow;
@@ -35,15 +34,12 @@ public class CashFlowViewModel : INotifyPropertyChanged
     private bool _isInitialized;
     private int _monthCount = 13;
     private decimal _paymentAmount;
-    private decimal _projectRevenue;
     // Grafico
-    private ISeries[] _series = Array.Empty<ISeries>();
+    private PlotModel _plotModel = new();
 
+    private decimal _projectRevenue;
     // Totali
     private string _statusText = "";
-
-    private Axis[] _xAxes = Array.Empty<Axis>();
-    private Axis[] _yAxes = Array.Empty<Axis>();
     public event PropertyChangedEventHandler? PropertyChanged;
 
     // Categorie (per CRUD)
@@ -55,19 +51,16 @@ public class CashFlowViewModel : INotifyPropertyChanged
     public string[] MonthLabels { get; set; } = Array.Empty<string>();
 
     public decimal PaymentAmount { get => _paymentAmount; set { _paymentAmount = value; Notify(); } }
+    public PlotModel PlotModel { get => _plotModel; set { _plotModel = value; Notify(); } }
     public string ProjectCode { get; set; } = "";
     public int ProjectId { get; set; }
     public decimal ProjectRevenue { get => _projectRevenue; set { _projectRevenue = value; Notify(); } }
     // Righe griglia (tutte le righe del foglio Excel)
     public ObservableCollection<CfGridRow> Rows { get; set; } = new();
-
-    public ISeries[] Series { get => _series; set { _series = value; Notify(); } }
     public bool ShowContent => IsInitialized;
     public bool ShowInit => !IsInitialized;
     public DateTime? StartDate { get; set; }
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
-    public Axis[] XAxes { get => _xAxes; set { _xAxes = value; Notify(); } }
-    public Axis[] YAxes { get => _yAxes; set { _yAxes = value; Notify(); } }
     // ═══════════════════════════════════════════════════════════════
     // FROM DATA
     // ═══════════════════════════════════════════════════════════════
@@ -282,42 +275,33 @@ public class CashFlowViewModel : INotifyPropertyChanged
         CfGridRow? rowDiff = Rows.FirstOrDefault(r => r.RowType == CfRowType.Cumulative);
         if (rowEntrate == null || rowUscite == null || rowDiff == null) return;
 
-        Series = new ISeries[]
+        var model = new PlotModel { PlotAreaBorderThickness = new OxyThickness(0) };
+
+        // Asse X — mesi
+        var xAxis = new LinearAxis
         {
-            new ColumnSeries<double>
+            Position = AxisPosition.Bottom,
+            Minimum = -0.5,
+            Maximum = MonthCount - 0.5,
+            MajorStep = 1,
+            MinorStep = 1,
+            FontSize = 10,
+            Angle = 45,
+            LabelFormatter = v =>
             {
-                Name = "Entrate",
-                Values = Enumerable.Range(0, MonthCount).Select(i => (double)rowEntrate.Values[i]).ToArray(),
-                Fill = new SolidColorPaint(new SKColor(0x05, 0x96, 0x69)), MaxBarWidth = 18
-            },
-            new ColumnSeries<double>
-            {
-                Name = "Uscite",
-                Values = Enumerable.Range(0, MonthCount).Select(i => (double)rowUscite.Values[i] * -1).ToArray(),
-                Fill = new SolidColorPaint(new SKColor(0xDC, 0x26, 0x26)), MaxBarWidth = 18
-            },
-            new LineSeries<double>
-            {
-                Name = "Saldo cumulativo",
-                Values = Enumerable.Range(0, MonthCount).Select(i => (double)rowDiff.Values[i]).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(0x4F, 0x6E, 0xF7), 3),
-                Fill = null, GeometrySize = 6,
-                GeometryStroke = new SolidColorPaint(new SKColor(0x4F, 0x6E, 0xF7), 2),
-                GeometryFill = new SolidColorPaint(SKColors.White)
+                int idx = (int)Math.Round(v);
+                return idx >= 0 && idx < MonthLabels.Length ? MonthLabels[idx] : "";
             }
         };
-        XAxes = new Axis[] { new Axis { Labels = MonthLabels, LabelsRotation = 45, TextSize = 10 } };
+        model.Axes.Add(xAxis);
 
-        // Alla fine di BuildChart, sostituisci la riga YAxes con:
-
+        // Asse Y — valori
         double maxVal = Math.Max(
-    Enumerable.Range(0, MonthCount).Select(i => Math.Abs((double)rowEntrate.Values[i])).DefaultIfEmpty(0).Max(),
-    Enumerable.Range(0, MonthCount).Select(i => Math.Abs((double)rowDiff.Values[i])).DefaultIfEmpty(0).Max()
-);
+            Enumerable.Range(0, MonthCount).Select(i => Math.Abs((double)rowEntrate.Values[i])).DefaultIfEmpty(0).Max(),
+            Enumerable.Range(0, MonthCount).Select(i => Math.Abs((double)rowDiff.Values[i])).DefaultIfEmpty(0).Max());
         double minVal = Enumerable.Range(0, MonthCount)
             .Select(i => Math.Min((double)rowUscite.Values[i] * -1, (double)rowDiff.Values[i]))
             .DefaultIfEmpty(0).Min();
-
         double step = maxVal switch
         {
             > 500000 => 100000,
@@ -331,19 +315,106 @@ public class CashFlowViewModel : INotifyPropertyChanged
             _ => 100
         };
 
-        YAxes = new Axis[]
+        model.Axes.Add(new LinearAxis
         {
-    new Axis
-    {
-        Labeler = v => $"{v:N0} €",
-        TextSize = 9,
-        MinStep = step,
-        MinLimit = minVal - step,
-        MaxLimit = maxVal + step,
-        SeparatorsPaint = new SolidColorPaint(new SKColor(0xE4, 0xE7, 0xEC), 1),
-        ShowSeparatorLines = true
-    }
+            Position = AxisPosition.Left,
+            StringFormat = "N0",
+            FontSize = 9,
+            MajorStep = step,
+            Minimum = minVal - step,
+            Maximum = maxVal + step,
+            MajorGridlineStyle = LineStyle.Solid,
+            MajorGridlineColor = OxyColor.FromRgb(0xE4, 0xE7, 0xEC)
+        });
+
+        // Barre Entrate (verticali)
+        var entrSeries = new RectangleBarSeries
+        {
+            Title = "Entrate",
+            FillColor = OxyColor.FromRgb(0x05, 0x96, 0x69),
+            StrokeThickness = 0,
+            IsVisible = true
         };
+        for (int i = 0; i < MonthCount; i++)
+        {
+            double val = (double)rowEntrate.Values[i];
+            if (val != 0) entrSeries.Items.Add(new RectangleBarItem(i - 0.35, 0, i - 0.05, val));
+        }
+        model.Series.Add(entrSeries);
+
+        // Barre Uscite (verticali, negative)
+        var uscSeries = new RectangleBarSeries
+        {
+            Title = "Uscite",
+            FillColor = OxyColor.FromRgb(0xDC, 0x26, 0x26),
+            StrokeThickness = 0,
+            IsVisible = true
+        };
+        for (int i = 0; i < MonthCount; i++)
+        {
+            double val = (double)rowUscite.Values[i] * -1;
+            if (val != 0) uscSeries.Items.Add(new RectangleBarItem(i + 0.05, 0, i + 0.35, val));
+        }
+        model.Series.Add(uscSeries);
+
+        // Annotazioni valore sopra/sotto le barre
+        for (int i = 0; i < MonthCount; i++)
+        {
+            double valE = (double)rowEntrate.Values[i];
+            double valU = (double)rowUscite.Values[i] * -1;
+            if (valE != 0)
+            {
+                model.Annotations.Add(new OxyPlot.Annotations.TextAnnotation
+                {
+                    Text = $"{valE:N0}",
+                    TextPosition = new DataPoint(i - 0.2, valE),
+                    TextHorizontalAlignment = OxyPlot.HorizontalAlignment.Center,
+                    TextVerticalAlignment = OxyPlot.VerticalAlignment.Bottom,
+                    FontSize = 8,
+                    TextColor = OxyColor.FromRgb(0x05, 0x96, 0x69),
+                    StrokeThickness = 0
+                });
+            }
+            if (valU != 0)
+            {
+                model.Annotations.Add(new OxyPlot.Annotations.TextAnnotation
+                {
+                    Text = $"{valU:N0}",
+                    TextPosition = new DataPoint(i + 0.2, valU),
+                    TextHorizontalAlignment = OxyPlot.HorizontalAlignment.Center,
+                    TextVerticalAlignment = OxyPlot.VerticalAlignment.Top,
+                    FontSize = 8,
+                    TextColor = OxyColor.FromRgb(0xDC, 0x26, 0x26),
+                    StrokeThickness = 0
+                });
+            }
+        }
+
+        // Linea Saldo cumulativo
+        var lineSeries = new OxyPlot.Series.LineSeries
+        {
+            Title = "Saldo cumulativo",
+            Color = OxyColor.FromRgb(0x4F, 0x6E, 0xF7),
+            StrokeThickness = 3,
+            MarkerType = MarkerType.Circle,
+            MarkerSize = 4,
+            MarkerFill = OxyColors.White,
+            MarkerStroke = OxyColor.FromRgb(0x4F, 0x6E, 0xF7),
+            MarkerStrokeThickness = 2,
+            TrackerFormatString = "Saldo cumulativo\nValore: {4:N0} €"
+        };
+        for (int i = 0; i < MonthCount; i++)
+            lineSeries.Points.Add(new DataPoint(i, (double)rowDiff.Values[i]));
+        model.Series.Add(lineSeries);
+
+        // Legenda
+        model.Legends.Add(new OxyPlot.Legends.Legend
+        {
+            LegendPosition = OxyPlot.Legends.LegendPosition.BottomCenter,
+            LegendOrientation = OxyPlot.Legends.LegendOrientation.Horizontal
+        });
+
+        PlotModel = model;
     }
     private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 }
