@@ -62,6 +62,7 @@ public partial class DaneaSyncBar : UserControl
         catch { txtSyncStatus.Text = "Sync non disponibile"; }
     }
 
+
     private async void BtnSync_Click(object sender, RoutedEventArgs e)
     {
         try

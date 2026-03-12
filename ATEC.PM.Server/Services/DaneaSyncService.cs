@@ -43,8 +43,8 @@ public class DaneaSyncService : BackgroundService
     {
         if (IsSyncing) return;
 
-        string remotePath = _config["DaneaSync:EftFilePath"] ?? "";
-        if (string.IsNullOrEmpty(remotePath))
+        string connStr = BuildConnectionString();
+        if (string.IsNullOrEmpty(connStr))
         {
             _log.LogWarning("[DaneaSync] DaneaSync:EftFilePath non configurato, skip sync.");
             return;
@@ -54,49 +54,27 @@ public class DaneaSyncService : BackgroundService
         LastError = null;
         _log.LogInformation("[DaneaSync] Inizio sincronizzazione...");
 
-        string localCopy = "";
-
         try
         {
-            // 1. Copia il file .eft in locale
-            ProgressMessage = "Copia file da remoto...";
-            string localDir = Path.Combine(AppContext.BaseDirectory, "DaneaTemp");
-            Directory.CreateDirectory(localDir);
-            localCopy = Path.Combine(localDir, "easyfatt_sync.eft");
-
-            _log.LogInformation($"[DaneaSync] Copia {remotePath} → {localCopy}");
-            System.IO.File.Copy(remotePath, localCopy, overwrite: true);
-            _log.LogInformation($"[DaneaSync] Copia completata ({new FileInfo(localCopy).Length / 1024 / 1024} MB)");
-
-            // 2. Apri la copia locale con Firebird Embedded
-            string appDir = AppContext.BaseDirectory;
-            string fbClientPath = _config["Easyfatt:FirebirdClientPath"]
-                                  ?? Path.Combine(appDir, "Firebird", "fbclient.dll");
-
-            string connStr = $"Database={localCopy};ServerType=1;User=SYSDBA;Password=masterkey;ClientLibrary={fbClientPath}";
-
+            ProgressMessage = "Connessione a Easyfatt...";
             using var fb = new FbConnection(connStr);
             await fb.OpenAsync();
 
             using var scope = _sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DbService>();
 
-            // 3. Sync fornitori
             ProgressMessage = "Sincronizzazione Fornitori...";
             await SyncSuppliers(fb, db);
 
-            // 4. Sync clienti
             ProgressMessage = "Sincronizzazione Clienti...";
             await SyncCustomers(fb, db);
 
-            // 5. Sync articoli
             ProgressMessage = "Sincronizzazione Articoli...";
             await SyncArticles(fb, db);
 
             LastSync = DateTime.Now;
             ProgressMessage = "Completato";
 
-            // Salva timestamp
             using var local = db.Open();
             await local.ExecuteAsync(@"
                 INSERT INTO app_config (config_key, config_value) VALUES ('danea_last_sync', @Val)
@@ -114,11 +92,40 @@ public class DaneaSyncService : BackgroundService
         finally
         {
             IsSyncing = false;
-
-            // Elimina copia locale
-            try { if (!string.IsNullOrEmpty(localCopy) && System.IO.File.Exists(localCopy)) System.IO.File.Delete(localCopy); }
-            catch { }
         }
+    }
+
+
+    private string BuildConnectionString()
+    {
+        string filePath = _config["DaneaSync:EftFilePath"] ?? "";
+        if (string.IsNullOrEmpty(filePath)) return "";
+
+        string appDir = AppContext.BaseDirectory;
+        string fbClientPath = _config["Easyfatt:FirebirdClientPath"]
+                              ?? Path.Combine(appDir, "Firebird", "fbclient.dll");
+
+        int serverType = int.TryParse(_config["DaneaSync:FbServerType"], out int st) ? st : 1;
+        string user = _config["DaneaSync:FbUser"] ?? "SYSDBA";
+        string password = _config["DaneaSync:FbPassword"] ?? "masterkey";
+
+        var csb = new FbConnectionStringBuilder
+        {
+            Database = filePath,
+            ServerType = (FbServerType)serverType,
+            UserID = user,
+            Password = password,
+            ClientLibrary = fbClientPath,
+            Charset = "NONE"
+        };
+
+        if (serverType == 0)
+        {
+            csb.DataSource = _config["DaneaSync:FbDataSource"] ?? "localhost";
+            csb.Port = int.TryParse(_config["DaneaSync:FbPort"], out int p) ? p : 3050;
+        }
+
+        return csb.ToString();
     }
 
     private async Task SyncSuppliers(FbConnection fb, DbService db)
