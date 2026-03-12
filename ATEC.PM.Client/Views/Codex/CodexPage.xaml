@@ -15,6 +15,19 @@
             <Grid>
                 <StackPanel Orientation="Horizontal">
                     <Button
+                        x:Name="btnGenerate"
+                        Background="#4F6EF7"
+                        Click="BtnGenerate_Click"
+                        Content="✚ Genera Codice"
+                        Foreground="White"
+                        Style="{StaticResource FlatBtn}" />
+
+                    <Separator
+                        Width="1"
+                        Margin="5,0"
+                        Background="#E4E7EC" />
+
+                    <Button
                         x:Name="btnSync"
                         Background="#12B76A"
                         Click="BtnSync_Click"

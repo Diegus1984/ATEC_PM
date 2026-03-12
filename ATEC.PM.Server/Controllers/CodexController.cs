@@ -13,11 +13,13 @@ public class CodexController : ControllerBase
 {
     private readonly DbService _db;
     private readonly CodexSyncService _sync;
+    private readonly CodexGeneratorService _generator;
 
-    public CodexController(DbService db, CodexSyncService sync)
+    public CodexController(DbService db, CodexSyncService sync, CodexGeneratorService generator)
     {
         _db = db;
         _sync = sync;
+        _generator = generator;
     }
 
     [HttpGet]
@@ -74,5 +76,32 @@ public class CodexController : ControllerBase
             LastError = CodexSyncService.LastError
         };
         return Ok(ApiResponse<CodexSyncStatus>.Ok(status));
+    }
+
+    // ── GENERAZIONE NUOVI CODICI ──────────────────────────
+
+    [HttpPost("generate")]
+    public IActionResult GenerateNewCode([FromBody] CodexNewItemRequest req)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(req.Prefisso) || string.IsNullOrWhiteSpace(req.Descrizione))
+                return BadRequest(ApiResponse<string>.Fail("Prefisso e descrizione obbligatori"));
+
+            var (codice, id) = _generator.GenerateNewCodex(req.Prefisso, req.Descrizione);
+            var result = new CodexGeneratedCode { Codice = codice, Id = id };
+            return Ok(ApiResponse<CodexGeneratedCode>.Ok(result, "Codice generato"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("prefixes")]
+    public IActionResult GetPrefixes()
+    {
+        var prefixes = _generator.GetAvailablePrefixes();
+        return Ok(ApiResponse<dynamic>.Ok(prefixes.Select(p => new { Codice = p.Code, Descrizione = p.Description }).ToList()));
     }
 }

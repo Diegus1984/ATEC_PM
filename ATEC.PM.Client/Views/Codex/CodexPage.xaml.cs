@@ -328,7 +328,20 @@ public partial class CodexPage : Page
         txtStatus.Text = $"{filtered.Count:N0} articoli trovati su {_allItems.Count:N0}";
     }
 
-    // ── AZIONI ────────────────────────────────────────────────────
+    private async void BtnGenerate_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new CodexGenerateDialog { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() == true)
+        {
+            // Codice generato con successo
+            txtStatus.Text = $"✓ Codice {dialog.GeneratedCode} generato con successo (ID: {dialog.GeneratedId})";
+            txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
+            
+            // Ricarica i dati
+            await Load();
+        }
+    }
 
     private async void BtnSync_Click(object sender, RoutedEventArgs e)
     {

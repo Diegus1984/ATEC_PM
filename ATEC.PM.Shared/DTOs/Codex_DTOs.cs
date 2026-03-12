@@ -33,3 +33,15 @@ public class CodexSyncStatus
     public int TotalRows { get; set; }
     public string? LastError { get; set; }
 }
+
+public class CodexNewItemRequest
+{
+    public string Prefisso { get; set; } = "";      // 101, 102, 201, etc
+    public string Descrizione { get; set; } = "";
+}
+
+public class CodexGeneratedCode
+{
+    public string Codice { get; set; } = "";        // 101-280226-001
+    public int Id { get; set; }
+}

@@ -30,6 +30,17 @@ public class DbService
     {
         using var c = Open();
 
+        //CODEX ID GENERATOR QUEUE
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_generation_queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    prefix VARCHAR(10) NOT NULL,
+    date_requested DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    code_generated VARCHAR(20),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY UQ_PrefixDate (prefix, date_requested)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ── FLUSSO CASSA ───────────────────────────────────────────
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow (

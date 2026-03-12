@@ -62,6 +62,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<DbService>();
 builder.Services.AddSingleton<NotificationService>();
+builder.Services.AddSingleton<CodexGeneratorService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 builder.Services.AddSingleton<CodexSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
