@@ -2,6 +2,7 @@
     x:Class="ATEC.PM.Client.Views.CatalogPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:uc="clr-namespace:ATEC.PM.Client.UserControls"
     Background="#F7F8FA">
 
     <DockPanel>
@@ -121,6 +122,8 @@
                 </StackPanel>
             </DockPanel>
         </Border>
+
+        <uc:DaneaSyncBar x:Name="syncBar" DockPanel.Dock="Top" />
 
         <!--  STATUS BAR  -->
         <Border

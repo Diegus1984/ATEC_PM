@@ -2,6 +2,7 @@
     x:Class="ATEC.PM.Client.Views.SuppliersPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:uc="clr-namespace:ATEC.PM.Client.UserControls"
     MinWidth="800"
     Background="#F7F8FA">
 
@@ -67,6 +68,8 @@
                     Style="{StaticResource FlatBtn}" />
             </Grid>
         </Border>
+
+        <uc:DaneaSyncBar x:Name="syncBar" DockPanel.Dock="Top" />
 
         <Border
             Padding="20,10"

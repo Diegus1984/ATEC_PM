@@ -4,7 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     MinWidth="800"
     Background="#F7F8FA">
-
     <DockPanel>
         <!--  TOOLBAR  -->
         <Border

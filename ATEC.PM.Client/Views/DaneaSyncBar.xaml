@@ -1,0 +1,35 @@
+<UserControl
+    x:Class="ATEC.PM.Client.UserControls.DaneaSyncBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Border
+        Padding="16,6"
+        Background="#F9FAFB"
+        BorderBrush="#E4E7EC"
+        BorderThickness="0,0,0,1">
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <TextBlock
+                    x:Name="txtSyncStatus"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="#667085"
+                    Text="" />
+                <Button
+                    x:Name="btnSync"
+                    Background="#12B76A"
+                    Click="BtnSync_Click"
+                    Content="⟳ Sync Easyfatt"
+                    Foreground="White"
+                    Style="{StaticResource FlatBtn}" />
+            </StackPanel>
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="11"
+                Foreground="#98A2B3"
+                Text="Dati sincronizzati da Danea Easyfatt" />
+        </DockPanel>
+    </Border>
+</UserControl>

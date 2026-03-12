@@ -20,6 +20,7 @@ public partial class SuppliersPage : Page
     public SuppliersPage()
     {
         InitializeComponent();
+        syncBar.SyncCompleted += async () => await Load();
         Loaded += async (_, _) => await Load();
     }
 

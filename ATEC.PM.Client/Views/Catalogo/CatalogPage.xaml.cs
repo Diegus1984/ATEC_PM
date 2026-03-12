@@ -32,6 +32,7 @@ public partial class CatalogPage : Page
         InitColumnDefs();
         LoadColumnSettings();
         BuildColumnCheckboxes();
+        syncBar.SyncCompleted += async () => await Load();
         Loaded += async (_, _) => await Load();
     }
 
