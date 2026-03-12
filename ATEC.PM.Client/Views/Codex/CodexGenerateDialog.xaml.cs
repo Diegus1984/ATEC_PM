@@ -127,6 +127,13 @@ public partial class CodexGenerateDialog : Window
                 GeneratedId = response.Data.Id;
                 _confirmed = true;
                 _currentReservationId = null;
+
+                MessageBox.Show(
+                    $"Codice {GeneratedCode} generato con successo.",
+                    "Codice Generato",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
                 DialogResult = true;
                 Close();
             }

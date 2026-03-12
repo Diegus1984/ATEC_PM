@@ -115,11 +115,7 @@ public class CodexGeneratorService
     public void ReleaseReservation(int reservationId)
     {
         using var conn = _db.Open();
-        conn.Execute(@"
-            UPDATE codex_reservations SET status = 'RELEASED'
-            WHERE id = @Id AND status = 'RESERVED'",
-            new { Id = reservationId });
-
+        conn.Execute("DELETE FROM codex_reservations WHERE id = @Id", new { Id = reservationId });
         _log.LogInformation("[CodexGenerator] Released reservation #{Id}", reservationId);
     }
 
