@@ -31,15 +31,17 @@ public class DbService
         using var c = Open();
 
         //CODEX ID GENERATOR QUEUE
-        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_generation_queue (
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_reservations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     prefix VARCHAR(10) NOT NULL,
-    date_requested DATE NOT NULL,
-    status VARCHAR(20) DEFAULT 'PENDING',
-    code_generated VARCHAR(20),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY UQ_PrefixDate (prefix, date_requested)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    reserved_code VARCHAR(50) NOT NULL,
+    reserved_by VARCHAR(100) NOT NULL,
+    reserved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    status ENUM('RESERVED','CONFIRMED','RELEASED') NOT NULL DEFAULT 'RESERVED',
+    INDEX idx_prefix_status (prefix, status),
+    INDEX idx_expires (expires_at, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
         // ── FLUSSO CASSA ───────────────────────────────────────────
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using System.Security.Claims;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -55,6 +56,8 @@ public class CodexController : ControllerBase
         return Ok(ApiResponse<CodexListItem>.Ok(item));
     }
 
+    // ── SYNC ────────────────────────────────────────────────
+
     [HttpPost("sync")]
     public IActionResult StartSync()
     {
@@ -78,19 +81,30 @@ public class CodexController : ControllerBase
         return Ok(ApiResponse<CodexSyncStatus>.Ok(status));
     }
 
-    // ── GENERAZIONE NUOVI CODICI ──────────────────────────
+    // ── GENERAZIONE CON PRENOTAZIONE ────────────────────────
 
-    [HttpPost("generate")]
-    public IActionResult GenerateNewCode([FromBody] CodexNewItemRequest req)
+    [HttpGet("prefixes")]
+    public IActionResult GetPrefixes()
+    {
+        var prefixes = _generator.GetAvailablePrefixes()
+            .Select(p => new CodexPrefix { Codice = p.Code, Descrizione = p.Description })
+            .ToList();
+        return Ok(ApiResponse<List<CodexPrefix>>.Ok(prefixes));
+    }
+
+    [HttpPost("reserve")]
+    public IActionResult ReserveCode([FromBody] CodexReserveRequest req)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(req.Prefisso) || string.IsNullOrWhiteSpace(req.Descrizione))
-                return BadRequest(ApiResponse<string>.Fail("Prefisso e descrizione obbligatori"));
-
-            var (codice, id) = _generator.GenerateNewCodex(req.Prefisso, req.Descrizione);
-            var result = new CodexGeneratedCode { Codice = codice, Id = id };
-            return Ok(ApiResponse<CodexGeneratedCode>.Ok(result, "Codice generato"));
+            string userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
+            var (code, reservationId) = _generator.ReserveNextCode(req.Prefisso, userName);
+            var result = new CodexReservationResult
+            {
+                Codice = CodexGeneratorService.FormatCodeForDisplay(code),
+                ReservationId = reservationId
+            };
+            return Ok(ApiResponse<CodexReservationResult>.Ok(result));
         }
         catch (Exception ex)
         {
@@ -98,10 +112,32 @@ public class CodexController : ControllerBase
         }
     }
 
-    [HttpGet("prefixes")]
-    public IActionResult GetPrefixes()
+    [HttpPost("release/{reservationId}")]
+    public IActionResult ReleaseReservation(int reservationId)
     {
-        var prefixes = _generator.GetAvailablePrefixes();
-        return Ok(ApiResponse<dynamic>.Ok(prefixes.Select(p => new { Codice = p.Code, Descrizione = p.Description }).ToList()));
+        try
+        {
+            _generator.ReleaseReservation(reservationId);
+            return Ok(ApiResponse<string>.Ok("Prenotazione rilasciata"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("confirm")]
+    public IActionResult ConfirmReservation([FromBody] CodexConfirmRequest req)
+    {
+        try
+        {
+            var (code, itemId) = _generator.ConfirmReservation(req.ReservationId, req.Descrizione);
+            var result = new CodexGeneratedCode { Codice = CodexGeneratorService.FormatCodeForDisplay(code), Id = itemId };
+            return Ok(ApiResponse<CodexGeneratedCode>.Ok(result, "Codice generato"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 }

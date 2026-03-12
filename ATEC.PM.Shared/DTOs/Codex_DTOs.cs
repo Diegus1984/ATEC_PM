@@ -3,7 +3,13 @@ namespace ATEC.PM.Shared.DTOs;
 public class CodexListItem
 {
     public int Id { get; set; }
-    public string Codice { get; set; } = "";
+
+    private string _codice = "";
+    public string Codice
+    {
+        get => _codice.Replace("..", ".");
+        set => _codice = value ?? "";
+    }
     public string CodeForn { get; set; } = "";
     public string Fornitore { get; set; } = "";
     public decimal PrezzoForn { get; set; }
@@ -34,14 +40,38 @@ public class CodexSyncStatus
     public string? LastError { get; set; }
 }
 
+public class CodexPrefix
+{
+    public string Codice { get; set; } = "";
+    public string Descrizione { get; set; } = "";
+    public string Display => $"{Codice} — {Descrizione}";
+}
+
+public class CodexReserveRequest
+{
+    public string Prefisso { get; set; } = "";
+}
+
+public class CodexReservationResult
+{
+    public string Codice { get; set; } = "";
+    public int ReservationId { get; set; }
+}
+
+public class CodexConfirmRequest
+{
+    public int ReservationId { get; set; }
+    public string Descrizione { get; set; } = "";
+}
+
 public class CodexNewItemRequest
 {
-    public string Prefisso { get; set; } = "";      // 101, 102, 201, etc
+    public string Prefisso { get; set; } = "";
     public string Descrizione { get; set; } = "";
 }
 
 public class CodexGeneratedCode
 {
-    public string Codice { get; set; } = "";        // 101-280226-001
+    public string Codice { get; set; } = "";
     public int Id { get; set; }
 }
