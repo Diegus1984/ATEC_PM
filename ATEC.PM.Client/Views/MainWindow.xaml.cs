@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         btnFornitori.Visibility = PermissionEngine.CanAccessFornitori(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCatalogo.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCodex.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnBackup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione GESTIONE AVANZATA
         btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
@@ -113,7 +114,7 @@ public partial class MainWindow : Window
                    btnCodex.Visibility == Visibility.Visible;
         lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
-        bool anyAdmin = btnUtenti.Visibility == Visibility.Visible;
+        bool anyAdmin = btnUtenti.Visibility == Visibility.Visible || btnBackup.Visibility == Visibility.Visible;
         lblAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -144,6 +145,7 @@ public partial class MainWindow : Window
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             case "Codex": PageContent.Navigate(new CodexPage()); break;
             case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
+            case "Backup": PageContent.Navigate(new BackupPage()); break;
             default: PageContent.Content = null; break;
         }
     }

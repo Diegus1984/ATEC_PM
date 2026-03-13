@@ -26,25 +26,41 @@ public class DbService
             "SELECT config_value FROM app_config WHERE config_key=@Key", new { Key = key }) ?? defaultValue;
     }
 
+    /// <summary>
+    /// Crea il database se non esiste (connessione a MySQL senza specificare il DB).
+    /// </summary>
+    private void EnsureDatabaseExists()
+    {
+        var csb = new MySqlConnectionStringBuilder(_cs);
+        string dbName = csb.Database;
+        csb.Database = "";
+
+        using var conn = new MySqlConnection(csb.ConnectionString);
+        conn.Open();
+        conn.Execute($"CREATE DATABASE IF NOT EXISTS `{dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        Console.WriteLine($"[DB] Database '{dbName}' verificato/creato.");
+    }
+
     public void InitDatabase()
     {
+        // ── STEP 1: Crea il database se non esiste ────────────────
+        EnsureDatabaseExists();
+
+        // ── STEP 2: Crea le tabelle ──────────────────────────────
         using var c = Open();
 
-        //CODEX ID GENERATOR QUEUE
-        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_reservations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    prefix VARCHAR(10) NOT NULL,
-    reserved_code VARCHAR(50) NOT NULL,
-    reserved_by VARCHAR(100) NOT NULL,
-    reserved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NOT NULL,
-    status ENUM('RESERVED','CONFIRMED','RELEASED') NOT NULL DEFAULT 'RESERVED',
-    INDEX idx_prefix_status (prefix, status),
-    INDEX idx_expires (expires_at, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        // ── CODEX ID GENERATOR QUEUE ──────────────────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_generation_queue (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            prefix VARCHAR(10) NOT NULL,
+            date_requested DATE NOT NULL,
+            status VARCHAR(20) DEFAULT 'PENDING',
+            code_generated VARCHAR(20),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_PrefixDate (prefix, date_requested)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ── FLUSSO CASSA ───────────────────────────────────────────
-
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL UNIQUE,
@@ -157,7 +173,7 @@ public class DbService
             FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── CLIENTI / FORNITORI ──────────────────────────────────────
+        // ── CLIENTI ────────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS customers (
             id INT AUTO_INCREMENT PRIMARY KEY,
             company_name VARCHAR(200) NOT NULL,
@@ -175,9 +191,11 @@ public class DbService
             easyfatt_id INT DEFAULT 0,
             notes TEXT,
             is_active BOOLEAN DEFAULT TRUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_Customer_Vat (vat_number)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // ── FORNITORI ──────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS suppliers (
             id INT AUTO_INCREMENT PRIMARY KEY,
             company_name VARCHAR(200) NOT NULL,
@@ -189,7 +207,8 @@ public class DbService
             fiscal_code VARCHAR(50) DEFAULT '',
             notes TEXT,
             is_active BOOLEAN DEFAULT TRUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_Supplier_Vat (vat_number)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ── CATALOGO ─────────────────────────────────────────────────
@@ -321,7 +340,7 @@ public class DbService
             FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── DOCUMENTI / EXTRA ────────────────────────────────────────
+        // ── DOCUMENTI ──────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
@@ -338,6 +357,7 @@ public class DbService
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // ── EXTRA COSTS ────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS extra_costs (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
@@ -425,7 +445,6 @@ public class DbService
         }
 
         // ── DESTINAZIONI DDP ────────────────────────────────────
-
         c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_destinations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(200) NOT NULL,
@@ -435,7 +454,6 @@ public class DbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ── NOTIFICHE ────────────────────────────────────────────
-
         c.Execute(@"CREATE TABLE IF NOT EXISTS notifications (
             id INT AUTO_INCREMENT PRIMARY KEY,
             notification_type VARCHAR(30) NOT NULL,
@@ -464,7 +482,6 @@ public class DbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ── CODEX (clone DB remoto SERVER-CODEX) ────────────────
-
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             remote_id INT NOT NULL,
@@ -495,6 +512,65 @@ public class DbService
             INDEX idx_categoria (categoria)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // ── CODEX RESERVATIONS ───────────────────────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_reservations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            prefix VARCHAR(10) NOT NULL,
+            reserved_code VARCHAR(50) NOT NULL,
+            reserved_by VARCHAR(100) NOT NULL,
+            reserved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            status ENUM('RESERVED','CONFIRMED','RELEASED') NOT NULL DEFAULT 'RESERVED',
+            INDEX idx_prefix_status (prefix, status),
+            INDEX idx_expires (expires_at, status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ── MIGRAZIONE: aggiungi UNIQUE se mancante su tabelle esistenti ──
+        ApplyMigrations(c);
+
         Console.WriteLine("[DB] Inizializzato.");
+    }
+
+    /// <summary>
+    /// Applica migrazioni incrementali su tabelle esistenti (ALTER safe).
+    /// </summary>
+    private void ApplyMigrations(MySqlConnection c)
+    {
+        // Aggiungi UNIQUE su customers.vat_number se non esiste
+        AddUniqueIndexIfMissing(c, "customers", "UQ_Customer_Vat", "vat_number");
+
+        // Aggiungi UNIQUE su suppliers.vat_number se non esiste
+        AddUniqueIndexIfMissing(c, "suppliers", "UQ_Supplier_Vat", "vat_number");
+    }
+
+    private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
+    {
+        try
+        {
+            int exists = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                  AND TABLE_NAME = @Table 
+                  AND INDEX_NAME = @Index",
+                new { Table = table, Index = indexName });
+
+            if (exists == 0)
+            {
+                // Prima rimuovi duplicati (tieni il record con id più basso)
+                c.Execute($@"
+                    DELETE t1 FROM `{table}` t1
+                    INNER JOIN `{table}` t2
+                    ON t1.`{column}` = t2.`{column}`
+                    AND t1.`{column}` != ''
+                    AND t1.id > t2.id");
+
+                c.Execute($"ALTER TABLE `{table}` ADD UNIQUE KEY `{indexName}` (`{column}`)");
+                Console.WriteLine($"[DB Migration] Aggiunto UNIQUE {indexName} su {table}.{column}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning: {indexName} su {table}: {ex.Message}");
+        }
     }
 }

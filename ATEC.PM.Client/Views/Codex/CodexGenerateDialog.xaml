@@ -6,11 +6,11 @@
     MinWidth="500"
     MinHeight="340"
     Background="#F7F8FA"
+    Closing="Window_Closing"
     WindowStartupLocation="CenterOwner"
-    WindowStyle="SingleBorderWindow"
-    Closing="Window_Closing">
+    WindowStyle="SingleBorderWindow">
     <DockPanel>
-        <!-- HEADER -->
+        <!--  HEADER  -->
         <Border
             Padding="20,15"
             Background="White"
@@ -24,7 +24,7 @@
                 Text="Genera un nuovo articolo Codex" />
         </Border>
 
-        <!-- FOOTER -->
+        <!--  FOOTER  -->
         <Border
             Padding="20,12"
             Background="White"
@@ -55,9 +55,9 @@
             </StackPanel>
         </Border>
 
-        <!-- CONTENT -->
+        <!--  CONTENT  -->
         <StackPanel Margin="20" DockPanel.Dock="Top">
-            <!-- PREFISSO -->
+            <!--  PREFISSO  -->
             <TextBlock
                 Margin="0,0,0,6"
                 FontSize="12"
@@ -75,7 +75,7 @@
                 Foreground="#1A1D26"
                 SelectionChanged="CmbPrefisso_SelectionChanged" />
 
-            <!-- CODICE PRENOTATO -->
+            <!--  CODICE PRENOTATO  -->
             <Border
                 x:Name="brdPreview"
                 Margin="0,12,0,0"
@@ -98,7 +98,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- DESCRIZIONE -->
+            <!--  DESCRIZIONE  -->
             <TextBlock
                 Margin="0,12,0,6"
                 FontSize="12"
@@ -109,15 +109,15 @@
                 x:Name="txtDescrizione"
                 Height="60"
                 Padding="12,8"
+                VerticalAlignment="Top"
                 Background="White"
                 BorderBrush="#D0D5DD"
                 BorderThickness="1"
                 FontSize="12"
                 Foreground="#1A1D26"
-                TextWrapping="Wrap"
-                VerticalAlignment="Top" />
+                TextWrapping="Wrap" />
 
-            <!-- ERRORE -->
+            <!--  ERRORE  -->
             <TextBlock
                 x:Name="txtError"
                 Margin="0,12,0,0"

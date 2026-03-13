@@ -211,6 +211,12 @@
                         Content="  Destinazioni DDP"
                         Style="{StaticResource NavBtn}"
                         Tag="DestinazioniDdp" />
+                    <Button
+                        x:Name="btnBackup"
+                        Click="Nav_Click"
+                        Content="  Backup DB"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Backup" />
                     <!--  SESSIONE  -->
                     <TextBlock
                         Margin="12,24,0,8"
