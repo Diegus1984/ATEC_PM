@@ -20,6 +20,7 @@ public partial class ProjectCostingControl : UserControl
     private bool IsOfferMode => _apiBasePath.Contains("/offers/");
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
     private CostingViewModel _vm = new();
+
     public ProjectCostingControl()
     {
         InitializeComponent();
@@ -36,9 +37,6 @@ public partial class ProjectCostingControl : UserControl
         _ = LoadData();
     }
 
-    /// <summary>
-    /// Carica il control in modalità offerta, usando le API offer_* al posto di project_*.
-    /// </summary>
     public void LoadForOffer(int offerId, bool readOnly = false)
     {
         _sectionEmployeesCache.Clear();
@@ -49,12 +47,10 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // LOAD DATA E MARKUPS
+    // MARKUPS
     // ══════════════════════════════════════════════════════════════
 
-    // ── K Indennità ──
-
-    private async void AllowanceMarkup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void AllowanceMarkup_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
@@ -77,9 +73,7 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
-    // ── Scheda Prezzi — handler % editabili ──
-
-    private async void PricingPct_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void PricingPct_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
@@ -103,9 +97,6 @@ public partial class ProjectCostingControl : UserControl
     {
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
         if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
-
-        // L'utente digita "5.0" → il PctToStringConverter fa ConvertBack → 0.050
-        // Ma se arriva qui dal KeyDown/LostFocus diretto, convertiamo manualmente
         if (val > 1m) val /= 100m;
 
         string tag = tb.Tag?.ToString() ?? "";
@@ -116,7 +107,32 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
-    // ── Aggiungi provvigione ──
+    private async void TravelMarkup_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb)
+        {
+            e.Handled = true;
+            if (decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != _vm.TravelMarkup)
+            {
+                _vm.TravelMarkup = newK;
+                await SavePricingMarkups();
+            }
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private async void TravelMarkup_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != _vm.TravelMarkup)
+        {
+            _vm.TravelMarkup = newK;
+            await SavePricingMarkups();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // CRUD
+    // ══════════════════════════════════════════════════════════════
 
     private async void BtnAddCommission_Click(object sender, RoutedEventArgs e)
     {
@@ -126,19 +142,13 @@ public partial class ProjectCostingControl : UserControl
 
         var req = new ProjectMaterialItemSaveRequest
         {
-            SectionId = secId,
-            Description = "Provvigione",
-            Quantity = 1,
-            UnitCost = 0,
-            MarkupValue = sec.DefaultCommissionMarkup,
-            ItemType = "COMMISSION"
+            SectionId = secId, Description = "Provvigione", Quantity = 1,
+            UnitCost = 0, MarkupValue = sec.DefaultCommissionMarkup, ItemType = "COMMISSION"
         };
         string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
-
-    // ── Aggiungi gruppo ──
 
     private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
     {
@@ -149,36 +159,25 @@ public partial class ProjectCostingControl : UserControl
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
             var data = doc.RootElement.GetProperty("data");
-
             var availableGroups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
                 data.GetProperty("groups").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
             var availableTemplates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
                 data.GetProperty("templates").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Filtra: gruppi non ancora nella commessa
             var existingGroupNames = _vm.Groups.Select(g => g.Name).ToHashSet();
             var newGroups = availableGroups.Where(g => !existingGroupNames.Contains(g.Name)).ToList();
 
             if (newGroups.Count == 0 && availableTemplates.Count == 0)
-            {
                 MessageBox.Show("Tutti i gruppi template sono già presenti nella commessa.\nPuoi creare un gruppo personalizzato.", "Info");
-            }
 
             var dlg = new AddCostGroupDialog(_projectId, newGroups, availableTemplates, _apiBasePath)
-            {
-                Owner = Window.GetWindow(this)
-            };
-
-            if (dlg.ShowDialog() == true)
-                await LoadData();
+            { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) await LoadData();
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
-
-    // ── Aggiungi materiale ──
 
     private async void BtnAddMaterialItem_Click(object sender, RoutedEventArgs e)
     {
@@ -188,19 +187,13 @@ public partial class ProjectCostingControl : UserControl
 
         var req = new ProjectMaterialItemSaveRequest
         {
-            SectionId = secId,
-            Description = "",
-            Quantity = 1,
-            UnitCost = 0,
-            MarkupValue = sec.DefaultMarkup,
-            ItemType = "MATERIAL"
+            SectionId = secId, Description = "", Quantity = 1,
+            UnitCost = 0, MarkupValue = sec.DefaultMarkup, ItemType = "MATERIAL"
         };
         string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
-
-    // ── Aggiungi risorsa ──
 
     private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
     {
@@ -218,7 +211,6 @@ public partial class ProjectCostingControl : UserControl
 
         if (IsOfferMode)
         {
-            // Offerta: alias + costo reparto, employee_id = null
             var anyEmp = allEmps.FirstOrDefault();
             string deptCode = anyEmp?.DepartmentCode ?? "RIS";
             decimal hourlyCost = anyEmp?.HourlyCost ?? 0;
@@ -227,13 +219,10 @@ public partial class ProjectCostingControl : UserControl
 
             var req = new ProjectCostResourceSaveRequest
             {
-                SectionId = secId,
-                EmployeeId = null,
+                SectionId = secId, EmployeeId = null,
                 ResourceName = $"{deptCode} {counter}",
-                HourlyCost = hourlyCost,
-                MarkupValue = markup,
-                HoursPerDay = 8,
-                CostPerKm = 0.90m
+                HourlyCost = hourlyCost, MarkupValue = markup,
+                HoursPerDay = 8, CostPerKm = 0.90m
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
@@ -241,7 +230,6 @@ public partial class ProjectCostingControl : UserControl
         }
         else
         {
-            // Commessa: dipendente reale
             var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
             var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
 
@@ -254,13 +242,9 @@ public partial class ProjectCostingControl : UserControl
             var first = available.First();
             var req = new ProjectCostResourceSaveRequest
             {
-                SectionId = secId,
-                EmployeeId = first.Id,
-                ResourceName = first.FullName,
-                HourlyCost = first.HourlyCost,
-                MarkupValue = first.DefaultMarkup,
-                HoursPerDay = 8,
-                CostPerKm = 0.90m
+                SectionId = secId, EmployeeId = first.Id,
+                ResourceName = first.FullName, HourlyCost = first.HourlyCost,
+                MarkupValue = first.DefaultMarkup, HoursPerDay = 8, CostPerKm = 0.90m
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
@@ -268,40 +252,24 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
-    // ── Aggiungi sezione a gruppo esistente ──
-
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not string groupName) return;
-
         try
         {
-            // Carica template disponibili
             string json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
             var data = doc.RootElement.GetProperty("data");
-
             var allTemplates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
                 data.GetProperty("templates").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Filtra per il gruppo corrente
             var groupTemplates = allTemplates.Where(t => t.GroupName == groupName).ToList();
-
-            if (groupTemplates.Count == 0)
-            {
-                // Nessun template disponibile, ma permetti sezione personalizzata
-            }
-
             var dlg = new AddCostSectionDialog(_projectId, groupName, groupTemplates, _apiBasePath)
-            {
-                Owner = Window.GetWindow(this)
-            };
-
-            if (dlg.ShowDialog() == true)
-                await LoadData();
+            { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) await LoadData();
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
@@ -334,6 +302,10 @@ public partial class ProjectCostingControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // COMBO DIPENDENTI
+    // ══════════════════════════════════════════════════════════════
+
     private void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is not ComboBox combo) return;
@@ -342,7 +314,6 @@ public partial class ProjectCostingControl : UserControl
 
         if (IsOfferMode)
         {
-            // Offerta: mostra alias nel combo (ELE 1, ELE 2...) con costi reali dietro
             string deptCode = allEmployees.FirstOrDefault()?.DepartmentCode ?? "RIS";
             var aliased = allEmployees.Select((emp, idx) => new EmployeeCostLookup
             {
@@ -353,11 +324,9 @@ public partial class ProjectCostingControl : UserControl
                 DefaultMarkup = emp.DefaultMarkup
             }).ToList();
             combo.ItemsSource = aliased;
-            // Non preselezionare — la riga ha già i dati corretti
         }
         else
         {
-            // Commessa: nomi reali
             CostSectionVM? sec = FindSection(row.SectionId);
             var usedIds = sec?.Resources
                 .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
@@ -379,9 +348,8 @@ public partial class ProjectCostingControl : UserControl
 
         if (IsOfferMode)
         {
-            // Offerta: prendi costi ma salva con alias e employee_id = null
             row.EmployeeId = null;
-            row.ResourceName = emp.FullName; // già l'alias "ELE 1"
+            row.ResourceName = emp.FullName;
             row.HourlyCost = emp.HourlyCost;
             row.MarkupValue = emp.DefaultMarkup;
         }
@@ -395,20 +363,9 @@ public partial class ProjectCostingControl : UserControl
         if (row.Id > 0) await SaveResource(row);
     }
 
-    private MaterialSectionVM? FindMaterialSection(int sectionId)
-    {
-        return _vm.MaterialSections.FirstOrDefault(s => s.Id == sectionId);
-    }
-
-    private CostSectionVM? FindSection(int sectionId)
-    {
-        foreach (var g in _vm.Groups)
-        {
-            var sec = g.Sections.FirstOrDefault(s => s.Id == sectionId);
-            if (sec != null) return sec;
-        }
-        return null;
-    }
+    // ══════════════════════════════════════════════════════════════
+    // LOAD DATA
+    // ══════════════════════════════════════════════════════════════
 
     private async Task LoadData()
     {
@@ -416,9 +373,6 @@ public partial class ProjectCostingControl : UserControl
         {
             _vm.StatusText = "Caricamento...";
             DataContext = _vm;
-            // Carica distribuzione prezzi (solo offerta)
-            if (IsOfferMode)
-                await LoadDistribution();
 
             string json = await ApiClient.GetAsync($"{_apiBasePath}");
             var doc = JsonDocument.Parse(json);
@@ -428,33 +382,24 @@ public partial class ProjectCostingControl : UserControl
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Preserva stato espansione
             var groupStates = _vm.Groups.ToDictionary(g => g.Name, g => g.IsExpanded);
-            var sectionStates = _vm.Groups
-                .SelectMany(g => g.Sections)
-                .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
-            var matSectionStates = _vm.MaterialSections
-                .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
+            var sectionStates = _vm.Groups.SelectMany(g => g.Sections).ToDictionary(s => s.Id, s => s.IsDetailExpanded);
+            var matSectionStates = _vm.MaterialSections.ToDictionary(s => s.Id, s => s.IsDetailExpanded);
 
             _vm = CostingViewModel.FromData(_data);
             _vm.IsOfferMode = IsOfferMode;
 
-            // Ripristina stato espansione
             foreach (var g in _vm.Groups)
             {
-                if (groupStates.TryGetValue(g.Name, out bool expanded))
-                    g.IsExpanded = expanded;
+                if (groupStates.TryGetValue(g.Name, out bool expanded)) g.IsExpanded = expanded;
                 foreach (var s in g.Sections)
-                    if (sectionStates.TryGetValue(s.Id, out bool secExpanded))
-                        s.IsDetailExpanded = secExpanded;
+                    if (sectionStates.TryGetValue(s.Id, out bool secExpanded)) s.IsDetailExpanded = secExpanded;
             }
             foreach (var ms in _vm.MaterialSections)
-                if (matSectionStates.TryGetValue(ms.Id, out bool matExpanded))
-                    ms.IsDetailExpanded = matExpanded;
+                if (matSectionStates.TryGetValue(ms.Id, out bool matExpanded)) ms.IsDetailExpanded = matExpanded;
 
             DataContext = _vm;
 
-            // Precarica dipendenti
             _sectionEmployeesCache.Clear();
             foreach (var g in _vm.Groups)
                 foreach (var sec in g.Sections)
@@ -463,10 +408,7 @@ public partial class ProjectCostingControl : UserControl
                     _sectionEmployeesCache[sec.Id] = emps;
                 }
         }
-        catch (Exception ex)
-        {
-            _vm.StatusText = $"Errore: {ex.Message}";
-        }
+        catch (Exception ex) { _vm.StatusText = $"Errore: {ex.Message}"; }
     }
 
     private async Task<List<EmployeeCostLookup>> LoadEmployeesForSection(int sectionId)
@@ -484,21 +426,38 @@ public partial class ProjectCostingControl : UserControl
         return new();
     }
 
-    private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e)
+    // ══════════════════════════════════════════════════════════════
+    // HELPERS / EVENTS
+    // ══════════════════════════════════════════════════════════════
+
+    private MaterialSectionVM? FindMaterialSection(int sectionId) => _vm.MaterialSections.FirstOrDefault(s => s.Id == sectionId);
+
+    private CostSectionVM? FindSection(int sectionId)
     {
-        if (sender is TextBox tb) tb.SelectAll();
+        foreach (var g in _vm.Groups)
+        {
+            var sec = g.Sections.FirstOrDefault(s => s.Id == sectionId);
+            if (sec != null) return sec;
+        }
+        return null;
     }
 
-    private void MarkupTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e) { if (sender is TextBox tb) tb.SelectAll(); }
+    private void MarkupTextBox_KeyDown(object sender, KeyEventArgs e) { }
     private void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { }
 
-    private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    private void GroupHeader_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (e.EditAction == DataGridEditAction.Cancel) return;
-        await Task.Delay(100);
-        if (e.Row.Item is MaterialItemVM row && row.Id > 0)
-            await SaveMaterialItem(row);
+        if (sender is Border border && border.DataContext is CostGroupVM group)
+            group.IsExpanded = !group.IsExpanded;
+    }
+
+    private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox) return;
+        if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
+            sec.IsDetailExpanded = !sec.IsDetailExpanded;
     }
 
     private void MaterialSectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -507,13 +466,23 @@ public partial class ProjectCostingControl : UserControl
             sec.IsDetailExpanded = !sec.IsDetailExpanded;
     }
 
+    private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction == DataGridEditAction.Cancel) return;
+        await Task.Delay(100);
+        if (e.Row.Item is MaterialItemVM row && row.Id > 0) await SaveMaterialItem(row);
+    }
+
     private async void ResourceGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction == DataGridEditAction.Cancel) return;
         await Task.Delay(100);
-        if (e.Row.Item is CostResourceVM row && row.Id > 0)
-            await SaveResource(row);
+        if (e.Row.Item is CostResourceVM row && row.Id > 0) await SaveResource(row);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // SAVE
+    // ══════════════════════════════════════════════════════════════
 
     private async Task SaveMaterialItem(MaterialItemVM row)
     {
@@ -521,13 +490,9 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new ProjectMaterialItemSaveRequest
             {
-                Id = row.Id,
-                SectionId = row.SectionId,
-                Description = row.Description,
-                Quantity = row.Quantity,
-                UnitCost = row.UnitCost,
-                MarkupValue = row.MarkupValue,
-                ItemType = row.ItemType
+                Id = row.Id, SectionId = row.SectionId, Description = row.Description,
+                Quantity = row.Quantity, UnitCost = row.UnitCost,
+                MarkupValue = row.MarkupValue, ItemType = row.ItemType
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/material-items/{row.Id}", json);
@@ -558,21 +523,13 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new ProjectCostResourceSaveRequest
             {
-                Id = row.Id,
-                SectionId = row.SectionId,
-                EmployeeId = row.EmployeeId,
-                ResourceName = row.ResourceName,
-                WorkDays = row.WorkDays,
-                HoursPerDay = row.HoursPerDay,
-                HourlyCost = row.HourlyCost,
-                MarkupValue = row.MarkupValue,
-                NumTrips = row.NumTrips,
-                KmPerTrip = row.KmPerTrip,
-                CostPerKm = row.CostPerKm,
-                DailyFood = row.DailyFood,
-                DailyHotel = row.DailyHotel,
-                AllowanceDays = row.AllowanceDays,
-                DailyAllowance = row.DailyAllowance
+                Id = row.Id, SectionId = row.SectionId, EmployeeId = row.EmployeeId,
+                ResourceName = row.ResourceName, WorkDays = row.WorkDays,
+                HoursPerDay = row.HoursPerDay, HourlyCost = row.HourlyCost,
+                MarkupValue = row.MarkupValue, NumTrips = row.NumTrips,
+                KmPerTrip = row.KmPerTrip, CostPerKm = row.CostPerKm,
+                DailyFood = row.DailyFood, DailyHotel = row.DailyHotel,
+                AllowanceDays = row.AllowanceDays, DailyAllowance = row.DailyAllowance
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/resources/{row.Id}", json);
@@ -580,50 +537,9 @@ public partial class ProjectCostingControl : UserControl
         catch { }
     }
 
-    private void GroupHeader_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is Border border && border.DataContext is CostGroupVM group)
-            group.IsExpanded = !group.IsExpanded;
-    }
-
-    private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox)
-            return;
-        if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
-            sec.IsDetailExpanded = !sec.IsDetailExpanded;
-    }
-
-    // ── K Trasferta ──
-
-    private async void TravelMarkup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && sender is TextBox tb)
-        {
-            e.Handled = true;
-            if (decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != _vm.TravelMarkup)
-            {
-                _vm.TravelMarkup = newK;
-                await SavePricingMarkups();
-            }
-            Keyboard.ClearFocus();
-        }
-    }
-
-    private async void TravelMarkup_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox tb && decimal.TryParse(tb.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal newK) && newK != _vm.TravelMarkup)
-        {
-            _vm.TravelMarkup = newK;
-            await SavePricingMarkups();
-        }
-    }
-
     // ══════════════════════════════════════════════════════════════
-    // DISTRIBUZIONE PREZZI CLIENTE
+    // DISTRIBUZIONE % SEZIONI (solo offerta)
     // ══════════════════════════════════════════════════════════════
-
-    private List<PricingDistributionRow> _distributionRows = new();
 
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
@@ -638,85 +554,9 @@ public partial class ProjectCostingControl : UserControl
             sec.MarginPct = weight;
             await SaveSectionDistribution(sec);
         }
-
-        // Ricarica la vista di distribuzione per renderla visibile in UI
-        await LoadDistribution();
     }
 
-    private async Task LoadDistribution()
-    {
-        if (!IsOfferMode) return;
-        try
-        {
-            string json = await ApiClient.GetAsync($"{_apiBasePath}/pricing-distribution");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            _distributionRows = JsonSerializer.Deserialize<List<PricingDistributionRow>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            RecalcDistribution();
-            dgDistribution.ItemsSource = _distributionRows;
-            pnlDistribution.Visibility = Visibility.Visible;
-        }
-        catch { }
-    }
-
-    private void RecalcDistribution()
-    {
-        decimal contingencyTotal = _vm.ContingencyAmount;
-        decimal marginTotal = _vm.NegotiationMarginAmount;
-
-        foreach (var row in _distributionRows)
-        {
-            row.ContingencyAmount = Math.Round(contingencyTotal * row.ContingencyPct, 2);
-            row.MarginAmount = Math.Round(marginTotal * row.MarginPct, 2);
-            row.ClientPrice = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
-        }
-
-        decimal totCont = _distributionRows.Sum(r => r.ContingencyPct);
-        decimal totMarg = _distributionRows.Sum(r => r.MarginPct);
-        txtDistTotals.Text = $"Cont: {totCont:P1}  |  Marg: {totMarg:P1}";
-    }
-
-    private async void DistributionGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
-    {
-        if (e.EditAction == DataGridEditAction.Cancel) return;
-        await Task.Delay(100);
-
-        if (e.Row.Item is not PricingDistributionRow row || row.Id <= 0) return;
-
-        string field = "";
-        decimal newValue = 0;
-
-        if (e.Column.Header?.ToString() == "CONT. %")
-        {
-            field = "contingency";
-            newValue = row.ContingencyPct;
-        }
-        else if (e.Column.Header?.ToString() == "MARG. %")
-        {
-            field = "margin";
-            newValue = row.MarginPct;
-        }
-        else return;
-
-        try
-        {
-            var req = new { fixedRowId = row.Id, field, newValue };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"{_apiBasePath}/pricing-distribution/rebalance", json);
-            await LoadDistribution();
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // DISTRIBUZIONE % SEZIONI (solo offerta)
-    // ══════════════════════════════════════════════════════════════
-
-    private async void DistPct_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void DistPct_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
@@ -728,8 +568,7 @@ public partial class ProjectCostingControl : UserControl
 
     private async void DistPct_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox tb)
-            await ApplyDistPct(tb);
+        if (sender is TextBox tb) await ApplyDistPct(tb);
     }
 
     private async Task ApplyDistPct(TextBox tb)
@@ -737,26 +576,20 @@ public partial class ProjectCostingControl : UserControl
         if (tb.DataContext is not CostSectionVM sec) return;
         string field = tb.Tag?.ToString() ?? "";
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
-        if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val)) return;
+        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
         if (val > 1m) val /= 100m;
 
         decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
         if (val == oldVal) return;
 
-        // Imposta il nuovo valore
         if (field == "contingency") sec.ContingencyPct = val;
         else sec.MarginPct = val;
 
-        // Ribilancia le altre sezioni
         var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
         RebalanceSections(allSections, sec.Id, field, val);
 
-        // Salva tutte le sezioni
         foreach (var s in allSections)
             await SaveSectionDistribution(s);
-
-        // Ricarica la vista di distribuzione per renderla visibile in UI
-        await LoadDistribution();
     }
 
     private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)

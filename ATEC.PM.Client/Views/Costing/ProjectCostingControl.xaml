@@ -1153,6 +1153,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <Border
@@ -1321,131 +1322,7 @@
                         </Grid>
 
                     </Border>
-                    <StackPanel
-                        x:Name="pnlDistribution"
-                        Margin="0,24,0,0"
-                        Visibility="Collapsed">
-                        <Border Height="1" Background="#E4E7EC" />
-                        <DockPanel Margin="0,16,0,8">
-                            <TextBlock
-                                FontSize="15"
-                                FontWeight="Bold"
-                                Foreground="#1A1D26"
-                                Text="DISTRIBUZIONE PREZZI CLIENTE" />
-                            <Button
-                                Height="28"
-                                Margin="12,0,0,0"
-                                Padding="12,0"
-                                Background="#4F6EF720"
-                                BorderThickness="0"
-                                Click="BtnGenerateDistribution_Click"
-                                Content="Genera / Rigenera"
-                                Cursor="Hand"
-                                FontSize="11"
-                                FontWeight="SemiBold"
-                                Foreground="#4F6EF7" />
-                        </DockPanel>
 
-                        <DataGrid
-                            x:Name="dgDistribution"
-                            AutoGenerateColumns="False"
-                            Background="White"
-                            BorderBrush="#E4E7EC"
-                            BorderThickness="1"
-                            CanUserAddRows="False"
-                            CanUserDeleteRows="False"
-                            CellEditEnding="DistributionGrid_CellEditEnding"
-                            ColumnHeaderHeight="30"
-                            FontSize="12"
-                            GridLinesVisibility="Horizontal"
-                            HeadersVisibility="Column"
-                            HorizontalGridLinesBrush="#F3F4F6"
-                            RowHeight="34"
-                            SelectionMode="Single">
-                            <DataGrid.ColumnHeaderStyle>
-                                <Style TargetType="DataGridColumnHeader">
-                                    <Setter Property="Background" Value="#F9FAFB" />
-                                    <Setter Property="Foreground" Value="#6B7280" />
-                                    <Setter Property="FontSize" Value="10" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                    <Setter Property="Padding" Value="8,0" />
-                                </Style>
-                            </DataGrid.ColumnHeaderStyle>
-                            <DataGrid.Columns>
-                                <DataGridTextColumn
-                                    Width="50"
-                                    Binding="{Binding SectionType}"
-                                    Header="TIPO"
-                                    IsReadOnly="True" />
-                                <DataGridTextColumn
-                                    Width="*"
-                                    Binding="{Binding SectionName}"
-                                    Header="SEZIONE"
-                                    IsReadOnly="True" />
-                                <DataGridTextColumn
-                                    Width="100"
-                                    Binding="{Binding SaleAmount, StringFormat=N2}"
-                                    Header="VENDITA €"
-                                    IsReadOnly="True" />
-                                <DataGridTextColumn
-                                    Width="80"
-                                    Binding="{Binding ContingencyPct, StringFormat=P1}"
-                                    Header="CONT. %" />
-                                <DataGridTextColumn
-                                    Width="100"
-                                    Binding="{Binding ContingencyAmount, StringFormat=N2}"
-                                    Header="CONT. €"
-                                    IsReadOnly="True" />
-                                <DataGridTextColumn
-                                    Width="80"
-                                    Binding="{Binding MarginPct, StringFormat=P1}"
-                                    Header="MARG. %" />
-                                <DataGridTextColumn
-                                    Width="100"
-                                    Binding="{Binding MarginAmount, StringFormat=N2}"
-                                    Header="MARG. €"
-                                    IsReadOnly="True" />
-                                <DataGridTextColumn
-                                    Width="120"
-                                    Binding="{Binding ClientPrice, StringFormat=N2}"
-                                    Header="PREZZO CLIENTE"
-                                    IsReadOnly="True">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="FontWeight" Value="Bold" />
-                                            <Setter Property="Foreground" Value="#059669" />
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-
-                        <Border
-                            Margin="0,2,0,0"
-                            Padding="8,6"
-                            Background="#1A1D26">
-                            <DockPanel>
-                                <TextBlock
-                                    DockPanel.Dock="Right"
-                                    FontSize="13"
-                                    FontWeight="Bold"
-                                    Foreground="#059669">
-                                    <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock
-                                        FontSize="12"
-                                        FontWeight="SemiBold"
-                                        Foreground="White"
-                                        Text="TOTALE" />
-                                    <TextBlock
-                                        x:Name="txtDistTotals"
-                                        Margin="20,0,0,0"
-                                        FontSize="11"
-                                        Foreground="#9CA3AF" />
-                                </StackPanel>
-                            </DockPanel>
-                        </Border>
-                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
