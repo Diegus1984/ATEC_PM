@@ -627,6 +627,8 @@ public class DbService
     {
         AddUniqueIndexIfMissing(c, "customers", "UQ_Customer_Vat", "vat_number");
         AddUniqueIndexIfMissing(c, "suppliers", "UQ_Supplier_Vat", "vat_number");
+        AddColumnIfMissing(c, "project_phases", "start_date", "DATE NULL AFTER notes");
+        AddColumnIfMissing(c, "project_phases", "end_date", "DATE NULL AFTER start_date");
         AddColumnIfMissing(c, "departments", "default_markup", "DECIMAL(5,3) NOT NULL DEFAULT 1.450 AFTER hourly_cost");
     }
 

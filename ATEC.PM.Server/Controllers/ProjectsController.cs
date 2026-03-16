@@ -65,12 +65,13 @@ public class ProjectsController : ControllerBase
     {
         using var c = _db.Open();
         using var trx = c.BeginTransaction();
+        int newId;
         try
         {
-            var newId = c.ExecuteScalar<int>(@"
-            INSERT INTO projects (code,title,customer_id,pm_id,description,start_date,end_date_planned,budget_total,budget_hours_total,revenue,status,priority,server_path,notes)
-            VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,@ServerPath,@Notes);
-            SELECT LAST_INSERT_ID()", req, trx);
+            newId = c.ExecuteScalar<int>(@"
+        INSERT INTO projects (code,title,customer_id,pm_id,description,start_date,end_date_planned,budget_total,budget_hours_total,revenue,status,priority,server_path,notes)
+        VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,@ServerPath,@Notes);
+        SELECT LAST_INSERT_ID()", req, trx);
 
             // Crea fasi di default
             if (req.CreateDefaultPhases)
@@ -79,29 +80,36 @@ public class ProjectsController : ControllerBase
                 foreach (var t in templates)
                 {
                     c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, department_id, sort_order)
-                        VALUES (@ProjId, @TplId, @DeptId, @Sort)",
+                    VALUES (@ProjId, @TplId, @DeptId, @Sort)",
                         new { ProjId = newId, TplId = (int)t.id, DeptId = (int?)t.department_id, Sort = (int)t.sort_order }, trx);
                 }
             }
 
             trx.Commit();
-
-            // Crea struttura cartelle da template (dopo il commit DB)
-            CopyTemplateToProject(req.Code);
-
-            // Aggiorna server_path nel DB
-            string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
-            string year = DateTime.Now.Year.ToString();
-            string fullPath = Path.Combine(basePath, year, req.Code);
-            c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = newId });
-
-            return Ok(ApiResponse<int>.Ok(newId, "Creato"));
         }
         catch
         {
             trx.Rollback();
             throw;
         }
+
+        // Dopo il commit — operazioni non transazionali
+        try
+        {
+            CopyTemplateToProject(req.Code);
+
+            string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+            string year = DateTime.Now.Year.ToString();
+            string fullPath = Path.Combine(basePath, year, req.Code);
+            c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = newId });
+        }
+        catch (Exception ex)
+        {
+            // Log ma non fallire — la commessa è già creata nel DB
+            Console.WriteLine($"[Projects] Warning: errore post-creazione commessa {req.Code}: {ex.Message}");
+        }
+
+        return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
     [HttpPut("{id}")]
@@ -817,12 +825,14 @@ public class ProjectsController : ControllerBase
 
         // Ore lavorate totali + costo consuntivo
         var totals = c.QueryFirstOrDefault<dynamic>(@"
-            SELECT COALESCE(SUM(te.hours), 0) AS HoursWorked,
-                   COALESCE(SUM(te.hours * e.hourly_cost), 0) AS CostWorked
-            FROM timesheet_entries te
-            JOIN employees e ON e.id = te.employee_id
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            WHERE pp.project_id = @Id", new { Id = id });
+    SELECT COALESCE(SUM(te.hours), 0) AS HoursWorked,
+           COALESCE(SUM(te.hours * COALESCE(d.hourly_cost, 0)), 0) AS CostWorked
+    FROM timesheet_entries te
+    JOIN employees e ON e.id = te.employee_id
+    JOIN project_phases pp ON pp.id = te.project_phase_id
+    LEFT JOIN employee_departments ed ON ed.employee_id = e.id AND ed.is_primary = 1
+    LEFT JOIN departments d ON d.id = ed.department_id
+    WHERE pp.project_id = @Id", new { Id = id });
 
         data.HoursWorked = (decimal)(totals?.HoursWorked ?? 0m);
         data.CostWorked = (decimal)(totals?.CostWorked ?? 0m);
@@ -888,6 +898,54 @@ public class ProjectsController : ControllerBase
             WHERE pp.project_id = @Id
             GROUP BY e.id, e.first_name, e.last_name, d.code
             ORDER BY e.last_name", new { Id = id }).ToList();
+
+        // ── Ore settimanali (ultime 12 settimane) ────────────────
+        data.WeeklyHours = c.Query<WeeklyHoursSummary>(@"
+            SELECT YEAR(te.work_date) AS Year,
+                   WEEK(te.work_date, 1) AS Week,
+                   SUM(te.hours) AS Hours,
+                   CONCAT('S', WEEK(te.work_date, 1)) AS WeekLabel
+            FROM timesheet_entries te
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            WHERE pp.project_id = @Id
+              AND te.work_date >= DATE_SUB(CURDATE(), INTERVAL 12 WEEK)
+            GROUP BY YEAR(te.work_date), WEEK(te.work_date, 1)
+            ORDER BY Year, Week", new { Id = id }).ToList();
+
+        // ── Gantt fasi ───────────────────────────────────────────
+        data.PhaseGantt = c.Query<PhaseGanttItem>(@"
+            SELECT pp.id AS PhaseId,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+                   COALESCE(d.code, 'TRASV') AS DepartmentCode,
+                   pp.status AS Status,
+                   pp.progress_pct AS ProgressPct,
+                   pp.budget_hours AS BudgetHours,
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
+                   pp.start_date AS StartDate,
+                   pp.end_date AS EndDate,
+                   pp.sort_order AS SortOrder
+            FROM project_phases pp
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            LEFT JOIN departments d ON d.id = pp.department_id
+            WHERE pp.project_id = @Id
+            ORDER BY pp.sort_order", new { Id = id }).ToList();
+
+        // ── Scadenze prossime (fasi non completate con end_date) ─
+        data.Deadlines = c.Query<UpcomingDeadline>(@"
+            SELECT COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+                   COALESCE(d.code, 'TRASV') AS DepartmentCode,
+                   pp.end_date AS Deadline,
+                   DATEDIFF(pp.end_date, CURDATE()) AS DaysRemaining,
+                   pp.status AS Status,
+                   pp.progress_pct AS ProgressPct
+            FROM project_phases pp
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            LEFT JOIN departments d ON d.id = pp.department_id
+            WHERE pp.project_id = @Id
+              AND pp.end_date IS NOT NULL
+              AND pp.status NOT IN ('COMPLETED', 'CANCELLED')
+            ORDER BY pp.end_date ASC
+            LIMIT 10", new { Id = id }).ToList();
 
         return Ok(ApiResponse<ProjectDashboardData>.Ok(data));
     }

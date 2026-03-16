@@ -52,6 +52,11 @@ public class ProjectDashboardData
     public List<DeptSummary> DepartmentSummaries { get; set; } = new();
     public List<RecentTimesheetEntry> RecentEntries { get; set; } = new();
     public List<ActiveTechSummary> ActiveTechnicians { get; set; } = new();
+
+    // ── NUOVI DATI PER DASHBOARD MIGLIORATA ──────────────────
+    public List<WeeklyHoursSummary> WeeklyHours { get; set; } = new();
+    public List<PhaseGanttItem> PhaseGantt { get; set; } = new();
+    public List<UpcomingDeadline> Deadlines { get; set; } = new();
 }
 
 public class DeptSummary
@@ -81,4 +86,45 @@ public class ActiveTechSummary
     public string DepartmentCode { get; set; } = "";
     public decimal TotalHours { get; set; }
     public int PhaseCount { get; set; }
+}
+
+/// <summary>
+/// Ore lavorate aggregate per settimana (line chart).
+/// </summary>
+public class WeeklyHoursSummary
+{
+    public int Year { get; set; }
+    public int Week { get; set; }
+    public decimal Hours { get; set; }
+    public string WeekLabel { get; set; } = "";
+}
+
+/// <summary>
+/// Dati per il Gantt semplificato delle fasi.
+/// </summary>
+public class PhaseGanttItem
+{
+    public int PhaseId { get; set; }
+    public string PhaseName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
+    public string Status { get; set; } = "";
+    public int ProgressPct { get; set; }
+    public decimal BudgetHours { get; set; }
+    public decimal HoursWorked { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public int SortOrder { get; set; }
+}
+
+/// <summary>
+/// Scadenze prossime (fasi con end_date vicina).
+/// </summary>
+public class UpcomingDeadline
+{
+    public string PhaseName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
+    public DateTime Deadline { get; set; }
+    public int DaysRemaining { get; set; }
+    public string Status { get; set; } = "";
+    public int ProgressPct { get; set; }
 }
