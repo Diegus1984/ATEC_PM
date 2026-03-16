@@ -501,6 +501,12 @@ public partial class ProjectCostingControl : UserControl
         }
         catch { }
     }
+    private void GroupHeader_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is CostGroupVM group)
+            group.IsExpanded = !group.IsExpanded;
+    }
+
     private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox)

@@ -393,10 +393,10 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS offer_pricing (
             id INT AUTO_INCREMENT PRIMARY KEY,
             offer_id INT NOT NULL UNIQUE,
-            structure_costs_pct DECIMAL(5,2) NOT NULL DEFAULT 8.00,
-            contingency_pct DECIMAL(5,2) NOT NULL DEFAULT 3.00,
-            risk_warranty_pct DECIMAL(5,2) NOT NULL DEFAULT 2.00,
-            negotiation_margin_pct DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            structure_costs_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0800,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0300,
+            risk_warranty_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0200,
+            negotiation_margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0500,
             travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
             allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
             FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
@@ -610,10 +610,10 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_pricing (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL UNIQUE,
-            structure_costs_pct DECIMAL(5,2) NOT NULL DEFAULT 8.00,
-            contingency_pct DECIMAL(5,2) NOT NULL DEFAULT 3.00,
-            risk_warranty_pct DECIMAL(5,2) NOT NULL DEFAULT 2.00,
-            negotiation_margin_pct DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            structure_costs_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0800,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0300,
+            risk_warranty_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0200,
+            negotiation_margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0500,
             travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
             allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -728,6 +728,67 @@ public class DbService
         AddColumnIfMissing(c, "project_phases", "start_date", "DATE NULL AFTER notes");
         AddColumnIfMissing(c, "project_phases", "end_date", "DATE NULL AFTER start_date");
         AddColumnIfMissing(c, "departments", "default_markup", "DECIMAL(5,3) NOT NULL DEFAULT 1.450 AFTER hourly_cost");
+        MigratePricingPctToDecimal(c);
+    }
+
+    /// <summary>
+    /// Converte le colonne pct da formato percentuale (8.00 = 8%) a decimale (0.08 = 8%)
+    /// e allarga DECIMAL(5,2) → DECIMAL(7,4) per entrambe le tabelle pricing.
+    /// Idempotente: controlla se ci sono valori > 1 prima di convertire.
+    /// </summary>
+    private void MigratePricingPctToDecimal(MySqlConnection c)
+    {
+        string[] tables = { "project_pricing", "offer_pricing" };
+        string[] columns = { "structure_costs_pct", "contingency_pct", "risk_warranty_pct", "negotiation_margin_pct" };
+
+        foreach (string table in tables)
+        {
+            try
+            {
+                // Verifica se la tabella esiste
+                int tableExists = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @Table",
+                    new { Table = table });
+                if (tableExists == 0) continue;
+
+                // Allarga le colonne a DECIMAL(7,4) se necessario
+                foreach (string col in columns)
+                {
+                    string currentType = c.ExecuteScalar<string>(@"
+                        SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @Table AND COLUMN_NAME = @Col",
+                        new { Table = table, Col = col }) ?? "";
+
+                    if (!currentType.Contains("7,4"))
+                    {
+                        c.Execute($"ALTER TABLE `{table}` MODIFY COLUMN `{col}` DECIMAL(7,4) NOT NULL DEFAULT 0.0800");
+                        Console.WriteLine($"[DB Migration] {table}.{col} → DECIMAL(7,4)");
+                    }
+                }
+
+                // Converti valori > 1 (formato percentuale) in decimale
+                int rowsWithOldFormat = c.ExecuteScalar<int>($@"
+                    SELECT COUNT(*) FROM `{table}`
+                    WHERE structure_costs_pct > 1 OR contingency_pct > 1
+                       OR risk_warranty_pct > 1 OR negotiation_margin_pct > 1");
+
+                if (rowsWithOldFormat > 0)
+                {
+                    c.Execute($@"
+                        UPDATE `{table}` SET
+                            structure_costs_pct = CASE WHEN structure_costs_pct > 1 THEN structure_costs_pct / 100 ELSE structure_costs_pct END,
+                            contingency_pct = CASE WHEN contingency_pct > 1 THEN contingency_pct / 100 ELSE contingency_pct END,
+                            risk_warranty_pct = CASE WHEN risk_warranty_pct > 1 THEN risk_warranty_pct / 100 ELSE risk_warranty_pct END,
+                            negotiation_margin_pct = CASE WHEN negotiation_margin_pct > 1 THEN negotiation_margin_pct / 100 ELSE negotiation_margin_pct END");
+                    Console.WriteLine($"[DB Migration] {table}: convertiti {rowsWithOldFormat} record pct da percentuale a decimale");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DB Migration] Warning pricing pct {table}: {ex.Message}");
+            }
+        }
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)

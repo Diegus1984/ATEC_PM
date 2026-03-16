@@ -218,10 +218,12 @@ public class CostingViewModel : INotifyPropertyChanged
         vm.AllowanceMarkup = data.Pricing.AllowanceMarkup;
 
         // Scheda prezzi dal pricing
-        vm.StructureCostsPct = data.Pricing.StructureCostsPct;
-        vm.ContingencyPct = data.Pricing.ContingencyPct;
-        vm.RiskWarrantyPct = data.Pricing.RiskWarrantyPct;
-        vm.NegotiationMarginPct = data.Pricing.NegotiationMarginPct;
+        // DB può avere formato percentuale (8.00 = 8%) o decimale (0.08 = 8%)
+        // Il ViewModel lavora in decimale (0.08), normalizza se necessario
+        vm.StructureCostsPct = NormalizePct(data.Pricing.StructureCostsPct);
+        vm.ContingencyPct = NormalizePct(data.Pricing.ContingencyPct);
+        vm.RiskWarrantyPct = NormalizePct(data.Pricing.RiskWarrantyPct);
+        vm.NegotiationMarginPct = NormalizePct(data.Pricing.NegotiationMarginPct);
 
         var colorMap = new Dictionary<string, string>
         {
@@ -314,6 +316,12 @@ public class CostingViewModel : INotifyPropertyChanged
         vm.WireAllChanges();
         return vm;
     }
+
+    /// <summary>
+    /// Se il valore è > 1 assume formato percentuale (es. 8.00 = 8%) e lo converte in decimale (0.08).
+    /// Se è già ≤ 1 lo lascia invariato (già in formato decimale).
+    /// </summary>
+    private static decimal NormalizePct(decimal value) => value > 1m ? value / 100m : value;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>
