@@ -1,4 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using ATEC.PM.Client.Views.Costing.ViewModels;
 
 namespace ATEC.PM.Client.Views.Costing;
@@ -41,9 +49,10 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // LOAD DATA
+    // LOAD DATA E MARKUPS
     // ══════════════════════════════════════════════════════════════
-    // ── K Trasferta ──
+
+    // ── K Indennità ──
 
     private async void AllowanceMarkup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
@@ -58,8 +67,6 @@ public partial class ProjectCostingControl : UserControl
             Keyboard.ClearFocus();
         }
     }
-
-    // ── Aggiungi sezione a gruppo esistente ──
 
     private async void AllowanceMarkup_LostFocus(object sender, RoutedEventArgs e)
     {
@@ -109,6 +116,8 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
+    // ── Aggiungi provvigione ──
+
     private async void BtnAddCommission_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
@@ -128,6 +137,8 @@ public partial class ProjectCostingControl : UserControl
         await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
+
+    // ── Aggiungi gruppo ──
 
     private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
     {
@@ -167,7 +178,8 @@ public partial class ProjectCostingControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
-    // ── Aggiungi gruppo ──
+    // ── Aggiungi materiale ──
+
     private async void BtnAddMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
@@ -187,6 +199,8 @@ public partial class ProjectCostingControl : UserControl
         await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
+
+    // ── Aggiungi risorsa ──
 
     private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
     {
@@ -254,6 +268,8 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
+    // ── Aggiungi sezione a gruppo esistente ──
+
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not string groupName) return;
@@ -289,6 +305,7 @@ public partial class ProjectCostingControl : UserControl
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
+
     private async void BtnDeleteMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int itemId || itemId <= 0) return;
@@ -312,7 +329,7 @@ public partial class ProjectCostingControl : UserControl
             if (doc.RootElement.GetProperty("success").GetBoolean())
                 await LoadData();
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                MessageBox.Show(doc.RootElement.GetProperty("message").GetString()!, "Errore");
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
@@ -475,6 +492,7 @@ public partial class ProjectCostingControl : UserControl
     private void MarkupTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
     private void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { }
+
     private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction == DataGridEditAction.Cancel) return;
@@ -561,6 +579,7 @@ public partial class ProjectCostingControl : UserControl
         }
         catch { }
     }
+
     private void GroupHeader_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (sender is Border border && border.DataContext is CostGroupVM group)
@@ -574,6 +593,8 @@ public partial class ProjectCostingControl : UserControl
         if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
             sec.IsDetailExpanded = !sec.IsDetailExpanded;
     }
+
+    // ── K Trasferta ──
 
     private async void TravelMarkup_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
@@ -597,6 +618,7 @@ public partial class ProjectCostingControl : UserControl
             await SavePricingMarkups();
         }
     }
+
     // ══════════════════════════════════════════════════════════════
     // DISTRIBUZIONE PREZZI CLIENTE
     // ══════════════════════════════════════════════════════════════
@@ -605,12 +627,20 @@ public partial class ProjectCostingControl : UserControl
 
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
-        try
+        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
+        decimal totalSale = allSections.Sum(s => s.TotalSale);
+        if (totalSale == 0) { MessageBox.Show("Nessun importo vendita."); return; }
+
+        foreach (var sec in allSections)
         {
-            await ApiClient.PostAsync($"{_apiBasePath.Replace("/costing", "")}/costing/pricing-distribution/generate", "{}");
-            await LoadDistribution();
+            decimal weight = Math.Round(sec.TotalSale / totalSale, 4);
+            sec.ContingencyPct = weight;
+            sec.MarginPct = weight;
+            await SaveSectionDistribution(sec);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+
+        // Ricarica la vista di distribuzione per renderla visibile in UI
+        await LoadDistribution();
     }
 
     private async Task LoadDistribution()
@@ -681,6 +711,7 @@ public partial class ProjectCostingControl : UserControl
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
+
     // ══════════════════════════════════════════════════════════════
     // DISTRIBUZIONE % SEZIONI (solo offerta)
     // ══════════════════════════════════════════════════════════════
@@ -723,6 +754,9 @@ public partial class ProjectCostingControl : UserControl
         // Salva tutte le sezioni
         foreach (var s in allSections)
             await SaveSectionDistribution(s);
+
+        // Ricarica la vista di distribuzione per renderla visibile in UI
+        await LoadDistribution();
     }
 
     private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)

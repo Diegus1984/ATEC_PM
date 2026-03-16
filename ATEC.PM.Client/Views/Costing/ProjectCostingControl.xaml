@@ -4,6 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:conv="clr-namespace:ATEC.PM.Client.Views.Costing.Converters"
     xmlns:vm="clr-namespace:ATEC.PM.Client.Views.Costing.ViewModels"
+    MinWidth="800"
+    MinHeight="800"
     Background="#F7F8FA">
 
     <UserControl.Resources>
@@ -17,11 +19,6 @@
         <conv:ItemTypeToBadgeConverter x:Key="ItemTypeToBadge" />
         <conv:PctToStringConverter x:Key="PctToString" />
 
-        <!--
-            ═══════════════════════════════════════════════════
-            DATAGRID STYLES
-            ═══════════════════════════════════════════════════
-        -->
         <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F9FAFB" />
             <Setter Property="Foreground" Value="#6B7280" />
@@ -34,11 +31,6 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!--
-            ═══════════════════════════════════════════════════
-            DELETE BUTTONS
-            ═══════════════════════════════════════════════════
-        -->
         <DataTemplate x:Key="DeleteButtonTemplate">
             <Button
                 Width="20"
@@ -67,11 +59,6 @@
                 Tag="{Binding Id}" />
         </DataTemplate>
 
-        <!--
-            ═══════════════════════════════════════════════════
-            RESOURCE GRID — IN SEDE
-            ═══════════════════════════════════════════════════
-        -->
         <DataTemplate x:Key="ResourceGridInSede">
             <DataGrid
                 AutoGenerateColumns="False"
@@ -154,11 +141,6 @@
             </DataGrid>
         </DataTemplate>
 
-        <!--
-            ═══════════════════════════════════════════════════
-            RESOURCE GRID — DA CLIENTE (con colonne trasferta)
-            ═══════════════════════════════════════════════════
-        -->
         <DataTemplate x:Key="ResourceGridDaCliente">
             <StackPanel>
                 <DataGrid
@@ -336,11 +318,6 @@
             </StackPanel>
         </DataTemplate>
 
-        <!--
-            ═══════════════════════════════════════════════════
-            MATERIAL ITEMS GRID
-            ═══════════════════════════════════════════════════
-        -->
         <DataTemplate x:Key="MaterialItemsGrid">
             <DataGrid
                 AutoGenerateColumns="False"
@@ -417,7 +394,6 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!--  STATUS BAR  -->
         <Border
             Grid.Row="0"
             Padding="12,8"
@@ -430,9 +406,7 @@
                 Text="{Binding StatusText}" />
         </Border>
 
-        <!--  MAIN CONTENT  -->
         <Grid Grid.Row="1">
-            <!--  INIT PLACEHOLDER  -->
             <StackPanel
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
@@ -456,18 +430,12 @@
                     Foreground="White" />
             </StackPanel>
 
-            <!--  SCROLLABLE CONTENT  -->
             <ScrollViewer
                 Padding="16"
                 VerticalScrollBarVisibility="Auto"
                 Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
 
-                    <!--
-                        ═══════════════════════════════════════
-                        IMPEGNO RISORSE — HEADER
-                        ═══════════════════════════════════════
-                    -->
                     <TextBlock
                         Margin="0,0,0,8"
                         FontSize="15"
@@ -475,7 +443,6 @@
                         Foreground="#1A1D26"
                         Text="IMPEGNO RISORSE" />
 
-                    <!--  Column headers  -->
                     <Border
                         Margin="0,0,0,4"
                         Padding="12,6"
@@ -523,17 +490,11 @@
                             </TextBlock>
                         </Grid>
                     </Border>
-                    <!--
-                        ═══════════════════════════════════════
-                        GROUPS (TreeView-style con ItemsControl)
-                        ═══════════════════════════════════════
-                    -->
                     <ItemsControl ItemsSource="{Binding Groups}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:CostGroupVM}">
                                 <StackPanel Margin="0,4,0,0">
 
-                                    <!--  GROUP HEADER (clickable)  -->
                                     <Border
                                         Padding="8,6"
                                         Background="{Binding Color, Converter={StaticResource HexToBrush}}"
@@ -575,7 +536,6 @@
                                         </DockPanel>
                                     </Border>
 
-                                    <!--  GROUP CONTENT (animated)  -->
                                     <StackPanel x:Name="pnlGroupContent" ClipToBounds="True">
                                         <StackPanel.Style>
                                             <Style TargetType="StackPanel">
@@ -588,7 +548,6 @@
                                             </Style>
                                         </StackPanel.Style>
 
-                                        <!--  SECTIONS  -->
                                         <ItemsControl Margin="16,4,0,0" ItemsSource="{Binding Sections}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:CostSectionVM}">
@@ -598,7 +557,6 @@
                                                         BorderBrush="#E4E7EC"
                                                         BorderThickness="1">
                                                         <StackPanel>
-                                                            <!--  SECTION ROW  -->
                                                             <Grid
                                                                 Background="#FAFBFC"
                                                                 Cursor="Hand"
@@ -737,7 +695,6 @@
                                                                 </TextBox>
                                                             </Grid>
 
-                                                            <!--  SECTION DETAIL  -->
                                                             <Border Padding="8,4,8,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
                                                                 <StackPanel>
                                                                     <ContentControl Content="{Binding}">
@@ -773,7 +730,6 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <!--  + AGGIUNGI SEZIONE  -->
                                         <Button
                                             Height="26"
                                             Margin="16,6,0,4"
@@ -794,7 +750,6 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!--  TOTALE RISORSE  -->
                     <Border
                         Margin="0,8,0,0"
                         Padding="16,10"
@@ -820,7 +775,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!--  + AGGIUNGI GRUPPO  -->
                     <Button
                         Height="30"
                         Margin="0,8,0,0"
@@ -835,11 +789,6 @@
                         FontWeight="SemiBold"
                         Foreground="#4F6EF7" />
 
-                    <!--
-                        ═══════════════════════════════════════
-                        MATERIALI
-                        ═══════════════════════════════════════
-                    -->
                     <Border
                         Height="1"
                         Margin="0,24,0,0"
@@ -1008,7 +957,6 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!--  TRASFERTE  -->
                     <Border
                         Margin="0,4,0,2"
                         Background="White"
@@ -1151,7 +1099,6 @@
                         </Grid>
                     </Border>
 
-                    <!--  TOTALE MATERIALI  -->
                     <Border
                         Margin="0,4,0,0"
                         Padding="16,10"
@@ -1177,11 +1124,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!--
-                        ═══════════════════════════════════════
-                        SCHEDA PREZZI
-                        ═══════════════════════════════════════
-                    -->
                     <Border
                         Height="1"
                         Margin="0,24,0,0"
@@ -1210,9 +1152,9 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <!--  NET COST  -->
                             <Border
                                 Grid.Row="0"
                                 Grid.ColumnSpan="3"
@@ -1236,7 +1178,6 @@
                                 </DockPanel>
                             </Border>
 
-                            <!--  + Contingency  -->
                             <TextBlock
                                 Grid.Row="1"
                                 Grid.Column="0"
@@ -1271,7 +1212,6 @@
                                 Foreground="#1A1D26">
                                 <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
-                            <!--  OFFER PRICE  -->
                             <Border
                                 Grid.Row="2"
                                 Grid.ColumnSpan="3"
@@ -1295,7 +1235,6 @@
                                 </DockPanel>
                             </Border>
 
-                            <!--  + Margine trattativa  -->
                             <TextBlock
                                 Grid.Row="3"
                                 Grid.Column="0"
@@ -1330,7 +1269,6 @@
                                 Foreground="#1A1D26">
                                 <Run Text="{Binding NegotiationMarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
-                            <!--  FINAL OFFER PRICE  -->
                             <Border
                                 Grid.Row="4"
                                 Grid.ColumnSpan="3"
@@ -1353,14 +1291,36 @@
                                         Text="FINAL OFFER PRICE" />
                                 </DockPanel>
                             </Border>
+
+                            <Button
+                                Grid.Row="5"
+                                Grid.ColumnSpan="3"
+                                Height="28"
+                                Margin="0,8,0,0"
+                                Padding="12,0"
+                                HorizontalAlignment="Left"
+                                Background="#4F6EF720"
+                                BorderThickness="0"
+                                Click="BtnGenerateDistribution_Click"
+                                Content="Genera distribuzione proporzionale"
+                                Cursor="Hand"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="#4F6EF7">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsOfferMode}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </Grid>
 
                     </Border>
-                    <!--
-                        ═══════════════════════════════════════
-                        DISTRIBUZIONE PREZZI CLIENTE (solo offerta)
-                        ═══════════════════════════════════════
-                    -->
                     <StackPanel
                         x:Name="pnlDistribution"
                         Margin="0,24,0,0"
@@ -1460,7 +1420,6 @@
                             </DataGrid.Columns>
                         </DataGrid>
 
-                        <!--  Totali  -->
                         <Border
                             Margin="0,2,0,0"
                             Padding="8,6"

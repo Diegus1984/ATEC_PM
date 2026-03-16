@@ -368,7 +368,7 @@ public class OffersController : ControllerBase
                         stype = (string)sec.section_type,
                         gname = (string)sec.group_name,
                         sort = (int)sec.sort_order,
-                        enabled = (bool)sec.is_enabled
+                        enabled = (bool)sec.is_enabled,
                         contPct = (decimal)sec.contingency_pct,
                         margPct = (decimal)sec.margin_pct
                     }, tx);
