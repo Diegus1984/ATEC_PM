@@ -17,9 +17,11 @@
         <conv:ItemTypeToBadgeConverter x:Key="ItemTypeToBadge" />
         <conv:PctToStringConverter x:Key="PctToString" />
 
-        <!-- ═══════════════════════════════════════════════════
-             DATAGRID STYLES
-             ═══════════════════════════════════════════════════ -->
+        <!--
+            ═══════════════════════════════════════════════════
+            DATAGRID STYLES
+            ═══════════════════════════════════════════════════
+        -->
         <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F9FAFB" />
             <Setter Property="Foreground" Value="#6B7280" />
@@ -32,9 +34,11 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- ═══════════════════════════════════════════════════
-             DELETE BUTTONS
-             ═══════════════════════════════════════════════════ -->
+        <!--
+            ═══════════════════════════════════════════════════
+            DELETE BUTTONS
+            ═══════════════════════════════════════════════════
+        -->
         <DataTemplate x:Key="DeleteButtonTemplate">
             <Button
                 Width="20"
@@ -63,9 +67,11 @@
                 Tag="{Binding Id}" />
         </DataTemplate>
 
-        <!-- ═══════════════════════════════════════════════════
-             RESOURCE GRID — IN SEDE
-             ═══════════════════════════════════════════════════ -->
+        <!--
+            ═══════════════════════════════════════════════════
+            RESOURCE GRID — IN SEDE
+            ═══════════════════════════════════════════════════
+        -->
         <DataTemplate x:Key="ResourceGridInSede">
             <DataGrid
                 AutoGenerateColumns="False"
@@ -148,9 +154,11 @@
             </DataGrid>
         </DataTemplate>
 
-        <!-- ═══════════════════════════════════════════════════
-             RESOURCE GRID — DA CLIENTE (con colonne trasferta)
-             ═══════════════════════════════════════════════════ -->
+        <!--
+            ═══════════════════════════════════════════════════
+            RESOURCE GRID — DA CLIENTE (con colonne trasferta)
+            ═══════════════════════════════════════════════════
+        -->
         <DataTemplate x:Key="ResourceGridDaCliente">
             <StackPanel>
                 <DataGrid
@@ -328,9 +336,11 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- ═══════════════════════════════════════════════════
-             MATERIAL ITEMS GRID
-             ═══════════════════════════════════════════════════ -->
+        <!--
+            ═══════════════════════════════════════════════════
+            MATERIAL ITEMS GRID
+            ═══════════════════════════════════════════════════
+        -->
         <DataTemplate x:Key="MaterialItemsGrid">
             <DataGrid
                 AutoGenerateColumns="False"
@@ -407,7 +417,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- STATUS BAR -->
+        <!--  STATUS BAR  -->
         <Border
             Grid.Row="0"
             Padding="12,8"
@@ -420,9 +430,9 @@
                 Text="{Binding StatusText}" />
         </Border>
 
-        <!-- MAIN CONTENT -->
+        <!--  MAIN CONTENT  -->
         <Grid Grid.Row="1">
-            <!-- INIT PLACEHOLDER -->
+            <!--  INIT PLACEHOLDER  -->
             <StackPanel
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
@@ -446,16 +456,18 @@
                     Foreground="White" />
             </StackPanel>
 
-            <!-- SCROLLABLE CONTENT -->
+            <!--  SCROLLABLE CONTENT  -->
             <ScrollViewer
                 Padding="16"
                 VerticalScrollBarVisibility="Auto"
                 Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
 
-                    <!-- ═══════════════════════════════════════
-                         IMPEGNO RISORSE — HEADER
-                         ═══════════════════════════════════════ -->
+                    <!--
+                        ═══════════════════════════════════════
+                        IMPEGNO RISORSE — HEADER
+                        ═══════════════════════════════════════
+                    -->
                     <TextBlock
                         Margin="0,0,0,8"
                         FontSize="15"
@@ -463,7 +475,7 @@
                         Foreground="#1A1D26"
                         Text="IMPEGNO RISORSE" />
 
-                    <!-- Column headers -->
+                    <!--  Column headers  -->
                     <Border
                         Margin="0,0,0,4"
                         Padding="12,6"
@@ -478,23 +490,57 @@
                                 <ColumnDefinition Width="120" />
                                 <ColumnDefinition Width="70" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE" />
-                            <TextBlock Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="QTÀ" />
-                            <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO NETTO" />
-                            <TextBlock Grid.Column="3" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="PREZZO VENDITA" />
-                            <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="TIPO" />
+                            <TextBlock
+                                Grid.Column="0"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="SEZIONE" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="QTÀ" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="COSTO NETTO" />
+                            <TextBlock
+                                Grid.Column="3"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="PREZZO VENDITA" />
+                            <TextBlock
+                                Grid.Column="4"
+                                HorizontalAlignment="Center"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="TIPO" />
                         </Grid>
                     </Border>
 
-                    <!-- ═══════════════════════════════════════
-                         GROUPS (TreeView-style con ItemsControl)
-                         ═══════════════════════════════════════ -->
+                    <!--
+                        ═══════════════════════════════════════
+                        GROUPS (TreeView-style con ItemsControl)
+                        ═══════════════════════════════════════
+                    -->
                     <ItemsControl ItemsSource="{Binding Groups}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:CostGroupVM}">
                                 <StackPanel Margin="0,4,0,0">
 
-                                    <!-- GROUP HEADER (clickable) -->
+                                    <!--  GROUP HEADER (clickable)  -->
                                     <Border
                                         Padding="8,6"
                                         Background="{Binding Color, Converter={StaticResource HexToBrush}}"
@@ -516,12 +562,12 @@
                                                     Margin="4,0,8,0"
                                                     VerticalAlignment="Center"
                                                     Data="M 0,0 L 5,5 L 0,10"
+                                                    RenderTransformOrigin="0.5,0.5"
                                                     Stroke="#FFFFFF90"
-                                                    StrokeThickness="1.5"
+                                                    StrokeEndLineCap="Round"
                                                     StrokeLineJoin="Round"
                                                     StrokeStartLineCap="Round"
-                                                    StrokeEndLineCap="Round"
-                                                    RenderTransformOrigin="0.5,0.5">
+                                                    StrokeThickness="1.5">
                                                     <Path.RenderTransform>
                                                         <RotateTransform Angle="{Binding IsExpanded, Converter={StaticResource BoolToAngle}}" />
                                                     </Path.RenderTransform>
@@ -536,7 +582,7 @@
                                         </DockPanel>
                                     </Border>
 
-                                    <!-- GROUP CONTENT (animated) -->
+                                    <!--  GROUP CONTENT (animated)  -->
                                     <StackPanel x:Name="pnlGroupContent" ClipToBounds="True">
                                         <StackPanel.Style>
                                             <Style TargetType="StackPanel">
@@ -549,8 +595,8 @@
                                             </Style>
                                         </StackPanel.Style>
 
-                                        <!-- SECTIONS -->
-                                        <ItemsControl ItemsSource="{Binding Sections}" Margin="16,4,0,0">
+                                        <!--  SECTIONS  -->
+                                        <ItemsControl Margin="16,4,0,0" ItemsSource="{Binding Sections}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:CostSectionVM}">
                                                     <Border
@@ -559,7 +605,7 @@
                                                         BorderBrush="#E4E7EC"
                                                         BorderThickness="1">
                                                         <StackPanel>
-                                                            <!-- SECTION ROW -->
+                                                            <!--  SECTION ROW  -->
                                                             <Grid
                                                                 Background="#FAFBFC"
                                                                 Cursor="Hand"
@@ -581,12 +627,12 @@
                                                                         Margin="0,0,8,0"
                                                                         VerticalAlignment="Center"
                                                                         Data="M 0,0 L 4.5,4.5 L 0,9"
+                                                                        RenderTransformOrigin="0.5,0.5"
                                                                         Stroke="#9CA3AF"
-                                                                        StrokeThickness="1.5"
+                                                                        StrokeEndLineCap="Round"
                                                                         StrokeLineJoin="Round"
                                                                         StrokeStartLineCap="Round"
-                                                                        StrokeEndLineCap="Round"
-                                                                        RenderTransformOrigin="0.5,0.5">
+                                                                        StrokeThickness="1.5">
                                                                         <Path.RenderTransform>
                                                                             <RotateTransform Angle="{Binding IsDetailExpanded, Converter={StaticResource BoolToAngle}}" />
                                                                         </Path.RenderTransform>
@@ -638,7 +684,7 @@
                                                                 </Border>
                                                             </Grid>
 
-                                                            <!-- SECTION DETAIL -->
+                                                            <!--  SECTION DETAIL  -->
                                                             <Border Padding="8,4,8,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
                                                                 <StackPanel>
                                                                     <ContentControl Content="{Binding}">
@@ -674,7 +720,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <!-- + AGGIUNGI SEZIONE -->
+                                        <!--  + AGGIUNGI SEZIONE  -->
                                         <Button
                                             Height="26"
                                             Margin="16,6,0,4"
@@ -695,7 +741,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- TOTALE RISORSE -->
+                    <!--  TOTALE RISORSE  -->
                     <Border
                         Margin="0,8,0,0"
                         Padding="16,10"
@@ -721,7 +767,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- + AGGIUNGI GRUPPO -->
+                    <!--  + AGGIUNGI GRUPPO  -->
                     <Button
                         Height="30"
                         Margin="0,8,0,0"
@@ -736,9 +782,11 @@
                         FontWeight="SemiBold"
                         Foreground="#4F6EF7" />
 
-                    <!-- ═══════════════════════════════════════
-                         MATERIALI
-                         ═══════════════════════════════════════ -->
+                    <!--
+                        ═══════════════════════════════════════
+                        MATERIALI
+                        ═══════════════════════════════════════
+                    -->
                     <Border
                         Height="1"
                         Margin="0,24,0,0"
@@ -763,10 +811,36 @@
                                 <ColumnDefinition Width="120" />
                                 <ColumnDefinition Width="120" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="CATEGORIA" />
-                            <TextBlock Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VOCI" />
-                            <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO NETTO" />
-                            <TextBlock Grid.Column="3" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="PREZZO VENDITA" />
+                            <TextBlock
+                                Grid.Column="0"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="CATEGORIA" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="VOCI" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="COSTO NETTO" />
+                            <TextBlock
+                                Grid.Column="3"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="#6B7280"
+                                Text="PREZZO VENDITA" />
                         </Grid>
                     </Border>
 
@@ -799,12 +873,12 @@
                                                     Margin="0,0,8,0"
                                                     VerticalAlignment="Center"
                                                     Data="M 0,0 L 4.5,4.5 L 0,9"
+                                                    RenderTransformOrigin="0.5,0.5"
                                                     Stroke="#9CA3AF"
-                                                    StrokeThickness="1.5"
+                                                    StrokeEndLineCap="Round"
                                                     StrokeLineJoin="Round"
                                                     StrokeStartLineCap="Round"
-                                                    StrokeEndLineCap="Round"
-                                                    RenderTransformOrigin="0.5,0.5">
+                                                    StrokeThickness="1.5">
                                                     <Path.RenderTransform>
                                                         <RotateTransform Angle="{Binding IsDetailExpanded, Converter={StaticResource BoolToAngle}}" />
                                                     </Path.RenderTransform>
@@ -881,7 +955,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!-- TRASFERTE -->
+                    <!--  TRASFERTE  -->
                     <Border
                         Margin="0,4,0,2"
                         Background="White"
@@ -896,9 +970,22 @@
                                 <ColumnDefinition Width="120" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="13" Text="🚗" />
-                                <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#92400E" Text="Spese trasferta (viaggi + vitto/alloggio)" />
-                                <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#9CA3AF" Text="  — calcolato da risorse" />
+                                <TextBlock
+                                    Margin="0,0,8,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Text="🚗" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="#92400E"
+                                    Text="Spese trasferta (viaggi + vitto/alloggio)" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="#9CA3AF"
+                                    Text="  — calcolato da risorse" />
                             </StackPanel>
                             <TextBlock
                                 Grid.Column="1"
@@ -954,9 +1041,22 @@
                                 <ColumnDefinition Width="120" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="13" Text="💰" />
-                                <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#92400E" Text="Indennità trasferta" />
-                                <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#9CA3AF" Text="  — calcolato da risorse" />
+                                <TextBlock
+                                    Margin="0,0,8,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Text="💰" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="#92400E"
+                                    Text="Indennità trasferta" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Foreground="#9CA3AF"
+                                    Text="  — calcolato da risorse" />
                             </StackPanel>
                             <TextBlock
                                 Grid.Column="1"
@@ -998,7 +1098,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- TOTALE MATERIALI -->
+                    <!--  TOTALE MATERIALI  -->
                     <Border
                         Margin="0,4,0,0"
                         Padding="16,10"
@@ -1024,9 +1124,11 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ═══════════════════════════════════════
-                         SCHEDA PREZZI
-                         ═══════════════════════════════════════ -->
+                    <!--
+                        ═══════════════════════════════════════
+                        SCHEDA PREZZI
+                        ═══════════════════════════════════════
+                    -->
                     <Border
                         Height="1"
                         Margin="0,24,0,0"
@@ -1057,46 +1159,281 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <!-- NET COST -->
-                            <Border Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,4" Padding="8,5" Background="#F3F4F6">
+                            <!--  NET COST  -->
+                            <Border
+                                Grid.Row="0"
+                                Grid.ColumnSpan="3"
+                                Margin="0,0,0,4"
+                                Padding="8,5"
+                                Background="#F3F4F6">
                                 <DockPanel>
-                                    <TextBlock VerticalAlignment="Center" DockPanel.Dock="Right" FontSize="13" FontWeight="Bold" Foreground="#1A1D26">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Right"
+                                        FontSize="13"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26">
                                         <Run Text="{Binding NetCostTotal, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                    <TextBlock VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#6B7280" Text="NET COST (risorse + materiali + trasferte)" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="NET COST (risorse + materiali + trasferte)" />
                                 </DockPanel>
                             </Border>
 
-                            <!-- + Contingency -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Contingency" />
-                            <TextBox Grid.Row="1" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="1" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
+                            <!--  + Contingency  -->
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Margin="8,2,0,2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#6B7280"
+                                Text="+ Contingency" />
+                            <TextBox
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Height="24"
+                                Margin="4,2"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Background="#F9FAFB"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1"
+                                FontSize="12"
+                                GotFocus="MarkupTextBox_GotFocus"
+                                KeyDown="PricingPct_KeyDown"
+                                LostFocus="PricingPct_LostFocus"
+                                Tag="contingency"
+                                Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="2"
+                                Margin="8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#1A1D26">
                                 <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
-                            <!-- OFFER PRICE -->
-                            <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0,4,0,4" Padding="8,5" Background="#1A1D26">
+                            <!--  OFFER PRICE  -->
+                            <Border
+                                Grid.Row="2"
+                                Grid.ColumnSpan="3"
+                                Margin="0,4,0,4"
+                                Padding="8,5"
+                                Background="#1A1D26">
                                 <DockPanel>
-                                    <TextBlock VerticalAlignment="Center" DockPanel.Dock="Right" FontSize="14" FontWeight="Bold" Foreground="#4F6EF7">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Right"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="#4F6EF7">
                                         <Run Text="{Binding OfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="White" Text="OFFER PRICE" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        FontWeight="Bold"
+                                        Foreground="White"
+                                        Text="OFFER PRICE" />
                                 </DockPanel>
                             </Border>
 
-                            <!-- + Margine trattativa -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Margine trattativa" />
-                            <TextBox Grid.Row="3" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="negotiation" Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
+                            <!--  + Margine trattativa  -->
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="0"
+                                Margin="8,2,0,2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#6B7280"
+                                Text="+ Margine trattativa" />
+                            <TextBox
+                                Grid.Row="3"
+                                Grid.Column="1"
+                                Height="24"
+                                Margin="4,2"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Background="#F9FAFB"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1"
+                                FontSize="12"
+                                GotFocus="MarkupTextBox_GotFocus"
+                                KeyDown="PricingPct_KeyDown"
+                                LostFocus="PricingPct_LostFocus"
+                                Tag="negotiation"
+                                Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="2"
+                                Margin="8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#1A1D26">
                                 <Run Text="{Binding NegotiationMarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
-                            <!-- FINAL OFFER PRICE -->
-                            <Border Grid.Row="4" Grid.ColumnSpan="3" Margin="0,4,0,0" Padding="8,7" Background="#059669">
+                            <!--  FINAL OFFER PRICE  -->
+                            <Border
+                                Grid.Row="4"
+                                Grid.ColumnSpan="3"
+                                Margin="0,4,0,0"
+                                Padding="8,7"
+                                Background="#059669">
                                 <DockPanel>
-                                    <TextBlock VerticalAlignment="Center" DockPanel.Dock="Right" FontSize="16" FontWeight="Bold" Foreground="White">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Right"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="White">
                                         <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                    <TextBlock VerticalAlignment="Center" FontSize="14" FontWeight="Bold" Foreground="White" Text="FINAL OFFER PRICE" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="White"
+                                        Text="FINAL OFFER PRICE" />
                                 </DockPanel>
                             </Border>
                         </Grid>
+
                     </Border>
+                    <!--
+                        ═══════════════════════════════════════
+                        DISTRIBUZIONE PREZZI CLIENTE (solo offerta)
+                        ═══════════════════════════════════════
+                    -->
+                    <StackPanel
+                        x:Name="pnlDistribution"
+                        Margin="0,24,0,0"
+                        Visibility="Collapsed">
+                        <Border Height="1" Background="#E4E7EC" />
+                        <DockPanel Margin="0,16,0,8">
+                            <TextBlock
+                                FontSize="15"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="DISTRIBUZIONE PREZZI CLIENTE" />
+                            <Button
+                                Height="28"
+                                Margin="12,0,0,0"
+                                Padding="12,0"
+                                Background="#4F6EF720"
+                                BorderThickness="0"
+                                Click="BtnGenerateDistribution_Click"
+                                Content="Genera / Rigenera"
+                                Cursor="Hand"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="#4F6EF7" />
+                        </DockPanel>
+
+                        <DataGrid
+                            x:Name="dgDistribution"
+                            AutoGenerateColumns="False"
+                            Background="White"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1"
+                            CanUserAddRows="False"
+                            CanUserDeleteRows="False"
+                            CellEditEnding="DistributionGrid_CellEditEnding"
+                            ColumnHeaderHeight="30"
+                            FontSize="12"
+                            GridLinesVisibility="Horizontal"
+                            HeadersVisibility="Column"
+                            HorizontalGridLinesBrush="#F3F4F6"
+                            RowHeight="34"
+                            SelectionMode="Single">
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="#F9FAFB" />
+                                    <Setter Property="Foreground" Value="#6B7280" />
+                                    <Setter Property="FontSize" Value="10" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="Padding" Value="8,0" />
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn
+                                    Width="50"
+                                    Binding="{Binding SectionType}"
+                                    Header="TIPO"
+                                    IsReadOnly="True" />
+                                <DataGridTextColumn
+                                    Width="*"
+                                    Binding="{Binding SectionName}"
+                                    Header="SEZIONE"
+                                    IsReadOnly="True" />
+                                <DataGridTextColumn
+                                    Width="100"
+                                    Binding="{Binding SaleAmount, StringFormat=N2}"
+                                    Header="VENDITA €"
+                                    IsReadOnly="True" />
+                                <DataGridTextColumn
+                                    Width="80"
+                                    Binding="{Binding ContingencyPct, StringFormat=P1}"
+                                    Header="CONT. %" />
+                                <DataGridTextColumn
+                                    Width="100"
+                                    Binding="{Binding ContingencyAmount, StringFormat=N2}"
+                                    Header="CONT. €"
+                                    IsReadOnly="True" />
+                                <DataGridTextColumn
+                                    Width="80"
+                                    Binding="{Binding MarginPct, StringFormat=P1}"
+                                    Header="MARG. %" />
+                                <DataGridTextColumn
+                                    Width="100"
+                                    Binding="{Binding MarginAmount, StringFormat=N2}"
+                                    Header="MARG. €"
+                                    IsReadOnly="True" />
+                                <DataGridTextColumn
+                                    Width="120"
+                                    Binding="{Binding ClientPrice, StringFormat=N2}"
+                                    Header="PREZZO CLIENTE"
+                                    IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                            <Setter Property="Foreground" Value="#059669" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <!--  Totali  -->
+                        <Border
+                            Margin="0,2,0,0"
+                            Padding="8,6"
+                            Background="#1A1D26">
+                            <DockPanel>
+                                <TextBlock
+                                    DockPanel.Dock="Right"
+                                    FontSize="13"
+                                    FontWeight="Bold"
+                                    Foreground="#059669">
+                                    <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="White"
+                                        Text="TOTALE" />
+                                    <TextBlock
+                                        x:Name="txtDistTotals"
+                                        Margin="20,0,0,0"
+                                        FontSize="11"
+                                        Foreground="#9CA3AF" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

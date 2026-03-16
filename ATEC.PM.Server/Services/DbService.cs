@@ -400,6 +400,18 @@ public class DbService
             FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_pricing_distribution (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    offer_id INT NOT NULL,
+                    section_type VARCHAR(20) NOT NULL,
+                    section_id INT NOT NULL,
+                    section_name VARCHAR(200) NOT NULL DEFAULT '',
+                    sale_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                    contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+                    margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+                    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_phases (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,

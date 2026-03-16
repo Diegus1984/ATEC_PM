@@ -286,6 +286,13 @@ public class OffersController : ControllerBase
                 FROM offer_pricing WHERE offer_id=@oldOfferId",
                 new { newOfferId, oldOfferId = id }, tx);
 
+            // Copia distribuzione prezzi
+            c.Execute(@"
+                INSERT INTO offer_pricing_distribution (offer_id, section_type, section_id, section_name, sale_amount, contingency_pct, margin_pct)
+                SELECT @newOfferId, section_type, section_id, section_name, sale_amount, contingency_pct, margin_pct
+                FROM offer_pricing_distribution WHERE offer_id=@oldOfferId",
+                new { newOfferId, oldOfferId = id }, tx);
+
             tx.Commit();
             return Ok(ApiResponse<int>.Ok(newOfferId, $"Revisione {nextRev} creata"));
         }

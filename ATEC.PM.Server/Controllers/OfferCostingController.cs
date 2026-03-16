@@ -336,4 +336,139 @@ public class OfferCostingController : ControllerBase
             });
         return Ok(ApiResponse<string>.Ok("", "Prezzi aggiornati"));
     }
+
+    // ── DISTRIBUZIONE PREZZI ──
+
+    /// <summary>GET /api/offers/{offerId}/costing/pricing-distribution</summary>
+    [HttpGet("pricing-distribution")]
+    public IActionResult GetPricingDistribution(int offerId)
+    {
+        using var c = _db.Open();
+        var rows = c.Query<PricingDistributionRow>(@"
+        SELECT id, offer_id AS OfferId, section_type AS SectionType,
+               section_id AS SectionId, section_name AS SectionName,
+               sale_amount AS SaleAmount, contingency_pct AS ContingencyPct,
+               margin_pct AS MarginPct
+        FROM offer_pricing_distribution WHERE offer_id=@offerId
+        ORDER BY section_type, id",
+            new { offerId }).ToList();
+        return Ok(ApiResponse<List<PricingDistributionRow>>.Ok(rows));
+    }
+
+    /// <summary>POST /api/offers/{offerId}/costing/pricing-distribution/generate</summary>
+    [HttpPost("pricing-distribution/generate")]
+    public IActionResult GeneratePricingDistribution(int offerId)
+    {
+        using var c = _db.Open();
+
+        // Cancella distribuzione esistente
+        c.Execute("DELETE FROM offer_pricing_distribution WHERE offer_id=@offerId", new { offerId });
+
+        // Prendi totale vendita per ogni sezione costo
+        var costSections = c.Query<dynamic>(@"
+        SELECT s.id, s.name,
+               COALESCE(SUM(r.work_days * r.hours_per_day * r.hourly_cost * r.markup_value), 0) AS sale
+        FROM offer_cost_sections s
+        LEFT JOIN offer_cost_resources r ON r.section_id = s.id
+        WHERE s.offer_id = @offerId AND s.is_enabled = 1
+        GROUP BY s.id, s.name
+        ORDER BY s.sort_order", new { offerId }).ToList();
+
+        // Prendi totale vendita per ogni sezione materiale
+        var matSections = c.Query<dynamic>(@"
+        SELECT s.id, s.name,
+               COALESCE(SUM(i.quantity * i.unit_cost * i.markup_value), 0) AS sale
+        FROM offer_material_sections s
+        LEFT JOIN offer_material_items i ON i.section_id = s.id
+        WHERE s.offer_id = @offerId AND s.is_enabled = 1
+        GROUP BY s.id, s.name
+        ORDER BY s.sort_order", new { offerId }).ToList();
+
+        decimal totalSale = costSections.Sum(s => (decimal)s.sale) + matSections.Sum(s => (decimal)s.sale);
+        if (totalSale == 0) return Ok(ApiResponse<string>.Ok("", "Nessun importo"));
+
+        foreach (var s in costSections)
+        {
+            decimal weight = (decimal)s.sale / totalSale;
+            c.Execute(@"INSERT INTO offer_pricing_distribution 
+            (offer_id, section_type, section_id, section_name, sale_amount, contingency_pct, margin_pct)
+            VALUES (@offerId, 'COST', @secId, @name, @sale, @weight, @weight)",
+                new { offerId, secId = (int)s.id, name = (string)s.name, sale = (decimal)s.sale, weight });
+        }
+
+        foreach (var s in matSections)
+        {
+            decimal weight = (decimal)s.sale / totalSale;
+            c.Execute(@"INSERT INTO offer_pricing_distribution 
+            (offer_id, section_type, section_id, section_name, sale_amount, contingency_pct, margin_pct)
+            VALUES (@offerId, 'MATERIAL', @secId, @name, @sale, @weight, @weight)",
+                new { offerId, secId = (int)s.id, name = (string)s.name, sale = (decimal)s.sale, weight });
+        }
+
+        return Ok(ApiResponse<string>.Ok("", "Distribuzione generata"));
+    }
+
+    /// <summary>PUT /api/offers/{offerId}/costing/pricing-distribution/{id}</summary>
+    [HttpPut("pricing-distribution/{id}")]
+    public IActionResult UpdatePricingDistribution(int offerId, int id, [FromBody] PricingDistributionRow req)
+    {
+        using var c = _db.Open();
+        c.Execute(@"UPDATE offer_pricing_distribution 
+        SET contingency_pct=@ContingencyPct, margin_pct=@MarginPct
+        WHERE id=@Id AND offer_id=@offerId",
+            new { req.ContingencyPct, req.MarginPct, Id = id, offerId });
+        return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
+    }
+
+    /// <summary>PUT /api/offers/{offerId}/costing/pricing-distribution/rebalance</summary>
+    [HttpPut("pricing-distribution/rebalance")]
+    public IActionResult RebalancePricingDistribution(int offerId, [FromBody] RebalanceRequest req)
+    {
+        using var c = _db.Open();
+
+        // Prendi tutte le righe
+        var rows = c.Query<PricingDistributionRow>(@"
+        SELECT id, contingency_pct AS ContingencyPct, margin_pct AS MarginPct, sale_amount AS SaleAmount
+        FROM offer_pricing_distribution WHERE offer_id=@offerId",
+            new { offerId }).ToList();
+
+        // La riga modificata ha il valore fisso
+        var fixedRow = rows.FirstOrDefault(r => r.Id == req.FixedRowId);
+        if (fixedRow == null) return BadRequest(ApiResponse<string>.Fail("Riga non trovata"));
+
+        if (req.Field == "contingency")
+        {
+            decimal fixedPct = req.NewValue;
+            decimal remaining = 1m - fixedPct;
+            decimal othersTotal = rows.Where(r => r.Id != req.FixedRowId).Sum(r => r.ContingencyPct);
+
+            c.Execute("UPDATE offer_pricing_distribution SET contingency_pct=@pct WHERE id=@id",
+                new { pct = fixedPct, id = req.FixedRowId });
+
+            foreach (var r in rows.Where(r => r.Id != req.FixedRowId))
+            {
+                decimal newPct = othersTotal > 0 ? r.ContingencyPct / othersTotal * remaining : remaining / (rows.Count - 1);
+                c.Execute("UPDATE offer_pricing_distribution SET contingency_pct=@pct WHERE id=@id",
+                    new { pct = newPct, id = r.Id });
+            }
+        }
+        else // margin
+        {
+            decimal fixedPct = req.NewValue;
+            decimal remaining = 1m - fixedPct;
+            decimal othersTotal = rows.Where(r => r.Id != req.FixedRowId).Sum(r => r.MarginPct);
+
+            c.Execute("UPDATE offer_pricing_distribution SET margin_pct=@pct WHERE id=@id",
+                new { pct = fixedPct, id = req.FixedRowId });
+
+            foreach (var r in rows.Where(r => r.Id != req.FixedRowId))
+            {
+                decimal newPct = othersTotal > 0 ? r.MarginPct / othersTotal * remaining : remaining / (rows.Count - 1);
+                c.Execute("UPDATE offer_pricing_distribution SET margin_pct=@pct WHERE id=@id",
+                    new { pct = newPct, id = r.Id });
+            }
+        }
+
+        return Ok(ApiResponse<string>.Ok("", "Ribilanciato"));
+    }
 }

@@ -9,6 +9,7 @@ public partial class ProjectCostingControl : UserControl
     private int _projectId;
     private string _apiBasePath = "";
     private bool _readOnly;
+    private bool IsOfferMode => _apiBasePath.Contains("/offers/");
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
     private CostingViewModel _vm = new();
     public ProjectCostingControl()
@@ -200,29 +201,57 @@ public partial class ProjectCostingControl : UserControl
         }
 
         var allEmps = _sectionEmployeesCache[secId];
-        var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
-        var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
 
-        if (available.Count == 0)
+        if (IsOfferMode)
         {
-            MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
-            return;
+            // Offerta: alias + costo reparto, employee_id = null
+            var anyEmp = allEmps.FirstOrDefault();
+            string deptCode = anyEmp?.DepartmentCode ?? "RIS";
+            decimal hourlyCost = anyEmp?.HourlyCost ?? 0;
+            decimal markup = anyEmp?.DefaultMarkup ?? 1.450m;
+            int counter = sec.Resources.Count + 1;
+
+            var req = new ProjectCostResourceSaveRequest
+            {
+                SectionId = secId,
+                EmployeeId = null,
+                ResourceName = $"{deptCode} {counter}",
+                HourlyCost = hourlyCost,
+                MarkupValue = markup,
+                HoursPerDay = 8,
+                CostPerKm = 0.90m
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
+            await LoadData();
         }
-
-        var first = available.First();
-        var req = new ProjectCostResourceSaveRequest
+        else
         {
-            SectionId = secId,
-            EmployeeId = first.Id,
-            ResourceName = first.FullName,
-            HourlyCost = first.HourlyCost,
-            MarkupValue = first.DefaultMarkup,
-            HoursPerDay = 8,
-            CostPerKm = 0.90m
-        };
-        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
-        await LoadData();
+            // Commessa: dipendente reale
+            var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
+            var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+
+            if (available.Count == 0)
+            {
+                MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
+                return;
+            }
+
+            var first = available.First();
+            var req = new ProjectCostResourceSaveRequest
+            {
+                SectionId = secId,
+                EmployeeId = first.Id,
+                ResourceName = first.FullName,
+                HourlyCost = first.HourlyCost,
+                MarkupValue = first.DefaultMarkup,
+                HoursPerDay = 8,
+                CostPerKm = 0.90m
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
+            await LoadData();
+        }
     }
 
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
@@ -294,16 +323,35 @@ public partial class ProjectCostingControl : UserControl
         if (combo.DataContext is not CostResourceVM row) return;
         if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees)) return;
 
-        CostSectionVM? sec = FindSection(row.SectionId);
-        var usedIds = sec?.Resources
-            .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
-            .Select(r => r.EmployeeId!.Value)
-            .ToHashSet() ?? new();
+        if (IsOfferMode)
+        {
+            // Offerta: mostra alias nel combo (ELE 1, ELE 2...) con costi reali dietro
+            string deptCode = allEmployees.FirstOrDefault()?.DepartmentCode ?? "RIS";
+            var aliased = allEmployees.Select((emp, idx) => new EmployeeCostLookup
+            {
+                Id = emp.Id,
+                FullName = $"{deptCode} {idx + 1}",
+                DepartmentCode = emp.DepartmentCode,
+                HourlyCost = emp.HourlyCost,
+                DefaultMarkup = emp.DefaultMarkup
+            }).ToList();
+            combo.ItemsSource = aliased;
+            // Non preselezionare — la riga ha già i dati corretti
+        }
+        else
+        {
+            // Commessa: nomi reali
+            CostSectionVM? sec = FindSection(row.SectionId);
+            var usedIds = sec?.Resources
+                .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
+                .Select(r => r.EmployeeId!.Value)
+                .ToHashSet() ?? new();
 
-        var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
-        combo.ItemsSource = available;
-        if (row.EmployeeId.HasValue)
-            combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
+            var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+            combo.ItemsSource = available;
+            if (row.EmployeeId.HasValue)
+                combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
+        }
     }
 
     private async void EmployeeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -311,10 +359,22 @@ public partial class ProjectCostingControl : UserControl
         if (sender is not ComboBox combo) return;
         if (combo.DataContext is not CostResourceVM row) return;
         if (combo.SelectedItem is not EmployeeCostLookup emp) return;
-        row.EmployeeId = emp.Id;
-        row.ResourceName = emp.FullName;
-        row.HourlyCost = emp.HourlyCost;
-        row.MarkupValue = emp.DefaultMarkup;
+
+        if (IsOfferMode)
+        {
+            // Offerta: prendi costi ma salva con alias e employee_id = null
+            row.EmployeeId = null;
+            row.ResourceName = emp.FullName; // già l'alias "ELE 1"
+            row.HourlyCost = emp.HourlyCost;
+            row.MarkupValue = emp.DefaultMarkup;
+        }
+        else
+        {
+            row.EmployeeId = emp.Id;
+            row.ResourceName = emp.FullName;
+            row.HourlyCost = emp.HourlyCost;
+            row.MarkupValue = emp.DefaultMarkup;
+        }
         if (row.Id > 0) await SaveResource(row);
     }
 
@@ -339,6 +399,9 @@ public partial class ProjectCostingControl : UserControl
         {
             _vm.StatusText = "Caricamento...";
             DataContext = _vm;
+            // Carica distribuzione prezzi (solo offerta)
+            if (IsOfferMode)
+                await LoadDistribution();
 
             string json = await ApiClient.GetAsync($"{_apiBasePath}");
             var doc = JsonDocument.Parse(json);
@@ -534,19 +597,87 @@ public partial class ProjectCostingControl : UserControl
         }
     }
     // ══════════════════════════════════════════════════════════════
-    // EVENT HANDLERS — GENERALI
+    // DISTRIBUZIONE PREZZI CLIENTE
     // ══════════════════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════════════════
-    // EVENT HANDLERS — RISORSE
-    // ══════════════════════════════════════════════════════════════
-    // ── K Ricarico risorse ──
-    // ══════════════════════════════════════════════════════════════
-    // EVENT HANDLERS — MATERIALI
-    // ══════════════════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════════════════
-    // HELPERS
-    // ══════════════════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════════════════
-    // SAVE
-    // ══════════════════════════════════════════════════════════════
+
+    private List<PricingDistributionRow> _distributionRows = new();
+
+    private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await ApiClient.PostAsync($"{_apiBasePath.Replace("/costing", "")}/costing/pricing-distribution/generate", "{}");
+            await LoadDistribution();
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    private async Task LoadDistribution()
+    {
+        if (!IsOfferMode) return;
+        try
+        {
+            string json = await ApiClient.GetAsync($"{_apiBasePath}/pricing-distribution");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            _distributionRows = JsonSerializer.Deserialize<List<PricingDistributionRow>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            RecalcDistribution();
+            dgDistribution.ItemsSource = _distributionRows;
+            pnlDistribution.Visibility = Visibility.Visible;
+        }
+        catch { }
+    }
+
+    private void RecalcDistribution()
+    {
+        decimal contingencyTotal = _vm.ContingencyAmount;
+        decimal marginTotal = _vm.NegotiationMarginAmount;
+
+        foreach (var row in _distributionRows)
+        {
+            row.ContingencyAmount = Math.Round(contingencyTotal * row.ContingencyPct, 2);
+            row.MarginAmount = Math.Round(marginTotal * row.MarginPct, 2);
+            row.ClientPrice = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+        }
+
+        decimal totCont = _distributionRows.Sum(r => r.ContingencyPct);
+        decimal totMarg = _distributionRows.Sum(r => r.MarginPct);
+        txtDistTotals.Text = $"Cont: {totCont:P1}  |  Marg: {totMarg:P1}";
+    }
+
+    private async void DistributionGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction == DataGridEditAction.Cancel) return;
+        await Task.Delay(100);
+
+        if (e.Row.Item is not PricingDistributionRow row || row.Id <= 0) return;
+
+        string field = "";
+        decimal newValue = 0;
+
+        if (e.Column.Header?.ToString() == "CONT. %")
+        {
+            field = "contingency";
+            newValue = row.ContingencyPct;
+        }
+        else if (e.Column.Header?.ToString() == "MARG. %")
+        {
+            field = "margin";
+            newValue = row.MarginPct;
+        }
+        else return;
+
+        try
+        {
+            var req = new { fixedRowId = row.Id, field, newValue };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"{_apiBasePath}/pricing-distribution/rebalance", json);
+            await LoadDistribution();
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
 }

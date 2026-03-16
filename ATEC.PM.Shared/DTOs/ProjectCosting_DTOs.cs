@@ -147,3 +147,26 @@ public class ProjectCostingData
     public ProjectPricingDto Pricing { get; set; } = new();
     public bool IsInitialized { get; set; }
 }
+
+public class PricingDistributionRow
+{
+    public int Id { get; set; }
+    public int OfferId { get; set; }
+    public string SectionType { get; set; } = "COST";
+    public int SectionId { get; set; }
+    public string SectionName { get; set; } = "";
+    public decimal SaleAmount { get; set; }
+    public decimal ContingencyPct { get; set; }
+    public decimal MarginPct { get; set; }
+    // Calcolati client-side
+    public decimal ContingencyAmount { get; set; }
+    public decimal MarginAmount { get; set; }
+    public decimal ClientPrice { get; set; }
+}
+
+public class RebalanceRequest
+{
+    public int FixedRowId { get; set; }
+    public string Field { get; set; } = "contingency";
+    public decimal NewValue { get; set; }
+}
