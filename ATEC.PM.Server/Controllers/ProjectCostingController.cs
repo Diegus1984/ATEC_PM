@@ -209,8 +209,8 @@ public class ProjectCostingController : ControllerBase
             ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
 
         var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
-            SELECT id, project_id AS ProjectId, structure_costs_pct AS StructureCostsPct,
-                   contingency_pct AS ContingencyPct, risk_warranty_pct AS RiskWarrantyPct,
+            SELECT id, project_id AS ProjectId,
+                   contingency_pct AS ContingencyPct,
                    negotiation_margin_pct AS NegotiationMarginPct,
                    travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup
             FROM project_pricing WHERE project_id=@projectId",
@@ -404,16 +404,14 @@ public class ProjectCostingController : ControllerBase
     {
         using var c = _db.Open();
         c.Execute(@"
-            UPDATE project_pricing SET structure_costs_pct=@StructureCostsPct,
-                contingency_pct=@ContingencyPct, risk_warranty_pct=@RiskWarrantyPct,
+            UPDATE project_pricing SET
+                contingency_pct=@ContingencyPct,
                 negotiation_margin_pct=@NegotiationMarginPct,
                 travel_markup=@TravelMarkup, allowance_markup=@AllowanceMarkup
             WHERE project_id=@projectId",
             new
             {
-                req.StructureCostsPct,
                 req.ContingencyPct,
-                req.RiskWarrantyPct,
                 req.NegotiationMarginPct,
                 req.TravelMarkup,
                 req.AllowanceMarkup,

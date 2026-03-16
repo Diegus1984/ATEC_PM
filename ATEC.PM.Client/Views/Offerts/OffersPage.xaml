@@ -42,10 +42,10 @@
                         <StackPanel>
                             <Border
                                 x:Name="Bd"
+                                Margin="0,1,0,1"
                                 Padding="{TemplateBinding Padding}"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="6"
-                                Margin="0,1,0,1">
+                                CornerRadius="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="20" />
@@ -60,12 +60,12 @@
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
                                         Data="M 0,0 L 5,5 L 0,10"
+                                        RenderTransformOrigin="0.5,0.5"
                                         Stroke="#9CA3AF"
-                                        StrokeThickness="1.5"
+                                        StrokeEndLineCap="Round"
                                         StrokeLineJoin="Round"
                                         StrokeStartLineCap="Round"
-                                        StrokeEndLineCap="Round"
-                                        RenderTransformOrigin="0.5,0.5">
+                                        StrokeThickness="1.5">
                                         <Path.RenderTransform>
                                             <RotateTransform x:Name="ExpanderRotation" Angle="0" />
                                         </Path.RenderTransform>
@@ -107,19 +107,31 @@
                                                 </DiscreteObjectKeyFrame>
                                             </ObjectAnimationUsingKeyFrames>
 
-                                            <DoubleAnimation Storyboard.TargetName="ExpanderRotation" Storyboard.TargetProperty="Angle" To="90" Duration="0:0:0.35">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ExpanderRotation"
+                                                Storyboard.TargetProperty="Angle"
+                                                To="90"
+                                                Duration="0:0:0.35">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
                                             </DoubleAnimation>
 
-                                            <DoubleAnimation Storyboard.TargetName="ItemsScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.35">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ItemsScale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="1"
+                                                Duration="0:0:0.35">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
                                             </DoubleAnimation>
 
-                                            <DoubleAnimation Storyboard.TargetName="ItemsHost" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.35">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ItemsHost"
+                                                Storyboard.TargetProperty="Opacity"
+                                                To="1"
+                                                Duration="0:0:0.35">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
@@ -130,19 +142,31 @@
                                 <Trigger.ExitActions>
                                     <BeginStoryboard>
                                         <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ExpanderRotation" Storyboard.TargetProperty="Angle" To="0" Duration="0:0:0.35">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ExpanderRotation"
+                                                Storyboard.TargetProperty="Angle"
+                                                To="0"
+                                                Duration="0:0:0.35">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
                                             </DoubleAnimation>
 
-                                            <DoubleAnimation Storyboard.TargetName="ItemsScale" Storyboard.TargetProperty="ScaleY" To="0" Duration="0:0:0.35">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ItemsScale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="0"
+                                                Duration="0:0:0.35">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
                                             </DoubleAnimation>
 
-                                            <DoubleAnimation Storyboard.TargetName="ItemsHost" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25">
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ItemsHost"
+                                                Storyboard.TargetProperty="Opacity"
+                                                To="0"
+                                                Duration="0:0:0.25">
                                                 <DoubleAnimation.EasingFunction>
                                                     <QuarticEase EasingMode="EaseOut" />
                                                 </DoubleAnimation.EasingFunction>
@@ -219,17 +243,15 @@
                     </DockPanel>
                 </Border>
 
-                <Border
-                    Padding="12,12,12,8"
-                    DockPanel.Dock="Top">
+                <Border Padding="12,12,12,8" DockPanel.Dock="Top">
                     <Grid>
                         <TextBox
                             x:Name="txtSearch"
                             Height="36"
                             Padding="12,0,12,0"
                             VerticalContentAlignment="Center"
-                            BorderBrush="#D1D5DB"
                             Background="#F9FAFB"
+                            BorderBrush="#D1D5DB"
                             FontSize="13"
                             TextChanged="TxtSearch_Changed">
                             <TextBox.Resources>
@@ -251,9 +273,9 @@
 
                 <Border
                     Padding="12,6"
+                    Background="#FAFBFC"
                     BorderBrush="#E4E7EC"
                     BorderThickness="0,1,0,0"
-                    Background="#FAFBFC"
                     DockPanel.Dock="Bottom">
                     <TextBlock
                         x:Name="txtStatus"
@@ -372,9 +394,9 @@
                                 x:Name="btnDelete"
                                 Margin="8,0,0,0"
                                 Background="#FEE2E2"
-                                Foreground="#DC2626"
                                 Click="BtnDelete_Click"
-                                Content="Elimina" />
+                                Content="Elimina"
+                                Foreground="#DC2626" />
                         </StackPanel>
                     </DockPanel>
                 </Border>
@@ -398,7 +420,10 @@
                             Text="Seleziona un'offerta dall'albero per visualizzarne i dettagli" />
                     </StackPanel>
 
-                    <DockPanel x:Name="pnlOfferDetail" Visibility="Collapsed" Margin="0,15,0,0">
+                    <DockPanel
+                        x:Name="pnlOfferDetail"
+                        Margin="0,15,0,0"
+                        Visibility="Collapsed">
                         <Border
                             Padding="30,12"
                             Background="#FAFBFC"

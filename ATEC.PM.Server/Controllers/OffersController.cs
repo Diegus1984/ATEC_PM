@@ -279,9 +279,9 @@ public class OffersController : ControllerBase
 
             // Copia pricing
             c.Execute(@"
-                INSERT INTO offer_pricing (offer_id, structure_costs_pct, contingency_pct, risk_warranty_pct,
+                INSERT INTO offer_pricing (offer_id, contingency_pct,
                     negotiation_margin_pct, travel_markup, allowance_markup)
-                SELECT @newOfferId, structure_costs_pct, contingency_pct, risk_warranty_pct,
+                SELECT @newOfferId, contingency_pct,
                     negotiation_margin_pct, travel_markup, allowance_markup
                 FROM offer_pricing WHERE offer_id=@oldOfferId",
                 new { newOfferId, oldOfferId = id }, tx);
@@ -411,9 +411,9 @@ public class OffersController : ControllerBase
 
             // 6. Copia pricing
             c.Execute(@"
-                INSERT INTO project_pricing (project_id, structure_costs_pct, contingency_pct, risk_warranty_pct,
+                INSERT INTO project_pricing (project_id, contingency_pct,
                     negotiation_margin_pct, travel_markup, allowance_markup)
-                SELECT @projectId, structure_costs_pct, contingency_pct, risk_warranty_pct,
+                SELECT @projectId, contingency_pct,
                     negotiation_margin_pct, travel_markup, allowance_markup
                 FROM offer_pricing WHERE offer_id=@offerId",
                 new { projectId, offerId = id }, tx);

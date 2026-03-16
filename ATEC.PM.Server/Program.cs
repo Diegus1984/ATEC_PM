@@ -77,14 +77,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<DbService>();
 builder.Services.AddSingleton<NotificationService>();
-builder.Services.AddHostedService<NotificationBackgroundService>();
 builder.Services.AddSingleton<CodexGeneratorService>();
+
+// BackgroundServices — abilitabili da appsettings.json sezione "Services"
+bool svcNotifications = builder.Configuration.GetValue("Services:Notifications", true);
+bool svcCodexSync = builder.Configuration.GetValue("Services:CodexSync", true);
+bool svcDaneaSync = builder.Configuration.GetValue("Services:DaneaSync", true);
+bool svcBackup = builder.Configuration.GetValue("Services:Backup", true);
+
+if (svcNotifications)
+    builder.Services.AddHostedService<NotificationBackgroundService>();
+
 builder.Services.AddSingleton<CodexSyncService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
+if (svcCodexSync)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
+
 builder.Services.AddSingleton<DaneaSyncService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
+if (svcDaneaSync)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
+
 builder.Services.AddScoped<BackupController>();
-builder.Services.AddHostedService<BackupBackgroundService>();
+if (svcBackup)
+    builder.Services.AddHostedService<BackupBackgroundService>();
 
 var app = builder.Build();
 

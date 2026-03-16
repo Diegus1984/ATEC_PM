@@ -121,10 +121,8 @@ public class ProjectPricingDto
 {
     public int Id { get; set; }
     public int ProjectId { get; set; }
-    public decimal StructureCostsPct { get; set; } = 0.020m;
-    public decimal ContingencyPct { get; set; } = 0.050m;
-    public decimal RiskWarrantyPct { get; set; } = 0.050m;
-    public decimal NegotiationMarginPct { get; set; } = 0.100m;
+    public decimal ContingencyPct { get; set; } = 0.130m;
+    public decimal NegotiationMarginPct { get; set; } = 0.050m;
     public decimal TravelMarkup { get; set; } = 1.000m;
     public decimal AllowanceMarkup { get; set; } = 1.000m;
 }

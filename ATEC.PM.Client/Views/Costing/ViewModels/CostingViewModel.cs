@@ -72,19 +72,7 @@ public class CostingViewModel : INotifyPropertyChanged
     // SCHEDA PREZZI — NET → OFFER → FINAL
     // ══════════════════════════════════════════════════════════════
 
-    private decimal _structureCostsPct = 0.020m;
-    public decimal StructureCostsPct
-    {
-        get => _structureCostsPct;
-        set
-        {
-            _structureCostsPct = value;
-            Notify(); Notify(nameof(StructureCostsAmount));
-            Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
-        }
-    }
-
-    private decimal _contingencyPct = 0.050m;
+    private decimal _contingencyPct = 0.130m;
     public decimal ContingencyPct
     {
         get => _contingencyPct;
@@ -96,19 +84,7 @@ public class CostingViewModel : INotifyPropertyChanged
         }
     }
 
-    private decimal _riskWarrantyPct = 0.050m;
-    public decimal RiskWarrantyPct
-    {
-        get => _riskWarrantyPct;
-        set
-        {
-            _riskWarrantyPct = value;
-            Notify(); Notify(nameof(RiskWarrantyAmount));
-            Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
-        }
-    }
-
-    private decimal _negotiationMarginPct = 0.100m;
+    private decimal _negotiationMarginPct = 0.050m;
     public decimal NegotiationMarginPct
     {
         get => _negotiationMarginPct;
@@ -123,12 +99,10 @@ public class CostingViewModel : INotifyPropertyChanged
     public decimal NetPrice => TotalCombinedSale;
 
     // Importi calcolati dalle %
-    public decimal StructureCostsAmount => NetPrice * StructureCostsPct;
     public decimal ContingencyAmount => NetPrice * ContingencyPct;
-    public decimal RiskWarrantyAmount => NetPrice * RiskWarrantyPct;
 
-    // OFFER = NET + struttura + contingency + rischi
-    public decimal OfferPrice => NetPrice + StructureCostsAmount + ContingencyAmount + RiskWarrantyAmount;
+    // OFFER = NET + contingency
+    public decimal OfferPrice => NetPrice + ContingencyAmount;
 
     // Margine trattativa
     public decimal NegotiationMarginAmount => OfferPrice * NegotiationMarginPct;
@@ -160,9 +134,7 @@ public class CostingViewModel : INotifyPropertyChanged
 
         // Scheda prezzi — ricalcolo a cascata
         Notify(nameof(NetPrice));
-        Notify(nameof(StructureCostsAmount));
         Notify(nameof(ContingencyAmount));
-        Notify(nameof(RiskWarrantyAmount));
         Notify(nameof(OfferPrice));
         Notify(nameof(NegotiationMarginAmount));
         Notify(nameof(FinalOfferPrice));
@@ -218,11 +190,7 @@ public class CostingViewModel : INotifyPropertyChanged
         vm.AllowanceMarkup = data.Pricing.AllowanceMarkup;
 
         // Scheda prezzi dal pricing
-        // DB può avere formato percentuale (8.00 = 8%) o decimale (0.08 = 8%)
-        // Il ViewModel lavora in decimale (0.08), normalizza se necessario
-        vm.StructureCostsPct = NormalizePct(data.Pricing.StructureCostsPct);
         vm.ContingencyPct = NormalizePct(data.Pricing.ContingencyPct);
-        vm.RiskWarrantyPct = NormalizePct(data.Pricing.RiskWarrantyPct);
         vm.NegotiationMarginPct = NormalizePct(data.Pricing.NegotiationMarginPct);
 
         var colorMap = new Dictionary<string, string>

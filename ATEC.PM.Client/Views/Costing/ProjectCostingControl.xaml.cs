@@ -103,9 +103,7 @@ public partial class ProjectCostingControl : UserControl
         string tag = tb.Tag?.ToString() ?? "";
         switch (tag)
         {
-            case "structure": _vm.StructureCostsPct = val; break;
             case "contingency": _vm.ContingencyPct = val; break;
-            case "risk": _vm.RiskWarrantyPct = val; break;
             case "negotiation": _vm.NegotiationMarginPct = val; break;
         }
     }
@@ -461,9 +459,7 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new
             {
-                structureCostsPct = _vm.StructureCostsPct,
                 contingencyPct = _vm.ContingencyPct,
-                riskWarrantyPct = _vm.RiskWarrantyPct,
                 negotiationMarginPct = _vm.NegotiationMarginPct,
                 travelMarkup = _vm.TravelMarkup,
                 allowanceMarkup = _vm.AllowanceMarkup

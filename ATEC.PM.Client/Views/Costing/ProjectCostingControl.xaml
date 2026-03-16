@@ -1055,8 +1055,6 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <!-- NET COST -->
@@ -1068,26 +1066,14 @@
                                 </DockPanel>
                             </Border>
 
-                            <!-- + Struttura -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Costi struttura" />
-                            <TextBox Grid.Row="1" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="structure" Text="{Binding StructureCostsPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="1" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
-                                <Run Text="{Binding StructureCostsAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-
                             <!-- + Contingency -->
-                            <TextBlock Grid.Row="2" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Contingency" />
-                            <TextBox Grid.Row="2" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="2" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
+                            <TextBlock Grid.Row="1" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Contingency" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
                                 <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
-                            <!-- + Rischi -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Rischi e Garanzie" />
-                            <TextBox Grid.Row="3" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="risk" Text="{Binding RiskWarrantyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
-                                <Run Text="{Binding RiskWarrantyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-
                             <!-- OFFER PRICE -->
-                            <Border Grid.Row="4" Grid.ColumnSpan="3" Margin="0,4,0,4" Padding="8,5" Background="#1A1D26">
+                            <Border Grid.Row="2" Grid.ColumnSpan="3" Margin="0,4,0,4" Padding="8,5" Background="#1A1D26">
                                 <DockPanel>
                                     <TextBlock VerticalAlignment="Center" DockPanel.Dock="Right" FontSize="14" FontWeight="Bold" Foreground="#4F6EF7">
                                         <Run Text="{Binding OfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
@@ -1096,13 +1082,13 @@
                             </Border>
 
                             <!-- + Margine trattativa -->
-                            <TextBlock Grid.Row="5" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Margine trattativa" />
-                            <TextBox Grid.Row="5" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="negotiation" Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Row="5" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
+                            <TextBlock Grid.Row="3" Grid.Column="0" Margin="8,2,0,2" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="+ Margine trattativa" />
+                            <TextBox Grid.Row="3" Grid.Column="1" Height="24" Margin="4,2" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Background="#F9FAFB" BorderBrush="#E4E7EC" BorderThickness="1" FontSize="12" GotFocus="MarkupTextBox_GotFocus" KeyDown="PricingPct_KeyDown" LostFocus="PricingPct_LostFocus" Tag="negotiation" Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#1A1D26">
                                 <Run Text="{Binding NegotiationMarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
 
                             <!-- FINAL OFFER PRICE -->
-                            <Border Grid.Row="6" Grid.ColumnSpan="3" Margin="0,4,0,0" Padding="8,7" Background="#059669">
+                            <Border Grid.Row="4" Grid.ColumnSpan="3" Margin="0,4,0,0" Padding="8,7" Background="#059669">
                                 <DockPanel>
                                     <TextBlock VerticalAlignment="Center" DockPanel.Dock="Right" FontSize="16" FontWeight="Bold" Foreground="White">
                                         <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
