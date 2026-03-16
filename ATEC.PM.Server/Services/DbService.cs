@@ -497,11 +497,16 @@ public class DbService
             quantity DECIMAL(10,3) DEFAULT 0,
             unit_cost DECIMAL(10,2) DEFAULT 0,
             supplier_id INT NULL,
+            manufacturer VARCHAR(200) DEFAULT '',
             item_status VARCHAR(20) DEFAULT 'TO_ORDER',
+            requested_by VARCHAR(100) DEFAULT '',
+            danea_ref VARCHAR(100) DEFAULT '',
             purchase_order VARCHAR(100) DEFAULT '',
             date_needed DATE,
             date_ordered DATE,
             date_received DATE,
+            destination VARCHAR(200) DEFAULT '',
+            ddp_type VARCHAR(20) DEFAULT 'COMMERCIAL',
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -728,6 +733,11 @@ public class DbService
         AddColumnIfMissing(c, "project_phases", "start_date", "DATE NULL AFTER notes");
         AddColumnIfMissing(c, "project_phases", "end_date", "DATE NULL AFTER start_date");
         AddColumnIfMissing(c, "departments", "default_markup", "DECIMAL(5,3) NOT NULL DEFAULT 1.450 AFTER hourly_cost");
+        AddColumnIfMissing(c, "bom_items", "manufacturer", "VARCHAR(200) DEFAULT '' AFTER supplier_id");
+        AddColumnIfMissing(c, "bom_items", "requested_by", "VARCHAR(100) DEFAULT '' AFTER item_status");
+        AddColumnIfMissing(c, "bom_items", "danea_ref", "VARCHAR(100) DEFAULT '' AFTER requested_by");
+        AddColumnIfMissing(c, "bom_items", "destination", "VARCHAR(200) DEFAULT '' AFTER date_received");
+        AddColumnIfMissing(c, "bom_items", "ddp_type", "VARCHAR(20) DEFAULT 'COMMERCIAL' AFTER destination");
         MigratePricingPctToDecimal(c);
     }
 

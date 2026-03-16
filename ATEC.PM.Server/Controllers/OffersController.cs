@@ -422,16 +422,27 @@ public class OffersController : ControllerBase
             c.Execute("UPDATE offers SET status='CONVERTITA', converted_project_id=@projectId WHERE id=@Id",
                 new { projectId, Id = id }, tx);
 
-            // 8. Crea cartelle commessa
+            // 8. Salva server_path
+            string fullPath = "";
             try
             {
                 string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
-                string fullPath = Path.Combine(basePath, year.ToString(), projectCode);
+                fullPath = Path.Combine(basePath, year.ToString(), projectCode);
                 c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = projectId }, tx);
             }
             catch { /* non critico */ }
 
             tx.Commit();
+
+            // 9. Crea cartelle da template (dopo commit, non transazionale)
+            try
+            {
+                CopyTemplateToProject(projectCode);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Offers] Warning: errore creazione cartelle {projectCode}: {ex.Message}");
+            }
 
             // Notifica al PM assegnato
             try
@@ -452,6 +463,35 @@ public class OffersController : ControllerBase
         {
             tx.Rollback();
             return StatusCode(500, ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    private void CopyTemplateToProject(string projectCode)
+    {
+        string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+        string templatePath = _db.GetConfig("TemplatePath", @"C:\ATEC_Commesse\MASTER_TEMPLATE");
+        string year = DateTime.Now.Year.ToString();
+        string targetPath = Path.Combine(basePath, year, projectCode);
+
+        if (!Directory.Exists(templatePath))
+        {
+            Directory.CreateDirectory(targetPath);
+            return;
+        }
+
+        Directory.CreateDirectory(targetPath);
+
+        foreach (string dir in Directory.GetDirectories(templatePath, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(templatePath, dir);
+            Directory.CreateDirectory(Path.Combine(targetPath, relativePath));
+        }
+
+        foreach (string file in Directory.GetFiles(templatePath, "*.*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(templatePath, file);
+            string destFile = Path.Combine(targetPath, relativePath);
+            System.IO.File.Copy(file, destFile, overwrite: false);
         }
     }
 }

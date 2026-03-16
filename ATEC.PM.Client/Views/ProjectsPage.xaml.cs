@@ -11,6 +11,8 @@ public partial class ProjectsPage : Page
     private Costing.ProjectCostingControl? _costingControl;
 
     private int _costingProjectId;
+    private int _selectedProjectId;
+    private string _selectedProjectCode = "";
 
     private int _pendingNavProjectId;
 
@@ -1054,6 +1056,20 @@ public partial class ProjectsPage : Page
             var parts = tag.Split('|');
             if (parts.Length < 2 || !int.TryParse(parts[1], out var id)) return;
 
+            _selectedProjectId = id;
+
+            // Mostra bottone elimina solo su nodi project/details e solo per ADMIN
+            bool isProjectNode = parts[0] is "project" or "details";
+            btnHardDelete.Visibility = isProjectNode && App.CurrentUser.IsAdmin
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            // Salva codice commessa per il messaggio di conferma
+            if (isProjectNode)
+            {
+                var proj = _allProjects.FirstOrDefault(p => p.Id == id);
+                _selectedProjectCode = proj?.Code ?? "";
+            }
+
             switch (parts[0])
             {
                 case "project":
@@ -1107,5 +1123,49 @@ public partial class ProjectsPage : Page
                 p.Title.ToLower().Contains(filter) ||
                 p.CustomerName.ToLower().Contains(filter)
             ).ToList());
+    }
+
+    private async void BtnHardDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProjectId <= 0) return;
+        string code = _selectedProjectCode;
+
+        if (MessageBox.Show(
+            $"Eliminare DEFINITIVAMENTE la commessa {code}?\n\n" +
+            "Verranno cancellati:\n" +
+            "• Tutti i dati (fasi, timesheet, DDP, costing, documenti)\n" +
+            "• Le cartelle su disco\n" +
+            "• Se derivata da offerta, l'offerta tornerà ACCETTATA\n\n" +
+            "Questa operazione è IRREVERSIBILE.",
+            "Conferma eliminazione definitiva",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        if (MessageBox.Show(
+            $"ULTIMA CONFERMA: cancellare {code}?",
+            "Sei sicuro?",
+            MessageBoxButton.YesNo, MessageBoxImage.Stop) != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            string json = await ApiClient.DeleteAsync($"/api/projects/{_selectedProjectId}/hard");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                MessageBox.Show($"Commessa {code} eliminata.", "Fatto", MessageBoxButton.OK, MessageBoxImage.Information);
+                _selectedProjectId = 0;
+                _selectedProjectCode = "";
+                btnHardDelete.Visibility = Visibility.Collapsed;
+                SectionContent.Content = null;
+                txtSectionTitle.Text = "Seleziona una commessa";
+                await LoadTree();
+            }
+            else
+            {
+                MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore", "Errore");
+            }
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 }

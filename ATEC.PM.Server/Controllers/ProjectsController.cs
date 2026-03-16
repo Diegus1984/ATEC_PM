@@ -132,6 +132,66 @@ public class ProjectsController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
+    /// <summary>
+    /// DELETE /api/projects/{id}/hard — Cancellazione definitiva: DB (CASCADE) + cartelle + ripristino offerta.
+    /// </summary>
+    [HttpDelete("{id}/hard")]
+    public IActionResult HardDelete(int id)
+    {
+        try
+        {
+            using var c = _db.Open();
+            var proj = c.QueryFirstOrDefault<dynamic>("SELECT id, code, server_path FROM projects WHERE id=@Id", new { Id = id });
+            if (proj == null) return NotFound(ApiResponse<string>.Fail("Commessa non trovata"));
+
+            string projectCode = (string)proj.code;
+            string? serverPath = (string?)proj.server_path;
+
+            using var tx = c.BeginTransaction();
+
+            // 1. Se il progetto è stato generato da un'offerta convertita → ripristina offerta
+            var offer = c.QueryFirstOrDefault<dynamic>(
+                "SELECT id, status FROM offers WHERE converted_project_id = @Pid",
+                new { Pid = id }, tx);
+
+            if (offer != null)
+            {
+                c.Execute(
+                    "UPDATE offers SET status = 'ACCETTATA', converted_project_id = NULL WHERE id = @Oid",
+                    new { Oid = (int)offer.id }, tx);
+            }
+
+            // 2. Cancella notifiche collegate
+            c.Execute(@"
+                DELETE nr FROM notification_recipients nr
+                JOIN notifications n ON n.id = nr.notification_id
+                WHERE n.project_id = @Pid", new { Pid = id }, tx);
+            c.Execute("DELETE FROM notifications WHERE project_id = @Pid", new { Pid = id }, tx);
+
+            // 3. DELETE progetto (FK CASCADE elimina fasi, timesheet, bom, costing, pricing, cashflow, chat, docs)
+            c.Execute("DELETE FROM projects WHERE id = @Id", new { Id = id }, tx);
+
+            tx.Commit();
+
+            // 4. Cancella cartelle fisiche (dopo commit, non critico)
+            try
+            {
+                if (!string.IsNullOrEmpty(serverPath) && Directory.Exists(serverPath))
+                    Directory.Delete(serverPath, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Projects] Warning: impossibile cancellare cartella {serverPath}: {ex.Message}");
+            }
+
+            return Ok(ApiResponse<bool>.Ok(true, $"Commessa {projectCode} eliminata definitivamente"));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
     // --- FASI ---
     [HttpGet("{id}/phases")]
     public IActionResult GetPhases(int id)

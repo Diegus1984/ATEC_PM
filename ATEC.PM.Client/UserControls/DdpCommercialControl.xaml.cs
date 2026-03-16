@@ -266,7 +266,7 @@ public partial class DdpCommercialControl : UserControl
     {
         var picker = new CatalogPickerWindow(_projectId, "COMMERCIAL", App.UserFullName)
         {
-            Owner = Window.GetWindow(this)
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
         };
         picker.ItemAdded += async () => await LoadData();
         picker.Show();
