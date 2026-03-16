@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Input;
 using ATEC.PM.Client.Services;
 
 namespace ATEC.PM.Client.Views;
@@ -11,6 +12,29 @@ public partial class LoginWindow : Window
         InitializeComponent();
         txtUsername.Focus();
     }
+
+    // ── EYE TOGGLE ──────────────────────────────────────────────
+
+    private void TxtPassword_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        txtPasswordVisible.Text = txtPassword.Password;
+    }
+
+    private void BtnEye_Down(object sender, MouseButtonEventArgs e)
+    {
+        txtPasswordVisible.Text = txtPassword.Password;
+        txtPasswordVisible.Visibility = Visibility.Visible;
+        txtPassword.Visibility = Visibility.Collapsed;
+    }
+
+    private void BtnEye_Up(object sender, MouseButtonEventArgs e)
+    {
+        txtPassword.Visibility = Visibility.Visible;
+        txtPasswordVisible.Visibility = Visibility.Collapsed;
+        txtPassword.Focus();
+    }
+
+    // ── LOGIN ───────────────────────────────────────────────────
 
     private async void BtnLogin_Click(object sender, RoutedEventArgs e)
     {
@@ -86,8 +110,6 @@ public partial class LoginWindow : Window
         }
         catch
         {
-            // Se fallisce (es. utente ADMIN appena creato senza reparti), UserContext rimane vuoto
-            // Il ruolo ADMIN bypassa comunque tutti i controlli
             App.SetCurrentUser(App.UserId, App.UserRole,
                 Enumerable.Empty<string>(),
                 Enumerable.Empty<string>(),
@@ -95,9 +117,9 @@ public partial class LoginWindow : Window
         }
     }
 
-    private void txtPassword_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void txtPassword_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Enter)
+        if (e.Key == Key.Enter)
         {
             if (string.IsNullOrWhiteSpace(txtUsername.Text))
             {

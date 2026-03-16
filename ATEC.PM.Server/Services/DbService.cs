@@ -26,9 +26,6 @@ public class DbService
             "SELECT config_value FROM app_config WHERE config_key=@Key", new { Key = key }) ?? defaultValue;
     }
 
-    /// <summary>
-    /// Crea il database se non esiste (connessione a MySQL senza specificare il DB).
-    /// </summary>
     private void EnsureDatabaseExists()
     {
         var csb = new MySqlConnectionStringBuilder(_cs);
@@ -43,24 +40,288 @@ public class DbService
 
     public void InitDatabase()
     {
-        // ── STEP 1: Crea il database se non esiste ────────────────
         EnsureDatabaseExists();
-
-        // ── STEP 2: Crea le tabelle ──────────────────────────────
         using var c = Open();
 
-        // ── CODEX ID GENERATOR QUEUE ──────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_generation_queue (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            prefix VARCHAR(10) NOT NULL,
-            date_requested DATE NOT NULL,
-            status VARCHAR(20) DEFAULT 'PENDING',
-            code_generated VARCHAR(20),
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY UQ_PrefixDate (prefix, date_requested)
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 0 — Tabelle senza dipendenze
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS app_config (
+            config_key VARCHAR(100) PRIMARY KEY,
+            config_value VARCHAR(500) DEFAULT '',
+            description VARCHAR(200) DEFAULT '',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── FLUSSO CASSA ───────────────────────────────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS departments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(10) NOT NULL UNIQUE,
+            name VARCHAR(100) NOT NULL,
+            hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
+            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.450,
+            sort_order INT DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS employees (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            first_name VARCHAR(100) NOT NULL,
+            last_name VARCHAR(100) NOT NULL,
+            email VARCHAR(200) DEFAULT '',
+            emp_type VARCHAR(20) DEFAULT 'INTERNAL',
+            supplier_id INT NULL,
+            status VARCHAR(20) DEFAULT 'ACTIVE',
+            username VARCHAR(50),
+            password_hash VARCHAR(255) DEFAULT '',
+            user_role VARCHAR(20) DEFAULT 'TECH',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS customers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            company_name VARCHAR(200) NOT NULL,
+            contact_name VARCHAR(100) DEFAULT '',
+            email VARCHAR(200) DEFAULT '',
+            pec VARCHAR(255) DEFAULT '',
+            phone VARCHAR(100) DEFAULT '',
+            cell VARCHAR(50) DEFAULT '',
+            address VARCHAR(300) DEFAULT '',
+            vat_number VARCHAR(50) DEFAULT '',
+            fiscal_code VARCHAR(50) DEFAULT '',
+            payment_terms VARCHAR(255) DEFAULT '',
+            sdi_code VARCHAR(50) DEFAULT '',
+            easyfatt_code VARCHAR(50) DEFAULT '',
+            easyfatt_id INT DEFAULT 0,
+            notes TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_Customer_Vat (vat_number)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS suppliers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            company_name VARCHAR(200) NOT NULL,
+            contact_name VARCHAR(100) DEFAULT '',
+            email VARCHAR(200) DEFAULT '',
+            phone VARCHAR(100) DEFAULT '',
+            address VARCHAR(300) DEFAULT '',
+            vat_number VARCHAR(50) DEFAULT '',
+            fiscal_code VARCHAR(50) DEFAULT '',
+            notes TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_Supplier_Vat (vat_number)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS holidays (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            holiday_date DATE NOT NULL,
+            description VARCHAR(100) DEFAULT '',
+            year INT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_destinations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            default_commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_groups (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 1 — Dipendono da livello 0
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS employee_departments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            department_id INT NOT NULL,
+            is_responsible BOOLEAN DEFAULT FALSE,
+            is_primary BOOLEAN DEFAULT FALSE,
+            UNIQUE KEY UQ_EmpDept (employee_id, department_id),
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS employee_competences (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            department_id INT NOT NULL,
+            notes VARCHAR(255) DEFAULT '',
+            UNIQUE KEY UQ_EmpComp (employee_id, department_id),
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS absences (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            date_from DATE NOT NULL,
+            date_to DATE NOT NULL,
+            absence_type VARCHAR(20) DEFAULT 'VACATION',
+            status VARCHAR(20) DEFAULT 'PENDING',
+            approved_by INT NULL,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_templates (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
+            group_id INT NOT NULL,
+            is_default BOOLEAN NOT NULL DEFAULT TRUE,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.450,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES cost_section_groups(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_template_departments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            section_template_id INT NOT NULL,
+            department_id INT NOT NULL,
+            FOREIGN KEY (section_template_id) REFERENCES cost_section_templates(id) ON DELETE CASCADE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS catalog_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(100) NOT NULL,
+            description VARCHAR(2000) DEFAULT '',
+            category VARCHAR(255) DEFAULT '',
+            subcategory VARCHAR(255) DEFAULT '',
+            unit VARCHAR(50) DEFAULT 'PZ',
+            unit_cost DECIMAL(10,4) DEFAULT 0,
+            list_price DECIMAL(10,4) DEFAULT 0,
+            supplier_id INT NULL,
+            supplier_code VARCHAR(100) DEFAULT '',
+            manufacturer VARCHAR(255) DEFAULT '',
+            barcode VARCHAR(50) DEFAULT '',
+            notes TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            easyfatt_id INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY UQ_CatalogItem_Code (code),
+            INDEX IX_CatalogItems_Description (description(255)),
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            notification_type VARCHAR(30) NOT NULL,
+            severity VARCHAR(10) NOT NULL DEFAULT 'INFO',
+            title VARCHAR(200) NOT NULL,
+            message VARCHAR(500) NOT NULL DEFAULT '',
+            reference_type VARCHAR(20) NOT NULL DEFAULT '',
+            reference_id INT NOT NULL DEFAULT 0,
+            project_id INT NULL,
+            created_by INT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_type (notification_type),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS notification_recipients (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            notification_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            read_at DATETIME NULL,
+            FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            INDEX idx_emp_unread (employee_id, is_read),
+            INDEX idx_notif (notification_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 2 — Dipendono da livello 1
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS phase_templates (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            category VARCHAR(50) DEFAULT '',
+            department_id INT NULL,
+            cost_section_template_id INT NULL,
+            sort_order INT DEFAULT 0,
+            is_default BOOLEAN DEFAULT TRUE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+            FOREIGN KEY (cost_section_template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 3 — projects
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS projects (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(20) NOT NULL,
+            title VARCHAR(300) NOT NULL,
+            customer_id INT NOT NULL,
+            pm_id INT NOT NULL,
+            description TEXT,
+            start_date DATE,
+            end_date_planned DATE,
+            end_date_actual DATE NULL,
+            budget_total DECIMAL(12,2) DEFAULT 0,
+            budget_hours_total DECIMAL(8,1) DEFAULT 0,
+            revenue DECIMAL(12,2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'DRAFT',
+            priority VARCHAR(20) DEFAULT 'MEDIUM',
+            server_path VARCHAR(500) DEFAULT '',
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (customer_id) REFERENCES customers(id),
+            FOREIGN KEY (pm_id) REFERENCES employees(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 4 — Dipendono da projects
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_phases (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            phase_template_id INT NOT NULL,
+            department_id INT NULL,
+            custom_name VARCHAR(200) DEFAULT '',
+            budget_hours DECIMAL(8,1) DEFAULT 0,
+            budget_cost DECIMAL(12,2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'NOT_STARTED',
+            progress_pct INT DEFAULT 0,
+            sort_order INT DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (phase_template_id) REFERENCES phase_templates(id),
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL UNIQUE,
@@ -93,308 +354,6 @@ public class DbService
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── CATEGORIE MATERIALI ──────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(200) NOT NULL,
-            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.300,
-            default_commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
-            sort_order INT NOT NULL DEFAULT 0,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── SEZIONI COSTO ────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_groups (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            sort_order INT NOT NULL DEFAULT 0,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_templates (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(200) NOT NULL,
-            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
-            group_id INT NOT NULL,
-            is_default BOOLEAN NOT NULL DEFAULT TRUE,
-            sort_order INT NOT NULL DEFAULT 0,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.450,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (group_id) REFERENCES cost_section_groups(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── REPARTI ──────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS departments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            code VARCHAR(10) NOT NULL UNIQUE,
-            name VARCHAR(100) NOT NULL,
-            hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
-            sort_order INT DEFAULT 0,
-            is_active BOOLEAN DEFAULT TRUE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── DIPENDENTI ───────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS employees (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            first_name VARCHAR(100) NOT NULL,
-            last_name VARCHAR(100) NOT NULL,
-            email VARCHAR(200) DEFAULT '',
-            emp_type VARCHAR(20) DEFAULT 'INTERNAL',
-            supplier_id INT NULL,
-            status VARCHAR(20) DEFAULT 'ACTIVE',
-            username VARCHAR(50),
-            password_hash VARCHAR(255) DEFAULT '',
-            user_role VARCHAR(20) DEFAULT 'TECH',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS employee_departments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            department_id INT NOT NULL,
-            is_responsible BOOLEAN DEFAULT FALSE,
-            is_primary BOOLEAN DEFAULT FALSE,
-            UNIQUE KEY UQ_EmpDept (employee_id, department_id),
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS employee_competences (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            department_id INT NOT NULL,
-            notes VARCHAR(255) DEFAULT '',
-            UNIQUE KEY UQ_EmpComp (employee_id, department_id),
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── CLIENTI ────────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS customers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            company_name VARCHAR(200) NOT NULL,
-            contact_name VARCHAR(100) DEFAULT '',
-            email VARCHAR(200) DEFAULT '',
-            pec VARCHAR(255) DEFAULT '',
-            phone VARCHAR(100) DEFAULT '',
-            cell VARCHAR(50) DEFAULT '',
-            address VARCHAR(300) DEFAULT '',
-            vat_number VARCHAR(50) DEFAULT '',
-            fiscal_code VARCHAR(50) DEFAULT '',
-            payment_terms VARCHAR(255) DEFAULT '',
-            sdi_code VARCHAR(50) DEFAULT '',
-            easyfatt_code VARCHAR(50) DEFAULT '',
-            easyfatt_id INT DEFAULT 0,
-            notes TEXT,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY UQ_Customer_Vat (vat_number)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── FORNITORI ──────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS suppliers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            company_name VARCHAR(200) NOT NULL,
-            contact_name VARCHAR(100) DEFAULT '',
-            email VARCHAR(200) DEFAULT '',
-            phone VARCHAR(100) DEFAULT '',
-            address VARCHAR(300) DEFAULT '',
-            vat_number VARCHAR(50) DEFAULT '',
-            fiscal_code VARCHAR(50) DEFAULT '',
-            notes TEXT,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY UQ_Supplier_Vat (vat_number)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── CATALOGO ─────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS catalog_items (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            code VARCHAR(100) NOT NULL,
-            description VARCHAR(2000) DEFAULT '',
-            category VARCHAR(255) DEFAULT '',
-            subcategory VARCHAR(255) DEFAULT '',
-            unit VARCHAR(50) DEFAULT 'PZ',
-            unit_cost DECIMAL(10,4) DEFAULT 0,
-            list_price DECIMAL(10,4) DEFAULT 0,
-            supplier_id INT NULL,
-            supplier_code VARCHAR(100) DEFAULT '',
-            manufacturer VARCHAR(255) DEFAULT '',
-            barcode VARCHAR(50) DEFAULT '',
-            notes TEXT,
-            is_active BOOLEAN DEFAULT TRUE,
-            easyfatt_id INT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY UQ_CatalogItem_Code (code),
-            INDEX IX_CatalogItems_Description (description(255)),
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── FASI TEMPLATE ────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS phase_templates (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            category VARCHAR(50) DEFAULT '',
-            department_id INT NULL,
-            cost_section_template_id INT NULL,
-            sort_order INT DEFAULT 0,
-            is_default BOOLEAN DEFAULT TRUE,
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
-            FOREIGN KEY (cost_section_template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── COMMESSE ─────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS projects (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            code VARCHAR(20) NOT NULL,
-            title VARCHAR(300) NOT NULL,
-            customer_id INT NOT NULL,
-            pm_id INT NOT NULL,
-            description TEXT,
-            start_date DATE,
-            end_date_planned DATE,
-            end_date_actual DATE NULL,
-            budget_total DECIMAL(12,2) DEFAULT 0,
-            budget_hours_total DECIMAL(8,1) DEFAULT 0,
-            revenue DECIMAL(12,2) DEFAULT 0,
-            status VARCHAR(20) DEFAULT 'DRAFT',
-            priority VARCHAR(20) DEFAULT 'MEDIUM',
-            server_path VARCHAR(500) DEFAULT '',
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES customers(id),
-            FOREIGN KEY (pm_id) REFERENCES employees(id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS project_phases (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id INT NOT NULL,
-            phase_template_id INT NOT NULL,
-            department_id INT NULL,
-            custom_name VARCHAR(200) DEFAULT '',
-            budget_hours DECIMAL(8,1) DEFAULT 0,
-            budget_cost DECIMAL(12,2) DEFAULT 0,
-            status VARCHAR(20) DEFAULT 'NOT_STARTED',
-            progress_pct INT DEFAULT 0,
-            sort_order INT DEFAULT 0,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (phase_template_id) REFERENCES phase_templates(id),
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS phase_assignments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_phase_id INT NOT NULL,
-            employee_id INT NOT NULL,
-            assign_role VARCHAR(20) DEFAULT 'MEMBER',
-            planned_hours DECIMAL(8,1) DEFAULT 0,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── TIMESHEET ────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS timesheet_entries (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            project_phase_id INT NOT NULL,
-            work_date DATE NOT NULL,
-            hours DECIMAL(4,1) DEFAULT 0,
-            entry_type VARCHAR(20) DEFAULT 'REGULAR',
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees(id),
-            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── DDP / BOM ────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS bom_items (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id INT NOT NULL,
-            project_phase_id INT NULL,
-            catalog_item_id INT NULL,
-            part_number VARCHAR(100) DEFAULT '',
-            description VARCHAR(300) DEFAULT '',
-            unit VARCHAR(50) DEFAULT 'PZ',
-            quantity DECIMAL(10,3) DEFAULT 0,
-            unit_cost DECIMAL(10,2) DEFAULT 0,
-            supplier_id INT NULL,
-            item_status VARCHAR(20) DEFAULT 'TO_ORDER',
-            purchase_order VARCHAR(100) DEFAULT '',
-            date_needed DATE,
-            date_ordered DATE,
-            date_received DATE,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-            FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── DOCUMENTI ──────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id INT NOT NULL,
-            project_phase_id INT NULL,
-            title VARCHAR(300) DEFAULT '',
-            file_path VARCHAR(500) DEFAULT '',
-            file_url VARCHAR(500) DEFAULT '',
-            file_type VARCHAR(50) DEFAULT '',
-            category VARCHAR(20) DEFAULT 'OTHER',
-            uploaded_by VARCHAR(100) DEFAULT '',
-            file_size BIGINT DEFAULT 0,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── EXTRA COSTS ────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS extra_costs (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id INT NOT NULL,
-            project_phase_id INT NULL,
-            employee_id INT NULL,
-            cost_date DATE,
-            category VARCHAR(20) DEFAULT 'OTHER',
-            description VARCHAR(300) DEFAULT '',
-            amount DECIMAL(10,2) DEFAULT 0,
-            receipt_ref VARCHAR(100) DEFAULT '',
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── ASSENZE / FESTIVITÀ ──────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS absences (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            date_from DATE NOT NULL,
-            date_to DATE NOT NULL,
-            absence_type VARCHAR(20) DEFAULT 'VACATION',
-            status VARCHAR(20) DEFAULT 'PENDING',
-            approved_by INT NULL,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS holidays (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            holiday_date DATE NOT NULL,
-            description VARCHAR(100) DEFAULT '',
-            year INT
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        // ── CHAT ─────────────────────────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_chats (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
@@ -429,59 +388,172 @@ public class DbService
             FOREIGN KEY (employee_id) REFERENCES employees(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── CONFIG ───────────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS app_config (
-            config_key VARCHAR(100) PRIMARY KEY,
-            config_value VARCHAR(500) DEFAULT '',
-            description VARCHAR(200) DEFAULT '',
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        c.Execute(@"CREATE TABLE IF NOT EXISTS bom_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            project_phase_id INT NULL,
+            catalog_item_id INT NULL,
+            part_number VARCHAR(100) DEFAULT '',
+            description VARCHAR(300) DEFAULT '',
+            unit VARCHAR(50) DEFAULT 'PZ',
+            quantity DECIMAL(10,3) DEFAULT 0,
+            unit_cost DECIMAL(10,2) DEFAULT 0,
+            supplier_id INT NULL,
+            item_status VARCHAR(20) DEFAULT 'TO_ORDER',
+            purchase_order VARCHAR(100) DEFAULT '',
+            date_needed DATE,
+            date_ordered DATE,
+            date_received DATE,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
+            FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
-        {
-            c.Execute(@"INSERT INTO app_config (config_key, config_value, description) VALUES
-                ('BasePath', 'C:\\ATEC_Commesse', 'Percorso base cartelle commesse'),
-                ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
-        }
-
-        // ── DESTINAZIONI DDP ────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_destinations (
+        c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            project_phase_id INT NULL,
+            title VARCHAR(300) DEFAULT '',
+            file_path VARCHAR(500) DEFAULT '',
+            file_url VARCHAR(500) DEFAULT '',
+            file_type VARCHAR(50) DEFAULT '',
+            category VARCHAR(20) DEFAULT 'OTHER',
+            uploaded_by VARCHAR(100) DEFAULT '',
+            file_size BIGINT DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS extra_costs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            project_phase_id INT NULL,
+            employee_id INT NULL,
+            cost_date DATE,
+            category VARCHAR(20) DEFAULT 'OTHER',
+            description VARCHAR(300) DEFAULT '',
+            amount DECIMAL(10,2) DEFAULT 0,
+            receipt_ref VARCHAR(100) DEFAULT '',
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_sections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            template_id INT NULL,
             name VARCHAR(200) NOT NULL,
+            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
+            group_name VARCHAR(100) NOT NULL DEFAULT '',
             sort_order INT NOT NULL DEFAULT 0,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── NOTIFICHE ────────────────────────────────────────────
-        c.Execute(@"CREATE TABLE IF NOT EXISTS notifications (
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_section_departments (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            notification_type VARCHAR(30) NOT NULL,
-            severity VARCHAR(10) NOT NULL DEFAULT 'INFO',
-            title VARCHAR(200) NOT NULL,
-            message VARCHAR(500) NOT NULL DEFAULT '',
-            reference_type VARCHAR(20) NOT NULL DEFAULT '',
-            reference_id INT NOT NULL DEFAULT 0,
-            project_id INT NULL,
-            created_by INT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_type (notification_type),
-            INDEX idx_created (created_at)
+            project_cost_section_id INT NOT NULL,
+            department_id INT NOT NULL,
+            FOREIGN KEY (project_cost_section_id) REFERENCES project_cost_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        c.Execute(@"CREATE TABLE IF NOT EXISTS notification_recipients (
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_resources (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            notification_id INT NOT NULL,
+            section_id INT NOT NULL,
+            employee_id INT NULL,
+            resource_name VARCHAR(200) NOT NULL DEFAULT '',
+            work_days DECIMAL(8,1) NOT NULL DEFAULT 0,
+            hours_per_day DECIMAL(4,1) NOT NULL DEFAULT 8,
+            hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.450,
+            num_trips INT NOT NULL DEFAULT 0,
+            km_per_trip DECIMAL(8,1) NOT NULL DEFAULT 0,
+            cost_per_km DECIMAL(6,3) NOT NULL DEFAULT 0,
+            daily_food DECIMAL(8,2) NOT NULL DEFAULT 0,
+            daily_hotel DECIMAL(8,2) NOT NULL DEFAULT 0,
+            allowance_days INT NOT NULL DEFAULT 0,
+            daily_allowance DECIMAL(8,2) NOT NULL DEFAULT 0,
+            sort_order INT NOT NULL DEFAULT 0,
+            FOREIGN KEY (section_id) REFERENCES project_cost_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_material_sections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            category_id INT NULL,
+            name VARCHAR(200) NOT NULL,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES material_categories(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_material_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            section_id INT NOT NULL,
+            description VARCHAR(500) NOT NULL DEFAULT '',
+            quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
+            unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
+            sort_order INT NOT NULL DEFAULT 0,
+            FOREIGN KEY (section_id) REFERENCES project_material_sections(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_pricing (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL UNIQUE,
+            structure_costs_pct DECIMAL(5,2) NOT NULL DEFAULT 8.00,
+            contingency_pct DECIMAL(5,2) NOT NULL DEFAULT 3.00,
+            risk_warranty_pct DECIMAL(5,2) NOT NULL DEFAULT 2.00,
+            negotiation_margin_pct DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+            travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+            allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // LIVELLO 5 — Dipendono da project_phases
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS phase_assignments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_phase_id INT NOT NULL,
             employee_id INT NOT NULL,
-            is_read BOOLEAN NOT NULL DEFAULT FALSE,
-            read_at DATETIME NULL,
-            FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-            INDEX idx_emp_unread (employee_id, is_read),
-            INDEX idx_notif (notification_id)
+            assign_role VARCHAR(20) DEFAULT 'MEMBER',
+            planned_hours DECIMAL(8,1) DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── CODEX (clone DB remoto SERVER-CODEX) ────────────────
+        c.Execute(@"CREATE TABLE IF NOT EXISTS timesheet_entries (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            project_phase_id INT NOT NULL,
+            work_date DATE NOT NULL,
+            hours DECIMAL(4,1) DEFAULT 0,
+            entry_type VARCHAR(20) DEFAULT 'REGULAR',
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id),
+            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
+        // STANDALONE — nessuna FK verso tabelle app
+        // ══════════════════════════════════════════════════════════
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             remote_id INT NOT NULL,
@@ -512,7 +584,6 @@ public class DbService
             INDEX idx_categoria (categoria)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── CODEX RESERVATIONS ───────────────────────────────────
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_reservations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             prefix VARCHAR(10) NOT NULL,
@@ -525,22 +596,38 @@ public class DbService
             INDEX idx_expires (expires_at, status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // ── MIGRAZIONE: aggiungi UNIQUE se mancante su tabelle esistenti ──
+        // ══════════════════════════════════════════════════════════
+        // SEED DATA
+        // ══════════════════════════════════════════════════════════
+
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
+        {
+            c.Execute(@"INSERT INTO app_config (config_key, config_value, description) VALUES
+                ('BasePath', 'C:\\ATEC_Commesse', 'Percorso base cartelle commesse'),
+                ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
+        }
+
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM employees") == 0)
+        {
+            c.Execute(@"INSERT INTO employees (first_name, last_name, email, username, password_hash, user_role, status)
+                VALUES ('Admin', 'ATEC', 'admin@atec.it', 'admin', SHA2('admin', 256), 'ADMIN', 'ACTIVE')");
+            Console.WriteLine("[DB] Utente admin di default creato (user: admin / pwd: admin)");
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // MIGRAZIONI su tabelle esistenti
+        // ══════════════════════════════════════════════════════════
+
         ApplyMigrations(c);
 
         Console.WriteLine("[DB] Inizializzato.");
     }
 
-    /// <summary>
-    /// Applica migrazioni incrementali su tabelle esistenti (ALTER safe).
-    /// </summary>
     private void ApplyMigrations(MySqlConnection c)
     {
-        // Aggiungi UNIQUE su customers.vat_number se non esiste
         AddUniqueIndexIfMissing(c, "customers", "UQ_Customer_Vat", "vat_number");
-
-        // Aggiungi UNIQUE su suppliers.vat_number se non esiste
         AddUniqueIndexIfMissing(c, "suppliers", "UQ_Supplier_Vat", "vat_number");
+        AddColumnIfMissing(c, "departments", "default_markup", "DECIMAL(5,3) NOT NULL DEFAULT 1.450 AFTER hourly_cost");
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
@@ -556,7 +643,6 @@ public class DbService
 
             if (exists == 0)
             {
-                // Prima rimuovi duplicati (tieni il record con id più basso)
                 c.Execute($@"
                     DELETE t1 FROM `{table}` t1
                     INNER JOIN `{table}` t2
@@ -571,6 +657,29 @@ public class DbService
         catch (Exception ex)
         {
             Console.WriteLine($"[DB Migration] Warning: {indexName} su {table}: {ex.Message}");
+        }
+    }
+
+    private void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)
+    {
+        try
+        {
+            int exists = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = @Table
+                  AND COLUMN_NAME = @Column",
+                new { Table = table, Column = column });
+
+            if (exists == 0)
+            {
+                c.Execute($"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition}");
+                Console.WriteLine($"[DB Migration] Aggiunta colonna {table}.{column}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning: {table}.{column}: {ex.Message}");
         }
     }
 }

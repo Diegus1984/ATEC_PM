@@ -3,10 +3,25 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server;
+using ATEC.PM.Server.Controllers;
+using Serilog;
+
 
 ExcelPackage.License.SetNonCommercialOrganization("ATEC");
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: @"C:\ATEC_PM\Logs\server-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog();
 
 // --- Auto-cifratura: se non esiste il file criptato, lo genera da appsettings.json ---
 if (!ProtectedConfigHelper.IsConfigured())
@@ -68,6 +83,8 @@ builder.Services.AddSingleton<CodexSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
 builder.Services.AddSingleton<DaneaSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
+builder.Services.AddScoped<BackupController>();
+builder.Services.AddHostedService<BackupBackgroundService>();
 
 var app = builder.Build();
 
@@ -91,4 +108,11 @@ catch (Exception ex)
     return;
 }
 
-app.Run();
+try
+{
+    app.Run();
+}
+finally
+{
+    Log.CloseAndFlush();
+}

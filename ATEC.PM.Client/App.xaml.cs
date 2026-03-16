@@ -1,7 +1,9 @@
+using System.IO;
 using System.Windows;
 using ATEC.PM.Client.Views;
 using ATEC.PM.Shared;
 using ATEC.PM.Shared.DTOs;
+using Serilog;
 
 namespace ATEC.PM.Client;
 
@@ -26,6 +28,26 @@ public partial class App : Application
 
     private void App_Startup(object sender, StartupEventArgs e)
     {
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.File(
+                path: Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "ATEC_PM", "Logs", "client-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 15,
+                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
+        Log.Information("ATEC PM Client avviato — utente OS: {User}", Environment.UserName);
+
         new LoginWindow().Show();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        Log.Information("ATEC PM Client chiuso");
+        Log.CloseAndFlush();
+        base.OnExit(e);
     }
 }

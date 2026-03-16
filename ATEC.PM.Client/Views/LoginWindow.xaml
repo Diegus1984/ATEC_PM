@@ -74,12 +74,39 @@
                     FontWeight="SemiBold"
                     Foreground="#9CA3AF"
                     Text="PASSWORD" />
-                <PasswordBox
-                    x:Name="txtPassword"
-                    Height="36"
-                    Padding="8,6"
-                    BorderBrush="#E4E7EC"
-                    KeyDown="txtPassword_KeyDown" />
+                <Grid>
+                    <PasswordBox
+                        x:Name="txtPassword"
+                        Height="36"
+                        Padding="8,6"
+                        BorderBrush="#E4E7EC"
+                        KeyDown="txtPassword_KeyDown"
+                        PasswordChanged="TxtPassword_PasswordChanged" />
+                    <TextBox
+                        x:Name="txtPasswordVisible"
+                        Height="36"
+                        Padding="8,6"
+                        BorderBrush="#E4E7EC"
+                        KeyDown="txtPassword_KeyDown"
+                        Visibility="Collapsed" />
+                    <Button
+                        Width="32"
+                        Height="32"
+                        Margin="0,0,4,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        PreviewMouseLeftButtonDown="BtnEye_Down"
+                        PreviewMouseLeftButtonUp="BtnEye_Up">
+                        <TextBlock
+                            x:Name="txtEyeIcon"
+                            FontSize="16"
+                            Foreground="#9CA3AF"
+                            Text="👁" />
+                    </Button>
+                </Grid>
 
                 <TextBlock
                     x:Name="txtError"

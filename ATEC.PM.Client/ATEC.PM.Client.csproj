@@ -8,6 +8,8 @@
   <ItemGroup>
 	  <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3800.47" />
 	  <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+	  <PackageReference Include="Serilog" Version="4.3.1" />
+	  <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
