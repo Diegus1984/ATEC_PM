@@ -75,7 +75,7 @@ public class NotificationService
 /// <summary>
 /// BackgroundService che ogni mattina:
 /// 1. Controlla articoli DDP scaduti (date_needed < oggi e stato non DELIVERED/CANCELLED)
-/// 2. Pulisce notifiche vecchie (retention 30gg lette, 90gg non lette)
+/// 2. Pulisce notifiche vecchie (retention 5gg lette, 30gg non lette)
 /// </summary>
 public class NotificationBackgroundService : BackgroundService
 {
