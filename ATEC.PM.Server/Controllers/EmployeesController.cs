@@ -54,6 +54,18 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
     }
 
+    [HttpGet("pm-list")]
+    public IActionResult GetPmList()
+    {
+        using var c = _db.Open();
+        var rows = c.Query<LookupItem>(@"
+            SELECT id, CONCAT(first_name,' ',last_name) AS Name
+            FROM employees
+            WHERE status<>'TERMINATED' AND user_role IN ('PM','ADMIN') AND username<>'admin'
+            ORDER BY last_name").ToList();
+        return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
+    }
+
     [HttpGet("{id}")]
     public IActionResult GetById(int id)
     {

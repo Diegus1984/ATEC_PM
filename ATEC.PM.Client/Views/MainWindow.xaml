@@ -122,6 +122,11 @@
                         Tag="Commesse" />
                     <Button
                         Click="Nav_Click"
+                        Content="  Offerte"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Offerte" />
+                    <Button
+                        Click="Nav_Click"
                         Content="  Timesheet"
                         Style="{StaticResource NavBtn}"
                         Tag="Timesheet" />

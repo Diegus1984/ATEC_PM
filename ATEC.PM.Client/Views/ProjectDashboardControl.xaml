@@ -7,26 +7,38 @@
 
     <UserControl.Resources>
         <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#1A1D26"/>
-            <Setter Property="Margin" Value="0,12,0,8"/>
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#1A1D26" />
+            <Setter Property="Margin" Value="0,12,0,8" />
         </Style>
 
         <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#E4E7EC"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,12"/>
-            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
 
         <DataTemplate x:Key="KpiTemplate">
-            <Border Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+            <Border Margin="0,0,8,0" Style="{StaticResource CardStyle}">
                 <StackPanel>
-                    <TextBlock Text="{Binding Label}" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" />
-                    <TextBlock Text="{Binding Value}" FontSize="24" FontWeight="Bold" Foreground="{Binding AccentColor}" Margin="0,4,0,2" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="#9CA3AF" />
+                    <TextBlock
+                        FontSize="10"
+                        FontWeight="SemiBold"
+                        Foreground="#6B7280"
+                        Text="{Binding Label}" />
+                    <TextBlock
+                        Margin="0,4,0,2"
+                        FontSize="24"
+                        FontWeight="Bold"
+                        Foreground="{Binding AccentColor}"
+                        Text="{Binding Value}" />
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="#9CA3AF"
+                        Text="{Binding Subtitle}" />
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -39,17 +51,41 @@
                     <ColumnDefinition Width="60" />
                     <ColumnDefinition Width="80" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding EmployeeName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <Border Grid.Column="1" Background="{Binding DeptBrush}" HorizontalAlignment="Left" Padding="8,2">
-                    <TextBlock Text="{Binding DepartmentCode}" FontSize="10" Foreground="White" FontWeight="Bold"/>
+                <TextBlock
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    FontWeight="SemiBold"
+                    Text="{Binding EmployeeName}" />
+                <Border
+                    Grid.Column="1"
+                    Padding="8,2"
+                    HorizontalAlignment="Left"
+                    Background="{Binding DeptBrush}">
+                    <TextBlock
+                        FontSize="10"
+                        FontWeight="Bold"
+                        Foreground="White"
+                        Text="{Binding DepartmentCode}" />
                 </Border>
-                <TextBlock Grid.Column="2" Text="{Binding PhaseCount}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="3" Text="{Binding TotalHours, StringFormat={}{0:N1} h}" FontWeight="Bold" TextAlignment="Right" VerticalAlignment="Center"/>
+                <TextBlock
+                    Grid.Column="2"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Text="{Binding PhaseCount}" />
+                <TextBlock
+                    Grid.Column="3"
+                    VerticalAlignment="Center"
+                    FontWeight="Bold"
+                    Text="{Binding TotalHours, StringFormat={}{0:N1} h}"
+                    TextAlignment="Right" />
             </Grid>
         </DataTemplate>
 
         <DataTemplate x:Key="TimesheetRowTemplate">
-            <Border BorderBrush="#F3F4F6" BorderThickness="0,0,0,1" Padding="0,6">
+            <Border
+                Padding="0,6"
+                BorderBrush="#F3F4F6"
+                BorderThickness="0,0,0,1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="50" />
@@ -57,19 +93,45 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="60" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding WorkDate, StringFormat=dd/MM}" Foreground="#6B7280" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="{Binding EmployeeName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
-                        <TextBlock Text="{Binding PhaseName}" FontSize="11" FontWeight="Medium"/>
-                        <TextBlock Text="{Binding Notes}" FontSize="10" Foreground="#9CA3AF" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Foreground="#6B7280"
+                        Text="{Binding WorkDate, StringFormat=dd/MM}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="{Binding EmployeeName}" />
+                    <StackPanel
+                        Grid.Column="2"
+                        Margin="8,0"
+                        VerticalAlignment="Center">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="Medium"
+                            Text="{Binding PhaseName}" />
+                        <TextBlock
+                            FontSize="10"
+                            Foreground="#9CA3AF"
+                            Text="{Binding Notes}"
+                            TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <TextBlock Grid.Column="3" Text="{Binding Hours, StringFormat={}{0:N1}}" FontWeight="Bold" TextAlignment="Right" VerticalAlignment="Center"/>
+                    <TextBlock
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Text="{Binding Hours, StringFormat={}{0:N1}}"
+                        TextAlignment="Right" />
                 </Grid>
             </Border>
         </DataTemplate>
 
         <DataTemplate x:Key="DeadlineRowTemplate">
-            <Border BorderBrush="#F3F4F6" BorderThickness="0,0,0,1" Padding="0,6">
+            <Border
+                Padding="0,6"
+                BorderBrush="#F3F4F6"
+                BorderThickness="0,0,0,1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="28" />
@@ -78,13 +140,42 @@
                         <ColumnDefinition Width="80" />
                         <ColumnDefinition Width="100" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="14" VerticalAlignment="Center"/>
-                    <Border Grid.Column="1" Background="{Binding DeptBrush}" HorizontalAlignment="Left" Padding="6,2">
-                        <TextBlock Text="{Binding DepartmentCode}" FontSize="9" Foreground="White" FontWeight="Bold"/>
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Text="{Binding Icon}" />
+                    <Border
+                        Grid.Column="1"
+                        Padding="6,2"
+                        HorizontalAlignment="Left"
+                        Background="{Binding DeptBrush}">
+                        <TextBlock
+                            FontSize="9"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="{Binding DepartmentCode}" />
                     </Border>
-                    <TextBlock Grid.Column="2" Text="{Binding PhaseName}" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    <TextBlock Grid.Column="3" Text="{Binding DeadlineText}" FontSize="11" Foreground="#6B7280" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="4" Text="{Binding RemainingText}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding UrgencyBrush}" VerticalAlignment="Center" TextAlignment="Right"/>
+                    <TextBlock
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Text="{Binding PhaseName}" />
+                    <TextBlock
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="#6B7280"
+                        Text="{Binding DeadlineText}" />
+                    <TextBlock
+                        Grid.Column="4"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{Binding UrgencyBrush}"
+                        Text="{Binding RemainingText}"
+                        TextAlignment="Right" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -92,15 +183,33 @@
         <DataTemplate x:Key="DeptBarTemplate">
             <StackPanel Margin="0,6">
                 <DockPanel>
-                    <Border Background="{Binding DeptBrush}" Padding="8,2" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding DepartmentCode}" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                    <Border
+                        Padding="8,2"
+                        VerticalAlignment="Center"
+                        Background="{Binding DeptBrush}">
+                        <TextBlock
+                            FontSize="10"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="{Binding DepartmentCode}" />
                     </Border>
-                    <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#374151"
+                        Text="{Binding Summary}" />
                 </DockPanel>
                 <Grid Height="8" Margin="0,4,0,0">
-                    <Border Background="#F3F4F6"/>
-                    <Border Background="{Binding BudgetBarBrush}" HorizontalAlignment="Left" Width="{Binding BudgetBarWidth}"/>
-                    <Border Background="{Binding DeptBrush}" HorizontalAlignment="Left" Width="{Binding WorkedBarWidth}"/>
+                    <Border Background="#F3F4F6" />
+                    <Border
+                        Width="{Binding BudgetBarWidth}"
+                        HorizontalAlignment="Left"
+                        Background="{Binding BudgetBarBrush}" />
+                    <Border
+                        Width="{Binding WorkedBarWidth}"
+                        HorizontalAlignment="Left"
+                        Background="{Binding DeptBrush}" />
                 </Grid>
             </StackPanel>
         </DataTemplate>

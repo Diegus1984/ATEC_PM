@@ -4,6 +4,7 @@ public partial class AddCostSectionDialog : Window
 {
     private readonly int _projectId;
     private readonly string _groupName;
+    private readonly string _apiBasePath;
     private List<CostSectionTemplateDto> _templates = new();
     private const string CUSTOM_TAG = "__CUSTOM__";
 
@@ -11,11 +12,12 @@ public partial class AddCostSectionDialog : Window
     /// groupName: il gruppo in cui aggiungere la sezione
     /// templates: lista template disponibili (non ancora nella commessa) per questo gruppo
     /// </summary>
-    public AddCostSectionDialog(int projectId, string groupName, List<CostSectionTemplateDto> templates)
+    public AddCostSectionDialog(int projectId, string groupName, List<CostSectionTemplateDto> templates, string apiBasePath = "")
     {
         InitializeComponent();
         _projectId = projectId;
         _groupName = groupName;
+        _apiBasePath = string.IsNullOrEmpty(apiBasePath) ? $"/api/projects/{projectId}/costing" : apiBasePath;
         _templates = templates;
         txtGroupName.Text = groupName;
 
@@ -96,7 +98,7 @@ public partial class AddCostSectionDialog : Window
                 isEnabled = true
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/sections", json);
+            string result = await ApiClient.PostAsync($"{_apiBasePath}/sections", json);
             JsonDocument doc = JsonDocument.Parse(result);
 
             if (doc.RootElement.GetProperty("success").GetBoolean())
@@ -113,7 +115,7 @@ public partial class AddCostSectionDialog : Window
                         {
                             var deptReq = new { projectCostSectionId = newSectionId, departmentId = deptId };
                             string deptJson = JsonSerializer.Serialize(deptReq);
-                            await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/sections/{newSectionId}/departments", deptJson);
+                            await ApiClient.PostAsync($"{_apiBasePath}/sections/{newSectionId}/departments", deptJson);
                         }
                     }
                 }

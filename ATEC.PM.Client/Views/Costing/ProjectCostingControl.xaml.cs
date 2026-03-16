@@ -7,6 +7,8 @@ public partial class ProjectCostingControl : UserControl
 {
     private ProjectCostingData _data = new();
     private int _projectId;
+    private string _apiBasePath = "";
+    private bool _readOnly;
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
     private CostingViewModel _vm = new();
     public ProjectCostingControl()
@@ -20,6 +22,20 @@ public partial class ProjectCostingControl : UserControl
         if (_projectId != projectId)
             _sectionEmployeesCache.Clear();
         _projectId = projectId;
+        if (string.IsNullOrEmpty(_apiBasePath))
+            _apiBasePath = $"/api/projects/{_projectId}/costing";
+        _ = LoadData();
+    }
+
+    /// <summary>
+    /// Carica il control in modalità offerta, usando le API offer_* al posto di project_*.
+    /// </summary>
+    public void LoadForOffer(int offerId, bool readOnly = false)
+    {
+        _sectionEmployeesCache.Clear();
+        _projectId = offerId;
+        _readOnly = readOnly;
+        _apiBasePath = $"/api/offers/{offerId}/costing";
         _ = LoadData();
     }
 
@@ -110,7 +126,7 @@ public partial class ProjectCostingControl : UserControl
             ItemType = "COMMISSION"
         };
         string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
+        await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
 
@@ -118,7 +134,7 @@ public partial class ProjectCostingControl : UserControl
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/available-templates");
+            string json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
@@ -141,7 +157,7 @@ public partial class ProjectCostingControl : UserControl
                 MessageBox.Show("Tutti i gruppi template sono già presenti nella commessa.\nPuoi creare un gruppo personalizzato.", "Info");
             }
 
-            var dlg = new AddCostGroupDialog(_projectId, newGroups, availableTemplates)
+            var dlg = new AddCostGroupDialog(_projectId, newGroups, availableTemplates, _apiBasePath)
             {
                 Owner = Window.GetWindow(this)
             };
@@ -169,7 +185,7 @@ public partial class ProjectCostingControl : UserControl
             ItemType = "MATERIAL"
         };
         string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
+        await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
         await LoadData();
     }
 
@@ -207,7 +223,7 @@ public partial class ProjectCostingControl : UserControl
             CostPerKm = 0.90m
         };
         string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/resources", json);
+        await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
         await LoadData();
     }
 
@@ -218,7 +234,7 @@ public partial class ProjectCostingControl : UserControl
         try
         {
             // Carica template disponibili
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/available-templates");
+            string json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
@@ -236,7 +252,7 @@ public partial class ProjectCostingControl : UserControl
                 // Nessun template disponibile, ma permetti sezione personalizzata
             }
 
-            var dlg = new AddCostSectionDialog(_projectId, groupName, groupTemplates)
+            var dlg = new AddCostSectionDialog(_projectId, groupName, groupTemplates, _apiBasePath)
             {
                 Owner = Window.GetWindow(this)
             };
@@ -249,14 +265,14 @@ public partial class ProjectCostingControl : UserControl
     private async void BtnDeleteMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int itemId || itemId <= 0) return;
-        await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/material-items/{itemId}");
+        await ApiClient.DeleteAsync($"{_apiBasePath}/material-items/{itemId}");
         await LoadData();
     }
 
     private async void BtnDeleteResource_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int resourceId || resourceId <= 0) return;
-        await ApiClient.DeleteAsync($"/api/projects/{_projectId}/costing/resources/{resourceId}");
+        await ApiClient.DeleteAsync($"{_apiBasePath}/resources/{resourceId}");
         await LoadData();
     }
 
@@ -264,7 +280,7 @@ public partial class ProjectCostingControl : UserControl
     {
         try
         {
-            string json = await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/init", "{}");
+            string json = await ApiClient.PostAsync($"{_apiBasePath}/init", "{}");
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
                 await LoadData();
@@ -326,7 +342,7 @@ public partial class ProjectCostingControl : UserControl
             _vm.StatusText = "Caricamento...";
             DataContext = _vm;
 
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing");
+            string json = await ApiClient.GetAsync($"{_apiBasePath}");
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
@@ -378,7 +394,7 @@ public partial class ProjectCostingControl : UserControl
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/costing/sections/{sectionId}/employees");
+            string json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
                 return JsonSerializer.Deserialize<List<EmployeeCostLookup>>(
@@ -434,7 +450,7 @@ public partial class ProjectCostingControl : UserControl
                 ItemType = row.ItemType
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/material-items/{row.Id}", json);
+            await ApiClient.PutAsync($"{_apiBasePath}/material-items/{row.Id}", json);
         }
         catch { }
     }
@@ -453,7 +469,7 @@ public partial class ProjectCostingControl : UserControl
                 allowanceMarkup = _vm.AllowanceMarkup
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/pricing", json);
+            await ApiClient.PutAsync($"{_apiBasePath}/pricing", json);
         }
         catch { }
     }
@@ -481,7 +497,7 @@ public partial class ProjectCostingControl : UserControl
                 DailyAllowance = row.DailyAllowance
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/resources/{row.Id}", json);
+            await ApiClient.PutAsync($"{_apiBasePath}/resources/{row.Id}", json);
         }
         catch { }
     }

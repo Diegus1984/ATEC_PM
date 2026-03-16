@@ -3,16 +3,18 @@ namespace ATEC.PM.Client.Views.Costing;
 public partial class AddCostGroupDialog : Window
 {
     private readonly int _projectId;
+    private readonly string _apiBasePath;
     private List<CostSectionGroupDto> _availableGroups = new();
     private List<CostSectionTemplateDto> _availableTemplates = new();
     private const string CUSTOM_TAG = "__CUSTOM__";
 
     public string? SelectedGroupName { get; private set; }
 
-    public AddCostGroupDialog(int projectId, List<CostSectionGroupDto> availableGroups, List<CostSectionTemplateDto> availableTemplates)
+    public AddCostGroupDialog(int projectId, List<CostSectionGroupDto> availableGroups, List<CostSectionTemplateDto> availableTemplates, string apiBasePath = "")
     {
         InitializeComponent();
         _projectId = projectId;
+        _apiBasePath = string.IsNullOrEmpty(apiBasePath) ? $"/api/projects/{projectId}/costing" : apiBasePath;
         _availableGroups = availableGroups;
         _availableTemplates = availableTemplates;
 
@@ -79,7 +81,7 @@ public partial class AddCostGroupDialog : Window
                         isEnabled = true
                     };
                     string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                    string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/sections", json);
+                    string result = await ApiClient.PostAsync($"{_apiBasePath}/sections", json);
 
                     // Copia reparti associati
                     JsonDocument doc = JsonDocument.Parse(result);
@@ -99,7 +101,7 @@ public partial class AddCostGroupDialog : Window
                             {
                                 var deptReq = new { departmentIds = fullTmpl.DepartmentIds };
                                 string deptJson = JsonSerializer.Serialize(deptReq, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                                await ApiClient.PutAsync($"/api/projects/{_projectId}/costing/sections/{newSectionId}/departments", deptJson);
+                                await ApiClient.PutAsync($"{_apiBasePath}/sections/{newSectionId}/departments", deptJson);
                             }
                         }
                     }
@@ -131,7 +133,7 @@ public partial class AddCostGroupDialog : Window
                     isEnabled = true
                 };
                 string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/sections", json);
+                await ApiClient.PostAsync($"{_apiBasePath}/sections", json);
             }
 
             DialogResult = true;

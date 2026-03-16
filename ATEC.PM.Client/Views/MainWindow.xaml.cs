@@ -134,6 +134,7 @@ public partial class MainWindow : Window
         {
             case "Dashboard": PageContent.Navigate(new DashboardPage()); break;
             case "Commesse": PageContent.Navigate(new ProjectsPage()); break;
+            case "Offerte": PageContent.Navigate(new OffersPage()); break;
             case "Timesheet": PageContent.Navigate(new TimesheetPage()); break;
             case "Clienti": PageContent.Navigate(new CustomersPage()); break;
             case "Fornitori": PageContent.Navigate(new SuppliersPage()); break;
