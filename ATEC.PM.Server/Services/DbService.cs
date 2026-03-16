@@ -332,6 +332,8 @@ public class DbService
             group_name VARCHAR(100) NOT NULL DEFAULT '',
             sort_order INT NOT NULL DEFAULT 0,
             is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE,
             FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -564,6 +566,8 @@ public class DbService
             group_name VARCHAR(100) NOT NULL DEFAULT '',
             sort_order INT NOT NULL DEFAULT 0,
             is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -746,6 +750,10 @@ public class DbService
         AddColumnIfMissing(c, "bom_items", "danea_ref", "VARCHAR(100) DEFAULT '' AFTER requested_by");
         AddColumnIfMissing(c, "bom_items", "destination", "VARCHAR(200) DEFAULT '' AFTER date_received");
         AddColumnIfMissing(c, "bom_items", "ddp_type", "VARCHAR(20) DEFAULT 'COMMERCIAL' AFTER destination");
+        AddColumnIfMissing(c, "offer_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
+        AddColumnIfMissing(c, "offer_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
+        AddColumnIfMissing(c, "project_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
+        AddColumnIfMissing(c, "project_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)

@@ -85,7 +85,8 @@ public class OfferCostingController : ControllerBase
         var sections = c.Query<ProjectCostSectionDto>(@"
             SELECT id, offer_id AS ProjectId, template_id AS TemplateId, name,
                    section_type AS SectionType, group_name AS GroupName,
-                   sort_order AS SortOrder, is_enabled AS IsEnabled
+                   sort_order AS SortOrder, is_enabled AS IsEnabled,
+                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct
             FROM offer_cost_sections WHERE offer_id=@offerId ORDER BY sort_order",
             new { offerId }).ToList();
 
@@ -470,5 +471,13 @@ public class OfferCostingController : ControllerBase
         }
 
         return Ok(ApiResponse<string>.Ok("", "Ribilanciato"));
+    }
+    [HttpPut("sections/{id}/distribution")]
+    public IActionResult UpdateSectionDistribution(int offerId, int id, [FromBody] SectionDistributionDto req)
+    {
+        using var c = _db.Open();
+        c.Execute("UPDATE offer_cost_sections SET contingency_pct=@ContPct, margin_pct=@MargPct WHERE id=@Id AND offer_id=@offerId",
+            new { ContPct = req.ContingencyPct, MargPct = req.MarginPct, Id = id, offerId });
+        return Ok(ApiResponse<string>.Ok("", "Distribuzione aggiornata"));
     }
 }

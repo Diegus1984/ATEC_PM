@@ -19,14 +19,19 @@ public class CostSectionVM : INotifyPropertyChanged
     public string TypeLabel => IsDaCliente ? "CLIENTE" : "SEDE";
     public string TypeColor => IsDaCliente ? "#D97706" : "#059669";
 
-    // NO MarkupValue sulla sezione — il K è sulla singola risorsa
-
     private bool _isDetailExpanded;
     public bool IsDetailExpanded
     {
         get => _isDetailExpanded;
         set { _isDetailExpanded = value; Notify(); }
     }
+
+    // Distribuzione prezzi (solo offerta)
+    private decimal _contingencyPct;
+    public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; Notify(); } }
+
+    private decimal _marginPct;
+    public decimal MarginPct { get => _marginPct; set { _marginPct = value; Notify(); } }
 
     public ObservableCollection<CostResourceVM> Resources { get; set; } = new();
     public List<int> DepartmentIds { get; set; } = new();

@@ -420,6 +420,7 @@ public partial class ProjectCostingControl : UserControl
                 .ToDictionary(s => s.Id, s => s.IsDetailExpanded);
 
             _vm = CostingViewModel.FromData(_data);
+            _vm.IsOfferMode = IsOfferMode;
 
             // Ripristina stato espansione
             foreach (var g in _vm.Groups)
@@ -679,5 +680,79 @@ public partial class ProjectCostingControl : UserControl
             await LoadDistribution();
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+    // ══════════════════════════════════════════════════════════════
+    // DISTRIBUZIONE % SEZIONI (solo offerta)
+    // ══════════════════════════════════════════════════════════════
+
+    private async void DistPct_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb)
+        {
+            e.Handled = true;
+            await ApplyDistPct(tb);
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private async void DistPct_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            await ApplyDistPct(tb);
+    }
+
+    private async Task ApplyDistPct(TextBox tb)
+    {
+        if (tb.DataContext is not CostSectionVM sec) return;
+        string field = tb.Tag?.ToString() ?? "";
+        string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
+        if (!decimal.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val)) return;
+        if (val > 1m) val /= 100m;
+
+        decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
+        if (val == oldVal) return;
+
+        // Imposta il nuovo valore
+        if (field == "contingency") sec.ContingencyPct = val;
+        else sec.MarginPct = val;
+
+        // Ribilancia le altre sezioni
+        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
+        RebalanceSections(allSections, sec.Id, field, val);
+
+        // Salva tutte le sezioni
+        foreach (var s in allSections)
+            await SaveSectionDistribution(s);
+    }
+
+    private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)
+    {
+        decimal remaining = 1m - fixedValue;
+        var others = allSections.Where(s => s.Id != fixedId).ToList();
+        decimal othersTotal = field == "contingency"
+            ? others.Sum(s => s.ContingencyPct)
+            : others.Sum(s => s.MarginPct);
+
+        foreach (var s in others)
+        {
+            decimal currentVal = field == "contingency" ? s.ContingencyPct : s.MarginPct;
+            decimal newVal = othersTotal > 0
+                ? currentVal / othersTotal * remaining
+                : remaining / others.Count;
+
+            if (field == "contingency") s.ContingencyPct = Math.Round(newVal, 4);
+            else s.MarginPct = Math.Round(newVal, 4);
+        }
+    }
+
+    private async Task SaveSectionDistribution(CostSectionVM sec)
+    {
+        try
+        {
+            var req = new { contingencyPct = sec.ContingencyPct, marginPct = sec.MarginPct };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
+        }
+        catch { }
     }
 }

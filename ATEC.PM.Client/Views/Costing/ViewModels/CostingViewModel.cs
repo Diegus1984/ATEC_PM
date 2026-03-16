@@ -12,6 +12,8 @@ public class CostingViewModel : INotifyPropertyChanged
     public bool ShowInit => !IsInitialized;
     public bool ShowContent => IsInitialized;
 
+    public bool IsOfferMode { get; set; }
+
     private string _statusText = "";
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
 
@@ -221,7 +223,9 @@ public class CostingViewModel : INotifyPropertyChanged
                     TemplateId = sec.TemplateId,
                     Name = sec.Name,
                     SectionType = sec.SectionType,
-                    DepartmentIds = sec.DepartmentIds
+                    DepartmentIds = sec.DepartmentIds,
+                    ContingencyPct = sec.ContingencyPct,
+                    MarginPct = sec.MarginPct
                 };
 
                 foreach (var res in sec.Resources.OrderBy(r => r.SortOrder))

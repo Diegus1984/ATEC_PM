@@ -15,6 +15,8 @@ public class ProjectCostSectionDto
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
     // NO MarkupValue — il K è sulla singola risorsa
+    public decimal ContingencyPct { get; set; }
+    public decimal MarginPct { get; set; }
     public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
@@ -169,4 +171,10 @@ public class RebalanceRequest
     public int FixedRowId { get; set; }
     public string Field { get; set; } = "contingency";
     public decimal NewValue { get; set; }
+}
+
+public class SectionDistributionDto
+{
+    public decimal ContingencyPct { get; set; }
+    public decimal MarginPct { get; set; }
 }

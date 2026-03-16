@@ -357,8 +357,8 @@ public class OffersController : ControllerBase
             foreach (var sec in offerSections)
             {
                 int newSecId = (int)c.ExecuteScalar<long>(@"
-                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
-                    VALUES (@projectId, @tmplId, @name, @stype, @gname, @sort, @enabled);
+                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled, contingency_pct, margin_pct)
+                    VALUES (@projectId, @tmplId, @name, @stype, @gname, @sort, @enabled, @contPct, @margPct);
                     SELECT LAST_INSERT_ID()",
                     new
                     {
@@ -369,6 +369,8 @@ public class OffersController : ControllerBase
                         gname = (string)sec.group_name,
                         sort = (int)sec.sort_order,
                         enabled = (bool)sec.is_enabled
+                        contPct = (decimal)sec.contingency_pct,
+                        margPct = (decimal)sec.margin_pct
                     }, tx);
 
                 c.Execute(@"
