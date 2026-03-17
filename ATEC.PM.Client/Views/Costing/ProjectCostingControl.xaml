@@ -9,229 +9,267 @@
     FontFamily="Segoe UI">
 
     <UserControl.Resources>
-        <!-- Shadow Effects -->
-        <DropShadowEffect x:Key="CardShadow" BlurRadius="8" ShadowDepth="2" Opacity="0.1" Direction="270" Color="#AAAAAA"/>
+        <!--  Shadow Effects  -->
+        <DropShadowEffect
+            x:Key="CardShadow"
+            BlurRadius="8"
+            Direction="270"
+            Opacity="0.1"
+            ShadowDepth="2"
+            Color="#AAAAAA" />
 
-        <!-- ========== STILI GLOBALI ========== -->
+        <!--  ========== STILI GLOBALI ==========  -->
 
-        <!-- Stile TextBox Numerico -->
+        <!--  Stile TextBox Numerico  -->
         <Style x:Key="NumericTextBox" TargetType="TextBox">
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#E4E7EC"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Padding" Value="4,2"/>
-            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Foreground" Value="#1A1D26"/>
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="#1A1D26" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="#9CA3AF"/>
+                    <Setter Property="BorderBrush" Value="#9CA3AF" />
                 </Trigger>
                 <Trigger Property="IsFocused" Value="True">
-                    <Setter Property="BorderBrush" Value="#4F6EF7"/>
-                    <Setter Property="BorderThickness" Value="2"/>
+                    <Setter Property="BorderBrush" Value="#4F6EF7" />
+                    <Setter Property="BorderThickness" Value="2" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#F3F4F6"/>
-                    <Setter Property="Foreground" Value="#9CA3AF"/>
+                    <Setter Property="Background" Value="#F3F4F6" />
+                    <Setter Property="Foreground" Value="#9CA3AF" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Stile Pulsante Principale -->
+        <!--  Stile Pulsante Principale  -->
         <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#4F6EF7"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="#4F6EF7" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="4"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3B5FDF"/>
+                    <Setter Property="Background" Value="#3B5FDF" />
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#2A4ABF"/>
+                    <Setter Property="Background" Value="#2A4ABF" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Stile Pulsante Secondario -->
-        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#4F6EF7"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#4F6EF7"/>
+        <!--  Stile Pulsante Secondario  -->
+        <Style
+            x:Key="SecondaryButton"
+            BasedOn="{StaticResource PrimaryButton}"
+            TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#4F6EF7" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#4F6EF7" />
         </Style>
 
-        <!-- Stile DataGrid Columns -->
+        <!--  Stile DataGrid Columns  -->
         <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F9FAFB" />
             <Setter Property="Foreground" Value="#6B7280" />
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="8,4" />
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
 
         <Style x:Key="CostingCell" TargetType="DataGridCell">
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Padding" Value="4,0"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#4F6EF720"/>
-                    <Setter Property="BorderBrush" Value="#4F6EF7"/>
-                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                    <Setter Property="Background" Value="#4F6EF720" />
+                    <Setter Property="BorderBrush" Value="#4F6EF7" />
+                    <Setter Property="BorderThickness" Value="0,0,0,2" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Stile ComboBox -->
+        <!--  Stile ComboBox  -->
         <Style x:Key="InlineComboBox" TargetType="ComboBox">
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="4,2" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#F3F4F6"/>
+                    <Setter Property="Background" Value="#F3F4F6" />
                 </Trigger>
                 <Trigger Property="IsDropDownOpen" Value="True">
-                    <Setter Property="Background" Value="White"/>
-                    <Setter Property="BorderThickness" Value="1"/>
-                    <Setter Property="BorderBrush" Value="#4F6EF7"/>
+                    <Setter Property="Background" Value="White" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="BorderBrush" Value="#4F6EF7" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- ========== DATA TEMPLATES ========== -->
+        <!--  ========== DATA TEMPLATES ==========  -->
 
         <DataTemplate x:Key="DeleteButtonTemplate">
-            <Button Width="20" Height="20"
-                    Background="#EF44441A"
-                    BorderThickness="0"
-                    Click="BtnDeleteResource_Click"
-                    Cursor="Hand"
-                    ToolTip="Elimina risorsa">
-                <TextBlock Text="✕" FontSize="9" Foreground="#EF4444" FontWeight="Bold"/>
+            <Button
+                Width="20"
+                Height="20"
+                Background="#EF44441A"
+                BorderThickness="0"
+                Click="BtnDeleteResource_Click"
+                Cursor="Hand"
+                ToolTip="Elimina risorsa">
+                <TextBlock
+                    FontSize="9"
+                    FontWeight="Bold"
+                    Foreground="#EF4444"
+                    Text="✕" />
             </Button>
         </DataTemplate>
 
         <DataTemplate x:Key="DeleteMaterialButtonTemplate">
-            <Button Width="20" Height="20"
-                    Background="#EF44441A"
-                    BorderThickness="0"
-                    Click="BtnDeleteMaterialItem_Click"
-                    Cursor="Hand"
-                    ToolTip="Elimina materiale">
-                <TextBlock Text="✕" FontSize="9" Foreground="#EF4444" FontWeight="Bold"/>
+            <Button
+                Width="20"
+                Height="20"
+                Background="#EF44441A"
+                BorderThickness="0"
+                Click="BtnDeleteMaterialItem_Click"
+                Cursor="Hand"
+                ToolTip="Elimina materiale">
+                <TextBlock
+                    FontSize="9"
+                    FontWeight="Bold"
+                    Foreground="#EF4444"
+                    Text="✕" />
             </Button>
         </DataTemplate>
 
-        <!-- Template Risorse In Sede -->
+        <!--  Template Risorse In Sede  -->
         <DataTemplate x:Key="ResourceGridInSede">
-            <DataGrid AutoGenerateColumns="False"
-                      BorderThickness="0"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      CellEditEnding="ResourceGrid_CellEditEnding"
-                      CellStyle="{StaticResource CostingCell}"
-                      ColumnHeaderHeight="28"
-                      ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
-                      FontSize="12"
-                      GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column"
-                      HorizontalGridLinesBrush="#F3F4F6"
-                      ItemsSource="{Binding Resources}"
-                      RowHeight="36"
-                      SelectionMode="Single"
-                      Background="Transparent"
-                      RowBackground="Transparent"
-                      AlternatingRowBackground="#F9FAFB">
+            <DataGrid
+                AlternatingRowBackground="#F9FAFB"
+                AutoGenerateColumns="False"
+                Background="Transparent"
+                BorderThickness="0"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CellEditEnding="ResourceGrid_CellEditEnding"
+                CellStyle="{StaticResource CostingCell}"
+                ColumnHeaderHeight="28"
+                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                FontSize="12"
+                GridLinesVisibility="Horizontal"
+                HeadersVisibility="Column"
+                HorizontalGridLinesBrush="#F3F4F6"
+                ItemsSource="{Binding Resources}"
+                RowBackground="Transparent"
+                RowHeight="36"
+                SelectionMode="Single">
                 <DataGrid.Columns>
                     <DataGridTemplateColumn Width="2*" Header="RISORSA">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Padding="8,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding ResourceName}"/>
+                                <TextBlock
+                                    Padding="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding ResourceName}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                         <DataGridTemplateColumn.CellEditingTemplate>
                             <DataTemplate>
-                                <ComboBox Style="{StaticResource InlineComboBox}"
-                                          DisplayMemberPath="FullName"
-                                          Loaded="EmployeeCombo_Loaded"
-                                          SelectionChanged="EmployeeCombo_SelectionChanged"
-                                          IsEditable="True"
-                                          IsTextSearchEnabled="True"
-                                          StaysOpenOnEdit="True"/>
+                                <ComboBox
+                                    DisplayMemberPath="FullName"
+                                    IsEditable="True"
+                                    IsTextSearchEnabled="True"
+                                    Loaded="EmployeeCombo_Loaded"
+                                    SelectionChanged="EmployeeCombo_SelectionChanged"
+                                    StaysOpenOnEdit="True"
+                                    Style="{StaticResource InlineComboBox}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellEditingTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Width="50" Header="GG" 
-                                        Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="GG">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="55" Header="ORE/G"
-                                        Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="ORE/G">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Center" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="65" Header="TOT ORE" IsReadOnly="True"
-                                        Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}">
+                    <DataGridTextColumn
+                        Width="65"
+                        Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
+                        Header="TOT ORE"
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="70" Header="€/H" IsReadOnly="True"
-                                        Binding="{Binding HourlyCost, StringFormat=N2}">
+                    <DataGridTextColumn
+                        Width="70"
+                        Binding="{Binding HourlyCost, StringFormat=N2}"
+                        Header="€/H"
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Setter Property="Foreground" Value="#4F6EF7"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Foreground" Value="#4F6EF7" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="90" Header="TOT €" IsReadOnly="True"
-                                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}">
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                        Header="TOT €"
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
@@ -239,120 +277,141 @@
                     <DataGridTemplateColumn Width="70" Header="K">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBox Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, 
-                                               ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
-                                         Style="{StaticResource NumericTextBox}"
-                                         Width="50"
-                                         HorizontalAlignment="Center"
-                                         ToolTip="Markup applicato (es: 1.45 = 45%)"/>
+                                <TextBox
+                                    Width="50"
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
+                                    ToolTip="Markup applicato (es: 1.45 = 45%)" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Width="90" Header="VENDITA €" IsReadOnly="True"
-                                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}">
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                        Header="VENDITA €"
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Setter Property="Foreground" Value="#059669"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Foreground" Value="#059669" />
+                                <Setter Property="FontWeight" Value="Bold" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Width="30" Header=""
-                                            CellTemplate="{StaticResource DeleteButtonTemplate}" />
+                    <DataGridTemplateColumn
+                        Width="30"
+                        CellTemplate="{StaticResource DeleteButtonTemplate}"
+                        Header="" />
                 </DataGrid.Columns>
             </DataGrid>
         </DataTemplate>
 
-        <!-- Template Risorse Da Cliente (con trasferte) -->
+        <!--  Template Risorse Da Cliente (con trasferte)  -->
         <DataTemplate x:Key="ResourceGridDaCliente">
             <StackPanel>
-                <DataGrid AutoGenerateColumns="False"
-                          BorderThickness="0"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          CellEditEnding="ResourceGrid_CellEditEnding"
-                          CellStyle="{StaticResource CostingCell}"
-                          ColumnHeaderHeight="28"
-                          ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
-                          FontSize="12"
-                          GridLinesVisibility="Horizontal"
-                          HeadersVisibility="Column"
-                          HorizontalGridLinesBrush="#F3F4F6"
-                          ItemsSource="{Binding Resources}"
-                          RowHeight="36"
-                          SelectionMode="Single"
-                          Background="Transparent"
-                          RowBackground="Transparent"
-                          AlternatingRowBackground="#F9FAFB">
+                <DataGrid
+                    AlternatingRowBackground="#F9FAFB"
+                    AutoGenerateColumns="False"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CanUserAddRows="False"
+                    CanUserDeleteRows="False"
+                    CellEditEnding="ResourceGrid_CellEditEnding"
+                    CellStyle="{StaticResource CostingCell}"
+                    ColumnHeaderHeight="28"
+                    ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                    FontSize="12"
+                    GridLinesVisibility="Horizontal"
+                    HeadersVisibility="Column"
+                    HorizontalGridLinesBrush="#F3F4F6"
+                    ItemsSource="{Binding Resources}"
+                    RowBackground="Transparent"
+                    RowHeight="36"
+                    SelectionMode="Single">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Width="2*" Header="RISORSA">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Padding="8,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Text="{Binding ResourceName}"/>
+                                    <TextBlock
+                                        Padding="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding ResourceName}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                             <DataGridTemplateColumn.CellEditingTemplate>
                                 <DataTemplate>
-                                    <ComboBox Style="{StaticResource InlineComboBox}"
-                                              DisplayMemberPath="FullName"
-                                              Loaded="EmployeeCombo_Loaded"
-                                              SelectionChanged="EmployeeCombo_SelectionChanged"/>
+                                    <ComboBox
+                                        DisplayMemberPath="FullName"
+                                        Loaded="EmployeeCombo_Loaded"
+                                        SelectionChanged="EmployeeCombo_SelectionChanged"
+                                        Style="{StaticResource InlineComboBox}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellEditingTemplate>
                         </DataGridTemplateColumn>
 
-                        <DataGridTextColumn Width="45" Header="GG"
-                                            Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="45"
+                            Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="GG">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="50" Header="ORE/G"
-                                            Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="ORE/G">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="60" Header="TOT ORE" IsReadOnly="True"
-                                            Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}">
+                        <DataGridTextColumn
+                            Width="60"
+                            Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
+                            Header="TOT ORE"
+                            IsReadOnly="True">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="65" Header="€/H" IsReadOnly="True"
-                                            Binding="{Binding HourlyCost, StringFormat=N2}">
+                        <DataGridTextColumn
+                            Width="65"
+                            Binding="{Binding HourlyCost, StringFormat=N2}"
+                            Header="€/H"
+                            IsReadOnly="True">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
-                                    <Setter Property="Foreground" Value="#4F6EF7"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                    <Setter Property="Foreground" Value="#4F6EF7" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="85" Header="TOT €" IsReadOnly="True"
-                                            Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}">
+                        <DataGridTextColumn
+                            Width="85"
+                            Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                            Header="TOT €"
+                            IsReadOnly="True">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
@@ -360,110 +419,125 @@
                         <DataGridTemplateColumn Width="60" Header="K">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBox Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, 
-                                                   ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
-                                             Style="{StaticResource NumericTextBox}"
-                                             Width="45"
-                                             HorizontalAlignment="Center"/>
+                                    <TextBox
+                                        Width="45"
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource NumericTextBox}"
+                                        Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <DataGridTextColumn Width="85" Header="VENDITA €" IsReadOnly="True"
-                                            Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}">
+                        <DataGridTextColumn
+                            Width="85"
+                            Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                            Header="VENDITA €"
+                            IsReadOnly="True">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
-                                    <Setter Property="Foreground" Value="#059669"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                    <Setter Property="Foreground" Value="#059669" />
+                                    <Setter Property="FontWeight" Value="Bold" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="45" Header="VIAGGI"
-                                            Binding="{Binding NumTrips, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="45"
+                            Binding="{Binding NumTrips, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="VIAGGI">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="VIAGGI" ToolTip="Numero viaggi"/>
+                                    <TextBlock Text="VIAGGI" ToolTip="Numero viaggi" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="45" Header="KM"
-                                            Binding="{Binding KmPerTrip, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="45"
+                            Binding="{Binding KmPerTrip, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="KM">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="KM" ToolTip="Km per viaggio"/>
+                                    <TextBlock Text="KM" ToolTip="Km per viaggio" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="50" Header="€/KM"
-                                            Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                            Header="€/KM">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="€/KM" ToolTip="Costo al chilometro"/>
+                                    <TextBlock Text="€/KM" ToolTip="Costo al chilometro" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="50" Header="VITTO/G"
-                                            Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                            Header="VITTO/G">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="VITTO/G" ToolTip="Vitto giornaliero"/>
+                                    <TextBlock Text="VITTO/G" ToolTip="Vitto giornaliero" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="50" Header="HOTEL/G"
-                                            Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                            Header="HOTEL/G">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="HOTEL/G" ToolTip="Hotel giornaliero"/>
+                                    <TextBlock Text="HOTEL/G" ToolTip="Hotel giornaliero" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="Margin" Value="0,0,8,0"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn Width="50" Header="GG IND."
-                                            Binding="{Binding AllowanceDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding AllowanceDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="GG IND.">
                             <DataGridTextColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="GG IND." ToolTip="Giorni indennità"/>
+                                    <TextBlock Text="GG IND." ToolTip="Giorni indennità" />
                                 </DataTemplate>
                             </DataGridTextColumn.HeaderTemplate>
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
@@ -471,31 +545,35 @@
                         <DataGridTemplateColumn Width="70" Header="€/G IND.">
                             <DataGridTemplateColumn.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="€/G IND." ToolTip="Indennità giornaliera"/>
+                                    <TextBlock Text="€/G IND." ToolTip="Indennità giornaliera" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.HeaderTemplate>
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <ComboBox ItemsSource="{x:Static vm:CostResourceVM.AllowanceOptions}"
-                                              SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
-                                              Style="{StaticResource InlineComboBox}"
-                                              Width="60"
-                                              HorizontalAlignment="Center"/>
+                                    <ComboBox
+                                        Width="60"
+                                        HorizontalAlignment="Center"
+                                        ItemsSource="{x:Static vm:CostResourceVM.AllowanceOptions}"
+                                        SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
+                                        Style="{StaticResource InlineComboBox}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <DataGridTemplateColumn Width="30" Header=""
-                                                CellTemplate="{StaticResource DeleteButtonTemplate}" />
+                        <DataGridTemplateColumn
+                            Width="30"
+                            CellTemplate="{StaticResource DeleteButtonTemplate}"
+                            Header="" />
                     </DataGrid.Columns>
                 </DataGrid>
 
-                <!-- Subtotali -->
-                <Border Margin="0,4,0,0"
-                        Padding="12,8"
-                        Background="#F9FAFB"
-                        BorderBrush="#E4E7EC"
-                        BorderThickness="0,1,0,0">
+                <!--  Subtotali  -->
+                <Border
+                    Margin="0,4,0,0"
+                    Padding="12,8"
+                    Background="#F9FAFB"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,1,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -505,102 +583,162 @@
                             <ColumnDefinition Width="140" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"
-                                   Foreground="#1A1D26"
-                                   Text="SUBTOTALI"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#1A1D26"
+                            Text="SUBTOTALI" />
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <TextBlock Text="Ore: " FontSize="11" Foreground="#6B7280"/>
-                            <TextBlock Text="{Binding TotalCostOre, StringFormat=N2}" 
-                                       FontSize="11" FontWeight="Bold" Foreground="#1A1D26"/>
-                            <TextBlock Text=" €" FontSize="11" Foreground="#1A1D26"/>
+                        <StackPanel
+                            Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#6B7280"
+                                Text="Ore: " />
+                            <TextBlock
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="{Binding TotalCostOre, StringFormat=N2}" />
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#1A1D26"
+                                Text=" €" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <TextBlock Text="Viaggi: " FontSize="11" Foreground="#6B7280"/>
-                            <TextBlock Text="{Binding TotalViaggi, StringFormat=N2}" 
-                                       FontSize="11" FontWeight="Bold" Foreground="#1A1D26"/>
-                            <TextBlock Text=" €" FontSize="11" Foreground="#1A1D26"/>
+                        <StackPanel
+                            Grid.Column="2"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#6B7280"
+                                Text="Viaggi: " />
+                            <TextBlock
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="{Binding TotalViaggi, StringFormat=N2}" />
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#1A1D26"
+                                Text=" €" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <TextBlock Text="Vitto/Alloggio: " FontSize="11" Foreground="#6B7280"/>
-                            <TextBlock Text="{Binding TotalAlloggio, StringFormat=N2}" 
-                                       FontSize="11" FontWeight="Bold" Foreground="#1A1D26"/>
-                            <TextBlock Text=" €" FontSize="11" Foreground="#1A1D26"/>
+                        <StackPanel
+                            Grid.Column="3"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#6B7280"
+                                Text="Vitto/Alloggio: " />
+                            <TextBlock
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="{Binding TotalAlloggio, StringFormat=N2}" />
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#1A1D26"
+                                Text=" €" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
-                            <TextBlock Text="Indennità: " FontSize="11" Foreground="#6B7280"/>
-                            <TextBlock Text="{Binding TotalIndennita, StringFormat=N2}" 
-                                       FontSize="11" FontWeight="Bold" Foreground="#1A1D26"/>
-                            <TextBlock Text=" €" FontSize="11" Foreground="#1A1D26"/>
+                        <StackPanel
+                            Grid.Column="4"
+                            Margin="0,0,8,0"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#6B7280"
+                                Text="Indennità: " />
+                            <TextBlock
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="{Binding TotalIndennita, StringFormat=N2}" />
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="#1A1D26"
+                                Text=" €" />
                         </StackPanel>
                     </Grid>
                 </Border>
             </StackPanel>
         </DataTemplate>
 
-        <!-- Template Material Items -->
+        <!--  Template Material Items  -->
         <DataTemplate x:Key="MaterialItemsGrid">
-            <DataGrid AutoGenerateColumns="False"
-                      BorderThickness="0"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      CellEditEnding="MaterialGrid_CellEditEnding"
-                      CellStyle="{StaticResource CostingCell}"
-                      ColumnHeaderHeight="28"
-                      ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
-                      FontSize="12"
-                      GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column"
-                      HorizontalGridLinesBrush="#F3F4F6"
-                      ItemsSource="{Binding Items}"
-                      RowHeight="36"
-                      SelectionMode="Single"
-                      Background="Transparent"
-                      RowBackground="Transparent"
-                      AlternatingRowBackground="#F9FAFB">
+            <DataGrid
+                AlternatingRowBackground="#F9FAFB"
+                AutoGenerateColumns="False"
+                Background="Transparent"
+                BorderThickness="0"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CellEditEnding="MaterialGrid_CellEditEnding"
+                CellStyle="{StaticResource CostingCell}"
+                ColumnHeaderHeight="28"
+                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                FontSize="12"
+                GridLinesVisibility="Horizontal"
+                HeadersVisibility="Column"
+                HorizontalGridLinesBrush="#F3F4F6"
+                ItemsSource="{Binding Items}"
+                RowBackground="Transparent"
+                RowHeight="36"
+                SelectionMode="Single">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Width="3*" Header="DESCRIZIONE"
-                                        Binding="{Binding Description, UpdateSourceTrigger=LostFocus}">
+                    <DataGridTextColumn
+                        Width="3*"
+                        Binding="{Binding Description, UpdateSourceTrigger=LostFocus}"
+                        Header="DESCRIZIONE">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Padding" Value="8,0,0,0"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Padding" Value="8,0,0,0" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="60" Header="QTÀ"
-                                        Binding="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}">
+                    <DataGridTextColumn
+                        Width="60"
+                        Binding="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="QTÀ">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="HorizontalAlignment" Value="Center" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="100" Header="COSTO UNIT."
-                                        Binding="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}">
+                    <DataGridTextColumn
+                        Width="100"
+                        Binding="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                        Header="COSTO UNIT.">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTextColumn Width="100" Header="COSTO TOT." IsReadOnly="True"
-                                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}">
+                    <DataGridTextColumn
+                        Width="100"
+                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                        Header="COSTO TOT."
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
@@ -608,24 +746,27 @@
                     <DataGridTemplateColumn Width="80" Header="K">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBox Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, 
-                                               ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
-                                         Style="{StaticResource NumericTextBox}"
-                                         Width="60"
-                                         HorizontalAlignment="Center"
-                                         ToolTip="Markup applicato"/>
+                                <TextBox
+                                    Width="60"
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
+                                    ToolTip="Markup applicato" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Width="120" Header="PREZZO VENDITA" IsReadOnly="True"
-                                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}">
+                    <DataGridTextColumn
+                        Width="120"
+                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                        Header="PREZZO VENDITA"
+                        IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Setter Property="Foreground" Value="#059669"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Foreground" Value="#059669" />
+                                <Setter Property="FontWeight" Value="Bold" />
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
@@ -633,27 +774,31 @@
                     <DataGridTemplateColumn Width="40" Header="">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Border Padding="4,2"
-                                        Background="#F3F4F6"
-                                        CornerRadius="4"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="{Binding ItemType, Converter={StaticResource ItemTypeToBadge}}"
-                                               FontSize="9"
-                                               FontWeight="Bold"
-                                               Foreground="#4F6EF7"/>
+                                <Border
+                                    Padding="4,2"
+                                    HorizontalAlignment="Center"
+                                    Background="#F3F4F6"
+                                    CornerRadius="4">
+                                    <TextBlock
+                                        FontSize="9"
+                                        FontWeight="Bold"
+                                        Foreground="#4F6EF7"
+                                        Text="{Binding ItemType, Converter={StaticResource ItemTypeToBadge}}" />
                                 </Border>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Width="30" Header=""
-                                            CellTemplate="{StaticResource DeleteMaterialButtonTemplate}" />
+                    <DataGridTemplateColumn
+                        Width="30"
+                        CellTemplate="{StaticResource DeleteMaterialButtonTemplate}"
+                        Header="" />
                 </DataGrid.Columns>
             </DataGrid>
         </DataTemplate>
     </UserControl.Resources>
 
-    <!-- ========== LAYOUT PRINCIPALE ========== -->
+    <!--  ========== LAYOUT PRINCIPALE ==========  -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -661,96 +806,108 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- HEADER -->
-        <Border Grid.Row="0"
-                Padding="16,10"
-                Background="White"
-                BorderBrush="#E4E7EC"
-                BorderThickness="0,0,0,1">
+        <!--  HEADER  -->
+        <Border
+            Grid.Row="0"
+            Padding="16,10"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Stato -->
+                <!--  Stato  -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="{Binding StatusText}"
-                               FontSize="12"
-                               Foreground="#6B7280"
-                               VerticalAlignment="Center"/>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#6B7280"
+                        Text="{Binding StatusText}" />
                 </StackPanel>
 
-                <!-- Azioni rapide -->
+                <!--  Azioni rapide  -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button Content="💾 Salva"
-                            Style="{StaticResource PrimaryButton}"
-                            Padding="10,4"
-                            Click="BtnSaveAll_Click"
-                            Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}"/>
+                    <Button
+                        Padding="10,4"
+                        Click="BtnSaveAll_Click"
+                        Content="💾 Salva"
+                        Style="{StaticResource PrimaryButton}"
+                        Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- CONTENUTO PRINCIPALE -->
+        <!--  CONTENUTO PRINCIPALE  -->
         <Grid Grid.Row="1">
-            <!-- Stato Inizializzazione -->
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding ShowInit, Converter={StaticResource BoolToVis}}">
-                <TextBlock HorizontalAlignment="Center"
-                           FontSize="16"
-                           Foreground="#6B7280"
-                           Text="Configurazione costi non ancora inizializzata."
-                           Margin="0,0,0,16"/>
-                <Button Width="240"
-                        Height="40"
-                        Style="{StaticResource PrimaryButton}"
-                        Click="BtnInit_Click"
-                        Content="🚀 Inizializza Configurazione"
-                        FontSize="14"/>
+            <!--  Stato Inizializzazione  -->
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="{Binding ShowInit, Converter={StaticResource BoolToVis}}">
+                <TextBlock
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Center"
+                    FontSize="16"
+                    Foreground="#6B7280"
+                    Text="Configurazione costi non ancora inizializzata." />
+                <Button
+                    Width="240"
+                    Height="40"
+                    Click="BtnInit_Click"
+                    Content="🚀 Inizializza Configurazione"
+                    FontSize="14"
+                    Style="{StaticResource PrimaryButton}" />
             </StackPanel>
 
-            <!-- Contenuto Principale con Scroll -->
-            <ScrollViewer Padding="16"
-                          VerticalScrollBarVisibility="Auto"
-                          Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
+            <!--  Contenuto Principale con Scroll  -->
+            <ScrollViewer
+                Padding="16"
+                VerticalScrollBarVisibility="Auto"
+                Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
 
-                    <!-- ========== SEZIONE RISORSE ========== -->
-                    <Border Background="White"
-                            CornerRadius="8"
-                            Padding="0"
-                            Margin="0,0,0,16">
+                    <!--  ========== SEZIONE RISORSE ==========  -->
+                    <Border
+                        Margin="0,0,0,16"
+                        Padding="0"
+                        Background="White"
+                        CornerRadius="8">
                         <StackPanel>
-                            <!-- Header sezione risorse -->
-                            <Border Background="#F9FAFB"
-                                    Padding="16,12"
-                                    CornerRadius="8,8,0,0">
+                            <!--  Header sezione risorse  -->
+                            <Border
+                                Padding="16,12"
+                                Background="#F9FAFB"
+                                CornerRadius="8,8,0,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="IMPEGNO RISORSE"
-                                               FontSize="16"
-                                               FontWeight="Bold"
-                                               Foreground="#1A1D26"/>
+                                    <TextBlock
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26"
+                                        Text="IMPEGNO RISORSE" />
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <Button Content="➕ Nuovo Gruppo"
-                                                Style="{StaticResource SecondaryButton}"
-                                                Click="BtnAddGroup_Click"
-                                                Margin="0,0,8,0"/>
+                                        <Button
+                                            Margin="0,0,8,0"
+                                            Click="BtnAddGroup_Click"
+                                            Content="➕ Nuovo Gruppo"
+                                            Style="{StaticResource SecondaryButton}" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
-                            <!-- Intestazione colonne riepilogo -->
-                            <Border Padding="12,6"
-                                    Background="#F9FAFB"
-                                    BorderBrush="#E4E7EC"
-                                    BorderThickness="0,0,0,1">
+                            <!--  Intestazione colonne riepilogo  -->
+                            <Border
+                                Padding="12,6"
+                                Background="#F9FAFB"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="0,0,0,1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -761,12 +918,50 @@
                                         <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="70" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE" />
-                                    <TextBlock Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="QTÀ" />
-                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO NETTO" />
-                                    <TextBlock Grid.Column="3" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="PREZZO VENDITA" />
-                                    <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="TIPO" />
-                                    <TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT.%">
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="SEZIONE" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="QTÀ" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="COSTO NETTO" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="PREZZO VENDITA" />
+                                    <TextBlock
+                                        Grid.Column="4"
+                                        HorizontalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="TIPO" />
+                                    <TextBlock
+                                        Grid.Column="5"
+                                        HorizontalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#D97706"
+                                        Text="CONT.%">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -778,7 +973,13 @@
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
-                                    <TextBlock Grid.Column="6" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG.%">
+                                    <TextBlock
+                                        Grid.Column="6"
+                                        HorizontalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#7C3AED"
+                                        Text="MARG.%">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -793,24 +994,26 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Gruppi e Sezioni -->
-                            <ItemsControl ItemsSource="{Binding Groups}" Margin="0,4,0,0">
+                            <!--  Gruppi e Sezioni  -->
+                            <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Groups}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:CostGroupVM}">
                                         <StackPanel Margin="0,4,0,0">
 
-                                            <!-- Header Gruppo -->
-                                            <Border Padding="12,8"
-                                                    Background="{Binding Color, Converter={StaticResource HexToBrush}}"
-                                                    Cursor="Hand"
-                                                    MouseLeftButtonDown="GroupHeader_Click"
-                                                    CornerRadius="4">
+                                            <!--  Header Gruppo  -->
+                                            <Border
+                                                Padding="12,8"
+                                                Background="{Binding Color, Converter={StaticResource HexToBrush}}"
+                                                CornerRadius="4"
+                                                Cursor="Hand"
+                                                MouseLeftButtonDown="GroupHeader_Click">
                                                 <DockPanel>
-                                                    <TextBlock DockPanel.Dock="Right"
-                                                               VerticalAlignment="Center"
-                                                               FontSize="12"
-                                                               FontWeight="SemiBold"
-                                                               Foreground="#C8FFFFFF">
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        DockPanel.Dock="Right"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#C8FFFFFF">
                                                         <Run Text="Netto " />
                                                         <Run Text="{Binding TotalCost, StringFormat=N2, Mode=OneWay}" />
                                                         <Run Text=" €  →  Vendita " />
@@ -818,45 +1021,48 @@
                                                         <Run Text=" €" />
                                                     </TextBlock>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Path Width="8"
-                                                              Height="10"
-                                                              Margin="4,0,8,0"
-                                                              VerticalAlignment="Center"
-                                                              Data="M 0,0 L 5,5 L 0,10"
-                                                              RenderTransformOrigin="0.5,0.5"
-                                                              Stroke="#FFFFFF90"
-                                                              StrokeThickness="1.5">
+                                                        <Path
+                                                            Width="8"
+                                                            Height="10"
+                                                            Margin="4,0,8,0"
+                                                            VerticalAlignment="Center"
+                                                            Data="M 0,0 L 5,5 L 0,10"
+                                                            RenderTransformOrigin="0.5,0.5"
+                                                            Stroke="#FFFFFF90"
+                                                            StrokeThickness="1.5">
                                                             <Path.RenderTransform>
                                                                 <RotateTransform Angle="{Binding IsExpanded, Converter={StaticResource BoolToAngle}}" />
                                                             </Path.RenderTransform>
                                                         </Path>
-                                                        <TextBlock Text="{Binding Name}"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="12"
-                                                                   FontWeight="SemiBold"
-                                                                   Foreground="White"/>
+                                                        <TextBlock
+                                                            VerticalAlignment="Center"
+                                                            FontSize="12"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="White"
+                                                            Text="{Binding Name}" />
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>
 
-                                            <!-- Contenuto Gruppo -->
-                                            <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"
-                                                        Margin="16,8,0,0">
+                                            <!--  Contenuto Gruppo  -->
+                                            <StackPanel Margin="16,8,0,0" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                                                 <ItemsControl ItemsSource="{Binding Sections}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type vm:CostSectionVM}">
-                                                            <Border Margin="0,0,0,4"
-                                                                    Background="White"
-                                                                    BorderBrush="#E4E7EC"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="4">
+                                                            <Border
+                                                                Margin="0,0,0,4"
+                                                                Background="White"
+                                                                BorderBrush="#E4E7EC"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4">
                                                                 <StackPanel>
 
-                                                                    <!-- Header Sezione -->
-                                                                    <Grid Background="#FAFBFC"
-                                                                          Cursor="Hand"
-                                                                          MouseLeftButtonDown="SectionRow_Click"
-                                                                          Height="36">
+                                                                    <!--  Header Sezione  -->
+                                                                    <Grid
+                                                                        Height="36"
+                                                                        Background="#FAFBFC"
+                                                                        Cursor="Hand"
+                                                                        MouseLeftButtonDown="SectionRow_Click">
                                                                         <Grid.ColumnDefinitions>
                                                                             <ColumnDefinition Width="*" />
                                                                             <ColumnDefinition Width="50" />
@@ -867,89 +1073,98 @@
                                                                             <ColumnDefinition Width="70" />
                                                                         </Grid.ColumnDefinitions>
 
-                                                                        <StackPanel Grid.Column="0"
-                                                                                    Margin="12,0,0,0"
-                                                                                    Orientation="Horizontal"
-                                                                                    VerticalAlignment="Center">
-                                                                            <Path Width="7"
-                                                                                  Height="9"
-                                                                                  Margin="0,0,8,0"
-                                                                                  VerticalAlignment="Center"
-                                                                                  Data="M 0,0 L 4.5,4.5 L 0,9"
-                                                                                  Stroke="#9CA3AF"
-                                                                                  StrokeThickness="1.5">
+                                                                        <StackPanel
+                                                                            Grid.Column="0"
+                                                                            Margin="12,0,0,0"
+                                                                            VerticalAlignment="Center"
+                                                                            Orientation="Horizontal">
+                                                                            <Path
+                                                                                Width="7"
+                                                                                Height="9"
+                                                                                Margin="0,0,8,0"
+                                                                                VerticalAlignment="Center"
+                                                                                Data="M 0,0 L 4.5,4.5 L 0,9"
+                                                                                Stroke="#9CA3AF"
+                                                                                StrokeThickness="1.5">
                                                                                 <Path.RenderTransform>
                                                                                     <RotateTransform Angle="{Binding IsDetailExpanded, Converter={StaticResource BoolToAngle}}" />
                                                                                 </Path.RenderTransform>
                                                                             </Path>
-                                                                            <TextBlock Text="{Binding Name}"
-                                                                                       FontSize="13"
-                                                                                       FontWeight="SemiBold"
-                                                                                       Foreground="#1A1D26"/>
+                                                                            <TextBlock
+                                                                                FontSize="13"
+                                                                                FontWeight="SemiBold"
+                                                                                Foreground="#1A1D26"
+                                                                                Text="{Binding Name}" />
                                                                         </StackPanel>
 
-                                                                        <TextBlock Grid.Column="1"
-                                                                                   Text="{Binding ResourceCount}"
-                                                                                   HorizontalAlignment="Right"
-                                                                                   Margin="0,0,8,0"
-                                                                                   VerticalAlignment="Center"
-                                                                                   FontSize="12"
-                                                                                   Foreground="#6B7280"/>
+                                                                        <TextBlock
+                                                                            Grid.Column="1"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="12"
+                                                                            Foreground="#6B7280"
+                                                                            Text="{Binding ResourceCount}" />
 
-                                                                        <TextBlock Grid.Column="2"
-                                                                                   HorizontalAlignment="Right"
-                                                                                   Margin="0,0,8,0"
-                                                                                   VerticalAlignment="Center"
-                                                                                   FontSize="12"
-                                                                                   FontWeight="SemiBold"
-                                                                                   Foreground="#1A1D26">
+                                                                        <TextBlock
+                                                                            Grid.Column="2"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="12"
+                                                                            FontWeight="SemiBold"
+                                                                            Foreground="#1A1D26">
                                                                             <Run Text="{Binding TotalCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                                                         </TextBlock>
 
-                                                                        <TextBlock Grid.Column="3"
-                                                                                   HorizontalAlignment="Right"
-                                                                                   Margin="0,0,8,0"
-                                                                                   VerticalAlignment="Center"
-                                                                                   FontSize="12"
-                                                                                   FontWeight="Bold"
-                                                                                   Foreground="#4F6EF7">
+                                                                        <TextBlock
+                                                                            Grid.Column="3"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="12"
+                                                                            FontWeight="Bold"
+                                                                            Foreground="#4F6EF7">
                                                                             <Run Text="{Binding TotalSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                                                         </TextBlock>
 
-                                                                        <Border Grid.Column="4"
-                                                                                Padding="6,2"
-                                                                                HorizontalAlignment="Center"
-                                                                                VerticalAlignment="Center"
-                                                                                Background="#F3F4F6"
-                                                                                CornerRadius="12">
-                                                                            <TextBlock Text="{Binding TypeLabel}"
-                                                                                       FontSize="9"
-                                                                                       FontWeight="Bold"
-                                                                                       Foreground="#6B7280"/>
+                                                                        <Border
+                                                                            Grid.Column="4"
+                                                                            Padding="6,2"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center"
+                                                                            Background="#F3F4F6"
+                                                                            CornerRadius="12">
+                                                                            <TextBlock
+                                                                                FontSize="9"
+                                                                                FontWeight="Bold"
+                                                                                Foreground="#6B7280"
+                                                                                Text="{Binding TypeLabel}" />
                                                                         </Border>
 
-                                                                        <TextBox Grid.Column="5"
-                                                                                 Width="50"
-                                                                                 Height="22"
-                                                                                 Style="{StaticResource NumericTextBox}"
-                                                                                 Tag="contingency"
-                                                                                 IsReadOnly="True"
-                                                                                 Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}"
-                                                                                 Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
+                                                                        <TextBox
+                                                                            Grid.Column="5"
+                                                                            Width="50"
+                                                                            Height="22"
+                                                                            IsReadOnly="True"
+                                                                            Style="{StaticResource NumericTextBox}"
+                                                                            Tag="contingency"
+                                                                            Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}"
+                                                                            Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
 
-                                                                        <TextBox Grid.Column="6"
-                                                                                 Width="50"
-                                                                                 Height="22"
-                                                                                 Style="{StaticResource NumericTextBox}"
-                                                                                 Tag="margin"
-                                                                                 IsReadOnly="True"
-                                                                                 Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}"
-                                                                                 Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
+                                                                        <TextBox
+                                                                            Grid.Column="6"
+                                                                            Width="50"
+                                                                            Height="22"
+                                                                            IsReadOnly="True"
+                                                                            Style="{StaticResource NumericTextBox}"
+                                                                            Tag="margin"
+                                                                            Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}"
+                                                                            Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
                                                                     </Grid>
 
-                                                                    <!-- Dettaglio Sezione (espanso) -->
-                                                                    <Border Padding="12,8"
-                                                                            Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
+                                                                    <!--  Dettaglio Sezione (espanso)  -->
+                                                                    <Border Padding="12,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
                                                                         <StackPanel>
                                                                             <ContentControl Content="{Binding}">
                                                                                 <ContentControl.Style>
@@ -964,14 +1179,15 @@
                                                                                 </ContentControl.Style>
                                                                             </ContentControl>
 
-                                                                            <Button Style="{StaticResource PrimaryButton}"
-                                                                                    Content="➕ Aggiungi Risorsa"
-                                                                                    HorizontalAlignment="Left"
-                                                                                    Margin="0,8,0,0"
-                                                                                    Padding="12,6"
-                                                                                    FontSize="11"
-                                                                                    Click="BtnAddResource_Click"
-                                                                                    Tag="{Binding Id}"/>
+                                                                            <Button
+                                                                                Margin="0,8,0,0"
+                                                                                Padding="12,6"
+                                                                                HorizontalAlignment="Left"
+                                                                                Click="BtnAddResource_Click"
+                                                                                Content="➕ Aggiungi Risorsa"
+                                                                                FontSize="11"
+                                                                                Style="{StaticResource PrimaryButton}"
+                                                                                Tag="{Binding Id}" />
                                                                         </StackPanel>
                                                                     </Border>
                                                                 </StackPanel>
@@ -980,69 +1196,94 @@
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
 
-                                                <Button Style="{StaticResource SecondaryButton}"
-                                                        Content="➕ Aggiungi Sezione"
-                                                        HorizontalAlignment="Left"
-                                                        Margin="0,8,0,4"
-                                                        Padding="12,6"
-                                                        FontSize="11"
-                                                        Click="BtnAddSection_Click"
-                                                        Tag="{Binding Name}"/>
+                                                <Button
+                                                    Margin="0,8,0,4"
+                                                    Padding="12,6"
+                                                    HorizontalAlignment="Left"
+                                                    Click="BtnAddSection_Click"
+                                                    Content="➕ Aggiungi Sezione"
+                                                    FontSize="11"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Tag="{Binding Name}" />
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- Totali Risorse -->
-                            <Border Margin="0,8,0,0"
-                                    Padding="16,10"
-                                    Background="#1A1D26"
-                                    CornerRadius="0,0,8,8">
+                            <!--  Totali Risorse  -->
+                            <Border
+                                Margin="0,8,0,0"
+                                Padding="16,10"
+                                Background="#1A1D26"
+                                CornerRadius="0,0,8,8">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Width="200"
-                                               FontSize="14"
-                                               FontWeight="Bold"
-                                               Foreground="White"
-                                               Text="TOTALE RISORSE" />
-                                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                        <TextBlock Text="Netto: " FontSize="13" Foreground="#9CA3AF"/>
-                                        <TextBlock Text="{Binding GrandTotalCost, StringFormat=N2}" 
-                                                   FontSize="13" FontWeight="SemiBold" Foreground="White"/>
-                                        <TextBlock Text=" €" FontSize="13" Foreground="White"/>
+                                    <TextBlock
+                                        Width="200"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="White"
+                                        Text="TOTALE RISORSE" />
+                                    <StackPanel Margin="20,0,0,0" Orientation="Horizontal">
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#9CA3AF"
+                                            Text="Netto: " />
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="SemiBold"
+                                            Foreground="White"
+                                            Text="{Binding GrandTotalCost, StringFormat=N2}" />
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="White"
+                                            Text=" €" />
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                        <TextBlock Text="Vendita: " FontSize="13" Foreground="#9CA3AF"/>
-                                        <TextBlock Text="{Binding GrandTotalSale, StringFormat=N2}" 
-                                                   FontSize="13" FontWeight="Bold" Foreground="#4F6EF7"/>
-                                        <TextBlock Text=" €" FontSize="13" Foreground="#4F6EF7"/>
+                                    <StackPanel Margin="20,0,0,0" Orientation="Horizontal">
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#9CA3AF"
+                                            Text="Vendita: " />
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="Bold"
+                                            Foreground="#4F6EF7"
+                                            Text="{Binding GrandTotalSale, StringFormat=N2}" />
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#4F6EF7"
+                                            Text=" €" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </Border>
 
-                    <!-- ========== SEZIONE MATERIALI ========== -->
-                    <Border Background="White"
-                            CornerRadius="8"
-                            Padding="0"
-                            Margin="0,0,0,16">
+                    <!--  ========== SEZIONE MATERIALI ==========  -->
+                    <Border
+                        Margin="0,0,0,16"
+                        Padding="0"
+                        Background="White"
+                        CornerRadius="8">
                         <StackPanel>
-                            <!-- Header materiali -->
-                            <Border Background="#F9FAFB"
-                                    Padding="16,12"
-                                    CornerRadius="8,8,0,0">
-                                <TextBlock Text="MATERIALI"
-                                           FontSize="16"
-                                           FontWeight="Bold"
-                                           Foreground="#1A1D26"/>
+                            <!--  Header materiali  -->
+                            <Border
+                                Padding="16,12"
+                                Background="#F9FAFB"
+                                CornerRadius="8,8,0,0">
+                                <TextBlock
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="MATERIALI" />
                             </Border>
 
-                            <!-- Intestazione colonne -->
-                            <Border Padding="12,6"
-                                    Background="#F9FAFB"
-                                    BorderBrush="#E4E7EC"
-                                    BorderThickness="0,0,0,1">
+                            <!--  Intestazione colonne  -->
+                            <Border
+                                Padding="12,6"
+                                Background="#F9FAFB"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="0,0,0,1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -1050,28 +1291,56 @@
                                         <ColumnDefinition Width="120" />
                                         <ColumnDefinition Width="120" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="CATEGORIA" />
-                                    <TextBlock Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VOCI" />
-                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="COSTO NETTO" />
-                                    <TextBlock Grid.Column="3" Margin="0,0,8,0" HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="PREZZO VENDITA" />
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="CATEGORIA" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="VOCI" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="COSTO NETTO" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="PREZZO VENDITA" />
                                 </Grid>
                             </Border>
 
-                            <!-- Sezioni materiali -->
-                            <ItemsControl ItemsSource="{Binding MaterialSections}" Margin="0,4,0,0">
+                            <!--  Sezioni materiali  -->
+                            <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding MaterialSections}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:MaterialSectionVM}">
-                                        <Border Margin="0,0,0,4"
-                                                Background="White"
-                                                BorderBrush="#E4E7EC"
-                                                BorderThickness="1"
-                                                CornerRadius="4">
+                                        <Border
+                                            Margin="0,0,0,4"
+                                            Background="White"
+                                            BorderBrush="#E4E7EC"
+                                            BorderThickness="1"
+                                            CornerRadius="4">
                                             <StackPanel>
-                                                <!-- Header sezione materiali -->
-                                                <Grid Background="#FAFBFC"
-                                                      Cursor="Hand"
-                                                      MouseLeftButtonDown="MaterialSectionRow_Click"
-                                                      Height="36">
+                                                <!--  Header sezione materiali  -->
+                                                <Grid
+                                                    Height="36"
+                                                    Background="#FAFBFC"
+                                                    Cursor="Hand"
+                                                    MouseLeftButtonDown="MaterialSectionRow_Click">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="50" />
@@ -1079,77 +1348,83 @@
                                                         <ColumnDefinition Width="120" />
                                                     </Grid.ColumnDefinitions>
 
-                                                    <StackPanel Grid.Column="0"
-                                                                Margin="12,0,0,0"
-                                                                Orientation="Horizontal"
-                                                                VerticalAlignment="Center">
-                                                        <Path Width="7"
-                                                              Height="9"
-                                                              Margin="0,0,8,0"
-                                                              VerticalAlignment="Center"
-                                                              Data="M 0,0 L 4.5,4.5 L 0,9"
-                                                              Stroke="#9CA3AF"
-                                                              StrokeThickness="1.5">
+                                                    <StackPanel
+                                                        Grid.Column="0"
+                                                        Margin="12,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Orientation="Horizontal">
+                                                        <Path
+                                                            Width="7"
+                                                            Height="9"
+                                                            Margin="0,0,8,0"
+                                                            VerticalAlignment="Center"
+                                                            Data="M 0,0 L 4.5,4.5 L 0,9"
+                                                            Stroke="#9CA3AF"
+                                                            StrokeThickness="1.5">
                                                             <Path.RenderTransform>
                                                                 <RotateTransform Angle="{Binding IsDetailExpanded, Converter={StaticResource BoolToAngle}}" />
                                                             </Path.RenderTransform>
                                                         </Path>
-                                                        <TextBlock Text="{Binding Name}"
-                                                                   FontSize="13"
-                                                                   FontWeight="SemiBold"
-                                                                   Foreground="#1A1D26"/>
+                                                        <TextBlock
+                                                            FontSize="13"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="#1A1D26"
+                                                            Text="{Binding Name}" />
                                                     </StackPanel>
 
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding ItemCount}"
-                                                               HorizontalAlignment="Right"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"
-                                                               FontSize="12"
-                                                               Foreground="#6B7280"/>
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="#6B7280"
+                                                        Text="{Binding ItemCount}" />
 
-                                                    <TextBlock Grid.Column="2"
-                                                               HorizontalAlignment="Right"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"
-                                                               FontSize="12"
-                                                               FontWeight="SemiBold"
-                                                               Foreground="#1A1D26">
+                                                    <TextBlock
+                                                        Grid.Column="2"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#1A1D26">
                                                         <Run Text="{Binding TotalCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                                     </TextBlock>
 
-                                                    <TextBlock Grid.Column="3"
-                                                               HorizontalAlignment="Right"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"
-                                                               FontSize="12"
-                                                               FontWeight="Bold"
-                                                               Foreground="#4F6EF7">
+                                                    <TextBlock
+                                                        Grid.Column="3"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="12"
+                                                        FontWeight="Bold"
+                                                        Foreground="#4F6EF7">
                                                         <Run Text="{Binding TotalSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                                     </TextBlock>
                                                 </Grid>
 
-                                                <!-- Dettaglio materiali -->
-                                                <Border Padding="12,8"
-                                                        Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
+                                                <!--  Dettaglio materiali  -->
+                                                <Border Padding="12,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
                                                     <StackPanel>
-                                                        <ContentControl Content="{Binding}" 
-                                                                        ContentTemplate="{StaticResource MaterialItemsGrid}" />
+                                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource MaterialItemsGrid}" />
 
-                                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                                            <Button Style="{StaticResource PrimaryButton}"
-                                                                    Content="➕ Riga Materiale"
-                                                                    Padding="12,6"
-                                                                    FontSize="11"
-                                                                    Click="BtnAddMaterialItem_Click"
-                                                                    Tag="{Binding Id}"
-                                                                    Margin="0,0,8,0"/>
-                                                            <Button Style="{StaticResource SecondaryButton}"
-                                                                    Content="💰 Provvigione"
-                                                                    Padding="12,6"
-                                                                    FontSize="11"
-                                                                    Click="BtnAddCommission_Click"
-                                                                    Tag="{Binding Id}"/>
+                                                        <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
+                                                            <Button
+                                                                Margin="0,0,8,0"
+                                                                Padding="12,6"
+                                                                Click="BtnAddMaterialItem_Click"
+                                                                Content="➕ Riga Materiale"
+                                                                FontSize="11"
+                                                                Style="{StaticResource PrimaryButton}"
+                                                                Tag="{Binding Id}" />
+                                                            <Button
+                                                                Padding="12,6"
+                                                                Click="BtnAddCommission_Click"
+                                                                Content="💰 Provvigione"
+                                                                FontSize="11"
+                                                                Style="{StaticResource SecondaryButton}"
+                                                                Tag="{Binding Id}" />
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>
@@ -1159,45 +1434,67 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- Totali materiali -->
-                            <Border Margin="0,8,0,0"
-                                    Padding="16,10"
-                                    Background="#1A1D26"
-                                    CornerRadius="0,0,8,8">
+                            <!--  Totali materiali  -->
+                            <Border
+                                Margin="0,8,0,0"
+                                Padding="16,10"
+                                Background="#1A1D26"
+                                CornerRadius="0,0,8,8">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Width="200"
-                                               FontSize="14"
-                                               FontWeight="Bold"
-                                               Foreground="White"
-                                               Text="TOTALE MATERIALI" />
-                                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                        <TextBlock Text="Netto: " FontSize="13" Foreground="#9CA3AF"/>
-                                        <TextBlock Text="{Binding GrandMaterialCost, StringFormat=N2}" 
-                                                   FontSize="13" FontWeight="SemiBold" Foreground="White"/>
-                                        <TextBlock Text=" €" FontSize="13" Foreground="White"/>
+                                    <TextBlock
+                                        Width="200"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="White"
+                                        Text="TOTALE MATERIALI" />
+                                    <StackPanel Margin="20,0,0,0" Orientation="Horizontal">
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#9CA3AF"
+                                            Text="Netto: " />
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="SemiBold"
+                                            Foreground="White"
+                                            Text="{Binding GrandMaterialCost, StringFormat=N2}" />
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="White"
+                                            Text=" €" />
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                        <TextBlock Text="Vendita: " FontSize="13" Foreground="#9CA3AF"/>
-                                        <TextBlock Text="{Binding GrandMaterialSale, StringFormat=N2}" 
-                                                   FontSize="13" FontWeight="Bold" Foreground="#4F6EF7"/>
-                                        <TextBlock Text=" €" FontSize="13" Foreground="#4F6EF7"/>
+                                    <StackPanel Margin="20,0,0,0" Orientation="Horizontal">
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#9CA3AF"
+                                            Text="Vendita: " />
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="Bold"
+                                            Foreground="#4F6EF7"
+                                            Text="{Binding GrandMaterialSale, StringFormat=N2}" />
+                                        <TextBlock
+                                            FontSize="13"
+                                            Foreground="#4F6EF7"
+                                            Text=" €" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </Border>
 
-                    <!-- ========== SCHEDA PREZZI ========== -->
-                    <Border Background="White"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,0,0,16">
+                    <!--  ========== SCHEDA PREZZI ==========  -->
+                    <Border
+                        Margin="0,0,0,16"
+                        Padding="16"
+                        Background="White"
+                        CornerRadius="8">
                         <StackPanel>
-                            <TextBlock Text="SCHEDA PREZZI"
-                                       FontSize="16"
-                                       FontWeight="Bold"
-                                       Foreground="#1A1D26"
-                                       Margin="0,0,0,12"/>
+                            <TextBlock
+                                Margin="0,0,0,12"
+                                FontSize="16"
+                                FontWeight="Bold"
+                                Foreground="#1A1D26"
+                                Text="SCHEDA PREZZI" />
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1214,178 +1511,262 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <!-- NET COST -->
-                                <Border Grid.Row="0"
-                                        Grid.ColumnSpan="3"
-                                        Background="#F3F4F6"
-                                        Padding="12,8"
-                                        CornerRadius="4"
-                                        Margin="0,0,0,8">
+                                <!--  NET COST  -->
+                                <Border
+                                    Grid.Row="0"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,0,0,8"
+                                    Padding="12,8"
+                                    Background="#F3F4F6"
+                                    CornerRadius="4">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   FontSize="14"
-                                                   FontWeight="Bold"
-                                                   Foreground="#1A1D26">
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26">
                                             <Run Text="{Binding NetPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                         </TextBlock>
-                                        <TextBlock Text="NET COST (risorse + materiali + trasferte)"
-                                                   FontSize="12"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#6B7280"/>
+                                        <TextBlock
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Foreground="#6B7280"
+                                            Text="NET COST (risorse + materiali + trasferte)" />
                                     </DockPanel>
                                 </Border>
 
-                                <!-- Contingency -->
-                                <TextBlock Grid.Row="1"
-                                           Grid.Column="0"
-                                           Text="+ Contingency"
-                                           VerticalAlignment="Center"
-                                           Margin="8,4,0,4"
-                                           FontSize="12"
-                                           Foreground="#6B7280"/>
+                                <!--  Contingency  -->
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="0"
+                                    Margin="8,4,0,4"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#6B7280"
+                                    Text="+ Contingency" />
 
-                                <TextBox Grid.Row="1"
-                                         Grid.Column="1"
-                                         Style="{StaticResource NumericTextBox}"
-                                         Width="80"
-                                         HorizontalAlignment="Right"
-                                         Tag="contingency"
-                                         Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Width="80"
+                                    HorizontalAlignment="Right"
+                                    GotFocus="MarkupTextBox_GotFocus"
+                                    KeyDown="PricingPct_KeyDown"
+                                    LostFocus="PricingPct_LostFocus"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Tag="contingency"
+                                    Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
 
-                                <TextBlock Grid.Row="1"
-                                           Grid.Column="2"
-                                           Text="{Binding ContingencyAmount, StringFormat=N2}"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"
-                                           FontSize="12"
-                                           Foreground="#1A1D26"/>
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="2"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding ContingencyAmount, StringFormat=N2}" />
 
-                                <!-- OFFER PRICE -->
-                                <Border Grid.Row="2"
-                                        Grid.ColumnSpan="3"
-                                        Background="#1A1D26"
-                                        Padding="12,8"
-                                        CornerRadius="4"
-                                        Margin="0,12,0,12">
+                                <!--  OFFER PRICE  -->
+                                <Border
+                                    Grid.Row="2"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,12,0,12"
+                                    Padding="12,8"
+                                    Background="#1A1D26"
+                                    CornerRadius="4">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   FontSize="16"
-                                                   FontWeight="Bold"
-                                                   Foreground="#4F6EF7">
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="16"
+                                            FontWeight="Bold"
+                                            Foreground="#4F6EF7">
                                             <Run Text="{Binding OfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                         </TextBlock>
-                                        <TextBlock Text="OFFER PRICE"
-                                                   FontSize="13"
-                                                   FontWeight="Bold"
-                                                   Foreground="White"/>
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="OFFER PRICE" />
                                     </DockPanel>
                                 </Border>
 
-                                <!-- Margine trattativa -->
-                                <TextBlock Grid.Row="3"
-                                           Grid.Column="0"
-                                           Text="+ Margine trattativa"
-                                           VerticalAlignment="Center"
-                                           Margin="8,4,0,4"
-                                           FontSize="12"
-                                           Foreground="#6B7280"/>
+                                <!--  Margine trattativa  -->
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="0"
+                                    Margin="8,4,0,4"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#6B7280"
+                                    Text="+ Margine trattativa" />
 
-                                <TextBox Grid.Row="3"
-                                         Grid.Column="1"
-                                         Style="{StaticResource NumericTextBox}"
-                                         Width="80"
-                                         HorizontalAlignment="Right"
-                                         Tag="negotiation"
-                                         Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Width="80"
+                                    HorizontalAlignment="Right"
+                                    GotFocus="MarkupTextBox_GotFocus"
+                                    KeyDown="PricingPct_KeyDown"
+                                    LostFocus="PricingPct_LostFocus"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Tag="negotiation"
+                                    Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
 
-                                <TextBlock Grid.Row="3"
-                                           Grid.Column="2"
-                                           Text="{Binding NegotiationMarginAmount, StringFormat=N2}"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"
-                                           FontSize="12"
-                                           Foreground="#1A1D26"/>
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="2"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding NegotiationMarginAmount, StringFormat=N2}" />
 
-                                <!-- FINAL OFFER PRICE -->
-                                <Border Grid.Row="4"
-                                        Grid.ColumnSpan="3"
-                                        Background="#059669"
-                                        Padding="12,10"
-                                        CornerRadius="4"
-                                        Margin="0,8,0,0">
+                                <!--  FINAL OFFER PRICE  -->
+                                <Border
+                                    Grid.Row="4"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,8,0,0"
+                                    Padding="12,10"
+                                    Background="#059669"
+                                    CornerRadius="4">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   FontSize="18"
-                                                   FontWeight="Bold"
-                                                   Foreground="White">
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="18"
+                                            FontWeight="Bold"
+                                            Foreground="White">
                                             <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" />
                                         </TextBlock>
-                                        <TextBlock Text="FINAL OFFER PRICE"
-                                                   FontSize="14"
-                                                   FontWeight="Bold"
-                                                   Foreground="White"/>
+                                        <TextBlock
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="FINAL OFFER PRICE" />
                                     </DockPanel>
                                 </Border>
 
-                                <!-- Pulsante ridistribuzione -->
-                                <Button Grid.Row="5"
-                                        Grid.ColumnSpan="3"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Content="🔄 Ridistribuisci (reset pin)"
-                                        HorizontalAlignment="Left"
-                                        Margin="0,12,0,0"
-                                        Padding="14,8"
-                                        FontSize="11"
-                                        Click="BtnGenerateDistribution_Click"
-                                        Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}"/>
+                                <!--  Pulsante ridistribuzione  -->
+                                <Button
+                                    Grid.Row="5"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,12,0,0"
+                                    Padding="14,8"
+                                    HorizontalAlignment="Left"
+                                    Click="BtnGenerateDistribution_Click"
+                                    Content="🔄 Ridistribuisci (reset pin)"
+                                    FontSize="11"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}" />
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!-- ═══ DISTRIBUZIONE PREZZO (offer only) ═══ -->
+                    <!--  ═══ DISTRIBUZIONE PREZZO (offer only) ═══  -->
                     <StackPanel Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}">
-                        <Border Height="1" Margin="0,20,0,0" Background="#E4E7EC" />
-                        <TextBlock Margin="0,12,0,8" FontSize="15" FontWeight="Bold" Foreground="#1A1D26" Text="DISTRIBUZIONE PREZZO" />
+                        <Border
+                            Height="1"
+                            Margin="0,20,0,0"
+                            Background="#E4E7EC" />
+                        <TextBlock
+                            Margin="0,12,0,8"
+                            FontSize="15"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="DISTRIBUZIONE PREZZO" />
 
-                        <!-- 4 Summary Cards -->
-                        <UniformGrid Columns="4" Margin="0,0,0,12">
-                            <Border Margin="0,0,4,0" Padding="12,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                        <!--  4 Summary Cards  -->
+                        <UniformGrid Margin="0,0,0,12" Columns="4">
+                            <Border
+                                Margin="0,0,4,0"
+                                Padding="12,10"
+                                Background="White"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1">
                                 <StackPanel>
-                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="RISORSE" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="16" FontWeight="Bold" Foreground="#2563EB">
+                                    <TextBlock
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="RISORSE" />
+                                    <TextBlock
+                                        Margin="0,4,0,0"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="#2563EB">
                                         <Run Text="{Binding ResourceDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                 </StackPanel>
                             </Border>
-                            <Border Margin="2,0" Padding="12,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                            <Border
+                                Margin="2,0"
+                                Padding="12,10"
+                                Background="White"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1">
                                 <StackPanel>
-                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="MATERIALI" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="16" FontWeight="Bold" Foreground="#7C3AED">
+                                    <TextBlock
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="MATERIALI" />
+                                    <TextBlock
+                                        Margin="0,4,0,0"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="#7C3AED">
                                         <Run Text="{Binding MaterialDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                 </StackPanel>
                             </Border>
-                            <Border Margin="2,0" Padding="12,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                            <Border
+                                Margin="2,0"
+                                Padding="12,10"
+                                Background="White"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="1">
                                 <StackPanel>
-                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="TRASFERTE" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="16" FontWeight="Bold" Foreground="#D97706">
+                                    <TextBlock
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="TRASFERTE" />
+                                    <TextBlock
+                                        Margin="0,4,0,0"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="#D97706">
                                         <Run Text="{Binding TravelDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                 </StackPanel>
                             </Border>
-                            <Border Margin="4,0,0,0" Padding="12,10" Background="#059669" BorderThickness="0">
+                            <Border
+                                Margin="4,0,0,0"
+                                Padding="12,10"
+                                Background="#059669"
+                                BorderThickness="0">
                                 <StackPanel>
-                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#FFFFFFB0" Text="TOTALE OFFERTA" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="16" FontWeight="Bold" Foreground="White">
+                                    <TextBlock
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#FFFFFFB0"
+                                        Text="TOTALE OFFERTA" />
+                                    <TextBlock
+                                        Margin="0,4,0,0"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="White">
                                         <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
 
-                        <!-- Distribution table (editable) -->
-                        <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1">
+                        <!--  Distribution table (editable)  -->
+                        <Border
+                            Background="White"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1">
                             <StackPanel>
-                                <!-- Header -->
-                                <Grid Background="#F9FAFB" Height="28">
+                                <!--  Header  -->
+                                <Grid Height="28" Background="#F9FAFB">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="100" />
@@ -1397,19 +1778,75 @@
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="110" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Margin="10,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE" />
-                                    <TextBlock Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VENDITA" />
-                                    <TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT %" />
-                                    <TextBlock Grid.Column="4" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT €" />
-                                    <TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG %" />
-                                    <TextBlock Grid.Column="7" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG €" />
-                                    <TextBlock Grid.Column="8" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE SEZ." />
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        Margin="10,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="SEZIONE" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="VENDITA" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#D97706"
+                                        Text="CONT %" />
+                                    <TextBlock
+                                        Grid.Column="4"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#D97706"
+                                        Text="CONT €" />
+                                    <TextBlock
+                                        Grid.Column="6"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#7C3AED"
+                                        Text="MARG %" />
+                                    <TextBlock
+                                        Grid.Column="7"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#7C3AED"
+                                        Text="MARG €" />
+                                    <TextBlock
+                                        Grid.Column="8"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26"
+                                        Text="TOTALE SEZ." />
                                 </Grid>
-                                <!-- Rows -->
+                                <!--  Rows  -->
                                 <ItemsControl ItemsSource="{Binding DistributionRows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="#F3F4F6" BorderThickness="0,0,0,1" Padding="0,3">
+                                            <Border
+                                                Padding="0,3"
+                                                BorderBrush="#F3F4F6"
+                                                BorderThickness="0,0,0,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
@@ -1422,34 +1859,94 @@
                                                         <ColumnDefinition Width="100" />
                                                         <ColumnDefinition Width="110" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" Margin="10,0" VerticalAlignment="Center" FontSize="11" Foreground="#1A1D26" Text="{Binding SectionName}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" Foreground="#6B7280">
+                                                    <TextBlock
+                                                        Grid.Column="0"
+                                                        Margin="10,0"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#1A1D26"
+                                                        Text="{Binding SectionName}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#6B7280">
                                                         <Run Text="{Binding SaleAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <!-- Contingency pin + editable % -->
-                                                    <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding ContingencyPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
-                                                    <TextBox Grid.Column="3" Height="22" Style="{StaticResource NumericTextBox}" Foreground="#D97706"
-                                                             Tag="contingency" GotFocus="MarkupTextBox_GotFocus"
-                                                             KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                                                    <TextBlock Grid.Column="4" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" Foreground="#D97706">
+                                                    <!--  Contingency pin + editable %  -->
+                                                    <TextBlock
+                                                        Grid.Column="2"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="10"
+                                                        Text="{Binding ContingencyPinIcon, Mode=OneWay}"
+                                                        ToolTip="Bloccato manualmente" />
+                                                    <TextBox
+                                                        Grid.Column="3"
+                                                        Height="22"
+                                                        Foreground="#D97706"
+                                                        GotFocus="MarkupTextBox_GotFocus"
+                                                        KeyDown="DistPct_KeyDown"
+                                                        LostFocus="DistPct_LostFocus"
+                                                        Style="{StaticResource NumericTextBox}"
+                                                        Tag="contingency"
+                                                        Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                    <TextBlock
+                                                        Grid.Column="4"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#D97706">
                                                         <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <!-- Margin pin + editable % -->
-                                                    <TextBlock Grid.Column="5" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding MarginPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
-                                                    <TextBox Grid.Column="6" Height="22" Style="{StaticResource NumericTextBox}" Foreground="#7C3AED"
-                                                             Tag="margin" GotFocus="MarkupTextBox_GotFocus"
-                                                             KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                                                    <TextBlock Grid.Column="7" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" Foreground="#7C3AED">
+                                                    <!--  Margin pin + editable %  -->
+                                                    <TextBlock
+                                                        Grid.Column="5"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="10"
+                                                        Text="{Binding MarginPinIcon, Mode=OneWay}"
+                                                        ToolTip="Bloccato manualmente" />
+                                                    <TextBox
+                                                        Grid.Column="6"
+                                                        Height="22"
+                                                        Foreground="#7C3AED"
+                                                        GotFocus="MarkupTextBox_GotFocus"
+                                                        KeyDown="DistPct_KeyDown"
+                                                        LostFocus="DistPct_LostFocus"
+                                                        Style="{StaticResource NumericTextBox}"
+                                                        Tag="margin"
+                                                        Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                    <TextBlock
+                                                        Grid.Column="7"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#7C3AED">
                                                         <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <TextBlock Grid.Column="8" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" Foreground="#1A1D26">
+                                                    <TextBlock
+                                                        Grid.Column="8"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#1A1D26">
                                                         <Run Text="{Binding SectionTotal, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <!-- Footer -->
-                                <Border Padding="0,5" Background="#F3F4F6" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
+                                <!--  Footer  -->
+                                <Border
+                                    Padding="0,5"
+                                    Background="#F3F4F6"
+                                    BorderBrush="#E4E7EC"
+                                    BorderThickness="0,1,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -1462,14 +1959,49 @@
                                             <ColumnDefinition Width="100" />
                                             <ColumnDefinition Width="110" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Margin="10,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE" />
-                                        <TextBlock Grid.Column="1" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26">
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Margin="10,0"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26"
+                                            Text="TOTALE" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26">
                                             <Run Text="{Binding TotalCombinedSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="4" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#D97706">
+                                        <TextBlock
+                                            Grid.Column="4"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#D97706">
                                             <Run Text="{Binding TotalDistContingencyCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="7" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#7C3AED">
+                                        <TextBlock
+                                            Grid.Column="7"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#7C3AED">
                                             <Run Text="{Binding TotalDistMarginCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="8" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#059669">
+                                        <TextBlock
+                                            Grid.Column="8"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#059669">
                                             <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                     </Grid>
                                 </Border>
@@ -1480,15 +2012,17 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- Status Bar (footer) -->
-        <Border Grid.Row="2"
-                Padding="16,6"
-                Background="White"
-                BorderBrush="#E4E7EC"
-                BorderThickness="0,1,0,0">
-            <TextBlock Text="{Binding StatusText}"
-                       FontSize="11"
-                       Foreground="#6B7280"/>
+        <!--  Status Bar (footer)  -->
+        <Border
+            Grid.Row="2"
+            Padding="16,6"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,1,0,0">
+            <TextBlock
+                FontSize="11"
+                Foreground="#6B7280"
+                Text="{Binding StatusText}" />
         </Border>
     </Grid>
 </UserControl>

@@ -164,14 +164,14 @@ public partial class ProjectCostingControl : UserControl
         }
     }
 
+    private bool _isPricingUpdating;
+
     private async void PricingPct_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
             e.Handled = true;
-            ApplyPricingPct(tb);
-            await SavePricingAndDistribution();
-            ShowTemporaryMessage("Percentuale aggiornata");
+            await ApplyAndSavePricing(tb);
             Keyboard.ClearFocus();
         }
     }
@@ -179,40 +179,55 @@ public partial class ProjectCostingControl : UserControl
     private async void PricingPct_LostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is TextBox tb)
-        {
-            ApplyPricingPct(tb);
-            await SavePricingAndDistribution();
-        }
+            await ApplyAndSavePricing(tb);
     }
 
-    private void ApplyPricingPct(TextBox tb)
+    private async Task ApplyAndSavePricing(TextBox tb)
     {
-        string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
-        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
-        if (val > 1m) val /= 100m;
+        if (_isPricingUpdating) return;
+        _isPricingUpdating = true;
 
-        string tag = tb.Tag?.ToString() ?? "";
-        switch (tag)
+        try
         {
-            case "contingency": _vm.ContingencyPct = val; break;
-            case "negotiation": _vm.NegotiationMarginPct = val; break;
+            string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
+            if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
+            if (val > 1m) val /= 100m;
+
+            string tag = tb.Tag?.ToString() ?? "";
+            bool changed = false;
+
+            if (tag == "contingency" && val != _vm.ContingencyPct)
+            {
+                _vm.ContingencyPct = val;
+                changed = true;
+            }
+            else if (tag == "negotiation" && val != _vm.NegotiationMarginPct)
+            {
+                _vm.NegotiationMarginPct = val;
+                changed = true;
+            }
+
+            if (!changed) return;
+
+            // Ribilancia tutte le sezioni non-pinned
+            _vm.RebalanceUnpinned("contingency");
+            _vm.RebalanceUnpinned("margin");
+
+            // Ricalcola totali e tabella distribuzione
+            _vm.RecalcGrandTotals();
+
+            // Salva su DB
+            await SavePricingMarkups();
+            var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
+            foreach (var s in allSections)
+                await SaveSectionDistribution(s);
+
+            ShowTemporaryMessage("Percentuale aggiornata e distribuzione ricalcolata");
         }
-
-        // Ribilancia le sezioni non-pinned e aggiorna la tabella distribuzione
-        _vm.RebalanceUnpinned("contingency");
-        _vm.RebalanceUnpinned("margin");
-        _vm.RecalcGrandTotals();
-    }
-
-    /// <summary>
-    /// Salva pricing globale + distribuzione di tutte le sezioni.
-    /// </summary>
-    private async Task SavePricingAndDistribution()
-    {
-        await SavePricingMarkups();
-        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
-        foreach (var s in allSections)
-            await SaveSectionDistribution(s);
+        finally
+        {
+            _isPricingUpdating = false;
+        }
     }
 
     private async void TravelMarkup_KeyDown(object sender, KeyEventArgs e)
@@ -843,7 +858,13 @@ public partial class ProjectCostingControl : UserControl
     {
         try
         {
-            var req = new { contingencyPct = sec.ContingencyPct, marginPct = sec.MarginPct };
+            var req = new
+            {
+                contingencyPct = sec.ContingencyPct,
+                marginPct = sec.MarginPct,
+                contingencyPinned = sec.IsContingencyPinned,
+                marginPinned = sec.IsMarginPinned
+            };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
         }

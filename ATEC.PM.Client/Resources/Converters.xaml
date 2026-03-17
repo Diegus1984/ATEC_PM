@@ -3,7 +3,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:conv="clr-namespace:ATEC.PM.Client.Converters">
 
-    <!-- ========== CONVERTER DI BASE ========== -->
+    <!--  ========== CONVERTER DI BASE ==========  -->
     <conv:StatusToDisplayConverter x:Key="StatusToDisplay" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:BoolToOpacityConverter x:Key="BoolToOpacity" />
@@ -11,23 +11,23 @@
     <conv:CodiceFormatConverter x:Key="CodiceFormatConverter" />
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-    <!-- ========== CONVERTER COLORI ========== -->
+    <!--  ========== CONVERTER COLORI ==========  -->
     <conv:HexToBrushConverter x:Key="HexToBrush" />
     <conv:HexToAlphaBrushConverter x:Key="HexToAlphaBrush" />
     <conv:BoolToColorConverter x:Key="BoolToColor" />
     <conv:ItemTypeToBadgeColorConverter x:Key="ItemTypeToBadgeColor" />
 
-    <!-- ========== CONVERTER NUMERICI ========== -->
+    <!--  ========== CONVERTER NUMERICI ==========  -->
     <conv:EuroCurrencyConverter x:Key="EuroCurrency" />
     <conv:MarkupToStringConverter x:Key="MarkupToString" />
     <conv:PctToStringConverter x:Key="PctToString" />
 
-    <!-- ========== CONVERTER BOOLEANI ========== -->
+    <!--  ========== CONVERTER BOOLEANI ==========  -->
     <conv:BoolToAngleConverter x:Key="BoolToAngle" />
     <conv:DaClienteToVisibilityConverter x:Key="DaClienteToVisibility" />
     <conv:BoolToWeightConverter x:Key="BoolToWeight" />
 
-    <!-- ========== CONVERTER BADGE ========== -->
+    <!--  ========== CONVERTER BADGE ==========  -->
     <conv:ItemTypeToBadgeConverter x:Key="ItemTypeToBadge" />
 
 </ResourceDictionary>

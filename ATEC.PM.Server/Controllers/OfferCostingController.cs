@@ -476,8 +476,19 @@ public class OfferCostingController : ControllerBase
     public IActionResult UpdateSectionDistribution(int offerId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute("UPDATE offer_cost_sections SET contingency_pct=@ContPct, margin_pct=@MargPct WHERE id=@Id AND offer_id=@offerId",
-            new { ContPct = req.ContingencyPct, MargPct = req.MarginPct, Id = id, offerId });
+        c.Execute(@"UPDATE offer_cost_sections 
+        SET contingency_pct=@ContPct, margin_pct=@MargPct, 
+            contingency_pinned=@ContPin, margin_pinned=@MargPin 
+        WHERE id=@Id AND offer_id=@offerId",
+            new
+            {
+                ContPct = req.ContingencyPct,
+                MargPct = req.MarginPct,
+                ContPin = req.ContingencyPinned,
+                MargPin = req.MarginPinned,
+                Id = id,
+                offerId
+            });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione aggiornata"));
     }
 }
