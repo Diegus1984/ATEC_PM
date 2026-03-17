@@ -176,22 +176,46 @@ public class CostingViewModel : INotifyPropertyChanged
 
     private void RebuildDistributionRows()
     {
-        DistributionRows.Clear();
-        foreach (var sec in Groups.SelectMany(g => g.Sections))
+        var sections = Groups.SelectMany(g => g.Sections).ToList();
+
+        // Se il conteggio è diverso, ricostruisci da zero
+        if (DistributionRows.Count != sections.Count)
         {
-            DistributionRows.Add(new DistributionRowVM
+            DistributionRows.Clear();
+            foreach (var sec in sections)
             {
-                SectionId = sec.Id,
-                SectionName = sec.Name,
-                SaleAmount = sec.TotalSale,
-                ContingencyPct = sec.ContingencyPct,
-                ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
-                IsContingencyPinned = sec.IsContingencyPinned,
-                MarginPct = sec.MarginPct,
-                MarginAmount = sec.MarginPct * NegotiationMarginAmount,
-                IsMarginPinned = sec.IsMarginPinned,
-                SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
-            });
+                DistributionRows.Add(new DistributionRowVM
+                {
+                    SectionId = sec.Id,
+                    SectionName = sec.Name,
+                    SaleAmount = sec.TotalSale,
+                    ContingencyPct = sec.ContingencyPct,
+                    ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
+                    IsContingencyPinned = sec.IsContingencyPinned,
+                    MarginPct = sec.MarginPct,
+                    MarginAmount = sec.MarginPct * NegotiationMarginAmount,
+                    IsMarginPinned = sec.IsMarginPinned,
+                    SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
+                });
+            }
+            return;
+        }
+
+        // Aggiorna in-place — non tocca il focus delle TextBox
+        for (int i = 0; i < sections.Count; i++)
+        {
+            var sec = sections[i];
+            var row = DistributionRows[i];
+            row.SectionId = sec.Id;
+            row.SectionName = sec.Name;
+            row.SaleAmount = sec.TotalSale;
+            row.ContingencyPct = sec.ContingencyPct;
+            row.ContingencyAmount = sec.ContingencyPct * ContingencyAmount;
+            row.IsContingencyPinned = sec.IsContingencyPinned;
+            row.MarginPct = sec.MarginPct;
+            row.MarginAmount = sec.MarginPct * NegotiationMarginAmount;
+            row.IsMarginPinned = sec.IsMarginPinned;
+            row.SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount);
         }
     }
 
@@ -382,8 +406,12 @@ public class CostingViewModel : INotifyPropertyChanged
 public class DistributionRowVM : INotifyPropertyChanged
 {
     public int SectionId { get; set; }
-    public string SectionName { get; set; } = "";
-    public decimal SaleAmount { get; set; }
+
+    private string _sectionName = "";
+    public string SectionName { get => _sectionName; set { _sectionName = value; Notify(); } }
+
+    private decimal _saleAmount;
+    public decimal SaleAmount { get => _saleAmount; set { _saleAmount = value; Notify(); } }
 
     private decimal _contingencyPct;
     public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; Notify(); } }
