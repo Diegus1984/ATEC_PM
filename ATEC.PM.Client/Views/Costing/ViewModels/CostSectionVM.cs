@@ -33,6 +33,12 @@ public class CostSectionVM : INotifyPropertyChanged
     private decimal _marginPct;
     public decimal MarginPct { get => _marginPct; set { _marginPct = value; Notify(); } }
 
+    private bool _isContingencyPinned;
+    public bool IsContingencyPinned { get => _isContingencyPinned; set { _isContingencyPinned = value; Notify(); } }
+
+    private bool _isMarginPinned;
+    public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; Notify(); } }
+
     public ObservableCollection<CostResourceVM> Resources { get; set; } = new();
     public List<int> DepartmentIds { get; set; } = new();
 

@@ -181,17 +181,61 @@ public class CostingViewModel : INotifyPropertyChanged
         {
             DistributionRows.Add(new DistributionRowVM
             {
+<<<<<<< HEAD
+=======
+                SectionId = sec.Id,
+>>>>>>> v1
                 SectionName = sec.Name,
                 SaleAmount = sec.TotalSale,
                 ContingencyPct = sec.ContingencyPct,
                 ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
+<<<<<<< HEAD
                 MarginPct = sec.MarginPct,
                 MarginAmount = sec.MarginPct * NegotiationMarginAmount,
+=======
+                IsContingencyPinned = sec.IsContingencyPinned,
+                MarginPct = sec.MarginPct,
+                MarginAmount = sec.MarginPct * NegotiationMarginAmount,
+                IsMarginPinned = sec.IsMarginPinned,
+>>>>>>> v1
                 SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
             });
         }
     }
 
+<<<<<<< HEAD
+=======
+    /// <summary>
+    /// Ribilancia le % non-pinned per un campo (contingency o margin).
+    /// Le sezioni pinned restano fisse, le altre si spartiscono il rimanente.
+    /// </summary>
+    public void RebalanceUnpinned(string field)
+    {
+        var allSections = Groups.SelectMany(g => g.Sections).ToList();
+        decimal pinnedTotal = field == "contingency"
+            ? allSections.Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct)
+            : allSections.Where(s => s.IsMarginPinned).Sum(s => s.MarginPct);
+
+        decimal remaining = Math.Max(0, 1m - pinnedTotal);
+        var unpinned = field == "contingency"
+            ? allSections.Where(s => !s.IsContingencyPinned).ToList()
+            : allSections.Where(s => !s.IsMarginPinned).ToList();
+
+        if (unpinned.Count == 0) return;
+
+        decimal totalSaleUnpinned = unpinned.Sum(s => s.TotalSale);
+        foreach (var s in unpinned)
+        {
+            decimal newVal = totalSaleUnpinned > 0
+                ? Math.Round(s.TotalSale / totalSaleUnpinned * remaining, 4)
+                : Math.Round(remaining / unpinned.Count, 4);
+
+            if (field == "contingency") s.ContingencyPct = newVal;
+            else s.MarginPct = newVal;
+        }
+    }
+
+>>>>>>> v1
     public void WireAllChanges()
     {
         // Risorse
@@ -346,6 +390,7 @@ public class CostingViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+<<<<<<< HEAD
 public class DistributionRowVM
 {
     public string SectionName { get; set; } = "";
@@ -355,4 +400,38 @@ public class DistributionRowVM
     public decimal MarginPct { get; set; }
     public decimal MarginAmount { get; set; }
     public decimal SectionTotal { get; set; }
+=======
+public class DistributionRowVM : INotifyPropertyChanged
+{
+    public int SectionId { get; set; }
+    public string SectionName { get; set; } = "";
+    public decimal SaleAmount { get; set; }
+
+    private decimal _contingencyPct;
+    public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; Notify(); } }
+
+    private decimal _contingencyAmount;
+    public decimal ContingencyAmount { get => _contingencyAmount; set { _contingencyAmount = value; Notify(); } }
+
+    private bool _isContingencyPinned;
+    public bool IsContingencyPinned { get => _isContingencyPinned; set { _isContingencyPinned = value; Notify(); Notify(nameof(ContingencyPinIcon)); } }
+    public string ContingencyPinIcon => IsContingencyPinned ? "🔒" : "";
+
+    private decimal _marginPct;
+    public decimal MarginPct { get => _marginPct; set { _marginPct = value; Notify(); } }
+
+    private decimal _marginAmount;
+    public decimal MarginAmount { get => _marginAmount; set { _marginAmount = value; Notify(); } }
+
+    private bool _isMarginPinned;
+    public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; Notify(); Notify(nameof(MarginPinIcon)); } }
+    public string MarginPinIcon => IsMarginPinned ? "🔒" : "";
+
+    private decimal _sectionTotal;
+    public decimal SectionTotal { get => _sectionTotal; set { _sectionTotal = value; Notify(); } }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Notify([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+>>>>>>> v1
 }
