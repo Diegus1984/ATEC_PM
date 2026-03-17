@@ -7,13 +7,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/Themes/Generic.xaml" />
                 <ResourceDictionary Source="/Resources/ButtonStyles.xaml" />
                 <ResourceDictionary Source="/Resources/GridStyles.xaml" />
                 <ResourceDictionary Source="/Resources/Converters.xaml" />
                 <ResourceDictionary Source="/Resources/ExpanderStyles.xaml" />
                 <ResourceDictionary Source="/Resources/TreeviewStyles.xaml" />
                 <ResourceDictionary Source="/Resources/ComboStyles.xaml" />
+                <ResourceDictionary Source="/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
