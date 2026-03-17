@@ -170,7 +170,7 @@ public partial class ProjectCostingControl : UserControl
         {
             e.Handled = true;
             ApplyPricingPct(tb);
-            await SavePricingMarkups();
+            await SavePricingAndDistribution();
             ShowTemporaryMessage("Percentuale aggiornata");
             Keyboard.ClearFocus();
         }
@@ -181,7 +181,7 @@ public partial class ProjectCostingControl : UserControl
         if (sender is TextBox tb)
         {
             ApplyPricingPct(tb);
-            await SavePricingMarkups();
+            await SavePricingAndDistribution();
         }
     }
 
@@ -197,6 +197,22 @@ public partial class ProjectCostingControl : UserControl
             case "contingency": _vm.ContingencyPct = val; break;
             case "negotiation": _vm.NegotiationMarginPct = val; break;
         }
+
+        // Ribilancia le sezioni non-pinned e aggiorna la tabella distribuzione
+        _vm.RebalanceUnpinned("contingency");
+        _vm.RebalanceUnpinned("margin");
+        _vm.RecalcGrandTotals();
+    }
+
+    /// <summary>
+    /// Salva pricing globale + distribuzione di tutte le sezioni.
+    /// </summary>
+    private async Task SavePricingAndDistribution()
+    {
+        await SavePricingMarkups();
+        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
+        foreach (var s in allSections)
+            await SaveSectionDistribution(s);
     }
 
     private async void TravelMarkup_KeyDown(object sender, KeyEventArgs e)
