@@ -933,12 +933,8 @@
                                                                                  Height="22"
                                                                                  Style="{StaticResource NumericTextBox}"
                                                                                  Tag="contingency"
-<<<<<<< HEAD
-                                                                                 Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}"
-=======
                                                                                  IsReadOnly="True"
                                                                                  Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}"
->>>>>>> v1
                                                                                  Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
 
                                                                         <TextBox Grid.Column="6"
@@ -946,12 +942,8 @@
                                                                                  Height="22"
                                                                                  Style="{StaticResource NumericTextBox}"
                                                                                  Tag="margin"
-<<<<<<< HEAD
-                                                                                 Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}"
-=======
                                                                                  IsReadOnly="True"
                                                                                  Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}"
->>>>>>> v1
                                                                                  Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
                                                                     </Grid>
 
@@ -1336,19 +1328,11 @@
                                     </DockPanel>
                                 </Border>
 
-<<<<<<< HEAD
-                                <!-- Pulsante distribuzione -->
-                                <Button Grid.Row="5"
-                                        Grid.ColumnSpan="3"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Content="📊 Genera distribuzione proporzionale"
-=======
                                 <!-- Pulsante ridistribuzione -->
                                 <Button Grid.Row="5"
                                         Grid.ColumnSpan="3"
                                         Style="{StaticResource SecondaryButton}"
                                         Content="🔄 Ridistribuisci (reset pin)"
->>>>>>> v1
                                         HorizontalAlignment="Left"
                                         Margin="0,12,0,0"
                                         Padding="14,8"
@@ -1358,8 +1342,6 @@
                             </Grid>
                         </StackPanel>
                     </Border>
-<<<<<<< HEAD
-=======
 
                     <!-- ═══ DISTRIBUZIONE PREZZO (offer only) ═══ -->
                     <StackPanel Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}">
@@ -1493,7 +1475,6 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
->>>>>>> v1
                 </StackPanel>
             </ScrollViewer>
         </Grid>

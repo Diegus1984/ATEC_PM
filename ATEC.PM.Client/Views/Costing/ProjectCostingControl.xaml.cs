@@ -717,13 +717,8 @@ public partial class ProjectCostingControl : UserControl
             return;
         }
 
-<<<<<<< HEAD
-        if (!await ConfirmAction("Genera distribuzione",
-            "Distribuire contingency e margine proporzionalmente al valore di vendita di ogni sezione?"))
-=======
         if (!await ConfirmAction("Ridistribuisci",
             "Resettare tutti i blocchi e ridistribuire proporzionalmente?"))
->>>>>>> v1
             return;
 
         await ExecuteWithLoading(async () =>
@@ -733,20 +728,13 @@ public partial class ProjectCostingControl : UserControl
                 decimal weight = Math.Round(sec.TotalSale / totalSale, 4);
                 sec.ContingencyPct = weight;
                 sec.MarginPct = weight;
-<<<<<<< HEAD
-=======
                 sec.IsContingencyPinned = false;
                 sec.IsMarginPinned = false;
->>>>>>> v1
                 await SaveSectionDistribution(sec);
             }
 
             _vm.RecalcGrandTotals();
-<<<<<<< HEAD
-            ShowTemporaryMessage("Distribuzione generata");
-=======
             ShowTemporaryMessage("Distribuzione ridistribuita — pin resettati");
->>>>>>> v1
         });
     }
 
@@ -772,11 +760,7 @@ public partial class ProjectCostingControl : UserControl
     /// </summary>
     private async Task ApplyDistPct(TextBox tb)
     {
-<<<<<<< HEAD
-        if (tb.DataContext is not CostSectionVM sec) return;
-=======
         if (tb.DataContext is not DistributionRowVM distRow) return;
->>>>>>> v1
 
         string field = tb.Tag?.ToString() ?? "";
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
@@ -793,12 +777,6 @@ public partial class ProjectCostingControl : UserControl
         decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
         if (val == oldVal) return;
 
-<<<<<<< HEAD
-        if (field == "contingency")
-            sec.ContingencyPct = val;
-        else
-            sec.MarginPct = val;
-=======
         // Applica il valore e pinna
         if (field == "contingency")
         {
@@ -810,7 +788,6 @@ public partial class ProjectCostingControl : UserControl
             sec.MarginPct = val;
             sec.IsMarginPinned = true;
         }
->>>>>>> v1
 
         // Ribilancia le non-pinned
         _vm.RebalanceUnpinned(field);
@@ -821,11 +798,7 @@ public partial class ProjectCostingControl : UserControl
             await SaveSectionDistribution(s);
 
         _vm.RecalcGrandTotals();
-<<<<<<< HEAD
-        ShowTemporaryMessage("Distribuzione aggiornata");
-=======
         ShowTemporaryMessage("Distribuzione aggiornata — sezione bloccata 🔒");
->>>>>>> v1
     }
 
     private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)

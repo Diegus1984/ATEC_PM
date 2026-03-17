@@ -181,30 +181,20 @@ public class CostingViewModel : INotifyPropertyChanged
         {
             DistributionRows.Add(new DistributionRowVM
             {
-<<<<<<< HEAD
-=======
                 SectionId = sec.Id,
->>>>>>> v1
                 SectionName = sec.Name,
                 SaleAmount = sec.TotalSale,
                 ContingencyPct = sec.ContingencyPct,
                 ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
-<<<<<<< HEAD
-                MarginPct = sec.MarginPct,
-                MarginAmount = sec.MarginPct * NegotiationMarginAmount,
-=======
                 IsContingencyPinned = sec.IsContingencyPinned,
                 MarginPct = sec.MarginPct,
                 MarginAmount = sec.MarginPct * NegotiationMarginAmount,
                 IsMarginPinned = sec.IsMarginPinned,
->>>>>>> v1
                 SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
             });
         }
     }
 
-<<<<<<< HEAD
-=======
     /// <summary>
     /// Ribilancia le % non-pinned per un campo (contingency o margin).
     /// Le sezioni pinned restano fisse, le altre si spartiscono il rimanente.
@@ -235,7 +225,6 @@ public class CostingViewModel : INotifyPropertyChanged
         }
     }
 
->>>>>>> v1
     public void WireAllChanges()
     {
         // Risorse
@@ -390,17 +379,6 @@ public class CostingViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-<<<<<<< HEAD
-public class DistributionRowVM
-{
-    public string SectionName { get; set; } = "";
-    public decimal SaleAmount { get; set; }
-    public decimal ContingencyPct { get; set; }
-    public decimal ContingencyAmount { get; set; }
-    public decimal MarginPct { get; set; }
-    public decimal MarginAmount { get; set; }
-    public decimal SectionTotal { get; set; }
-=======
 public class DistributionRowVM : INotifyPropertyChanged
 {
     public int SectionId { get; set; }
@@ -433,5 +411,4 @@ public class DistributionRowVM : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
->>>>>>> v1
 }
