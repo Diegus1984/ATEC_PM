@@ -83,6 +83,8 @@ public class CostingViewModel : INotifyPropertyChanged
             _contingencyPct = value;
             Notify(); Notify(nameof(ContingencyAmount));
             Notify(nameof(OfferPrice)); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+            Notify(nameof(ResourceDistributed)); Notify(nameof(MaterialDistributed)); Notify(nameof(TravelDistributed));
+            Notify(nameof(TotalDistContingencyCheck)); Notify(nameof(TotalDistMarginCheck));
         }
     }
 
@@ -94,6 +96,8 @@ public class CostingViewModel : INotifyPropertyChanged
         {
             _negotiationMarginPct = value;
             Notify(); Notify(nameof(NegotiationMarginAmount)); Notify(nameof(FinalOfferPrice));
+            Notify(nameof(ResourceDistributed)); Notify(nameof(MaterialDistributed)); Notify(nameof(TravelDistributed));
+            Notify(nameof(TotalDistContingencyCheck)); Notify(nameof(TotalDistMarginCheck));
         }
     }
 
@@ -111,6 +115,22 @@ public class CostingViewModel : INotifyPropertyChanged
 
     // FINAL = OFFER + margine
     public decimal FinalOfferPrice => OfferPrice + NegotiationMarginAmount;
+
+    // ══════════════════════════════════════════════════════════════
+    // DISTRIBUZIONE PREZZO — pesi per macro-categoria
+    // ══════════════════════════════════════════════════════════════
+
+    public decimal ResourceDistributed => TotalCombinedSale > 0 ? FinalOfferPrice * (GrandTotalSale / TotalCombinedSale) : 0;
+    public decimal MaterialDistributed => TotalCombinedSale > 0 ? FinalOfferPrice * (GrandMaterialSale / TotalCombinedSale) : 0;
+    public decimal TravelDistributed => TotalCombinedSale > 0 ? FinalOfferPrice * ((TotalTravelSale + TotalAllowanceSale) / TotalCombinedSale) : 0;
+
+    // Distribuzione per sezione: importi contingency/margine calcolati dalle % sezione
+    // (le % sono editabili nelle righe sezione, qui esponiamo gli importi calcolati)
+    public decimal TotalDistContingencyCheck => Groups.SelectMany(g => g.Sections).Sum(s => s.ContingencyPct * ContingencyAmount);
+    public decimal TotalDistMarginCheck => Groups.SelectMany(g => g.Sections).Sum(s => s.MarginPct * NegotiationMarginAmount);
+
+    // Tabella distribuzione per sezione
+    public ObservableCollection<DistributionRowVM> DistributionRows { get; set; } = new();
 
     // ══════════════════════════════════════════════════════════════
 
@@ -141,9 +161,35 @@ public class CostingViewModel : INotifyPropertyChanged
         Notify(nameof(NegotiationMarginAmount));
         Notify(nameof(FinalOfferPrice));
 
+        // Distribuzione prezzo
+        Notify(nameof(ResourceDistributed));
+        Notify(nameof(MaterialDistributed));
+        Notify(nameof(TravelDistributed));
+        Notify(nameof(TotalDistContingencyCheck));
+        Notify(nameof(TotalDistMarginCheck));
+        RebuildDistributionRows();
+
         int secCount = Groups.Sum(g => g.Sections.Count);
         StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
                      $"Netto {TotalCombinedCost:N2} € — Vendita {TotalCombinedSale:N2} €";
+    }
+
+    private void RebuildDistributionRows()
+    {
+        DistributionRows.Clear();
+        foreach (var sec in Groups.SelectMany(g => g.Sections))
+        {
+            DistributionRows.Add(new DistributionRowVM
+            {
+                SectionName = sec.Name,
+                SaleAmount = sec.TotalSale,
+                ContingencyPct = sec.ContingencyPct,
+                ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
+                MarginPct = sec.MarginPct,
+                MarginAmount = sec.MarginPct * NegotiationMarginAmount,
+                SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
+            });
+        }
     }
 
     public void WireAllChanges()
@@ -298,4 +344,15 @@ public class CostingViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+public class DistributionRowVM
+{
+    public string SectionName { get; set; } = "";
+    public decimal SaleAmount { get; set; }
+    public decimal ContingencyPct { get; set; }
+    public decimal ContingencyAmount { get; set; }
+    public decimal MarginPct { get; set; }
+    public decimal MarginAmount { get; set; }
+    public decimal SectionTotal { get; set; }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +21,10 @@ public partial class ProjectCostingControl : UserControl
     private bool IsOfferMode => _apiBasePath.Contains("/offers/");
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
     private CostingViewModel _vm = new();
+
+    // Timer per debounce
+    private Timer _saveTimer;
+    private const int SaveDelayMs = 800;
 
     public ProjectCostingControl()
     {
@@ -47,7 +52,91 @@ public partial class ProjectCostingControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════════
-    // MARKUPS
+    // LOAD DATA CON STATI PRESERVATI
+    // ══════════════════════════════════════════════════════════════
+
+    private async Task LoadData()
+    {
+        try
+        {
+            // Salva stati di espansione prima del reload
+            var expandedGroups = _vm.Groups?.Where(g => g.IsExpanded).Select(g => g.Name).ToHashSet() ?? new();
+            var expandedSections = _vm.Groups?.SelectMany(g => g.Sections)
+                .Where(s => s.IsDetailExpanded).Select(s => s.Id).ToHashSet() ?? new();
+            var expandedMaterialSections = _vm.MaterialSections?
+                .Where(s => s.IsDetailExpanded).Select(s => s.Id).ToHashSet() ?? new();
+
+            _vm.StatusText = "Caricamento in corso...";
+            DataContext = null; // Sospendi binding durante il caricamento
+            await Task.Delay(10); // Permetti UI di aggiornarsi
+
+            string json = await ApiClient.GetAsync($"{_apiBasePath}");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                _vm.StatusText = "Errore nel caricamento dati";
+                return;
+            }
+
+            _data = JsonSerializer.Deserialize<ProjectCostingData>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            _vm = CostingViewModel.FromData(_data);
+            _vm.IsOfferMode = IsOfferMode;
+
+            // Ripristina stati di espansione
+            foreach (var g in _vm.Groups)
+            {
+                if (expandedGroups.Contains(g.Name))
+                    g.IsExpanded = true;
+
+                foreach (var s in g.Sections)
+                    if (expandedSections.Contains(s.Id))
+                        s.IsDetailExpanded = true;
+            }
+
+            foreach (var ms in _vm.MaterialSections)
+                if (expandedMaterialSections.Contains(ms.Id))
+                    ms.IsDetailExpanded = true;
+
+            DataContext = _vm;
+            _vm.StatusText = "Dati caricati";
+        }
+        catch (Exception ex)
+        {
+            _vm.StatusText = $"Errore: {ex.Message}";
+            ShowError("Errore nel caricamento", ex.Message);
+        }
+    }
+
+    private async Task<List<EmployeeCostLookup>> LoadEmployeesForSection(int sectionId)
+    {
+        // Cache semplice
+        if (_sectionEmployeesCache.TryGetValue(sectionId, out var cached))
+            return cached;
+
+        try
+        {
+            string json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var employees = JsonSerializer.Deserialize<List<EmployeeCostLookup>>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+                _sectionEmployeesCache[sectionId] = employees;
+                return employees;
+            }
+        }
+        catch { }
+
+        return new List<EmployeeCostLookup>();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // MARKUPS CON FEEDBACK MIGLIORATO
     // ══════════════════════════════════════════════════════════════
 
     private async void AllowanceMarkup_KeyDown(object sender, KeyEventArgs e)
@@ -59,6 +148,7 @@ public partial class ProjectCostingControl : UserControl
             {
                 _vm.AllowanceMarkup = newK;
                 await SavePricingMarkups();
+                ShowTemporaryMessage("Modifica salvata");
             }
             Keyboard.ClearFocus();
         }
@@ -70,6 +160,7 @@ public partial class ProjectCostingControl : UserControl
         {
             _vm.AllowanceMarkup = newK;
             await SavePricingMarkups();
+            ShowTemporaryMessage("Modifica salvata");
         }
     }
 
@@ -80,6 +171,7 @@ public partial class ProjectCostingControl : UserControl
             e.Handled = true;
             ApplyPricingPct(tb);
             await SavePricingMarkups();
+            ShowTemporaryMessage("Percentuale aggiornata");
             Keyboard.ClearFocus();
         }
     }
@@ -116,6 +208,7 @@ public partial class ProjectCostingControl : UserControl
             {
                 _vm.TravelMarkup = newK;
                 await SavePricingMarkups();
+                ShowTemporaryMessage("Modifica salvata");
             }
             Keyboard.ClearFocus();
         }
@@ -127,27 +220,40 @@ public partial class ProjectCostingControl : UserControl
         {
             _vm.TravelMarkup = newK;
             await SavePricingMarkups();
+            ShowTemporaryMessage("Modifica salvata");
         }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // CRUD
+    // CRUD CON CONFERME
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnAddCommission_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
+
+        if (!await ConfirmAction("Aggiungi provvigione", "Aggiungere una nuova provvigione?"))
+            return;
+
         MaterialSectionVM? sec = FindMaterialSection(secId);
         if (sec == null) return;
 
-        var req = new ProjectMaterialItemSaveRequest
+        await ExecuteWithLoading(async () =>
         {
-            SectionId = secId, Description = "Provvigione", Quantity = 1,
-            UnitCost = 0, MarkupValue = sec.DefaultCommissionMarkup, ItemType = "COMMISSION"
-        };
-        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
-        await LoadData();
+            var req = new ProjectMaterialItemSaveRequest
+            {
+                SectionId = secId,
+                Description = "Provvigione",
+                Quantity = 1,
+                UnitCost = 0,
+                MarkupValue = sec.DefaultCommissionMarkup,
+                ItemType = "COMMISSION"
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
+            await LoadData();
+            ShowTemporaryMessage("Provvigione aggiunta");
+        });
     }
 
     private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
@@ -170,91 +276,154 @@ public partial class ProjectCostingControl : UserControl
             var newGroups = availableGroups.Where(g => !existingGroupNames.Contains(g.Name)).ToList();
 
             if (newGroups.Count == 0 && availableTemplates.Count == 0)
-                MessageBox.Show("Tutti i gruppi template sono già presenti nella commessa.\nPuoi creare un gruppo personalizzato.", "Info");
+            {
+                ShowInfo("Info", "Tutti i gruppi template sono già presenti nella commessa.\nPuoi creare un gruppo personalizzato.");
+                return;
+            }
 
             var dlg = new AddCostGroupDialog(_projectId, newGroups, availableTemplates, _apiBasePath)
             { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) await LoadData();
+
+            if (dlg.ShowDialog() == true)
+            {
+                await LoadData();
+                ShowTemporaryMessage("Gruppo aggiunto");
+            }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            ShowError("Errore", ex.Message);
+        }
     }
 
     private async void BtnAddMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
+
+        if (!await ConfirmAction("Aggiungi materiale", "Aggiungere un nuovo materiale?"))
+            return;
+
         MaterialSectionVM? sec = FindMaterialSection(secId);
         if (sec == null) return;
 
-        var req = new ProjectMaterialItemSaveRequest
+        await ExecuteWithLoading(async () =>
         {
-            SectionId = secId, Description = "", Quantity = 1,
-            UnitCost = 0, MarkupValue = sec.DefaultMarkup, ItemType = "MATERIAL"
-        };
-        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
-        await LoadData();
+            var req = new ProjectMaterialItemSaveRequest
+            {
+                SectionId = secId,
+                Description = "",
+                Quantity = 1,
+                UnitCost = 0,
+                MarkupValue = sec.DefaultMarkup,
+                ItemType = "MATERIAL"
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
+            await LoadData();
+            ShowTemporaryMessage("Materiale aggiunto");
+        });
     }
 
     private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
+
+        if (!await ConfirmAction("Aggiungi risorsa", "Aggiungere una nuova risorsa?"))
+            return;
+
         CostSectionVM? sec = FindSection(secId);
         if (sec == null) return;
 
-        if (!_sectionEmployeesCache.ContainsKey(secId))
+        await ExecuteWithLoading(async () =>
         {
-            var emps = await LoadEmployeesForSection(secId);
-            _sectionEmployeesCache[secId] = emps;
-        }
-
-        var allEmps = _sectionEmployeesCache[secId];
-
-        if (IsOfferMode)
-        {
-            var anyEmp = allEmps.FirstOrDefault();
-            string deptCode = anyEmp?.DepartmentCode ?? "RIS";
-            decimal hourlyCost = anyEmp?.HourlyCost ?? 0;
-            decimal markup = anyEmp?.DefaultMarkup ?? 1.450m;
-            int counter = sec.Resources.Count + 1;
-
-            var req = new ProjectCostResourceSaveRequest
+            if (!_sectionEmployeesCache.ContainsKey(secId))
             {
-                SectionId = secId, EmployeeId = null,
-                ResourceName = $"{deptCode} {counter}",
-                HourlyCost = hourlyCost, MarkupValue = markup,
-                HoursPerDay = 8, CostPerKm = 0.90m
-            };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
-            await LoadData();
-        }
-        else
-        {
-            var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
-            var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
-
-            if (available.Count == 0)
-            {
-                MessageBox.Show("Tutti i dipendenti disponibili sono già assegnati a questa sezione.", "Attenzione");
-                return;
+                var emps = await LoadEmployeesForSection(secId);
+                _sectionEmployeesCache[secId] = emps;
             }
 
-            var first = available.First();
-            var req = new ProjectCostResourceSaveRequest
+            var allEmps = _sectionEmployeesCache[secId];
+
+            if (IsOfferMode)
             {
-                SectionId = secId, EmployeeId = first.Id,
-                ResourceName = first.FullName, HourlyCost = first.HourlyCost,
-                MarkupValue = first.DefaultMarkup, HoursPerDay = 8, CostPerKm = 0.90m
-            };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
+                await AddOfferResource(sec, allEmps);
+            }
+            else
+            {
+                await AddProjectResource(sec, allEmps);
+            }
+
             await LoadData();
+            ShowTemporaryMessage("Risorsa aggiunta");
+        });
+    }
+
+    private async Task AddOfferResource(CostSectionVM sec, List<EmployeeCostLookup> allEmps)
+    {
+        var anyEmp = allEmps.FirstOrDefault();
+        string deptCode = anyEmp?.DepartmentCode ?? "RIS";
+        decimal hourlyCost = anyEmp?.HourlyCost ?? 0;
+        decimal markup = anyEmp?.DefaultMarkup ?? 1.450m;
+        int counter = sec.Resources.Count + 1;
+
+        var req = new ProjectCostResourceSaveRequest
+        {
+            SectionId = sec.Id,
+            EmployeeId = null,
+            ResourceName = $"{deptCode} {counter}",
+            HourlyCost = hourlyCost,
+            MarkupValue = markup,
+            HoursPerDay = 8,
+            CostPerKm = 0.90m
+        };
+        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
+    }
+
+    private async Task AddProjectResource(CostSectionVM sec, List<EmployeeCostLookup> allEmps)
+    {
+        var usedIds = sec.Resources.Where(r => r.EmployeeId.HasValue).Select(r => r.EmployeeId!.Value).ToHashSet();
+        var available = allEmps.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+
+        if (available.Count == 0)
+        {
+            if (await ConfirmAction("Attenzione", "Tutti i dipendenti sono già assegnati. Aggiungere risorsa generica?"))
+            {
+                var req = new ProjectCostResourceSaveRequest
+                {
+                    SectionId = sec.Id,
+                    EmployeeId = null,
+                    ResourceName = $"Risorsa {sec.Resources.Count + 1}",
+                    HourlyCost = allEmps.FirstOrDefault()?.HourlyCost ?? 0,
+                    MarkupValue = allEmps.FirstOrDefault()?.DefaultMarkup ?? 1.450m,
+                    HoursPerDay = 8,
+                    CostPerKm = 0.90m
+                };
+                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
+            }
+            return;
         }
+
+        var first = available.First();
+        var req2 = new ProjectCostResourceSaveRequest
+        {
+            SectionId = sec.Id,
+            EmployeeId = first.Id,
+            ResourceName = first.FullName,
+            HourlyCost = first.HourlyCost,
+            MarkupValue = first.DefaultMarkup,
+            HoursPerDay = 8,
+            CostPerKm = 0.90m
+        };
+        string json2 = JsonSerializer.Serialize(req2, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await ApiClient.PostAsync($"{_apiBasePath}/resources", json2);
     }
 
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not string groupName) return;
+
         try
         {
             string json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
@@ -269,75 +438,130 @@ public partial class ProjectCostingControl : UserControl
             var groupTemplates = allTemplates.Where(t => t.GroupName == groupName).ToList();
             var dlg = new AddCostSectionDialog(_projectId, groupName, groupTemplates, _apiBasePath)
             { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) await LoadData();
+
+            if (dlg.ShowDialog() == true)
+            {
+                await LoadData();
+                ShowTemporaryMessage("Sezione aggiunta");
+            }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            ShowError("Errore", ex.Message);
+        }
     }
 
     private async void BtnDeleteMaterialItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int itemId || itemId <= 0) return;
-        await ApiClient.DeleteAsync($"{_apiBasePath}/material-items/{itemId}");
-        await LoadData();
+
+        if (!await ConfirmAction("Conferma eliminazione", "Eliminare questo elemento?"))
+            return;
+
+        await ExecuteWithLoading(async () =>
+        {
+            await ApiClient.DeleteAsync($"{_apiBasePath}/material-items/{itemId}");
+            await LoadData();
+            ShowTemporaryMessage("Elemento eliminato");
+        });
     }
 
     private async void BtnDeleteResource_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int resourceId || resourceId <= 0) return;
-        await ApiClient.DeleteAsync($"{_apiBasePath}/resources/{resourceId}");
-        await LoadData();
+
+        if (!await ConfirmAction("Conferma eliminazione", "Eliminare questa risorsa?"))
+            return;
+
+        await ExecuteWithLoading(async () =>
+        {
+            await ApiClient.DeleteAsync($"{_apiBasePath}/resources/{resourceId}");
+            await LoadData();
+            ShowTemporaryMessage("Risorsa eliminata");
+        });
     }
 
     private async void BtnInit_Click(object sender, RoutedEventArgs e)
     {
+        if (!await ConfirmAction("Inizializza configurazione",
+            "Questa operazione creerà la struttura base dei costi. Continuare?"))
+            return;
+
         try
         {
+            _vm.StatusText = "Inizializzazione in corso...";
             string json = await ApiClient.PostAsync($"{_apiBasePath}/init", "{}");
             var doc = JsonDocument.Parse(json);
+
             if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
                 await LoadData();
+                ShowTemporaryMessage("Configurazione inizializzata");
+            }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString()!, "Errore");
+            {
+                ShowError("Errore", doc.RootElement.GetProperty("message").GetString()!);
+            }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            ShowError("Errore", ex.Message);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // COMBO DIPENDENTI
+    // COMBO DIPENDENTI MIGLIORATA
     // ══════════════════════════════════════════════════════════════
 
-    private void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
+    private async void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is not ComboBox combo) return;
         if (combo.DataContext is not CostResourceVM row) return;
-        if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees)) return;
+
+        // Carica dipendenti se non in cache
+        if (!_sectionEmployeesCache.TryGetValue(row.SectionId, out var allEmployees))
+        {
+            allEmployees = await LoadEmployeesForSection(row.SectionId);
+            _sectionEmployeesCache[row.SectionId] = allEmployees;
+        }
 
         if (IsOfferMode)
         {
-            string deptCode = allEmployees.FirstOrDefault()?.DepartmentCode ?? "RIS";
-            var aliased = allEmployees.Select((emp, idx) => new EmployeeCostLookup
-            {
-                Id = emp.Id,
-                FullName = $"{deptCode} {idx + 1}",
-                DepartmentCode = emp.DepartmentCode,
-                HourlyCost = emp.HourlyCost,
-                DefaultMarkup = emp.DefaultMarkup
-            }).ToList();
-            combo.ItemsSource = aliased;
+            SetupOfferModeCombo(combo, row, allEmployees);
         }
         else
         {
-            CostSectionVM? sec = FindSection(row.SectionId);
-            var usedIds = sec?.Resources
-                .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
-                .Select(r => r.EmployeeId!.Value)
-                .ToHashSet() ?? new();
-
-            var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
-            combo.ItemsSource = available;
-            if (row.EmployeeId.HasValue)
-                combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
+            SetupProjectModeCombo(combo, row, allEmployees);
         }
+    }
+
+    private void SetupOfferModeCombo(ComboBox combo, CostResourceVM row, List<EmployeeCostLookup> allEmployees)
+    {
+        string deptCode = allEmployees.FirstOrDefault()?.DepartmentCode ?? "RIS";
+        var aliased = allEmployees.Select((emp, idx) => new EmployeeCostLookup
+        {
+            Id = emp.Id,
+            FullName = $"{deptCode} {idx + 1}",
+            DepartmentCode = emp.DepartmentCode,
+            HourlyCost = emp.HourlyCost,
+            DefaultMarkup = emp.DefaultMarkup
+        }).ToList();
+        combo.ItemsSource = aliased;
+    }
+
+    private void SetupProjectModeCombo(ComboBox combo, CostResourceVM row, List<EmployeeCostLookup> allEmployees)
+    {
+        CostSectionVM? sec = FindSection(row.SectionId);
+        var usedIds = sec?.Resources
+            .Where(r => r.EmployeeId.HasValue && r.Id != row.Id)
+            .Select(r => r.EmployeeId!.Value)
+            .ToHashSet() ?? new();
+
+        var available = allEmployees.Where(emp => !usedIds.Contains(emp.Id)).ToList();
+        combo.ItemsSource = available;
+
+        if (row.EmployeeId.HasValue)
+            combo.SelectedItem = available.FirstOrDefault(emp => emp.Id == row.EmployeeId);
     }
 
     private async void EmployeeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -360,129 +584,74 @@ public partial class ProjectCostingControl : UserControl
             row.HourlyCost = emp.HourlyCost;
             row.MarkupValue = emp.DefaultMarkup;
         }
-        if (row.Id > 0) await SaveResource(row);
+
+        if (row.Id > 0)
+            await SaveResource(row);
     }
 
     // ══════════════════════════════════════════════════════════════
-    // LOAD DATA
+    // SAVE CON DEBOUNCE
     // ══════════════════════════════════════════════════════════════
 
-    private async Task LoadData()
+    private async void ResourceGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
-        try
+        if (e.EditAction == DataGridEditAction.Cancel) return;
+        if (e.Row.Item is not CostResourceVM row || row.Id <= 0) return;
+
+        // Debounce per evitare troppi salvataggi
+        _saveTimer?.Dispose();
+        _saveTimer = new Timer(async _ =>
         {
-            _vm.StatusText = "Caricamento...";
-            DataContext = _vm;
-
-            string json = await ApiClient.GetAsync($"{_apiBasePath}");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            _data = JsonSerializer.Deserialize<ProjectCostingData>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-            var groupStates = _vm.Groups.ToDictionary(g => g.Name, g => g.IsExpanded);
-            var sectionStates = _vm.Groups.SelectMany(g => g.Sections).ToDictionary(s => s.Id, s => s.IsDetailExpanded);
-            var matSectionStates = _vm.MaterialSections.ToDictionary(s => s.Id, s => s.IsDetailExpanded);
-
-            _vm = CostingViewModel.FromData(_data);
-            _vm.IsOfferMode = IsOfferMode;
-
-            foreach (var g in _vm.Groups)
-            {
-                if (groupStates.TryGetValue(g.Name, out bool expanded)) g.IsExpanded = expanded;
-                foreach (var s in g.Sections)
-                    if (sectionStates.TryGetValue(s.Id, out bool secExpanded)) s.IsDetailExpanded = secExpanded;
-            }
-            foreach (var ms in _vm.MaterialSections)
-                if (matSectionStates.TryGetValue(ms.Id, out bool matExpanded)) ms.IsDetailExpanded = matExpanded;
-
-            DataContext = _vm;
-
-            _sectionEmployeesCache.Clear();
-            foreach (var g in _vm.Groups)
-                foreach (var sec in g.Sections)
-                {
-                    var emps = await LoadEmployeesForSection(sec.Id);
-                    _sectionEmployeesCache[sec.Id] = emps;
-                }
-        }
-        catch (Exception ex) { _vm.StatusText = $"Errore: {ex.Message}"; }
-    }
-
-    private async Task<List<EmployeeCostLookup>> LoadEmployeesForSection(int sectionId)
-    {
-        try
-        {
-            string json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                return JsonSerializer.Deserialize<List<EmployeeCostLookup>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-        }
-        catch { }
-        return new();
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // HELPERS / EVENTS
-    // ══════════════════════════════════════════════════════════════
-
-    private MaterialSectionVM? FindMaterialSection(int sectionId) => _vm.MaterialSections.FirstOrDefault(s => s.Id == sectionId);
-
-    private CostSectionVM? FindSection(int sectionId)
-    {
-        foreach (var g in _vm.Groups)
-        {
-            var sec = g.Sections.FirstOrDefault(s => s.Id == sectionId);
-            if (sec != null) return sec;
-        }
-        return null;
-    }
-
-    private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e) { if (sender is TextBox tb) tb.SelectAll(); }
-    private void MarkupTextBox_KeyDown(object sender, KeyEventArgs e) { }
-    private void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e) { }
-    private void MarkupTextBox_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { }
-
-    private void GroupHeader_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is Border border && border.DataContext is CostGroupVM group)
-            group.IsExpanded = !group.IsExpanded;
-    }
-
-    private void SectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox) return;
-        if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
-            sec.IsDetailExpanded = !sec.IsDetailExpanded;
-    }
-
-    private void MaterialSectionRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is Grid grid && grid.DataContext is MaterialSectionVM sec)
-            sec.IsDetailExpanded = !sec.IsDetailExpanded;
+            await Dispatcher.InvokeAsync(async () => await SaveResource(row));
+        }, null, SaveDelayMs, Timeout.Infinite);
     }
 
     private async void MaterialGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (e.EditAction == DataGridEditAction.Cancel) return;
-        await Task.Delay(100);
-        if (e.Row.Item is MaterialItemVM row && row.Id > 0) await SaveMaterialItem(row);
+        if (e.Row.Item is not MaterialItemVM row || row.Id <= 0) return;
+
+        // Debounce per evitare troppi salvataggi
+        _saveTimer?.Dispose();
+        _saveTimer = new Timer(async _ =>
+        {
+            await Dispatcher.InvokeAsync(async () => await SaveMaterialItem(row));
+        }, null, SaveDelayMs, Timeout.Infinite);
     }
 
-    private async void ResourceGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    private async Task SaveResource(CostResourceVM row)
     {
-        if (e.EditAction == DataGridEditAction.Cancel) return;
-        await Task.Delay(100);
-        if (e.Row.Item is CostResourceVM row && row.Id > 0) await SaveResource(row);
-    }
+        try
+        {
+            var req = new ProjectCostResourceSaveRequest
+            {
+                Id = row.Id,
+                SectionId = row.SectionId,
+                EmployeeId = row.EmployeeId,
+                ResourceName = row.ResourceName,
+                WorkDays = row.WorkDays,
+                HoursPerDay = row.HoursPerDay,
+                HourlyCost = row.HourlyCost,
+                MarkupValue = row.MarkupValue,
+                NumTrips = row.NumTrips,
+                KmPerTrip = row.KmPerTrip,
+                CostPerKm = row.CostPerKm,
+                DailyFood = row.DailyFood,
+                DailyHotel = row.DailyHotel,
+                AllowanceDays = row.AllowanceDays,
+                DailyAllowance = row.DailyAllowance
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"{_apiBasePath}/resources/{row.Id}", json);
 
-    // ══════════════════════════════════════════════════════════════
-    // SAVE
-    // ══════════════════════════════════════════════════════════════
+            // Feedback visivo (opzionale)
+            ShowTemporaryMessage("✓", 500);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Errore salvataggio", ex.Message);
+        }
+    }
 
     private async Task SaveMaterialItem(MaterialItemVM row)
     {
@@ -490,14 +659,24 @@ public partial class ProjectCostingControl : UserControl
         {
             var req = new ProjectMaterialItemSaveRequest
             {
-                Id = row.Id, SectionId = row.SectionId, Description = row.Description,
-                Quantity = row.Quantity, UnitCost = row.UnitCost,
-                MarkupValue = row.MarkupValue, ItemType = row.ItemType
+                Id = row.Id,
+                SectionId = row.SectionId,
+                Description = row.Description,
+                Quantity = row.Quantity,
+                UnitCost = row.UnitCost,
+                MarkupValue = row.MarkupValue,
+                ItemType = row.ItemType
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/material-items/{row.Id}", json);
+
+            // Feedback visivo
+            ShowTemporaryMessage("✓", 500);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            ShowError("Errore salvataggio", ex.Message);
+        }
     }
 
     private async Task SavePricingMarkups()
@@ -514,46 +693,44 @@ public partial class ProjectCostingControl : UserControl
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/pricing", json);
         }
-        catch { }
-    }
-
-    private async Task SaveResource(CostResourceVM row)
-    {
-        try
+        catch (Exception ex)
         {
-            var req = new ProjectCostResourceSaveRequest
-            {
-                Id = row.Id, SectionId = row.SectionId, EmployeeId = row.EmployeeId,
-                ResourceName = row.ResourceName, WorkDays = row.WorkDays,
-                HoursPerDay = row.HoursPerDay, HourlyCost = row.HourlyCost,
-                MarkupValue = row.MarkupValue, NumTrips = row.NumTrips,
-                KmPerTrip = row.KmPerTrip, CostPerKm = row.CostPerKm,
-                DailyFood = row.DailyFood, DailyHotel = row.DailyHotel,
-                AllowanceDays = row.AllowanceDays, DailyAllowance = row.DailyAllowance
-            };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"{_apiBasePath}/resources/{row.Id}", json);
+            ShowError("Errore salvataggio markups", ex.Message);
         }
-        catch { }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // DISTRIBUZIONE % SEZIONI (solo offerta)
+    // DISTRIBUZIONE % SEZIONI
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
         var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
         decimal totalSale = allSections.Sum(s => s.TotalSale);
-        if (totalSale == 0) { MessageBox.Show("Nessun importo vendita."); return; }
 
-        foreach (var sec in allSections)
+        if (totalSale == 0)
         {
-            decimal weight = Math.Round(sec.TotalSale / totalSale, 4);
-            sec.ContingencyPct = weight;
-            sec.MarginPct = weight;
-            await SaveSectionDistribution(sec);
+            ShowError("Errore", "Nessun importo vendita disponibile per la distribuzione.");
+            return;
         }
+
+        if (!await ConfirmAction("Genera distribuzione",
+            "Distribuire contingency e margine proporzionalmente al valore di vendita di ogni sezione?"))
+            return;
+
+        await ExecuteWithLoading(async () =>
+        {
+            foreach (var sec in allSections)
+            {
+                decimal weight = Math.Round(sec.TotalSale / totalSale, 4);
+                sec.ContingencyPct = weight;
+                sec.MarginPct = weight;
+                await SaveSectionDistribution(sec);
+            }
+
+            _vm.RecalcGrandTotals();
+            ShowTemporaryMessage("Distribuzione generata");
+        });
     }
 
     private async void DistPct_KeyDown(object sender, KeyEventArgs e)
@@ -568,28 +745,38 @@ public partial class ProjectCostingControl : UserControl
 
     private async void DistPct_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox tb) await ApplyDistPct(tb);
+        if (sender is TextBox tb)
+            await ApplyDistPct(tb);
     }
 
     private async Task ApplyDistPct(TextBox tb)
     {
         if (tb.DataContext is not CostSectionVM sec) return;
+
         string field = tb.Tag?.ToString() ?? "";
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
-        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
+
+        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val))
+            return;
+
         if (val > 1m) val /= 100m;
 
         decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
         if (val == oldVal) return;
 
-        if (field == "contingency") sec.ContingencyPct = val;
-        else sec.MarginPct = val;
+        if (field == "contingency")
+            sec.ContingencyPct = val;
+        else
+            sec.MarginPct = val;
 
         var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
         RebalanceSections(allSections, sec.Id, field, val);
 
         foreach (var s in allSections)
             await SaveSectionDistribution(s);
+
+        _vm.RecalcGrandTotals();
+        ShowTemporaryMessage("Distribuzione aggiornata");
     }
 
     private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)
@@ -607,8 +794,10 @@ public partial class ProjectCostingControl : UserControl
                 ? currentVal / othersTotal * remaining
                 : remaining / others.Count;
 
-            if (field == "contingency") s.ContingencyPct = Math.Round(newVal, 4);
-            else s.MarginPct = Math.Round(newVal, 4);
+            if (field == "contingency")
+                s.ContingencyPct = Math.Round(newVal, 4);
+            else
+                s.MarginPct = Math.Round(newVal, 4);
         }
     }
 
@@ -620,6 +809,155 @@ public partial class ProjectCostingControl : UserControl
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            ShowError("Errore salvataggio distribuzione", ex.Message);
+        }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // FUNZIONI DI SUPPORTO (UX)
+    // ══════════════════════════════════════════════════════════════
+
+    private MaterialSectionVM? FindMaterialSection(int sectionId)
+        => _vm.MaterialSections.FirstOrDefault(s => s.Id == sectionId);
+
+    private CostSectionVM? FindSection(int sectionId)
+    {
+        foreach (var g in _vm.Groups)
+        {
+            var sec = g.Sections.FirstOrDefault(s => s.Id == sectionId);
+            if (sec != null) return sec;
+        }
+        return null;
+    }
+
+    // Helper per mostrare messaggi temporanei
+    private void ShowTemporaryMessage(string message, int durationMs = 2000)
+    {
+        _vm.StatusText = message;
+
+        // Timer per cancellare il messaggio
+        var timer = new System.Timers.Timer(durationMs);
+        timer.Elapsed += (s, e) =>
+        {
+            Dispatcher.Invoke(() => { if (_vm.StatusText == message) _vm.StatusText = ""; });
+            timer.Stop();
+            timer.Dispose();
+        };
+        timer.Start();
+    }
+
+    private Task<bool> ConfirmAction(string title, string message)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+
+        Dispatcher.Invoke(() =>
+        {
+            var result = MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            tcs.SetResult(result == MessageBoxResult.Yes);
+        });
+
+        return tcs.Task;
+    }
+
+    private void ShowError(string title, string message)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        });
+    }
+
+    private void ShowInfo(string title, string message)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+        });
+    }
+
+    private async Task ExecuteWithLoading(Func<Task> action)
+    {
+        try
+        {
+            _vm.StatusText = "Operazione in corso...";
+            await action();
+        }
+        finally
+        {
+            _vm.StatusText = "";
+        }
+    }
+    private async void BtnSaveAll_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _vm.StatusText = "Salvataggio in corso...";
+
+            // Salva markups
+            await SavePricingMarkups();
+
+            // Salva tutte le risorse modificate
+            foreach (var group in _vm.Groups)
+            {
+                foreach (var section in group.Sections)
+                {
+                    foreach (var resource in section.Resources.Where(r => r.IsDirty))
+                    {
+                        await SaveResource(resource);
+                    }
+                }
+            }
+
+            // Salva tutti i materiali modificati
+            foreach (var section in _vm.MaterialSections)
+            {
+                foreach (var item in section.Items.Where(i => i.IsDirty))
+                {
+                    await SaveMaterialItem(item);
+                }
+            }
+
+            _vm.StatusText = "Salvataggio completato";
+            ShowTemporaryMessage("✓ Tutto salvato", 2000);
+        }
+        catch (Exception ex)
+        {
+            ShowError("Errore salvataggio", ex.Message);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // EVENTI UI (invariati)
+    // ══════════════════════════════════════════════════════════════
+
+    private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb) tb.SelectAll();
+    }
+
+    private void GroupHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is CostGroupVM group)
+            group.IsExpanded = !group.IsExpanded;
+    }
+
+    private void SectionRow_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is TextBox || (e.OriginalSource as FrameworkElement)?.TemplatedParent is TextBox) return;
+        if (sender is Grid grid && grid.DataContext is CostSectionVM sec)
+            sec.IsDetailExpanded = !sec.IsDetailExpanded;
+    }
+
+    private void MaterialSectionRow_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Grid grid && grid.DataContext is MaterialSectionVM sec)
+            sec.IsDetailExpanded = !sec.IsDetailExpanded;
+    }
+
+    // Metodi vuoti mantenuti per compatibilità
+    private void MarkupTextBox_KeyDown(object sender, KeyEventArgs e) { }
+    private void MarkupTextBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void MarkupTextBox_PreviewMouseDown(object sender, MouseButtonEventArgs e) { }
 }

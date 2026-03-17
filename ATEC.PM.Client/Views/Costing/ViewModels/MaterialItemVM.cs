@@ -12,6 +12,13 @@ public class MaterialItemVM : INotifyPropertyChanged
     public string Description { get => _description; set { _description = value; Notify(); } }
 
     private decimal _quantity = 1;
+
+    private bool _isDirty;
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set { _isDirty = value; OnPropertyChanged(); }
+    }
     public decimal Quantity { get => _quantity; set { _quantity = value; Notify(); Notify(nameof(TotalCost)); Notify(nameof(TotalSale)); } }
 
     private decimal _unitCost;

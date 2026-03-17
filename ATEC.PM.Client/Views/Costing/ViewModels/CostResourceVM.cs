@@ -39,7 +39,13 @@ public class CostResourceVM : INotifyPropertyChanged
         get => _markupValue;
         set { _markupValue = value; Notify(); Notify(nameof(TotalSale)); }
     }
-
+    // In CostResourceVM
+    private bool _isDirty;
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set { _isDirty = value; OnPropertyChanged(); }
+    }
     public decimal TotalHours => WorkDays * HoursPerDay;
     public decimal TotalCost => TotalHours * HourlyCost;
     public decimal TotalSale => TotalCost * MarkupValue;
