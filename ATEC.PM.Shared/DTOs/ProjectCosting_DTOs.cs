@@ -17,6 +17,8 @@ public class ProjectCostSectionDto
     // NO MarkupValue — il K è sulla singola risorsa
     public decimal ContingencyPct { get; set; }
     public decimal MarginPct { get; set; }
+    public bool ContingencyPinned { get; set; }
+    public bool MarginPinned { get; set; }
     public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
@@ -177,4 +179,6 @@ public class SectionDistributionDto
 {
     public decimal ContingencyPct { get; set; }
     public decimal MarginPct { get; set; }
+    public bool ContingencyPinned { get; set; }
+    public bool MarginPinned { get; set; }
 }

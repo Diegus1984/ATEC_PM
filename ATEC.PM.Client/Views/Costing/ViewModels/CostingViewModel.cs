@@ -167,6 +167,11 @@ public class CostingViewModel : INotifyPropertyChanged
         Notify(nameof(TravelDistributed));
         Notify(nameof(TotalDistContingencyCheck));
         Notify(nameof(TotalDistMarginCheck));
+
+        // Auto-ribilancia non-pinned quando cambiano i TotalSale
+        RebalanceUnpinned("contingency");
+        RebalanceUnpinned("margin");
+
         RebuildDistributionRows();
 
         int secCount = Groups.Sum(g => g.Sections.Count);
@@ -304,7 +309,9 @@ public class CostingViewModel : INotifyPropertyChanged
                     SectionType = sec.SectionType,
                     DepartmentIds = sec.DepartmentIds,
                     ContingencyPct = sec.ContingencyPct,
-                    MarginPct = sec.MarginPct
+                    MarginPct = sec.MarginPct,
+                    IsContingencyPinned = sec.ContingencyPinned,
+                    IsMarginPinned = sec.MarginPinned
                 };
 
                 foreach (var res in sec.Resources.OrderBy(r => r.SortOrder))

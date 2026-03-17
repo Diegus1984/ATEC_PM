@@ -752,8 +752,12 @@ public class DbService
         AddColumnIfMissing(c, "bom_items", "ddp_type", "VARCHAR(20) DEFAULT 'COMMERCIAL' AFTER destination");
         AddColumnIfMissing(c, "offer_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
         AddColumnIfMissing(c, "offer_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
+        AddColumnIfMissing(c, "offer_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
+        AddColumnIfMissing(c, "offer_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
         AddColumnIfMissing(c, "project_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
         AddColumnIfMissing(c, "project_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
+        AddColumnIfMissing(c, "project_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
+        AddColumnIfMissing(c, "project_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)

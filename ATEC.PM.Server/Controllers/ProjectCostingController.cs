@@ -158,7 +158,9 @@ public class ProjectCostingController : ControllerBase
         var sections = c.Query<ProjectCostSectionDto>(@"
             SELECT id, project_id AS ProjectId, template_id AS TemplateId, name,
                    section_type AS SectionType, group_name AS GroupName,
-                   sort_order AS SortOrder, is_enabled AS IsEnabled
+                   sort_order AS SortOrder, is_enabled AS IsEnabled,
+                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
+                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned
             FROM project_cost_sections WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
@@ -418,5 +420,25 @@ public class ProjectCostingController : ControllerBase
                 projectId
             });
         return Ok(ApiResponse<string>.Ok("", "Prezzi aggiornati"));
+    }
+
+    [HttpPut("sections/{id}/distribution")]
+    public IActionResult UpdateSectionDistribution(int projectId, int id, [FromBody] SectionDistributionDto req)
+    {
+        using var c = _db.Open();
+        c.Execute(@"UPDATE project_cost_sections 
+            SET contingency_pct=@ContPct, margin_pct=@MargPct,
+                contingency_pinned=@ContPin, margin_pinned=@MargPin
+            WHERE id=@Id AND project_id=@projectId",
+            new
+            {
+                ContPct = req.ContingencyPct,
+                MargPct = req.MarginPct,
+                ContPin = req.ContingencyPinned,
+                MargPin = req.MarginPinned,
+                Id = id,
+                projectId
+            });
+        return Ok(ApiResponse<string>.Ok("", "Distribuzione aggiornata"));
     }
 }

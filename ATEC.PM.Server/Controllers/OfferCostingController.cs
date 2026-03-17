@@ -86,7 +86,8 @@ public class OfferCostingController : ControllerBase
             SELECT id, offer_id AS ProjectId, template_id AS TemplateId, name,
                    section_type AS SectionType, group_name AS GroupName,
                    sort_order AS SortOrder, is_enabled AS IsEnabled,
-                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct
+                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
+                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned
             FROM offer_cost_sections WHERE offer_id=@offerId ORDER BY sort_order",
             new { offerId }).ToList();
 
