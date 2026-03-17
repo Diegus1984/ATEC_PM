@@ -325,8 +325,8 @@ public class ItemTypeToBadgeColorConverter : IValueConverter
     {
         if (value is string itemType)
         {
-            // Se c'è un parametro numerico, restituisce il colore con alpha
-            bool returnWithAlpha = parameter != null && int.TryParse(parameter.ToString(), out int alpha);
+            int alpha = 255;
+            bool returnWithAlpha = parameter != null && int.TryParse(parameter.ToString(), out alpha);
 
             switch (itemType.ToUpper())
             {

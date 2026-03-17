@@ -44,7 +44,7 @@ public class CostResourceVM : INotifyPropertyChanged
     public bool IsDirty
     {
         get => _isDirty;
-        set { _isDirty = value; OnPropertyChanged(); }
+        set { _isDirty = value; Notify(); }
     }
     public decimal TotalHours => WorkDays * HoursPerDay;
     public decimal TotalCost => TotalHours * HourlyCost;

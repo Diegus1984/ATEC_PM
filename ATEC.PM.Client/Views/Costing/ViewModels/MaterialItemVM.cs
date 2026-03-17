@@ -17,7 +17,7 @@ public class MaterialItemVM : INotifyPropertyChanged
     public bool IsDirty
     {
         get => _isDirty;
-        set { _isDirty = value; OnPropertyChanged(); }
+        set { _isDirty = value; Notify(); }
     }
     public decimal Quantity { get => _quantity; set { _quantity = value; Notify(); Notify(nameof(TotalCost)); Notify(nameof(TotalSale)); } }
 
