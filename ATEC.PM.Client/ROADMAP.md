@@ -7,6 +7,7 @@
 - **Database**: MySQL (XAMPP) con Dapper ORM
 - **Auth**: JWT Bearer token
 - **Grafici**: OxyPlot.Wpf 2.2 (migrato da LiveCharts2)
+- **PDF**: QuestPDF (Community License)
 - **GitHub**: github.com/Diegus1984/ATEC_PM
 
 ---
@@ -118,205 +119,191 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Funzionalità | Stato | Note |
 |---|---|---|
 | Griglia tipo Excel | ✅ | DataGrid con TextBox sempre visibili, editing diretto |
-| Righe entrate (PAGAMENTO, %, ENTRATE, Aggiustamento) | ✅ | % distribuite per mese |
-| Righe uscite (categorie fornitore dinamiche CRUD) | ✅ | 8 default + aggiungi/rimuovi |
-| Righe totali (USCITE MESE, DIFFERENZA cumulativa, BANCA) | ✅ | Differenza cumulativa progressiva |
-| Colonne frozen A+B | ✅ | Etichetta + Importo fisse, mesi scrollabili |
-| Colori celle (verde editabile #92D050, giallo calcolato #FFE699) | ✅ | Via CellColor + RowTypeToBgConverter |
-| Rosso valori negativi | ✅ | CellForegroundConverter |
-| Cap % a 100% | ✅ | Automatico nel Recalculate |
-| Grafico OxyPlot | ✅ | Barre entrate/uscite (RectangleBarSeries) + linea saldo (LineSeries) |
-| Annotazioni valori sulle barre | ✅ | TextAnnotation sopra/sotto barre con importi |
+| Righe entrate/uscite/totali | ✅ | Differenza cumulativa progressiva |
+| Grafico OxyPlot | ✅ | Barre + linea saldo + TextAnnotation |
 | DB: 3 tabelle compatte | ✅ | project_cashflow, project_cashflow_categories, project_cashflow_data |
-| Endpoint unico PUT data (upsert generico) | ✅ | data_type: INCOME_PCT, ADJUSTMENT, CAT_PCT, BANK, SCHEDULE |
 
 ### 5c. Codex — Sync DB Remoto ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
-| Tabella `codex_items` (clone locale) | ✅ | 22 colonne, indici su codice/fornitore/categoria |
-| `CodexSyncService` (BackgroundService) | ✅ | Sync all'avvio + schedulato ogni 6h + manuale |
-| `CodexController` | ✅ | GET lista, GET dettaglio, POST sync, GET sync-status |
-| `CodexPage` WPF | ✅ | DataGrid 21 filtri, popup "Seleziona colonne", preferenze JSON locale |
-| Encoding fix | ✅ | ConvertZeroDateTime + CharacterSet latin1/utf8mb4 |
-| Connessione remota | ✅ | SERVER-CODEX:3306, ConnectionTimeout=60 |
+| CodexSyncService + CodexPage | ✅ | 21 filtri, popup colonne, sync ogni 6h |
 
-### 5d. Catalogo Articoli — Miglioramenti ✅
+### 5d. Catalogo Articoli ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
-| Popup "Seleziona colonne" | ✅ | Stesso pattern CodexPage, preferenze in catalog_columns.json |
-| Filtro su Categoria aggiunto | ✅ | TextBox header come le altre colonne |
+| Popup colonne + filtro Categoria | ✅ | Stesso pattern CodexPage |
 
 ---
 
 ## Blocco 6 — Sistema Notifiche & Dashboard ✅ COMPLETATO
 
-### 6a. Infrastruttura Notifiche ✅
+### 6a-d. Notifiche + Dashboard PM + Grafici OxyPlot ✅
 
-| Funzionalità | Stato | Note |
-|---|---|---|
-| Tabella `notifications` + `notification_recipients` | ✅ | Approccio B: 1 messaggio + N destinatari con is_read/read_at |
-| `NotificationsController` | ✅ | GET unread, GET all, GET badge, PUT read, PUT read-all, DELETE |
-| `NotificationService` (helper creazione) | ✅ | Create(), GetProjectPmIds(), GetAcqEmployeeIds() |
-| `NotificationBackgroundService` | ✅ | Check scadenze DDP ogni 6h + pulizia retention |
-| Trigger DDP_STATUS_CHANGED | ✅ | PUT ddp/{id} → confronta vecchio/nuovo stato → notifica PM+ACQ |
-| Trigger PHASE_ASSIGNED | ✅ | AddAssignment + SaveAssignments → notifica tecnico assegnato |
-| DdpStatusMap condiviso | ✅ | Classe statica in Bom_DTOs.cs, usata da server e client |
-| Claim fix ClaimTypes.NameIdentifier | ✅ | Corretto in NotificationsController, ProjectsController, PhasesController, ChatController |
-| Retention configurabile | ✅ | appsettings.json → Notifications:RetentionReadDays/RetentionUnreadDays |
-
-### 6b. Dashboard PM con Notifiche ✅
-
-| Funzionalità | Stato | Note |
-|---|---|---|
-| KPI cards | ✅ | Commesse attive, ore settimana/mese, ricavo totale |
-| DataGrid alarm list stile VisiWin | ✅ | 4 severità colorate: ALARM rosso, WARNING arancio, INFO blu, SUCCESS verde |
-| Colonne: Icona, Data/Ora, Operatore, Commessa, Tipo, Titolo, Messaggio, Articolo, Letto | ✅ | Messaggi in italiano |
-| Righe lette → opacity 55% | ✅ | DataTrigger su IsRead |
-| Checkbox "Solo non lette" | ✅ | Default attivo |
-| Pulsante "Segna tutte lette" | ✅ | PUT read-all + refresh |
-| Bottone "→ Vai" per navigazione | ✅ | Click → naviga alla DDP della commessa nel TreeView |
-| Polling notifiche ogni 30s | ✅ | DispatcherTimer nella DashboardPage |
-| Badge contatore sidebar | ✅ | Cerchio rosso su voce Dashboard, polling 60s |
-| Commesse recenti | ✅ | DataGrid con codice, titolo, cliente, stato, ore |
-
-### 6c. Tipi Notifica implementati
-
-| Tipo | Severità | Destinatario | Trigger |
-|---|---|---|---|
-| `DDP_STATUS_CHANGED` | INFO/SUCCESS/WARNING | PM + ACQ (escluso chi modifica) | Cambio stato articolo DDP |
-| `DDP_OVERDUE` | ALARM | PM + ACQ | Background: date_needed < oggi, stato ≠ DELIVERED/CANCELLED |
-| `PHASE_ASSIGNED` | INFO | Tecnico assegnato | Assegnazione fase (singola e bulk) |
-
-### 6d. Migrazione Grafici ✅
-
-| Funzionalità | Stato | Note |
-|---|---|---|
-| LiveCharts2 → OxyPlot.Wpf 2.2 | ✅ | Rimosso SkiaSharp, rendering molto più veloce |
-| RectangleBarSeries (barre verticali) | ✅ | Entrate verde + Uscite rosso |
-| LineSeries (saldo cumulativo) | ✅ | Linea blu con marker |
-| TextAnnotation valori sulle barre | ✅ | Importi visibili sopra/sotto barre |
-| Tracker tooltip su linea | ✅ | "Saldo cumulativo: N €" |
+Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 
 ---
 
-## Blocco 7 — Prossimi Step
+## Blocco 7 — Offerte Commerciali ✅ COMPLETATO
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| OffersPage + OfferViewPage | ✅ | TreeView per cliente/anno, dettaglio con tab |
+| Codice OF{anno}{progressivo 3 cifre} | ✅ | OF2026001 |
+| Stati BOZZA→INVIATA→ACCETTATA→CONVERTITA | ✅ | + RIFIUTATA/PERSA/SUPERATA |
+| Revisioni con copia completa costing | ✅ | Vecchia → SUPERATA, nuova copia |
+| Conversione offerta → commessa | ✅ | Copia offer_* → project_*, crea fasi, notifica PM |
+| OfferCostingController (mirror ProjectCosting) | ✅ | Tabelle offer_* |
+| ProjectCostingControl riusato via _apiBasePath | ✅ | LoadForOffer(offerId) |
+| ConvertOfferDialog | ✅ | Seleziona PM da endpoint /api/employees/pm-list |
+
+---
+
+## Blocco 8 — Modulo CMS Preventivi 🔧 IN CORSO
+
+### 8a. Catalogo Template ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| QuoteDbService (DB separato dal modulo principale) | ✅ | 8 tabelle: quote_groups, quote_categories, quote_products, quote_product_variants, quotes, quote_items, quote_revisions, quote_documents, quote_status_log |
+| QuoteCatalogController (API CRUD completo) | ✅ | Gruppi, categorie, prodotti con varianti, duplicazione, albero per TreeView |
+| QuoteCatalogPage (UI WPF) | ✅ | TreeView Gruppi→Categorie + DataGrid prodotti con filtri, prezzi range, conteggio varianti |
+| QuoteGroupDialog / QuoteCategoryDialog | ✅ | CRUD gruppi e categorie |
+| QuoteProductDialog | ✅ | Editor prodotto con griglia varianti inline (codice, nome, costo, prezzo, sconto, IVA, UdM, qty), flag auto-include |
+| Seed data catalogo | ✅ | 7 gruppi, 21 categorie, 36 prodotti, ~50 varianti con prezzi realistici |
+
+### 8b. Gestione Preventivi ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| QuotesController (API CRUD completo) | ✅ | Codice PRV-2026-0001, auto-populate da template, gestione items, stati, duplicazione, ricalcolo totali, statistiche |
+| QuotesListPage (lista preventivi) | ✅ | DataGrid con filtri header, filtro stato, ricerca, colonne: numero, data, cliente, titolo, totale, utile, stato (badge colorato), agente |
+| NewQuoteDialog | ✅ | Selezione cliente (ComboBox ricercabile), template, condizioni, pagamento |
+| QuoteDetailPage (dettaglio completo) | ✅ | Header editabile, griglia voci, riepilogo economico (subtotale→IVA→sconto→imponibile→costi aziendali→UTILE), toggle PDF, note interne/preventivo, cambio stato |
+| AddQuoteItemDialog | ✅ | Doppio-click da catalogo con duplicate detection (pattern DDP), aggiornamento real-time della lista items |
+| Dirty tracking con snapshot JSON | ✅ | Confronto DTO serializzato, conferma uscita su navigazione |
+
+### 8c. Generazione PDF ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| QuotePdfService (QuestPDF) | ✅ | Layout professionale: header ATEC, destinatario, tabella voci, riepilogo, condizioni, firma, footer con paginazione |
+| Endpoint GET /api/quotes/{id}/pdf | ✅ | Ritorna byte[] PDF |
+| Anteprima PDF (bottone viola) | ✅ | Salva in %TEMP%, apre con viewer di default |
+| Scarica PDF (SaveFileDialog) | ✅ | Salva dove vuole l'utente |
+| Toggle visibilità nel PDF | ✅ | ShowItemPrices, ShowSummary, ShowSummaryPrices |
+| ApiClient.GetBytesAsync() | ✅ | Nuovo metodo per download binari |
+
+### 8d. DA COMPLETARE — Funzionalità mancanti
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Rich text editor descrizione prodotto | ❌ | Extended.Wpf.Toolkit RichTextBoxFormatBar, toolbar bold/italic/liste |
+| Upload allegato per prodotto | ❌ | Campo file associato al prodotto nel catalogo |
+| Upload immagine per prodotto | ❌ | Immagine prodotto visibile nel catalogo e nel PDF |
+| Link nella descrizione prodotto | ❌ | Inserimento URL nella descrizione rich text |
+
+---
+
+## Blocco 9 — Fusione Preventivi + Offerte ❌ DA FARE
+
+**Preventivi e offerte sono la stessa cosa.** Il Blocco 9 fonde i due moduli in uno solo, prendendo le funzionalità migliori di ciascuno.
+
+### Decisioni aperte (da definire prima di procedere)
+
+| # | Decisione | Opzioni | Stato |
+|---|---|---|---|
+| D1 | Strategia fusione | **A**: Offerte come base + features CMS, **B**: CMS come base + conversione | ☐ |
+| D2 | Costing | Avanzato (struttura/contingency/margine) vs Semplice (costo/vendita/utile) | ☐ |
+| D3 | Mapping verso commessa | Come le voci catalogo diventano fasi/BOM/budget ore | ☐ |
+| D4 | Codice unico | OF2026xxx o PRV-2026-xxxx o altro formato | ☐ |
+| D5 | UI lista | TreeView (per cliente/anno) o DataGrid (con filtri) | ☐ |
+| D6 | Offerte vecchie | Migrare o lasciare com'è sono | ☐ |
+
+### Roadmap fusione (post-decisioni)
+
+| Fase | Descrizione | Sessioni | Dipende da |
+|---|---|---|---|
+| F1 — Decisioni | Definire risposte alle 6 decisioni | 1 discussione | — |
+| F2 — Fusione DB | Unificare tabelle o creare ponte tra schemi | 1-2 | F1 |
+| F3 — Fusione UI | Una sola coppia di pagine con features migliori + rich text editor + upload allegati/immagini | 2-3 | F2 |
+| F4 — Conversione commessa | Adattare conversione al nuovo schema. Mapping voci catalogo → fasi/BOM | 1-2 | F3 |
+| F5 — PDF aggiornato | Adattare QuotePdfService al schema fuso + logo + layout personalizzabile | 1 | F3 |
+| F6 — Revisioni | Sistema revisioni con snapshot JSON + storico completo | 1 | F3 |
+| F7 — Dashboard CMC | KPI: preventivi emessi, tasso conversione, pipeline, utile medio + grafici OxyPlot | 1-2 | F3 |
+| F8 — Ruolo CMC | CMC nel RBAC. Menu/pagine visibili per ruolo | 1 | F7 |
+| F9 — Cleanup | Rimuovere modulo non più usato. Pulizia codice e DB | 1 | F4 |
+
+**Totale stimato: 10-14 sessioni**
+
+### Inventario — cosa abbiamo da entrambi i moduli
+
+**Dal modulo Offerte (Blocco 7):**
+- Conversione in commessa funzionante
+- Costing avanzato (sezioni/risorse/materiali/pricing)
+- ProjectCostingControl riusabile
+- Revisioni con copia completa
+- Notifiche OFFER_CONVERTED
+
+**Dal modulo Preventivi CMS (Blocco 8):**
+- Catalogo template (Gruppi→Categorie→Prodotti→Varianti)
+- Auto-populate dal template
+- Aggiunta rapida con doppio-click + duplicate detection
+- Generazione PDF professionale
+- Dirty tracking con snapshot
+- Doppio prezzo costo/vendita con utile per riga
+
+**Da costruire nella fusione:**
+- Ponte tra voci catalogo e sezioni costo
+- UI unificata (una sola lista + un solo dettaglio)
+- Mapping conversione: voci catalogo → fasi progetto + BOM
+- Rich text editor per descrizione prodotto
+- Upload allegati/immagini per prodotto
+- Dashboard CMC con KPI
+- Ruolo CMC nel RBAC
+
+---
+
+## Blocco 10 — Prossimi Step Generali
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
 | Notifica TIMESHEET_ANOMALY | ❌ | ALTA | Ore giornaliere > 10h, fase sfora budget > 150% |
-| Export Excel preventivo | ❌ | MEDIA | EPPlus, formato standard ATEC |
-| Export PDF offerta | ❌ | MEDIA | Documento offerta cliente |
 | Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
 | Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze via email |
+| Separazione ruoli (menu per ruolo) | ❌ | MEDIA | ADMIN/PM/CMC/TECH vedono pagine diverse |
+| Sicurezza (bcrypt, HTTPS, rate limiting) | ❌ | MEDIA | Migrazione SHA2→bcrypt |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
 
 ---
 
-## Struttura Navigazione TreeView Commessa
+## Struttura File Modulo CMS
 
 ```
-📁 AT2026001 - Cliente
-  ├── Dettagli                    → ProjectDashboardControl (KPI + ultime registrazioni con note)
-  ├── ⚙ Configura Commessa       → ProjectCostingControl (risorse + materiali + scheda prezzi)
-  ├── Fasi e Avanzamento          → PhasesManagementControl
-  ├── 📊 Preventivo vs Consuntivo → BudgetVsActualControl
-  ├── 💰 Flusso di Cassa          → CashFlowControl (griglia Excel + grafico OxyPlot)
-  ├── 💬 Chat                     → ProjectChatControl
-  ├── 📋 DDP Commerciali          → DdpCommercialControl
-  └── 📁 Documenti                → DocumentManagerControl (lazy-load, preview)
-```
+Views/Cms/
+  QuoteCatalogPage.xaml/.cs         ← TreeView Gruppi→Categorie + DataGrid prodotti
+  QuoteGroupDialog.xaml/.cs         ← CRUD gruppi
+  QuoteCategoryDialog.xaml/.cs      ← CRUD categorie
+  QuoteProductDialog.xaml/.cs       ← Editor prodotto con griglia varianti inline
+  QuotesListPage.xaml/.cs           ← Lista preventivi con filtri e badge stato
+  NewQuoteDialog.xaml/.cs           ← Dialog creazione con selezione cliente+template
+  QuoteDetailPage.xaml/.cs          ← Dettaglio completo (header+voci+riepilogo+note+PDF)
+  AddQuoteItemDialog.xaml/.cs       ← Aggiunta voci da catalogo con doppio-click
+  Converters/
+    QuoteCatalogConverters.cs       ← Tipo prodotto/contenuto badge
+    QuoteStatusConverters.cs        ← Badge stato preventivo
 
----
+Server/Services/
+  QuoteDbService.cs                 ← DB separato per modulo preventivi (8 tabelle)
+  QuotePdfService.cs                ← Generatore PDF con QuestPDF
 
-## Architettura Relazioni Chiave
-
-### Reparti (centro costo)
-- `departments` → `hourly_cost` + `default_markup`
-- Quando selezioni dipendente nella commessa → precompila €/h e K dal suo reparto
-
-### Sezioni Costo → Reparti
-- `cost_section_template_departments` = quali reparti possono lavorare in quella sezione
-- Filtra i dipendenti visibili nella ComboBox della commessa
-
-### Fasi Template → Sezioni Costo
-- `phase_templates.cost_section_template_id` (many-to-one)
-- Permette confronto preventivo vs consuntivo raggruppando ore timesheet per sezione costo
-
-### In Commessa
-- `project_cost_sections` = copia locale delle sezioni (indipendente dal template)
-- `project_cost_resources` = risorse con ore, €/h, K per riga, campi trasferta
-- `project_material_sections` / `project_material_items` = materiali con K per riga
-- `project_pricing` = percentuali scheda prezzi + K trasferta/indennità
-- Trasferte: costo ore nella sezione risorse (K risorsa), spese viaggio/alloggio/indennità nella sezione materiali (K dedicato)
-
-### Notifiche
-- `notifications` = messaggio unico (type, severity, title, message, reference_type/id, project_id, created_by)
-- `notification_recipients` = N destinatari per notifica (employee_id, is_read, read_at)
-- Retention: lette dopo 5gg, non lette dopo 30gg (configurabile in appsettings.json)
-- Destinatari: PM commessa + ruoli ADMIN/PM + reparto ACQ (escluso chi genera la notifica)
-
-### Flusso Cassa
-- `project_cashflow` = testata (payment_amount, month_count)
-- `project_cashflow_categories` = categorie fornitore CRUD
-- `project_cashflow_data` = unica tabella per tutti i valori mensili (data_type + ref_id + month_number)
-- Catena: timesheet_entries → project_phases → projects (no project_id diretto su timbrature)
-
-### Codex
-- `codex_items` = clone locale di SERVER-CODEX:codex.codici
-- Sync: all'avvio (delay 5s) + ogni 6h + manuale via POST /api/codex/sync
-- Encoding: latin1/utf8mb4 + ConvertZeroDateTime
-
-### Calcolo Prezzo
-```
-Vendita Risorse = Σ (ore × €/h × K) per riga
-Vendita Materiali = Σ (qtà × costo × K) per riga
-Vendita Trasferte = (viaggi + alloggio) × K_trasferta
-Vendita Indennità = indennità × K_indennità
-─────────────────
-NET PRICE = Σ tutto
-+ Costi struttura (%)
-+ Contingency (%)
-+ Rischi & Garanzie (%)
-= OFFER PRICE
-+ Margine trattativa (%)
-= FINAL OFFER PRICE
-```
-
----
-
-## Struttura File
-
-```
-Views/Costing/
-  ProjectCostingControl.xaml/.cs    ← Risorse + materiali + scheda prezzi
-  AddCostSectionDialog.xaml/.cs     ← Dialog aggiungi sezione
-  AddCostGroupDialog.xaml/.cs       ← Dialog aggiungi gruppo
-  Converters/CostingConverters.cs
-  ViewModels/CostingViewModel.cs, CostGroupVM.cs, CostSectionVM.cs,
-             CostResourceVM.cs, MaterialSectionVM.cs, MaterialItemVM.cs
-
-Views/CashFlow/
-  CashFlowControl.xaml/.cs          ← Griglia tipo Excel + grafico OxyPlot
-  VM/CashFlowViewModel.cs           ← CfGridRow, CfRowType, Recalculate(), BuildChart()
-  Converters/CashFlowConverters.cs  ← NegativeToBrush, RowTypeToBg, SepValue, InvertBool, IntAmount, CellForeground
-
-Views/BudgetVsCosting/
-  BudgetVsActualControl.xaml/.cs
-  ViewModels/BvaCostingVM.cs
-
-Views/Codex/
-  CodexPage.xaml/.cs                ← DataGrid 21 filtri + popup colonne + sync status
-
-Views/DashboardPage.xaml/.cs        ← KPI + alarm list notifiche + commesse recenti
-
-Services/
-  NotificationService.cs            ← Create() + NotificationBackgroundService (scadenze + retention)
-  CodexSyncService.cs               ← Sync DB remoto SERVER-CODEX
+Server/Controllers/
+  QuoteCatalogController.cs         ← API catalogo (gruppi, categorie, prodotti, varianti)
+  QuotesController.cs               ← API preventivi (CRUD, items, stati, PDF, stats)
 
 Shared/DTOs/
-  DdpStatusMap                      ← Mappa stati DDP condivisa server/client (in Bom_DTOs.cs)
+  Quote_DTOs.cs                     ← Tutti i DTO del modulo
 ```
 
 ---
@@ -326,15 +313,16 @@ Shared/DTOs/
 - **DockPanel ordering**: `Dock="Right"` prima degli elementi filler in XAML
 - **MySQL + Dapper**: usare `System.Data.IDbConnection/IDbTransaction`, non tipi MySqlConnector
 - **EPPlus 8+**: `ExcelPackage.License.SetNonCommercialOrganization()`
+- **QuestPDF**: `QuestPDF.Settings.License = LicenseType.Community` — gratuito per fatturato < $1M
 - **Cache WPF**: cancellare bin/obj/.vs e Rebuild quando il designer mostra errori namespace fantasma
 - **Expander Content**: un solo figlio — usare StackPanel wrapper se servono più elementi
 - **Naming conflicts**: `System.IO.File` vs `ControllerBase.File()` → fully qualified
 - **DataGrid edit diretto**: TextBox nel CellTemplate con IsReadOnly bindato, niente CellEditingTemplate
 - **DataGrid refresh senza flash**: `decimal[]` con `Items.Refresh()` via Dispatcher
 - **OxyPlot**: RectangleBarSeries per barre verticali, TrackerFormatString su LineSeries, TextAnnotation per valori fissi
-- **OxyPlot tracker**: RectangleBarSeries non supporta tracker standard — usare TextAnnotation
 - **JWT Claims**: usare `ClaimTypes.NameIdentifier` (non custom "employeeId") per GetCurrentEmployeeId()
 - **Codex encoding**: ConvertZeroDateTime=True + CharacterSet=latin1 nella connection string
-- **Column selector**: popup ToggleButton + Popup con CheckBox, preferenze in %AppData%/ATEC_PM/*.json
 - **Notifiche destinatari**: PM commessa + user_role IN ('ADMIN','PM') + reparto ACQ — Remove(currentEmpId)
+- **Stili DataGrid TextBlock**: usare `DgHeaderText` e `DgCellText` (non ModernColumnHeader/ModernCell sui TextBlock)
+- **Snapshot dirty tracking**: serializzare DTO in JSON al load, confrontare alla navigazione — niente eventi TextChanged
 - **L'utente comunica in italiano**
