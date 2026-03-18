@@ -5,7 +5,7 @@
     MinWidth="800"
     Background="#F7F8FA">
     <DockPanel>
-        <!-- TOOLBAR -->
+        <!--  TOOLBAR  -->
         <Border
             Padding="20,15"
             Background="White"
@@ -13,7 +13,7 @@
             BorderThickness="0,0,0,1"
             DockPanel.Dock="Top">
             <DockPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button
                         x:Name="btnBackupNow"
                         Background="#4F6EF7"
@@ -44,7 +44,7 @@
             </DockPanel>
         </Border>
 
-        <!-- INFO BANNER -->
+        <!--  INFO BANNER  -->
         <Border
             Padding="20,10"
             Background="#FFF8E1"
@@ -54,11 +54,11 @@
             <TextBlock
                 FontSize="12"
                 Foreground="#6D4C00"
-                TextWrapping="Wrap"
-                Text="⚠ Il ripristino di un backup sovrascrive TUTTI i dati attuali. Prima di ripristinare viene creato automaticamente un backup di sicurezza." />
+                Text="⚠ Il ripristino di un backup sovrascrive TUTTI i dati attuali. Prima di ripristinare viene creato automaticamente un backup di sicurezza."
+                TextWrapping="Wrap" />
         </Border>
 
-        <!-- STATUS BAR -->
+        <!--  STATUS BAR  -->
         <Border
             Padding="20,10"
             Background="White"
@@ -72,7 +72,7 @@
                 Text="Pronto" />
         </Border>
 
-        <!-- DATAGRID -->
+        <!--  DATAGRID  -->
         <DataGrid
             x:Name="dgBackups"
             Margin="20"
@@ -110,7 +110,7 @@
                 <DataGridTemplateColumn Width="280" Header="Azioni">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
                                 <Button
                                     Margin="0,0,8,0"
                                     Padding="10,5"

@@ -933,13 +933,16 @@ public partial class ProjectCostingControl : UserControl
     {
         _vm.StatusText = message;
 
-        // Timer per cancellare il messaggio
         var timer = new System.Timers.Timer(durationMs);
         timer.Elapsed += (s, e) =>
         {
-            Dispatcher.Invoke(() => { if (_vm.StatusText == message) _vm.StatusText = ""; });
             timer.Stop();
             timer.Dispose();
+            try
+            {
+                Dispatcher.BeginInvoke(() => { if (_vm.StatusText == message) _vm.StatusText = ""; });
+            }
+            catch (TaskCanceledException) { }
         };
         timer.Start();
     }
@@ -983,44 +986,6 @@ public partial class ProjectCostingControl : UserControl
         finally
         {
             _vm.StatusText = "";
-        }
-    }
-    private async void BtnSaveAll_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            _vm.StatusText = "Salvataggio in corso...";
-
-            // Salva markups
-            await SavePricingMarkups();
-
-            // Salva tutte le risorse modificate
-            foreach (var group in _vm.Groups)
-            {
-                foreach (var section in group.Sections)
-                {
-                    foreach (var resource in section.Resources.Where(r => r.IsDirty))
-                    {
-                        await SaveResource(resource);
-                    }
-                }
-            }
-
-            // Salva tutti i materiali modificati
-            foreach (var section in _vm.MaterialSections)
-            {
-                foreach (var item in section.Items.Where(i => i.IsDirty))
-                {
-                    await SaveMaterialItem(item);
-                }
-            }
-
-            _vm.StatusText = "Salvataggio completato";
-            ShowTemporaryMessage("✓ Tutto salvato", 2000);
-        }
-        catch (Exception ex)
-        {
-            ShowError("Errore salvataggio", ex.Message);
         }
     }
 

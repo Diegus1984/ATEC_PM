@@ -18,6 +18,5 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Views\BudgetVsCosting\Converters\" />
-    <Folder Include="Views\Costing\Styles\" />
   </ItemGroup>
 </Project>

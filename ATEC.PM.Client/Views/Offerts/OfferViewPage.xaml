@@ -11,14 +11,14 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- LEFT: Offer Header -->
+        <!--  LEFT: Offer Header  -->
         <Border
             Grid.Column="0"
             Background="White"
             BorderBrush="#E4E7EC"
             BorderThickness="0,0,1,0">
             <DockPanel>
-                <!-- Offer Header -->
+                <!--  Offer Header  -->
                 <Border
                     Padding="16,14"
                     Background="#1A1D26"
@@ -69,7 +69,7 @@
                                 Text="" />
                         </Border>
 
-                        <!-- Link commessa (se convertita) -->
+                        <!--  Link commessa (se convertita)  -->
                         <TextBlock
                             x:Name="txtConvertedLink"
                             Margin="0,6,0,0"
@@ -80,7 +80,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Azioni -->
+                <!--  Azioni  -->
                 <Border
                     Padding="12,8"
                     BorderBrush="#E4E7EC"
@@ -172,7 +172,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Back button -->
+                <!--  Back button  -->
                 <Border
                     Padding="12,8"
                     BorderBrush="#E4E7EC"
@@ -189,14 +189,12 @@
                         Foreground="#374151" />
                 </Border>
 
-                <!-- Spacer -->
+                <!--  Spacer  -->
                 <Border />
             </DockPanel>
         </Border>
 
-        <!-- RIGHT: Costing Control -->
-        <costing:ProjectCostingControl
-            x:Name="costingControl"
-            Grid.Column="1" />
+        <!--  RIGHT: Costing Control  -->
+        <costing:ProjectCostingControl x:Name="costingControl" Grid.Column="1" />
     </Grid>
 </Page>

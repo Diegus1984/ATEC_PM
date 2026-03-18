@@ -18,9 +18,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Cliente -->
+        <!--  Cliente  -->
         <StackPanel Grid.Row="0">
-            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#374151" Text="Cliente *" />
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Cliente *" />
             <ComboBox
                 x:Name="cmbCustomer"
                 Height="32"
@@ -31,9 +35,13 @@
                 SelectedValuePath="Id" />
         </StackPanel>
 
-        <!-- Titolo -->
+        <!--  Titolo  -->
         <StackPanel Grid.Row="1" Margin="0,12,0,0">
-            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#374151" Text="Titolo *" />
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Titolo *" />
             <TextBox
                 x:Name="txtTitle"
                 Height="32"
@@ -43,9 +51,13 @@
                 FontSize="13" />
         </StackPanel>
 
-        <!-- Descrizione -->
+        <!--  Descrizione  -->
         <StackPanel Grid.Row="2" Margin="0,12,0,0">
-            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#374151" Text="Descrizione" />
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Descrizione" />
             <TextBox
                 x:Name="txtDescription"
                 Height="60"
@@ -58,7 +70,7 @@
                 VerticalScrollBarVisibility="Auto" />
         </StackPanel>
 
-        <!-- Buttons -->
+        <!--  Buttons  -->
         <StackPanel
             Grid.Row="4"
             Margin="0,16,0,0"

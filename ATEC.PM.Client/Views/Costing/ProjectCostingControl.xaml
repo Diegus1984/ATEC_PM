@@ -9,128 +9,13 @@
     FontFamily="Segoe UI">
 
     <UserControl.Resources>
-        <!--  Shadow Effects  -->
-        <DropShadowEffect
-            x:Key="CardShadow"
-            BlurRadius="8"
-            Direction="270"
-            Opacity="0.1"
-            ShadowDepth="2"
-            Color="#AAAAAA" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/ATEC.PM.Client;component/Views/Costing/Styles/ProjectCostingStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
-        <!--  ========== STILI GLOBALI ==========  -->
-
-        <!--  Stile TextBox Numerico  -->
-        <Style x:Key="NumericTextBox" TargetType="TextBox">
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="#E4E7EC" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="Padding" Value="4,2" />
-            <Setter Property="HorizontalContentAlignment" Value="Right" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="Foreground" Value="#1A1D26" />
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="#9CA3AF" />
-                </Trigger>
-                <Trigger Property="IsFocused" Value="True">
-                    <Setter Property="BorderBrush" Value="#4F6EF7" />
-                    <Setter Property="BorderThickness" Value="2" />
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#F3F4F6" />
-                    <Setter Property="Foreground" Value="#9CA3AF" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!--  Stile Pulsante Principale  -->
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#4F6EF7" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3B5FDF" />
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#2A4ABF" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!--  Stile Pulsante Secondario  -->
-        <Style
-            x:Key="SecondaryButton"
-            BasedOn="{StaticResource PrimaryButton}"
-            TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="#4F6EF7" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="#4F6EF7" />
-        </Style>
-
-        <!--  Stile DataGrid Columns  -->
-        <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#F9FAFB" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-        </Style>
-
-        <Style x:Key="CostingCell" TargetType="DataGridCell">
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Padding" Value="4,0" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#4F6EF720" />
-                    <Setter Property="BorderBrush" Value="#4F6EF7" />
-                    <Setter Property="BorderThickness" Value="0,0,0,2" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!--  Stile ComboBox  -->
-        <Style x:Key="InlineComboBox" TargetType="ComboBox">
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Padding" Value="4,2" />
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#F3F4F6" />
-                </Trigger>
-                <Trigger Property="IsDropDownOpen" Value="True">
-                    <Setter Property="Background" Value="White" />
-                    <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="BorderBrush" Value="#4F6EF7" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
+        
         <!--  ========== DATA TEMPLATES ==========  -->
-
         <DataTemplate x:Key="DeleteButtonTemplate">
             <Button
                 Width="20"
@@ -803,6 +688,7 @@
                 </DataGrid.Columns>
             </DataGrid>
         </DataTemplate>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <!--  ========== LAYOUT PRINCIPALE ==========  -->
@@ -834,16 +720,6 @@
                         FontSize="12"
                         Foreground="#6B7280"
                         Text="{Binding StatusText}" />
-                </StackPanel>
-
-                <!--  Azioni rapide  -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button
-                        Padding="10,4"
-                        Click="BtnSaveAll_Click"
-                        Content="💾 Salva"
-                        Style="{StaticResource PrimaryButton}"
-                        Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </Grid>
         </Border>
