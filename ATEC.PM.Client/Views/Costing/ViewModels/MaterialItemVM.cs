@@ -35,6 +35,19 @@ public class MaterialItemVM : INotifyPropertyChanged
     public decimal TotalCost => Quantity * UnitCost;
     public decimal TotalSale => Quantity * UnitCost * MarkupValue;
 
+    // Distribuzione prezzi (solo offerta)
+    private decimal _contingencyPct;
+    public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; Notify(); } }
+
+    private decimal _marginPct;
+    public decimal MarginPct { get => _marginPct; set { _marginPct = value; Notify(); } }
+
+    private bool _isContingencyPinned;
+    public bool IsContingencyPinned { get => _isContingencyPinned; set { _isContingencyPinned = value; Notify(); } }
+
+    private bool _isMarginPinned;
+    public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; Notify(); } }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

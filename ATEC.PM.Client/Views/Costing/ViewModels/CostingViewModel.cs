@@ -392,9 +392,19 @@ public class CostingViewModel : INotifyPropertyChanged
 
 public class DistributionRowVM : INotifyPropertyChanged
 {
+    /// "R" = sezione risorse, "M" = item materiale
+    public string RowType { get; set; } = "R";
     public int SectionId { get; set; }
-    public string SectionName { get; set; } = "";
-    public decimal SaleAmount { get; set; }
+    /// Per material items: MaterialItemVM.Id
+    public int ItemId { get; set; }
+    public string TypeBadge => RowType == "M" ? "M" : "R";
+    public string TypeBadgeColor => RowType == "M" ? "#7C3AED" : "#2563EB";
+
+    private string _sectionName = "";
+    public string SectionName { get => _sectionName; set { _sectionName = value; Notify(); } }
+
+    private decimal _saleAmount;
+    public decimal SaleAmount { get => _saleAmount; set { _saleAmount = value; Notify(); } }
 
     private decimal _contingencyPct;
     public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; Notify(); } }
