@@ -1768,6 +1768,7 @@
                                 <!--  Header  -->
                                 <Grid Height="28" Background="#F9FAFB">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="25" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="25" />
@@ -1778,77 +1779,22 @@
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="110" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock
-                                        Grid.Column="0"
-                                        Margin="10,0"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#6B7280"
-                                        Text="SEZIONE" />
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#6B7280"
-                                        Text="VENDITA" />
-                                    <TextBlock
-                                        Grid.Column="3"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#D97706"
-                                        Text="CONT %" />
-                                    <TextBlock
-                                        Grid.Column="4"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#D97706"
-                                        Text="CONT €" />
-                                    <TextBlock
-                                        Grid.Column="6"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#7C3AED"
-                                        Text="MARG %" />
-                                    <TextBlock
-                                        Grid.Column="7"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#7C3AED"
-                                        Text="MARG €" />
-                                    <TextBlock
-                                        Grid.Column="8"
-                                        Margin="0,0,8,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="Bold"
-                                        Foreground="#1A1D26"
-                                        Text="TOTALE SEZ." />
+                                    <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE" />
+                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VENDITA" />
+                                    <TextBlock Grid.Column="4" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT %" />
+                                    <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT €" />
+                                    <TextBlock Grid.Column="7" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG %" />
+                                    <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG €" />
+                                    <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE SEZ." />
                                 </Grid>
                                 <!--  Rows  -->
                                 <ItemsControl ItemsSource="{Binding DistributionRows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border
-                                                Padding="0,3"
-                                                BorderBrush="#F3F4F6"
-                                                BorderThickness="0,0,0,1">
+                                            <Border Padding="0,3" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="25" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="100" />
                                                         <ColumnDefinition Width="25" />
@@ -1859,82 +1805,26 @@
                                                         <ColumnDefinition Width="100" />
                                                         <ColumnDefinition Width="110" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock
-                                                        Grid.Column="0"
-                                                        Margin="10,0"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="11"
-                                                        Foreground="#1A1D26"
-                                                        Text="{Binding SectionName}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock
-                                                        Grid.Column="1"
-                                                        Margin="0,0,8,0"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="11"
-                                                        Foreground="#6B7280">
+                                                    <!-- Badge R/M -->
+                                                    <Border Grid.Column="0" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            Background="{Binding TypeBadgeColor, Converter={StaticResource HexToAlphaBrush}, ConverterParameter=30}" CornerRadius="2">
+                                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="9" FontWeight="Bold"
+                                                                   Foreground="{Binding TypeBadgeColor, Converter={StaticResource HexToBrush}}" Text="{Binding TypeBadge}" />
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="11" Foreground="#1A1D26" Text="{Binding SectionName}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#6B7280">
                                                         <Run Text="{Binding SaleAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <!--  Contingency pin + editable %  -->
-                                                    <TextBlock
-                                                        Grid.Column="2"
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="10"
-                                                        Text="{Binding ContingencyPinIcon, Mode=OneWay}"
-                                                        ToolTip="Bloccato manualmente" />
-                                                    <TextBox
-                                                        Grid.Column="3"
-                                                        Height="22"
-                                                        Foreground="#D97706"
-                                                        GotFocus="MarkupTextBox_GotFocus"
-                                                        KeyDown="DistPct_KeyDown"
-                                                        LostFocus="DistPct_LostFocus"
-                                                        Style="{StaticResource NumericTextBox}"
-                                                        Tag="contingency"
-                                                        Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                                                    <TextBlock
-                                                        Grid.Column="4"
-                                                        Margin="0,0,8,0"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="11"
-                                                        Foreground="#D97706">
+                                                    <TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding ContingencyPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
+                                                    <TextBox Grid.Column="4" Height="22" Foreground="#D97706" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
+                                                             Style="{StaticResource NumericTextBox}" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                    <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#D97706">
                                                         <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <!--  Margin pin + editable %  -->
-                                                    <TextBlock
-                                                        Grid.Column="5"
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="10"
-                                                        Text="{Binding MarginPinIcon, Mode=OneWay}"
-                                                        ToolTip="Bloccato manualmente" />
-                                                    <TextBox
-                                                        Grid.Column="6"
-                                                        Height="22"
-                                                        Foreground="#7C3AED"
-                                                        GotFocus="MarkupTextBox_GotFocus"
-                                                        KeyDown="DistPct_KeyDown"
-                                                        LostFocus="DistPct_LostFocus"
-                                                        Style="{StaticResource NumericTextBox}"
-                                                        Tag="margin"
-                                                        Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
-                                                    <TextBlock
-                                                        Grid.Column="7"
-                                                        Margin="0,0,8,0"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="11"
-                                                        Foreground="#7C3AED">
+                                                    <TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding MarginPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
+                                                    <TextBox Grid.Column="7" Height="22" Foreground="#7C3AED" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
+                                                             Style="{StaticResource NumericTextBox}" Tag="margin" Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                    <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7C3AED">
                                                         <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <TextBlock
-                                                        Grid.Column="8"
-                                                        Margin="0,0,8,0"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="11"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="#1A1D26">
+                                                    <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" Foreground="#1A1D26">
                                                         <Run Text="{Binding SectionTotal, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                 </Grid>
                                             </Border>
@@ -1942,13 +1832,10 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <!--  Footer  -->
-                                <Border
-                                    Padding="0,5"
-                                    Background="#F3F4F6"
-                                    BorderBrush="#E4E7EC"
-                                    BorderThickness="0,1,0,0">
+                                <Border Padding="0,5" Background="#F3F4F6" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="25" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="100" />
                                             <ColumnDefinition Width="25" />
@@ -1959,49 +1846,14 @@
                                             <ColumnDefinition Width="100" />
                                             <ColumnDefinition Width="110" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock
-                                            Grid.Column="0"
-                                            Margin="10,0"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            FontWeight="Bold"
-                                            Foreground="#1A1D26"
-                                            Text="TOTALE" />
-                                        <TextBlock
-                                            Grid.Column="1"
-                                            Margin="0,0,8,0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            FontWeight="Bold"
-                                            Foreground="#1A1D26">
+                                        <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE" />
+                                        <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26">
                                             <Run Text="{Binding TotalCombinedSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock
-                                            Grid.Column="4"
-                                            Margin="0,0,8,0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            FontWeight="Bold"
-                                            Foreground="#D97706">
+                                        <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#D97706">
                                             <Run Text="{Binding TotalDistContingencyCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock
-                                            Grid.Column="7"
-                                            Margin="0,0,8,0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            FontWeight="Bold"
-                                            Foreground="#7C3AED">
+                                        <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#7C3AED">
                                             <Run Text="{Binding TotalDistMarginCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock
-                                            Grid.Column="8"
-                                            Margin="0,0,8,0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            FontWeight="Bold"
-                                            Foreground="#059669">
+                                        <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#059669">
                                             <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                     </Grid>
                                 </Border>

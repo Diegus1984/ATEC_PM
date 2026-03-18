@@ -126,8 +126,12 @@ public class CostingViewModel : INotifyPropertyChanged
 
     // Distribuzione per sezione: importi contingency/margine calcolati dalle % sezione
     // (le % sono editabili nelle righe sezione, qui esponiamo gli importi calcolati)
-    public decimal TotalDistContingencyCheck => Groups.SelectMany(g => g.Sections).Sum(s => s.ContingencyPct * ContingencyAmount);
-    public decimal TotalDistMarginCheck => Groups.SelectMany(g => g.Sections).Sum(s => s.MarginPct * NegotiationMarginAmount);
+    public decimal TotalDistContingencyCheck =>
+        Groups.SelectMany(g => g.Sections).Sum(s => s.ContingencyPct * ContingencyAmount) +
+        MaterialSections.SelectMany(s => s.Items).Sum(i => i.ContingencyPct * ContingencyAmount);
+    public decimal TotalDistMarginCheck =>
+        Groups.SelectMany(g => g.Sections).Sum(s => s.MarginPct * NegotiationMarginAmount) +
+        MaterialSections.SelectMany(s => s.Items).Sum(i => i.MarginPct * NegotiationMarginAmount);
 
     // Tabella distribuzione per sezione
     public ObservableCollection<DistributionRowVM> DistributionRows { get; set; } = new();

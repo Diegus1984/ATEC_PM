@@ -218,9 +218,7 @@ public partial class ProjectCostingControl : UserControl
 
             // Salva su DB
             await SavePricingMarkups();
-            var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
-            foreach (var s in allSections)
-                await SaveSectionDistribution(s);
+            await SaveAllDistributions();
 
             ShowTemporaryMessage("Percentuale aggiornata e distribuzione ricalcolata");
         }
@@ -740,7 +738,8 @@ public partial class ProjectCostingControl : UserControl
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
         var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
-        decimal totalSale = allSections.Sum(s => s.TotalSale);
+        var allMatItems = _vm.MaterialSections.SelectMany(s => s.Items).ToList();
+        decimal totalSale = allSections.Sum(s => s.TotalSale) + allMatItems.Sum(i => i.TotalSale);
 
         if (totalSale == 0)
         {
@@ -762,6 +761,16 @@ public partial class ProjectCostingControl : UserControl
                 sec.IsContingencyPinned = false;
                 sec.IsMarginPinned = false;
                 await SaveSectionDistribution(sec);
+            }
+
+            foreach (var item in allMatItems)
+            {
+                decimal weight = Math.Round(item.TotalSale / totalSale, 4);
+                item.ContingencyPct = weight;
+                item.MarginPct = weight;
+                item.IsContingencyPinned = false;
+                item.IsMarginPinned = false;
+                await SaveMaterialItemDistribution(item);
             }
 
             _vm.RecalcGrandTotals();
@@ -795,41 +804,68 @@ public partial class ProjectCostingControl : UserControl
 
         string field = tb.Tag?.ToString() ?? "";
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
-
-        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val))
-            return;
-
+        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
         if (val > 1m) val /= 100m;
 
-        // Trova la sezione corrispondente
-        CostSectionVM? sec = FindSection(distRow.SectionId);
-        if (sec == null) return;
-
-        decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
-        if (val == oldVal) return;
-
-        // Applica il valore e pinna
-        if (field == "contingency")
+        if (distRow.RowType == "R")
         {
-            sec.ContingencyPct = val;
-            sec.IsContingencyPinned = true;
+            CostSectionVM? sec = FindSection(distRow.SectionId);
+            if (sec == null) return;
+            decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
+            if (val == oldVal) return;
+            if (field == "contingency") { sec.ContingencyPct = val; sec.IsContingencyPinned = true; }
+            else { sec.MarginPct = val; sec.IsMarginPinned = true; }
         }
-        else
+        else // "M"
         {
-            sec.MarginPct = val;
-            sec.IsMarginPinned = true;
+            MaterialItemVM? item = FindMaterialItem(distRow.ItemId);
+            if (item == null) return;
+            decimal oldVal = field == "contingency" ? item.ContingencyPct : item.MarginPct;
+            if (val == oldVal) return;
+            if (field == "contingency") { item.ContingencyPct = val; item.IsContingencyPinned = true; }
+            else { item.MarginPct = val; item.IsMarginPinned = true; }
         }
 
-        // Ribilancia le non-pinned
         _vm.RebalanceUnpinned(field);
-
-        // Salva tutte le sezioni
-        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
-        foreach (var s in allSections)
-            await SaveSectionDistribution(s);
-
+        await SaveAllDistributions();
         _vm.RecalcGrandTotals();
-        ShowTemporaryMessage("Distribuzione aggiornata — sezione bloccata 🔒");
+        ShowTemporaryMessage("Distribuzione aggiornata — bloccata 🔒");
+    }
+
+    private MaterialItemVM? FindMaterialItem(int itemId)
+    {
+        foreach (var ms in _vm.MaterialSections)
+        {
+            var item = ms.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item != null) return item;
+        }
+        return null;
+    }
+
+    /// <summary>Salva distribuzione di tutte le sezioni + tutti i material items.</summary>
+    private async Task SaveAllDistributions()
+    {
+        foreach (var s in _vm.Groups.SelectMany(g => g.Sections))
+            await SaveSectionDistribution(s);
+        foreach (var item in _vm.MaterialSections.SelectMany(ms => ms.Items))
+            await SaveMaterialItemDistribution(item);
+    }
+
+    private async Task SaveMaterialItemDistribution(MaterialItemVM item)
+    {
+        try
+        {
+            var req = new
+            {
+                contingencyPct = item.ContingencyPct,
+                marginPct = item.MarginPct,
+                contingencyPinned = item.IsContingencyPinned,
+                marginPinned = item.IsMarginPinned
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"{_apiBasePath}/material-items/{item.Id}/distribution", json);
+        }
+        catch (Exception ex) { ShowError("Errore salvataggio distribuzione materiale", ex.Message); }
     }
 
     private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)
