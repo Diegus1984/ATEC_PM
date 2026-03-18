@@ -735,6 +735,10 @@ public class DbService
 
         ApplyMigrations(c);
 
+        // Modulo Preventivi/Catalogo
+        new QuoteDbService(this).InitTables(c);
+        new QuoteDbService(this).ApplyMigrations(c);
+
         Console.WriteLine("[DB] Inizializzato.");
     }
 
