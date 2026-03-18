@@ -201,7 +201,9 @@ public class ProjectCostingController : ControllerBase
             SELECT i.id, i.section_id AS SectionId, i.description AS Description,
                    i.quantity AS Quantity, i.unit_cost AS UnitCost,
                    i.markup_value AS MarkupValue, i.item_type AS ItemType,
-                   i.sort_order AS SortOrder
+                   i.sort_order AS SortOrder,
+                   i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
+                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned
             FROM project_material_items i
             JOIN project_material_sections s ON s.id = i.section_id
             WHERE s.project_id=@projectId ORDER BY i.sort_order",

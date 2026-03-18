@@ -758,6 +758,15 @@ public class DbService
         AddColumnIfMissing(c, "project_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
         AddColumnIfMissing(c, "project_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
         AddColumnIfMissing(c, "project_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
+        // Material items distribution
+        AddColumnIfMissing(c, "offer_material_items", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER sort_order");
+        AddColumnIfMissing(c, "offer_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
+        AddColumnIfMissing(c, "offer_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
+        AddColumnIfMissing(c, "offer_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
+        AddColumnIfMissing(c, "project_material_items", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER sort_order");
+        AddColumnIfMissing(c, "project_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
+        AddColumnIfMissing(c, "project_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
+        AddColumnIfMissing(c, "project_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
