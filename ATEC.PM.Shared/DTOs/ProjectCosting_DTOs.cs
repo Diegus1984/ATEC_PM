@@ -101,8 +101,12 @@ public class ProjectMaterialItemDto
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
-    public string ItemType { get; set; } = "MATERIAL"; // MATERIAL o COMMISSION
+    public string ItemType { get; set; } = "MATERIAL";
     public int SortOrder { get; set; }
+    public decimal ContingencyPct { get; set; }
+    public decimal MarginPct { get; set; }
+    public bool ContingencyPinned { get; set; }
+    public bool MarginPinned { get; set; }
     public decimal TotalCost => Quantity * UnitCost;
     public decimal TotalSale => Quantity * UnitCost * MarkupValue;
 }

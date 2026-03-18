@@ -437,7 +437,11 @@ public class CostingViewModel : INotifyPropertyChanged
                     Quantity = item.Quantity,
                     UnitCost = item.UnitCost,
                     MarkupValue = item.MarkupValue,
-                    ItemType = item.ItemType
+                    ItemType = item.ItemType,
+                    ContingencyPct = item.ContingencyPct,
+                    MarginPct = item.MarginPct,
+                    IsContingencyPinned = item.ContingencyPinned,
+                    IsMarginPinned = item.MarginPinned
                 });
             }
 
