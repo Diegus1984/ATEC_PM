@@ -821,19 +821,19 @@ public partial class ProjectCostingControl : UserControl
         {
             CostSectionVM? sec = FindSection(distRow.SectionId);
             if (sec == null) return;
-            decimal oldVal = field == "contingency" ? sec.ContingencyPct : sec.MarginPct;
-            if (val == oldVal) return;
-            if (field == "contingency") { sec.ContingencyPct = val; sec.IsContingencyPinned = true; }
-            else { sec.MarginPct = val; sec.IsMarginPinned = true; }
+            sec.ContingencyPct = field == "contingency" ? val : sec.ContingencyPct;
+            sec.MarginPct = field == "margin" ? val : sec.MarginPct;
+            if (field == "contingency") sec.IsContingencyPinned = true;
+            else sec.IsMarginPinned = true;
         }
-        else // "M"
+        else
         {
             MaterialItemVM? item = FindMaterialItem(distRow.ItemId);
             if (item == null) return;
-            decimal oldVal = field == "contingency" ? item.ContingencyPct : item.MarginPct;
-            if (val == oldVal) return;
-            if (field == "contingency") { item.ContingencyPct = val; item.IsContingencyPinned = true; }
-            else { item.MarginPct = val; item.IsMarginPinned = true; }
+            item.ContingencyPct = field == "contingency" ? val : item.ContingencyPct;
+            item.MarginPct = field == "margin" ? val : item.MarginPct;
+            if (field == "contingency") item.IsContingencyPinned = true;
+            else item.IsMarginPinned = true;
         }
 
         _vm.RebalanceUnpinned(field);

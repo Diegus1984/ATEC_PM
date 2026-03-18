@@ -139,6 +139,7 @@
                 BorderThickness="0"
                 Click="BtnDeleteResource_Click"
                 Cursor="Hand"
+                Tag="{Binding Id}"
                 ToolTip="Elimina risorsa">
                 <TextBlock
                     FontSize="9"
@@ -156,6 +157,7 @@
                 BorderThickness="0"
                 Click="BtnDeleteMaterialItem_Click"
                 Cursor="Hand"
+                Tag="{Binding Id}"
                 ToolTip="Elimina materiale">
                 <TextBlock
                     FontSize="9"
