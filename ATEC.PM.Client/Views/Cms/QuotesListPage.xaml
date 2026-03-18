@@ -1,0 +1,186 @@
+<Page
+    x:Class="ATEC.PM.Client.Views.Quotes.QuotesListPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
+
+    <DockPanel>
+        <!-- TOOLBAR -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="btnNew" Content="+ Crea Preventivo"
+                            Style="{StaticResource PrimaryBtn}" Margin="0,0,12,0"
+                            Click="BtnNew_Click" />
+                    <Button x:Name="btnDuplicate" Content="Duplica"
+                            Style="{StaticResource FlatBtn}" Margin="0,0,8,0"
+                            IsEnabled="False" Click="BtnDuplicate_Click" />
+                    <Button x:Name="btnDelete" Content="Elimina"
+                            Style="{StaticResource FlatBtn}" Foreground="#B42318"
+                            IsEnabled="False" Click="BtnDelete_Click" />
+                    <Rectangle Width="1" Fill="#E4E7EC" Margin="12,2" />
+                    <Button Content="Aggiorna" Style="{StaticResource GhostBtn}"
+                            Click="BtnRefresh_Click" />
+                </StackPanel>
+
+                <!-- Filtri a destra -->
+                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <TextBlock Text="Stato:" VerticalAlignment="Center"
+                               FontSize="12" Foreground="#6B7280" Margin="0,0,6,0" />
+                    <ComboBox x:Name="cmbStatusFilter" Width="140" Height="32" FontSize="12"
+                              SelectionChanged="StatusFilter_Changed">
+                        <ComboBoxItem Content="Tutti" Tag="" IsSelected="True" />
+                        <ComboBoxItem Content="Bozza" Tag="draft" />
+                        <ComboBoxItem Content="Inviato" Tag="sent" />
+                        <ComboBoxItem Content="In trattativa" Tag="negotiation" />
+                        <ComboBoxItem Content="Accettato" Tag="accepted" />
+                        <ComboBoxItem Content="Rifiutato" Tag="rejected" />
+                        <ComboBoxItem Content="Convertito" Tag="converted" />
+                    </ComboBox>
+                    <TextBox x:Name="txtSearch" Width="200" Height="32" FontSize="12"
+                             Margin="12,0,0,0" Style="{StaticResource ModernTextBox}"
+                             TextChanged="TxtSearch_Changed" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- STATUS BAR -->
+        <Border DockPanel.Dock="Bottom" Background="White"
+                BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,6">
+            <TextBlock x:Name="txtStatus" Text="Caricamento..."
+                       FontSize="11" Foreground="#6B7280" />
+        </Border>
+
+        <!-- DATAGRID -->
+        <DataGrid x:Name="dgQuotes"
+                  Style="{StaticResource ModernDataGrid}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionMode="Single"
+                  SelectionChanged="DgQuotes_SelectionChanged"
+                  MouseDoubleClick="DgQuotes_DoubleClick">
+            <DataGrid.Columns>
+                <!-- Numero -->
+                <DataGridTemplateColumn Width="140" SortMemberPath="QuoteNumber">
+                    <DataGridTemplateColumn.Header>
+                        <StackPanel>
+                            <TextBlock Text="NUMERO" Style="{StaticResource DgHeaderText}" />
+                            <TextBox Tag="QuoteNumber" Style="{StaticResource HeaderSearchBox}"
+                                     TextChanged="Filter_Changed" Loaded="Filter_Loaded" />
+                        </StackPanel>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding QuoteNumber}" Style="{StaticResource DgCellText}"
+                                       FontWeight="SemiBold" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Data -->
+                <DataGridTemplateColumn Width="90" SortMemberPath="CreatedAt">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="DATA" Style="{StaticResource DgHeaderText}" />
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding CreatedAt, StringFormat=dd/MM/yyyy}"
+                                       Style="{StaticResource DgCellText}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Cliente -->
+                <DataGridTemplateColumn Width="*" MinWidth="160" SortMemberPath="CustomerName">
+                    <DataGridTemplateColumn.Header>
+                        <StackPanel>
+                            <TextBlock Text="CLIENTE" Style="{StaticResource DgHeaderText}" />
+                            <TextBox Tag="CustomerName" Style="{StaticResource HeaderSearchBox}"
+                                     TextChanged="Filter_Changed" Loaded="Filter_Loaded" />
+                        </StackPanel>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding CustomerName}" Style="{StaticResource DgCellText}"
+                                       Foreground="#2563EB" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Titolo -->
+                <DataGridTemplateColumn Width="*" MinWidth="200" SortMemberPath="Title">
+                    <DataGridTemplateColumn.Header>
+                        <StackPanel>
+                            <TextBlock Text="TITOLO" Style="{StaticResource DgHeaderText}" />
+                            <TextBox Tag="Title" Style="{StaticResource HeaderSearchBox}"
+                                     TextChanged="Filter_Changed" Loaded="Filter_Loaded" />
+                        </StackPanel>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource DgCellText}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Totale -->
+                <DataGridTemplateColumn Width="110" SortMemberPath="Total">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="TOTALE" Style="{StaticResource DgHeaderText}" />
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Total, StringFormat='{}{0:N2}€'}"
+                                       Style="{StaticResource DgCellText}" FontWeight="SemiBold" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Utile -->
+                <DataGridTemplateColumn Width="110" SortMemberPath="Profit">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="UTILE" Style="{StaticResource DgHeaderText}" />
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Profit, StringFormat='{}{0:N2}€'}"
+                                       Style="{StaticResource DgCellText}" FontWeight="Bold"
+                                       Foreground="#16A34A" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Stato -->
+                <DataGridTemplateColumn Width="120" SortMemberPath="Status">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="STATO" Style="{StaticResource DgHeaderText}" />
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border x:Name="statusBorder" CornerRadius="4" Padding="8,3"
+                                    HorizontalAlignment="Left"
+                                    Background="{Binding Status, Converter={StaticResource QuoteStatusToBgConverter}}">
+                                <TextBlock Text="{Binding Status, Converter={StaticResource QuoteStatusToLabelConverter}}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{Binding Status, Converter={StaticResource QuoteStatusToFgConverter}}" />
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Agente -->
+                <DataGridTemplateColumn Width="120" SortMemberPath="CreatedByName">
+                    <DataGridTemplateColumn.Header>
+                        <TextBlock Text="AGENTE" Style="{StaticResource DgHeaderText}" />
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding CreatedByName}" Style="{StaticResource DgCellText}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Page>

@@ -132,6 +132,11 @@
                         Tag="CatalogoPreventivi" />
                     <Button
                         Click="Nav_Click"
+                        Content="  Preventivi"
+                        Style="{StaticResource NavBtn}"
+                        Tag="Preventivi" />
+                    <Button
+                        Click="Nav_Click"
                         Content="  Timesheet"
                         Style="{StaticResource NavBtn}"
                         Tag="Timesheet" />

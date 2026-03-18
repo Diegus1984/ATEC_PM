@@ -1,0 +1,341 @@
+<Page
+    x:Class="ATEC.PM.Client.Views.Quotes.QuoteDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
+
+    <DockPanel>
+        <!-- TOP BAR -->
+        <Border DockPanel.Dock="Top" Background="White"
+                BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="20,10">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="← Lista" Style="{StaticResource GhostBtn}"
+                            Click="BtnBack_Click" Margin="0,0,16,0" />
+                    <TextBlock x:Name="txtQuoteNumber" FontSize="18" FontWeight="Bold"
+                               Foreground="#1A1D26" VerticalAlignment="Center" />
+                    <Border x:Name="brdStatus" CornerRadius="4" Padding="10,4"
+                            Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="txtStatus" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <Button x:Name="btnSave" Content="💾 Salva" Style="{StaticResource PrimaryBtn}"
+                            Click="BtnSave_Click" Margin="0,0,8,0" />
+                    <Button x:Name="btnAddItem" Content="+ Aggiungi al preventivo"
+                            Style="{StaticResource FlatBtn}" Background="#16A34A" Foreground="White"
+                            Click="BtnAddItem_Click" Margin="0,0,8,0" />
+                    <ComboBox x:Name="cmbChangeStatus" Width="140" Height="32" FontSize="12"
+                              SelectionChanged="CmbChangeStatus_Changed">
+                        <ComboBoxItem Content="Cambia stato..." Tag="" IsSelected="True" />
+                        <ComboBoxItem Content="→ Inviato" Tag="sent" />
+                        <ComboBoxItem Content="→ In trattativa" Tag="negotiation" />
+                        <ComboBoxItem Content="→ Accettato" Tag="accepted" />
+                        <ComboBoxItem Content="→ Rifiutato" Tag="rejected" />
+                        <ComboBoxItem Content="→ Bozza" Tag="draft" />
+                    </ComboBox>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- MAIN CONTENT -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20">
+
+                <!-- ══════════════════════════════════════ -->
+                <!-- HEADER PREVENTIVO                     -->
+                <!-- ══════════════════════════════════════ -->
+                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
+                        CornerRadius="6" Padding="20" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+
+                        <!-- Row 0 -->
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                            <TextBlock Text="Titolo *" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtTitle" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,12">
+                            <TextBlock Text="Cliente" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBlock x:Name="txtCustomer" FontSize="13" Foreground="#2563EB"
+                                       FontWeight="SemiBold" Padding="0,8" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,12">
+                            <TextBlock Text="Template" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBlock x:Name="txtGroupName" FontSize="13" Foreground="#374151"
+                                       Padding="0,8" />
+                        </StackPanel>
+
+                        <!-- Row 1 -->
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,12">
+                            <TextBlock Text="Referente 1" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtContact1" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,12,12">
+                            <TextBlock Text="Referente 2" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtContact2" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,12">
+                            <TextBlock Text="Referente 3" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtContact3" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+
+                        <!-- Row 2 -->
+                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="Tempi consegna (gg)" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtDeliveryDays" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,12,0">
+                            <TextBlock Text="Validità offerta (gg)" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtValidityDays" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,0">
+                            <TextBlock Text="Tipo pagamento" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox x:Name="txtPaymentType" Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══════════════════════════════════════ -->
+                <!-- PRODOTTI & CONTENUTI                  -->
+                <!-- ══════════════════════════════════════ -->
+                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
+                        CornerRadius="6" Padding="0" Margin="0,0,0,16">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Padding="16,10"
+                                BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                            <TextBlock Text="PRODOTTI &amp; CONTENUTI" FontSize="13"
+                                       FontWeight="Bold" Foreground="#1A1D26" />
+                        </Border>
+
+                        <DataGrid x:Name="dgItems"
+                                  AutoGenerateColumns="False" CanUserAddRows="False"
+                                  CanUserDeleteRows="False" SelectionMode="Single"
+                                  HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#F3F4F6"
+                                  BorderThickness="0" RowHeight="38"
+                                  ColumnHeaderHeight="34" FontSize="13"
+                                  Background="White" MinHeight="100">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Width="50">
+                                    <DataGridTemplateColumn.Header>
+                                        <TextBlock Text="" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding ItemType, Converter={StaticResource QuoteItemTypeToBgConverter}}"
+                                                    CornerRadius="3" Padding="4,2" HorizontalAlignment="Center">
+                                                <TextBlock Text="{Binding ItemTypeLabel}" FontSize="10"
+                                                           FontWeight="SemiBold" Foreground="White" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTextColumn Header="Codice" Binding="{Binding Code}" Width="100"
+                                                    IsReadOnly="True" />
+                                <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="*"
+                                                    MinWidth="200" IsReadOnly="True" FontWeight="SemiBold" />
+                                <DataGridTextColumn Header="UdM" Binding="{Binding Unit}" Width="55"
+                                                    IsReadOnly="True" />
+                                <DataGridTextColumn Header="Qtà" Binding="{Binding Quantity, StringFormat=N2}"
+                                                    Width="65" />
+                                <DataGridTextColumn Header="Costo az. €" Binding="{Binding CostPrice, StringFormat=N2}"
+                                                    Width="95" />
+                                <DataGridTextColumn Header="Prezzo cl. €" Binding="{Binding SellPrice, StringFormat=N2}"
+                                                    Width="95" />
+                                <DataGridTextColumn Header="Sconto %" Binding="{Binding DiscountPct}"
+                                                    Width="70" />
+                                <DataGridTextColumn Header="IVA %" Binding="{Binding VatPct}"
+                                                    Width="55" IsReadOnly="True" />
+                                <DataGridTextColumn Header="TOTALE" Binding="{Binding LineTotal, StringFormat=N2}"
+                                                    Width="100" IsReadOnly="True" FontWeight="Bold" />
+                                <DataGridTextColumn Header="UTILE" Binding="{Binding LineProfit, StringFormat=N2}"
+                                                    Width="90" IsReadOnly="True" Foreground="Green" />
+                                <DataGridTemplateColumn Width="36">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="✕" FontSize="12" Foreground="#DC2626"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Cursor="Hand" Click="BtnRemoveItem_Click"
+                                                    Tag="{Binding Id}" ToolTip="Rimuovi voce" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Border>
+
+                <!-- ══════════════════════════════════════ -->
+                <!-- RIEPILOGO ECONOMICO                   -->
+                <!-- ══════════════════════════════════════ -->
+                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1"
+                        CornerRadius="6" Padding="20" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="300" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Sinistra: sconto globale + toggle PDF -->
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="Sconto sul TOTALE:" FontSize="12"
+                                           FontWeight="SemiBold" Foreground="#374151"
+                                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBox x:Name="txtDiscountPct" Width="60" Height="30"
+                                         FontSize="12" Text="0" TextAlignment="Right" />
+                                <TextBlock Text="%" FontSize="12" VerticalAlignment="Center"
+                                           Margin="4,0,0,0" />
+                            </StackPanel>
+                            <CheckBox x:Name="chkShowItemPrices"
+                                      Content="Visualizza prezzi sulle pagine dei singoli articoli"
+                                      FontSize="12" Margin="0,0,0,6" IsChecked="True" />
+                            <CheckBox x:Name="chkShowSummary"
+                                      Content="Attiva il riepilogo finale"
+                                      FontSize="12" Margin="0,0,0,6" IsChecked="True" />
+                            <CheckBox x:Name="chkShowSummaryPrices"
+                                      Content="Visualizza prezzi dei singoli articoli sul riepilogo"
+                                      FontSize="12" IsChecked="True" />
+                        </StackPanel>
+
+                        <!-- Destra: totali -->
+                        <StackPanel Grid.Column="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="120" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="4" />
+                                    <RowDefinition Height="32" />
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="4" />
+                                    <RowDefinition Height="32" />
+                                    <RowDefinition Height="32" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="TOTALE"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#374151" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="txtSubtotal"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#111827" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="TOTALE IVA"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#374151" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="txtVatTotal"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#111827" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="SCONTO"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#374151" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="txtDiscount"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#DC2626" />
+
+                                <!-- Separator -->
+                                <Border Grid.Row="3" Grid.ColumnSpan="2" BorderBrush="#E4E7EC"
+                                        BorderThickness="0,1,0,0" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="TOTALE IMPONIBILE"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="#111827" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="txtTotal"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="#111827" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="TOTALE IVA INCLUSA"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#374151" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" x:Name="txtTotalWithVat"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="12" Foreground="#374151" />
+
+                                <!-- Separator -->
+                                <Border Grid.Row="6" Grid.ColumnSpan="2" BorderBrush="#E4E7EC"
+                                        BorderThickness="0,1,0,0" />
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="TOTALE COSTI AZIENDALI"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="#16A34A" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" x:Name="txtCostTotal"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="#16A34A" />
+
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="UTILE"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="14" FontWeight="Bold" Foreground="#16A34A" />
+                                <TextBlock Grid.Row="8" Grid.Column="1" x:Name="txtProfit"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="14" FontWeight="Bold" Foreground="#16A34A" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══════════════════════════════════════ -->
+                <!-- NOTE PREVENTIVO                       -->
+                <!-- ══════════════════════════════════════ -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Background="White" BorderBrush="#E4E7EC"
+                            BorderThickness="1" CornerRadius="6" Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="NOTE AD USO INTERNO" FontSize="11" FontWeight="Bold"
+                                       Foreground="#6B7280" Margin="0,0,0,8" />
+                            <TextBox x:Name="txtNotesInternal" Height="120"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Background="White" BorderBrush="#E4E7EC"
+                            BorderThickness="1" CornerRadius="6" Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="NOTE SU PREVENTIVO" FontSize="11" FontWeight="Bold"
+                                       Foreground="#6B7280" Margin="0,0,0,8" />
+                            <TextBox x:Name="txtNotesQuote" Height="120"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Style="{StaticResource ModernTextBox}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Page>

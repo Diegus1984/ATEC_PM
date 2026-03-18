@@ -148,6 +148,7 @@ public partial class MainWindow : Window
             case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
             case "Backup": PageContent.Navigate(new BackupPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
+            case "Preventivi": PageContent.Navigate(new Quotes.QuotesListPage()); break;
             default: PageContent.Content = null; break;
         }
     }

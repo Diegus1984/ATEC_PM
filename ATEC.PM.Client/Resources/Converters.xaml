@@ -33,4 +33,8 @@
     <conv:ItemTypeToBgConverter x:Key="ItemTypeToBgConverter" />
     <conv:ItemTypeToLabelConverter x:Key="ItemTypeToLabelConverter" />
 
+    <conv:QuoteStatusToBgConverter x:Key="QuoteStatusToBgConverter" />
+    <conv:QuoteStatusToFgConverter x:Key="QuoteStatusToFgConverter" />
+    <conv:QuoteStatusToLabelConverter x:Key="QuoteStatusToLabelConverter" />
+    <conv:QuoteItemTypeToBgConverter x:Key="QuoteItemTypeToBgConverter" />
 </ResourceDictionary>
