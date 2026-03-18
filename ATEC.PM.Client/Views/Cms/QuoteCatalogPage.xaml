@@ -1,0 +1,332 @@
+<Page
+    x:Class="ATEC.PM.Client.Views.Quotes.QuoteCatalogPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="#F7F8FA">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!--  ══════════════════════════════════════════════  -->
+        <!--  LEFT: Tree Gruppi → Categorie  -->
+        <!--  ══════════════════════════════════════════════  -->
+        <Border
+            Grid.Column="0"
+            Background="White"
+            BorderBrush="#E4E7EC"
+            BorderThickness="0,0,1,0">
+            <DockPanel>
+
+                <!--  Toolbar albero  -->
+                <Border
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <DockPanel>
+                        <Button
+                            Background="#4F6EF7"
+                            Click="BtnNewGroup_Click"
+                            Content="+ Gruppo"
+                            Foreground="White"
+                            Style="{StaticResource FlatBtn}" />
+                        <Button
+                            Background="#16A34A"
+                            Click="BtnNewCategory_Click"
+                            Content="+ Categoria"
+                            Foreground="White"
+                            Style="{StaticResource FlatBtn}" />
+                        <Button
+                            HorizontalAlignment="Right"
+                            Background="#F3F4F6"
+                            Click="BtnRefreshTree_Click"
+                            Content="⟳"
+                            DockPanel.Dock="Right"
+                            Foreground="#374151"
+                            Style="{StaticResource FlatBtn}"
+                            ToolTip="Aggiorna" />
+                    </DockPanel>
+                </Border>
+
+                <!--  Ricerca  -->
+                <Border
+                    Padding="12,8"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <Grid>
+                        <TextBox
+                            x:Name="txtTreeSearch"
+                            Height="32"
+                            Padding="8,5"
+                            BorderBrush="#E4E7EC"
+                            FontSize="13"
+                            TextChanged="TxtTreeSearch_TextChanged" />
+                        <TextBlock
+                            x:Name="txtTreeSearchPlaceholder"
+                            Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            Foreground="#9CA3AF"
+                            IsHitTestVisible="False"
+                            Text="Cerca gruppo o categoria..." />
+                    </Grid>
+                </Border>
+
+                <!--  Status  -->
+                <Border
+                    Padding="12,6"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,1,0,0"
+                    DockPanel.Dock="Bottom">
+                    <TextBlock
+                        x:Name="txtTreeStatus"
+                        FontSize="11"
+                        Foreground="#9CA3AF"
+                        Text="Caricamento..." />
+                </Border>
+
+                <!--  TreeView  -->
+                <TreeView
+                    x:Name="treeGroups"
+                    Padding="4"
+                    Background="White"
+                    BorderThickness="0"
+                    SelectedItemChanged="Tree_SelectedItemChanged">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="Padding" Value="4,4" />
+                            <Setter Property="FontSize" Value="13" />
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    <TreeView.Resources>
+                        <ContextMenu x:Key="GroupContextMenu">
+                            <MenuItem Click="BtnEditGroup_Click" Header="Modifica gruppo" />
+                            <MenuItem Click="BtnDeleteGroup_Click" Header="Elimina gruppo" />
+                        </ContextMenu>
+                        <ContextMenu x:Key="CategoryContextMenu">
+                            <MenuItem Click="BtnEditCategory_Click" Header="Modifica categoria" />
+                            <MenuItem Click="BtnDeleteCategory_Click" Header="Elimina categoria" />
+                        </ContextMenu>
+                    </TreeView.Resources>
+                </TreeView>
+            </DockPanel>
+        </Border>
+
+        <!--  ══════════════════════════════════════════════  -->
+        <!--  RIGHT: Prodotti della categoria selezionata  -->
+        <!--  ══════════════════════════════════════════════  -->
+        <Border Grid.Column="1">
+            <DockPanel>
+                <!--  Header destro  -->
+                <Border
+                    Padding="20,10"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock
+                            x:Name="txtSectionTitle"
+                            VerticalAlignment="Center"
+                            FontSize="18"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            Text="Seleziona un gruppo o categoria" />
+                        <StackPanel
+                            HorizontalAlignment="Right"
+                            DockPanel.Dock="Right"
+                            Orientation="Horizontal">
+                            <Button
+                                x:Name="btnNewProduct"
+                                Background="#4F6EF7"
+                                Click="BtnNewProduct_Click"
+                                Content="+ Nuovo Prodotto"
+                                Foreground="White"
+                                Style="{StaticResource FlatBtn}"
+                                Visibility="Collapsed" />
+                            <Button
+                                x:Name="btnEditProduct"
+                                Margin="8,0,0,0"
+                                Click="BtnEditProduct_Click"
+                                Content="Modifica"
+                                IsEnabled="False"
+                                Style="{StaticResource FlatBtn}" />
+                            <Button
+                                x:Name="btnDuplicateProduct"
+                                Margin="8,0,0,0"
+                                Click="BtnDuplicateProduct_Click"
+                                Content="Duplica"
+                                IsEnabled="False"
+                                Style="{StaticResource FlatBtn}" />
+                            <Button
+                                x:Name="btnDeleteProduct"
+                                Margin="8,0,0,0"
+                                Click="BtnDeleteProduct_Click"
+                                Content="Elimina"
+                                Foreground="#B42318"
+                                IsEnabled="False"
+                                Style="{StaticResource FlatBtn}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!--  Status bar prodotti  -->
+                <Border
+                    Padding="16,6"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,1,0,0"
+                    DockPanel.Dock="Bottom">
+                    <TextBlock
+                        x:Name="txtProductStatus"
+                        FontSize="11"
+                        Foreground="#6B7280"
+                        Text="Pronto" />
+                </Border>
+
+                <!--  DataGrid Prodotti  -->
+                <DataGrid
+                    x:Name="dgProducts"
+                    Margin="0"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    MouseDoubleClick="DgProducts_DoubleClick"
+                    SelectionChanged="DgProducts_SelectionChanged"
+                    SelectionMode="Single"
+                    Style="{StaticResource ModernDataGrid}">
+                    <DataGrid.Columns>
+                        <!--  Tipo  -->
+                        <DataGridTemplateColumn Width="60" SortMemberPath="ItemType">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="TIPO" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Padding="4,2"
+                                        HorizontalAlignment="Center"
+                                        Background="{Binding ItemType, Converter={StaticResource ItemTypeToBgConverter}}"
+                                        CornerRadius="3">
+                                        <TextBlock
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Foreground="White"
+                                            Text="{Binding ItemType, Converter={StaticResource ItemTypeToLabelConverter}}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Codice  -->
+                        <DataGridTemplateColumn Width="120" SortMemberPath="Code">
+                            <DataGridTemplateColumn.Header>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource DgHeaderText}" Text="CODICE" />
+                                    <TextBox
+                                        Loaded="ProductFilter_Loaded"
+                                        Style="{StaticResource HeaderSearchBox}"
+                                        Tag="Code"
+                                        TextChanged="ProductFilter_Changed" />
+                                </StackPanel>
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource DgCellText}" Text="{Binding Code}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Nome  -->
+                        <DataGridTemplateColumn
+                            Width="*"
+                            MinWidth="200"
+                            SortMemberPath="Name">
+                            <DataGridTemplateColumn.Header>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource DgHeaderText}" Text="NOME" />
+                                    <TextBox
+                                        Loaded="ProductFilter_Loaded"
+                                        Style="{StaticResource HeaderSearchBox}"
+                                        Tag="Name"
+                                        TextChanged="ProductFilter_Changed" />
+                                </StackPanel>
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        FontWeight="SemiBold"
+                                        Style="{StaticResource DgCellText}"
+                                        Text="{Binding Name}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Varianti (conteggio)  -->
+                        <DataGridTemplateColumn Width="80" SortMemberPath="VariantCount">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="VARIANTI" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource DgCellText}"
+                                        Text="{Binding VariantCount}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Prezzo min-max  -->
+                        <DataGridTemplateColumn Width="160" SortMemberPath="PriceRange">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="PREZZO CLIENTE" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        FontWeight="SemiBold"
+                                        Foreground="#111827"
+                                        Style="{StaticResource DgCellText}"
+                                        Text="{Binding PriceRange}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Costo min-max  -->
+                        <DataGridTemplateColumn Width="160" SortMemberPath="CostRange">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="COSTO AZIENDALE" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        Foreground="#16A34A"
+                                        Style="{StaticResource DgCellText}"
+                                        Text="{Binding CostRange}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Auto-include  -->
+                        <DataGridTemplateColumn Width="70">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="AUTO" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource DgCellText}"
+                                        Text="{Binding AutoIncludeLabel}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Page>

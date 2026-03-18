@@ -30,4 +30,7 @@
     <!--  ========== CONVERTER BADGE ==========  -->
     <conv:ItemTypeToBadgeConverter x:Key="ItemTypeToBadge" />
 
+    <conv:ItemTypeToBgConverter x:Key="ItemTypeToBgConverter" />
+    <conv:ItemTypeToLabelConverter x:Key="ItemTypeToLabelConverter" />
+
 </ResourceDictionary>

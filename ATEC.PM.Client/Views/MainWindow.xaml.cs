@@ -147,6 +147,7 @@ public partial class MainWindow : Window
             case "Codex": PageContent.Navigate(new CodexPage()); break;
             case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
             case "Backup": PageContent.Navigate(new BackupPage()); break;
+            case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
             default: PageContent.Content = null; break;
         }
     }

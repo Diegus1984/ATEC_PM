@@ -14,192 +14,46 @@
                 <ResourceDictionary Source="/ATEC.PM.Client;component/Views/Costing/Styles/ProjectCostingStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-        
-        <!--  ========== DATA TEMPLATES ==========  -->
-        <DataTemplate x:Key="DeleteButtonTemplate">
-            <Button
-                Width="20"
-                Height="20"
-                Background="#EF44441A"
-                BorderThickness="0"
-                Click="BtnDeleteResource_Click"
-                Cursor="Hand"
-                Tag="{Binding Id}"
-                ToolTip="Elimina risorsa">
-                <TextBlock
-                    FontSize="9"
-                    FontWeight="Bold"
-                    Foreground="#EF4444"
-                    Text="✕" />
-            </Button>
-        </DataTemplate>
 
-        <DataTemplate x:Key="DeleteMaterialButtonTemplate">
-            <Button
-                Width="20"
-                Height="20"
-                Background="#EF44441A"
-                BorderThickness="0"
-                Click="BtnDeleteMaterialItem_Click"
-                Cursor="Hand"
-                Tag="{Binding Id}"
-                ToolTip="Elimina materiale">
-                <TextBlock
-                    FontSize="9"
-                    FontWeight="Bold"
-                    Foreground="#EF4444"
-                    Text="✕" />
-            </Button>
-        </DataTemplate>
+            <!--  ========== DATA TEMPLATES ==========  -->
+            <DataTemplate x:Key="DeleteButtonTemplate">
+                <Button
+                    Width="20"
+                    Height="20"
+                    Background="#EF44441A"
+                    BorderThickness="0"
+                    Click="BtnDeleteResource_Click"
+                    Cursor="Hand"
+                    Tag="{Binding Id}"
+                    ToolTip="Elimina risorsa">
+                    <TextBlock
+                        FontSize="9"
+                        FontWeight="Bold"
+                        Foreground="#EF4444"
+                        Text="✕" />
+                </Button>
+            </DataTemplate>
 
-        <!--  Template Risorse In Sede  -->
-        <DataTemplate x:Key="ResourceGridInSede">
-            <DataGrid
-                AlternatingRowBackground="#F9FAFB"
-                AutoGenerateColumns="False"
-                Background="Transparent"
-                BorderThickness="0"
-                CanUserAddRows="False"
-                CanUserDeleteRows="False"
-                CellEditEnding="ResourceGrid_CellEditEnding"
-                CellStyle="{StaticResource CostingCell}"
-                ColumnHeaderHeight="28"
-                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
-                FontSize="12"
-                GridLinesVisibility="Horizontal"
-                HeadersVisibility="Column"
-                HorizontalGridLinesBrush="#F3F4F6"
-                ItemsSource="{Binding Resources}"
-                RowBackground="Transparent"
-                RowHeight="36"
-                SelectionMode="Single">
-                <DataGrid.Columns>
-                    <DataGridTemplateColumn Width="2*" Header="RISORSA">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock
-                                    Padding="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Text="{Binding ResourceName}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                        <DataGridTemplateColumn.CellEditingTemplate>
-                            <DataTemplate>
-                                <ComboBox
-                                    DisplayMemberPath="FullName"
-                                    IsEditable="True"
-                                    IsTextSearchEnabled="True"
-                                    Loaded="EmployeeCombo_Loaded"
-                                    SelectionChanged="EmployeeCombo_SelectionChanged"
-                                    StaysOpenOnEdit="True"
-                                    Style="{StaticResource InlineComboBox}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellEditingTemplate>
-                    </DataGridTemplateColumn>
+            <DataTemplate x:Key="DeleteMaterialButtonTemplate">
+                <Button
+                    Width="20"
+                    Height="20"
+                    Background="#EF44441A"
+                    BorderThickness="0"
+                    Click="BtnDeleteMaterialItem_Click"
+                    Cursor="Hand"
+                    Tag="{Binding Id}"
+                    ToolTip="Elimina materiale">
+                    <TextBlock
+                        FontSize="9"
+                        FontWeight="Bold"
+                        Foreground="#EF4444"
+                        Text="✕" />
+                </Button>
+            </DataTemplate>
 
-                    <DataGridTextColumn
-                        Width="50"
-                        Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                        Header="GG">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center" />
-                                <Setter Property="VerticalAlignment" Value="Center" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn
-                        Width="55"
-                        Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                        Header="ORE/G">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn
-                        Width="65"
-                        Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
-                        Header="TOT ORE"
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn
-                        Width="70"
-                        Binding="{Binding HourlyCost, StringFormat=N2}"
-                        Header="€/H"
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="Foreground" Value="#4F6EF7" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn
-                        Width="90"
-                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
-                        Header="TOT €"
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTemplateColumn Width="70" Header="K">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBox
-                                    Width="50"
-                                    HorizontalAlignment="Center"
-                                    Style="{StaticResource NumericTextBox}"
-                                    Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
-                                    ToolTip="Markup applicato (es: 1.45 = 45%)" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTextColumn
-                        Width="90"
-                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
-                        Header="VENDITA €"
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="Foreground" Value="#059669" />
-                                <Setter Property="FontWeight" Value="Bold" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTemplateColumn
-                        Width="30"
-                        CellTemplate="{StaticResource DeleteButtonTemplate}"
-                        Header="" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </DataTemplate>
-
-        <!--  Template Risorse Da Cliente (con trasferte)  -->
-        <DataTemplate x:Key="ResourceGridDaCliente">
-            <StackPanel>
+            <!--  Template Risorse In Sede  -->
+            <DataTemplate x:Key="ResourceGridInSede">
                 <DataGrid
                     AlternatingRowBackground="#F9FAFB"
                     AutoGenerateColumns="False"
@@ -233,26 +87,30 @@
                                 <DataTemplate>
                                     <ComboBox
                                         DisplayMemberPath="FullName"
+                                        IsEditable="True"
+                                        IsTextSearchEnabled="True"
                                         Loaded="EmployeeCombo_Loaded"
                                         SelectionChanged="EmployeeCombo_SelectionChanged"
+                                        StaysOpenOnEdit="True"
                                         Style="{StaticResource InlineComboBox}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellEditingTemplate>
                         </DataGridTemplateColumn>
 
                         <DataGridTextColumn
-                            Width="45"
+                            Width="50"
                             Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
                             Header="GG">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="HorizontalAlignment" Value="Center" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
                         <DataGridTextColumn
-                            Width="50"
+                            Width="55"
                             Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
                             Header="ORE/G">
                             <DataGridTextColumn.ElementStyle>
@@ -263,7 +121,7 @@
                         </DataGridTextColumn>
 
                         <DataGridTextColumn
-                            Width="60"
+                            Width="65"
                             Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
                             Header="TOT ORE"
                             IsReadOnly="True">
@@ -276,7 +134,7 @@
                         </DataGridTextColumn>
 
                         <DataGridTextColumn
-                            Width="65"
+                            Width="70"
                             Binding="{Binding HourlyCost, StringFormat=N2}"
                             Header="€/H"
                             IsReadOnly="True">
@@ -290,7 +148,7 @@
                         </DataGridTextColumn>
 
                         <DataGridTextColumn
-                            Width="85"
+                            Width="90"
                             Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
                             Header="TOT €"
                             IsReadOnly="True">
@@ -303,20 +161,21 @@
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTemplateColumn Width="60" Header="K">
+                        <DataGridTemplateColumn Width="70" Header="K">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBox
-                                        Width="45"
+                                        Width="50"
                                         HorizontalAlignment="Center"
                                         Style="{StaticResource NumericTextBox}"
-                                        Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}" />
+                                        Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
+                                        ToolTip="Markup applicato (es: 1.45 = 45%)" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
                         <DataGridTextColumn
-                            Width="85"
+                            Width="90"
                             Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
                             Header="VENDITA €"
                             IsReadOnly="True">
@@ -330,364 +189,505 @@
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
-                        <DataGridTextColumn
-                            Width="45"
-                            Binding="{Binding NumTrips, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                            Header="VIAGGI">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="VIAGGI" ToolTip="Numero viaggi" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTextColumn
-                            Width="45"
-                            Binding="{Binding KmPerTrip, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                            Header="KM">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="KM" ToolTip="Km per viaggio" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTextColumn
-                            Width="50"
-                            Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
-                            Header="€/KM">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="€/KM" ToolTip="Costo al chilometro" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right" />
-                                    <Setter Property="Margin" Value="0,0,8,0" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTextColumn
-                            Width="50"
-                            Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
-                            Header="VITTO/G">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="VITTO/G" ToolTip="Vitto giornaliero" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right" />
-                                    <Setter Property="Margin" Value="0,0,8,0" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTextColumn
-                            Width="50"
-                            Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
-                            Header="HOTEL/G">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="HOTEL/G" ToolTip="Hotel giornaliero" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Right" />
-                                    <Setter Property="Margin" Value="0,0,8,0" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTextColumn
-                            Width="50"
-                            Binding="{Binding AllowanceDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                            Header="GG IND.">
-                            <DataGridTextColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="GG IND." ToolTip="Giorni indennità" />
-                                </DataTemplate>
-                            </DataGridTextColumn.HeaderTemplate>
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="HorizontalAlignment" Value="Center" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <DataGridTemplateColumn Width="70" Header="€/G IND.">
-                            <DataGridTemplateColumn.HeaderTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="€/G IND." ToolTip="Indennità giornaliera" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.HeaderTemplate>
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ComboBox
-                                        Width="60"
-                                        HorizontalAlignment="Center"
-                                        ItemsSource="{x:Static vm:CostResourceVM.AllowanceOptions}"
-                                        SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
-                                        Style="{StaticResource InlineComboBox}" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
                         <DataGridTemplateColumn
                             Width="30"
                             CellTemplate="{StaticResource DeleteButtonTemplate}"
                             Header="" />
                     </DataGrid.Columns>
                 </DataGrid>
+            </DataTemplate>
 
-                <!--  Subtotali  -->
-                <Border
-                    Margin="0,4,0,0"
-                    Padding="12,8"
-                    Background="#F9FAFB"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="0,1,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="140" />
-                            <ColumnDefinition Width="140" />
-                        </Grid.ColumnDefinitions>
+            <!--  Template Risorse Da Cliente (con trasferte)  -->
+            <DataTemplate x:Key="ResourceGridDaCliente">
+                <StackPanel>
+                    <DataGrid
+                        AlternatingRowBackground="#F9FAFB"
+                        AutoGenerateColumns="False"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CanUserAddRows="False"
+                        CanUserDeleteRows="False"
+                        CellEditEnding="ResourceGrid_CellEditEnding"
+                        CellStyle="{StaticResource CostingCell}"
+                        ColumnHeaderHeight="28"
+                        ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                        FontSize="12"
+                        GridLinesVisibility="Horizontal"
+                        HeadersVisibility="Column"
+                        HorizontalGridLinesBrush="#F3F4F6"
+                        ItemsSource="{Binding Resources}"
+                        RowBackground="Transparent"
+                        RowHeight="36"
+                        SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Width="2*" Header="RISORSA">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Padding="8,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="{Binding ResourceName}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <ComboBox
+                                            DisplayMemberPath="FullName"
+                                            Loaded="EmployeeCombo_Loaded"
+                                            SelectionChanged="EmployeeCombo_SelectionChanged"
+                                            Style="{StaticResource InlineComboBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
 
-                        <TextBlock
-                            Grid.Column="0"
-                            VerticalAlignment="Center"
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#1A1D26"
-                            Text="SUBTOTALI" />
+                            <DataGridTextColumn
+                                Width="45"
+                                Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                Header="GG">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
 
-                        <StackPanel
-                            Grid.Column="1"
-                            HorizontalAlignment="Right"
-                            Orientation="Horizontal">
+                            <DataGridTextColumn
+                                Width="50"
+                                Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                Header="ORE/G">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="60"
+                                Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
+                                Header="TOT ORE"
+                                IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="65"
+                                Binding="{Binding HourlyCost, StringFormat=N2}"
+                                Header="€/H"
+                                IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                        <Setter Property="Foreground" Value="#4F6EF7" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="85"
+                                Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                                Header="TOT €"
+                                IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTemplateColumn Width="60" Header="K">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox
+                                            Width="45"
+                                            HorizontalAlignment="Center"
+                                            Style="{StaticResource NumericTextBox}"
+                                            Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTextColumn
+                                Width="85"
+                                Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                                Header="VENDITA €"
+                                IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                        <Setter Property="Foreground" Value="#059669" />
+                                        <Setter Property="FontWeight" Value="Bold" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="45"
+                                Binding="{Binding NumTrips, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                Header="VIAGGI">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="VIAGGI" ToolTip="Numero viaggi" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="45"
+                                Binding="{Binding KmPerTrip, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                Header="KM">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="KM" ToolTip="Km per viaggio" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="50"
+                                Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                                Header="€/KM">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="€/KM" ToolTip="Costo al chilometro" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="50"
+                                Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                                Header="VITTO/G">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="VITTO/G" ToolTip="Vitto giornaliero" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="50"
+                                Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                                Header="HOTEL/G">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="HOTEL/G" ToolTip="Hotel giornaliero" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Right" />
+                                        <Setter Property="Margin" Value="0,0,8,0" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTextColumn
+                                Width="50"
+                                Binding="{Binding AllowanceDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                Header="GG IND.">
+                                <DataGridTextColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="GG IND." ToolTip="Giorni indennità" />
+                                    </DataTemplate>
+                                </DataGridTextColumn.HeaderTemplate>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <DataGridTemplateColumn Width="70" Header="€/G IND.">
+                                <DataGridTemplateColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="€/G IND." ToolTip="Indennità giornaliera" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.HeaderTemplate>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox
+                                            Width="60"
+                                            HorizontalAlignment="Center"
+                                            ItemsSource="{x:Static vm:CostResourceVM.AllowanceOptions}"
+                                            SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
+                                            Style="{StaticResource InlineComboBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn
+                                Width="30"
+                                CellTemplate="{StaticResource DeleteButtonTemplate}"
+                                Header="" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!--  Subtotali  -->
+                    <Border
+                        Margin="0,4,0,0"
+                        Padding="12,8"
+                        Background="#F9FAFB"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="0,1,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="140" />
+                            </Grid.ColumnDefinitions>
+
                             <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
                                 FontSize="11"
-                                Foreground="#6B7280"
-                                Text="Ore: " />
-                            <TextBlock
-                                FontSize="11"
-                                FontWeight="Bold"
+                                FontWeight="SemiBold"
                                 Foreground="#1A1D26"
-                                Text="{Binding TotalCostOre, StringFormat=N2}" />
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#1A1D26"
-                                Text=" €" />
-                        </StackPanel>
+                                Text="SUBTOTALI" />
 
-                        <StackPanel
-                            Grid.Column="2"
-                            HorizontalAlignment="Right"
-                            Orientation="Horizontal">
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#6B7280"
-                                Text="Viaggi: " />
-                            <TextBlock
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#1A1D26"
-                                Text="{Binding TotalViaggi, StringFormat=N2}" />
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#1A1D26"
-                                Text=" €" />
-                        </StackPanel>
+                            <StackPanel
+                                Grid.Column="1"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#6B7280"
+                                    Text="Ore: " />
+                                <TextBlock
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding TotalCostOre, StringFormat=N2}" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#1A1D26"
+                                    Text=" €" />
+                            </StackPanel>
 
-                        <StackPanel
-                            Grid.Column="3"
-                            HorizontalAlignment="Right"
-                            Orientation="Horizontal">
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#6B7280"
-                                Text="Vitto/Alloggio: " />
-                            <TextBlock
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#1A1D26"
-                                Text="{Binding TotalAlloggio, StringFormat=N2}" />
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#1A1D26"
-                                Text=" €" />
-                        </StackPanel>
+                            <StackPanel
+                                Grid.Column="2"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#6B7280"
+                                    Text="Viaggi: " />
+                                <TextBlock
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding TotalViaggi, StringFormat=N2}" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#1A1D26"
+                                    Text=" €" />
+                            </StackPanel>
 
-                        <StackPanel
-                            Grid.Column="4"
-                            Margin="0,0,8,0"
-                            HorizontalAlignment="Right"
-                            Orientation="Horizontal">
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#6B7280"
-                                Text="Indennità: " />
-                            <TextBlock
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#1A1D26"
-                                Text="{Binding TotalIndennita, StringFormat=N2}" />
-                            <TextBlock
-                                FontSize="11"
-                                Foreground="#1A1D26"
-                                Text=" €" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </StackPanel>
-        </DataTemplate>
+                            <StackPanel
+                                Grid.Column="3"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#6B7280"
+                                    Text="Vitto/Alloggio: " />
+                                <TextBlock
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding TotalAlloggio, StringFormat=N2}" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#1A1D26"
+                                    Text=" €" />
+                            </StackPanel>
 
-        <!--  Template Material Items  -->
-        <DataTemplate x:Key="MaterialItemsGrid">
-            <DataGrid
-                AlternatingRowBackground="#F9FAFB"
-                AutoGenerateColumns="False"
-                Background="Transparent"
-                BorderThickness="0"
-                CanUserAddRows="False"
-                CanUserDeleteRows="False"
-                CellEditEnding="MaterialGrid_CellEditEnding"
-                CellStyle="{StaticResource CostingCell}"
-                ColumnHeaderHeight="28"
-                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
-                FontSize="12"
-                GridLinesVisibility="Horizontal"
-                HeadersVisibility="Column"
-                HorizontalGridLinesBrush="#F3F4F6"
-                ItemsSource="{Binding Items}"
-                RowBackground="Transparent"
-                RowHeight="36"
-                SelectionMode="Single">
-                <DataGrid.Resources>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#EBF0FF"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#F3F4F6"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26"/>
-                </DataGrid.Resources>
-                <DataGrid.Columns>
-                    <DataGridTextColumn
-                        Width="3*"
-                        Binding="{Binding Description, UpdateSourceTrigger=LostFocus}"
-                        Header="DESCRIZIONE">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Padding" Value="8,0,0,0" />
-                                <Setter Property="VerticalAlignment" Value="Center" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                            <StackPanel
+                                Grid.Column="4"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#6B7280"
+                                    Text="Indennità: " />
+                                <TextBlock
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding TotalIndennita, StringFormat=N2}" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="#1A1D26"
+                                    Text=" €" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </DataTemplate>
 
-                    <DataGridTextColumn
-                        Width="60"
-                        Binding="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                        Header="QTÀ">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+            <!--  Template Material Items  -->
+            <DataTemplate x:Key="MaterialItemsGrid">
+                <DataGrid
+                    AlternatingRowBackground="#F9FAFB"
+                    AutoGenerateColumns="False"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CanUserAddRows="False"
+                    CanUserDeleteRows="False"
+                    CellEditEnding="MaterialGrid_CellEditEnding"
+                    CellStyle="{StaticResource CostingCell}"
+                    ColumnHeaderHeight="28"
+                    ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                    FontSize="12"
+                    GridLinesVisibility="Horizontal"
+                    HeadersVisibility="Column"
+                    HorizontalGridLinesBrush="#F3F4F6"
+                    ItemsSource="{Binding Items}"
+                    RowBackground="Transparent"
+                    RowHeight="36"
+                    SelectionMode="Single">
+                    <DataGrid.Resources>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#EBF0FF" />
+                        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#F3F4F6" />
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26" />
+                    </DataGrid.Resources>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="3*"
+                            Binding="{Binding Description, UpdateSourceTrigger=LostFocus}"
+                            Header="DESCRIZIONE">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Padding" Value="8,0,0,0" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                    <DataGridTextColumn
-                        Width="100"
-                        Binding="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
-                        Header="COSTO UNIT.">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                        <DataGridTextColumn
+                            Width="60"
+                            Binding="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                            Header="QTÀ">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Center" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                    <DataGridTextColumn
-                        Width="100"
-                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
-                        Header="COSTO TOT."
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                        <DataGridTextColumn
+                            Width="100"
+                            Binding="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                            Header="COSTO UNIT.">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Width="80" Header="K">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBox
-                                    Width="60"
-                                    HorizontalAlignment="Center"
-                                    Style="{StaticResource NumericTextBox}"
-                                    Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
-                                    ToolTip="Markup applicato" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                        <DataGridTextColumn
+                            Width="100"
+                            Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                            Header="COSTO TOT."
+                            IsReadOnly="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                    <DataGridTextColumn
-                        Width="120"
-                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
-                        Header="PREZZO VENDITA"
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,8,0" />
-                                <Setter Property="Foreground" Value="#059669" />
-                                <Setter Property="FontWeight" Value="Bold" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                        <DataGridTemplateColumn Width="80" Header="K">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox
+                                        Width="60"
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource NumericTextBox}"
+                                        Text="{Binding MarkupValue, Converter={StaticResource MarkupToString}, ConverterCulture=en-US, UpdateSourceTrigger=LostFocus}"
+                                        ToolTip="Markup applicato" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Width="40" Header="">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Border
-                                    Padding="4,2"
-                                    HorizontalAlignment="Center"
-                                    Background="#F3F4F6"
-                                    CornerRadius="4">
-                                    <TextBlock
-                                        FontSize="9"
-                                        FontWeight="Bold"
-                                        Foreground="#4F6EF7"
-                                        Text="{Binding ItemType, Converter={StaticResource ItemTypeToBadge}}" />
-                                </Border>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                        <DataGridTextColumn
+                            Width="120"
+                            Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                            Header="PREZZO VENDITA"
+                            IsReadOnly="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="Margin" Value="0,0,8,0" />
+                                    <Setter Property="Foreground" Value="#059669" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                    <DataGridTemplateColumn
-                        Width="30"
-                        CellTemplate="{StaticResource DeleteMaterialButtonTemplate}"
-                        Header="" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </DataTemplate>
+                        <DataGridTemplateColumn Width="40" Header="">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Padding="4,2"
+                                        HorizontalAlignment="Center"
+                                        Background="#F3F4F6"
+                                        CornerRadius="4">
+                                        <TextBlock
+                                            FontSize="9"
+                                            FontWeight="Bold"
+                                            Foreground="#4F6EF7"
+                                            Text="{Binding ItemType, Converter={StaticResource ItemTypeToBadge}}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn
+                            Width="30"
+                            CellTemplate="{StaticResource DeleteMaterialButtonTemplate}"
+                            Header="" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -1662,19 +1662,75 @@
                                         <ColumnDefinition Width="100" />
                                         <ColumnDefinition Width="110" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="SEZIONE" />
-                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="VENDITA" />
-                                    <TextBlock Grid.Column="4" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT %" />
-                                    <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#D97706" Text="CONT €" />
-                                    <TextBlock Grid.Column="7" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG %" />
-                                    <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#7C3AED" Text="MARG €" />
-                                    <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE SEZ." />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Margin="4,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="SEZIONE" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#6B7280"
+                                        Text="VENDITA" />
+                                    <TextBlock
+                                        Grid.Column="4"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#D97706"
+                                        Text="CONT %" />
+                                    <TextBlock
+                                        Grid.Column="5"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#D97706"
+                                        Text="CONT €" />
+                                    <TextBlock
+                                        Grid.Column="7"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#7C3AED"
+                                        Text="MARG %" />
+                                    <TextBlock
+                                        Grid.Column="8"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="#7C3AED"
+                                        Text="MARG €" />
+                                    <TextBlock
+                                        Grid.Column="9"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26"
+                                        Text="TOTALE SEZ." />
                                 </Grid>
                                 <!--  Rows  -->
                                 <ItemsControl ItemsSource="{Binding DistributionRows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Padding="0,3" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                            <Border
+                                                Padding="0,3"
+                                                BorderBrush="#F3F4F6"
+                                                BorderThickness="0,0,0,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="25" />
@@ -1688,26 +1744,97 @@
                                                         <ColumnDefinition Width="100" />
                                                         <ColumnDefinition Width="110" />
                                                     </Grid.ColumnDefinitions>
-                                                    <!-- Badge R/M -->
-                                                    <Border Grid.Column="0" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                            Background="{Binding TypeBadgeColor, Converter={StaticResource HexToAlphaBrush}, ConverterParameter=30}" CornerRadius="2">
-                                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="9" FontWeight="Bold"
-                                                                   Foreground="{Binding TypeBadgeColor, Converter={StaticResource HexToBrush}}" Text="{Binding TypeBadge}" />
+                                                    <!--  Badge R/M  -->
+                                                    <Border
+                                                        Grid.Column="0"
+                                                        Width="18"
+                                                        Height="18"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Background="{Binding TypeBadgeColor, Converter={StaticResource HexToAlphaBrush}, ConverterParameter=30}"
+                                                        CornerRadius="2">
+                                                        <TextBlock
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            FontSize="9"
+                                                            FontWeight="Bold"
+                                                            Foreground="{Binding TypeBadgeColor, Converter={StaticResource HexToBrush}}"
+                                                            Text="{Binding TypeBadge}" />
                                                     </Border>
-                                                    <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="11" Foreground="#1A1D26" Text="{Binding SectionName}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#6B7280">
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Margin="4,0"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#1A1D26"
+                                                        Text="{Binding SectionName}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock
+                                                        Grid.Column="2"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#6B7280">
                                                         <Run Text="{Binding SaleAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding ContingencyPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
-                                                    <TextBox Grid.Column="4" Height="22" Foreground="#D97706" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Style="{StaticResource NumericTextBox}" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
-                                                    <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#D97706">
+                                                    <TextBlock
+                                                        Grid.Column="3"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="10"
+                                                        Text="{Binding ContingencyPinIcon, Mode=OneWay}"
+                                                        ToolTip="Bloccato manualmente" />
+                                                    <TextBox
+                                                        Grid.Column="4"
+                                                        Height="22"
+                                                        Foreground="#D97706"
+                                                        GotFocus="MarkupTextBox_GotFocus"
+                                                        KeyDown="DistPct_KeyDown"
+                                                        LostFocus="DistPct_LostFocus"
+                                                        Style="{StaticResource NumericTextBox}"
+                                                        Tag="contingency"
+                                                        Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+                                                    <TextBlock
+                                                        Grid.Column="5"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#D97706">
                                                         <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding MarginPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
-                                                    <TextBox Grid.Column="7" Height="22" Foreground="#7C3AED" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Style="{StaticResource NumericTextBox}" Tag="margin" Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
-                                                    <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7C3AED">
+                                                    <TextBlock
+                                                        Grid.Column="6"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="10"
+                                                        Text="{Binding MarginPinIcon, Mode=OneWay}"
+                                                        ToolTip="Bloccato manualmente" />
+                                                    <TextBox
+                                                        Grid.Column="7"
+                                                        Height="22"
+                                                        Foreground="#7C3AED"
+                                                        GotFocus="MarkupTextBox_GotFocus"
+                                                        KeyDown="DistPct_KeyDown"
+                                                        LostFocus="DistPct_LostFocus"
+                                                        Style="{StaticResource NumericTextBox}"
+                                                        Tag="margin"
+                                                        Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+                                                    <TextBlock
+                                                        Grid.Column="8"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        Foreground="#7C3AED">
                                                         <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                                    <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" Foreground="#1A1D26">
+                                                    <TextBlock
+                                                        Grid.Column="9"
+                                                        Margin="0,0,8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#1A1D26">
                                                         <Run Text="{Binding SectionTotal, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                 </Grid>
                                             </Border>
@@ -1715,7 +1842,11 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <!--  Footer  -->
-                                <Border Padding="0,5" Background="#F3F4F6" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
+                                <Border
+                                    Padding="0,5"
+                                    Background="#F3F4F6"
+                                    BorderBrush="#E4E7EC"
+                                    BorderThickness="0,1,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="25" />
@@ -1729,14 +1860,49 @@
                                             <ColumnDefinition Width="100" />
                                             <ColumnDefinition Width="110" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="1" Margin="4,0" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26" Text="TOTALE" />
-                                        <TextBlock Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#1A1D26">
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="4,0"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26"
+                                            Text="TOTALE" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26">
                                             <Run Text="{Binding TotalCombinedSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#D97706">
+                                        <TextBlock
+                                            Grid.Column="5"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#D97706">
                                             <Run Text="{Binding TotalDistContingencyCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#7C3AED">
+                                        <TextBlock
+                                            Grid.Column="8"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#7C3AED">
                                             <Run Text="{Binding TotalDistMarginCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                        <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="Bold" Foreground="#059669">
+                                        <TextBlock
+                                            Grid.Column="9"
+                                            Margin="0,0,8,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            FontWeight="Bold"
+                                            Foreground="#059669">
                                             <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                     </Grid>
                                 </Border>

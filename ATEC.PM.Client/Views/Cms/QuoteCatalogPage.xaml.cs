@@ -1,0 +1,454 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
+
+namespace ATEC.PM.Client.Views.Quotes;
+
+public partial class QuoteCatalogPage : Page
+{
+    private QuoteCatalogTreeDto _tree = new();
+    private List<ProductListItem> _allProducts = new();
+    private Dictionary<string, TextBox> _productFilterBoxes = new();
+    private CancellationTokenSource? _filterCts;
+
+    private int? _selectedGroupId;
+    private int? _selectedCategoryId;
+
+    public QuoteCatalogPage()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) => await LoadTree();
+    }
+
+    // ══════════════════════════════════════════════════
+    // TREE — Caricamento e costruzione
+    // ══════════════════════════════════════════════════
+
+    private async Task LoadTree()
+    {
+        txtTreeStatus.Text = "Caricamento...";
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/quote-catalog/tree");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                _tree = JsonSerializer.Deserialize<QuoteCatalogTreeDto>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                BuildTree();
+                txtTreeStatus.Text = $"{_tree.TotalGroups} gruppi · {_tree.TotalCategories} categorie · {_tree.TotalProducts} prodotti";
+            }
+        }
+        catch (Exception ex) { txtTreeStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void BuildTree()
+    {
+        treeGroups.Items.Clear();
+
+        foreach (var group in _tree.Groups.OrderBy(g => g.SortOrder).ThenBy(g => g.Name))
+        {
+            var groupNode = new TreeViewItem
+            {
+                Header = BuildTreeHeader(group.Name, group.ProductCount, "#1A1D26", FontWeights.SemiBold),
+                Tag = ("group", group.Id, group.Name),
+                FontSize = 13,
+                IsExpanded = true,
+                ContextMenu = (ContextMenu)treeGroups.Resources["GroupContextMenu"]
+            };
+
+            foreach (var cat in group.Categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name))
+            {
+                var catNode = new TreeViewItem
+                {
+                    Header = BuildTreeHeader(cat.Name, cat.ProductCount, "#374151", FontWeights.Normal),
+                    Tag = ("category", cat.Id, cat.Name),
+                    FontSize = 13,
+                    ContextMenu = (ContextMenu)treeGroups.Resources["CategoryContextMenu"]
+                };
+                groupNode.Items.Add(catNode);
+            }
+
+            treeGroups.Items.Add(groupNode);
+        }
+    }
+
+    private static StackPanel BuildTreeHeader(string text, int count, string color, FontWeight weight)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        sp.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontWeight = weight,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color))
+        });
+        if (count > 0)
+        {
+            sp.Children.Add(new TextBlock
+            {
+                Text = $" ({count})",
+                FontSize = 11,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9CA3AF")),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+        return sp;
+    }
+
+    // ══════════════════════════════════════════════════
+    // TREE — Selezione e ricerca
+    // ══════════════════════════════════════════════════
+
+    private async void Tree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (treeGroups.SelectedItem is TreeViewItem tvi && tvi.Tag is (string type, int id, string name))
+        {
+            if (type == "group")
+            {
+                _selectedGroupId = id;
+                _selectedCategoryId = null;
+                txtSectionTitle.Text = name;
+                btnNewProduct.Visibility = Visibility.Collapsed;
+                await LoadProducts(groupId: id);
+            }
+            else if (type == "category")
+            {
+                _selectedGroupId = null;
+                _selectedCategoryId = id;
+                txtSectionTitle.Text = name;
+                btnNewProduct.Visibility = Visibility.Visible;
+                await LoadProducts(categoryId: id);
+            }
+        }
+    }
+
+    private void TxtTreeSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        string search = txtTreeSearch.Text.Trim().ToLower();
+        txtTreeSearchPlaceholder.Visibility = string.IsNullOrEmpty(search)
+            ? Visibility.Visible : Visibility.Collapsed;
+
+        foreach (TreeViewItem groupNode in treeGroups.Items)
+        {
+            bool anyChildVisible = false;
+            foreach (TreeViewItem catNode in groupNode.Items)
+            {
+                if (catNode.Tag is (string _, int _, string catName))
+                {
+                    bool match = string.IsNullOrEmpty(search) || catName.ToLower().Contains(search);
+                    catNode.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
+                    if (match) anyChildVisible = true;
+                }
+            }
+            if (groupNode.Tag is (string _, int _, string grpName))
+            {
+                bool groupMatch = string.IsNullOrEmpty(search) || grpName.ToLower().Contains(search);
+                groupNode.Visibility = (groupMatch || anyChildVisible) ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // PRODUCTS — Caricamento e filtro
+    // ══════════════════════════════════════════════════
+
+    private async Task LoadProducts(int? categoryId = null, int? groupId = null)
+    {
+        txtProductStatus.Text = "Caricamento prodotti...";
+        try
+        {
+            string url = "/api/quote-catalog/products?";
+            if (categoryId.HasValue) url += $"categoryId={categoryId}";
+            else if (groupId.HasValue) url += $"groupId={groupId}";
+
+            string json = await ApiClient.GetAsync(url);
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var products = JsonSerializer.Deserialize<List<QuoteProductDto>>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+                _allProducts = products.Select(p => new ProductListItem(p)).ToList();
+                ApplyProductFilter();
+            }
+        }
+        catch (Exception ex) { txtProductStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void ProductFilter_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.Tag != null)
+            _productFilterBoxes[tb.Tag.ToString()!] = tb;
+    }
+
+    private async void ProductFilter_Changed(object sender, TextChangedEventArgs e)
+    {
+        _filterCts?.Cancel();
+        _filterCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _filterCts.Token);
+            ApplyProductFilter();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private string PF(string tag) =>
+        _productFilterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
+
+    private void ApplyProductFilter()
+    {
+        string fCode = PF("Code");
+        string fName = PF("Name");
+
+        var filtered = _allProducts.Where(p =>
+            (string.IsNullOrEmpty(fCode) || (p.Code?.ToLower().Contains(fCode) ?? false)) &&
+            (string.IsNullOrEmpty(fName) || (p.Name?.ToLower().Contains(fName) ?? false))
+        ).ToList();
+
+        dgProducts.ItemsSource = filtered;
+        txtProductStatus.Text = $"{filtered.Count} prodotti su {_allProducts.Count}";
+    }
+
+    // ══════════════════════════════════════════════════
+    // PRODUCTS — Selezione e azioni
+    // ══════════════════════════════════════════════════
+
+    private void DgProducts_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        bool hasSel = dgProducts.SelectedItem != null;
+        btnEditProduct.IsEnabled = hasSel;
+        btnDuplicateProduct.IsEnabled = hasSel;
+        btnDeleteProduct.IsEnabled = hasSel;
+    }
+
+    private void DgProducts_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        BtnEditProduct_Click(sender, e);
+    }
+
+    // ══════════════════════════════════════════════════
+    // GROUPS — CRUD
+    // ══════════════════════════════════════════════════
+
+    private void BtnNewGroup_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new QuoteGroupDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true) _ = LoadTree();
+    }
+
+    private void BtnEditGroup_Click(object sender, RoutedEventArgs e)
+    {
+        if (treeGroups.SelectedItem is TreeViewItem tvi && tvi.Tag is ("group", int id, string _))
+        {
+            var group = _tree.Groups.FirstOrDefault(g => g.Id == id);
+            if (group != null)
+            {
+                var dlg = new QuoteGroupDialog(group) { Owner = Window.GetWindow(this) };
+                if (dlg.ShowDialog() == true) _ = LoadTree();
+            }
+        }
+    }
+
+    private async void BtnDeleteGroup_Click(object sender, RoutedEventArgs e)
+    {
+        if (treeGroups.SelectedItem is TreeViewItem tvi && tvi.Tag is ("group", int id, string name))
+        {
+            if (MessageBox.Show($"Eliminare il gruppo '{name}' e tutte le sue categorie/prodotti?",
+                "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                await ApiClient.DeleteAsync($"/api/quote-catalog/groups/{id}");
+                await LoadTree();
+                dgProducts.ItemsSource = null;
+                txtSectionTitle.Text = "Seleziona un gruppo o categoria";
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // CATEGORIES — CRUD
+    // ══════════════════════════════════════════════════
+
+    private void BtnNewCategory_Click(object sender, RoutedEventArgs e)
+    {
+        int? groupId = null;
+        if (treeGroups.SelectedItem is TreeViewItem tvi)
+        {
+            if (tvi.Tag is ("group", int gid, string _)) groupId = gid;
+            else if (tvi.Tag is ("category", int _, string _) && tvi.Parent is TreeViewItem parent
+                     && parent.Tag is ("group", int pgid, string _)) groupId = pgid;
+        }
+
+        var dlg = new QuoteCategoryDialog(_tree.Groups, groupId) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true) _ = LoadTree();
+    }
+
+    private void BtnEditCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (treeGroups.SelectedItem is TreeViewItem tvi && tvi.Tag is ("category", int id, string _))
+        {
+            QuoteCategoryDto? cat = null;
+            foreach (var g in _tree.Groups)
+            {
+                cat = g.Categories.FirstOrDefault(c => c.Id == id);
+                if (cat != null) break;
+            }
+            if (cat != null)
+            {
+                var dlg = new QuoteCategoryDialog(_tree.Groups, cat) { Owner = Window.GetWindow(this) };
+                if (dlg.ShowDialog() == true) _ = LoadTree();
+            }
+        }
+    }
+
+    private async void BtnDeleteCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (treeGroups.SelectedItem is TreeViewItem tvi && tvi.Tag is ("category", int id, string name))
+        {
+            if (MessageBox.Show($"Eliminare la categoria '{name}' e tutti i suoi prodotti?",
+                "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                await ApiClient.DeleteAsync($"/api/quote-catalog/categories/{id}");
+                await LoadTree();
+                dgProducts.ItemsSource = null;
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // PRODUCTS — CRUD
+    // ══════════════════════════════════════════════════
+
+    private void BtnNewProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_selectedCategoryId.HasValue)
+        {
+            MessageBox.Show("Seleziona prima una categoria.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dlg = new QuoteProductDialog(_selectedCategoryId.Value) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true)
+        {
+            _ = LoadProducts(categoryId: _selectedCategoryId);
+            _ = LoadTree();
+        }
+    }
+
+    private async void BtnEditProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (dgProducts.SelectedItem is ProductListItem item)
+        {
+            // Carica il prodotto completo per passarlo al dialog
+            try
+            {
+                string json = await ApiClient.GetAsync($"/api/quote-catalog/products/{item.Id}");
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.GetProperty("success").GetBoolean())
+                {
+                    var product = JsonSerializer.Deserialize<QuoteProductDto>(
+                        doc.RootElement.GetProperty("data").GetRawText(),
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (product != null)
+                    {
+                        var dlg = new QuoteProductDialog(product) { Owner = Window.GetWindow(this) };
+                        if (dlg.ShowDialog() == true)
+                        {
+                            _ = LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
+                            _ = LoadTree();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        }
+    }
+
+    private async void BtnDuplicateProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (dgProducts.SelectedItem is ProductListItem item)
+        {
+            await ApiClient.PostAsync($"/api/quote-catalog/products/{item.Id}/duplicate", "{}");
+            await LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
+            await LoadTree();
+        }
+    }
+
+    private async void BtnDeleteProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (dgProducts.SelectedItem is ProductListItem item &&
+            MessageBox.Show($"Eliminare '{item.Name}'?", "Conferma",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        {
+            await ApiClient.DeleteAsync($"/api/quote-catalog/products/{item.Id}");
+            await LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
+            await LoadTree();
+        }
+    }
+
+    private async void BtnRefreshTree_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadTree();
+    }
+}
+
+// ══════════════════════════════════════════════════
+// ProductListItem — ViewModel per la riga DataGrid
+// ══════════════════════════════════════════════════
+
+public class ProductListItem
+{
+    public int Id { get; set; }
+    public string ItemType { get; set; } = "";
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string CategoryName { get; set; } = "";
+    public string GroupName { get; set; } = "";
+    public bool AutoInclude { get; set; }
+    public int VariantCount { get; set; }
+    public string PriceRange { get; set; } = "";
+    public string CostRange { get; set; } = "";
+    public string AutoIncludeLabel => AutoInclude ? "✓" : "";
+
+    public ProductListItem(QuoteProductDto p)
+    {
+        Id = p.Id;
+        ItemType = p.ItemType;
+        Code = p.Code;
+        Name = p.Name;
+        CategoryName = p.CategoryName;
+        GroupName = p.GroupName;
+        AutoInclude = p.AutoInclude;
+        VariantCount = p.Variants.Count;
+
+        if (p.ItemType == "content" || p.Variants.Count == 0)
+        {
+            PriceRange = "—";
+            CostRange = "—";
+        }
+        else if (p.Variants.Count == 1)
+        {
+            PriceRange = $"{p.Variants[0].SellPrice:N2}€";
+            CostRange = $"{p.Variants[0].CostPrice:N2}€";
+        }
+        else
+        {
+            decimal minP = p.Variants.Min(v => v.SellPrice);
+            decimal maxP = p.Variants.Max(v => v.SellPrice);
+            PriceRange = minP == maxP ? $"{minP:N2}€" : $"{minP:N2}€ – {maxP:N2}€";
+
+            decimal minC = p.Variants.Min(v => v.CostPrice);
+            decimal maxC = p.Variants.Max(v => v.CostPrice);
+            CostRange = minC == maxC ? $"{minC:N2}€" : $"{minC:N2}€ – {maxC:N2}€";
+        }
+    }
+}
