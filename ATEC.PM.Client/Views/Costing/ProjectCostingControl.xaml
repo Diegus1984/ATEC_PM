@@ -1818,12 +1818,12 @@
                                                         <Run Text="{Binding SaleAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                     <TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding ContingencyPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
                                                     <TextBox Grid.Column="4" Height="22" Foreground="#D97706" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Style="{StaticResource NumericTextBox}" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                             Style="{StaticResource NumericTextBox}" Tag="contingency" Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
                                                     <TextBlock Grid.Column="5" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#D97706">
                                                         <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                     <TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Text="{Binding MarginPinIcon, Mode=OneWay}" ToolTip="Bloccato manualmente" />
                                                     <TextBox Grid.Column="7" Height="22" Foreground="#7C3AED" GotFocus="MarkupTextBox_GotFocus" KeyDown="DistPct_KeyDown" LostFocus="DistPct_LostFocus"
-                                                             Style="{StaticResource NumericTextBox}" Tag="margin" Text="{Binding MarginPct, Converter={StaticResource PctToString}, UpdateSourceTrigger=LostFocus}" />
+                                                             Style="{StaticResource NumericTextBox}" Tag="margin" Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
                                                     <TextBlock Grid.Column="8" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7C3AED">
                                                         <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                                     <TextBlock Grid.Column="9" Margin="0,0,8,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold" Foreground="#1A1D26">

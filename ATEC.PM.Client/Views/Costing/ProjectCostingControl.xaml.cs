@@ -102,14 +102,9 @@ public partial class ProjectCostingControl : UserControl
 
             DataContext = _vm;
 
-            // Ribilancia le non-pinned dopo il caricamento (nuove risorse/materiali cambiano i pesi)
+            // RecalcGrandTotals chiama RecalcDistribution che ribilancia automaticamente
             if (IsOfferMode)
-            {
-                _vm.RebalanceUnpinned("contingency");
-                _vm.RebalanceUnpinned("margin");
-                _vm.RecalcGrandTotals();
                 await SaveAllDistributions();
-            }
 
             _vm.StatusText = "Dati caricati";
         }
@@ -207,35 +202,18 @@ public partial class ProjectCostingControl : UserControl
             bool changed = false;
 
             if (tag == "contingency" && val != _vm.ContingencyPct)
-            {
-                _vm.ContingencyPct = val;
-                changed = true;
-            }
+            { _vm.ContingencyPct = val; changed = true; }
             else if (tag == "negotiation" && val != _vm.NegotiationMarginPct)
-            {
-                _vm.NegotiationMarginPct = val;
-                changed = true;
-            }
+            { _vm.NegotiationMarginPct = val; changed = true; }
 
             if (!changed) return;
 
-            // Ribilancia tutte le sezioni non-pinned
-            _vm.RebalanceUnpinned("contingency");
-            _vm.RebalanceUnpinned("margin");
-
-            // Ricalcola totali e tabella distribuzione
             _vm.RecalcGrandTotals();
-
-            // Salva su DB
             await SavePricingMarkups();
             await SaveAllDistributions();
-
-            ShowTemporaryMessage("Percentuale aggiornata e distribuzione ricalcolata");
+            ShowTemporaryMessage("Percentuale aggiornata");
         }
-        finally
-        {
-            _isPricingUpdating = false;
-        }
+        finally { _isPricingUpdating = false; }
     }
 
     private async void TravelMarkup_KeyDown(object sender, KeyEventArgs e)
@@ -637,11 +615,14 @@ public partial class ProjectCostingControl : UserControl
         if (e.EditAction == DataGridEditAction.Cancel) return;
         if (e.Row.Item is not CostResourceVM row || row.Id <= 0) return;
 
-        // Debounce per evitare troppi salvataggi
         _saveTimer?.Dispose();
         _saveTimer = new Timer(async _ =>
         {
-            await Dispatcher.InvokeAsync(async () => await SaveResource(row));
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                await SaveResource(row);
+                if (IsOfferMode) await SaveAllDistributions();
+            });
         }, null, SaveDelayMs, Timeout.Infinite);
     }
 
@@ -650,11 +631,14 @@ public partial class ProjectCostingControl : UserControl
         if (e.EditAction == DataGridEditAction.Cancel) return;
         if (e.Row.Item is not MaterialItemVM row || row.Id <= 0) return;
 
-        // Debounce per evitare troppi salvataggi
         _saveTimer?.Dispose();
         _saveTimer = new Timer(async _ =>
         {
-            await Dispatcher.InvokeAsync(async () => await SaveMaterialItem(row));
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                await SaveMaterialItem(row);
+                if (IsOfferMode) await SaveAllDistributions();
+            });
         }, null, SaveDelayMs, Timeout.Infinite);
     }
 
@@ -747,43 +731,20 @@ public partial class ProjectCostingControl : UserControl
     /// </summary>
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
-        var allSections = _vm.Groups.SelectMany(g => g.Sections).ToList();
-        var allMatItems = _vm.MaterialSections.SelectMany(s => s.Items).ToList();
-        decimal totalSale = allSections.Sum(s => s.TotalSale) + allMatItems.Sum(i => i.TotalSale);
-
-        if (totalSale == 0)
-        {
-            ShowError("Errore", "Nessun importo vendita disponibile per la distribuzione.");
-            return;
-        }
-
         if (!await ConfirmAction("Ridistribuisci",
             "Resettare tutti i blocchi e ridistribuire proporzionalmente?"))
             return;
 
         await ExecuteWithLoading(async () =>
         {
-            foreach (var sec in allSections)
-            {
-                decimal weight = Math.Round(sec.TotalSale / totalSale, 4);
-                sec.ContingencyPct = weight;
-                sec.MarginPct = weight;
-                sec.IsContingencyPinned = false;
-                sec.IsMarginPinned = false;
-                await SaveSectionDistribution(sec);
-            }
-
-            foreach (var item in allMatItems)
-            {
-                decimal weight = Math.Round(item.TotalSale / totalSale, 4);
-                item.ContingencyPct = weight;
-                item.MarginPct = weight;
-                item.IsContingencyPinned = false;
-                item.IsMarginPinned = false;
-                await SaveMaterialItemDistribution(item);
-            }
+            // Annulla tutti i pin — LA PROC ridistribuisce
+            foreach (var sec in _vm.Groups.SelectMany(g => g.Sections))
+            { sec.IsContingencyPinned = false; sec.IsMarginPinned = false; }
+            foreach (var item in _vm.MaterialSections.SelectMany(s => s.Items))
+            { item.IsContingencyPinned = false; item.IsMarginPinned = false; }
 
             _vm.RecalcGrandTotals();
+            await SaveAllDistributions();
             ShowTemporaryMessage("Distribuzione ridistribuita — pin resettati");
         });
     }
@@ -817,28 +778,25 @@ public partial class ProjectCostingControl : UserControl
         if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
         if (val > 1m) val /= 100m;
 
+        // Setta valore + pinna
         if (distRow.RowType == "R")
         {
             CostSectionVM? sec = FindSection(distRow.SectionId);
             if (sec == null) return;
-            sec.ContingencyPct = field == "contingency" ? val : sec.ContingencyPct;
-            sec.MarginPct = field == "margin" ? val : sec.MarginPct;
-            if (field == "contingency") sec.IsContingencyPinned = true;
-            else sec.IsMarginPinned = true;
+            if (field == "contingency") { sec.ContingencyPct = val; sec.IsContingencyPinned = true; }
+            else { sec.MarginPct = val; sec.IsMarginPinned = true; }
         }
         else
         {
             MaterialItemVM? item = FindMaterialItem(distRow.ItemId);
             if (item == null) return;
-            item.ContingencyPct = field == "contingency" ? val : item.ContingencyPct;
-            item.MarginPct = field == "margin" ? val : item.MarginPct;
-            if (field == "contingency") item.IsContingencyPinned = true;
-            else item.IsMarginPinned = true;
+            if (field == "contingency") { item.ContingencyPct = val; item.IsContingencyPinned = true; }
+            else { item.MarginPct = val; item.IsMarginPinned = true; }
         }
 
-        _vm.RebalanceUnpinned(field);
-        await SaveAllDistributions();
+        // LA PROC fa il resto
         _vm.RecalcGrandTotals();
+        await SaveAllDistributions();
         ShowTemporaryMessage("Distribuzione aggiornata — bloccata 🔒");
     }
 

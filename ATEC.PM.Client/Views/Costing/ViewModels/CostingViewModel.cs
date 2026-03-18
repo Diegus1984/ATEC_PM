@@ -176,10 +176,12 @@ public class CostingViewModel : INotifyPropertyChanged
             Notify(nameof(ResourceDistributed));
             Notify(nameof(MaterialDistributed));
             Notify(nameof(TravelDistributed));
+
+            // LA PROC — ribilancia + ricalcola importi + aggiorna righe
+            RecalcDistribution();
+
             Notify(nameof(TotalDistContingencyCheck));
             Notify(nameof(TotalDistMarginCheck));
-
-            RebuildDistributionRows();
 
             int secCount = Groups.Sum(g => g.Sections.Count);
             StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
@@ -191,116 +193,97 @@ public class CostingViewModel : INotifyPropertyChanged
         }
     }
 
-    private void RebuildDistributionRows()
+    /// <summary>
+    /// LA PROC. Unico punto di ricalcolo distribuzione.
+    /// 1) Raccoglie tutti gli oggetti (sezioni R + items M)
+    /// 2) Per contingency e margin separatamente:
+    ///    - Somma % pinned → rimanente = 100% - pinned
+    ///    - Distribuisce rimanente tra non-pinned proporzionale a TotalSale
+    /// 3) Ricalcola importi € per ogni riga
+    /// 4) Aggiorna la tabella DistributionRows
+    /// </summary>
+    private void RecalcDistribution()
     {
         var allSections = Groups.SelectMany(g => g.Sections).ToList();
         var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
+
+        // ── STEP 1: ribilancia CONT % ──
+        {
+            decimal pinnedSum = allSections.Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct)
+                              + allMatItems.Where(i => i.IsContingencyPinned).Sum(i => i.ContingencyPct);
+            decimal remaining = Math.Max(0, 1m - pinnedSum);
+
+            // Raccogli non-pinned con il loro peso (TotalSale)
+            var unpinned = new List<(Action<decimal> Set, decimal Sale)>();
+            foreach (var s in allSections.Where(s => !s.IsContingencyPinned))
+                unpinned.Add((v => s.ContingencyPct = v, s.TotalSale));
+            foreach (var i in allMatItems.Where(i => !i.IsContingencyPinned))
+                unpinned.Add((v => i.ContingencyPct = v, i.TotalSale));
+
+            decimal totalSale = unpinned.Sum(u => u.Sale);
+            foreach (var (set, sale) in unpinned)
+                set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
+        }
+
+        // ── STEP 2: ribilancia MARG % ──
+        {
+            decimal pinnedSum = allSections.Where(s => s.IsMarginPinned).Sum(s => s.MarginPct)
+                              + allMatItems.Where(i => i.IsMarginPinned).Sum(i => i.MarginPct);
+            decimal remaining = Math.Max(0, 1m - pinnedSum);
+
+            var unpinned = new List<(Action<decimal> Set, decimal Sale)>();
+            foreach (var s in allSections.Where(s => !s.IsMarginPinned))
+                unpinned.Add((v => s.MarginPct = v, s.TotalSale));
+            foreach (var i in allMatItems.Where(i => !i.IsMarginPinned))
+                unpinned.Add((v => i.MarginPct = v, i.TotalSale));
+
+            decimal totalSale = unpinned.Sum(u => u.Sale);
+            foreach (var (set, sale) in unpinned)
+                set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
+        }
+
+        // ── STEP 3: aggiorna tabella DistributionRows ──
         int expectedCount = allSections.Count + allMatItems.Count;
 
         if (DistributionRows.Count != expectedCount)
         {
             DistributionRows.Clear();
             foreach (var sec in allSections)
-            {
-                DistributionRows.Add(new DistributionRowVM
-                {
-                    RowType = "R", SectionId = sec.Id, ItemId = 0,
-                    SectionName = sec.Name, SaleAmount = sec.TotalSale,
-                    ContingencyPct = sec.ContingencyPct, ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
-                    IsContingencyPinned = sec.IsContingencyPinned,
-                    MarginPct = sec.MarginPct, MarginAmount = sec.MarginPct * NegotiationMarginAmount,
-                    IsMarginPinned = sec.IsMarginPinned,
-                    SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
-                });
-            }
+                DistributionRows.Add(MakeDistRow("R", sec.Id, 0, sec.Name, sec.TotalSale, sec.ContingencyPct, sec.IsContingencyPinned, sec.MarginPct, sec.IsMarginPinned));
             foreach (var item in allMatItems)
-            {
-                DistributionRows.Add(new DistributionRowVM
-                {
-                    RowType = "M", SectionId = 0, ItemId = item.Id,
-                    SectionName = item.Description, SaleAmount = item.TotalSale,
-                    ContingencyPct = item.ContingencyPct, ContingencyAmount = item.ContingencyPct * ContingencyAmount,
-                    IsContingencyPinned = item.IsContingencyPinned,
-                    MarginPct = item.MarginPct, MarginAmount = item.MarginPct * NegotiationMarginAmount,
-                    IsMarginPinned = item.IsMarginPinned,
-                    SectionTotal = item.TotalSale + (item.ContingencyPct * ContingencyAmount) + (item.MarginPct * NegotiationMarginAmount)
-                });
-            }
-            return;
-        }
-
-        int idx = 0;
-        foreach (var sec in allSections)
-        {
-            var row = DistributionRows[idx++];
-            row.RowType = "R"; row.SectionId = sec.Id; row.ItemId = 0;
-            row.SectionName = sec.Name; row.SaleAmount = sec.TotalSale;
-            row.ContingencyPct = sec.ContingencyPct; row.ContingencyAmount = sec.ContingencyPct * ContingencyAmount;
-            row.IsContingencyPinned = sec.IsContingencyPinned;
-            row.MarginPct = sec.MarginPct; row.MarginAmount = sec.MarginPct * NegotiationMarginAmount;
-            row.IsMarginPinned = sec.IsMarginPinned;
-            row.SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount);
-        }
-        foreach (var item in allMatItems)
-        {
-            var row = DistributionRows[idx++];
-            row.RowType = "M"; row.SectionId = 0; row.ItemId = item.Id;
-            row.SectionName = item.Description; row.SaleAmount = item.TotalSale;
-            row.ContingencyPct = item.ContingencyPct; row.ContingencyAmount = item.ContingencyPct * ContingencyAmount;
-            row.IsContingencyPinned = item.IsContingencyPinned;
-            row.MarginPct = item.MarginPct; row.MarginAmount = item.MarginPct * NegotiationMarginAmount;
-            row.IsMarginPinned = item.IsMarginPinned;
-            row.SectionTotal = item.TotalSale + (item.ContingencyPct * ContingencyAmount) + (item.MarginPct * NegotiationMarginAmount);
-        }
-    }
-
-    /// <summary>
-    /// Ribilancia le % non-pinned per un campo (contingency o margin).
-    /// Pool unificato: sezioni risorse + singoli item materiale.
-    /// </summary>
-    public void RebalanceUnpinned(string field)
-    {
-        var allSections = Groups.SelectMany(g => g.Sections).ToList();
-        var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
-
-        decimal pinnedTotal = 0;
-        if (field == "contingency")
-        {
-            pinnedTotal += allSections.Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct);
-            pinnedTotal += allMatItems.Where(i => i.IsContingencyPinned).Sum(i => i.ContingencyPct);
+                DistributionRows.Add(MakeDistRow("M", 0, item.Id, item.Description, item.TotalSale, item.ContingencyPct, item.IsContingencyPinned, item.MarginPct, item.IsMarginPinned));
         }
         else
         {
-            pinnedTotal += allSections.Where(s => s.IsMarginPinned).Sum(s => s.MarginPct);
-            pinnedTotal += allMatItems.Where(i => i.IsMarginPinned).Sum(i => i.MarginPct);
+            int idx = 0;
+            foreach (var sec in allSections)
+                UpdateDistRow(DistributionRows[idx++], "R", sec.Id, 0, sec.Name, sec.TotalSale, sec.ContingencyPct, sec.IsContingencyPinned, sec.MarginPct, sec.IsMarginPinned);
+            foreach (var item in allMatItems)
+                UpdateDistRow(DistributionRows[idx++], "M", 0, item.Id, item.Description, item.TotalSale, item.ContingencyPct, item.IsContingencyPinned, item.MarginPct, item.IsMarginPinned);
         }
+    }
 
-        decimal remaining = Math.Max(0, 1m - pinnedTotal);
-        var unpinned = new List<(Action<decimal> SetPct, decimal Sale)>();
-
-        foreach (var s in allSections)
+    private DistributionRowVM MakeDistRow(string type, int secId, int itemId, string name, decimal sale,
+        decimal contPct, bool contPin, decimal margPct, bool margPin)
+    {
+        return new DistributionRowVM
         {
-            bool pinned = field == "contingency" ? s.IsContingencyPinned : s.IsMarginPinned;
-            if (!pinned)
-                unpinned.Add((val => { if (field == "contingency") s.ContingencyPct = val; else s.MarginPct = val; }, s.TotalSale));
-        }
-        foreach (var i in allMatItems)
-        {
-            bool pinned = field == "contingency" ? i.IsContingencyPinned : i.IsMarginPinned;
-            if (!pinned)
-                unpinned.Add((val => { if (field == "contingency") i.ContingencyPct = val; else i.MarginPct = val; }, i.TotalSale));
-        }
+            RowType = type, SectionId = secId, ItemId = itemId,
+            SectionName = name, SaleAmount = sale,
+            ContingencyPct = contPct, ContingencyAmount = contPct * ContingencyAmount, IsContingencyPinned = contPin,
+            MarginPct = margPct, MarginAmount = margPct * NegotiationMarginAmount, IsMarginPinned = margPin,
+            SectionTotal = sale + (contPct * ContingencyAmount) + (margPct * NegotiationMarginAmount)
+        };
+    }
 
-        if (unpinned.Count == 0) return;
-
-        decimal totalSaleUnpinned = unpinned.Sum(u => u.Sale);
-        foreach (var (setPct, sale) in unpinned)
-        {
-            decimal newVal = totalSaleUnpinned > 0
-                ? Math.Round(sale / totalSaleUnpinned * remaining, 4)
-                : Math.Round(remaining / unpinned.Count, 4);
-            setPct(newVal);
-        }
+    private void UpdateDistRow(DistributionRowVM row, string type, int secId, int itemId, string name, decimal sale,
+        decimal contPct, bool contPin, decimal margPct, bool margPin)
+    {
+        row.RowType = type; row.SectionId = secId; row.ItemId = itemId;
+        row.SectionName = name; row.SaleAmount = sale;
+        row.ContingencyPct = contPct; row.ContingencyAmount = contPct * ContingencyAmount; row.IsContingencyPinned = contPin;
+        row.MarginPct = margPct; row.MarginAmount = margPct * NegotiationMarginAmount; row.IsMarginPinned = margPin;
+        row.SectionTotal = sale + (contPct * ContingencyAmount) + (margPct * NegotiationMarginAmount);
     }
 
     public void WireAllChanges()
