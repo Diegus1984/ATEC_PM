@@ -17,6 +17,7 @@ namespace ATEC.PM.Client.Views.Quotes;
 public partial class QuoteDetailPage : Page
 {
     private int _quoteId;
+    private string _snapshotJson = "";
     private QuoteDto? _quote;
     private ObservableCollection<QuoteItemRow> _items = new();
 
@@ -25,14 +26,24 @@ public partial class QuoteDetailPage : Page
         InitializeComponent();
         _quoteId = quoteId;
         dgItems.ItemsSource = _items;
-        Loaded += async (_, _) => await LoadQuote();
+        Loaded += async (_, _) =>
+        {
+            await LoadQuote();
+            if (NavigationService != null)
+                NavigationService.Navigating += NavigationService_Navigating;
+        };
+        Unloaded += (_, _) =>
+        {
+            if (NavigationService != null)
+                NavigationService.Navigating -= NavigationService_Navigating;
+        };
     }
 
     // ═══════════════════════════════════════════════
     // LOAD
     // ═══════════════════════════════════════════════
 
-    private async Task LoadQuote()
+    private async Task LoadQuote(bool updateSnapshot = true)
     {
         try
         {
@@ -46,6 +57,8 @@ public partial class QuoteDetailPage : Page
 
                 if (_quote == null) return;
                 PopulateUI();
+                if (updateSnapshot)
+                    TakeSnapshot();
             }
         }
         catch (Exception ex)
@@ -54,12 +67,10 @@ public partial class QuoteDetailPage : Page
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
-
     private void PopulateUI()
     {
         if (_quote == null) return;
 
-        // Header
         txtQuoteNumber.Text = _quote.QuoteNumber;
         txtTitle.Text = _quote.Title;
         txtCustomer.Text = _quote.CustomerName;
@@ -71,26 +82,20 @@ public partial class QuoteDetailPage : Page
         txtValidityDays.Text = _quote.ValidityDays.ToString();
         txtPaymentType.Text = _quote.PaymentType;
 
-        // Status badge
         SetStatusBadge(_quote.Status);
 
-        // Items
         _items.Clear();
         foreach (var item in _quote.Items)
             _items.Add(new QuoteItemRow(item));
 
-        // Totali
         UpdateTotalsUI();
 
-        // Sconto globale
         txtDiscountPct.Text = _quote.DiscountPct.ToString("N2");
 
-        // Toggle PDF
         chkShowItemPrices.IsChecked = _quote.ShowItemPrices;
         chkShowSummary.IsChecked = _quote.ShowSummary;
         chkShowSummaryPrices.IsChecked = _quote.ShowSummaryPrices;
 
-        // Note
         txtNotesInternal.Text = _quote.NotesInternal;
         txtNotesQuote.Text = _quote.NotesQuote;
     }
@@ -128,51 +133,109 @@ public partial class QuoteDetailPage : Page
     }
 
     // ═══════════════════════════════════════════════
-    // SAVE
+    // SNAPSHOT DIRTY TRACKING
     // ═══════════════════════════════════════════════
 
-    private async void BtnSave_Click(object sender, RoutedEventArgs e)
+    private void TakeSnapshot()
     {
-        if (_quote == null) return;
+        _snapshotJson = BuildSnapshotJson();
+    }
 
-        var dto = new QuoteSaveDto
+    private bool HasChanges()
+    {
+        if (string.IsNullOrEmpty(_snapshotJson)) return false;
+        return BuildSnapshotJson() != _snapshotJson;
+    }
+
+    private string BuildSnapshotJson()
+    {
+        var snapshot = new
         {
             Title = txtTitle.Text.Trim(),
-            CustomerId = _quote.CustomerId,
+            ContactName1 = txtContact1.Text.Trim(),
+            ContactName2 = txtContact2.Text.Trim(),
+            ContactName3 = txtContact3.Text.Trim(),
+            DeliveryDays = txtDeliveryDays.Text.Trim(),
+            ValidityDays = txtValidityDays.Text.Trim(),
+            PaymentType = txtPaymentType.Text.Trim(),
+            DiscountPct = txtDiscountPct.Text.Trim(),
+            ShowItemPrices = chkShowItemPrices.IsChecked,
+            ShowSummary = chkShowSummary.IsChecked,
+            ShowSummaryPrices = chkShowSummaryPrices.IsChecked,
+            NotesInternal = txtNotesInternal.Text,
+            NotesQuote = txtNotesQuote.Text,
+            ItemIds = string.Join(",", _items.Select(i => $"{i.Id}:{i.Quantity}"))
+        };
+        return JsonSerializer.Serialize(snapshot);
+    }
+
+    private bool ConfirmLeave()
+    {
+        if (!HasChanges()) return true;
+        return MessageBox.Show(
+            "Ci sono modifiche non salvate. Vuoi uscire senza salvare?",
+            "Conferma uscita",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
+    private QuoteSaveDto BuildCurrentDto()
+    {
+        return new QuoteSaveDto
+        {
+            Title = txtTitle.Text.Trim(),
+            CustomerId = _quote?.CustomerId ?? 0,
             ContactName1 = txtContact1.Text.Trim(),
             ContactName2 = txtContact2.Text.Trim(),
             ContactName3 = txtContact3.Text.Trim(),
             DeliveryDays = int.TryParse(txtDeliveryDays.Text, out int dd) ? dd : 0,
             ValidityDays = int.TryParse(txtValidityDays.Text, out int vd) ? vd : 60,
             PaymentType = txtPaymentType.Text.Trim(),
-            GroupId = _quote.GroupId,
+            GroupId = _quote?.GroupId,
             DiscountPct = decimal.TryParse(txtDiscountPct.Text, out decimal dp) ? dp : 0,
             ShowItemPrices = chkShowItemPrices.IsChecked == true,
             ShowSummary = chkShowSummary.IsChecked == true,
             ShowSummaryPrices = chkShowSummaryPrices.IsChecked == true,
             NotesInternal = txtNotesInternal.Text,
             NotesQuote = txtNotesQuote.Text,
-            AssignedTo = _quote.AssignedTo
+            AssignedTo = _quote?.AssignedTo
         };
+    }
 
+    private void NavigationService_Navigating(object sender, System.Windows.Navigation.NavigatingCancelEventArgs e)
+    {
+        if (HasChanges())
+        {
+            if (!ConfirmLeave())
+                e.Cancel = true;
+        }
+    }
+
+    // ═══════════════════════════════════════════════
+    // SAVE
+    // ═══════════════════════════════════════════════
+
+    private async void BtnSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_quote == null) return;
         try
         {
-            string body = JsonSerializer.Serialize(dto);
+            string body = JsonSerializer.Serialize(BuildCurrentDto());
             await ApiClient.PutAsync($"/api/quotes/{_quoteId}", body);
-            await LoadQuote();
+            await LoadQuote(); // true = aggiorna snapshot
             MessageBox.Show("Preventivo salvato.", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     // ═══════════════════════════════════════════════
-    // ITEMS — Aggiungi dal catalogo
+    // ITEMS
     // ═══════════════════════════════════════════════
 
     private void BtnAddItem_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new AddQuoteItemDialog(_quoteId) { Owner = Window.GetWindow(this) };
-        dlg.ItemAdded += async () => await LoadQuote();
+        dlg.ItemAdded += async () => await LoadQuote(false);
         dlg.ShowDialog();
     }
 
@@ -184,7 +247,7 @@ public partial class QuoteDetailPage : Page
                 MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             {
                 await ApiClient.DeleteAsync($"/api/quotes/{_quoteId}/items/{itemId}");
-                await LoadQuote();
+                await LoadQuote(false);
             }
         }
     }
@@ -220,8 +283,60 @@ public partial class QuoteDetailPage : Page
                 catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
             }
 
-            // Reset combo
             cmbChangeStatus.SelectedIndex = 0;
+        }
+    }
+
+    // ═══════════════════════════════════════════════
+    // PDF
+    // ═══════════════════════════════════════════════
+
+    private async void BtnPdfPreview_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            byte[] pdfBytes = await ApiClient.GetBytesAsync($"/api/quotes/{_quoteId}/pdf");
+
+            string tempPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"ATEC_Preventivo_{_quote?.QuoteNumber?.Replace("/", "-") ?? _quoteId.ToString()}.pdf");
+            System.IO.File.WriteAllBytes(tempPath, pdfBytes);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = tempPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore generazione PDF: {ex.Message}", "Errore",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void BtnPdfDownload_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = $"{_quote?.QuoteNumber?.Replace("/", "-") ?? "Preventivo"}.pdf",
+                Filter = "PDF|*.pdf",
+                Title = "Salva preventivo PDF"
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                byte[] pdfBytes = await ApiClient.GetBytesAsync($"/api/quotes/{_quoteId}/pdf");
+                System.IO.File.WriteAllBytes(dlg.FileName, pdfBytes);
+                MessageBox.Show("PDF salvato.", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -231,12 +346,13 @@ public partial class QuoteDetailPage : Page
 
     private void BtnBack_Click(object sender, RoutedEventArgs e)
     {
-        NavigationService?.Navigate(new QuotesListPage());
+        if (ConfirmLeave())
+            NavigationService?.Navigate(new QuotesListPage());
     }
 }
 
 // ═══════════════════════════════════════════════
-// QuoteItemRow — ViewModel per riga DataGrid
+// QuoteItemRow
 // ═══════════════════════════════════════════════
 
 public class QuoteItemRow : INotifyPropertyChanged
@@ -256,6 +372,8 @@ public class QuoteItemRow : INotifyPropertyChanged
     public decimal VatPct { get; set; }
     public decimal LineTotal { get; set; }
     public decimal LineProfit { get; set; }
+    public int SortOrder { get; set; }
+    public string DescriptionRtf { get; set; } = "";
 
     public QuoteItemRow(QuoteItemDto dto)
     {
@@ -273,6 +391,8 @@ public class QuoteItemRow : INotifyPropertyChanged
         VatPct = dto.VatPct;
         LineTotal = dto.LineTotal;
         LineProfit = dto.LineProfit;
+        SortOrder = dto.SortOrder;
+        DescriptionRtf = dto.DescriptionRtf;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

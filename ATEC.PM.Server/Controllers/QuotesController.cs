@@ -13,7 +13,8 @@ namespace ATEC.PM.Server.Controllers;
 public class QuotesController : ControllerBase
 {
     private readonly QuoteDbService _qdb;
-    public QuotesController(QuoteDbService qdb) => _qdb = qdb;
+    private readonly QuotePdfService _pdf;
+    public QuotesController(QuoteDbService qdb, QuotePdfService pdf) { _qdb = qdb; _pdf = pdf; }
 
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
@@ -489,6 +490,60 @@ public class QuotesController : ControllerBase
             return Ok(ApiResponse<int>.Ok(newId, $"Preventivo duplicato come {newNumber}"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // PDF
+    // ═══════════════════════════════════════════════════════
+
+    [HttpGet("{id}/pdf")]
+    public IActionResult GeneratePdf(int id)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            var quote = c.QueryFirstOrDefault<QuoteDto>(@"
+                SELECT q.id AS Id, q.quote_number AS QuoteNumber, q.title AS Title,
+                       q.customer_id AS CustomerId, cu.company_name AS CustomerName,
+                       q.contact_name1 AS ContactName1, q.contact_name2 AS ContactName2,
+                       q.contact_name3 AS ContactName3,
+                       q.status AS Status, q.revision AS Revision,
+                       q.subtotal AS Subtotal, q.discount_pct AS DiscountPct,
+                       q.discount_abs AS DiscountAbs, q.vat_total AS VatTotal,
+                       q.total AS Total, q.total_with_vat AS TotalWithVat,
+                       q.cost_total AS CostTotal, q.profit AS Profit,
+                       q.delivery_days AS DeliveryDays, q.validity_days AS ValidityDays,
+                       q.payment_type AS PaymentType,
+                       q.show_item_prices AS ShowItemPrices,
+                       q.show_summary AS ShowSummary,
+                       q.show_summary_prices AS ShowSummaryPrices,
+                       q.notes_quote AS NotesQuote,
+                       q.created_at AS CreatedAt
+                FROM quotes q
+                LEFT JOIN customers cu ON cu.id = q.customer_id
+                WHERE q.id = @Id", new { Id = id });
+
+            if (quote == null)
+                return NotFound();
+
+            quote.Items = c.Query<QuoteItemDto>(@"
+                SELECT id AS Id, item_type AS ItemType, code AS Code, name AS Name,
+                       description_rtf AS DescriptionRtf, unit AS Unit,
+                       quantity AS Quantity, cost_price AS CostPrice,
+                       sell_price AS SellPrice, discount_pct AS DiscountPct,
+                       vat_pct AS VatPct, line_total AS LineTotal,
+                       line_profit AS LineProfit, sort_order AS SortOrder
+                FROM quote_items WHERE quote_id = @Id
+                ORDER BY sort_order", new { Id = id }).ToList();
+
+            byte[] pdf = _pdf.Generate(quote);
+            string fileName = $"{quote.QuoteNumber.Replace("/", "-")}.pdf";
+            return File(pdf, "application/pdf", fileName);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Errore generazione PDF: {ex.Message}");
+        }
     }
 
     // ═══════════════════════════════════════════════════════

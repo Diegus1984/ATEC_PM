@@ -1,7 +1,6 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- TextBlock usato come header nelle DataGrid template columns -->
+    <!--  TextBlock usato come header nelle DataGrid template columns  -->
     <Style x:Key="DgHeaderText" TargetType="TextBlock">
         <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -9,7 +8,7 @@
         <Setter Property="Padding" Value="8,0" />
     </Style>
 
-    <!-- TextBlock usato come cella nelle DataGrid template columns -->
+    <!--  TextBlock usato come cella nelle DataGrid template columns  -->
     <Style x:Key="DgCellText" TargetType="TextBlock">
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="#111827" />

@@ -57,6 +57,15 @@ public static class ApiClient
         return await HandleResponse(resp);
     }
 
+    public static async Task<byte[]> GetBytesAsync(string endpoint)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, $"{App.ApiBaseUrl}{endpoint}");
+        AddAuth(req);
+        var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsByteArrayAsync();
+    }
+
     // ── POST ────────────────────────────────────────────────────
 
     public static async Task<string> PostAsync(string endpoint, string jsonBody)

@@ -77,6 +77,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<DbService>();
 builder.Services.AddSingleton<QuoteDbService>();
+builder.Services.AddSingleton<QuotePdfService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<CodexGeneratorService>();
 
