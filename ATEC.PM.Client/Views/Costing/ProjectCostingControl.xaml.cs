@@ -101,6 +101,16 @@ public partial class ProjectCostingControl : UserControl
                     ms.IsDetailExpanded = true;
 
             DataContext = _vm;
+
+            // Ribilancia le non-pinned dopo il caricamento (nuove risorse/materiali cambiano i pesi)
+            if (IsOfferMode)
+            {
+                _vm.RebalanceUnpinned("contingency");
+                _vm.RebalanceUnpinned("margin");
+                _vm.RecalcGrandTotals();
+                await SaveAllDistributions();
+            }
+
             _vm.StatusText = "Dati caricati";
         }
         catch (Exception ex)

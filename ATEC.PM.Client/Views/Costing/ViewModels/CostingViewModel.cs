@@ -138,99 +138,168 @@ public class CostingViewModel : INotifyPropertyChanged
 
     // ══════════════════════════════════════════════════════════════
 
+    private bool _isRecalculating;
+
     public void RecalcGrandTotals()
     {
-        GrandTotalCost = Groups.Sum(g => g.TotalCost);
-        GrandTotalSale = Groups.Sum(g => g.TotalSale);
-        GrandMaterialCost = MaterialSections.Sum(s => s.TotalCost);
-        GrandMaterialSale = MaterialSections.Sum(s => s.TotalSale);
+        if (_isRecalculating) return;
+        _isRecalculating = true;
 
-        // Trasferte dalle risorse DA_CLIENTE
-        TotalTravelCost = Groups.SelectMany(g => g.Sections)
-            .Where(s => s.IsDaCliente)
-            .Sum(s => s.TotalTravelExpenses);
-        TotalAllowanceCost = Groups.SelectMany(g => g.Sections)
-            .Where(s => s.IsDaCliente)
-            .Sum(s => s.TotalAllowanceExpenses);
+        try
+        {
+            GrandTotalCost = Groups.Sum(g => g.TotalCost);
+            GrandTotalSale = Groups.Sum(g => g.TotalSale);
+            GrandMaterialCost = MaterialSections.Sum(s => s.TotalCost);
+            GrandMaterialSale = MaterialSections.Sum(s => s.TotalSale);
 
-        Notify(nameof(GrandMaterialCostWithTravel));
-        Notify(nameof(GrandMaterialSaleWithTravel));
-        Notify(nameof(TotalCombinedCost));
-        Notify(nameof(TotalCombinedSale));
+            // Trasferte dalle risorse DA_CLIENTE
+            TotalTravelCost = Groups.SelectMany(g => g.Sections)
+                .Where(s => s.IsDaCliente)
+                .Sum(s => s.TotalTravelExpenses);
+            TotalAllowanceCost = Groups.SelectMany(g => g.Sections)
+                .Where(s => s.IsDaCliente)
+                .Sum(s => s.TotalAllowanceExpenses);
 
-        // Scheda prezzi — ricalcolo a cascata
-        Notify(nameof(NetPrice));
-        Notify(nameof(ContingencyAmount));
-        Notify(nameof(OfferPrice));
-        Notify(nameof(NegotiationMarginAmount));
-        Notify(nameof(FinalOfferPrice));
+            Notify(nameof(GrandMaterialCostWithTravel));
+            Notify(nameof(GrandMaterialSaleWithTravel));
+            Notify(nameof(TotalCombinedCost));
+            Notify(nameof(TotalCombinedSale));
 
-        // Distribuzione prezzo
-        Notify(nameof(ResourceDistributed));
-        Notify(nameof(MaterialDistributed));
-        Notify(nameof(TravelDistributed));
-        Notify(nameof(TotalDistContingencyCheck));
-        Notify(nameof(TotalDistMarginCheck));
+            // Scheda prezzi — ricalcolo a cascata
+            Notify(nameof(NetPrice));
+            Notify(nameof(ContingencyAmount));
+            Notify(nameof(OfferPrice));
+            Notify(nameof(NegotiationMarginAmount));
+            Notify(nameof(FinalOfferPrice));
 
-        // Auto-ribilancia non-pinned quando cambiano i TotalSale
-        RebalanceUnpinned("contingency");
-        RebalanceUnpinned("margin");
+            // Distribuzione prezzo
+            Notify(nameof(ResourceDistributed));
+            Notify(nameof(MaterialDistributed));
+            Notify(nameof(TravelDistributed));
+            Notify(nameof(TotalDistContingencyCheck));
+            Notify(nameof(TotalDistMarginCheck));
 
-        RebuildDistributionRows();
+            RebuildDistributionRows();
 
-        int secCount = Groups.Sum(g => g.Sections.Count);
-        StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
-                     $"Netto {TotalCombinedCost:N2} € — Vendita {TotalCombinedSale:N2} €";
+            int secCount = Groups.Sum(g => g.Sections.Count);
+            StatusText = $"{secCount} sezioni risorse, {MaterialSections.Count} categorie materiali — " +
+                         $"Netto {TotalCombinedCost:N2} € — Vendita {TotalCombinedSale:N2} €";
+        }
+        finally
+        {
+            _isRecalculating = false;
+        }
     }
 
     private void RebuildDistributionRows()
     {
-        DistributionRows.Clear();
-        foreach (var sec in Groups.SelectMany(g => g.Sections))
+        var allSections = Groups.SelectMany(g => g.Sections).ToList();
+        var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
+        int expectedCount = allSections.Count + allMatItems.Count;
+
+        if (DistributionRows.Count != expectedCount)
         {
-            DistributionRows.Add(new DistributionRowVM
+            DistributionRows.Clear();
+            foreach (var sec in allSections)
             {
-                SectionId = sec.Id,
-                SectionName = sec.Name,
-                SaleAmount = sec.TotalSale,
-                ContingencyPct = sec.ContingencyPct,
-                ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
-                IsContingencyPinned = sec.IsContingencyPinned,
-                MarginPct = sec.MarginPct,
-                MarginAmount = sec.MarginPct * NegotiationMarginAmount,
-                IsMarginPinned = sec.IsMarginPinned,
-                SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
-            });
+                DistributionRows.Add(new DistributionRowVM
+                {
+                    RowType = "R", SectionId = sec.Id, ItemId = 0,
+                    SectionName = sec.Name, SaleAmount = sec.TotalSale,
+                    ContingencyPct = sec.ContingencyPct, ContingencyAmount = sec.ContingencyPct * ContingencyAmount,
+                    IsContingencyPinned = sec.IsContingencyPinned,
+                    MarginPct = sec.MarginPct, MarginAmount = sec.MarginPct * NegotiationMarginAmount,
+                    IsMarginPinned = sec.IsMarginPinned,
+                    SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount)
+                });
+            }
+            foreach (var item in allMatItems)
+            {
+                DistributionRows.Add(new DistributionRowVM
+                {
+                    RowType = "M", SectionId = 0, ItemId = item.Id,
+                    SectionName = item.Description, SaleAmount = item.TotalSale,
+                    ContingencyPct = item.ContingencyPct, ContingencyAmount = item.ContingencyPct * ContingencyAmount,
+                    IsContingencyPinned = item.IsContingencyPinned,
+                    MarginPct = item.MarginPct, MarginAmount = item.MarginPct * NegotiationMarginAmount,
+                    IsMarginPinned = item.IsMarginPinned,
+                    SectionTotal = item.TotalSale + (item.ContingencyPct * ContingencyAmount) + (item.MarginPct * NegotiationMarginAmount)
+                });
+            }
+            return;
+        }
+
+        int idx = 0;
+        foreach (var sec in allSections)
+        {
+            var row = DistributionRows[idx++];
+            row.RowType = "R"; row.SectionId = sec.Id; row.ItemId = 0;
+            row.SectionName = sec.Name; row.SaleAmount = sec.TotalSale;
+            row.ContingencyPct = sec.ContingencyPct; row.ContingencyAmount = sec.ContingencyPct * ContingencyAmount;
+            row.IsContingencyPinned = sec.IsContingencyPinned;
+            row.MarginPct = sec.MarginPct; row.MarginAmount = sec.MarginPct * NegotiationMarginAmount;
+            row.IsMarginPinned = sec.IsMarginPinned;
+            row.SectionTotal = sec.TotalSale + (sec.ContingencyPct * ContingencyAmount) + (sec.MarginPct * NegotiationMarginAmount);
+        }
+        foreach (var item in allMatItems)
+        {
+            var row = DistributionRows[idx++];
+            row.RowType = "M"; row.SectionId = 0; row.ItemId = item.Id;
+            row.SectionName = item.Description; row.SaleAmount = item.TotalSale;
+            row.ContingencyPct = item.ContingencyPct; row.ContingencyAmount = item.ContingencyPct * ContingencyAmount;
+            row.IsContingencyPinned = item.IsContingencyPinned;
+            row.MarginPct = item.MarginPct; row.MarginAmount = item.MarginPct * NegotiationMarginAmount;
+            row.IsMarginPinned = item.IsMarginPinned;
+            row.SectionTotal = item.TotalSale + (item.ContingencyPct * ContingencyAmount) + (item.MarginPct * NegotiationMarginAmount);
         }
     }
 
     /// <summary>
     /// Ribilancia le % non-pinned per un campo (contingency o margin).
-    /// Le sezioni pinned restano fisse, le altre si spartiscono il rimanente.
+    /// Pool unificato: sezioni risorse + singoli item materiale.
     /// </summary>
     public void RebalanceUnpinned(string field)
     {
         var allSections = Groups.SelectMany(g => g.Sections).ToList();
-        decimal pinnedTotal = field == "contingency"
-            ? allSections.Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct)
-            : allSections.Where(s => s.IsMarginPinned).Sum(s => s.MarginPct);
+        var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
+
+        decimal pinnedTotal = 0;
+        if (field == "contingency")
+        {
+            pinnedTotal += allSections.Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct);
+            pinnedTotal += allMatItems.Where(i => i.IsContingencyPinned).Sum(i => i.ContingencyPct);
+        }
+        else
+        {
+            pinnedTotal += allSections.Where(s => s.IsMarginPinned).Sum(s => s.MarginPct);
+            pinnedTotal += allMatItems.Where(i => i.IsMarginPinned).Sum(i => i.MarginPct);
+        }
 
         decimal remaining = Math.Max(0, 1m - pinnedTotal);
-        var unpinned = field == "contingency"
-            ? allSections.Where(s => !s.IsContingencyPinned).ToList()
-            : allSections.Where(s => !s.IsMarginPinned).ToList();
+        var unpinned = new List<(Action<decimal> SetPct, decimal Sale)>();
+
+        foreach (var s in allSections)
+        {
+            bool pinned = field == "contingency" ? s.IsContingencyPinned : s.IsMarginPinned;
+            if (!pinned)
+                unpinned.Add((val => { if (field == "contingency") s.ContingencyPct = val; else s.MarginPct = val; }, s.TotalSale));
+        }
+        foreach (var i in allMatItems)
+        {
+            bool pinned = field == "contingency" ? i.IsContingencyPinned : i.IsMarginPinned;
+            if (!pinned)
+                unpinned.Add((val => { if (field == "contingency") i.ContingencyPct = val; else i.MarginPct = val; }, i.TotalSale));
+        }
 
         if (unpinned.Count == 0) return;
 
-        decimal totalSaleUnpinned = unpinned.Sum(s => s.TotalSale);
-        foreach (var s in unpinned)
+        decimal totalSaleUnpinned = unpinned.Sum(u => u.Sale);
+        foreach (var (setPct, sale) in unpinned)
         {
             decimal newVal = totalSaleUnpinned > 0
-                ? Math.Round(s.TotalSale / totalSaleUnpinned * remaining, 4)
+                ? Math.Round(sale / totalSaleUnpinned * remaining, 4)
                 : Math.Round(remaining / unpinned.Count, 4);
-
-            if (field == "contingency") s.ContingencyPct = newVal;
-            else s.MarginPct = newVal;
+            setPct(newVal);
         }
     }
 
