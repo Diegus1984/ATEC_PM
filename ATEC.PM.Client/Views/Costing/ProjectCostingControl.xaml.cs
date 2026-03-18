@@ -868,29 +868,6 @@ public partial class ProjectCostingControl : UserControl
         }
         catch (Exception ex) { ShowError("Errore salvataggio distribuzione materiale", ex.Message); }
     }
-
-    private void RebalanceSections(List<CostSectionVM> allSections, int fixedId, string field, decimal fixedValue)
-    {
-        decimal remaining = 1m - fixedValue;
-        var others = allSections.Where(s => s.Id != fixedId).ToList();
-        decimal othersTotal = field == "contingency"
-            ? others.Sum(s => s.ContingencyPct)
-            : others.Sum(s => s.MarginPct);
-
-        foreach (var s in others)
-        {
-            decimal currentVal = field == "contingency" ? s.ContingencyPct : s.MarginPct;
-            decimal newVal = othersTotal > 0
-                ? currentVal / othersTotal * remaining
-                : remaining / others.Count;
-
-            if (field == "contingency")
-                s.ContingencyPct = Math.Round(newVal, 4);
-            else
-                s.MarginPct = Math.Round(newVal, 4);
-        }
-    }
-
     private async Task SaveSectionDistribution(CostSectionVM sec)
     {
         try
