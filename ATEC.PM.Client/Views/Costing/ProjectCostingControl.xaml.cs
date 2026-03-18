@@ -778,20 +778,21 @@ public partial class ProjectCostingControl : UserControl
         if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
         if (val > 1m) val /= 100m;
 
-        // Setta valore + pinna
+        // PIN PRIMA, VALORE DOPO — il setter triggera RecalcGrandTotals via wiring
+        // e RecalcDistribution deve già vedere il pin attivo
         if (distRow.RowType == "R")
         {
             CostSectionVM? sec = FindSection(distRow.SectionId);
             if (sec == null) return;
-            if (field == "contingency") { sec.ContingencyPct = val; sec.IsContingencyPinned = true; }
-            else { sec.MarginPct = val; sec.IsMarginPinned = true; }
+            if (field == "contingency") { sec.IsContingencyPinned = true; sec.ContingencyPct = val; }
+            else { sec.IsMarginPinned = true; sec.MarginPct = val; }
         }
         else
         {
             MaterialItemVM? item = FindMaterialItem(distRow.ItemId);
             if (item == null) return;
-            if (field == "contingency") { item.ContingencyPct = val; item.IsContingencyPinned = true; }
-            else { item.MarginPct = val; item.IsMarginPinned = true; }
+            if (field == "contingency") { item.IsContingencyPinned = true; item.ContingencyPct = val; }
+            else { item.IsMarginPinned = true; item.MarginPct = val; }
         }
 
         // LA PROC fa il resto
