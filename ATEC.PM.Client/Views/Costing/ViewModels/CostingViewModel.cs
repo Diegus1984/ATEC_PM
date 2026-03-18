@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Serilog;
 
 namespace ATEC.PM.Client.Views.Costing.ViewModels;
 
@@ -195,17 +196,28 @@ public class CostingViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// LA PROC. Unico punto di ricalcolo distribuzione.
-    /// 1) Raccoglie tutti gli oggetti (sezioni R + items M)
-    /// 2) Per contingency e margin separatamente:
-    ///    - Somma % pinned → rimanente = 100% - pinned
-    ///    - Distribuisce rimanente tra non-pinned proporzionale a TotalSale
-    /// 3) Ricalcola importi € per ogni riga
-    /// 4) Aggiorna la tabella DistributionRows
     /// </summary>
+    private static int _recalcCounter = 0;
+
     private void RecalcDistribution()
     {
+        _recalcCounter++;
+        int callNum = _recalcCounter;
+
+        var stack = new System.Diagnostics.StackTrace(1, false);
+        var frames = stack.GetFrames()?.Take(5).Select(f => f.GetMethod()?.Name ?? "?") ?? Array.Empty<string>();
+        Log.Debug("═══ RecalcDistribution #{CallNum} da: {Caller}", callNum, string.Join(" → ", frames));
+
         var allSections = Groups.SelectMany(g => g.Sections).ToList();
         var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
+
+        // Log PRIMA
+        foreach (var s in allSections)
+            Log.Debug("  PRIMA R [{Id}] {Name}: Sale={Sale:N2} ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                s.Id, s.Name, s.TotalSale, s.ContingencyPct, s.IsContingencyPinned, s.MarginPct, s.IsMarginPinned);
+        foreach (var i in allMatItems)
+            Log.Debug("  PRIMA M [{Id}] {Desc}: Sale={Sale:N2} ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                i.Id, i.Description, i.TotalSale, i.ContingencyPct, i.IsContingencyPinned, i.MarginPct, i.IsMarginPinned);
 
         // ── STEP 1: ribilancia CONT % ──
         {
@@ -213,7 +225,6 @@ public class CostingViewModel : INotifyPropertyChanged
                               + allMatItems.Where(i => i.IsContingencyPinned).Sum(i => i.ContingencyPct);
             decimal remaining = Math.Max(0, 1m - pinnedSum);
 
-            // Raccogli non-pinned con il loro peso (TotalSale)
             var unpinned = new List<(Action<decimal> Set, decimal Sale)>();
             foreach (var s in allSections.Where(s => !s.IsContingencyPinned))
                 unpinned.Add((v => s.ContingencyPct = v, s.TotalSale));
@@ -221,6 +232,8 @@ public class CostingViewModel : INotifyPropertyChanged
                 unpinned.Add((v => i.ContingencyPct = v, i.TotalSale));
 
             decimal totalSale = unpinned.Sum(u => u.Sale);
+            Log.Debug("  CONT: pinnedSum={PinnedSum:P1} remaining={Remaining:P1} unpinned={Count} totalSale={Total:N2}",
+                pinnedSum, remaining, unpinned.Count, totalSale);
             foreach (var (set, sale) in unpinned)
                 set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
         }
@@ -238,15 +251,26 @@ public class CostingViewModel : INotifyPropertyChanged
                 unpinned.Add((v => i.MarginPct = v, i.TotalSale));
 
             decimal totalSale = unpinned.Sum(u => u.Sale);
+            Log.Debug("  MARG: pinnedSum={PinnedSum:P1} remaining={Remaining:P1} unpinned={Count} totalSale={Total:N2}",
+                pinnedSum, remaining, unpinned.Count, totalSale);
             foreach (var (set, sale) in unpinned)
                 set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
         }
+
+        // Log DOPO
+        foreach (var s in allSections)
+            Log.Debug("  DOPO R [{Id}] {Name}: ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                s.Id, s.Name, s.ContingencyPct, s.IsContingencyPinned, s.MarginPct, s.IsMarginPinned);
+        foreach (var i in allMatItems)
+            Log.Debug("  DOPO M [{Id}] {Desc}: ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                i.Id, i.Description, i.ContingencyPct, i.IsContingencyPinned, i.MarginPct, i.IsMarginPinned);
 
         // ── STEP 3: aggiorna tabella DistributionRows ──
         int expectedCount = allSections.Count + allMatItems.Count;
 
         if (DistributionRows.Count != expectedCount)
         {
+            Log.Debug("  REBUILD righe: {Old} → {New}", DistributionRows.Count, expectedCount);
             DistributionRows.Clear();
             foreach (var sec in allSections)
                 DistributionRows.Add(MakeDistRow("R", sec.Id, 0, sec.Name, sec.TotalSale, sec.ContingencyPct, sec.IsContingencyPinned, sec.MarginPct, sec.IsMarginPinned));
@@ -255,12 +279,14 @@ public class CostingViewModel : INotifyPropertyChanged
         }
         else
         {
+            Log.Debug("  UPDATE in-place: {Count} righe", expectedCount);
             int idx = 0;
             foreach (var sec in allSections)
                 UpdateDistRow(DistributionRows[idx++], "R", sec.Id, 0, sec.Name, sec.TotalSale, sec.ContingencyPct, sec.IsContingencyPinned, sec.MarginPct, sec.IsMarginPinned);
             foreach (var item in allMatItems)
                 UpdateDistRow(DistributionRows[idx++], "M", 0, item.Id, item.Description, item.TotalSale, item.ContingencyPct, item.IsContingencyPinned, item.MarginPct, item.IsMarginPinned);
         }
+        Log.Debug("═══ Fine RecalcDistribution #{CallNum}", callNum);
     }
 
     private DistributionRowVM MakeDistRow(string type, int secId, int itemId, string name, decimal sale,
@@ -430,6 +456,18 @@ public class CostingViewModel : INotifyPropertyChanged
 
             vm.MaterialSections.Add(matVM);
         }
+
+        // LOG: cosa ha letto FromData dal DB
+        Log.Debug("═══ FromData COMPLETATO ═══");
+        foreach (var g in vm.Groups)
+            foreach (var s in g.Sections)
+                Log.Debug("  FromData R [{Id}] {Name}: ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                    s.Id, s.Name, s.ContingencyPct, s.IsContingencyPinned, s.MarginPct, s.IsMarginPinned);
+        foreach (var ms in vm.MaterialSections)
+            foreach (var i in ms.Items)
+                Log.Debug("  FromData M [{Id}] {Desc}: ContPct={Cont:P1} ContPin={ContPin} MargPct={Marg:P1} MargPin={MargPin}",
+                    i.Id, i.Description, i.ContingencyPct, i.IsContingencyPinned, i.MarginPct, i.IsMarginPinned);
+        Log.Debug("  → Ora chiamo WireAllChanges...");
 
         vm.WireAllChanges();
         return vm;

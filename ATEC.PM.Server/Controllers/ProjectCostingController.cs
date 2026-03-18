@@ -443,4 +443,23 @@ public class ProjectCostingController : ControllerBase
             });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione aggiornata"));
     }
+
+    [HttpPut("material-items/{id}/distribution")]
+    public IActionResult UpdateMaterialItemDistribution(int projectId, int id, [FromBody] SectionDistributionDto req)
+    {
+        using var c = _db.Open();
+        c.Execute(@"UPDATE project_material_items 
+            SET contingency_pct=@ContPct, margin_pct=@MargPct,
+                contingency_pinned=@ContPin, margin_pinned=@MargPin
+            WHERE id=@Id",
+            new
+            {
+                ContPct = req.ContingencyPct,
+                MargPct = req.MarginPct,
+                ContPin = req.ContingencyPinned,
+                MargPin = req.MarginPinned,
+                Id = id
+            });
+        return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));
+    }
 }

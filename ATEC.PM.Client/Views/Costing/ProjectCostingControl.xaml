@@ -695,6 +695,11 @@
                 RowBackground="Transparent"
                 RowHeight="36"
                 SelectionMode="Single">
+                <DataGrid.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#EBF0FF"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#F3F4F6"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26"/>
+                </DataGrid.Resources>
                 <DataGrid.Columns>
                     <DataGridTextColumn
                         Width="3*"

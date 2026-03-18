@@ -776,26 +776,58 @@ public partial class ProjectCostingControl : UserControl
         string field = tb.Tag?.ToString() ?? "";
         string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
         if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
-        if (val > 1m) val /= 100m;
+        val /= 100m;
 
-        // PIN PRIMA, VALORE DOPO — il setter triggera RecalcGrandTotals via wiring
-        // e RecalcDistribution deve già vedere il pin attivo
+        // Calcola pinned totale attuale (escludendo la riga corrente se già pinned)
+        decimal currentPinnedCont = _vm.Groups.SelectMany(g => g.Sections)
+            .Where(s => s.IsContingencyPinned).Sum(s => s.ContingencyPct)
+            + _vm.MaterialSections.SelectMany(s => s.Items)
+            .Where(i => i.IsContingencyPinned).Sum(i => i.ContingencyPct);
+        decimal currentPinnedMarg = _vm.Groups.SelectMany(g => g.Sections)
+            .Where(s => s.IsMarginPinned).Sum(s => s.MarginPct)
+            + _vm.MaterialSections.SelectMany(s => s.Items)
+            .Where(i => i.IsMarginPinned).Sum(i => i.MarginPct);
+
+        // PIN PRIMA, VALORE DOPO (con cap automatico al 100%)
         if (distRow.RowType == "R")
         {
             CostSectionVM? sec = FindSection(distRow.SectionId);
             if (sec == null) return;
-            if (field == "contingency") { sec.IsContingencyPinned = true; sec.ContingencyPct = val; }
-            else { sec.IsMarginPinned = true; sec.MarginPct = val; }
+            if (field == "contingency")
+            {
+                decimal otherPinned = currentPinnedCont - (sec.IsContingencyPinned ? sec.ContingencyPct : 0);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                sec.IsContingencyPinned = true;
+                sec.ContingencyPct = val;
+            }
+            else
+            {
+                decimal otherPinned = currentPinnedMarg - (sec.IsMarginPinned ? sec.MarginPct : 0);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                sec.IsMarginPinned = true;
+                sec.MarginPct = val;
+            }
         }
         else
         {
             MaterialItemVM? item = FindMaterialItem(distRow.ItemId);
             if (item == null) return;
-            if (field == "contingency") { item.IsContingencyPinned = true; item.ContingencyPct = val; }
-            else { item.IsMarginPinned = true; item.MarginPct = val; }
+            if (field == "contingency")
+            {
+                decimal otherPinned = currentPinnedCont - (item.IsContingencyPinned ? item.ContingencyPct : 0);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                item.IsContingencyPinned = true;
+                item.ContingencyPct = val;
+            }
+            else
+            {
+                decimal otherPinned = currentPinnedMarg - (item.IsMarginPinned ? item.MarginPct : 0);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                item.IsMarginPinned = true;
+                item.MarginPct = val;
+            }
         }
 
-        // LA PROC fa il resto
         _vm.RecalcGrandTotals();
         await SaveAllDistributions();
         ShowTemporaryMessage("Distribuzione aggiornata — bloccata 🔒");

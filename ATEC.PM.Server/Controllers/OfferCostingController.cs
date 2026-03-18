@@ -494,4 +494,23 @@ public class OfferCostingController : ControllerBase
             });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione aggiornata"));
     }
+
+    [HttpPut("material-items/{id}/distribution")]
+    public IActionResult UpdateMaterialItemDistribution(int offerId, int id, [FromBody] SectionDistributionDto req)
+    {
+        using var c = _db.Open();
+        c.Execute(@"UPDATE offer_material_items 
+            SET contingency_pct=@ContPct, margin_pct=@MargPct,
+                contingency_pinned=@ContPin, margin_pinned=@MargPin
+            WHERE id=@Id",
+            new
+            {
+                ContPct = req.ContingencyPct,
+                MargPct = req.MarginPct,
+                ContPin = req.ContingencyPinned,
+                MargPin = req.MarginPinned,
+                Id = id
+            });
+        return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));
+    }
 }
