@@ -169,13 +169,11 @@ public partial class QuoteDetailPage : Page
     // ITEMS — Aggiungi dal catalogo
     // ═══════════════════════════════════════════════
 
-    private async void BtnAddItem_Click(object sender, RoutedEventArgs e)
+    private void BtnAddItem_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new AddQuoteItemDialog(_quoteId) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true)
-        {
-            await LoadQuote();
-        }
+        dlg.ItemAdded += async () => await LoadQuote();
+        dlg.ShowDialog();
     }
 
     private async void BtnRemoveItem_Click(object sender, RoutedEventArgs e)

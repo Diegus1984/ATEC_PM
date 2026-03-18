@@ -34,24 +34,25 @@
         <Border DockPanel.Dock="Bottom" Padding="16,10" Background="White"
                 BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
             <DockPanel>
-                <TextBlock x:Name="txtInfo" FontSize="11" Foreground="#6B7280"
-                           VerticalAlignment="Center"
-                           Text="Seleziona un prodotto e una variante, poi clicca Aggiungi" />
-                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right"
-                            Orientation="Horizontal">
-                    <Button Content="Chiudi" Style="{StaticResource FlatBtn}"
-                            Width="80" Click="BtnClose_Click" />
-                    <Button x:Name="btnAdd" Content="Aggiungi" Style="{StaticResource PrimaryBtn}"
-                            Width="100" Margin="8,0,0,0" IsEnabled="False"
-                            Click="BtnAdd_Click" />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="txtInfo" FontSize="11" Foreground="#6B7280"
+                               VerticalAlignment="Center"
+                               Text="Doppio-click su un prodotto per aggiungerlo al preventivo" />
+                    <TextBlock x:Name="txtAdded" FontSize="11" Foreground="#16A34A"
+                               FontWeight="SemiBold" VerticalAlignment="Center"
+                               Margin="16,0,0,0" />
                 </StackPanel>
+                <Button DockPanel.Dock="Right" HorizontalAlignment="Right"
+                        Content="Chiudi" Style="{StaticResource FlatBtn}"
+                        Width="80" Click="BtnClose_Click" />
             </DockPanel>
         </Border>
 
         <!-- Product grid -->
         <DataGrid x:Name="dgProducts"
                   AutoGenerateColumns="False" IsReadOnly="True"
-                  SelectionMode="Single" SelectionChanged="DgProducts_SelectionChanged"
+                  SelectionMode="Single"
+                  MouseDoubleClick="DgProducts_DoubleClick"
                   GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F3F4F6"
                   BorderThickness="0" RowHeight="36" FontSize="13"
                   Background="White">

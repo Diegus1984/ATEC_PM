@@ -17,6 +17,8 @@ public partial class AddQuoteItemDialog : Window
     private List<CatalogPickItem> _allItems = new();
     private CancellationTokenSource? _searchCts;
     private bool _added = false;
+    private int _addedCount = 0;
+    public event Action? ItemAdded;
 
     public AddQuoteItemDialog(int quoteId)
     {
@@ -174,45 +176,98 @@ public partial class AddQuoteItemDialog : Window
         txtInfo.Text = $"{filtered.Count} voci disponibili";
     }
 
-    private void DgProducts_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        btnAdd.IsEnabled = dgProducts.SelectedItem != null;
-    }
+    private void DgProducts_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
 
-    private async void BtnAdd_Click(object sender, RoutedEventArgs e)
+    private async void DgProducts_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (dgProducts.SelectedItem is not CatalogPickItem item) return;
 
-        var dto = new QuoteItemSaveDto
-        {
-            ProductId = item.ProductId,
-            VariantId = item.VariantId,
-            ItemType = item.ItemType,
-            Code = item.Code,
-            Name = string.IsNullOrEmpty(item.VariantName) || item.VariantName == "—"
-                ? item.Name : item.VariantName,
-            DescriptionRtf = item.DescriptionRtf,
-            Unit = item.Unit,
-            Quantity = item.DefaultQty,
-            CostPrice = item.CostPrice,
-            SellPrice = item.SellPrice,
-            DiscountPct = item.DiscountPct,
-            VatPct = item.VatPct
-        };
-
         try
         {
+            // Controlla se esiste già nel preventivo
+            string checkJson = await ApiClient.GetAsync($"/api/quotes/{_quoteId}");
+            var checkDoc = JsonDocument.Parse(checkJson);
+            if (checkDoc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var quoteData = checkDoc.RootElement.GetProperty("data");
+                var existingItems = JsonSerializer.Deserialize<QuoteDto>(
+                    quoteData.GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.Items ?? new();
+
+                // Cerca duplicato per product_id + variant_id
+                var duplicate = existingItems.FirstOrDefault(x =>
+                    x.ProductId == item.ProductId && x.VariantId == item.VariantId);
+
+                if (duplicate != null)
+                {
+                    var result = MessageBox.Show(
+                        $"'{item.VariantName ?? item.Name}' è già presente nel preventivo (Qtà attuale: {duplicate.Quantity:N0}).\n\nVuoi aggiungere +1 alla quantità?",
+                        "Articolo già presente",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        var updateDto = new QuoteItemSaveDto
+                        {
+                            ProductId = duplicate.ProductId,
+                            VariantId = duplicate.VariantId,
+                            ItemType = duplicate.ItemType,
+                            Code = duplicate.Code,
+                            Name = duplicate.Name,
+                            DescriptionRtf = duplicate.DescriptionRtf,
+                            Unit = duplicate.Unit,
+                            Quantity = duplicate.Quantity + 1,
+                            CostPrice = duplicate.CostPrice,
+                            SellPrice = duplicate.SellPrice,
+                            DiscountPct = duplicate.DiscountPct,
+                            VatPct = duplicate.VatPct,
+                            SortOrder = duplicate.SortOrder
+                        };
+                        string updateBody = JsonSerializer.Serialize(updateDto);
+                        await ApiClient.PutAsync($"/api/quotes/{_quoteId}/items/{duplicate.Id}", updateBody);
+                        _addedCount++;
+                        ItemAdded?.Invoke();
+                        txtAdded.Text = $"✓ Qtà aggiornata per {duplicate.Name} → {duplicate.Quantity + 1}";
+                        _added = true;
+                    }
+                    return;
+                }
+            }
+
+            // Inserimento nuovo
+            var dto = new QuoteItemSaveDto
+            {
+                ProductId = item.ProductId,
+                VariantId = item.VariantId,
+                ItemType = item.ItemType,
+                Code = item.Code,
+                Name = string.IsNullOrEmpty(item.VariantName) || item.VariantName == "—"
+                    ? item.Name : item.VariantName,
+                DescriptionRtf = item.DescriptionRtf,
+                Unit = item.Unit,
+                Quantity = item.DefaultQty,
+                CostPrice = item.CostPrice,
+                SellPrice = item.SellPrice,
+                DiscountPct = item.DiscountPct,
+                VatPct = item.VatPct
+            };
+
             string body = JsonSerializer.Serialize(dto);
             string json = await ApiClient.PostAsync($"/api/quotes/{_quoteId}/items", body);
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
+                _addedCount++;
+                ItemAdded?.Invoke();
                 _added = true;
-                txtInfo.Text = $"✓ Aggiunto: {dto.Name}";
+                txtAdded.Text = $"✓ {_addedCount} voc{(_addedCount == 1 ? "e aggiunta" : "i aggiunte")}";
             }
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
+
+    private async void BtnAdd_Click(object sender, RoutedEventArgs e) { }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
