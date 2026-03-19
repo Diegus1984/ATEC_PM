@@ -17,8 +17,19 @@ public class QuoteDbService
     public void InitTables(MySqlConnection c)
     {
         // ──────────────────────────────────────────────────
-        // QUOTE CATALOG — Gruppi → Categorie → Prodotti → Varianti
+        // QUOTE CATALOG — Listini → Gruppi → Categorie → Prodotti → Varianti
         // ──────────────────────────────────────────────────
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_price_lists (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            currency VARCHAR(10) DEFAULT 'EUR',
+            locale VARCHAR(10) DEFAULT 'it',
+            is_active TINYINT(1) DEFAULT 1,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_groups (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -197,6 +208,22 @@ public class QuoteDbService
 
     public void ApplyMigrations(MySqlConnection c)
     {
-        // Future migrazioni del modulo quote vanno qui
+        // Listino: FK su quote_groups e quotes
+        AddColumnIfMissing(c, "quote_groups", "price_list_id", "INT NULL AFTER id");
+        AddColumnIfMissing(c, "quotes", "price_list_id", "INT NULL AFTER group_id");
+
+        // Varianti nel preventivo: toggle attiva/conferma + raggruppamento
+        AddColumnIfMissing(c, "quote_items", "is_active", "TINYINT(1) DEFAULT 1 AFTER sort_order");
+        AddColumnIfMissing(c, "quote_items", "is_confirmed", "TINYINT(1) DEFAULT 0 AFTER is_active");
+        AddColumnIfMissing(c, "quote_items", "parent_item_id", "INT NULL AFTER is_confirmed");
+    }
+
+    private static void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)
+    {
+        int exists = c.ExecuteScalar<int>($@"
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'");
+        if (exists == 0)
+            c.Execute($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
     }
 }

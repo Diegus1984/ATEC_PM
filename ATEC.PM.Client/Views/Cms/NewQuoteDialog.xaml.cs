@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using ATEC.PM.Client.Services;
@@ -17,10 +18,11 @@ public partial class NewQuoteDialog : Window
         Loaded += async (_, _) => await LoadData();
     }
 
+    private List<QuoteGroupDto> _allGroups = new();
+    private static readonly JsonSerializerOptions _jopt = new() { PropertyNameCaseInsensitive = true };
+
     private async System.Threading.Tasks.Task LoadData()
     {
-        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
         // Carica clienti
         try
         {
@@ -29,8 +31,23 @@ public partial class NewQuoteDialog : Window
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 var customers = JsonSerializer.Deserialize<List<CustomerListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(), opts) ?? new();
+                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
                 cmbCustomer.ItemsSource = customers;
+            }
+        }
+        catch { }
+
+        // Carica listini
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/quote-catalog/price-lists");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var priceLists = JsonSerializer.Deserialize<List<QuotePriceListDto>>(
+                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
+                cmbPriceList.ItemsSource = priceLists;
+                if (priceLists.Count > 0) cmbPriceList.SelectedIndex = 0;
             }
         }
         catch { }
@@ -42,12 +59,27 @@ public partial class NewQuoteDialog : Window
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
-                var groups = JsonSerializer.Deserialize<List<QuoteGroupDto>>(
-                    doc.RootElement.GetProperty("data").GetRawText(), opts) ?? new();
-                cmbGroup.ItemsSource = groups;
+                _allGroups = JsonSerializer.Deserialize<List<QuoteGroupDto>>(
+                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
+                FilterGroupsByPriceList();
             }
         }
         catch { }
+    }
+
+    private void CmbPriceList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        FilterGroupsByPriceList();
+    }
+
+    private void FilterGroupsByPriceList()
+    {
+        int? plId = cmbPriceList.SelectedValue as int?;
+        if (plId.HasValue)
+            cmbGroup.ItemsSource = _allGroups.Where(g => g.PriceListId == plId.Value).ToList();
+        else
+            cmbGroup.ItemsSource = _allGroups;
+        cmbGroup.SelectedIndex = -1;
     }
 
     private async void BtnCreate_Click(object sender, RoutedEventArgs e)
@@ -64,10 +96,12 @@ public partial class NewQuoteDialog : Window
         }
 
         int? groupId = cmbGroup.SelectedValue as int?;
+        int? priceListId = cmbPriceList.SelectedValue as int?;
         string payment = cmbPayment.Text?.Trim() ?? "";
 
         var dto = new QuoteSaveDto
         {
+            PriceListId = priceListId,
             Title = txtTitle.Text.Trim(),
             CustomerId = customerId,
             GroupId = groupId,

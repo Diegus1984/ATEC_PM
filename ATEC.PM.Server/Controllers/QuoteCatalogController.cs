@@ -16,25 +16,94 @@ public class QuoteCatalogController : ControllerBase
     public QuoteCatalogController(QuoteDbService qdb) => _qdb = qdb;
 
     // ═══════════════════════════════════════════════════════
+    // PRICE LISTS — Listini
+    // ═══════════════════════════════════════════════════════
+
+    [HttpGet("price-lists")]
+    public IActionResult GetPriceLists()
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            var rows = c.Query<QuotePriceListDto>(@"
+                SELECT pl.id AS Id, pl.name AS Name, pl.currency AS Currency,
+                       pl.locale AS Locale, pl.is_active AS IsActive, pl.sort_order AS SortOrder,
+                       (SELECT COUNT(*) FROM quote_groups WHERE price_list_id = pl.id) AS GroupCount
+                FROM quote_price_lists pl
+                ORDER BY pl.sort_order, pl.name").ToList();
+            return Ok(ApiResponse<List<QuotePriceListDto>>.Ok(rows));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<List<QuotePriceListDto>>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpPost("price-lists")]
+    public IActionResult CreatePriceList([FromBody] QuotePriceListSaveDto dto)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            int id = (int)c.ExecuteScalar<long>(@"
+                INSERT INTO quote_price_lists (name, currency, locale, is_active, sort_order)
+                VALUES (@Name, @Currency, @Locale, @IsActive, @SortOrder);
+                SELECT LAST_INSERT_ID()", dto);
+            return Ok(ApiResponse<int>.Ok(id, "Listino creato"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpPut("price-lists/{id}")]
+    public IActionResult UpdatePriceList(int id, [FromBody] QuotePriceListSaveDto dto)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            c.Execute(@"UPDATE quote_price_lists SET name=@Name, currency=@Currency,
+                        locale=@Locale, is_active=@IsActive, sort_order=@SortOrder WHERE id=@Id",
+                new { dto.Name, dto.Currency, dto.Locale, dto.IsActive, dto.SortOrder, Id = id });
+            return Ok(ApiResponse<string>.Ok("Listino aggiornato"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpDelete("price-lists/{id}")]
+    public IActionResult DeletePriceList(int id)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            // Aggiorna gruppi orfani
+            c.Execute("UPDATE quote_groups SET price_list_id=NULL WHERE price_list_id=@Id", new { Id = id });
+            c.Execute("DELETE FROM quote_price_lists WHERE id=@Id", new { Id = id });
+            return Ok(ApiResponse<string>.Ok("Listino eliminato"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ═══════════════════════════════════════════════════════
     // TREE — Albero completo Gruppi → Categorie (per TreeView)
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("tree")]
-    public IActionResult GetTree()
+    public IActionResult GetTree([FromQuery] int? priceListId = null)
     {
         try
         {
             using var c = _qdb.Open();
 
-            var groups = c.Query<QuoteGroupDto>(@"
-                SELECT g.id AS Id, g.name AS Name, g.description AS Description,
+            string whereGroup = priceListId.HasValue ? "WHERE g.price_list_id = @PriceListId" : "";
+            var groups = c.Query<QuoteGroupDto>($@"
+                SELECT g.id AS Id, g.price_list_id AS PriceListId,
+                       COALESCE(pl.name,'') AS PriceListName,
+                       g.name AS Name, g.description AS Description,
                        g.sort_order AS SortOrder, g.is_active AS IsActive,
                        (SELECT COUNT(*) FROM quote_categories WHERE group_id = g.id) AS CategoryCount,
                        (SELECT COUNT(*) FROM quote_products p
                         JOIN quote_categories cat ON cat.id = p.category_id
                         WHERE cat.group_id = g.id) AS ProductCount
                 FROM quote_groups g
-                ORDER BY g.sort_order, g.name").ToList();
+                LEFT JOIN quote_price_lists pl ON pl.id = g.price_list_id
+                {whereGroup}
+                ORDER BY g.sort_order, g.name", new { PriceListId = priceListId }).ToList();
 
             var categories = c.Query<QuoteCategoryDto>(@"
                 SELECT c.id AS Id, c.group_id AS GroupId, g.name AS GroupName,
@@ -69,20 +138,25 @@ public class QuoteCatalogController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("groups")]
-    public IActionResult GetGroups()
+    public IActionResult GetGroups([FromQuery] int? priceListId = null)
     {
         try
         {
             using var c = _qdb.Open();
-            var rows = c.Query<QuoteGroupDto>(@"
-                SELECT g.id AS Id, g.name AS Name, g.description AS Description,
+            string where = priceListId.HasValue ? "WHERE g.price_list_id = @PriceListId" : "";
+            var rows = c.Query<QuoteGroupDto>($@"
+                SELECT g.id AS Id, g.price_list_id AS PriceListId,
+                       COALESCE(pl.name,'') AS PriceListName,
+                       g.name AS Name, g.description AS Description,
                        g.sort_order AS SortOrder, g.is_active AS IsActive,
                        (SELECT COUNT(*) FROM quote_categories WHERE group_id = g.id) AS CategoryCount,
                        (SELECT COUNT(*) FROM quote_products p
                         JOIN quote_categories cat ON cat.id = p.category_id
                         WHERE cat.group_id = g.id) AS ProductCount
                 FROM quote_groups g
-                ORDER BY g.sort_order, g.name").ToList();
+                LEFT JOIN quote_price_lists pl ON pl.id = g.price_list_id
+                {where}
+                ORDER BY g.sort_order, g.name", new { PriceListId = priceListId }).ToList();
             return Ok(ApiResponse<List<QuoteGroupDto>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<QuoteGroupDto>>.Fail($"Errore: {ex.Message}")); }
@@ -95,8 +169,8 @@ public class QuoteCatalogController : ControllerBase
         {
             using var c = _qdb.Open();
             int id = (int)c.ExecuteScalar<long>(@"
-                INSERT INTO quote_groups (name, description, sort_order, is_active)
-                VALUES (@Name, @Description, @SortOrder, @IsActive);
+                INSERT INTO quote_groups (price_list_id, name, description, sort_order, is_active)
+                VALUES (@PriceListId, @Name, @Description, @SortOrder, @IsActive);
                 SELECT LAST_INSERT_ID()", dto);
             return Ok(ApiResponse<int>.Ok(id, "Gruppo creato"));
         }
@@ -109,9 +183,9 @@ public class QuoteCatalogController : ControllerBase
         try
         {
             using var c = _qdb.Open();
-            c.Execute(@"UPDATE quote_groups SET name=@Name, description=@Description,
+            c.Execute(@"UPDATE quote_groups SET price_list_id=@PriceListId, name=@Name, description=@Description,
                         sort_order=@SortOrder, is_active=@IsActive WHERE id=@Id",
-                new { dto.Name, dto.Description, dto.SortOrder, dto.IsActive, Id = id });
+                new { dto.PriceListId, dto.Name, dto.Description, dto.SortOrder, dto.IsActive, Id = id });
             return Ok(ApiResponse<string>.Ok("Gruppo aggiornato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
@@ -405,5 +479,79 @@ public class QuoteCatalogController : ControllerBase
             return Ok(ApiResponse<int>.Ok(newId, "Prodotto duplicato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // IMPORT — Importazione catalogo da Excel
+    // ═══════════════════════════════════════════════════════
+
+    [HttpPost("import")]
+    public IActionResult ImportCatalog([FromBody] QuoteCatalogImportDto dto)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            using var tx = c.BeginTransaction();
+
+            int totalGroups = 0, totalCats = 0, totalProds = 0, totalVars = 0;
+
+            foreach (var listino in dto.PriceLists)
+            {
+                int plId = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO quote_price_lists (name, currency, locale, is_active)
+                    VALUES (@Name, @Currency, @Locale, 1);
+                    SELECT LAST_INSERT_ID()",
+                    new { listino.Name, listino.Currency, listino.Locale }, tx);
+
+                int gSort = 0;
+                foreach (var group in listino.Groups)
+                {
+                    int gId = (int)c.ExecuteScalar<long>(@"
+                        INSERT INTO quote_groups (price_list_id, name, sort_order, is_active)
+                        VALUES (@PlId, @Name, @Sort, 1);
+                        SELECT LAST_INSERT_ID()",
+                        new { PlId = plId, group.Name, Sort = gSort++ }, tx);
+                    totalGroups++;
+
+                    int cSort = 0;
+                    foreach (var cat in group.Categories)
+                    {
+                        int catId = (int)c.ExecuteScalar<long>(@"
+                            INSERT INTO quote_categories (group_id, name, sort_order, is_active)
+                            VALUES (@GId, @Name, @Sort, 1);
+                            SELECT LAST_INSERT_ID()",
+                            new { GId = gId, cat.Name, Sort = cSort++ }, tx);
+                        totalCats++;
+
+                        int pSort = 0;
+                        foreach (var prod in cat.Products)
+                        {
+                            string itemType = prod.ItemType == "content" ? "content" : "product";
+                            int pId = (int)c.ExecuteScalar<long>(@"
+                                INSERT INTO quote_products (category_id, item_type, code, name, description_rtf, sort_order, is_active)
+                                VALUES (@CatId, @Type, @Code, @Name, @Desc, @Sort, 1);
+                                SELECT LAST_INSERT_ID()",
+                                new { CatId = catId, Type = itemType, prod.Code, prod.Name, Desc = prod.Description, Sort = pSort++ }, tx);
+                            totalProds++;
+
+                            int vSort = 0;
+                            foreach (var v in prod.Variants)
+                            {
+                                c.Execute(@"
+                                    INSERT INTO quote_product_variants (product_id, code, name, cost_price, sell_price, vat_pct, sort_order)
+                                    VALUES (@PId, @Code, @Name, @Cost, @Price, @Vat, @Sort)",
+                                    new { PId = pId, v.Code, v.Name, Cost = v.CostPrice, Price = v.SellPrice, Vat = v.VatPct, Sort = vSort++ }, tx);
+                                totalVars++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            tx.Commit();
+            string msg = $"Importati: {dto.PriceLists.Count} listini, {totalGroups} gruppi, {totalCats} categorie, {totalProds} prodotti, {totalVars} varianti";
+            return Ok(ApiResponse<string>.Ok(msg));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore import: {ex.Message}")); }
     }
 }

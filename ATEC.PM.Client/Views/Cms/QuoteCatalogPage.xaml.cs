@@ -21,29 +21,70 @@ public partial class QuoteCatalogPage : Page
 
     private int? _selectedGroupId;
     private int? _selectedCategoryId;
+    private List<QuotePriceListDto> _priceLists = new();
+    private static readonly JsonSerializerOptions _jopt = new() { PropertyNameCaseInsensitive = true };
 
     public QuoteCatalogPage()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await LoadTree();
+        Loaded += async (_, _) =>
+        {
+            await LoadPriceLists();
+            await LoadTree();
+        };
+    }
+
+    // ══════════════════════════════════════════════════
+    // PRICE LISTS
+    // ══════════════════════════════════════════════════
+
+    private async Task LoadPriceLists()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/quote-catalog/price-lists");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                _priceLists = JsonSerializer.Deserialize<List<QuotePriceListDto>>(
+                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
+
+                var items = new List<QuotePriceListDto> { new() { Id = 0, Name = "Tutti i listini" } };
+                items.AddRange(_priceLists);
+                cmbPriceList.ItemsSource = items;
+                cmbPriceList.SelectedIndex = 0;
+            }
+        }
+        catch { }
+    }
+
+    private void CmbPriceList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _ = LoadTree();
     }
 
     // ══════════════════════════════════════════════════
     // TREE — Caricamento e costruzione
     // ══════════════════════════════════════════════════
 
+    private int? SelectedPriceListId =>
+        cmbPriceList?.SelectedItem is QuotePriceListDto pl && pl.Id > 0 ? pl.Id : null;
+
     private async Task LoadTree()
     {
         txtTreeStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/quote-catalog/tree");
+            string url = "/api/quote-catalog/tree";
+            if (SelectedPriceListId.HasValue)
+                url += $"?priceListId={SelectedPriceListId.Value}";
+
+            string json = await ApiClient.GetAsync(url);
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 _tree = JsonSerializer.Deserialize<QuoteCatalogTreeDto>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
                 BuildTree();
                 txtTreeStatus.Text = $"{_tree.TotalGroups} gruppi · {_tree.TotalCategories} categorie · {_tree.TotalProducts} prodotti";
             }
@@ -416,6 +457,138 @@ public partial class QuoteCatalogPage : Page
     private async void BtnRefreshTree_Click(object sender, RoutedEventArgs e)
     {
         await LoadTree();
+    }
+
+    // ══════════════════════════════════════════════════
+    // IMPORT EXCEL
+    // ══════════════════════════════════════════════════
+
+    private async void BtnImportExcel_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Importa catalogo da Excel",
+            Filter = "File Excel (*.xlsx)|*.xlsx",
+            DefaultExt = ".xlsx"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var importData = ParseExcelCatalog(dlg.FileName);
+            int totalProd = importData.PriceLists.Sum(pl => pl.Groups.Sum(g => g.Categories.Sum(c => c.Products.Count)));
+            int totalVar = importData.PriceLists.Sum(pl => pl.Groups.Sum(g => g.Categories.Sum(c => c.Products.Sum(p => p.Variants.Count))));
+
+            var confirm = MessageBox.Show(
+                $"Importare il catalogo?\n\n" +
+                $"Listini: {importData.PriceLists.Count}\n" +
+                $"Gruppi: {importData.PriceLists.Sum(pl => pl.Groups.Count)}\n" +
+                $"Categorie: {importData.PriceLists.Sum(pl => pl.Groups.Sum(g => g.Categories.Count))}\n" +
+                $"Prodotti: {totalProd}\n" +
+                $"Varianti: {totalVar}",
+                "Conferma importazione",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            string body = JsonSerializer.Serialize(importData);
+            string json = await ApiClient.PostAsync("/api/quote-catalog/import", body);
+            var doc = JsonDocument.Parse(json);
+            bool success = doc.RootElement.GetProperty("success").GetBoolean();
+            string msg = doc.RootElement.GetProperty("message").GetString() ?? "";
+
+            if (success)
+            {
+                MessageBox.Show(msg, "Import completato", MessageBoxButton.OK, MessageBoxImage.Information);
+                await LoadPriceLists();
+                await LoadTree();
+            }
+            else
+            {
+                MessageBox.Show(msg, "Errore import", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static QuoteCatalogImportDto ParseExcelCatalog(string filePath)
+    {
+        using var wb = new ClosedXML.Excel.XLWorkbook(filePath);
+        var ws = wb.Worksheet(1);
+        var rows = ws.RangeUsed()?.RowsUsed().Skip(1).ToList() ?? new();
+
+        var result = new QuoteCatalogImportDto();
+        QuoteCatalogImportListino? curListino = null;
+        QuoteCatalogImportGroup? curGroup = null;
+        QuoteCatalogImportCategory? curCat = null;
+        QuoteCatalogImportProduct? curProd = null;
+
+        foreach (var row in rows)
+        {
+            string cellA = row.Cell(1).GetString().Trim();
+            string cellE = row.Cell(5).GetString().Trim();
+            string cellG = row.Cell(7).GetString().Trim();
+            string cellI = row.Cell(9).GetString().Trim();
+            string cellN = row.Cell(14).GetString().Trim();
+
+            if (!string.IsNullOrEmpty(cellA))
+            {
+                curListino = new QuoteCatalogImportListino
+                {
+                    Name = row.Cell(2).GetString().Trim(),
+                    Currency = row.Cell(3).GetString().Trim(),
+                    Locale = row.Cell(4).GetString().Trim()
+                };
+                if (string.IsNullOrEmpty(curListino.Currency)) curListino.Currency = "EUR";
+                if (string.IsNullOrEmpty(curListino.Locale)) curListino.Locale = "it";
+                result.PriceLists.Add(curListino);
+                curGroup = null; curCat = null; curProd = null;
+            }
+
+            if (!string.IsNullOrEmpty(cellE) && curListino != null)
+            {
+                curGroup = new QuoteCatalogImportGroup { Name = row.Cell(6).GetString().Trim() };
+                curListino.Groups.Add(curGroup);
+                curCat = null; curProd = null;
+            }
+
+            if (!string.IsNullOrEmpty(cellG) && curGroup != null)
+            {
+                curCat = new QuoteCatalogImportCategory { Name = row.Cell(8).GetString().Trim() };
+                curGroup.Categories.Add(curCat);
+                curProd = null;
+            }
+
+            if (!string.IsNullOrEmpty(cellI) && curCat != null)
+            {
+                curProd = new QuoteCatalogImportProduct
+                {
+                    Code = row.Cell(10).GetString().Trim(),
+                    Name = row.Cell(11).GetString().Trim(),
+                    Position = row.Cell(12).GetString().Trim(),
+                    Description = row.Cell(13).GetString().Trim()
+                };
+                curCat.Products.Add(curProd);
+            }
+
+            if (!string.IsNullOrEmpty(cellN) && curProd != null)
+            {
+                curProd.Variants.Add(new QuoteCatalogImportVariant
+                {
+                    Code = row.Cell(15).GetString().Trim(),
+                    Name = row.Cell(16).GetString().Trim(),
+                    Description = row.Cell(17).GetString().Trim(),
+                    SellPrice = row.Cell(18).IsEmpty() ? 0 : (decimal)row.Cell(18).GetDouble(),
+                    CostPrice = row.Cell(19).IsEmpty() ? 0 : (decimal)row.Cell(19).GetDouble(),
+                    VatPct = row.Cell(20).IsEmpty() ? 22 : (decimal)row.Cell(20).GetDouble()
+                });
+            }
+        }
+
+        return result;
     }
 }
 

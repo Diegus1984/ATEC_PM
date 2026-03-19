@@ -241,6 +241,37 @@ public partial class QuoteDetailPage : Page
         dlg.ShowDialog();
     }
 
+    private async void ItemToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox cb) return;
+        if (cb.DataContext is not QuoteItemRow row) return;
+
+        try
+        {
+            var dto = new QuoteItemSaveDto
+            {
+                ProductId = row.ProductId,
+                VariantId = row.VariantId,
+                ItemType = row.ItemType,
+                Code = row.Code,
+                Name = row.Name,
+                Unit = row.Unit,
+                Quantity = row.Quantity,
+                CostPrice = row.CostPrice,
+                SellPrice = row.SellPrice,
+                DiscountPct = row.DiscountPct,
+                VatPct = row.VatPct,
+                SortOrder = row.SortOrder,
+                IsActive = row.IsActive,
+                IsConfirmed = row.IsConfirmed,
+                ParentItemId = row.ParentItemId
+            };
+            string body = JsonSerializer.Serialize(dto);
+            await ApiClient.PutAsync($"/api/quotes/{_quoteId}/items/{row.Id}", body);
+        }
+        catch { }
+    }
+
     private async void BtnRemoveItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is int itemId)
@@ -380,6 +411,25 @@ public class QuoteItemRow : INotifyPropertyChanged
     public int SortOrder { get; set; }
     public string DescriptionRtf { get; set; } = "";
 
+    private bool _isActive = true;
+    public bool IsActive
+    {
+        get => _isActive;
+        set { _isActive = value; Notify(); }
+    }
+
+    private bool _isConfirmed;
+    public bool IsConfirmed
+    {
+        get => _isConfirmed;
+        set { _isConfirmed = value; Notify(); }
+    }
+
+    public int? ParentItemId { get; set; }
+
+    /// <summary>True se è una variante (ha un parent), false se è un header prodotto.</summary>
+    public bool IsVariantRow => ParentItemId.HasValue;
+
     public QuoteItemRow(QuoteItemDto dto)
     {
         Id = dto.Id;
@@ -398,6 +448,9 @@ public class QuoteItemRow : INotifyPropertyChanged
         LineProfit = dto.LineProfit;
         SortOrder = dto.SortOrder;
         DescriptionRtf = dto.DescriptionRtf;
+        _isActive = dto.IsActive;
+        _isConfirmed = dto.IsConfirmed;
+        ParentItemId = dto.ParentItemId;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

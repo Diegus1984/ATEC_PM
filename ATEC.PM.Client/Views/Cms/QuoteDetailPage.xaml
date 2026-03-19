@@ -321,6 +321,36 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
 
+                                <!--  Toggle Attiva  -->
+                                <DataGridTemplateColumn Width="45" Header="Attiva">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Checked="ItemToggle_Changed"
+                                                IsChecked="{Binding IsActive, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Unchecked="ItemToggle_Changed"
+                                                Visibility="{Binding IsVariantRow, Converter={StaticResource BoolToVis}}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <!--  Toggle Conferma  -->
+                                <DataGridTemplateColumn Width="55" Header="Conf.">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Checked="ItemToggle_Changed"
+                                                IsChecked="{Binding IsConfirmed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Unchecked="ItemToggle_Changed"
+                                                Visibility="{Binding IsVariantRow, Converter={StaticResource BoolToVis}}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
                                 <DataGridTextColumn
                                     Width="100"
                                     Binding="{Binding Code}"

@@ -1,12 +1,34 @@
 namespace ATEC.PM.Shared.DTOs;
 
 // ══════════════════════════════════════════════════════════
-// CATALOG — Gruppi, Categorie, Prodotti, Varianti
+// CATALOG — Listini → Gruppi → Categorie → Prodotti → Varianti
 // ══════════════════════════════════════════════════════════
+
+public class QuotePriceListDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Currency { get; set; } = "EUR";
+    public string Locale { get; set; } = "it";
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; }
+    public int GroupCount { get; set; }
+}
+
+public class QuotePriceListSaveDto
+{
+    public string Name { get; set; } = "";
+    public string Currency { get; set; } = "EUR";
+    public string Locale { get; set; } = "it";
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; }
+}
 
 public class QuoteGroupDto
 {
     public int Id { get; set; }
+    public int? PriceListId { get; set; }
+    public string PriceListName { get; set; } = "";
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public int SortOrder { get; set; }
@@ -65,6 +87,7 @@ public class QuoteProductVariantDto
 // DTO per creazione/modifica
 public class QuoteGroupSaveDto
 {
+    public int? PriceListId { get; set; }
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public int SortOrder { get; set; }
@@ -141,6 +164,8 @@ public class QuoteDto
     public string Language { get; set; } = "it";
     public string Status { get; set; } = "draft";
     public int Revision { get; set; }
+    public int? PriceListId { get; set; }
+    public string PriceListName { get; set; } = "";
     public int? GroupId { get; set; }
     public string GroupName { get; set; } = "";
     public decimal Subtotal { get; set; }
@@ -189,10 +214,14 @@ public class QuoteItemDto
     public decimal LineTotal { get; set; }
     public decimal LineProfit { get; set; }
     public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool IsConfirmed { get; set; }
+    public int? ParentItemId { get; set; }
 }
 
 public class QuoteSaveDto
 {
+    public int? PriceListId { get; set; }
     public string Title { get; set; } = "";
     public int CustomerId { get; set; }
     public string ContactName1 { get; set; } = "";
@@ -228,6 +257,9 @@ public class QuoteItemSaveDto
     public decimal DiscountPct { get; set; }
     public decimal VatPct { get; set; } = 22.00m;
     public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool IsConfirmed { get; set; }
+    public int? ParentItemId { get; set; }
 }
 
 public class QuoteStatusChangeDto
@@ -269,6 +301,55 @@ public class QuoteStatusLogDto
     public string ChangedByName { get; set; } = "";
     public DateTime ChangedAt { get; set; }
     public string Notes { get; set; } = "";
+}
+
+// ══════════════════════════════════════════════════════════
+// IMPORT
+// ══════════════════════════════════════════════════════════
+
+public class QuoteCatalogImportDto
+{
+    public List<QuoteCatalogImportListino> PriceLists { get; set; } = new();
+}
+
+public class QuoteCatalogImportListino
+{
+    public string Name { get; set; } = "";
+    public string Currency { get; set; } = "EUR";
+    public string Locale { get; set; } = "it";
+    public List<QuoteCatalogImportGroup> Groups { get; set; } = new();
+}
+
+public class QuoteCatalogImportGroup
+{
+    public string Name { get; set; } = "";
+    public List<QuoteCatalogImportCategory> Categories { get; set; } = new();
+}
+
+public class QuoteCatalogImportCategory
+{
+    public string Name { get; set; } = "";
+    public List<QuoteCatalogImportProduct> Products { get; set; } = new();
+}
+
+public class QuoteCatalogImportProduct
+{
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ItemType { get; set; } = "product";
+    public string Description { get; set; } = "";
+    public string Position { get; set; } = "";
+    public List<QuoteCatalogImportVariant> Variants { get; set; } = new();
+}
+
+public class QuoteCatalogImportVariant
+{
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public decimal SellPrice { get; set; }
+    public decimal CostPrice { get; set; }
+    public decimal VatPct { get; set; } = 22;
 }
 
 public class QuoteStatsDto

@@ -22,8 +22,16 @@
                       DisplayMemberPath="CompanyName" SelectedValuePath="Id"
                       Margin="0,0,0,16" />
 
+            <!-- Listino -->
+            <TextBlock Text="Listino *" FontSize="11" FontWeight="SemiBold"
+                       Foreground="#6B7280" Margin="0,0,0,4" />
+            <ComboBox x:Name="cmbPriceList" Height="36" FontSize="13"
+                      DisplayMemberPath="Name" SelectedValuePath="Id"
+                      SelectionChanged="CmbPriceList_SelectionChanged"
+                      Margin="0,0,0,16" />
+
             <!-- Template (Gruppo) -->
-            <TextBlock Text="Template (Gruppo) *" FontSize="11" FontWeight="SemiBold"
+            <TextBlock Text="Template (Gruppo)" FontSize="11" FontWeight="SemiBold"
                        Foreground="#6B7280" Margin="0,0,0,4" />
             <ComboBox x:Name="cmbGroup" Height="36" FontSize="13"
                       DisplayMemberPath="Name" SelectedValuePath="Id"

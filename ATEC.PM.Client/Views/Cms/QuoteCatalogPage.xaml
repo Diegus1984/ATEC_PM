@@ -20,6 +20,31 @@
             BorderThickness="0,0,1,0">
             <DockPanel>
 
+                <!--  Selezione Listino  -->
+                <Border
+                    Padding="8,8"
+                    Background="#F0F4FF"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="0,0,0,1"
+                    DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock
+                            Margin="4,0,8,0"
+                            VerticalAlignment="Center"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="#4F6EF7"
+                            Text="LISTINO:" />
+                        <ComboBox
+                            x:Name="cmbPriceList"
+                            Height="28"
+                            Padding="6,3"
+                            DisplayMemberPath="Name"
+                            FontSize="12"
+                            SelectionChanged="CmbPriceList_SelectionChanged" />
+                    </DockPanel>
+                </Border>
+
                 <!--  Toolbar albero  -->
                 <Border
                     BorderBrush="#E4E7EC"
@@ -168,6 +193,16 @@
                                 Content="Elimina"
                                 Foreground="#B42318"
                                 IsEnabled="False"
+                                Style="{StaticResource FlatBtn}" />
+                            <Border
+                                Width="1"
+                                Margin="12,4"
+                                Background="#E4E7EC" />
+                            <Button
+                                Background="#F59E0B"
+                                Click="BtnImportExcel_Click"
+                                Content="📥 Importa Excel"
+                                Foreground="White"
                                 Style="{StaticResource FlatBtn}" />
                         </StackPanel>
                     </DockPanel>

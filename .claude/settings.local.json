@@ -26,7 +26,26 @@
       "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"const mysql = require\\(''C:/Users/diego/AppData/Roaming/npm/node_modules/@benborla29/mcp-server-mysql/node_modules/mysql2''\\); const c = mysql.createConnection\\({host:''localhost'',port:3306,user:''root'',password:''Atec2005'',database:''atec_pm''}\\); c.query\\(''SELECT COUNT\\(*\\) as tot, COUNT\\(supplier_id\\) as with_supp FROM catalog_items WHERE is_active=1'', \\(e,r\\) => { console.log\\(JSON.stringify\\(r\\)\\); c.end\\(\\); }\\)\")",
       "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"const mysql = require\\(''C:/Users/diego/AppData/Roaming/npm/node_modules/@benborla29/mcp-server-mysql/node_modules/mysql2''\\); const c = mysql.createConnection\\({host:''localhost'',port:3306,user:''root'',password:''Atec2005'',database:''atec_pm''}\\); c.query\\(''SELECT id, company_name FROM suppliers LIMIT 10'', \\(e,r\\) => { console.log\\(JSON.stringify\\(r\\)\\); c.end\\(\\); }\\)\")",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:forum.openoffice.org)"
+      "WebFetch(domain:forum.openoffice.org)",
+      "Bash(mv CustomersPage.xaml CustomersPage.xaml.cs CustomerDialog.xaml CustomerDialog.xaml.cs Clienti/)",
+      "Bash(mv UsersPage.xaml UsersPage.xaml.cs UserViewModels.cs EmployeeDialog.xaml EmployeeDialog.xaml.cs CredentialsDialog.xaml CredentialsDialog.xaml.cs Utenti/)",
+      "Bash(mv DepartmentsPage.xaml DepartmentsPage.xaml.cs DepartmentDialog.xaml DepartmentDialog.xaml.cs Reparti/)",
+      "Bash(mv PhaseTemplatesPage.xaml PhaseTemplatesPage.xaml.cs PhaseTemplateDialog.xaml PhaseTemplateDialog.xaml.cs FasiTemplate/)",
+      "Bash(mv MaterialCategoriesPage.xaml MaterialCategoriesPage.xaml.cs MaterialCategoryDialog.xaml MaterialCategoryDialog.xaml.cs Materiali/)",
+      "Bash(mv EasyfattImportDialog.xaml EasyfattImportDialog.xaml.cs EasyfattArticlesImportDialog.xaml EasyfattArticlesImportDialog.xaml.cs EasyfattCustomersImportDialog.xaml EasyfattCustomersImportDialog.xaml.cs DaneaSyncBar.xaml DaneaSyncBar.xaml.cs Easyfatt/)",
+      "Bash(mv CostSectionsPage.xaml CostSectionsPage.xaml.cs CostSectionTemplateDialog.xaml CostSectionTemplateDialog.xaml.cs CostMaterialItemDialog.xaml CostMaterialItemDialog.xaml.cs CostResourceDialog.xaml CostResourceDialog.xaml.cs Costing/)",
+      "Bash(mv CatalogPickerWindow.xaml CatalogPickerWindow.xaml.cs Catalogo/)",
+      "Bash(python -c \":*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(ls \"C:\\\\Python\"*/python.exe)",
+      "Bash(ls \"C:\\\\Users\\\\diego\\\\AppData\\\\Local\\\\Programs\\\\Python\"*/python.exe)",
+      "Bash(python3 -c \"import pandas; print\\(''''ok''''\\)\")",
+      "Bash(python3 -m pip install pandas openpyxl)",
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install -g xlsx)",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \":*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet restore:*)"
     ]
   }
 }

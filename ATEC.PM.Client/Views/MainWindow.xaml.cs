@@ -96,7 +96,7 @@ public partial class MainWindow : Window
         // Sezione GESTIONE AVANZATA
         btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
         btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        lblAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible ||
+        expAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible ||
                                   btnReparti.Visibility == Visibility.Visible ||
                                   btnMaterialCat.Visibility == Visibility.Visible ||
                                   btnCostSections.Visibility == Visibility.Visible ||
@@ -114,10 +114,10 @@ public partial class MainWindow : Window
                    btnCatalogo.Visibility == Visibility.Visible ||
                    btnCodex.Visibility == Visibility.Visible ||
                    btnCodexComposition.Visibility == Visibility.Visible;
-        lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
+        expGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
         bool anyAdmin = btnUtenti.Visibility == Visibility.Visible || btnBackup.Visibility == Visibility.Visible;
-        lblAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
+        expAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)

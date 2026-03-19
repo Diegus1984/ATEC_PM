@@ -80,180 +80,156 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Margin="8,0">
-                    <!--  PRINCIPALE  -->
-                    <TextBlock
-                        Margin="12,0,0,8"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#4A4D56"
-                        Text="PRINCIPALE" />
-                    <Button
-                        Click="Nav_Click"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Dashboard">
-                        <Grid>
-                            <TextBlock VerticalAlignment="Center" Text="  Dashboard" />
-                            <Border
-                                x:Name="badgeNotif"
-                                Height="18"
-                                MinWidth="18"
-                                Margin="0,0,0,0"
-                                Padding="4,0"
-                                HorizontalAlignment="Right"
-                                Background="#DC2626"
-                                CornerRadius="9"
-                                Visibility="Collapsed">
-                                <TextBlock
-                                    x:Name="txtBadgeCount"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    FontSize="10"
-                                    FontWeight="Bold"
-                                    Foreground="White"
-                                    Text="0" />
-                            </Border>
-                        </Grid>
-                    </Button>
-                    <Button
-                        Click="Nav_Click"
-                        Content="  Commesse"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Commesse" />
-                    <Button
-                        Click="Nav_Click"
-                        Content="  Offerte"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Offerte" />
-                    <Button
-                        Click="Nav_Click"
-                        Content="Catalogo Preventivi"
-                        Style="{StaticResource NavBtn}"
-                        Tag="CatalogoPreventivi" />
-                    <Button
-                        Click="Nav_Click"
-                        Content="  Preventivi"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Preventivi" />
-                    <Button
-                        Click="Nav_Click"
-                        Content="  Timesheet"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Timesheet" />
+                <ScrollViewer Margin="8,0" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer.Resources>
+                        <!--  Stile Expander per sidebar scura  -->
+                        <Style x:Key="NavExpander" TargetType="Expander">
+                            <Setter Property="IsExpanded" Value="True" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="Foreground" Value="#4A4D56" />
+                            <Setter Property="Margin" Value="0,4,0,0" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Expander">
+                                        <StackPanel>
+                                            <ToggleButton
+                                                x:Name="HeaderSite"
+                                                Margin="4,0"
+                                                Padding="8,6"
+                                                HorizontalContentAlignment="Left"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border
+                                                            x:Name="bd"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="4">
+                                                            <DockPanel>
+                                                                <TextBlock
+                                                                    x:Name="arrow"
+                                                                    Width="14"
+                                                                    DockPanel.Dock="Left"
+                                                                    FontSize="9"
+                                                                    Foreground="#9CA3AF"
+                                                                    Text="▼" />
+                                                                <ContentPresenter
+                                                                    VerticalAlignment="Center" />
+                                                            </DockPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="False">
+                                                                <Setter TargetName="arrow" Property="Text" Value="▶" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bd" Property="Background" Value="#2A2D36" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="#9CA3AF"
+                                                    Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}" />
+                                            </ToggleButton>
+                                            <ContentPresenter
+                                                x:Name="ExpandSite"
+                                                Margin="0,2,0,0"
+                                                Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsExpanded" Value="True">
+                                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ScrollViewer.Resources>
 
-                    <!--  GESTIONE  -->
-                    <TextBlock
-                        x:Name="lblGestione"
-                        Margin="12,24,0,8"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#4A4D56"
-                        Text="GESTIONE" />
-                    <Button
-                        x:Name="btnClienti"
-                        Click="Nav_Click"
-                        Content="  Clienti"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Clienti" />
-                    <Button
-                        x:Name="btnFornitori"
-                        Click="Nav_Click"
-                        Content="  Fornitori"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Fornitori" />
-                    <Button
-                        x:Name="btnCatalogo"
-                        Click="Nav_Click"
-                        Content="  Catalogo Articoli"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Catalogo" />
-                    <Button
-                        x:Name="btnCodex"
-                        Click="Nav_Click"
-                        Content="  Codex Articoli"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Codex" />
-                    <Button
-                        x:Name="btnCodexComposition"
-                        Click="Nav_Click"
-                        Content="  Composizione Codex"
-                        Style="{StaticResource NavBtn}"
-                        Tag="CodexComposizione" />
+                    <StackPanel>
+                        <!--  PRINCIPALE  -->
+                        <Expander Header="PRINCIPALE" Style="{StaticResource NavExpander}">
+                            <StackPanel>
+                                <Button
+                                    Click="Nav_Click"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Dashboard">
+                                    <Grid>
+                                        <TextBlock VerticalAlignment="Center" Text="  Dashboard" />
+                                        <Border
+                                            x:Name="badgeNotif"
+                                            Height="18"
+                                            MinWidth="18"
+                                            Padding="4,0"
+                                            HorizontalAlignment="Right"
+                                            Background="#DC2626"
+                                            CornerRadius="9"
+                                            Visibility="Collapsed">
+                                            <TextBlock
+                                                x:Name="txtBadgeCount"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                FontSize="10"
+                                                FontWeight="Bold"
+                                                Foreground="White"
+                                                Text="0" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                                <Button Click="Nav_Click" Content="  Commesse" Style="{StaticResource NavBtn}" Tag="Commesse" />
+                                <Button Click="Nav_Click" Content="  Offerte" Style="{StaticResource NavBtn}" Tag="Offerte" />
+                                <Button Click="Nav_Click" Content="  Cat. Preventivi" Style="{StaticResource NavBtn}" Tag="CatalogoPreventivi" />
+                                <Button Click="Nav_Click" Content="  Preventivi" Style="{StaticResource NavBtn}" Tag="Preventivi" />
+                                <Button Click="Nav_Click" Content="  Timesheet" Style="{StaticResource NavBtn}" Tag="Timesheet" />
+                            </StackPanel>
+                        </Expander>
 
-                    <!--  AMMINISTRAZIONE  -->
-                    <TextBlock
-                        x:Name="lblAdmin"
-                        Margin="12,24,0,8"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#4A4D56"
-                        Text="AMMINISTRAZIONE" />
-                    <Button
-                        x:Name="btnUtenti"
-                        Click="Nav_Click"
-                        Content="  Utenti"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Utenti" />
-                    <!--  GESTIONE AVANZATA  -->
-                    <TextBlock
-                        x:Name="lblAvanzata"
-                        Margin="12,24,0,8"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#4A4D56"
-                        Text="GESTIONE AVANZATA" />
-                    <Button
-                        x:Name="btnFasiTemplate"
-                        Click="Nav_Click"
-                        Content="  Fasi Template"
-                        Style="{StaticResource NavBtn}"
-                        Tag="FasiTemplate" />
-                    <Button
-                        x:Name="btnReparti"
-                        Click="Nav_Click"
-                        Content="  Reparti"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Reparti" />
-                    <Button
-                        x:Name="btnCostSections"
-                        Click="Nav_Click"
-                        Content="  Sezioni Costo"
-                        Style="{StaticResource NavBtn}"
-                        Tag="SezioniCosto" />
-                    <Button
-                        x:Name="btnMaterialCat"
-                        Click="Nav_Click"
-                        Content="  Categorie Materiali"
-                        Style="{StaticResource NavBtn}"
-                        Tag="CategorieMateriali" />
-                    <Button
-                        x:Name="btnDdpDest"
-                        Click="Nav_Click"
-                        Content="  Destinazioni DDP"
-                        Style="{StaticResource NavBtn}"
-                        Tag="DestinazioniDdp" />
-                    <Button
-                        x:Name="btnBackup"
-                        Click="Nav_Click"
-                        Content="  Backup DB"
-                        Style="{StaticResource NavBtn}"
-                        Tag="Backup" />
-                    <!--  SESSIONE  -->
-                    <TextBlock
-                        Margin="12,24,0,8"
-                        FontSize="11"
-                        FontWeight="SemiBold"
-                        Foreground="#4A4D56"
-                        Text="SESSIONE" />
-                    <Button
-                        Click="BtnLogout_Click"
-                        Content="  Logout"
-                        Style="{StaticResource NavBtn}" />
-                    <Button
-                        Click="BtnExit_Click"
-                        Content="  Esci"
-                        Style="{StaticResource NavBtn}" />
-                </StackPanel>
+                        <!--  GESTIONE  -->
+                        <Expander x:Name="expGestione" Header="GESTIONE" Style="{StaticResource NavExpander}">
+                            <StackPanel>
+                                <Button x:Name="btnClienti" Click="Nav_Click" Content="  Clienti" Style="{StaticResource NavBtn}" Tag="Clienti" />
+                                <Button x:Name="btnFornitori" Click="Nav_Click" Content="  Fornitori" Style="{StaticResource NavBtn}" Tag="Fornitori" />
+                                <Button x:Name="btnCatalogo" Click="Nav_Click" Content="  Catalogo Articoli" Style="{StaticResource NavBtn}" Tag="Catalogo" />
+                                <Button x:Name="btnCodex" Click="Nav_Click" Content="  Codex Articoli" Style="{StaticResource NavBtn}" Tag="Codex" />
+                                <Button x:Name="btnCodexComposition" Click="Nav_Click" Content="  Composizione Codex" Style="{StaticResource NavBtn}" Tag="CodexComposizione" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!--  AMMINISTRAZIONE  -->
+                        <Expander x:Name="expAdmin" Header="AMMINISTRAZIONE" Style="{StaticResource NavExpander}">
+                            <StackPanel>
+                                <Button x:Name="btnUtenti" Click="Nav_Click" Content="  Utenti" Style="{StaticResource NavBtn}" Tag="Utenti" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!--  GESTIONE AVANZATA  -->
+                        <Expander x:Name="expAvanzata" Header="GESTIONE AVANZATA" IsExpanded="False" Style="{StaticResource NavExpander}">
+                            <StackPanel>
+                                <Button x:Name="btnFasiTemplate" Click="Nav_Click" Content="  Fasi Template" Style="{StaticResource NavBtn}" Tag="FasiTemplate" />
+                                <Button x:Name="btnReparti" Click="Nav_Click" Content="  Reparti" Style="{StaticResource NavBtn}" Tag="Reparti" />
+                                <Button x:Name="btnCostSections" Click="Nav_Click" Content="  Sezioni Costo" Style="{StaticResource NavBtn}" Tag="SezioniCosto" />
+                                <Button x:Name="btnMaterialCat" Click="Nav_Click" Content="  Cat. Materiali" Style="{StaticResource NavBtn}" Tag="CategorieMateriali" />
+                                <Button x:Name="btnDdpDest" Click="Nav_Click" Content="  Destinazioni DDP" Style="{StaticResource NavBtn}" Tag="DestinazioniDdp" />
+                                <Button x:Name="btnBackup" Click="Nav_Click" Content="  Backup DB" Style="{StaticResource NavBtn}" Tag="Backup" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!--  SESSIONE  -->
+                        <Expander Header="SESSIONE" IsExpanded="False" Style="{StaticResource NavExpander}">
+                            <StackPanel>
+                                <Button Click="BtnLogout_Click" Content="  Logout" Style="{StaticResource NavBtn}" />
+                                <Button Click="BtnExit_Click" Content="  Esci" Style="{StaticResource NavBtn}" />
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
             </DockPanel>
         </Border>
 
