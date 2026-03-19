@@ -478,7 +478,7 @@
                             <TextBlock
                                 VerticalAlignment="Center"
                                 FontWeight="Medium"
-                                Text="{Binding Codice, Converter={StaticResource CodiceFormatConverter}}" />
+                                Text="{Binding Codice}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -1010,7 +1010,10 @@
                 </DataGridTemplateColumn>
 
                 <!--  AZIONI (solo admin)  -->
-                <DataGridTemplateColumn x:Name="colActions" Width="70" MinWidth="70">
+                <DataGridTemplateColumn
+                    x:Name="colActions"
+                    Width="70"
+                    MinWidth="70">
                     <DataGridTemplateColumn.HeaderTemplate>
                         <DataTemplate>
                             <TextBlock

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -20,6 +21,7 @@ public partial class CodexCompositionPage : Page
     private bool _suppressParentFilter;
     private bool _catalogLoaded;
     private string _currentSource = "codex";
+    private CancellationTokenSource? _parentFilterCts;
 
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
 
@@ -164,24 +166,46 @@ public partial class CodexCompositionPage : Page
         await LoadTree(parent.Id);
     }
 
-    private void CmbParent_TextChanged(object sender, TextChangedEventArgs e)
+    private async void CmbParent_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_suppressParentFilter) return;
-        if (cmbParent.SelectedItem != null) return; // selezione in corso, non filtrare
+        if (cmbParent.SelectedItem != null) return;
 
-        string search = cmbParent.Text?.Trim().ToLower() ?? "";
+        // Debounce 300ms
+        _parentFilterCts?.Cancel();
+        _parentFilterCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _parentFilterCts.Token);
+        }
+        catch (TaskCanceledException) { return; }
+
+        // Salva testo e posizione cursore
+        var editBox = cmbParent.Template.FindName("PART_EditableTextBox", cmbParent) as System.Windows.Controls.TextBox;
+        string search = editBox?.Text?.Trim().ToLower() ?? "";
+        int caretPos = editBox?.CaretIndex ?? 0;
+
+        List<CompositionParentItem> items;
         if (string.IsNullOrEmpty(search))
         {
-            cmbParent.ItemsSource = _allParentItems;
+            items = _allParentItems;
         }
         else
         {
-            var filtered = _allParentItems
+            items = _allParentItems
                 .Where(i => Match(i.Codice, search) || Match(i.Descr, search))
                 .ToList();
-            _suppressParentFilter = true;
-            cmbParent.ItemsSource = filtered;
-            _suppressParentFilter = false;
+        }
+
+        _suppressParentFilter = true;
+        cmbParent.ItemsSource = items;
+        _suppressParentFilter = false;
+
+        // Ripristina testo e cursore
+        if (editBox != null)
+        {
+            editBox.Text = search;
+            editBox.CaretIndex = Math.Min(caretPos, search.Length);
         }
 
         cmbParent.IsDropDownOpen = true;

@@ -20,7 +20,13 @@
       "Read(//c/Users/diego/AppData/Roaming/Claude/**)",
       "Read(//c/Users/diego/**)",
       "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"console.log\\(''node works''\\)\")",
-      "Bash(claude mcp:*)"
+      "Bash(claude mcp:*)",
+      "Bash(dotnet run:*)",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"const mysql = require\\(''C:/Users/diego/AppData/Roaming/npm/node_modules/@benborla29/mcp-server-mysql/node_modules/mysql2''\\); const c = mysql.createConnection\\({host:''localhost'',port:3306,user:''root'',password:''Atec2005'',database:''atec_pm''}\\); c.query\\(''SELECT codice FROM codex_items LIMIT 5'', \\(e,r\\) => { console.log\\(JSON.stringify\\(r\\)\\); c.end\\(\\); }\\)\")",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"const mysql = require\\(''C:/Users/diego/AppData/Roaming/npm/node_modules/@benborla29/mcp-server-mysql/node_modules/mysql2''\\); const c = mysql.createConnection\\({host:''localhost'',port:3306,user:''root'',password:''Atec2005'',database:''atec_pm''}\\); c.query\\(''SELECT COUNT\\(*\\) as tot, COUNT\\(supplier_id\\) as with_supp FROM catalog_items WHERE is_active=1'', \\(e,r\\) => { console.log\\(JSON.stringify\\(r\\)\\); c.end\\(\\); }\\)\")",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"const mysql = require\\(''C:/Users/diego/AppData/Roaming/npm/node_modules/@benborla29/mcp-server-mysql/node_modules/mysql2''\\); const c = mysql.createConnection\\({host:''localhost'',port:3306,user:''root'',password:''Atec2005'',database:''atec_pm''}\\); c.query\\(''SELECT id, company_name FROM suppliers LIMIT 10'', \\(e,r\\) => { console.log\\(JSON.stringify\\(r\\)\\); c.end\\(\\); }\\)\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:forum.openoffice.org)"
     ]
   }
 }

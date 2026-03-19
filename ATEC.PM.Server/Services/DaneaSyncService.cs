@@ -225,27 +225,104 @@ public class DaneaSyncService : BackgroundService
 
     private async Task SyncArticles(FbConnection fb, DbService db)
     {
-        var remote = (await fb.QueryAsync(@"
-            SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", ""NomeSottocategoria"", 
-                   ""Udm"", ""PrezzoNetto1"", ""PrezzoNettoForn"", ""CodArticoloForn"",
-                   ""Produttore"", ""CodBarre"", ""Note""
-            FROM ""TArticoli""")).ToList();
+        // Scopri colonne di TArticoli per capire se esiste IDFornitore
+        var artCols = (await fb.QueryAsync<string>(@"
+            SELECT TRIM(rf.RDB$FIELD_NAME) FROM RDB$RELATION_FIELDS rf
+            WHERE rf.RDB$RELATION_NAME = 'TArticoli'")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool hasIDFornitore = artCols.Contains("IDFornitore");
+
+        _log.LogInformation("[DaneaSync] TArticoli ha IDFornitore: {Has}", hasIDFornitore);
+
+        // Leggi fornitori da TAnagrafica per lookup nome
+        var fornitori = new Dictionary<int, string>();
+        if (hasIDFornitore)
+        {
+            try
+            {
+                // Scopri PK di TAnagrafica
+                var anagCols = (await fb.QueryAsync<string>(@"
+                    SELECT TRIM(rf.RDB$FIELD_NAME) FROM RDB$RELATION_FIELDS rf
+                    WHERE rf.RDB$RELATION_NAME = 'TAnagrafica'")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                string pkCol = anagCols.Contains("Id") ? "Id" :
+                               anagCols.Contains("IDAnag") ? "IDAnag" :
+                               anagCols.Contains("CodAnagr") ? "CodAnagr" : "";
+
+                _log.LogInformation("[DaneaSync] TAnagrafica PK candidata: '{Pk}', colonne: {Cols}",
+                    pkCol, string.Join(", ", anagCols.Take(15)));
+
+                if (!string.IsNullOrEmpty(pkCol))
+                {
+                    var anag = (await fb.QueryAsync(
+                        $"SELECT \"{pkCol}\", \"Nome\" FROM \"TAnagrafica\" WHERE \"Fornitore\" = 1")).ToList();
+                    foreach (var f in anag)
+                    {
+                        var dict = (IDictionary<string, object>)f;
+                        int id = Convert.ToInt32(dict[pkCol]);
+                        string nome = ((string?)dict["Nome"])?.Trim() ?? "";
+                        if (!string.IsNullOrEmpty(nome))
+                            fornitori[id] = nome;
+                    }
+                    _log.LogInformation("[DaneaSync] Caricati {N} fornitori per match articoli", fornitori.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning("[DaneaSync] Impossibile leggere fornitori: {Msg}", ex.Message);
+            }
+        }
+
+        string artQuery = hasIDFornitore
+            ? @"SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", ""NomeSottocategoria"",
+                       ""Udm"", ""PrezzoNetto1"", ""PrezzoNettoForn"", ""CodArticoloForn"",
+                       ""Produttore"", ""CodBarre"", ""Note"", ""IDFornitore""
+                FROM ""TArticoli"""
+            : @"SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", ""NomeSottocategoria"",
+                       ""Udm"", ""PrezzoNetto1"", ""PrezzoNettoForn"", ""CodArticoloForn"",
+                       ""Produttore"", ""CodBarre"", ""Note""
+                FROM ""TArticoli""";
+
+        var remote = (await fb.QueryAsync(artQuery)).ToList();
 
         using var local = db.Open();
+
+        // Prepara lookup fornitori locali per nome (primo match in caso di duplicati)
+        var supplierLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in await local.QueryAsync<(int Id, string Name)>("SELECT id, company_name FROM suppliers"))
+        {
+            var key = s.Name.Trim();
+            if (!string.IsNullOrEmpty(key))
+                supplierLookup.TryAdd(key, s.Id);
+        }
+
         int count = 0;
         foreach (var a in remote)
         {
             string code = ((string?)a.CodArticolo)?.Trim() ?? "";
             if (string.IsNullOrEmpty(code)) continue;
 
+            // Match fornitore: Easyfatt IDFornitore → nome → supplier locale
+            int? supplierId = null;
+            if (hasIDFornitore)
+            {
+                int idForn = 0;
+                try { idForn = (int?)a.IDFornitore ?? 0; } catch { }
+                if (idForn > 0 && fornitori.TryGetValue(idForn, out string? fornNome)
+                    && !string.IsNullOrEmpty(fornNome)
+                    && supplierLookup.TryGetValue(fornNome.ToLower(), out int sid))
+                {
+                    supplierId = sid;
+                }
+            }
+
             await local.ExecuteAsync(@"
-                INSERT INTO catalog_items (code, description, category, subcategory, unit, unit_cost, 
-                                         list_price, supplier_code, manufacturer, barcode, notes, is_active, easyfatt_id)
-                VALUES (@Code, @Desc, @Cat, @SubCat, @Udm, @CostoForn, 
-                        @Listino, @CodForn, @Produttore, @Barcode, @Note, 1, @EftId)
-                ON DUPLICATE KEY UPDATE 
-                    description=@Desc, category=@Cat, unit_cost=@CostoForn, 
-                    list_price=@Listino, notes=@Note, easyfatt_id=@EftId",
+                INSERT INTO catalog_items (code, description, category, subcategory, unit, unit_cost,
+                                         list_price, supplier_id, supplier_code, manufacturer, barcode, notes, is_active, easyfatt_id)
+                VALUES (@Code, @Desc, @Cat, @SubCat, @Udm, @CostoForn,
+                        @Listino, @SuppId, @CodForn, @Produttore, @Barcode, @Note, 1, @EftId)
+                ON DUPLICATE KEY UPDATE
+                    description=@Desc, category=@Cat, unit_cost=@CostoForn,
+                    list_price=@Listino, supplier_id=@SuppId, notes=@Note, easyfatt_id=@EftId",
                 new
                 {
                     Code = code,
@@ -255,6 +332,7 @@ public class DaneaSyncService : BackgroundService
                     Udm = ((string?)a.Udm)?.Trim() ?? "",
                     CostoForn = (decimal?)a.PrezzoNettoForn ?? 0m,
                     Listino = (decimal?)a.PrezzoNetto1 ?? 0m,
+                    SuppId = supplierId,
                     CodForn = ((string?)a.CodArticoloForn)?.Trim() ?? "",
                     Produttore = ((string?)a.Produttore)?.Trim() ?? "",
                     Barcode = ((string?)a.CodBarre)?.Trim() ?? "",
