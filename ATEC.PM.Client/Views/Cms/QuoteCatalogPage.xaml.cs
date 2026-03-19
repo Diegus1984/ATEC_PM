@@ -285,10 +285,6 @@ public partial class QuoteCatalogPage : Page
 
     private void DgProducts_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        bool hasSel = dgProducts.SelectedItem != null;
-        btnEditProduct.IsEnabled = hasSel;
-        btnDuplicateProduct.IsEnabled = hasSel;
-        btnDeleteProduct.IsEnabled = hasSel;
     }
 
     private void DgProducts_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -451,6 +447,51 @@ public partial class QuoteCatalogPage : Page
             await ApiClient.DeleteAsync($"/api/quote-catalog/products/{item.Id}");
             await LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
             await LoadTree();
+        }
+    }
+
+    // ── Azioni inline per riga ──
+
+    private void SelectProductById(int id)
+    {
+        if (dgProducts.ItemsSource is List<ProductListItem> items)
+        {
+            var item = items.FirstOrDefault(p => p.Id == id);
+            if (item != null) dgProducts.SelectedItem = item;
+        }
+    }
+
+    private void BtnEditProductRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is int id)
+        {
+            SelectProductById(id);
+            BtnEditProduct_Click(sender, e);
+        }
+    }
+
+    private void BtnDuplicateProductRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is int id)
+        {
+            SelectProductById(id);
+            BtnDuplicateProduct_Click(sender, e);
+        }
+    }
+
+    private async void BtnDeleteProductRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is int id)
+        {
+            var item = (dgProducts.ItemsSource as List<ProductListItem>)?.FirstOrDefault(p => p.Id == id);
+            string nome = item?.Name ?? $"#{id}";
+            if (MessageBox.Show($"Eliminare '{nome}'?", "Conferma",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                await ApiClient.DeleteAsync($"/api/quote-catalog/products/{id}");
+                await LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
+                await LoadTree();
+            }
         }
     }
 

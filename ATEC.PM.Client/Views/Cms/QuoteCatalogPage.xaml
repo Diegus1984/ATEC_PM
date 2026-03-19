@@ -172,28 +172,6 @@
                                 Foreground="White"
                                 Style="{StaticResource FlatBtn}"
                                 Visibility="Collapsed" />
-                            <Button
-                                x:Name="btnEditProduct"
-                                Margin="8,0,0,0"
-                                Click="BtnEditProduct_Click"
-                                Content="Modifica"
-                                IsEnabled="False"
-                                Style="{StaticResource FlatBtn}" />
-                            <Button
-                                x:Name="btnDuplicateProduct"
-                                Margin="8,0,0,0"
-                                Click="BtnDuplicateProduct_Click"
-                                Content="Duplica"
-                                IsEnabled="False"
-                                Style="{StaticResource FlatBtn}" />
-                            <Button
-                                x:Name="btnDeleteProduct"
-                                Margin="8,0,0,0"
-                                Click="BtnDeleteProduct_Click"
-                                Content="Elimina"
-                                Foreground="#B42318"
-                                IsEnabled="False"
-                                Style="{StaticResource FlatBtn}" />
                             <Border
                                 Width="1"
                                 Margin="12,4"
@@ -365,6 +343,45 @@
                                         HorizontalAlignment="Center"
                                         Style="{StaticResource DgCellText}"
                                         Text="{Binding AutoIncludeLabel}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  AZIONI inline  -->
+                        <DataGridTemplateColumn Width="110" MinWidth="110">
+                            <DataGridTemplateColumn.Header>
+                                <TextBlock Style="{StaticResource DgHeaderText}" Text="" />
+                            </DataGridTemplateColumn.Header>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                        <Button
+                                            Width="26" Height="26"
+                                            Background="#4F6EF71A"
+                                            BorderThickness="0"
+                                            Click="BtnEditProductRow_Click"
+                                            Content="✏" Cursor="Hand"
+                                            FontSize="12" Foreground="#4F6EF7"
+                                            Tag="{Binding Id}" ToolTip="Modifica" />
+                                        <Button
+                                            Width="26" Height="26"
+                                            Margin="4,0,0,0"
+                                            Background="#16A34A1A"
+                                            BorderThickness="0"
+                                            Click="BtnDuplicateProductRow_Click"
+                                            Content="📋" Cursor="Hand"
+                                            FontSize="11" Foreground="#16A34A"
+                                            Tag="{Binding Id}" ToolTip="Duplica" />
+                                        <Button
+                                            Width="26" Height="26"
+                                            Margin="4,0,0,0"
+                                            Background="#EF44441A"
+                                            BorderThickness="0"
+                                            Click="BtnDeleteProductRow_Click"
+                                            Content="✕" Cursor="Hand"
+                                            FontSize="12" Foreground="#EF4444"
+                                            Tag="{Binding Id}" ToolTip="Elimina" />
+                                    </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>

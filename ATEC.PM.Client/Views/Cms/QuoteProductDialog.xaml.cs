@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -16,6 +17,7 @@ public partial class QuoteProductDialog : Window
     private int? _editProductId;
     private int _categoryId;
     private ObservableCollection<VariantRow> _variants = new();
+    private string _attachmentPath = "";
 
     // Costruttore per NUOVO prodotto (da categoria selezionata)
     // Costruttore per NUOVO prodotto (da categoria selezionata)
@@ -55,8 +57,11 @@ public partial class QuoteProductDialog : Window
                 _categoryId = product.CategoryId;
                 txtName.Text = product.Name;
                 txtCode.Text = product.Code;
-                txtDescription.Text = product.DescriptionRtf;
+                htmlEditor.SetContent(product.DescriptionRtf ?? "");
                 chkAutoInclude.IsChecked = product.AutoInclude;
+                _attachmentPath = product.AttachmentPath ?? "";
+                if (!string.IsNullOrEmpty(_attachmentPath))
+                    txtAttachment.Text = Path.GetFileName(_attachmentPath);
 
                 // Tipo
                 cmbItemType.SelectedIndex = product.ItemType == "content" ? 1 : 0;
@@ -114,13 +119,17 @@ public partial class QuoteProductDialog : Window
         if (cmbItemType.SelectedItem is ComboBoxItem cbi && cbi.Tag is string t)
             itemType = t;
 
+        string htmlContent = "";
+        try { htmlContent = await htmlEditor.GetContentAsync(); } catch { }
+
         var dto = new QuoteProductSaveDto
         {
             CategoryId = _categoryId,
             ItemType = itemType,
             Code = txtCode.Text.Trim(),
             Name = txtName.Text.Trim(),
-            DescriptionRtf = txtDescription.Text.Trim(),
+            DescriptionRtf = htmlContent,
+            AttachmentPath = _attachmentPath,
             AutoInclude = chkAutoInclude.IsChecked == true,
             SortOrder = 0,
             IsActive = true,
@@ -154,6 +163,27 @@ public partial class QuoteProductDialog : Window
         {
             MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    // ── Gestione allegato ──
+
+    private void BtnSelectAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Seleziona allegato",
+            Filter = "Tutti i file (*.*)|*.*"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        string uploadsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "uploads", "products");
+        Directory.CreateDirectory(uploadsDir);
+        string fileName = $"att_{DateTime.Now:yyyyMMdd_HHmmss}_{Path.GetFileName(dlg.FileName)}";
+        string destPath = Path.Combine(uploadsDir, fileName);
+        File.Copy(dlg.FileName, destPath, true);
+
+        _attachmentPath = destPath;
+        txtAttachment.Text = Path.GetFileName(dlg.FileName);
     }
 
     private void BtnCancel_Click(object sender, RoutedEventArgs e)

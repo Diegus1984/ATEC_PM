@@ -8,6 +8,8 @@
 - **Auth**: JWT Bearer token
 - **Grafici**: OxyPlot.Wpf 2.2 (migrato da LiveCharts2)
 - **PDF**: QuestPDF (Community License)
+- **Excel**: ClosedXML (import catalogo)
+- **Rich Text**: TinyMCE 5 self-hosted + WebView2
 - **GitHub**: github.com/Diegus1984/ATEC_PM
 
 
@@ -26,7 +28,7 @@
 | Gestione Fornitori | ✅ | CRUD + import da Easyfatt (.eft Firebird) |
 | Gestione Reparti | ✅ | Costo orario + K ricarico diretto (default_markup) |
 | Configurazione App | ✅ | app_config DB table, DPAPI per secrets |
-| Sidebar + Navigazione | ✅ | MainWindow con sidebar scura |
+| Sidebar + Navigazione | ✅ | MainWindow con sidebar scura, sezioni collassabili (Expander) |
 
 ---
 
@@ -132,12 +134,32 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Funzionalità | Stato | Note |
 |---|---|---|
 | CodexSyncService + CodexPage | ✅ | 21 filtri, popup colonne, sync ogni 6h |
+| Filtri wildcard (abc* / *abc) | ✅ | Su tutte le pagine con filtri di ricerca |
+| Generazione codici Codex inline | ✅ | Pannello inline, prefissi 101/201/501/601/701 |
+| Modifica/Elimina articoli Codex | ✅ | Pulsanti inline, solo admin, protezione se in composizione |
+| Formato codice con punto singolo | ✅ | Getter DTO: rimuove tutti i punti, rimette uno solo |
 
 ### 5d. Catalogo Articoli ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
 | Popup colonne + filtro Categoria | ✅ | Stesso pattern CodexPage |
+| ComboBox filtro Fornitore/Produttore/Categoria | ✅ | Dropdown con valori distinti + "Tutti" |
+| Sync fornitore da Easyfatt | ✅ | Match IDFornitore → TAnagrafica → supplier_id locale |
+
+### 5e. Composizione Codex ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| CodexCompositionPage (layout split) | ✅ | Sinistra: articoli disponibili, Destra: TreeView composizione |
+| Gerarchia a matrioska | ✅ | 501→1xx-4xx, 601→501, 701→601 |
+| Drag & drop + doppio-click | ✅ | Con dialog quantità (drag) o inserimento diretto (doppio-click) |
+| Colori sfondo per tipo codice | ✅ | 7 colori tenui per 101-701 |
+| Sorgente Codex + Catalogo | ✅ | ComboBox sorgente, articoli catalogo con icona 🛒 |
+| Sotto-nodi read-only | ✅ | In 601 non si modificano i 501 sotto |
+| Protezione cancellazione | ✅ | Blocco delete su codex/catalogo se usati in composizione |
+| Ricerca wildcard doppia (codice + descrizione) | ✅ | Due TextBox separate nel pannello sinistro |
+| Riferimenti 201/401 su codici 101 | ✅ | Tabella codex_item_references + ComboBox con ricerca lazy |
 
 ---
 
@@ -199,14 +221,52 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 | Toggle visibilità nel PDF | ✅ | ShowItemPrices, ShowSummary, ShowSummaryPrices |
 | ApiClient.GetBytesAsync() | ✅ | Nuovo metodo per download binari |
 
-### 8d. DA COMPLETARE — Funzionalità mancanti
+### 8d. Livello Listino ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
-| Rich text editor descrizione prodotto | ❌ | Extended.Wpf.Toolkit RichTextBoxFormatBar, toolbar bold/italic/liste |
-| Upload allegato per prodotto | ❌ | Campo file associato al prodotto nel catalogo |
-| Upload immagine per prodotto | ❌ | Immagine prodotto visibile nel catalogo e nel PDF |
-| Link nella descrizione prodotto | ❌ | Inserimento URL nella descrizione rich text |
+| Tabella quote_price_lists | ✅ | id, name, currency, locale, is_active |
+| FK price_list_id su quote_groups e quotes | ✅ | Migration automatica |
+| CRUD Listini (API + UI) | ✅ | 4 endpoint + ComboBox filtro in QuoteCatalogPage |
+| Filtro albero per listino | ✅ | GetTree(?priceListId=) + GetGroups(?priceListId=) |
+| Selezione listino in NewQuoteDialog | ✅ | Filtra gruppi template per listino |
+
+### 8e. Import Excel ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Endpoint POST /api/quote-catalog/import | ✅ | Transazione: listini→gruppi→categorie→prodotti→varianti |
+| DTO import gerarchico | ✅ | 7 classi: QuoteCatalogImportDto → ...Listino/Group/Category/Product/Variant |
+| Parser Excel (ClosedXML) | ✅ | Parsing struttura gerarchica con state machine |
+| Pulsante "Importa Excel" nella CatalogPage | ✅ | OpenFileDialog + conferma conteggi + feedback |
+
+### 8f. UI Varianti nel Preventivo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Colonne is_active, is_confirmed, parent_item_id | ✅ | Migration su quote_items |
+| Toggle Attiva/Conferma nel DataGrid | ✅ | CheckBox con save immediato via API |
+| RecalcTotals con is_active | ✅ | Solo items attivi con qty>0 contano nei totali |
+| Endpoint AddProductWithAllVariants | ✅ | POST /{id}/items/product/{productId} — header + tutte le varianti |
+
+### 8g. Rich Text Editor ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| UserControl HtmlEditor (WebView2) | ✅ | Riutilizzabile, comunicazione bidirezionale WPF↔JS |
+| TinyMCE 5 self-hosted | ✅ | Installato localmente via npm, no API key, no CDN |
+| Toolbar completa | ✅ | Bold/italic/underline, heading, colori, tabelle, immagini, link, code, fullscreen |
+| Resize immagini nativo | ✅ | Handle drag angolari TinyMCE |
+| Tabelle con resize colonne | ✅ | Plugin table nativo |
+| Paste da Word/Office | ✅ | Plugin paste |
+| Upload immagini inline (base64) | ✅ | File picker con blob cache |
+| Upload allegato prodotto | ✅ | Pulsante + copia in uploads/products/ |
+
+### 8h. DA COMPLETARE — Funzionalità mancanti
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Pulsanti azioni inline su riga prodotto catalogo | ✅ | Modifica/Duplica/Elimina per riga |
 
 ---
 
@@ -286,28 +346,40 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 
 ```
 Views/Cms/
-  QuoteCatalogPage.xaml/.cs         ← TreeView Gruppi→Categorie + DataGrid prodotti
+  QuoteCatalogPage.xaml/.cs         ← TreeView Gruppi→Categorie + DataGrid prodotti + Import Excel
   QuoteGroupDialog.xaml/.cs         ← CRUD gruppi
   QuoteCategoryDialog.xaml/.cs      ← CRUD categorie
-  QuoteProductDialog.xaml/.cs       ← Editor prodotto con griglia varianti inline
+  QuoteProductDialog.xaml/.cs       ← Editor prodotto con TinyMCE + griglia varianti + allegato
   QuotesListPage.xaml/.cs           ← Lista preventivi con filtri e badge stato
-  NewQuoteDialog.xaml/.cs           ← Dialog creazione con selezione cliente+template
-  QuoteDetailPage.xaml/.cs          ← Dettaglio completo (header+voci+riepilogo+note+PDF)
+  NewQuoteDialog.xaml/.cs           ← Dialog creazione con selezione listino+cliente+template
+  QuoteDetailPage.xaml/.cs          ← Dettaglio completo + toggle Attiva/Conferma varianti
   AddQuoteItemDialog.xaml/.cs       ← Aggiunta voci da catalogo con doppio-click
   Converters/
     QuoteCatalogConverters.cs       ← Tipo prodotto/contenuto badge
     QuoteStatusConverters.cs        ← Badge stato preventivo
 
+UserControls/
+  HtmlEditor.xaml/.cs               ← WebView2 + TinyMCE 5 (riutilizzabile)
+
+Assets/tinymce/
+  editor.html                       ← HTML host per TinyMCE
+  tinymce/                          ← TinyMCE 5 self-hosted (npm)
+
+Views/Codex/
+  CodexPage.xaml/.cs                ← Lista articoli codex con filtri
+  CodexCompositionPage.xaml/.cs     ← Composizione 501/601/701 con drag&drop
+  QuantityDialog.xaml/.cs           ← Dialog quantità
+
 Server/Services/
-  QuoteDbService.cs                 ← DB separato per modulo preventivi (8 tabelle)
+  QuoteDbService.cs                 ← DB modulo preventivi (10 tabelle incl. quote_price_lists)
   QuotePdfService.cs                ← Generatore PDF con QuestPDF
 
 Server/Controllers/
-  QuoteCatalogController.cs         ← API catalogo (gruppi, categorie, prodotti, varianti)
-  QuotesController.cs               ← API preventivi (CRUD, items, stati, PDF, stats)
+  QuoteCatalogController.cs         ← API catalogo + listini + import Excel
+  QuotesController.cs               ← API preventivi + AddProductWithAllVariants
 
 Shared/DTOs/
-  Quote_DTOs.cs                     ← Tutti i DTO del modulo
+  Quote_DTOs.cs                     ← Tutti i DTO (incl. PriceList, Import, varianti attive)
 ```
 
 ---
@@ -329,4 +401,7 @@ Shared/DTOs/
 - **Notifiche destinatari**: PM commessa + user_role IN ('ADMIN','PM') + reparto ACQ — Remove(currentEmpId)
 - **Stili DataGrid TextBlock**: usare `DgHeaderText` e `DgCellText` (non ModernColumnHeader/ModernCell sui TextBlock)
 - **Snapshot dirty tracking**: serializzare DTO in JSON al load, confrontare alla navigazione — niente eventi TextChanged
+- **Views organizzate in sottocartelle**: Commesse/, Clienti/, Utenti/, Reparti/, FasiTemplate/, Materiali/, Easyfatt/, Catalogo/, Codex/, Cms/, Costing/, etc. Root: solo LoginWindow + MainWindow
+- **Sidebar collassabile**: Expander con freccia ▼/▶, sezioni Principale/Gestione/Admin/Avanzata/Sessione
+- **TinyMCE 5 self-hosted**: no API key, no CDN — npm install tinymce@5, copiato in Assets/tinymce/tinymce/
 - **L'utente comunica in italiano**

@@ -45,7 +45,9 @@
       "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install -g xlsx)",
       "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \":*)",
       "Bash(dotnet add:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(curl -L -o ckeditor4.zip \"https://ckeditor.com/ckeditor-4/download/?type=full\")",
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install tinymce@5 --prefix ./tinymce-pkg)"
     ]
   }
 }

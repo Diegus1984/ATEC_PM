@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+</style>
+<script src="tinymce/tinymce.min.js"></script>
+</head>
+<body>
+<textarea id="editor"></textarea>
+<script>
+var editorInstance = null;
+
+function initEditor(initialContent) {
+  tinymce.init({
+    selector: '#editor',
+    height: '100%',
+    menubar: 'file edit view insert format table tools',
+    branding: false,
+    promotion: false,
+    statusbar: true,
+    resize: false,
+    plugins: [
+      'advlist autolink lists link image charmap print preview anchor',
+      'searchreplace visualblocks code fullscreen',
+      'insertdatetime media table paste code help wordcount',
+      'imagetools hr nonbreaking pagebreak textcolor colorpicker'
+    ],
+    toolbar: [
+      'undo redo | formatselect | bold italic underline strikethrough | forecolor backcolor',
+      'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table image link | hr blockquote | code fullscreen'
+    ],
+    content_style: 'body { font-family: Segoe UI, sans-serif; font-size: 13px; margin: 10px; }',
+    image_advtab: true,
+    image_caption: true,
+    paste_data_images: true,
+    automatic_uploads: false,
+    file_picker_types: 'image',
+    file_picker_callback: function(callback, value, meta) {
+      if (meta.filetype === 'image') {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function() {
+          var file = this.files[0];
+          var reader = new FileReader();
+          reader.onload = function() {
+            var id = 'img-' + Date.now();
+            var blobCache = tinymce.activeEditor.editorUpload.blobCache;
+            var base64 = reader.result.split(',')[1];
+            var blobInfo = blobCache.create(id, file, base64);
+            blobCache.add(blobInfo);
+            callback(blobInfo.blobUri(), { title: file.name, alt: file.name });
+          };
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      }
+    },
+    object_resizing: true,
+    resize_img_proportional: true,
+    table_default_attributes: { border: '1' },
+    table_default_styles: { 'border-collapse': 'collapse', width: '100%' },
+    table_responsive_width: true,
+    setup: function(editor) {
+      editor.on('init', function() {
+        editorInstance = editor;
+        if (initialContent) editor.setContent(initialContent);
+      });
+      editor.on('change keyup NodeChange', function() {
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage(JSON.stringify({
+            type: 'contentChanged',
+            html: editor.getContent()
+          }));
+        }
+      });
+    }
+  });
+}
+
+function getContent() {
+  return editorInstance ? editorInstance.getContent() : '';
+}
+
+function setContent(html) {
+  if (editorInstance) editorInstance.setContent(html || '');
+}
+
+window.addEventListener('load', function() { initEditor(''); });
+</script>
+</body>
+</html>
