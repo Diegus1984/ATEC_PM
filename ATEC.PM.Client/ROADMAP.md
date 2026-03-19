@@ -16,6 +16,8 @@
 
 ## Blocco 1 — Infrastruttura Base ✅ COMPLETATO
 
+
+
 | Funzionalità | Stato | Note |
 |---|---|---|
 | Autenticazione JWT | ✅ | Login, token, refresh |
