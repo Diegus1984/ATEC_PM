@@ -10,6 +10,8 @@
 - **PDF**: QuestPDF (Community License)
 - **GitHub**: github.com/Diegus1984/ATEC_PM
 
+
+
 ---
 
 ## Blocco 1 — Infrastruttura Base ✅ COMPLETATO
