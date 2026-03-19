@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -type f -name *Codex*)",
+      "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -name launchSettings.json -o -name package.json -o -name appsettings*.json)",
+      "Bash(dotnet build:*)"
+    ]
+  }
+}

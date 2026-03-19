@@ -173,6 +173,12 @@
                         Content="  Codex Articoli"
                         Style="{StaticResource NavBtn}"
                         Tag="Codex" />
+                    <Button
+                        x:Name="btnCodexComposition"
+                        Click="Nav_Click"
+                        Content="  Composizione Codex"
+                        Style="{StaticResource NavBtn}"
+                        Tag="CodexComposizione" />
 
                     <!--  AMMINISTRAZIONE  -->
                     <TextBlock

@@ -711,6 +711,20 @@ public class DbService
             INDEX idx_expires (expires_at, status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_compositions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            parent_codex_id INT NOT NULL,
+            child_codex_id INT NOT NULL,
+            quantity INT NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (child_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
+            INDEX idx_parent (parent_codex_id),
+            INDEX idx_child (child_codex_id),
+            UNIQUE KEY uq_parent_child (parent_codex_id, child_codex_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ══════════════════════════════════════════════════════════
         // SEED DATA
         // ══════════════════════════════════════════════════════════

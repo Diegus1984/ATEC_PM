@@ -176,16 +176,13 @@ public class CodexGeneratorService
     {
         return new List<(string, string)>
         {
-            ("101", "Particolare a disegno generico"),
-            ("102", "Particolare a disegno stampato"),
-            ("201", "Particolare commerciale generico"),
-            ("202", "Particolare commerciale rilavorato"),
-            ("203", "Particolare commerciale robot"),
+            ("101", "Particolari a disegno"),
+            ("201", "Particolare commerciale"),
             ("301", "Elemento di fissaggio"),
             ("401", "Materia prima"),
-            ("501", "Gruppo meccanico generico"),
-            ("601", "Assieme meccanico generico"),
-            ("701", "Layout meccanico generico")
+            ("501", "Gruppo meccanico"),
+            ("601", "Assieme meccanico"),
+            ("701", "Layout meccanico")
         };
     }
 }

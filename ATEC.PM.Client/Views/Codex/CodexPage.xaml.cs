@@ -39,6 +39,11 @@ public partial class CodexPage : Page
 
         Loaded += async (_, _) =>
         {
+            // Colonna azioni e pulsante genera solo per admin
+            bool isAdmin = App.CurrentUser.IsAdmin;
+            colActions.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
+            btnGenerate.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
+
             await LoadSyncStatus();
             await Load();
             btnColumnToggle.Unchecked += (_, _) => { }; // Popup si chiude da solo con StaysOpen=False
@@ -271,8 +276,23 @@ public partial class CodexPage : Page
     private string F(string tag) =>
         _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
-    private static bool Match(string? value, string filter) =>
-        string.IsNullOrEmpty(filter) || (value?.ToLower().Contains(filter) ?? false);
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
 
     private void ApplyFilter()
     {
@@ -328,19 +348,157 @@ public partial class CodexPage : Page
         txtStatus.Text = $"{filtered.Count:N0} articoli trovati su {_allItems.Count:N0}";
     }
 
+    // ── GENERA CODICE INLINE ──────────────────────────────────────
+
+    private int? _currentReservationId;
+    private string _currentReservedCode = "";
+
     private async void BtnGenerate_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new CodexGenerateDialog { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() == true)
+        pnlGenerate.Visibility = Visibility.Visible;
+        btnGenerate.IsEnabled = false;
+        txtGenerateError.Text = "";
+        txtDescrizione.Text = "";
+        cmbPrefisso.SelectedIndex = -1;
+        brdPreview.Visibility = Visibility.Collapsed;
+        btnGenerateConfirm.IsEnabled = false;
+        await LoadPrefixes();
+    }
+
+    private async Task LoadPrefixes()
+    {
+        try
         {
-            // Codice generato con successo
-            txtStatus.Text = $"✓ Codice {dialog.GeneratedCode} generato con successo (ID: {dialog.GeneratedId})";
-            txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
-                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
-            
-            // Ricarica i dati
-            await Load();
+            string json = await ApiClient.GetAsync("/api/codex/prefixes");
+            var response = JsonSerializer.Deserialize<ApiResponse<List<CodexPrefix>>>(json, _jsonOpt);
+            if (response?.Success == true && response.Data != null)
+            {
+                cmbPrefisso.ItemsSource = response.Data;
+                cmbPrefisso.DisplayMemberPath = "Display";
+                cmbPrefisso.SelectedValuePath = "Codice";
+            }
         }
+        catch (Exception ex) { txtGenerateError.Text = $"Errore caricamento prefissi: {ex.Message}"; }
+    }
+
+    private async void CmbPrefisso_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        txtGenerateError.Text = "";
+        await ReleaseCurrentReservation();
+
+        if (cmbPrefisso.SelectedValue == null)
+        {
+            brdPreview.Visibility = Visibility.Collapsed;
+            btnGenerateConfirm.IsEnabled = false;
+            return;
+        }
+
+        try
+        {
+            string prefisso = cmbPrefisso.SelectedValue.ToString() ?? "";
+            var req = new CodexReserveRequest { Prefisso = prefisso };
+            string jsonBody = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string result = await ApiClient.PostAsync("/api/codex/reserve", jsonBody);
+
+            var response = JsonSerializer.Deserialize<ApiResponse<CodexReservationResult>>(result, _jsonOpt);
+            if (response?.Success == true && response.Data != null)
+            {
+                _currentReservationId = response.Data.ReservationId;
+                _currentReservedCode = response.Data.Codice;
+                txtPreviewCode.Text = _currentReservedCode;
+                brdPreview.Visibility = Visibility.Visible;
+                btnGenerateConfirm.IsEnabled = true;
+                txtDescrizione.Focus();
+            }
+            else
+            {
+                txtGenerateError.Text = response?.Message ?? "Errore prenotazione";
+                brdPreview.Visibility = Visibility.Collapsed;
+                btnGenerateConfirm.IsEnabled = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            txtGenerateError.Text = $"Errore: {ex.Message}";
+            brdPreview.Visibility = Visibility.Collapsed;
+            btnGenerateConfirm.IsEnabled = false;
+        }
+    }
+
+    private async void BtnGenerateConfirm_Click(object sender, RoutedEventArgs e)
+    {
+        txtGenerateError.Text = "";
+
+        if (_currentReservationId == null)
+        {
+            txtGenerateError.Text = "Nessun codice prenotato";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(txtDescrizione.Text))
+        {
+            txtGenerateError.Text = "Inserisci una descrizione";
+            return;
+        }
+
+        btnGenerateConfirm.IsEnabled = false;
+        try
+        {
+            var req = new CodexConfirmRequest
+            {
+                ReservationId = _currentReservationId.Value,
+                Descrizione = txtDescrizione.Text.Trim()
+            };
+
+            string jsonBody = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string result = await ApiClient.PostAsync("/api/codex/confirm", jsonBody);
+
+            var response = JsonSerializer.Deserialize<ApiResponse<CodexGeneratedCode>>(result, _jsonOpt);
+            if (response?.Success == true && response.Data != null)
+            {
+                string code = response.Data.Codice;
+                int id = response.Data.Id;
+                _currentReservationId = null;
+
+                // Chiudi pannello e mostra successo
+                CloseGeneratePanel();
+                txtStatus.Text = $"✓ Codice {code} generato con successo (ID: {id})";
+                txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
+                await Load();
+            }
+            else
+            {
+                txtGenerateError.Text = response?.Message ?? "Errore nella conferma";
+                btnGenerateConfirm.IsEnabled = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            txtGenerateError.Text = $"Errore: {ex.Message}";
+            btnGenerateConfirm.IsEnabled = true;
+        }
+    }
+
+    private async void BtnGenerateCancel_Click(object sender, RoutedEventArgs e)
+    {
+        await ReleaseCurrentReservation();
+        CloseGeneratePanel();
+    }
+
+    private void CloseGeneratePanel()
+    {
+        pnlGenerate.Visibility = Visibility.Collapsed;
+        btnGenerate.IsEnabled = true;
+    }
+
+    private async Task ReleaseCurrentReservation()
+    {
+        if (_currentReservationId == null) return;
+        try { await ApiClient.PostAsync($"/api/codex/release/{_currentReservationId.Value}", "{}"); }
+        catch { }
+        _currentReservationId = null;
+        _currentReservedCode = "";
     }
 
     private async void BtnSync_Click(object sender, RoutedEventArgs e)
@@ -377,5 +535,98 @@ public partial class CodexPage : Page
     {
         await LoadSyncStatus();
         await Load();
+    }
+
+    // ── MODIFICA / ELIMINA PER RIGA ─────────────────────────────
+
+    private int _editId;
+
+    private void BtnEditRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not CodexListItem item) return;
+
+        _editId = item.Id;
+        txtEditCode.Text = item.Codice;
+        txtEditDescr.Text = item.Descr;
+        txtEditError.Text = "";
+        pnlEdit.Visibility = Visibility.Visible;
+        txtEditDescr.Focus();
+    }
+
+    private async void BtnSaveEdit_Click(object sender, RoutedEventArgs e)
+    {
+        txtEditError.Text = "";
+
+        if (string.IsNullOrWhiteSpace(txtEditDescr.Text))
+        {
+            txtEditError.Text = "La descrizione non può essere vuota";
+            return;
+        }
+
+        btnSaveEdit.IsEnabled = false;
+        try
+        {
+            var req = new CodexUpdateRequest { Descrizione = txtEditDescr.Text.Trim() };
+            string jsonBody = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string result = await ApiClient.PutAsync($"/api/codex/{_editId}", jsonBody);
+
+            var response = JsonSerializer.Deserialize<ApiResponse<int>>(result, _jsonOpt);
+            if (response?.Success == true)
+            {
+                pnlEdit.Visibility = Visibility.Collapsed;
+                txtStatus.Text = $"✓ Articolo {txtEditCode.Text} aggiornato";
+                txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
+                await Load();
+            }
+            else
+            {
+                txtEditError.Text = response?.Message ?? "Errore nel salvataggio";
+            }
+        }
+        catch (Exception ex)
+        {
+            txtEditError.Text = $"Errore: {ex.Message}";
+        }
+        btnSaveEdit.IsEnabled = true;
+    }
+
+    private void BtnCancelEdit_Click(object sender, RoutedEventArgs e)
+    {
+        pnlEdit.Visibility = Visibility.Collapsed;
+    }
+
+    private async void BtnDeleteRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not CodexListItem item) return;
+
+        var result = MessageBox.Show(
+            $"Eliminare definitivamente l'articolo {item.Codice}?\n\n\"{item.Descr}\"\n\nQuesta operazione non è reversibile.",
+            "Conferma eliminazione",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            string json = await ApiClient.DeleteAsync($"/api/codex/{item.Id}");
+            var response = JsonSerializer.Deserialize<ApiResponse<bool>>(json, _jsonOpt);
+            if (response?.Success == true)
+            {
+                txtStatus.Text = $"✓ Articolo {item.Codice} eliminato";
+                txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
+                await Load();
+            }
+            else
+            {
+                MessageBox.Show(response?.Message ?? "Errore", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }

@@ -206,14 +206,32 @@ public partial class QuoteCatalogPage : Page
     private string PF(string tag) =>
         _productFilterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
+
     private void ApplyProductFilter()
     {
         string fCode = PF("Code");
         string fName = PF("Name");
 
         var filtered = _allProducts.Where(p =>
-            (string.IsNullOrEmpty(fCode) || (p.Code?.ToLower().Contains(fCode) ?? false)) &&
-            (string.IsNullOrEmpty(fName) || (p.Name?.ToLower().Contains(fName) ?? false))
+            Match(p.Code, fCode) &&
+            Match(p.Name, fName)
         ).ToList();
 
         dgProducts.ItemsSource = filtered;

@@ -172,8 +172,23 @@ public partial class CatalogPage : Page
     private string F(string tag) =>
         _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
-    private static bool Match(string? value, string filter) =>
-        string.IsNullOrEmpty(filter) || (value?.ToLower().Contains(filter) ?? false);
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
 
     private void ApplyFilter()
     {

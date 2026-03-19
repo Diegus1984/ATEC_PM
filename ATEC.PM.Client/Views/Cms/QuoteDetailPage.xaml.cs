@@ -208,6 +208,8 @@ public partial class QuoteDetailPage : Page
         {
             if (!ConfirmLeave())
                 e.Cancel = true;
+            else
+                _snapshotJson = ""; // reset — non chiedere più
         }
     }
 
@@ -347,7 +349,10 @@ public partial class QuoteDetailPage : Page
     private void BtnBack_Click(object sender, RoutedEventArgs e)
     {
         if (ConfirmLeave())
+        {
+            _snapshotJson = "";
             NavigationService?.Navigate(new QuotesListPage());
+        }
     }
 }
 

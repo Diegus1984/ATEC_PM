@@ -60,6 +60,24 @@ public partial class SuppliersPage : Page
         catch (TaskCanceledException) { }
     }
 
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
+
     private void ApplyFilter()
     {
         if (_allItems == null) return;
@@ -69,9 +87,9 @@ public partial class SuppliersPage : Page
         string fVat = _filterBoxes.GetValueOrDefault("Vat")?.Text.Trim().ToLower() ?? "";
 
         var filtered = _allItems.Where(s =>
-            (string.IsNullOrEmpty(fName) || (s.CompanyName?.ToLower().Contains(fName) ?? false)) &&
-            (string.IsNullOrEmpty(fContact) || (s.ContactName?.ToLower().Contains(fContact) ?? false)) &&
-            (string.IsNullOrEmpty(fVat) || (s.VatNumber?.ToLower().Contains(fVat) ?? false))
+            Match(s.CompanyName, fName) &&
+            Match(s.ContactName, fContact) &&
+            Match(s.VatNumber, fVat)
         ).ToList();
 
         dgSuppliers.ItemsSource = filtered;

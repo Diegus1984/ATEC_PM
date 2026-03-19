@@ -49,8 +49,14 @@
         <!-- STATUS BAR -->
         <Border DockPanel.Dock="Bottom" Background="White"
                 BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" Padding="16,6">
-            <TextBlock x:Name="txtStatus" Text="Caricamento..."
-                       FontSize="11" Foreground="#6B7280" />
+            <Grid>
+                <TextBlock x:Name="txtStatus" Text="Caricamento..."
+                           HorizontalAlignment="Left"
+                           FontSize="11" Foreground="#6B7280" />
+                <TextBlock HorizontalAlignment="Right"
+                           FontSize="11" FontStyle="Italic" Foreground="#9CA3AF"
+                           Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con" />
+            </Grid>
         </Border>
 
         <!-- DATAGRID -->

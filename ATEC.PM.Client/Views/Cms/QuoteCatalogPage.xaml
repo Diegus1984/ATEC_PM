@@ -180,11 +180,20 @@
                     BorderBrush="#E4E7EC"
                     BorderThickness="0,1,0,0"
                     DockPanel.Dock="Bottom">
-                    <TextBlock
-                        x:Name="txtProductStatus"
-                        FontSize="11"
-                        Foreground="#6B7280"
-                        Text="Pronto" />
+                    <Grid>
+                        <TextBlock
+                            x:Name="txtProductStatus"
+                            HorizontalAlignment="Left"
+                            FontSize="11"
+                            Foreground="#6B7280"
+                            Text="Pronto" />
+                        <TextBlock
+                            HorizontalAlignment="Right"
+                            FontSize="11"
+                            FontStyle="Italic"
+                            Foreground="#9CA3AF"
+                            Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con" />
+                    </Grid>
                 </Border>
 
                 <!--  DataGrid Prodotti  -->

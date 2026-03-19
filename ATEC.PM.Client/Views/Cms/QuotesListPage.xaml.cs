@@ -73,6 +73,24 @@ public partial class QuotesListPage : Page
     private string F(string tag) =>
         _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
+
     private void ApplyFilter()
     {
         if (_allQuotes == null || !IsLoaded) return;
@@ -89,15 +107,15 @@ public partial class QuotesListPage : Page
         var filtered = _allQuotes.Where(q =>
         {
             if (!string.IsNullOrEmpty(statusFilter) && q.Status != statusFilter) return false;
-            if (!string.IsNullOrEmpty(fNum) && !(q.QuoteNumber ?? "").ToLower().Contains(fNum)) return false;
-            if (!string.IsNullOrEmpty(fCust) && !(q.CustomerName ?? "").ToLower().Contains(fCust)) return false;
-            if (!string.IsNullOrEmpty(fTitle) && !(q.Title ?? "").ToLower().Contains(fTitle)) return false;
+            if (!Match(q.QuoteNumber, fNum)) return false;
+            if (!Match(q.CustomerName, fCust)) return false;
+            if (!Match(q.Title, fTitle)) return false;
             if (!string.IsNullOrEmpty(globalSearch))
             {
-                return (q.QuoteNumber ?? "").ToLower().Contains(globalSearch)
-                    || (q.CustomerName ?? "").ToLower().Contains(globalSearch)
-                    || (q.Title ?? "").ToLower().Contains(globalSearch)
-                    || (q.CreatedByName ?? "").ToLower().Contains(globalSearch);
+                return Match(q.QuoteNumber, globalSearch)
+                    || Match(q.CustomerName, globalSearch)
+                    || Match(q.Title, globalSearch)
+                    || Match(q.CreatedByName, globalSearch);
             }
             return true;
         }).ToList();

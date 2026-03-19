@@ -7,7 +7,14 @@ public class CodexListItem
     private string _codice = "";
     public string Codice
     {
-        get => _codice.Replace("..", ".");
+        get
+        {
+            var c = _codice.Replace("..", ".");
+            // Se non contiene il punto e ha più di 3 caratteri, formatta: XXX...XXX.YYY
+            if (!c.Contains('.') && c.Length > 3)
+                return c.Substring(0, c.Length - 3) + "." + c.Substring(c.Length - 3);
+            return c;
+        }
         set => _codice = value ?? "";
     }
     public string CodeForn { get; set; } = "";
@@ -44,7 +51,7 @@ public class CodexPrefix
 {
     public string Codice { get; set; } = "";
     public string Descrizione { get; set; } = "";
-    public string Display => $"{Codice} � {Descrizione}";
+    public string Display => $"{Codice} � {Descrizione}";
 }
 
 public class CodexReserveRequest
@@ -74,4 +81,44 @@ public class CodexGeneratedCode
 {
     public string Codice { get; set; } = "";
     public int Id { get; set; }
+}
+
+public class CodexUpdateRequest
+{
+    public string Descrizione { get; set; } = "";
+}
+
+// ── COMPOSIZIONE ────────────────────────────────────────
+
+public class CompositionChildDto
+{
+    public int Id { get; set; }
+    public int ParentCodexId { get; set; }
+    public int ChildCodexId { get; set; }
+    public string ChildCodice { get; set; } = "";
+    public string ChildDescr { get; set; } = "";
+    public int Quantity { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public class CompositionTreeNode
+{
+    public int CodexId { get; set; }
+    public string Codice { get; set; } = "";
+    public string Descr { get; set; } = "";
+    public int Quantity { get; set; } = 1;
+    public List<CompositionTreeNode> Children { get; set; } = new();
+}
+
+public class AddCompositionRequest
+{
+    public int ParentCodexId { get; set; }
+    public int ChildCodexId { get; set; }
+    public int Quantity { get; set; } = 1;
+}
+
+public class UpdateCompositionRequest
+{
+    public int Quantity { get; set; }
+    public int SortOrder { get; set; }
 }

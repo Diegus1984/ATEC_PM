@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         btnFornitori.Visibility = PermissionEngine.CanAccessFornitori(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCatalogo.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
         btnCodex.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
+        btnCodexComposition.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
         btnBackup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione GESTIONE AVANZATA
@@ -111,7 +112,8 @@ public partial class MainWindow : Window
         bool anyGestione = btnClienti.Visibility == Visibility.Visible ||
                    btnFornitori.Visibility == Visibility.Visible ||
                    btnCatalogo.Visibility == Visibility.Visible ||
-                   btnCodex.Visibility == Visibility.Visible;
+                   btnCodex.Visibility == Visibility.Visible ||
+                   btnCodexComposition.Visibility == Visibility.Visible;
         lblGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
 
         bool anyAdmin = btnUtenti.Visibility == Visibility.Visible || btnBackup.Visibility == Visibility.Visible;
@@ -145,6 +147,7 @@ public partial class MainWindow : Window
             case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             case "Codex": PageContent.Navigate(new CodexPage()); break;
+            case "CodexComposizione": PageContent.Navigate(new CodexCompositionPage()); break;
             case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
             case "Backup": PageContent.Navigate(new BackupPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;

@@ -65,6 +65,226 @@
             </Grid>
         </Border>
 
+        <!--  GENERA CODICE INLINE PANEL  -->
+        <Border
+            x:Name="pnlGenerate"
+            Padding="20,12"
+            Background="#F0F4FF"
+            BorderBrush="#4F6EF7"
+            BorderThickness="0,0,0,2"
+            DockPanel.Dock="Top"
+            Visibility="Collapsed">
+            <StackPanel>
+                <Grid>
+                    <TextBlock
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="#1A1D26"
+                        Text="Genera un nuovo articolo Codex" />
+                    <Button
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="BtnGenerateCancel_Click"
+                        Content="✕"
+                        FontSize="14"
+                        Foreground="#667085"
+                        Style="{StaticResource FlatBtn}" />
+                </Grid>
+                <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                    <!--  PREFISSO  -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#667085"
+                            Text="Prefisso" />
+                        <ComboBox
+                            x:Name="cmbPrefisso"
+                            Width="280"
+                            Height="34"
+                            Margin="0,4,0,0"
+                            Padding="10,6"
+                            Background="White"
+                            BorderBrush="#D0D5DD"
+                            BorderThickness="1"
+                            FontSize="12"
+                            Foreground="#1A1D26"
+                            SelectionChanged="CmbPrefisso_SelectionChanged" />
+                    </StackPanel>
+                    <!--  CODICE PRENOTATO  -->
+                    <Border
+                        x:Name="brdPreview"
+                        Margin="0,0,16,0"
+                        Padding="12,0"
+                        VerticalAlignment="Bottom"
+                        Background="White"
+                        BorderBrush="#4F6EF7"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Visibility="Collapsed">
+                        <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#667085"
+                                Text="Codice: " />
+                            <TextBlock
+                                x:Name="txtPreviewCode"
+                                VerticalAlignment="Center"
+                                FontSize="13"
+                                FontWeight="Bold"
+                                Foreground="#4F6EF7" />
+                        </StackPanel>
+                    </Border>
+                    <!--  DESCRIZIONE  -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#667085"
+                            Text="Descrizione" />
+                        <TextBox
+                            x:Name="txtDescrizione"
+                            Width="350"
+                            Height="34"
+                            Margin="0,4,0,0"
+                            Padding="10,6"
+                            VerticalContentAlignment="Center"
+                            Background="White"
+                            BorderBrush="#D0D5DD"
+                            BorderThickness="1"
+                            FontSize="12"
+                            Foreground="#1A1D26" />
+                    </StackPanel>
+                    <!--  BUTTONS  -->
+                    <Button
+                        x:Name="btnGenerateConfirm"
+                        Margin="0,0,8,0"
+                        Padding="16,8"
+                        VerticalAlignment="Bottom"
+                        Background="#12B76A"
+                        Click="BtnGenerateConfirm_Click"
+                        Content="Genera"
+                        Foreground="White"
+                        IsEnabled="False"
+                        Style="{StaticResource FlatBtn}" />
+                    <Button
+                        Padding="16,8"
+                        VerticalAlignment="Bottom"
+                        Background="Transparent"
+                        BorderBrush="#D0D5DD"
+                        BorderThickness="1"
+                        Click="BtnGenerateCancel_Click"
+                        Content="Annulla"
+                        Foreground="#344054"
+                        Style="{StaticResource FlatBtn}" />
+                </StackPanel>
+                <!--  ERRORE  -->
+                <TextBlock
+                    x:Name="txtGenerateError"
+                    Margin="0,6,0,0"
+                    FontSize="11"
+                    Foreground="#F04438" />
+            </StackPanel>
+        </Border>
+
+        <!--  MODIFICA INLINE PANEL  -->
+        <Border
+            x:Name="pnlEdit"
+            Padding="20,12"
+            Background="#FFFBEB"
+            BorderBrush="#F59E0B"
+            BorderThickness="0,0,0,2"
+            DockPanel.Dock="Top"
+            Visibility="Collapsed">
+            <StackPanel>
+                <Grid>
+                    <TextBlock
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="#1A1D26"
+                        Text="Modifica articolo" />
+                    <Button
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="BtnCancelEdit_Click"
+                        Content="✕"
+                        FontSize="14"
+                        Foreground="#667085"
+                        Style="{StaticResource FlatBtn}" />
+                </Grid>
+                <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                    <!--  CODICE (readonly)  -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#667085"
+                            Text="Codice" />
+                        <TextBlock
+                            x:Name="txtEditCode"
+                            Margin="0,6,0,0"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Foreground="#4F6EF7" />
+                    </StackPanel>
+                    <!--  DESCRIZIONE  -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Foreground="#667085"
+                            Text="Descrizione" />
+                        <TextBox
+                            x:Name="txtEditDescr"
+                            Width="500"
+                            Height="34"
+                            Margin="0,4,0,0"
+                            Padding="10,6"
+                            VerticalContentAlignment="Center"
+                            Background="White"
+                            BorderBrush="#D0D5DD"
+                            BorderThickness="1"
+                            FontSize="12"
+                            Foreground="#1A1D26" />
+                    </StackPanel>
+                    <!--  BUTTONS  -->
+                    <Button
+                        x:Name="btnSaveEdit"
+                        Margin="0,0,8,0"
+                        Padding="16,8"
+                        VerticalAlignment="Bottom"
+                        Background="#4F6EF7"
+                        Click="BtnSaveEdit_Click"
+                        Content="Salva"
+                        Foreground="White"
+                        Style="{StaticResource FlatBtn}" />
+                    <Button
+                        Padding="16,8"
+                        VerticalAlignment="Bottom"
+                        Background="Transparent"
+                        BorderBrush="#D0D5DD"
+                        BorderThickness="1"
+                        Click="BtnCancelEdit_Click"
+                        Content="Annulla"
+                        Foreground="#344054"
+                        Style="{StaticResource FlatBtn}" />
+                </StackPanel>
+                <!--  ERRORE  -->
+                <TextBlock
+                    x:Name="txtEditError"
+                    Margin="0,6,0,0"
+                    FontSize="11"
+                    Foreground="#F04438" />
+            </StackPanel>
+        </Border>
+
         <!--  COLUMN VISIBILITY PANEL  -->
         <Border
             Padding="20,8"
@@ -136,11 +356,20 @@
             BorderBrush="#E4E7EC"
             BorderThickness="0,1,0,0"
             DockPanel.Dock="Bottom">
-            <TextBlock
-                x:Name="txtStatus"
-                FontSize="12"
-                Foreground="#667085"
-                Text="Pronto" />
+            <Grid>
+                <TextBlock
+                    x:Name="txtStatus"
+                    HorizontalAlignment="Left"
+                    FontSize="12"
+                    Foreground="#667085"
+                    Text="Pronto" />
+                <TextBlock
+                    HorizontalAlignment="Right"
+                    FontSize="11"
+                    FontStyle="Italic"
+                    Foreground="#9CA3AF"
+                    Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con" />
+            </Grid>
         </Border>
 
         <!--  DATAGRID  -->
@@ -717,6 +946,49 @@
                                 VerticalAlignment="Center"
                                 Text="{Binding Note}"
                                 TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!--  AZIONI (solo admin)  -->
+                <DataGridTemplateColumn x:Name="colActions" Width="70" MinWidth="70">
+                    <DataGridTemplateColumn.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                FontWeight="Bold"
+                                Foreground="#667085"
+                                Text="" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.HeaderTemplate>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                <Button
+                                    Width="28"
+                                    Height="28"
+                                    Background="#4F6EF71A"
+                                    BorderThickness="0"
+                                    Click="BtnEditRow_Click"
+                                    Content="✏"
+                                    Cursor="Hand"
+                                    FontSize="12"
+                                    Foreground="#4F6EF7"
+                                    Tag="{Binding}"
+                                    ToolTip="Modifica" />
+                                <Button
+                                    Width="28"
+                                    Height="28"
+                                    Margin="4,0,0,0"
+                                    Background="#EF44441A"
+                                    BorderThickness="0"
+                                    Click="BtnDeleteRow_Click"
+                                    Content="✕"
+                                    Cursor="Hand"
+                                    FontSize="12"
+                                    Foreground="#EF4444"
+                                    Tag="{Binding}"
+                                    ToolTip="Elimina" />
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

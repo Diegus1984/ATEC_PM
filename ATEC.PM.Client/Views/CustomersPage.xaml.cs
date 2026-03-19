@@ -60,6 +60,24 @@ public partial class CustomersPage : Page
         catch (TaskCanceledException) { }
     }
 
+    private static bool Match(string? value, string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) return true;
+        var v = value?.ToLower() ?? "";
+
+        bool startsWild = filter.StartsWith('*');
+        bool endsWild = filter.EndsWith('*');
+
+        if (startsWild && endsWild)
+            return v.Contains(filter.Trim('*'));
+        if (endsWild)
+            return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild)
+            return v.EndsWith(filter.TrimStart('*'));
+
+        return v.Contains(filter);
+    }
+
     private void ApplyFilter()
     {
         if (_allItems == null) return;
@@ -70,10 +88,10 @@ public partial class CustomersPage : Page
         string fEmail = _filterBoxes.GetValueOrDefault("Email")?.Text.Trim().ToLower() ?? "";
 
         var filtered = _allItems.Where(c =>
-            (string.IsNullOrEmpty(fName) || (c.CompanyName?.ToLower().Contains(fName) ?? false)) &&
-            (string.IsNullOrEmpty(fContact) || (c.ContactName?.ToLower().Contains(fContact) ?? false)) &&
-            (string.IsNullOrEmpty(fVat) || (c.VatNumber?.ToLower().Contains(fVat) ?? false)) &&
-            (string.IsNullOrEmpty(fEmail) || (c.Email?.ToLower().Contains(fEmail) ?? false))
+            Match(c.CompanyName, fName) &&
+            Match(c.ContactName, fContact) &&
+            Match(c.VatNumber, fVat) &&
+            Match(c.Email, fEmail)
         ).ToList();
 
         dgCustomers.ItemsSource = filtered;
