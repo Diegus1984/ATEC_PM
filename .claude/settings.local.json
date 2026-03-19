@@ -3,7 +3,24 @@
     "allow": [
       "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -type f -name *Codex*)",
       "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -name launchSettings.json -o -name package.json -o -name appsettings*.json)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "WebSearch",
+      "Bash(where node:*)",
+      "Bash(where npm:*)",
+      "Bash(npm --version)",
+      "Bash(cmd /c \"node --version\")",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" --version)",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install -g @benborla29/mcp-server-mysql)",
+      "Bash(set \"PATH=C:\\\\Program Files\\\\nodejs;%PATH%\")",
+      "Bash(npm install:*)",
+      "Bash(export PATH=\"/mnt/c/Program Files/nodejs:$PATH\")",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" --version)",
+      "Bash(cmd /c \"set PATH=C:\\\\Program Files\\\\nodejs;%PATH% && npm install -g @benborla29/mcp-server-mysql\")",
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install -g @benborla29/mcp-server-mysql)",
+      "Read(//c/Users/diego/AppData/Roaming/Claude/**)",
+      "Read(//c/Users/diego/**)",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"console.log\\(''node works''\\)\")",
+      "Bash(claude mcp:*)"
     ]
   }
 }

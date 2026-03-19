@@ -37,6 +37,12 @@ public partial class CodexPage : Page
         LoadColumnSettings();
         BuildColumnCheckboxes();
 
+        // Ricerca lazy nelle combo riferimento 201/401
+        cmbRef201.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+            new TextChangedEventHandler((_, _) => FilterRefCombo(cmbRef201, "2")));
+        cmbRef401.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+            new TextChangedEventHandler((_, _) => FilterRefCombo(cmbRef401, "4")));
+
         Loaded += async (_, _) =>
         {
             // Colonna azioni e pulsante genera solo per admin
@@ -390,12 +396,29 @@ public partial class CodexPage : Page
         {
             brdPreview.Visibility = Visibility.Collapsed;
             btnGenerateConfirm.IsEnabled = false;
+            pnlReferences.Visibility = Visibility.Collapsed;
             return;
+        }
+
+        // Mostra campi riferimento solo per prefisso 101
+        string selectedPrefix = cmbPrefisso.SelectedValue.ToString() ?? "";
+        bool is101 = selectedPrefix == "101";
+        pnlReferences.Visibility = is101 ? Visibility.Visible : Visibility.Collapsed;
+
+        if (is101)
+        {
+            // Combo vuote — si popolano digitando (filtro lazy)
+            cmbRef201.ItemsSource = null;
+            cmbRef201.SelectedIndex = -1;
+            cmbRef201.Text = "";
+            cmbRef401.ItemsSource = null;
+            cmbRef401.SelectedIndex = -1;
+            cmbRef401.Text = "";
         }
 
         try
         {
-            string prefisso = cmbPrefisso.SelectedValue.ToString() ?? "";
+            string prefisso = selectedPrefix;
             var req = new CodexReserveRequest { Prefisso = prefisso };
             string jsonBody = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync("/api/codex/reserve", jsonBody);
@@ -460,6 +483,9 @@ public partial class CodexPage : Page
                 int id = response.Data.Id;
                 _currentReservationId = null;
 
+                // Salva riferimenti 201/401 se presenti (solo per 101)
+                await SaveReferencesIfNeeded(id);
+
                 // Chiudi pannello e mostra successo
                 CloseGeneratePanel();
                 txtStatus.Text = $"✓ Codice {code} generato con successo (ID: {id})";
@@ -499,6 +525,79 @@ public partial class CodexPage : Page
         catch { }
         _currentReservationId = null;
         _currentReservedCode = "";
+    }
+
+    private bool _suppressRefFilter;
+
+    private void FilterRefCombo(ComboBox cmb, string prefix)
+    {
+        if (_suppressRefFilter) return;
+        if (cmb.SelectedItem != null) return;
+
+        var tb = cmb.Template.FindName("PART_EditableTextBox", cmb) as System.Windows.Controls.TextBox;
+        string search = tb?.Text?.Trim().ToLower() ?? "";
+        int caretPos = tb?.CaretIndex ?? 0;
+
+        if (search.Length < 2)
+        {
+            _suppressRefFilter = true;
+            cmb.ItemsSource = null;
+            cmb.IsDropDownOpen = false;
+            _suppressRefFilter = false;
+            return;
+        }
+
+        var filtered = _allItems
+            .Where(i => i.Codice.StartsWith(prefix))
+            .Where(i => Match(i.Codice, search) || Match(i.Descr, search))
+            .Take(50)
+            .Select(i => new { i.Id, Display = $"{i.Codice} — {i.Descr}" })
+            .ToList();
+
+        _suppressRefFilter = true;
+        cmb.ItemsSource = filtered;
+        cmb.IsDropDownOpen = filtered.Count > 0;
+
+        // Ripristina testo e cursore
+        if (tb != null)
+        {
+            tb.Text = search;
+            tb.CaretIndex = caretPos;
+        }
+        _suppressRefFilter = false;
+    }
+
+    private async Task SaveReferencesIfNeeded(int codexId)
+    {
+        var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+        // Rif. 201 (commerciale)
+        if (cmbRef201.SelectedItem != null)
+        {
+            dynamic sel201 = cmbRef201.SelectedItem;
+            var req201 = new AddCodexReferenceRequest
+            {
+                SourceCodexId = codexId,
+                RefCodexId = (int)sel201.Id,
+                RefType = "201"
+            };
+            try { await ApiClient.PostAsync("/api/codex/references", JsonSerializer.Serialize(req201, jsonOpts)); }
+            catch { }
+        }
+
+        // Rif. 401 (materia prima)
+        if (cmbRef401.SelectedItem != null)
+        {
+            dynamic sel401 = cmbRef401.SelectedItem;
+            var req401 = new AddCodexReferenceRequest
+            {
+                SourceCodexId = codexId,
+                RefCodexId = (int)sel401.Id,
+                RefType = "401"
+            };
+            try { await ApiClient.PostAsync("/api/codex/references", JsonSerializer.Serialize(req401, jsonOpts)); }
+            catch { }
+        }
     }
 
     private async void BtnSync_Click(object sender, RoutedEventArgs e)

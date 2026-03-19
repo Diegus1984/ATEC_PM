@@ -113,19 +113,51 @@
                     BorderThickness="0,0,0,1"
                     DockPanel.Dock="Top">
                     <StackPanel>
-                        <TextBlock
-                            FontSize="12"
-                            FontWeight="SemiBold"
-                            Foreground="#4F6EF7"
-                            Text="ARTICOLI DISPONIBILI" />
-                        <TextBox
-                            x:Name="txtSearch"
-                            Height="28"
-                            Margin="0,6,0,0"
-                            Padding="6,3"
-                            BorderBrush="#D0D5DD"
-                            FontSize="12"
-                            TextChanged="TxtSearch_TextChanged" />
+                        <DockPanel>
+                            <TextBlock
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="#4F6EF7"
+                                Text="ARTICOLI DISPONIBILI"
+                                VerticalAlignment="Center" />
+                            <ComboBox
+                                x:Name="cmbSource"
+                                Width="120"
+                                Height="26"
+                                Margin="12,0,0,0"
+                                Padding="6,2"
+                                FontSize="12"
+                                HorizontalAlignment="Left"
+                                SelectionChanged="CmbSource_SelectionChanged">
+                                <ComboBoxItem Content="Codex" IsSelected="True" />
+                                <ComboBoxItem Content="Catalogo" />
+                            </ComboBox>
+                        </DockPanel>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                x:Name="txtSearchCodice"
+                                Grid.Column="0"
+                                Height="28"
+                                Padding="6,3"
+                                BorderBrush="#D0D5DD"
+                                FontSize="12"
+                                Tag="Codice"
+                                TextChanged="TxtSearch_TextChanged" />
+                            <TextBox
+                                x:Name="txtSearchDescr"
+                                Grid.Column="2"
+                                Height="28"
+                                Padding="6,3"
+                                BorderBrush="#D0D5DD"
+                                FontSize="12"
+                                Tag="Descrizione"
+                                TextChanged="TxtSearch_TextChanged" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -134,6 +166,7 @@
                     x:Name="dgAvailable"
                     AutoGenerateColumns="False"
                     Background="White"
+                    MouseDoubleClick="DgAvailable_MouseDoubleClick"
                     BorderThickness="0"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"

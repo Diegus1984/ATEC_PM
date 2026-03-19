@@ -9,11 +9,11 @@ public class CodexListItem
     {
         get
         {
-            var c = _codice.Replace("..", ".");
-            // Se non contiene il punto e ha più di 3 caratteri, formatta: XXX...XXX.YYY
-            if (!c.Contains('.') && c.Length > 3)
-                return c.Substring(0, c.Length - 3) + "." + c.Substring(c.Length - 3);
-            return c;
+            // Rimuovi TUTTI i punti, poi metti UN solo punto prima delle ultime 3 cifre
+            var raw = (_codice ?? "").Replace(".", "");
+            if (raw.Length > 3)
+                return string.Concat(raw.AsSpan(0, raw.Length - 3), ".", raw.AsSpan(raw.Length - 3));
+            return raw;
         }
         set => _codice = value ?? "";
     }
@@ -94,26 +94,30 @@ public class CompositionChildDto
 {
     public int Id { get; set; }
     public int ParentCodexId { get; set; }
-    public int ChildCodexId { get; set; }
+    public int? ChildCodexId { get; set; }
+    public int? ChildCatalogId { get; set; }
     public string ChildCodice { get; set; } = "";
     public string ChildDescr { get; set; } = "";
-    public int Quantity { get; set; }
     public int SortOrder { get; set; }
+    public string Source { get; set; } = "codex"; // "codex" o "catalog"
 }
 
 public class CompositionTreeNode
 {
+    public int CompositionId { get; set; }
     public int CodexId { get; set; }
+    public int? CatalogId { get; set; }
     public string Codice { get; set; } = "";
     public string Descr { get; set; } = "";
-    public int Quantity { get; set; } = 1;
+    public string Source { get; set; } = "codex"; // "codex" o "catalog"
     public List<CompositionTreeNode> Children { get; set; } = new();
 }
 
 public class AddCompositionRequest
 {
     public int ParentCodexId { get; set; }
-    public int ChildCodexId { get; set; }
+    public int? ChildCodexId { get; set; }
+    public int? ChildCatalogId { get; set; }
     public int Quantity { get; set; } = 1;
 }
 
@@ -121,4 +125,23 @@ public class UpdateCompositionRequest
 {
     public int Quantity { get; set; }
     public int SortOrder { get; set; }
+}
+
+// ── RIFERIMENTI 101 → 201/401 ──────────────────────────────
+
+public class CodexItemReference
+{
+    public int Id { get; set; }
+    public int SourceCodexId { get; set; }
+    public int RefCodexId { get; set; }
+    public string RefType { get; set; } = "";
+    public string RefCodice { get; set; } = "";
+    public string RefDescr { get; set; } = "";
+}
+
+public class AddCodexReferenceRequest
+{
+    public int SourceCodexId { get; set; }
+    public int RefCodexId { get; set; }
+    public string RefType { get; set; } = "";
 }

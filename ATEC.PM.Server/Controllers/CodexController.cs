@@ -157,6 +157,15 @@ public class CodexController : ControllerBase
     public IActionResult Delete(int id)
     {
         using var c = _db.Open();
+
+        // Blocca cancellazione se usato in una composizione
+        int usedInComp = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM codex_compositions WHERE child_codex_id=@Id",
+            new { Id = id });
+        if (usedInComp > 0)
+            return BadRequest(ApiResponse<string>.Fail(
+                "Impossibile eliminare: questo articolo è utilizzato in una composizione"));
+
         int rows = c.Execute("DELETE FROM codex_items WHERE id=@Id", new { Id = id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Articolo non trovato"));
         return Ok(ApiResponse<bool>.Ok(true, "Eliminato"));
@@ -164,19 +173,26 @@ public class CodexController : ControllerBase
 
     // ── COMPOSIZIONE ────────────────────────────────────────
 
+    private const string CompositionSelectSql = @"
+        SELECT cc.id AS Id, cc.parent_codex_id AS ParentCodexId,
+               cc.child_codex_id AS ChildCodexId,
+               cc.child_catalog_id AS ChildCatalogId,
+               COALESCE(ci.codice, cat.code) AS ChildCodice,
+               COALESCE(ci.descr, cat.description) AS ChildDescr,
+               cc.sort_order AS SortOrder,
+               CASE WHEN cc.child_catalog_id IS NOT NULL THEN 'catalog' ELSE 'codex' END AS Source
+        FROM codex_compositions cc
+        LEFT JOIN codex_items ci ON ci.id = cc.child_codex_id
+        LEFT JOIN catalog_items cat ON cat.id = cc.child_catalog_id";
+
     [HttpGet("compositions/{parentId}")]
     public IActionResult GetCompositionChildren(int parentId)
     {
         using var c = _db.Open();
-        var rows = c.Query<CompositionChildDto>(@"
-            SELECT cc.id AS Id, cc.parent_codex_id AS ParentCodexId,
-                   cc.child_codex_id AS ChildCodexId,
-                   ci.codice AS ChildCodice, ci.descr AS ChildDescr,
-                   cc.quantity AS Quantity, cc.sort_order AS SortOrder
-            FROM codex_compositions cc
-            JOIN codex_items ci ON ci.id = cc.child_codex_id
+        var rows = c.Query<CompositionChildDto>(
+            CompositionSelectSql + @"
             WHERE cc.parent_codex_id = @ParentId
-            ORDER BY cc.sort_order, ci.codice",
+            ORDER BY cc.sort_order, COALESCE(ci.codice, cat.code)",
             new { ParentId = parentId }).ToList();
         return Ok(ApiResponse<List<CompositionChildDto>>.Ok(rows));
     }
@@ -191,14 +207,8 @@ public class CodexController : ControllerBase
             new { Id = codexId });
         if (root == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
 
-        var allComps = c.Query<CompositionChildDto>(@"
-            SELECT cc.id AS Id, cc.parent_codex_id AS ParentCodexId,
-                   cc.child_codex_id AS ChildCodexId,
-                   ci.codice AS ChildCodice, ci.descr AS ChildDescr,
-                   cc.quantity AS Quantity, cc.sort_order AS SortOrder
-            FROM codex_compositions cc
-            JOIN codex_items ci ON ci.id = cc.child_codex_id
-            ORDER BY cc.sort_order, ci.codice").ToList();
+        var allComps = c.Query<CompositionChildDto>(
+            CompositionSelectSql + " ORDER BY cc.sort_order, COALESCE(ci.codice, cat.code)").ToList();
 
         var lookup = allComps.GroupBy(x => x.ParentCodexId)
                              .ToDictionary(g => g.Key, g => g.ToList());
@@ -220,12 +230,16 @@ public class CodexController : ControllerBase
         {
             var childNode = new CompositionTreeNode
             {
-                CodexId = child.ChildCodexId,
+                CodexId = child.ChildCodexId ?? 0,
+                CatalogId = child.ChildCatalogId,
                 Codice = child.ChildCodice,
                 Descr = child.ChildDescr,
-                Quantity = child.Quantity
+                CompositionId = child.Id,
+                Source = child.Source
             };
-            BuildTree(childNode, lookup);
+            // Solo nodi codex possono avere sotto-figli
+            if (child.ChildCodexId.HasValue)
+                BuildTree(childNode, lookup);
             node.Children.Add(childNode);
         }
     }
@@ -235,39 +249,57 @@ public class CodexController : ControllerBase
     {
         using var c = _db.Open();
 
+        if (req.ChildCodexId == null && req.ChildCatalogId == null)
+            return BadRequest(ApiResponse<string>.Fail("Specificare ChildCodexId o ChildCatalogId"));
+
         var parent = c.QueryFirstOrDefault<CodexListItem>(
             "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id",
             new { Id = req.ParentCodexId });
-        var child = c.QueryFirstOrDefault<CodexListItem>(
-            "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id",
-            new { Id = req.ChildCodexId });
-
-        if (parent == null || child == null)
-            return BadRequest(ApiResponse<string>.Fail("Articolo non trovato"));
+        if (parent == null)
+            return BadRequest(ApiResponse<string>.Fail("Articolo parent non trovato"));
 
         string parentPrefix = parent.Codice.Substring(0, 1);
-        string childPrefix = child.Codice.Substring(0, 1);
 
-        string? error = ValidateHierarchy(parentPrefix, childPrefix);
-        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
+        // Validazione gerarchia solo per figli codex
+        if (req.ChildCodexId.HasValue)
+        {
+            var child = c.QueryFirstOrDefault<CodexListItem>(
+                "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id",
+                new { Id = req.ChildCodexId.Value });
+            if (child == null)
+                return BadRequest(ApiResponse<string>.Fail("Articolo figlio non trovato"));
 
-        int exists = c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM codex_compositions WHERE parent_codex_id=@P AND child_codex_id=@C",
-            new { P = req.ParentCodexId, C = req.ChildCodexId });
-        if (exists > 0)
-            return BadRequest(ApiResponse<string>.Fail("Relazione già esistente"));
+            string childPrefix = child.Codice.Substring(0, 1);
+            string? error = ValidateHierarchy(parentPrefix, childPrefix);
+            if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
+        }
+        else if (req.ChildCatalogId.HasValue)
+        {
+            // Verifica che l'articolo catalogo esista
+            int exists = c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM catalog_items WHERE id=@Id",
+                new { Id = req.ChildCatalogId.Value });
+            if (exists == 0)
+                return BadRequest(ApiResponse<string>.Fail("Articolo catalogo non trovato"));
+        }
 
         int maxSort = c.ExecuteScalar<int>(
             "SELECT COALESCE(MAX(sort_order),0) FROM codex_compositions WHERE parent_codex_id=@P",
             new { P = req.ParentCodexId });
 
-        int id = c.ExecuteScalar<int>(@"
-            INSERT INTO codex_compositions (parent_codex_id, child_codex_id, quantity, sort_order)
-            VALUES (@ParentCodexId, @ChildCodexId, @Quantity, @Sort);
-            SELECT LAST_INSERT_ID()",
-            new { req.ParentCodexId, req.ChildCodexId, req.Quantity, Sort = maxSort + 1 });
+        int qty = Math.Max(1, req.Quantity);
+        int lastId = 0;
+        for (int i = 0; i < qty; i++)
+        {
+            lastId = c.ExecuteScalar<int>(@"
+                INSERT INTO codex_compositions (parent_codex_id, child_codex_id, child_catalog_id, sort_order)
+                VALUES (@ParentCodexId, @ChildCodexId, @ChildCatalogId, @Sort);
+                SELECT LAST_INSERT_ID()",
+                new { req.ParentCodexId, req.ChildCodexId, req.ChildCatalogId, Sort = maxSort + 1 + i });
+        }
 
-        return Ok(ApiResponse<int>.Ok(id, "Composizione aggiunta"));
+        string msg = qty > 1 ? $"{qty} elementi aggiunti" : "Composizione aggiunta";
+        return Ok(ApiResponse<int>.Ok(lastId, msg));
     }
 
     [HttpPut("compositions/{id}")]
@@ -275,8 +307,8 @@ public class CodexController : ControllerBase
     {
         using var c = _db.Open();
         int rows = c.Execute(
-            "UPDATE codex_compositions SET quantity=@Quantity, sort_order=@SortOrder WHERE id=@Id",
-            new { req.Quantity, req.SortOrder, Id = id });
+            "UPDATE codex_compositions SET sort_order=@SortOrder WHERE id=@Id",
+            new { req.SortOrder, Id = id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Non trovato"));
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
@@ -302,5 +334,69 @@ public class CodexController : ControllerBase
                 ? null : "Layout meccanico (7xx) può contenere solo assiemi 6xx",
             _ => "Solo articoli 5xx, 6xx, 7xx possono avere composizioni"
         };
+    }
+
+    // ── RIFERIMENTI 101 → 201/401 ──────────────────────────────
+
+    [HttpGet("references/{sourceId}")]
+    public IActionResult GetReferences(int sourceId)
+    {
+        using var c = _db.Open();
+        var refs = c.Query<CodexItemReference>(@"
+            SELECT r.id AS Id, r.source_codex_id AS SourceCodexId,
+                   r.ref_codex_id AS RefCodexId, r.ref_type AS RefType,
+                   ci.codice AS RefCodice, ci.descr AS RefDescr
+            FROM codex_item_references r
+            JOIN codex_items ci ON ci.id = r.ref_codex_id
+            WHERE r.source_codex_id = @Id
+            ORDER BY r.ref_type", new { Id = sourceId }).ToList();
+        return Ok(ApiResponse<List<CodexItemReference>>.Ok(refs));
+    }
+
+    [HttpPost("references")]
+    public IActionResult AddReference([FromBody] AddCodexReferenceRequest req)
+    {
+        using var c = _db.Open();
+
+        // Verifica che il source sia un 101
+        var source = c.QueryFirstOrDefault<CodexListItem>(
+            "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id", new { Id = req.SourceCodexId });
+        if (source == null) return BadRequest(ApiResponse<string>.Fail("Articolo sorgente non trovato"));
+        if (!source.Codice.StartsWith("1"))
+            return BadRequest(ApiResponse<string>.Fail("Solo i codici 1xx possono avere riferimenti 201/401"));
+
+        // Verifica che il ref sia del tipo giusto
+        var refItem = c.QueryFirstOrDefault<CodexListItem>(
+            "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id", new { Id = req.RefCodexId });
+        if (refItem == null) return BadRequest(ApiResponse<string>.Fail("Articolo riferimento non trovato"));
+
+        string refPrefix = refItem.Codice.Substring(0, 1);
+        if (req.RefType == "201" && refPrefix != "2")
+            return BadRequest(ApiResponse<string>.Fail("Riferimento 201 deve essere un codice 2xx"));
+        if (req.RefType == "401" && refPrefix != "4")
+            return BadRequest(ApiResponse<string>.Fail("Riferimento 401 deve essere un codice 4xx"));
+
+        try
+        {
+            int id = c.ExecuteScalar<int>(@"
+                INSERT INTO codex_item_references (source_codex_id, ref_codex_id, ref_type)
+                VALUES (@SourceCodexId, @RefCodexId, @RefType)
+                ON DUPLICATE KEY UPDATE ref_codex_id = @RefCodexId;
+                SELECT LAST_INSERT_ID()", req);
+            return Ok(ApiResponse<int>.Ok(id, "Riferimento salvato"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    [HttpDelete("references/{id}")]
+    public IActionResult DeleteReference(int id)
+    {
+        using var c = _db.Open();
+        int rows = c.Execute("DELETE FROM codex_item_references WHERE id=@Id", new { Id = id });
+        if (rows == 0) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+        return Ok(ApiResponse<bool>.Ok(true, "Riferimento rimosso"));
     }
 }

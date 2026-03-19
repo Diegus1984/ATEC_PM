@@ -12,11 +12,14 @@ namespace ATEC.PM.Client.Views;
 public partial class CodexCompositionPage : Page
 {
     private List<CodexListItem> _allItems = new();
+    private List<CatalogItemListItem> _catalogItems = new();
     private List<CompositionParentItem> _allParentItems = new();
     private int? _selectedParentId;
     private Point _dragStartPoint;
     private TreeViewItem? _lastHighlighted;
     private bool _suppressParentFilter;
+    private bool _catalogLoaded;
+    private string _currentSource = "codex";
 
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
 
@@ -58,6 +61,66 @@ public partial class CodexCompositionPage : Page
         }
     }
 
+    // ── SORGENTE COMBO ─────────────────────────────────────
+
+    private void CmbSource_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (cmbSource.SelectedItem is not ComboBoxItem sel) return;
+        _currentSource = sel.Content?.ToString() == "Catalogo" ? "catalog" : "codex";
+
+        if (_currentSource == "catalog" && !_catalogLoaded)
+            _ = LoadCatalogItems();
+        else
+            RefreshLeftPanel();
+    }
+
+    private async Task LoadCatalogItems()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/catalog");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                _catalogItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
+                    doc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
+                _catalogLoaded = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore caricamento catalogo: {ex.Message}", "Errore",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        RefreshLeftPanel();
+    }
+
+    private void RefreshLeftPanel()
+    {
+        if (cmbType.SelectedItem is CompositionType type)
+        {
+            if (_currentSource == "catalog")
+                FilterLeftPanelCatalog();
+            else
+                FilterLeftPanel(type.AllowedChildPrefixes);
+        }
+    }
+
+    private void FilterLeftPanelCatalog()
+    {
+        string searchCodice = txtSearchCodice.Text.Trim().ToLower();
+        string searchDescr = txtSearchDescr.Text.Trim().ToLower();
+
+        var filtered = _catalogItems
+            .Where(i => string.IsNullOrEmpty(searchCodice) || Match(i.Code, searchCodice))
+            .Where(i => string.IsNullOrEmpty(searchDescr) || Match(i.Description, searchDescr))
+            .Select(i => new AvailableItem { Id = i.Id, Codice = i.Code, Descr = i.Description, Source = "catalog" })
+            .OrderBy(i => i.Codice)
+            .ToList();
+
+        dgAvailable.ItemsSource = filtered;
+    }
+
     // ── COMBO BOX HANDLERS ──────────────────────────────────
 
     private void CmbType_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -76,6 +139,12 @@ public partial class CodexCompositionPage : Page
         cmbParent.SelectedIndex = -1;
         cmbParent.Text = "";
         _suppressParentFilter = false;
+
+        // 601/701: solo sorgente Codex, no catalogo
+        bool allowCatalog = type.Prefix == "501";
+        cmbSource.SelectedIndex = 0; // forza "Codex"
+        cmbSource.IsEnabled = allowCatalog;
+        _currentSource = "codex";
         _selectedParentId = null;
 
         // Filtra lista sinistra per tipo ammesso
@@ -122,13 +191,14 @@ public partial class CodexCompositionPage : Page
 
     private void FilterLeftPanel(string[] allowedPrefixes)
     {
-        string search = txtSearch.Text.Trim().ToLower();
+        string searchCodice = txtSearchCodice.Text.Trim().ToLower();
+        string searchDescr = txtSearchDescr.Text.Trim().ToLower();
 
         var filtered = _allItems
             .Where(i => allowedPrefixes.Any(p => i.Codice.StartsWith(p)))
-            .Where(i => string.IsNullOrEmpty(search) ||
-                        Match(i.Codice, search) ||
-                        Match(i.Descr, search))
+            .Where(i => string.IsNullOrEmpty(searchCodice) || Match(i.Codice, searchCodice))
+            .Where(i => string.IsNullOrEmpty(searchDescr) || Match(i.Descr, searchDescr))
+            .Select(i => new AvailableItem { Id = i.Id, Codice = i.Codice, Descr = i.Descr, Source = "codex" })
             .OrderBy(i => i.Codice)
             .ToList();
 
@@ -137,8 +207,7 @@ public partial class CodexCompositionPage : Page
 
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (cmbType.SelectedItem is CompositionType type)
-            FilterLeftPanel(type.AllowedChildPrefixes);
+        RefreshLeftPanel();
     }
 
     private void BtnRefresh_Click(object sender, RoutedEventArgs e)
@@ -184,19 +253,41 @@ public partial class CodexCompositionPage : Page
         }
     }
 
-    private TreeViewItem BuildTreeViewItem(CompositionTreeNode node, bool isRoot = false)
+    // Colori sfondo per tipo codice (tenui, leggibili con testo nero)
+    private static readonly Dictionary<string, Color> _nodeColors = new()
     {
+        { "1", Color.FromRgb(0xDB, 0xED, 0xF8) }, // 1xx - azzurro chiaro
+        { "2", Color.FromRgb(0xE8, 0xF5, 0xE9) }, // 2xx - verde chiaro
+        { "3", Color.FromRgb(0xFF, 0xF3, 0xE0) }, // 3xx - arancio chiaro
+        { "4", Color.FromRgb(0xF3, 0xE5, 0xF5) }, // 4xx - viola chiaro
+        { "5", Color.FromRgb(0xFD, 0xF6, 0xD6) }, // 5xx - giallo chiaro
+        { "6", Color.FromRgb(0xE0, 0xF2, 0xF1) }, // 6xx - teal chiaro
+        { "7", Color.FromRgb(0xFC, 0xE4, 0xEC) }, // 7xx - rosa chiaro
+    };
+
+    private static Color GetNodeColor(string codice)
+    {
+        string prefix = codice.Length > 0 ? codice.Substring(0, 1) : "";
+        return _nodeColors.TryGetValue(prefix, out var color) ? color : Color.FromRgb(0xF5, 0xF5, 0xF5);
+    }
+
+    private TreeViewItem BuildTreeViewItem(CompositionTreeNode node, bool isRoot = false, bool isEditable = true)
+    {
+        var bgColor = GetNodeColor(node.Codice);
+        double fontSize = isRoot ? 16 : 13;
+
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
 
         // Icona tipo
-        string icon = node.Codice.StartsWith("7") ? "📦" :
+        string icon = node.Source == "catalog" ? "🛒" :
+                       node.Codice.StartsWith("7") ? "📦" :
                        node.Codice.StartsWith("6") ? "🔧" :
                        node.Codice.StartsWith("5") ? "⚙" : "🔩";
 
         panel.Children.Add(new TextBlock
         {
             Text = icon + " ",
-            FontSize = 13,
+            FontSize = fontSize,
             VerticalAlignment = VerticalAlignment.Center
         });
 
@@ -204,34 +295,21 @@ public partial class CodexCompositionPage : Page
         panel.Children.Add(new TextBlock
         {
             Text = node.Codice,
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 13,
+            FontWeight = isRoot ? FontWeights.Bold : FontWeights.SemiBold,
+            FontSize = fontSize,
             Foreground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1D, 0x26)),
             VerticalAlignment = VerticalAlignment.Center
         });
         panel.Children.Add(new TextBlock
         {
             Text = $" — {node.Descr}",
-            FontSize = 13,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x70, 0x85)),
+            FontSize = fontSize,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
             VerticalAlignment = VerticalAlignment.Center
         });
 
-        // Quantità (non per root)
-        if (!isRoot && node.Quantity > 0)
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"  (x{node.Quantity})",
-                FontSize = 12,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x4F, 0x6E, 0xF7)),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-        }
-
-        // Pulsante elimina (solo admin, non root)
-        if (!isRoot && App.CurrentUser.IsAdmin)
+        // Pulsante elimina (solo admin, non root, solo se editabile)
+        if (!isRoot && isEditable && App.CurrentUser.IsAdmin)
         {
             var btnDelete = new Button
             {
@@ -244,28 +322,49 @@ public partial class CodexCompositionPage : Page
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 FontSize = 10,
-                Tag = node.CodexId,
+                Tag = node.CompositionId,
                 ToolTip = "Rimuovi dalla composizione"
             };
             btnDelete.Click += BtnRemoveNode_Click;
             panel.Children.Add(btnDelete);
         }
 
-        var item = new TreeViewItem
+        // Contenitore con sfondo colorato e bordo arrotondato
+        var border = new Border
         {
-            Header = panel,
-            IsExpanded = true,
-            Tag = node,
-            AllowDrop = true
+            Background = new SolidColorBrush(bgColor),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 3, 6, 3),
+            Margin = new Thickness(0, 1, 0, 1),
+            Child = panel
         };
 
-        // Drop su sotto-nodo
-        item.DragOver += TreeViewItem_DragOver;
-        item.Drop += TreeViewItem_Drop;
+        var item = new TreeViewItem
+        {
+            Header = border,
+            IsExpanded = true,
+            Tag = node,
+            AllowDrop = isEditable
+        };
 
-        // Figli
+        // Drop su sotto-nodo (solo se editabile)
+        if (isEditable)
+        {
+            item.DragOver += TreeViewItem_DragOver;
+            item.Drop += TreeViewItem_Drop;
+        }
+
+        // Figli — se il nodo corrente è di un livello diverso dal root,
+        // i suoi figli sono in sola lettura (es. figli di un 501 dentro un 601)
+        string? rootPrefix = (cmbType.SelectedItem as CompositionType)?.Prefix;
         foreach (var child in node.Children)
-            item.Items.Add(BuildTreeViewItem(child));
+        {
+            // Un figlio è editabile solo se il suo parent è il root type
+            // Es: in un 601, i 501 sono editabili (possono essere rimossi dal 601),
+            // ma i figli dei 501 (101, 201...) NON sono editabili
+            bool childEditable = isRoot; // solo i figli diretti del root sono editabili
+            item.Items.Add(BuildTreeViewItem(child, isEditable: childEditable));
+        }
 
         return item;
     }
@@ -276,6 +375,43 @@ public partial class CodexCompositionPage : Page
     }
 
     // ── DRAG & DROP ─────────────────────────────────────────
+
+    private void DgAvailable_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!App.CurrentUser.IsAdmin) return;
+        if (_selectedParentId == null) return;
+        if (dgAvailable.SelectedItem is not AvailableItem item) return;
+
+        _ = HandleQuickAdd(_selectedParentId.Value, item);
+    }
+
+    private async Task HandleQuickAdd(int parentId, AvailableItem child)
+    {
+        try
+        {
+            var req = new AddCompositionRequest
+            {
+                ParentCodexId = parentId,
+                ChildCodexId = child.Source == "codex" ? child.Id : null,
+                ChildCatalogId = child.Source == "catalog" ? child.Id : null,
+                Quantity = 1
+            };
+            string body = JsonSerializer.Serialize(req);
+            string json = await ApiClient.PostAsync("/api/codex/compositions", body);
+            var response = JsonSerializer.Deserialize<ApiResponse<int>>(json, _jsonOpt);
+
+            if (response?.Success == true)
+                await LoadTree(_selectedParentId!.Value);
+            else
+                MessageBox.Show(response?.Message ?? "Errore", "Attenzione",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     private void DgAvailable_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -293,9 +429,9 @@ public partial class CodexCompositionPage : Page
         if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
             Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
         {
-            if (dgAvailable.SelectedItem is CodexListItem item)
+            if (dgAvailable.SelectedItem is AvailableItem item)
             {
-                var data = new DataObject(typeof(CodexListItem), item);
+                var data = new DataObject(typeof(AvailableItem), item);
                 DragDrop.DoDragDrop(dgAvailable, data, DragDropEffects.Copy);
             }
         }
@@ -306,7 +442,7 @@ public partial class CodexCompositionPage : Page
         e.Effects = DragDropEffects.None;
 
         if (!App.CurrentUser.IsAdmin || _selectedParentId == null) return;
-        if (!e.Data.GetDataPresent(typeof(CodexListItem))) return;
+        if (!e.Data.GetDataPresent(typeof(AvailableItem))) return;
 
         e.Effects = DragDropEffects.Copy;
         e.Handled = true;
@@ -315,7 +451,7 @@ public partial class CodexCompositionPage : Page
     private void TvComposition_Drop(object sender, DragEventArgs e)
     {
         if (!App.CurrentUser.IsAdmin || _selectedParentId == null) return;
-        if (e.Data.GetData(typeof(CodexListItem)) is not CodexListItem droppedItem) return;
+        if (e.Data.GetData(typeof(AvailableItem)) is not AvailableItem droppedItem) return;
 
         // Drop sulla TreeView stessa = drop sul parent root
         _ = HandleDrop(_selectedParentId.Value, droppedItem);
@@ -328,14 +464,15 @@ public partial class CodexCompositionPage : Page
         e.Handled = true;
 
         if (!App.CurrentUser.IsAdmin) return;
-        if (!e.Data.GetDataPresent(typeof(CodexListItem))) return;
+        if (!e.Data.GetDataPresent(typeof(AvailableItem))) return;
         if (sender is not TreeViewItem tvi) return;
         if (tvi.Tag is not CompositionTreeNode targetNode) return;
 
         // Valida se il target può ricevere il child
-        if (e.Data.GetData(typeof(CodexListItem)) is CodexListItem item)
+        if (e.Data.GetData(typeof(AvailableItem)) is AvailableItem item)
         {
-            string? error = ValidateDropLocal(targetNode.Codice, item.Codice);
+            // Articoli catalogo accettati ovunque, codex validati con gerarchia
+            string? error = item.Source == "catalog" ? null : ValidateDropLocal(targetNode.Codice, item.Codice);
             if (error == null)
             {
                 e.Effects = DragDropEffects.Copy;
@@ -356,7 +493,7 @@ public partial class CodexCompositionPage : Page
         if (!App.CurrentUser.IsAdmin) return;
         if (sender is not TreeViewItem tvi) return;
         if (tvi.Tag is not CompositionTreeNode targetNode) return;
-        if (e.Data.GetData(typeof(CodexListItem)) is not CodexListItem droppedItem) return;
+        if (e.Data.GetData(typeof(AvailableItem)) is not AvailableItem droppedItem) return;
 
         _ = HandleDrop(targetNode.CodexId, droppedItem);
     }
@@ -370,7 +507,7 @@ public partial class CodexCompositionPage : Page
         }
     }
 
-    private async Task HandleDrop(int parentId, CodexListItem child)
+    private async Task HandleDrop(int parentId, AvailableItem child)
     {
         // Chiedi quantità
         var dialog = new QuantityDialog { Owner = Window.GetWindow(this) };
@@ -381,7 +518,8 @@ public partial class CodexCompositionPage : Page
             var req = new AddCompositionRequest
             {
                 ParentCodexId = parentId,
-                ChildCodexId = child.Id,
+                ChildCodexId = child.Source == "codex" ? child.Id : null,
+                ChildCatalogId = child.Source == "catalog" ? child.Id : null,
                 Quantity = dialog.Quantity
             };
             string body = JsonSerializer.Serialize(req);
@@ -412,40 +550,17 @@ public partial class CodexCompositionPage : Page
         if (sender is not Button btn) return;
         if (_selectedParentId == null) return;
 
-        // Trova il composition id dalla relazione
-        int childCodexId = (int)btn.Tag;
+        int compositionId = (int)btn.Tag;
 
-        // Cerca il composition id
+        var result = MessageBox.Show(
+            "Rimuovere questo elemento dalla composizione?",
+            "Conferma rimozione", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes) return;
+
         try
         {
-            string json = await ApiClient.GetAsync($"/api/codex/compositions/{_selectedParentId.Value}");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CompositionChildDto>>>(json, _jsonOpt);
-
-            if (response?.Success != true) return;
-
-            // Trova il nodo target nel parent attuale. Devo risalire trovando il parent
-            // del nodo cliccato nell'albero
-            var targetParentId = FindParentOfChild(childCodexId);
-            if (targetParentId == null) return;
-
-            string jsonChildren = await ApiClient.GetAsync($"/api/codex/compositions/{targetParentId.Value}");
-            var responseChildren = JsonSerializer.Deserialize<ApiResponse<List<CompositionChildDto>>>(jsonChildren, _jsonOpt);
-            if (responseChildren?.Success != true) return;
-
-            var comp = responseChildren.Data?.FirstOrDefault(c => c.ChildCodexId == childCodexId);
-            if (comp == null)
-            {
-                MessageBox.Show("Relazione non trovata", "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var result = MessageBox.Show(
-                $"Rimuovere {comp.ChildCodice} dalla composizione?\n\n\"{comp.ChildDescr}\"",
-                "Conferma rimozione", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-            if (result != MessageBoxResult.Yes) return;
-
-            string delJson = await ApiClient.DeleteAsync($"/api/codex/compositions/{comp.Id}");
+            string delJson = await ApiClient.DeleteAsync($"/api/codex/compositions/{compositionId}");
             var delResponse = JsonSerializer.Deserialize<ApiResponse<bool>>(delJson, _jsonOpt);
 
             if (delResponse?.Success == true)
@@ -457,28 +572,6 @@ public partial class CodexCompositionPage : Page
         {
             MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    private int? FindParentOfChild(int childCodexId)
-    {
-        // Cerca ricorsivamente nel tree il parent del nodo con CodexId == childCodexId
-        if (tvComposition.Items.Count == 0) return null;
-        if (tvComposition.Items[0] is not TreeViewItem rootTvi) return null;
-        if (rootTvi.Tag is not CompositionTreeNode rootNode) return null;
-
-        return FindParentInNode(rootNode, childCodexId);
-    }
-
-    private int? FindParentInNode(CompositionTreeNode node, int childCodexId)
-    {
-        foreach (var child in node.Children)
-        {
-            if (child.CodexId == childCodexId)
-                return node.CodexId;
-            var found = FindParentInNode(child, childCodexId);
-            if (found.HasValue) return found;
-        }
-        return null;
     }
 
     // ── WILDCARD MATCH ─────────────────────────────────────
@@ -547,5 +640,14 @@ public partial class CodexCompositionPage : Page
             Codice = codice;
             Descr = descr;
         }
+    }
+
+    /// <summary>Wrapper unificato per articoli Codex e Catalogo nel DataGrid sinistro.</summary>
+    public class AvailableItem
+    {
+        public int Id { get; set; }
+        public string Codice { get; set; } = "";
+        public string Descr { get; set; } = "";
+        public string Source { get; set; } = "codex"; // "codex" o "catalog"
     }
 }

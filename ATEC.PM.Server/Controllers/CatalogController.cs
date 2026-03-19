@@ -130,6 +130,15 @@ public class CatalogController : ControllerBase
         try
         {
             using var c = _db.Open();
+
+            // Blocca cancellazione se usato in una composizione
+            int usedInComp = c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM codex_compositions WHERE child_catalog_id=@Id",
+                new { Id = id });
+            if (usedInComp > 0)
+                return Ok(ApiResponse<string>.Fail(
+                    "Impossibile eliminare: questo articolo è utilizzato in una composizione"));
+
             // Invece di cancellare fisicamente, disattiviamo l'articolo
             c.Execute("UPDATE catalog_items SET is_active = 0 WHERE id = @id", new { id });
             return Ok(ApiResponse<string>.Ok("Articolo eliminato"));

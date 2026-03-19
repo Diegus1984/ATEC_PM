@@ -16,6 +16,7 @@ public partial class CatalogPage : Page
 {
     private List<CatalogItemListItem> _allItems = new();
     private Dictionary<string, TextBox> _filterBoxes = new();
+    private Dictionary<string, ComboBox> _comboFilterBoxes = new();
     private CancellationTokenSource? _filterCts;
 
     private readonly List<(string Key, string Label, DataGridColumn Column)> _columnDefs = new();
@@ -143,6 +144,7 @@ public partial class CatalogPage : Page
                 _allItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
                     doc.RootElement.GetProperty("data").GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                RefreshComboFilters();
                 ApplyFilter();
             }
         }
@@ -167,6 +169,56 @@ public partial class CatalogPage : Page
             ApplyFilter();
         }
         catch (TaskCanceledException) { }
+    }
+
+    private void ComboFilter_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ComboBox cb && cb.Tag != null)
+            _comboFilterBoxes[cb.Tag.ToString()!] = cb;
+    }
+
+    private void ComboFilter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        // Posticipa al prossimo ciclo UI così SelectedItem/Text sono allineati
+        Dispatcher.InvokeAsync(ApplyFilter, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void RefreshComboFilters()
+    {
+        PopulateCombo("Supp", _allItems.Select(i => i.SupplierName));
+        PopulateCombo("Man", _allItems.Select(i => i.Manufacturer));
+        PopulateCombo("Cat", _allItems.Select(i => i.Category));
+    }
+
+    private void PopulateCombo(string tag, IEnumerable<string?> values)
+    {
+        if (!_comboFilterBoxes.TryGetValue(tag, out var cb)) return;
+
+        var prev = cb.SelectedItem as string;
+        cb.SelectionChanged -= ComboFilter_Changed;
+
+        var distinct = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(v => v)
+            .ToList();
+
+        distinct.Insert(0, "Tutti");
+        cb.ItemsSource = distinct;
+        cb.SelectedIndex = prev != null && distinct.Contains(prev) ? distinct.IndexOf(prev) : 0;
+
+        cb.SelectionChanged += ComboFilter_Changed;
+    }
+
+    private string CF(string tag)
+    {
+        if (!_comboFilterBoxes.TryGetValue(tag, out var cb)) return "";
+        var sel = cb.SelectedItem as string;
+        if (sel == "Tutti" || string.IsNullOrEmpty(sel)) return "";
+        if (cb.IsEditable && !string.IsNullOrEmpty(cb.Text) && cb.Text != sel)
+            return cb.Text.Trim().ToLower();
+        return sel.ToLower();
     }
 
     private string F(string tag) =>
@@ -196,9 +248,9 @@ public partial class CatalogPage : Page
 
         string fCode = F("Code");
         string fDesc = F("Desc");
-        string fSupp = F("Supp");
-        string fMan = F("Man");
-        string fCat = F("Cat");
+        string fSupp = CF("Supp");
+        string fMan = CF("Man");
+        string fCat = CF("Cat");
 
         var filtered = _allItems.Where(i =>
             Match(i.Code, fCode) &&
@@ -217,6 +269,7 @@ public partial class CatalogPage : Page
     private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
     {
         foreach (var tb in _filterBoxes.Values) tb.Clear();
+        foreach (var cb in _comboFilterBoxes.Values) cb.SelectedIndex = 0; // "Tutti"
         ApplyFilter();
     }
 

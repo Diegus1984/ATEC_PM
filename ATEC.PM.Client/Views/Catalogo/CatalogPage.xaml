@@ -229,11 +229,15 @@
                                     FontWeight="Bold"
                                     Foreground="#667085"
                                     Text="Fornitore" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Supp"
-                                    TextChanged="Filter_Changed" />
+                                <ComboBox
+                                    Height="28"
+                                    Margin="0,4,0,2"
+                                    Padding="6,0"
+                                    FontSize="12"
+                                    IsEditable="True"
+                                    Loaded="ComboFilter_Loaded"
+                                    SelectionChanged="ComboFilter_Changed"
+                                    Tag="Supp" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
@@ -255,11 +259,15 @@
                                     FontWeight="Bold"
                                     Foreground="#667085"
                                     Text="Produttore" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Man"
-                                    TextChanged="Filter_Changed" />
+                                <ComboBox
+                                    Height="28"
+                                    Margin="0,4,0,2"
+                                    Padding="6,0"
+                                    FontSize="12"
+                                    IsEditable="True"
+                                    Loaded="ComboFilter_Loaded"
+                                    SelectionChanged="ComboFilter_Changed"
+                                    Tag="Man" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>
@@ -281,11 +289,15 @@
                                     FontWeight="Bold"
                                     Foreground="#667085"
                                     Text="Categoria" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Cat"
-                                    TextChanged="Filter_Changed" />
+                                <ComboBox
+                                    Height="28"
+                                    Margin="0,4,0,2"
+                                    Padding="6,0"
+                                    FontSize="12"
+                                    IsEditable="True"
+                                    Loaded="ComboFilter_Loaded"
+                                    SelectionChanged="ComboFilter_Changed"
+                                    Tag="Cat" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.HeaderTemplate>

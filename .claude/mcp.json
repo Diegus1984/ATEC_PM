@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\diego\\AppData\\Roaming\\npm\\node_modules\\@benborla29\\mcp-server-mysql\\dist\\index.js"
+      ],
+      "env": {
+        "MYSQL_HOST": "localhost",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "root",
+        "MYSQL_PASSWORD": "Atec2005",
+        "MYSQL_DATABASE": "atec_pm"
+      }
+    }
+  }
+}

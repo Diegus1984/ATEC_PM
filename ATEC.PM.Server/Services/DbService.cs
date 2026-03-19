@@ -715,14 +715,24 @@ public class DbService
             id INT AUTO_INCREMENT PRIMARY KEY,
             parent_codex_id INT NOT NULL,
             child_codex_id INT NOT NULL,
-            quantity INT NOT NULL DEFAULT 1,
             sort_order INT NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (parent_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
             FOREIGN KEY (child_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
             INDEX idx_parent (parent_codex_id),
-            INDEX idx_child (child_codex_id),
-            UNIQUE KEY uq_parent_child (parent_codex_id, child_codex_id)
+            INDEX idx_child (child_codex_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS codex_item_references (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            source_codex_id INT NOT NULL,
+            ref_codex_id INT NOT NULL,
+            ref_type VARCHAR(10) NOT NULL COMMENT '201 o 401',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (ref_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_source_ref (source_codex_id, ref_type),
+            INDEX idx_source (source_codex_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ══════════════════════════════════════════════════════════
@@ -785,6 +795,15 @@ public class DbService
         AddColumnIfMissing(c, "project_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
         AddColumnIfMissing(c, "project_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
         AddColumnIfMissing(c, "project_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
+
+        // Codex compositions: rimuovi UNIQUE constraint e colonna quantity (ogni riga = 1 pezzo)
+        DropIndexIfExists(c, "codex_compositions", "uq_parent_child");
+        DropColumnIfExists(c, "codex_compositions", "quantity");
+
+        // Codex compositions: supporto figli da catalogo
+        AddColumnIfMissing(c, "codex_compositions", "child_catalog_id", "INT NULL AFTER child_codex_id");
+        // Rendere child_codex_id nullable (può essere NULL se figlio è da catalogo)
+        try { c.Execute("ALTER TABLE codex_compositions MODIFY child_codex_id INT NULL"); } catch { }
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
@@ -837,6 +856,52 @@ public class DbService
         catch (Exception ex)
         {
             Console.WriteLine($"[DB Migration] Warning: {table}.{column}: {ex.Message}");
+        }
+    }
+
+    private void DropIndexIfExists(MySqlConnection c, string table, string indexName)
+    {
+        try
+        {
+            int exists = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = @Table
+                  AND INDEX_NAME = @Index",
+                new { Table = table, Index = indexName });
+
+            if (exists > 0)
+            {
+                c.Execute($"ALTER TABLE `{table}` DROP INDEX `{indexName}`");
+                Console.WriteLine($"[DB Migration] Rimosso indice {indexName} da {table}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning: drop index {indexName} su {table}: {ex.Message}");
+        }
+    }
+
+    private void DropColumnIfExists(MySqlConnection c, string table, string column)
+    {
+        try
+        {
+            int exists = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = @Table
+                  AND COLUMN_NAME = @Column",
+                new { Table = table, Column = column });
+
+            if (exists > 0)
+            {
+                c.Execute($"ALTER TABLE `{table}` DROP COLUMN `{column}`");
+                Console.WriteLine($"[DB Migration] Rimossa colonna {table}.{column}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning: drop column {table}.{column}: {ex.Message}");
         }
     }
 }

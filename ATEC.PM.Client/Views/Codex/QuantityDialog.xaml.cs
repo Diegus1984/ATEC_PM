@@ -14,6 +14,13 @@ public partial class QuantityDialog : Window
             txtQuantity.Focus();
             txtQuantity.SelectAll();
         };
+        txtQuantity.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+                BtnOk_Click(this, new RoutedEventArgs());
+            else if (e.Key == System.Windows.Input.Key.Escape)
+                BtnCancel_Click(this, new RoutedEventArgs());
+        };
     }
 
     private void BtnOk_Click(object sender, RoutedEventArgs e)
