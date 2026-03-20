@@ -11,9 +11,13 @@
 <textarea id="editor"></textarea>
 <script>
 var editorInstance = null;
-var pendingUploads = {};  // id -> { resolve, reject }
+var _apiBaseUrl = '';
+var _authToken = '';
 
-function initEditor(initialContent) {
+function initEditor(initialContent, apiBaseUrl, authToken) {
+  _apiBaseUrl = apiBaseUrl || '';
+  _authToken = authToken || '';
+
   tinymce.init({
     selector: '#editor',
     height: '100%',
@@ -37,26 +41,39 @@ function initEditor(initialContent) {
     image_caption: true,
     paste_data_images: true,
     automatic_uploads: true,
-    images_upload_handler: function(blobInfo) {
-      return new Promise(function(resolve, reject) {
-        var id = 'upload-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        pendingUploads[id] = { resolve: resolve, reject: reject };
 
-        // Invia il file come base64 al C# per l'upload sul server
-        if (window.chrome && window.chrome.webview) {
-          window.chrome.webview.postMessage(JSON.stringify({
-            type: 'imageUpload',
-            uploadId: id,
-            fileName: blobInfo.filename() || ('image-' + Date.now() + '.png'),
-            base64: blobInfo.base64()
-          }));
-        } else {
-          // Fallback: usa base64 inline
-          resolve('data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64());
-          delete pendingUploads[id];
+    // Upload handler per TUTTE le immagini (paste, drag, file picker blob)
+    images_upload_handler: function(blobInfo, success, failure) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', _apiBaseUrl + '/api/quote-catalog/products/upload');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + _authToken);
+
+      xhr.onload = function() {
+        if (xhr.status !== 200) {
+          failure('HTTP Error: ' + xhr.status);
+          return;
         }
-      });
+        try {
+          var json = JSON.parse(xhr.responseText);
+          if (json.success && json.data) {
+            success(_apiBaseUrl + json.data);
+          } else {
+            failure(json.message || 'Upload fallito');
+          }
+        } catch(e) {
+          failure('Risposta non valida dal server');
+        }
+      };
+
+      xhr.onerror = function() {
+        failure('Errore di rete durante upload');
+      };
+
+      var formData = new FormData();
+      formData.append('file', blobInfo.blob(), blobInfo.filename() || 'image.png');
+      xhr.send(formData);
     },
+
     file_picker_types: 'image',
     file_picker_callback: function(callback, value, meta) {
       if (meta.filetype === 'image') {
@@ -101,21 +118,6 @@ function initEditor(initialContent) {
   });
 }
 
-// Chiamato dal C# dopo l'upload
-function onImageUploaded(uploadId, url) {
-  if (pendingUploads[uploadId]) {
-    pendingUploads[uploadId].resolve(url);
-    delete pendingUploads[uploadId];
-  }
-}
-
-function onImageUploadFailed(uploadId, error) {
-  if (pendingUploads[uploadId]) {
-    pendingUploads[uploadId].reject(error);
-    delete pendingUploads[uploadId];
-  }
-}
-
 function getContent() {
   return editorInstance ? editorInstance.getContent() : '';
 }
@@ -124,7 +126,7 @@ function setContent(html) {
   if (editorInstance) editorInstance.setContent(html || '');
 }
 
-window.addEventListener('load', function() { initEditor(''); });
+// Initialization is triggered by C# via initEditor() call
 </script>
 </body>
 </html>

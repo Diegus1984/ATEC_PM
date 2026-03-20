@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
-using ATEC.PM.Client.Services;
 
 namespace ATEC.PM.Client.UserControls;
 
@@ -26,22 +25,29 @@ public partial class HtmlEditor : UserControl
     {
         try
         {
-            var env = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(Path.GetTempPath(), "ATEC_PM_WebView2"));
+            string wvDataFolder = Path.Combine(Path.GetTempPath(), "ATEC_PM_WebView2");
+            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: wvDataFolder);
             await webView.EnsureCoreWebView2Async(env);
+
+            // Pulisci cache per forzare reload di editor.html
+            await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(
+                CoreWebView2BrowsingDataKinds.DiskCache | CoreWebView2BrowsingDataKinds.CacheStorage);
 
             webView.CoreWebView2.WebMessageReceived += OnWebMessage;
 
-            // Carica l'HTML dell'editor
             string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "tinymce", "editor.html");
             if (File.Exists(htmlPath))
             {
-                webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                string cacheBust = $"?v={DateTime.Now.Ticks}";
+                webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri + cacheBust);
                 webView.CoreWebView2.NavigationCompleted += async (_, _) =>
                 {
-                    // Inizializza TinyMCE con il contenuto pendente
+                    // Passa contenuto, API base URL e token a TinyMCE
                     string escaped = JsonSerializer.Serialize(_pendingContent);
-                    await webView.CoreWebView2.ExecuteScriptAsync($"initEditor({escaped})");
+                    string apiUrl = JsonSerializer.Serialize(App.ApiBaseUrl ?? "");
+                    string token = JsonSerializer.Serialize(App.Token ?? "");
+                    await webView.CoreWebView2.ExecuteScriptAsync(
+                        $"initEditor({escaped}, {apiUrl}, {token})");
                     _isReady = true;
                     txtLoading.Visibility = Visibility.Collapsed;
                 };
@@ -70,57 +76,8 @@ public partial class HtmlEditor : UserControl
                 string html = doc.RootElement.GetProperty("html").GetString() ?? "";
                 ContentChanged?.Invoke(html);
             }
-            else if (type == "imageUpload")
-            {
-                string uploadId = doc.RootElement.GetProperty("uploadId").GetString() ?? "";
-                string fileName = doc.RootElement.GetProperty("fileName").GetString() ?? "image.png";
-                string base64 = doc.RootElement.GetProperty("base64").GetString() ?? "";
-                _ = HandleImageUpload(uploadId, fileName, base64);
-            }
         }
         catch { }
-    }
-
-    private async System.Threading.Tasks.Task HandleImageUpload(string uploadId, string fileName, string base64)
-    {
-        try
-        {
-            // Salva base64 come file temporaneo
-            byte[] bytes = Convert.FromBase64String(base64);
-            string tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM_Uploads");
-            Directory.CreateDirectory(tempDir);
-            string tempPath = Path.Combine(tempDir, fileName);
-            await File.WriteAllBytesAsync(tempPath, bytes);
-
-            // Upload sul server
-            string json = await ApiClient.UploadFileAsync("/api/quote-catalog/products/upload", tempPath);
-            var response = JsonSerializer.Deserialize<JsonElement>(json);
-
-            bool success = response.TryGetProperty("success", out var sp) && sp.GetBoolean();
-            if (success && response.TryGetProperty("data", out var dp))
-            {
-                // Costruisci URL completo per l'immagine
-                string relativePath = dp.GetString() ?? "";
-                string fullUrl = $"{App.ApiBaseUrl}{relativePath}";
-
-                await webView.CoreWebView2.ExecuteScriptAsync(
-                    $"onImageUploaded({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(fullUrl)})");
-            }
-            else
-            {
-                string error = response.TryGetProperty("message", out var mp) ? mp.GetString() ?? "Errore upload" : "Errore upload";
-                await webView.CoreWebView2.ExecuteScriptAsync(
-                    $"onImageUploadFailed({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(error)})");
-            }
-
-            // Pulisci file temporaneo
-            try { File.Delete(tempPath); } catch { }
-        }
-        catch (Exception ex)
-        {
-            await webView.CoreWebView2.ExecuteScriptAsync(
-                $"onImageUploadFailed({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(ex.Message)})");
-        }
     }
 
     /// <summary>Imposta il contenuto HTML nell'editor.</summary>
@@ -139,7 +96,6 @@ public partial class HtmlEditor : UserControl
     {
         if (!_isReady) return _pendingContent;
         string result = await webView.CoreWebView2.ExecuteScriptAsync("getContent()");
-        // Il risultato è una stringa JSON-escaped
         return JsonSerializer.Deserialize<string>(result) ?? "";
     }
 }
