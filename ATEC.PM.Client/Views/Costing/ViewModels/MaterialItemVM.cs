@@ -48,6 +48,9 @@ public class MaterialItemVM : INotifyPropertyChanged
     private bool _isMarginPinned;
     public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; Notify(); } }
 
+    private bool _isShadowed;
+    public bool IsShadowed { get => _isShadowed; set { _isShadowed = value; Notify(); } }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

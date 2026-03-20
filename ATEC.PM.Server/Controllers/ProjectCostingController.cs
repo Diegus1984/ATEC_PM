@@ -160,7 +160,8 @@ public class ProjectCostingController : ControllerBase
                    section_type AS SectionType, group_name AS GroupName,
                    sort_order AS SortOrder, is_enabled AS IsEnabled,
                    contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
-                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned
+                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned,
+                   COALESCE(is_shadowed,0) AS IsShadowed
             FROM project_cost_sections WHERE project_id=@projectId ORDER BY sort_order",
             new { projectId }).ToList();
 
@@ -203,7 +204,8 @@ public class ProjectCostingController : ControllerBase
                    i.markup_value AS MarkupValue, i.item_type AS ItemType,
                    i.sort_order AS SortOrder,
                    i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
-                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned
+                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned,
+                   COALESCE(i.is_shadowed,0) AS IsShadowed
             FROM project_material_items i
             JOIN project_material_sections s ON s.id = i.section_id
             WHERE s.project_id=@projectId ORDER BY i.sort_order",
@@ -428,9 +430,10 @@ public class ProjectCostingController : ControllerBase
     public IActionResult UpdateSectionDistribution(int projectId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute(@"UPDATE project_cost_sections 
+        c.Execute(@"UPDATE project_cost_sections
             SET contingency_pct=@ContPct, margin_pct=@MargPct,
-                contingency_pinned=@ContPin, margin_pinned=@MargPin
+                contingency_pinned=@ContPin, margin_pinned=@MargPin,
+                is_shadowed=@Shadowed
             WHERE id=@Id AND project_id=@projectId",
             new
             {
@@ -438,6 +441,7 @@ public class ProjectCostingController : ControllerBase
                 MargPct = req.MarginPct,
                 ContPin = req.ContingencyPinned,
                 MargPin = req.MarginPinned,
+                Shadowed = req.IsShadowed,
                 Id = id,
                 projectId
             });
@@ -448,9 +452,10 @@ public class ProjectCostingController : ControllerBase
     public IActionResult UpdateMaterialItemDistribution(int projectId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute(@"UPDATE project_material_items 
+        c.Execute(@"UPDATE project_material_items
             SET contingency_pct=@ContPct, margin_pct=@MargPct,
-                contingency_pinned=@ContPin, margin_pinned=@MargPin
+                contingency_pinned=@ContPin, margin_pinned=@MargPin,
+                is_shadowed=@Shadowed
             WHERE id=@Id",
             new
             {
@@ -458,6 +463,7 @@ public class ProjectCostingController : ControllerBase
                 MargPct = req.MarginPct,
                 ContPin = req.ContingencyPinned,
                 MargPin = req.MarginPinned,
+                Shadowed = req.IsShadowed,
                 Id = id
             });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));

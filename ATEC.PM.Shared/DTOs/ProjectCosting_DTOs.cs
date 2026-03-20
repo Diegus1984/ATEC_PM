@@ -19,6 +19,7 @@ public class ProjectCostSectionDto
     public decimal MarginPct { get; set; }
     public bool ContingencyPinned { get; set; }
     public bool MarginPinned { get; set; }
+    public bool IsShadowed { get; set; }
     public List<int> DepartmentIds { get; set; } = new();
     public List<ProjectCostResourceDto> Resources { get; set; } = new();
     // Calcolati
@@ -107,6 +108,7 @@ public class ProjectMaterialItemDto
     public decimal MarginPct { get; set; }
     public bool ContingencyPinned { get; set; }
     public bool MarginPinned { get; set; }
+    public bool IsShadowed { get; set; }
     public decimal TotalCost => Quantity * UnitCost;
     public decimal TotalSale => Quantity * UnitCost * MarkupValue;
 }
@@ -185,4 +187,5 @@ public class SectionDistributionDto
     public decimal MarginPct { get; set; }
     public bool ContingencyPinned { get; set; }
     public bool MarginPinned { get; set; }
+    public bool IsShadowed { get; set; }
 }

@@ -39,6 +39,9 @@ public class CostSectionVM : INotifyPropertyChanged
     private bool _isMarginPinned;
     public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; Notify(); } }
 
+    private bool _isShadowed;
+    public bool IsShadowed { get => _isShadowed; set { _isShadowed = value; Notify(); } }
+
     public ObservableCollection<CostResourceVM> Resources { get; set; } = new();
     public List<int> DepartmentIds { get; set; } = new();
 

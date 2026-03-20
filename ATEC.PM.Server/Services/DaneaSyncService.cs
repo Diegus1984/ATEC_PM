@@ -96,7 +96,7 @@ public class DaneaSyncService : BackgroundService
     }
 
 
-    private string BuildConnectionString()
+    public string BuildConnectionString()
     {
         string filePath = _config["DaneaSync:EftFilePath"] ?? "";
         if (string.IsNullOrEmpty(filePath)) return "";

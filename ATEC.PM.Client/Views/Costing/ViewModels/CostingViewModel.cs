@@ -208,8 +208,16 @@ public class CostingViewModel : INotifyPropertyChanged
         var frames = stack.GetFrames()?.Take(5).Select(f => f.GetMethod()?.Name ?? "?") ?? Array.Empty<string>();
         Log.Debug("═══ RecalcDistribution #{CallNum} da: {Caller}", callNum, string.Join(" → ", frames));
 
-        var allSections = Groups.SelectMany(g => g.Sections).ToList();
-        var allMatItems = MaterialSections.SelectMany(s => s.Items).ToList();
+        var allSections = Groups.SelectMany(g => g.Sections)
+            .Where(s => s.TotalSale != 0)
+            .GroupBy(s => s.Name?.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+        var allMatItems = MaterialSections.SelectMany(s => s.Items)
+            .Where(i => i.TotalSale != 0)
+            .GroupBy(i => i.Description?.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
 
         // Log PRIMA
         foreach (var s in allSections)
@@ -268,6 +276,11 @@ public class CostingViewModel : INotifyPropertyChanged
         // ── STEP 3: aggiorna tabella DistributionRows ──
         int expectedCount = allSections.Count + allMatItems.Count;
 
+        // Preserva stato shadow dalle righe esistenti
+        var shadowState = DistributionRows.ToDictionary(
+            r => $"{r.RowType}_{r.SectionId}_{r.ItemId}",
+            r => r.IsShadowed);
+
         if (DistributionRows.Count != expectedCount)
         {
             Log.Debug("  REBUILD righe: {Old} → {New}", DistributionRows.Count, expectedCount);
@@ -286,6 +299,28 @@ public class CostingViewModel : INotifyPropertyChanged
             foreach (var item in allMatItems)
                 UpdateDistRow(DistributionRows[idx++], "M", 0, item.Id, item.Description, item.TotalSale, item.ContingencyPct, item.IsContingencyPinned, item.MarginPct, item.IsMarginPinned);
         }
+
+        // Ripristina stato shadow (da dict precedente o dal VM sottostante al primo load)
+        foreach (var row in DistributionRows)
+        {
+            string key = $"{row.RowType}_{row.SectionId}_{row.ItemId}";
+            if (shadowState.TryGetValue(key, out bool wasShadowed))
+                row.IsShadowed = wasShadowed;
+            else if (row.RowType == "R")
+            {
+                var sec = allSections.FirstOrDefault(s => s.Id == row.SectionId);
+                if (sec != null) row.IsShadowed = sec.IsShadowed;
+            }
+            else
+            {
+                var item = allMatItems.FirstOrDefault(i => i.Id == row.ItemId);
+                if (item != null) row.IsShadowed = item.IsShadowed;
+            }
+        }
+
+        // ── STEP 4: calcola spalmo shadow ──
+        RecalcShadow();
+
         Log.Debug("═══ Fine RecalcDistribution #{CallNum}", callNum);
     }
 
@@ -310,6 +345,71 @@ public class CostingViewModel : INotifyPropertyChanged
         row.ContingencyPct = contPct; row.ContingencyAmount = contPct * ContingencyAmount; row.IsContingencyPinned = contPin;
         row.MarginPct = margPct; row.MarginAmount = margPct * NegotiationMarginAmount; row.IsMarginPinned = margPin;
         row.SectionTotal = sale + (contPct * ContingencyAmount) + (margPct * NegotiationMarginAmount);
+    }
+
+    /// <summary>
+    /// Toggle shadow su una riga e ricalcola lo spalmo.
+    /// </summary>
+    public void ToggleShadow(DistributionRowVM row)
+    {
+        row.IsShadowed = !row.IsShadowed;
+
+        // Sincronizza stato shadow con il VM sottostante
+        if (row.RowType == "R")
+        {
+            var sec = Groups.SelectMany(g => g.Sections).FirstOrDefault(s => s.Id == row.SectionId);
+            if (sec != null) sec.IsShadowed = row.IsShadowed;
+        }
+        else
+        {
+            var item = MaterialSections.SelectMany(s => s.Items).FirstOrDefault(i => i.Id == row.ItemId);
+            if (item != null) item.IsShadowed = row.IsShadowed;
+        }
+
+        RecalcShadow();
+    }
+
+    /// <summary>
+    /// Calcola lo spalmo shadow: le righe shadowed (non pinned) distribuiscono
+    /// la loro vendita proporzionalmente sulle righe visibili.
+    /// </summary>
+    private void RecalcShadow()
+    {
+        // Righe shadowed → il loro SaleAmount viene spalmato sulle visibili
+        var shadowed = DistributionRows.Where(r => r.IsShadowed).ToList();
+        var visible = DistributionRows.Where(r => !r.IsShadowed).ToList();
+
+        decimal totalShadowedSale = shadowed.Sum(r => r.SaleAmount);
+        decimal totalVisibleSale = visible.Sum(r => r.SaleAmount);
+
+        Log.Debug("RecalcShadow: shadowed={ShadowCount} visible={VisibleCount} totalShadowed={TotalSh:N2} totalVisible={TotalVis:N2}",
+            shadowed.Count, visible.Count, totalShadowedSale, totalVisibleSale);
+
+        foreach (var row in DistributionRows)
+        {
+            if (row.IsShadowed)
+            {
+                row.ShadowedAmount = 0;
+                row.ShadowedPct = 0;
+                // Riga nascosta: totale sezione = 0
+                row.SectionTotal = 0;
+            }
+            else if (totalVisibleSale > 0 && totalShadowedSale > 0)
+            {
+                decimal quota = row.SaleAmount / totalVisibleSale;
+                row.ShadowedAmount = Math.Round(totalShadowedSale * quota, 2);
+                row.ShadowedPct = quota;
+                // Totale = vendita + contingency + margine + shadow ricevuto
+                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount + row.ShadowedAmount;
+            }
+            else
+            {
+                row.ShadowedAmount = 0;
+                row.ShadowedPct = 0;
+                // Totale normale senza shadow
+                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+            }
+        }
     }
 
     public void WireAllChanges()
@@ -393,7 +493,8 @@ public class CostingViewModel : INotifyPropertyChanged
                     ContingencyPct = sec.ContingencyPct,
                     MarginPct = sec.MarginPct,
                     IsContingencyPinned = sec.ContingencyPinned,
-                    IsMarginPinned = sec.MarginPinned
+                    IsMarginPinned = sec.MarginPinned,
+                    IsShadowed = sec.IsShadowed
                 };
 
                 foreach (var res in sec.Resources.OrderBy(r => r.SortOrder))
@@ -450,7 +551,8 @@ public class CostingViewModel : INotifyPropertyChanged
                     ContingencyPct = item.ContingencyPct,
                     MarginPct = item.MarginPct,
                     IsContingencyPinned = item.ContingencyPinned,
-                    IsMarginPinned = item.MarginPinned
+                    IsMarginPinned = item.MarginPinned,
+                    IsShadowed = item.IsShadowed
                 });
             }
 
@@ -522,6 +624,22 @@ public class DistributionRowVM : INotifyPropertyChanged
 
     private decimal _sectionTotal;
     public decimal SectionTotal { get => _sectionTotal; set { _sectionTotal = value; Notify(); } }
+
+    // ── Shadow ──
+    private bool _isShadowed;
+    public bool IsShadowed
+    {
+        get => _isShadowed;
+        set { _isShadowed = value; Notify(); Notify(nameof(EyeIcon)); Notify(nameof(DisplaySaleAmount)); }
+    }
+    public string EyeIcon => IsShadowed ? "👁‍🗨" : "👁";
+    public decimal DisplaySaleAmount => IsShadowed ? 0m : SaleAmount;
+
+    private decimal _shadowedAmount;
+    public decimal ShadowedAmount { get => _shadowedAmount; set { _shadowedAmount = value; Notify(); } }
+
+    private decimal _shadowedPct;
+    public decimal ShadowedPct { get => _shadowedPct; set { _shadowedPct = value; Notify(); } }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>

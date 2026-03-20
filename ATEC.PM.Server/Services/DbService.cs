@@ -796,6 +796,12 @@ public class DbService
         AddColumnIfMissing(c, "project_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
         AddColumnIfMissing(c, "project_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
 
+        // Shadow: nascondi voce e spalma costo
+        AddColumnIfMissing(c, "offer_cost_sections", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
+        AddColumnIfMissing(c, "offer_material_items", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
+        AddColumnIfMissing(c, "project_cost_sections", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
+        AddColumnIfMissing(c, "project_material_items", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
+
         // Codex compositions: rimuovi UNIQUE constraint e colonna quantity (ogni riga = 1 pezzo)
         DropIndexIfExists(c, "codex_compositions", "uq_parent_child");
         DropColumnIfExists(c, "codex_compositions", "quantity");

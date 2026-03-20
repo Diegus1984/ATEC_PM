@@ -93,7 +93,13 @@
       "Bash(findstr :5100)",
       "Bash(findstr LISTENING)",
       "Bash(taskkill /PID 23812 /F)",
-      "Bash(cmd //c \"taskkill /PID 23812 /F\")"
+      "Bash(cmd //c \"taskkill /PID 23812 /F\")",
+      "mcp__mysql__mysql_query",
+      "Bash(mysql -u root -h 127.0.0.1 -P 3306 atec_pm -e \"DELETE FROM quote_items; DELETE FROM quotes;\")",
+      "Bash(curl -s http://127.0.0.1:5100/api/danea-sync/explore/tables)",
+      "Bash(cmd //c \"taskkill /PID 2004 /F\")",
+      "Bash(cmd //c \"taskkill /PID 3656 /F\")",
+      "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -type f \\\\\\(-name *.db -o -name *.sql \\\\\\))"
     ]
   }
 }

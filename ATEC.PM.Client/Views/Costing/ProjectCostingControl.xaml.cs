@@ -749,6 +749,15 @@ public partial class ProjectCostingControl : UserControl
         });
     }
 
+    private async void ShadowToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is DistributionRowVM row)
+        {
+            _vm.ToggleShadow(row);
+            await SaveAllDistributions();
+        }
+    }
+
     private async void DistPct_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb)
@@ -861,7 +870,8 @@ public partial class ProjectCostingControl : UserControl
                 contingencyPct = item.ContingencyPct,
                 marginPct = item.MarginPct,
                 contingencyPinned = item.IsContingencyPinned,
-                marginPinned = item.IsMarginPinned
+                marginPinned = item.IsMarginPinned,
+                isShadowed = item.IsShadowed
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/material-items/{item.Id}/distribution", json);
@@ -877,7 +887,8 @@ public partial class ProjectCostingControl : UserControl
                 contingencyPct = sec.ContingencyPct,
                 marginPct = sec.MarginPct,
                 contingencyPinned = sec.IsContingencyPinned,
-                marginPinned = sec.IsMarginPinned
+                marginPinned = sec.IsMarginPinned,
+                isShadowed = sec.IsShadowed
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);

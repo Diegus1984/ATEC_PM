@@ -87,7 +87,8 @@ public class OfferCostingController : ControllerBase
                    section_type AS SectionType, group_name AS GroupName,
                    sort_order AS SortOrder, is_enabled AS IsEnabled,
                    contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
-                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned
+                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned,
+                   COALESCE(is_shadowed,0) AS IsShadowed
             FROM offer_cost_sections WHERE offer_id=@offerId ORDER BY sort_order",
             new { offerId }).ToList();
 
@@ -130,7 +131,8 @@ public class OfferCostingController : ControllerBase
                    i.markup_value AS MarkupValue, i.item_type AS ItemType,
                    i.sort_order AS SortOrder,
                    i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
-                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned
+                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned,
+                   COALESCE(i.is_shadowed,0) AS IsShadowed
             FROM offer_material_items i
             JOIN offer_material_sections s ON s.id = i.section_id
             WHERE s.offer_id=@offerId ORDER BY i.sort_order",
@@ -479,9 +481,10 @@ public class OfferCostingController : ControllerBase
     public IActionResult UpdateSectionDistribution(int offerId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute(@"UPDATE offer_cost_sections 
-        SET contingency_pct=@ContPct, margin_pct=@MargPct, 
-            contingency_pinned=@ContPin, margin_pinned=@MargPin 
+        c.Execute(@"UPDATE offer_cost_sections
+        SET contingency_pct=@ContPct, margin_pct=@MargPct,
+            contingency_pinned=@ContPin, margin_pinned=@MargPin,
+            is_shadowed=@Shadowed
         WHERE id=@Id AND offer_id=@offerId",
             new
             {
@@ -489,6 +492,7 @@ public class OfferCostingController : ControllerBase
                 MargPct = req.MarginPct,
                 ContPin = req.ContingencyPinned,
                 MargPin = req.MarginPinned,
+                Shadowed = req.IsShadowed,
                 Id = id,
                 offerId
             });
@@ -499,9 +503,10 @@ public class OfferCostingController : ControllerBase
     public IActionResult UpdateMaterialItemDistribution(int offerId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute(@"UPDATE offer_material_items 
+        c.Execute(@"UPDATE offer_material_items
             SET contingency_pct=@ContPct, margin_pct=@MargPct,
-                contingency_pinned=@ContPin, margin_pinned=@MargPin
+                contingency_pinned=@ContPin, margin_pinned=@MargPin,
+                is_shadowed=@Shadowed
             WHERE id=@Id",
             new
             {
@@ -509,6 +514,7 @@ public class OfferCostingController : ControllerBase
                 MargPct = req.MarginPct,
                 ContPin = req.ContingencyPinned,
                 MargPin = req.MarginPinned,
+                Shadowed = req.IsShadowed,
                 Id = id
             });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));
