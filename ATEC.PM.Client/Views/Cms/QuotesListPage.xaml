@@ -31,11 +31,12 @@
                     <ComboBox x:Name="cmbStatusFilter" Width="140" Height="32" FontSize="12"
                               SelectionChanged="StatusFilter_Changed">
                         <ComboBoxItem Content="Tutti" Tag="" IsSelected="True" />
-                        <ComboBoxItem Content="Bozza" Tag="draft" />
-                        <ComboBoxItem Content="Inviato" Tag="sent" />
+                        <ComboBoxItem Content="In preparazione" Tag="draft" />
+                        <ComboBoxItem Content="Preventivo inviato" Tag="sent" />
                         <ComboBoxItem Content="In trattativa" Tag="negotiation" />
-                        <ComboBoxItem Content="Accettato" Tag="accepted" />
-                        <ComboBoxItem Content="Rifiutato" Tag="rejected" />
+                        <ComboBoxItem Content="Il cliente ha confermato" Tag="accepted" />
+                        <ComboBoxItem Content="Cliente non interessato" Tag="rejected" />
+                        <ComboBoxItem Content="Scaduto" Tag="expired" />
                         <ComboBoxItem Content="Convertito" Tag="converted" />
                     </ComboBox>
                     <TextBox x:Name="txtSearch" Width="200" Height="32" FontSize="12"
@@ -156,20 +157,65 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <!-- Stato -->
-                <DataGridTemplateColumn Width="120" SortMemberPath="Status">
+                <!-- Stato (ComboBox inline con colori) -->
+                <DataGridTemplateColumn Width="180" SortMemberPath="Status">
                     <DataGridTemplateColumn.Header>
                         <TextBlock Text="STATO" Style="{StaticResource DgHeaderText}" />
                     </DataGridTemplateColumn.Header>
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Border x:Name="statusBorder" CornerRadius="4" Padding="8,3"
-                                    HorizontalAlignment="Left"
-                                    Background="{Binding Status, Converter={StaticResource QuoteStatusToBgConverter}}">
-                                <TextBlock Text="{Binding Status, Converter={StaticResource QuoteStatusToLabelConverter}}"
-                                           FontSize="11" FontWeight="SemiBold"
-                                           Foreground="{Binding Status, Converter={StaticResource QuoteStatusToFgConverter}}" />
-                            </Border>
+                            <ComboBox x:Name="cmbStatus" Tag="{Binding Id}"
+                                      SelectedValue="{Binding Status, Mode=OneWay}"
+                                      SelectedValuePath="Tag"
+                                      SelectionChanged="StatusCombo_Changed"
+                                      FontSize="11" FontWeight="SemiBold" Height="28"
+                                      HorizontalAlignment="Left" MinWidth="160"
+                                      Background="{Binding Status, Converter={StaticResource QuoteStatusToBgConverter}}"
+                                      Foreground="{Binding Status, Converter={StaticResource QuoteStatusToFgConverter}}"
+                                      BorderBrush="{Binding Status, Converter={StaticResource QuoteStatusToBgConverter}}">
+                                <ComboBoxItem Tag="draft">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#9CA3AF" Margin="0,0,8,0" />
+                                        <TextBlock Text="In preparazione" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="sent">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#3B82F6" Margin="0,0,8,0" />
+                                        <TextBlock Text="Preventivo inviato" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="negotiation">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#F59E0B" Margin="0,0,8,0" />
+                                        <TextBlock Text="In trattativa" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="accepted">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#10B981" Margin="0,0,8,0" />
+                                        <TextBlock Text="Il cliente ha confermato" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="rejected">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#EF4444" Margin="0,0,8,0" />
+                                        <TextBlock Text="Cliente non interessato" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="expired">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#6B7280" Margin="0,0,8,0" />
+                                        <TextBlock Text="Scaduto" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="converted">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="10" Height="10" Fill="#059669" Margin="0,0,8,0" />
+                                        <TextBlock Text="Convertito" />
+                                    </StackPanel>
+                                </ComboBoxItem>
+                            </ComboBox>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -182,6 +228,112 @@
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding CreatedByName}" Style="{StaticResource DgCellText}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Azioni -->
+                <DataGridTemplateColumn Width="200" Header="">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="4,0">
+                                <!-- Visualizza PDF -->
+                                <Button Tag="{Binding Id}" Click="RowBtnPreview_Click"
+                                        ToolTip="Visualizza PDF" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#10B981" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <!-- Scarica PDF -->
+                                <Button Tag="{Binding Id}" Click="RowBtnDownload_Click"
+                                        ToolTip="Scarica PDF" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#3B82F6" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <!-- Invia email (placeholder) -->
+                                <Button Tag="{Binding Id}" Click="RowBtnSend_Click"
+                                        ToolTip="Invia al cliente" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#8B5CF6" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE724;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <!-- Duplica -->
+                                <Button Tag="{Binding Id}" Click="RowBtnDuplicate_Click"
+                                        ToolTip="Duplica preventivo" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#F59E0B" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <!-- Modifica -->
+                                <Button Tag="{Binding Id}" Click="RowBtnEdit_Click"
+                                        ToolTip="Modifica preventivo" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#06B6D4" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <!-- Cancella -->
+                                <Button Tag="{Binding Id}" Click="RowBtnDelete_Click"
+                                        ToolTip="Elimina preventivo" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#EF4444" BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                    Padding="4,2">
+                                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

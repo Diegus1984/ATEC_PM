@@ -11,7 +11,7 @@
     <SolidColorBrush x:Key="GridHeaderBackground" Color="#FAFAFA" />
     <SolidColorBrush x:Key="GridHeaderForeground" Color="#71717A" />
     <SolidColorBrush x:Key="GridBorderBrush" Color="#E4E4E7" />
-    <SolidColorBrush x:Key="GridSelectedRowBackground" Color="#F4F4F5" />
+    <SolidColorBrush x:Key="GridSelectedRowBackground" Color="#EBF2FF" />
     <SolidColorBrush x:Key="GridHoverRowBackground" Color="#FAFAFA" />
     <SolidColorBrush x:Key="GridCellForeground" Color="#18181B" />
     <SolidColorBrush x:Key="GridCellMutedForeground" Color="#71717A" />
@@ -109,7 +109,7 @@
                     <Condition Property="IsSelected" Value="True" />
                     <Condition Property="IsMouseOver" Value="True" />
                 </MultiTrigger.Conditions>
-                <Setter Property="Background" Value="#ECECEF" />
+                <Setter Property="Background" Value="#DDEAFF" />
             </MultiTrigger>
         </Style.Triggers>
     </Style>

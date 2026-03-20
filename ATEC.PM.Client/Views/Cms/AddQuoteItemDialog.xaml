@@ -113,29 +113,21 @@
                     Header="Codice" />
                 <DataGridTextColumn
                     Width="*"
-                    MinWidth="200"
+                    MinWidth="250"
                     Binding="{Binding Name}"
-                    Header="Nome" />
+                    Header="Prodotto" />
                 <DataGridTextColumn
-                    Width="200"
-                    Binding="{Binding VariantName}"
-                    Header="Variante" />
+                    Width="80"
+                    Binding="{Binding VariantCount}"
+                    Header="Varianti" />
                 <DataGridTextColumn
-                    Width="90"
-                    Binding="{Binding CostPrice, StringFormat=N2}"
-                    Header="Costo €" />
+                    Width="180"
+                    Binding="{Binding PriceRange}"
+                    Header="Prezzo" />
                 <DataGridTextColumn
-                    Width="90"
-                    Binding="{Binding SellPrice, StringFormat=N2}"
-                    Header="Prezzo €" />
-                <DataGridTextColumn
-                    Width="55"
-                    Binding="{Binding Unit}"
-                    Header="UdM" />
-                <DataGridTextColumn
-                    Width="55"
-                    Binding="{Binding DefaultQty, StringFormat=N0}"
-                    Header="Qtà" />
+                    Width="80"
+                    Binding="{Binding ItemType}"
+                    Header="Tipo" />
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

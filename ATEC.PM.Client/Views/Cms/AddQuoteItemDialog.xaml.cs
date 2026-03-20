@@ -106,46 +106,30 @@ public partial class AddQuoteItemDialog : Window
                     doc.RootElement.GetProperty("data").GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-                // Flatten: 1 riga per variante
+                // Una riga per prodotto (padre), non per variante
                 _allItems = new();
                 foreach (var p in products)
                 {
-                    if (p.Variants.Count == 0)
+                    int varCount = p.Variants.Count;
+                    string priceRange = "";
+                    if (varCount > 0)
                     {
-                        _allItems.Add(new CatalogPickItem
-                        {
-                            ProductId = p.Id,
-                            ItemType = p.ItemType,
-                            Code = p.Code,
-                            Name = p.Name,
-                            DescriptionRtf = p.DescriptionRtf,
-                            VariantName = "—",
-                            CostPrice = 0, SellPrice = 0,
-                            Unit = "nr.", DefaultQty = 1, VatPct = 22
-                        });
+                        decimal minPrice = p.Variants.Min(v => v.SellPrice);
+                        decimal maxPrice = p.Variants.Max(v => v.SellPrice);
+                        priceRange = minPrice == maxPrice
+                            ? $"{minPrice:N2}€"
+                            : $"{minPrice:N2}€ – {maxPrice:N2}€";
                     }
-                    else
+
+                    _allItems.Add(new CatalogPickItem
                     {
-                        foreach (var v in p.Variants)
-                        {
-                            _allItems.Add(new CatalogPickItem
-                            {
-                                ProductId = p.Id,
-                                VariantId = v.Id,
-                                ItemType = p.ItemType,
-                                Code = v.Code,
-                                Name = p.Name,
-                                DescriptionRtf = p.DescriptionRtf,
-                                VariantName = v.Name,
-                                CostPrice = v.CostPrice,
-                                SellPrice = v.SellPrice,
-                                DiscountPct = v.DiscountPct,
-                                VatPct = v.VatPct,
-                                Unit = v.Unit,
-                                DefaultQty = v.DefaultQty
-                            });
-                        }
-                    }
+                        ProductId = p.Id,
+                        ItemType = p.ItemType,
+                        Code = p.Code,
+                        Name = p.Name,
+                        VariantCount = varCount,
+                        PriceRange = priceRange
+                    });
                 }
 
                 ApplySearch();
@@ -169,8 +153,7 @@ public partial class AddQuoteItemDialog : Window
             ? _allItems
             : _allItems.Where(i =>
                 i.Code.ToLower().Contains(s) ||
-                i.Name.ToLower().Contains(s) ||
-                i.VariantName.ToLower().Contains(s)).ToList();
+                i.Name.ToLower().Contains(s)).ToList();
 
         dgProducts.ItemsSource = filtered;
         txtInfo.Text = $"{filtered.Count} voci disponibili";
@@ -184,7 +167,7 @@ public partial class AddQuoteItemDialog : Window
 
         try
         {
-            // Controlla se esiste già nel preventivo
+            // Controlla se il prodotto è già nel preventivo
             string checkJson = await ApiClient.GetAsync($"/api/quotes/{_quoteId}");
             var checkDoc = JsonDocument.Parse(checkJson);
             if (checkDoc.RootElement.GetProperty("success").GetBoolean())
@@ -194,74 +177,35 @@ public partial class AddQuoteItemDialog : Window
                     quoteData.GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.Items ?? new();
 
-                // Cerca duplicato per product_id + variant_id
-                var duplicate = existingItems.FirstOrDefault(x =>
-                    x.ProductId == item.ProductId && x.VariantId == item.VariantId);
-
+                var duplicate = existingItems.FirstOrDefault(x => x.ProductId == item.ProductId);
                 if (duplicate != null)
                 {
-                    var result = MessageBox.Show(
-                        $"'{item.VariantName ?? item.Name}' è già presente nel preventivo (Qtà attuale: {duplicate.Quantity:N0}).\n\nVuoi aggiungere +1 alla quantità?",
-                        "Articolo già presente",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        var updateDto = new QuoteItemSaveDto
-                        {
-                            ProductId = duplicate.ProductId,
-                            VariantId = duplicate.VariantId,
-                            ItemType = duplicate.ItemType,
-                            Code = duplicate.Code,
-                            Name = duplicate.Name,
-                            DescriptionRtf = duplicate.DescriptionRtf,
-                            Unit = duplicate.Unit,
-                            Quantity = duplicate.Quantity + 1,
-                            CostPrice = duplicate.CostPrice,
-                            SellPrice = duplicate.SellPrice,
-                            DiscountPct = duplicate.DiscountPct,
-                            VatPct = duplicate.VatPct,
-                            SortOrder = duplicate.SortOrder
-                        };
-                        string updateBody = JsonSerializer.Serialize(updateDto);
-                        await ApiClient.PutAsync($"/api/quotes/{_quoteId}/items/{duplicate.Id}", updateBody);
-                        _addedCount++;
-                        ItemAdded?.Invoke();
-                        txtAdded.Text = $"✓ Qtà aggiornata per {duplicate.Name} → {duplicate.Quantity + 1}";
-                        _added = true;
-                    }
+                    MessageBox.Show(
+                        $"'{item.Name}' è già presente nel preventivo.",
+                        "Prodotto già presente",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                     return;
                 }
             }
 
-            // Inserimento nuovo
-            var dto = new QuoteItemSaveDto
-            {
-                ProductId = item.ProductId,
-                VariantId = item.VariantId,
-                ItemType = item.ItemType,
-                Code = item.Code,
-                Name = string.IsNullOrEmpty(item.VariantName) || item.VariantName == "—"
-                    ? item.Name : item.VariantName,
-                DescriptionRtf = item.DescriptionRtf,
-                Unit = item.Unit,
-                Quantity = item.DefaultQty,
-                CostPrice = item.CostPrice,
-                SellPrice = item.SellPrice,
-                DiscountPct = item.DiscountPct,
-                VatPct = item.VatPct
-            };
-
-            string body = JsonSerializer.Serialize(dto);
-            string json = await ApiClient.PostAsync($"/api/quotes/{_quoteId}/items", body);
+            // Aggiunge il prodotto con tutte le varianti
+            string json = await ApiClient.PostAsync($"/api/quotes/{_quoteId}/items/product/{item.ProductId}", "{}");
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
                 _addedCount++;
                 ItemAdded?.Invoke();
                 _added = true;
-                txtAdded.Text = $"✓ {_addedCount} voc{(_addedCount == 1 ? "e aggiunta" : "i aggiunte")}";
+                string msg = item.VariantCount > 0
+                    ? $"✓ {item.Name} aggiunto con {item.VariantCount} varianti"
+                    : $"✓ {item.Name} aggiunto";
+                txtAdded.Text = msg;
+            }
+            else
+            {
+                string errMsg = doc.RootElement.TryGetProperty("message", out var m) ? m.GetString() ?? "Errore" : "Errore";
+                MessageBox.Show(errMsg, "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
@@ -279,16 +223,9 @@ public partial class AddQuoteItemDialog : Window
 public class CatalogPickItem
 {
     public int ProductId { get; set; }
-    public int? VariantId { get; set; }
     public string ItemType { get; set; } = "product";
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
-    public string DescriptionRtf { get; set; } = "";
-    public string VariantName { get; set; } = "";
-    public decimal CostPrice { get; set; }
-    public decimal SellPrice { get; set; }
-    public decimal DiscountPct { get; set; }
-    public decimal VatPct { get; set; } = 22;
-    public string Unit { get; set; } = "nr.";
-    public decimal DefaultQty { get; set; } = 1;
+    public int VariantCount { get; set; }
+    public string PriceRange { get; set; } = "";
 }

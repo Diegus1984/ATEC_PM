@@ -32,7 +32,7 @@ public partial class NewQuoteDialog : Window
             {
                 var customers = JsonSerializer.Deserialize<List<CustomerListItem>>(
                     doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
-                cmbCustomer.ItemsSource = customers;
+                cmbCustomer.ItemsSource = customers.OrderBy(c => c.CompanyName, StringComparer.OrdinalIgnoreCase).ToList();
             }
         }
         catch { }
@@ -46,7 +46,7 @@ public partial class NewQuoteDialog : Window
             {
                 var priceLists = JsonSerializer.Deserialize<List<QuotePriceListDto>>(
                     doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
-                cmbPriceList.ItemsSource = priceLists;
+                cmbPriceList.ItemsSource = priceLists.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
                 if (priceLists.Count > 0) cmbPriceList.SelectedIndex = 0;
             }
         }
@@ -75,10 +75,10 @@ public partial class NewQuoteDialog : Window
     private void FilterGroupsByPriceList()
     {
         int? plId = cmbPriceList.SelectedValue as int?;
-        if (plId.HasValue)
-            cmbGroup.ItemsSource = _allGroups.Where(g => g.PriceListId == plId.Value).ToList();
-        else
-            cmbGroup.ItemsSource = _allGroups;
+        var groups = plId.HasValue
+            ? _allGroups.Where(g => g.PriceListId == plId.Value)
+            : _allGroups.AsEnumerable();
+        cmbGroup.ItemsSource = groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
         cmbGroup.SelectedIndex = -1;
     }
 

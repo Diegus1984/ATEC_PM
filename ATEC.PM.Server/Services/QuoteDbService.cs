@@ -121,6 +121,7 @@ public class QuoteDbService
             show_item_prices TINYINT(1) DEFAULT 1,
             show_summary TINYINT(1) DEFAULT 1,
             show_summary_prices TINYINT(1) DEFAULT 1,
+            hide_quantities TINYINT(1) DEFAULT 0,
             notes_internal TEXT,
             notes_quote TEXT,
             project_id INT,
@@ -159,6 +160,7 @@ public class QuoteDbService
             line_total DECIMAL(14,2) DEFAULT 0,
             line_profit DECIMAL(14,2) DEFAULT 0,
             sort_order INT DEFAULT 0,
+            is_auto_include TINYINT(1) DEFAULT 0,
             FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
             FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE SET NULL,
             FOREIGN KEY (variant_id) REFERENCES quote_product_variants(id) ON DELETE SET NULL,
@@ -220,6 +222,12 @@ public class QuoteDbService
         // description_rtf: TEXT → LONGTEXT per contenuti HTML con immagini
         ModifyColumnIfNeeded(c, "quote_products", "description_rtf", "LONGTEXT");
         ModifyColumnIfNeeded(c, "quote_items", "description_rtf", "LONGTEXT");
+
+        // Flag per distinguere items auto-include da quelli manuali
+        AddColumnIfMissing(c, "quote_items", "is_auto_include", "TINYINT(1) DEFAULT 0 AFTER parent_item_id");
+
+        // Opzione nascondi quantità nel PDF
+        AddColumnIfMissing(c, "quotes", "hide_quantities", "TINYINT(1) DEFAULT 0 AFTER show_summary_prices");
     }
 
     private static void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)

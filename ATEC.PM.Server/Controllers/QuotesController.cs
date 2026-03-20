@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
+using Serilog;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
@@ -92,6 +93,7 @@ public class QuotesController : ControllerBase
                        q.show_item_prices AS ShowItemPrices,
                        q.show_summary AS ShowSummary,
                        q.show_summary_prices AS ShowSummaryPrices,
+                       COALESCE(q.hide_quantities,0) AS HideQuantities,
                        q.notes_internal AS NotesInternal, q.notes_quote AS NotesQuote,
                        q.assigned_to AS AssignedTo,
                        CONCAT(ea.first_name,' ',ea.last_name) AS AssignedToName,
@@ -122,7 +124,8 @@ public class QuotesController : ControllerBase
                        line_total AS LineTotal, line_profit AS LineProfit,
                        sort_order AS SortOrder,
                        COALESCE(is_active,1) AS IsActive, COALESCE(is_confirmed,0) AS IsConfirmed,
-                       parent_item_id AS ParentItemId
+                       parent_item_id AS ParentItemId,
+                       COALESCE(is_auto_include,0) AS IsAutoInclude
                 FROM quote_items WHERE quote_id = @Id
                 ORDER BY sort_order", new { Id = id }).ToList();
 
@@ -171,61 +174,89 @@ public class QuotesController : ControllerBase
                     CreatedBy = GetCurrentEmployeeId()
                 }, tx);
 
-            // Auto-populate: se c'è un group_id, clona le voci auto_include dal catalogo
-            if (dto.GroupId.HasValue && dto.GroupId.Value > 0)
+            // Auto-populate: inserisci TUTTI i prodotti auto_include dello stesso listino
             {
-                var autoItems = c.Query<dynamic>(@"
+                // Se c'è un listino, prendi gli auto_include di quel listino.
+                // Altrimenti prendi TUTTI gli auto_include globali.
+                string autoSql = @"
                     SELECT p.id AS ProductId, p.item_type, p.code, p.name, p.description_rtf,
                            v.id AS VariantId, v.code AS VarCode, v.name AS VarName,
                            v.cost_price, v.sell_price, v.discount_pct, v.vat_pct, v.unit, v.default_qty
                     FROM quote_products p
                     JOIN quote_categories cat ON cat.id = p.category_id
+                    JOIN quote_groups g ON g.id = cat.group_id
                     LEFT JOIN quote_product_variants v ON v.product_id = p.id
-                    WHERE cat.group_id = @GroupId AND p.auto_include = 1 AND p.is_active = 1
-                    ORDER BY cat.sort_order, p.sort_order, v.sort_order",
-                    new { dto.GroupId }, tx).ToList();
+                    WHERE p.auto_include = 1 AND p.is_active = 1";
+                if (dto.PriceListId.HasValue && dto.PriceListId.Value > 0)
+                    autoSql += " AND g.price_list_id = @PriceListId";
+                autoSql += " ORDER BY g.sort_order, cat.sort_order, p.sort_order, v.sort_order";
 
+                var autoItems = c.Query<dynamic>(autoSql,
+                    new { dto.PriceListId }, tx).ToList();
+
+                // Raggruppa per ProductId: inserisci parent + varianti come AddProductWithAllVariants
                 int sortOrder = 0;
-                foreach (var item in autoItems)
+                var grouped = autoItems.GroupBy(x => (int)x.ProductId);
+                foreach (var grp in grouped)
                 {
-                    decimal qty = item.default_qty ?? 1m;
-                    decimal sellPrice = item.sell_price ?? 0m;
-                    decimal costPrice = item.cost_price ?? 0m;
-                    decimal discPct = item.discount_pct ?? 0m;
-                    decimal lineTotal = qty * sellPrice * (1 - discPct / 100m);
-                    decimal lineCost = qty * costPrice;
-                    decimal lineProfit = lineTotal - lineCost;
+                    var first = grp.First();
+                    string productName = (string)first.name;
+                    string productCode = (string)(first.code ?? "");
+                    string productType = (string)first.item_type;
+                    string desc = (string?)(first.description_rtf) ?? "";
 
-                    string name = item.VarName ?? item.name;
-                    string code = item.VarCode ?? item.code ?? "";
+                    bool hasVariants = grp.Any(x => x.VariantId != null);
 
-                    c.Execute(@"
-                        INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
-                            code, name, description_rtf, unit, quantity,
-                            cost_price, sell_price, discount_pct, vat_pct,
-                            line_total, line_profit, sort_order)
-                        VALUES (@QuoteId, @ProductId, @VariantId, @ItemType,
-                            @Code, @Name, @Desc, @Unit, @Qty,
-                            @CostPrice, @SellPrice, @DiscountPct, @VatPct,
-                            @LineTotal, @LineProfit, @SortOrder)",
-                        new {
-                            QuoteId = quoteId,
-                            ProductId = (int?)item.ProductId,
-                            VariantId = (int?)item.VariantId,
-                            ItemType = (string)item.item_type,
-                            Code = code,
-                            Name = name,
-                            Desc = (string?)(item.description_rtf),
-                            Unit = (string?)(item.unit) ?? "nr.",
-                            Qty = qty,
-                            CostPrice = costPrice,
-                            SellPrice = sellPrice,
-                            DiscountPct = discPct,
-                            VatPct = item.vat_pct ?? 22m,
-                            LineTotal = lineTotal,
-                            LineProfit = lineProfit,
-                            SortOrder = sortOrder++
-                        }, tx);
+                    if (hasVariants)
+                    {
+                        // Inserisci parent (header)
+                        int parentId = (int)c.ExecuteScalar<long>(@"
+                            INSERT INTO quote_items (quote_id, product_id, item_type,
+                                code, name, description_rtf, unit, quantity,
+                                cost_price, sell_price, discount_pct, vat_pct,
+                                line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
+                            VALUES (@QId, @PId, @Type, @Code, @Name, @Desc, '', 0, 0, 0, 0, 0, 0, 0, @Sort, 1, 0, 1);
+                            SELECT LAST_INSERT_ID()",
+                            new { QId = quoteId, PId = grp.Key, Type = productType,
+                                  Code = productCode, Name = productName, Desc = desc,
+                                  Sort = sortOrder++ }, tx);
+
+                        // Inserisci varianti
+                        foreach (var v in grp.Where(x => x.VariantId != null))
+                        {
+                            decimal qty = v.default_qty ?? 1m;
+                            decimal sell = v.sell_price ?? 0m;
+                            decimal cost = v.cost_price ?? 0m;
+                            decimal disc = v.discount_pct ?? 0m;
+                            decimal lt = qty * sell * (1 - disc / 100m);
+                            decimal lp = lt - (qty * cost);
+
+                            c.Execute(@"
+                                INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
+                                    code, name, unit, quantity, cost_price, sell_price, discount_pct, vat_pct,
+                                    line_total, line_profit, sort_order, is_active, is_confirmed, parent_item_id, is_auto_include)
+                                VALUES (@QId, @PId, @VId, 'product', @Code, @Name, @Unit, @Qty,
+                                    @Cost, @Sell, @Disc, @Vat, @LT, @LP, @Sort, 0, 0, @ParentId, 1)",
+                                new { QId = quoteId, PId = grp.Key, VId = (int?)v.VariantId,
+                                      Code = (string)(v.VarCode ?? ""), Name = (string)(v.VarName ?? productName),
+                                      Unit = (string?)(v.unit) ?? "nr.", Qty = qty,
+                                      Cost = cost, Sell = sell, Disc = disc, Vat = v.vat_pct ?? 22m,
+                                      LT = lt, LP = lp, Sort = sortOrder++, ParentId = parentId }, tx);
+                        }
+                    }
+                    else
+                    {
+                        // Prodotto senza varianti (es. content)
+                        c.Execute(@"
+                            INSERT INTO quote_items (quote_id, product_id, item_type,
+                                code, name, description_rtf, unit, quantity,
+                                cost_price, sell_price, discount_pct, vat_pct,
+                                line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
+                            VALUES (@QId, @PId, @Type, @Code, @Name, @Desc, 'nr.', 0, 0, 0, 0, 0, 0, 0, @Sort, 1, 0, 1)",
+                            new { QId = quoteId, PId = grp.Key, Type = productType,
+                                  Code = productCode, Name = productName, Desc = desc,
+                                  Sort = sortOrder++ }, tx);
+                    }
                 }
 
                 // Ricalcola totali
@@ -259,14 +290,14 @@ public class QuotesController : ControllerBase
                         payment_type=@PaymentType, language=@Language, group_id=@GroupId,
                         discount_pct=@DiscountPct, discount_abs=@DiscountAbs,
                         show_item_prices=@ShowItemPrices, show_summary=@ShowSummary,
-                        show_summary_prices=@ShowSummaryPrices,
+                        show_summary_prices=@ShowSummaryPrices, hide_quantities=@HideQuantities,
                         notes_internal=@NotesInternal, notes_quote=@NotesQuote,
                         assigned_to=@AssignedTo
                         WHERE id=@Id",
                 new { dto.Title, dto.CustomerId, dto.ContactName1, dto.ContactName2, dto.ContactName3,
                       dto.DeliveryDays, dto.ValidityDays, dto.PaymentType, dto.Language, dto.GroupId,
                       dto.DiscountPct, dto.DiscountAbs, dto.ShowItemPrices, dto.ShowSummary,
-                      dto.ShowSummaryPrices, dto.NotesInternal, dto.NotesQuote, dto.AssignedTo, Id = id });
+                      dto.ShowSummaryPrices, dto.HideQuantities, dto.NotesInternal, dto.NotesQuote, dto.AssignedTo, Id = id });
 
             // Ricalcola totali
             using var c2 = _qdb.Open();
@@ -342,11 +373,16 @@ public class QuotesController : ControllerBase
         try
         {
             using var c = _qdb.Open();
+            // Leggi direttamente la description come stringa per evitare problemi di mapping
             var product = c.QueryFirstOrDefault<QuoteProductDto>(@"
-                SELECT id AS Id, item_type AS ItemType, code AS Code, name AS Name,
-                       description_rtf AS DescriptionRtf
+                SELECT id AS Id, item_type AS ItemType, code AS Code, name AS Name
                 FROM quote_products WHERE id=@Id", new { Id = productId });
             if (product == null) return Ok(ApiResponse<string>.Fail("Prodotto non trovato"));
+
+            string descriptionRtf = c.ExecuteScalar<string>(
+                "SELECT description_rtf FROM quote_products WHERE id=@Id", new { Id = productId }) ?? "";
+            Log.Information("[AddProduct] Prodotto {Name} — description_rtf.Length={Len}",
+                product.Name, descriptionRtf.Length);
 
             var variants = c.Query<QuoteProductVariantDto>(@"
                 SELECT id AS Id, product_id AS ProductId, code AS Code, name AS Name,
@@ -367,7 +403,8 @@ public class QuotesController : ControllerBase
                     '', 0, 0, 0, 0, 0, 0, 0, @Sort, 1, 0);
                 SELECT LAST_INSERT_ID()",
                 new { QId = id, PId = productId, Type = product.ItemType,
-                      product.Code, product.Name, Desc = product.DescriptionRtf, Sort = maxSort + 1 });
+                      product.Code, product.Name, Desc = descriptionRtf, Sort = maxSort + 1 });
+            Log.Information("[AddProduct] Parent inserito id={ParentId}, desc salvata={Len}", parentId, descriptionRtf.Length);
 
             // Inserisci tutte le varianti come figlie
             int vSort = 0;
@@ -439,6 +476,47 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
+    /// <summary>Aggiunge una variante locale a un parent item nel preventivo.</summary>
+    [HttpPost("{quoteId}/items/{parentItemId}/variant")]
+    public IActionResult AddLocalVariant(int quoteId, int parentItemId, [FromBody] QuoteItemSaveDto dto)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            // Verifica che il parent esista
+            var parent = c.QueryFirstOrDefault<dynamic>(
+                "SELECT id, product_id, is_auto_include FROM quote_items WHERE id=@Id AND quote_id=@QId",
+                new { Id = parentItemId, QId = quoteId });
+            if (parent == null)
+                return Ok(ApiResponse<string>.Fail("Voce parent non trovata"));
+
+            int maxSort = c.ExecuteScalar<int>(
+                "SELECT COALESCE(MAX(sort_order),0) FROM quote_items WHERE quote_id=@Id", new { Id = quoteId });
+
+            decimal lineTotal = dto.Quantity * dto.SellPrice * (1 - dto.DiscountPct / 100m);
+            decimal lineProfit = lineTotal - (dto.Quantity * dto.CostPrice);
+
+            int itemId = (int)c.ExecuteScalar<long>(@"
+                INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
+                    code, name, unit, quantity, cost_price, sell_price, discount_pct, vat_pct,
+                    line_total, line_profit, sort_order, is_active, is_confirmed, parent_item_id, is_auto_include)
+                VALUES (@QId, @PId, NULL, 'product', @Code, @Name, @Unit, @Qty,
+                    @Cost, @Sell, @Disc, @Vat, @LT, @LP, @Sort, @Active, 0, @ParentId, @AutoInc);
+                SELECT LAST_INSERT_ID()",
+                new { QId = quoteId, PId = (int?)parent.product_id,
+                      dto.Code, dto.Name, dto.Unit, Qty = dto.Quantity,
+                      Cost = dto.CostPrice, Sell = dto.SellPrice, Disc = dto.DiscountPct,
+                      Vat = dto.VatPct, LT = lineTotal, LP = lineProfit,
+                      Sort = maxSort + 1, Active = dto.IsActive,
+                      ParentId = parentItemId,
+                      AutoInc = (bool)(parent.is_auto_include ?? false) ? 1 : 0 });
+
+            RecalcTotals(c, quoteId, null);
+            return Ok(ApiResponse<int>.Ok(itemId, "Variante locale aggiunta"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+    }
+
     [HttpPut("{id}/items/reorder")]
     public IActionResult ReorderItems(int id, [FromBody] List<int> itemIds)
     {
@@ -465,19 +543,12 @@ public class QuotesController : ControllerBase
             using var c = _qdb.Open();
             string currentStatus = c.ExecuteScalar<string>("SELECT status FROM quotes WHERE id=@Id", new { Id = id }) ?? "";
 
-            // Validazione transizioni
-            var allowed = new Dictionary<string, string[]>
-            {
-                ["draft"]       = new[] { "sent" },
-                ["sent"]        = new[] { "negotiation", "accepted", "rejected", "expired", "draft" },
-                ["negotiation"] = new[] { "accepted", "rejected", "draft" },
-                ["accepted"]    = new[] { "converted" },
-                ["rejected"]    = new[] { "draft" },
-                ["expired"]     = new[] { "draft" },
-            };
-
-            if (!allowed.ContainsKey(currentStatus) || !allowed[currentStatus].Contains(dto.NewStatus))
-                return Ok(ApiResponse<string>.Fail($"Transizione {currentStatus} → {dto.NewStatus} non consentita"));
+            // Validazione: lo stato deve essere valido
+            var validStatuses = new[] { "draft", "sent", "negotiation", "accepted", "rejected", "expired", "converted" };
+            if (!validStatuses.Contains(dto.NewStatus))
+                return Ok(ApiResponse<string>.Fail($"Stato '{dto.NewStatus}' non valido"));
+            if (currentStatus == dto.NewStatus)
+                return Ok(ApiResponse<string>.Ok("Stato invariato"));
 
             // Aggiorna stato + date
             string extraSql = dto.NewStatus switch
@@ -527,28 +598,58 @@ public class QuotesController : ControllerBase
 
             int newId = (int)c.ExecuteScalar<long>(@"
                 INSERT INTO quotes (quote_number, title, customer_id, contact_name1, contact_name2, contact_name3,
-                    delivery_days, validity_days, payment_type, language, group_id,
-                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices,
-                    notes_internal, notes_quote, assigned_to, created_by, status)
+                    delivery_days, validity_days, payment_type, language, group_id, price_list_id,
+                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices, hide_quantities,
+                    notes_internal, notes_quote, assigned_to, created_by, status, revision)
                 SELECT @NewNum, CONCAT(title, ' (copia)'), customer_id, contact_name1, contact_name2, contact_name3,
-                    delivery_days, validity_days, payment_type, language, group_id,
-                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices,
-                    notes_internal, notes_quote, assigned_to, @By, 'draft'
+                    delivery_days, validity_days, payment_type, language, group_id, price_list_id,
+                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices, hide_quantities,
+                    notes_internal, notes_quote, assigned_to, @By, status, 0
                 FROM quotes WHERE id=@Id;
                 SELECT LAST_INSERT_ID()",
                 new { NewNum = newNumber, By = GetCurrentEmployeeId(), Id = id }, tx);
 
             // Clona items
-            c.Execute(@"INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
-                    code, name, description_rtf, unit, quantity,
-                    cost_price, sell_price, discount_pct, vat_pct,
-                    line_total, line_profit, sort_order)
-                SELECT @NewId, product_id, variant_id, item_type,
-                    code, name, description_rtf, unit, quantity,
-                    cost_price, sell_price, discount_pct, vat_pct,
-                    line_total, line_profit, sort_order
-                FROM quote_items WHERE quote_id=@Id ORDER BY sort_order",
-                new { NewId = newId, Id = id }, tx);
+            // Clona items mantenendo gerarchia padre/figlio
+            var oldItems = c.Query<(int Id, int? ParentItemId)>(
+                "SELECT id, parent_item_id FROM quote_items WHERE quote_id=@Id ORDER BY sort_order",
+                new { Id = id }, tx).ToList();
+
+            // Prima inserisci i padri (parent_item_id IS NULL)
+            var idMap = new Dictionary<int, int>(); // oldId → newId
+            foreach (var item in oldItems.Where(x => x.ParentItemId == null))
+            {
+                int newItemId = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
+                        code, name, description_rtf, unit, quantity,
+                        cost_price, sell_price, discount_pct, vat_pct,
+                        line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
+                    SELECT @NewId, product_id, variant_id, item_type,
+                        code, name, description_rtf, unit, quantity,
+                        cost_price, sell_price, discount_pct, vat_pct,
+                        line_total, line_profit, sort_order, is_active, is_confirmed, COALESCE(is_auto_include,0)
+                    FROM quote_items WHERE id=@OldId;
+                    SELECT LAST_INSERT_ID()",
+                    new { NewId = newId, OldId = item.Id }, tx);
+                idMap[item.Id] = newItemId;
+            }
+
+            // Poi inserisci i figli con parent_item_id mappato
+            foreach (var item in oldItems.Where(x => x.ParentItemId != null))
+            {
+                int? newParentId = idMap.GetValueOrDefault(item.ParentItemId!.Value);
+                c.Execute(@"
+                    INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
+                        code, name, description_rtf, unit, quantity,
+                        cost_price, sell_price, discount_pct, vat_pct,
+                        line_total, line_profit, sort_order, is_active, is_confirmed, parent_item_id, is_auto_include)
+                    SELECT @NewId, product_id, variant_id, item_type,
+                        code, name, description_rtf, unit, quantity,
+                        cost_price, sell_price, discount_pct, vat_pct,
+                        line_total, line_profit, sort_order, is_active, is_confirmed, @NewParentId, COALESCE(is_auto_include,0)
+                    FROM quote_items WHERE id=@OldId",
+                    new { NewId = newId, OldId = item.Id, NewParentId = newParentId }, tx);
+            }
 
             RecalcTotals(c, newId, tx);
 
@@ -583,6 +684,7 @@ public class QuotesController : ControllerBase
                        q.show_item_prices AS ShowItemPrices,
                        q.show_summary AS ShowSummary,
                        q.show_summary_prices AS ShowSummaryPrices,
+                       COALESCE(q.hide_quantities,0) AS HideQuantities,
                        q.notes_quote AS NotesQuote,
                        q.created_at AS CreatedAt
                 FROM quotes q
@@ -598,7 +700,9 @@ public class QuotesController : ControllerBase
                        quantity AS Quantity, cost_price AS CostPrice,
                        sell_price AS SellPrice, discount_pct AS DiscountPct,
                        vat_pct AS VatPct, line_total AS LineTotal,
-                       line_profit AS LineProfit, sort_order AS SortOrder
+                       line_profit AS LineProfit, sort_order AS SortOrder,
+                       COALESCE(is_active,1) AS IsActive, parent_item_id AS ParentItemId,
+                       COALESCE(is_auto_include,0) AS IsAutoInclude
                 FROM quote_items WHERE quote_id = @Id
                 ORDER BY sort_order", new { Id = id }).ToList();
 

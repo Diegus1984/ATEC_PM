@@ -96,7 +96,7 @@ public partial class QuoteCatalogPage : Page
     {
         treeGroups.Items.Clear();
 
-        foreach (var group in _tree.Groups.OrderBy(g => g.SortOrder).ThenBy(g => g.Name))
+        foreach (var group in _tree.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase))
         {
             var groupNode = new TreeViewItem
             {
@@ -107,7 +107,7 @@ public partial class QuoteCatalogPage : Page
                 ContextMenu = (ContextMenu)treeGroups.Resources["GroupContextMenu"]
             };
 
-            foreach (var cat in group.Categories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name))
+            foreach (var cat in group.Categories.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
             {
                 var catNode = new TreeViewItem
                 {
@@ -219,7 +219,8 @@ public partial class QuoteCatalogPage : Page
                     doc.RootElement.GetProperty("data").GetRawText(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-                _allProducts = products.Select(p => new ProductListItem(p)).ToList();
+                _allProducts = products.Select(p => new ProductListItem(p))
+                    .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
                 ApplyProductFilter();
             }
         }
@@ -287,8 +288,34 @@ public partial class QuoteCatalogPage : Page
     {
     }
 
+    private void BtnExpandRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        var row = FindParent<DataGridRow>(btn);
+        if (row == null) return;
+
+        bool expanding = row.DetailsVisibility != Visibility.Visible;
+        row.DetailsVisibility = expanding ? Visibility.Visible : Visibility.Collapsed;
+        btn.Content = expanding ? "▼" : "▶";
+    }
+
+    private static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
+    {
+        while (child != null)
+        {
+            if (child is T parent) return parent;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return null;
+    }
+
     private void DgProducts_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        // Ignora doppio click sul pulsante expand
+        if (FindParent<Button>(e.OriginalSource as DependencyObject) is Button btn
+            && btn.Name == "btnExpand")
+            return;
+
         BtnEditProduct_Click(sender, e);
     }
 
@@ -650,6 +677,7 @@ public class ProductListItem
     public string PriceRange { get; set; } = "";
     public string CostRange { get; set; } = "";
     public string AutoIncludeLabel => AutoInclude ? "✓" : "";
+    public List<VariantDisplayItem> Variants { get; set; } = new();
 
     public ProductListItem(QuoteProductDto p)
     {
@@ -661,6 +689,18 @@ public class ProductListItem
         GroupName = p.GroupName;
         AutoInclude = p.AutoInclude;
         VariantCount = p.Variants.Count;
+
+        Variants = p.Variants.Select(v => new VariantDisplayItem
+        {
+            Code = v.Code,
+            Name = v.Name,
+            CostPrice = v.CostPrice,
+            SellPrice = v.SellPrice,
+            DiscountPct = v.DiscountPct,
+            VatPct = v.VatPct,
+            Unit = v.Unit,
+            DefaultQty = v.DefaultQty
+        }).ToList();
 
         if (p.ItemType == "content" || p.Variants.Count == 0)
         {
@@ -683,4 +723,21 @@ public class ProductListItem
             CostRange = minC == maxC ? $"{minC:N2}€" : $"{minC:N2}€ – {maxC:N2}€";
         }
     }
+}
+
+public class VariantDisplayItem
+{
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public decimal CostPrice { get; set; }
+    public decimal SellPrice { get; set; }
+    public decimal DiscountPct { get; set; }
+    public decimal VatPct { get; set; }
+    public string Unit { get; set; } = "nr.";
+    public decimal DefaultQty { get; set; } = 1;
+    public string SellPriceFormatted => $"{SellPrice:N2}€";
+    public string CostPriceFormatted => $"{CostPrice:N2}€";
+    public string DiscountFormatted => DiscountPct > 0 ? $"{DiscountPct:N1}%" : "—";
+    public string VatFormatted => $"{VatPct:N0}%";
+    public string QtyFormatted => $"{DefaultQty:G} {Unit}";
 }

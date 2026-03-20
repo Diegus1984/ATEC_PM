@@ -12,13 +12,13 @@ public class QuoteStatusToBgConverter : IValueConverter
         string status = value?.ToString() ?? "";
         string color = status switch
         {
-            "draft"       => "#F3F4F6",
-            "sent"        => "#DBEAFE",
-            "negotiation" => "#FEF3C7",
-            "accepted"    => "#D1FAE5",
-            "rejected"    => "#FEE2E2",
-            "expired"     => "#F3F4F6",
-            "converted"   => "#D1FAE5",
+            "draft"       => "#F3F4F6",   // grigio chiaro
+            "sent"        => "#DBEAFE",   // azzurro chiaro
+            "negotiation" => "#FEF3C7",   // giallo chiaro
+            "accepted"    => "#D1FAE5",   // verde chiaro
+            "rejected"    => "#FEE2E2",   // rosso chiaro
+            "expired"     => "#F3F4F6",   // grigio chiaro
+            "converted"   => "#DCFCE7",   // verde lime chiaro
             _ => "#F3F4F6"
         };
         return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
@@ -33,13 +33,13 @@ public class QuoteStatusToFgConverter : IValueConverter
         string status = value?.ToString() ?? "";
         string color = status switch
         {
-            "draft"       => "#374151",
-            "sent"        => "#1D4ED8",
-            "negotiation" => "#D97706",
-            "accepted"    => "#059669",
-            "rejected"    => "#DC2626",
-            "expired"     => "#6B7280",
-            "converted"   => "#059669",
+            "draft"       => "#6B7280",   // grigio
+            "sent"        => "#1D4ED8",   // blu
+            "negotiation" => "#D97706",   // arancione
+            "accepted"    => "#059669",   // verde
+            "rejected"    => "#DC2626",   // rosso
+            "expired"     => "#6B7280",   // grigio
+            "converted"   => "#16A34A",   // verde scuro
             _ => "#374151"
         };
         return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
@@ -53,11 +53,11 @@ public class QuoteStatusToLabelConverter : IValueConverter
     {
         return (value?.ToString() ?? "") switch
         {
-            "draft"       => "Bozza",
-            "sent"        => "Inviato",
+            "draft"       => "In preparazione",
+            "sent"        => "Preventivo inviato",
             "negotiation" => "In trattativa",
-            "accepted"    => "Accettato",
-            "rejected"    => "Rifiutato",
+            "accepted"    => "Il cliente ha confermato",
+            "rejected"    => "Cliente non interessato",
             "expired"     => "Scaduto",
             "converted"   => "Convertito",
             _ => value?.ToString() ?? ""

@@ -179,6 +179,7 @@ public class QuoteDto
     public bool ShowItemPrices { get; set; } = true;
     public bool ShowSummary { get; set; } = true;
     public bool ShowSummaryPrices { get; set; } = true;
+    public bool HideQuantities { get; set; }
     public string NotesInternal { get; set; } = "";
     public string NotesQuote { get; set; } = "";
     public int? ProjectId { get; set; }
@@ -217,6 +218,7 @@ public class QuoteItemDto
     public bool IsActive { get; set; } = true;
     public bool IsConfirmed { get; set; }
     public int? ParentItemId { get; set; }
+    public bool IsAutoInclude { get; set; }
 }
 
 public class QuoteSaveDto
@@ -237,6 +239,7 @@ public class QuoteSaveDto
     public bool ShowItemPrices { get; set; } = true;
     public bool ShowSummary { get; set; } = true;
     public bool ShowSummaryPrices { get; set; } = true;
+    public bool HideQuantities { get; set; }
     public string NotesInternal { get; set; } = "";
     public string NotesQuote { get; set; } = "";
     public int? AssignedTo { get; set; }
@@ -260,6 +263,7 @@ public class QuoteItemSaveDto
     public bool IsActive { get; set; } = true;
     public bool IsConfirmed { get; set; }
     public int? ParentItemId { get; set; }
+    public bool IsAutoInclude { get; set; }
 }
 
 public class QuoteStatusChangeDto
