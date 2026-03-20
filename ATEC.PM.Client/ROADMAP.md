@@ -90,6 +90,8 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 |---|---|---|
 | Totale risorse + materiali + trasferte | ✅ | Barre nere + barra blu TOTALE GENERALE |
 | Scheda Prezzi (NET → OFFER → FINAL) | ✅ | Struttura%, contingency%, rischi%, margine% — piè di pagina fisso |
+| Shadow (nascondi e spalma) | ✅ | Icona 👁 per riga, nasconde voce e spalma il costo proporzionalmente sulle visibili. Colonne SHADOW € e SH %. Persistente su DB (is_shadowed). |
+| Filtro righe vuote e duplicati | ✅ | DistributionRows esclude TotalSale==0 e deduplica per nome |
 | Export Excel/PDF preventivo | ❌ | EPPlus per Excel |
 
 ---
@@ -129,7 +131,17 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Grafico OxyPlot | ✅ | Barre + linea saldo + TextAnnotation |
 | DB: 3 tabelle compatte | ✅ | project_cashflow, project_cashflow_categories, project_cashflow_data |
 
-### 5c. Codex — Sync DB Remoto ✅
+### 5c. Esplorazione DB Danea (Firebird) ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Endpoint explore/tables | ✅ | Lista tutte le 63 tabelle Danea |
+| Endpoint explore/tables/{name}/columns | ✅ | Schema colonne con tipo, lunghezza, nullable |
+| Endpoint explore/tables/{name}/data | ✅ | Primi N record (max 100) |
+| Endpoint explore/tables/{name}/search | ✅ | Ricerca LIKE su colonna specifica (max 200) |
+| Fix case-sensitivity Firebird | ✅ | Nomi tabella mixed-case senza ToUpper() |
+
+### 5e. Codex — Sync DB Remoto ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
@@ -139,7 +151,7 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Modifica/Elimina articoli Codex | ✅ | Pulsanti inline, solo admin, protezione se in composizione |
 | Formato codice con punto singolo | ✅ | Getter DTO: rimuove tutti i punti, rimette uno solo |
 
-### 5d. Catalogo Articoli ✅
+### 5f. Catalogo Articoli ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
@@ -147,7 +159,7 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | ComboBox filtro Fornitore/Produttore/Categoria | ✅ | Dropdown con valori distinti + "Tutti" |
 | Sync fornitore da Easyfatt | ✅ | Match IDFornitore → TAnagrafica → supplier_id locale |
 
-### 5e. Composizione Codex ✅
+### 5g. Composizione Codex ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
@@ -262,11 +274,42 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 | Upload immagini inline (base64) | ✅ | File picker con blob cache |
 | Upload allegato prodotto | ✅ | Pulsante + copia in uploads/products/ |
 
-### 8h. DA COMPLETARE — Funzionalità mancanti
+### 8h. QuoteDetailPage Redesign ✅
 
 | Funzionalità | Stato | Note |
 |---|---|---|
-| Pulsanti azioni inline su riga prodotto catalogo | ✅ | Modifica/Duplica/Elimina per riga |
+| ItemsControl custom al posto di DataGrid | ✅ | Layout gerarchico: prodotto padre → varianti figlie espandibili |
+| Sezione "Contenuti automatici" separata | ✅ | ListBox con drag & drop per riordinamento, auto_include=1 |
+| Varianti attivabili/disattivabili con checkbox | ✅ | Toggle inline, _suppressToggle per evitare eventi durante load |
+| Editing inline varianti | ✅ | Qtà, prezzo, sconto modificabili direttamente nella riga |
+| AddLocalVariantDialog | ✅ | Aggiunta varianti locali (non da catalogo) |
+| Snapshot varianti locale | ✅ | Varianti copiate nel preventivo, indipendenti dal catalogo |
+| AddQuoteItemDialog — solo prodotti padre | ✅ | Mostra un prodotto per riga (non le singole varianti), doppio-click aggiunge tutte le varianti |
+
+### 8i. PDF Avanzato ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| description_rtf nel PDF | ✅ | Fix: _suppressToggle impedisce sovrascrittura vuota da checkbox |
+| Tabelle HTML a 2 colonne | ✅ | TinyMCE produce `<table><tr><td>` — rendering QuestPDF con Row + RelativeItem |
+| Auto-include sempre in fondo al PDF | ✅ | Sezione separata dopo il riepilogo |
+| Nascondi dettagli (costo, qtà, sconto) | ✅ | Checkbox HideQuantities → rimuove 3 colonne dal riepilogo, lascia solo nome + totale |
+| Riepilogo su pagina nuova | ✅ | Ultima pagina sempre separata con totali + firma |
+
+### 8j. Gestione Stati Preventivo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| ComboBox cambio stato nella lista preventivi | ✅ | Stile dedicato con colore sfondo + testo per ogni stato |
+| Pulsanti azione per riga (lista) | ✅ | Visualizza, Scarica PDF, Invia (placeholder), Duplica, Modifica, Elimina |
+| Duplicazione completa con parent_item_id | ✅ | Clona quote + items preservando la gerarchia padre/figlio |
+| Transizioni stato flessibili | ✅ | Tutti gli stati raggiungibili tranne converted (irreversibile) |
+
+### 8k. Pulsanti azioni inline su riga prodotto catalogo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Modifica/Duplica/Elimina per riga | ✅ | Pulsanti inline nella DataGrid catalogo |
 
 ---
 
