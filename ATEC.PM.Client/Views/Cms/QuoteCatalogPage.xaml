@@ -47,22 +47,19 @@
 
                 <!--  Toolbar albero  -->
                 <Border
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="0,0,0,1"
+                    Style="{StaticResource ToolbarBorder}"
                     DockPanel.Dock="Top">
                     <DockPanel>
                         <Button
-                            Background="#4F6EF7"
                             Click="BtnNewGroup_Click"
                             Content="+ Gruppo"
-                            Foreground="White"
-                            Style="{StaticResource FlatBtn}" />
+                            Style="{StaticResource PrimaryBtn}" />
                         <Button
                             Background="#16A34A"
                             Click="BtnNewCategory_Click"
                             Content="+ Categoria"
                             Foreground="White"
-                            Style="{StaticResource FlatBtn}" />
+                            Style="{StaticResource SuccessBtn}" />
                         <Button
                             HorizontalAlignment="Right"
                             Background="#F3F4F6"
@@ -166,11 +163,9 @@
                             Orientation="Horizontal">
                             <Button
                                 x:Name="btnNewProduct"
-                                Background="#4F6EF7"
                                 Click="BtnNewProduct_Click"
                                 Content="+ Nuovo Prodotto"
-                                Foreground="White"
-                                Style="{StaticResource FlatBtn}"
+                                Style="{StaticResource PrimaryBtn}"
                                 Visibility="Collapsed" />
                             <Border
                                 Width="1"
@@ -356,13 +351,9 @@
                                 <DataTemplate>
                                     <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
                                         <Button
-                                            Width="26" Height="26"
-                                            Background="#4F6EF71A"
-                                            BorderThickness="0"
                                             Click="BtnEditProductRow_Click"
-                                            Content="✏" Cursor="Hand"
-                                            FontSize="12" Foreground="#4F6EF7"
-                                            Tag="{Binding Id}" ToolTip="Modifica" />
+                                            Style="{StaticResource RowEditBtn}"
+                                            Tag="{Binding Id}" />
                                         <Button
                                             Width="26" Height="26"
                                             Margin="4,0,0,0"
@@ -373,14 +364,10 @@
                                             FontSize="11" Foreground="#16A34A"
                                             Tag="{Binding Id}" ToolTip="Duplica" />
                                         <Button
-                                            Width="26" Height="26"
                                             Margin="4,0,0,0"
-                                            Background="#EF44441A"
-                                            BorderThickness="0"
                                             Click="BtnDeleteProductRow_Click"
-                                            Content="✕" Cursor="Hand"
-                                            FontSize="12" Foreground="#EF4444"
-                                            Tag="{Binding Id}" ToolTip="Elimina" />
+                                            Style="{StaticResource RowDeleteBtn}"
+                                            Tag="{Binding Id}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>

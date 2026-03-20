@@ -218,27 +218,20 @@
             BorderThickness="0,0,1,0">
             <DockPanel>
                 <Border
-                    Padding="8"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="0,0,0,1"
+                    Style="{StaticResource ToolbarBorder}"
                     DockPanel.Dock="Top">
                     <DockPanel>
                         <Button
-                            Padding="12,6"
                             Background="#4F6EF7"
                             Click="BtnNew_Click"
                             Content="+ Nuova"
-                            FontWeight="SemiBold"
                             Foreground="White"
-                            Style="{StaticResource FlatBtn}" />
+                            Style="{StaticResource PrimaryBtn}" />
                         <Button
-                            Padding="12,6"
                             HorizontalAlignment="Right"
-                            Background="#F3F4F6"
                             Click="BtnRefresh_Click"
                             Content="Aggiorna"
                             DockPanel.Dock="Right"
-                            Foreground="#374151"
                             Style="{StaticResource FlatBtn}" />
                     </DockPanel>
                 </Border>
@@ -322,37 +315,14 @@
                             Orientation="Horizontal"
                             Visibility="Collapsed">
 
-                            <StackPanel.Resources>
-                                <Style TargetType="Button">
-                                    <Setter Property="Height" Value="34" />
-                                    <Setter Property="Padding" Value="16,0" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                    <Setter Property="Cursor" Value="Hand" />
-                                    <Setter Property="FontSize" Value="13" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                    <Setter Property="Foreground" Value="White" />
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}" CornerRadius="6">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Opacity" Value="0.9" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Resources>
 
                             <Button
                                 x:Name="btnSetInviata"
                                 Background="#3B82F6"
                                 Click="BtnSetStatus_Click"
                                 Content="Segna INVIATA"
+                                Foreground="White"
+                                Style="{StaticResource PrimaryBtn}"
                                 Tag="INVIATA" />
                             <Button
                                 x:Name="btnSetAccettata"
@@ -360,6 +330,8 @@
                                 Background="#10B981"
                                 Click="BtnSetStatus_Click"
                                 Content="Segna ACCETTATA"
+                                Foreground="White"
+                                Style="{StaticResource SuccessBtn}"
                                 Tag="ACCETTATA" />
                             <Button
                                 x:Name="btnSetRifiutata"
@@ -367,6 +339,8 @@
                                 Background="#EF4444"
                                 Click="BtnSetStatus_Click"
                                 Content="Rifiutata"
+                                Foreground="White"
+                                Style="{StaticResource DangerBtn}"
                                 Tag="RIFIUTATA" />
                             <Button
                                 x:Name="btnSetPersa"
@@ -374,6 +348,8 @@
                                 Background="#6B7280"
                                 Click="BtnSetStatus_Click"
                                 Content="Persa"
+                                Foreground="White"
+                                Style="{StaticResource FlatBtn}"
                                 Tag="PERSA" />
                             <Border
                                 Width="1"
@@ -383,20 +359,25 @@
                                 x:Name="btnRevision"
                                 Background="#F59E0B"
                                 Click="BtnRevision_Click"
-                                Content="Nuova Revisione" />
+                                Content="Nuova Revisione"
+                                Foreground="White"
+                                Style="{StaticResource FlatBtn}" />
                             <Button
                                 x:Name="btnConvert"
                                 Margin="8,0,0,0"
                                 Background="#10B981"
                                 Click="BtnConvert_Click"
-                                Content="Converti in Commessa" />
+                                Content="Converti in Commessa"
+                                Foreground="White"
+                                Style="{StaticResource SuccessBtn}" />
                             <Button
                                 x:Name="btnDelete"
                                 Margin="8,0,0,0"
                                 Background="#FEE2E2"
                                 Click="BtnDelete_Click"
                                 Content="Elimina"
-                                Foreground="#DC2626" />
+                                Foreground="#DC2626"
+                                Style="{StaticResource FlatBtn}" />
                         </StackPanel>
                     </DockPanel>
                 </Border>

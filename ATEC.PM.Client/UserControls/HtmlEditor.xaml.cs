@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
+using ATEC.PM.Client.Services;
 
 namespace ATEC.PM.Client.UserControls;
 
@@ -62,13 +63,64 @@ public partial class HtmlEditor : UserControl
         {
             string json = e.WebMessageAsJson;
             var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("type").GetString() == "contentChanged")
+            string type = doc.RootElement.GetProperty("type").GetString() ?? "";
+
+            if (type == "contentChanged")
             {
                 string html = doc.RootElement.GetProperty("html").GetString() ?? "";
                 ContentChanged?.Invoke(html);
             }
+            else if (type == "imageUpload")
+            {
+                string uploadId = doc.RootElement.GetProperty("uploadId").GetString() ?? "";
+                string fileName = doc.RootElement.GetProperty("fileName").GetString() ?? "image.png";
+                string base64 = doc.RootElement.GetProperty("base64").GetString() ?? "";
+                _ = HandleImageUpload(uploadId, fileName, base64);
+            }
         }
         catch { }
+    }
+
+    private async System.Threading.Tasks.Task HandleImageUpload(string uploadId, string fileName, string base64)
+    {
+        try
+        {
+            // Salva base64 come file temporaneo
+            byte[] bytes = Convert.FromBase64String(base64);
+            string tempDir = Path.Combine(Path.GetTempPath(), "ATEC_PM_Uploads");
+            Directory.CreateDirectory(tempDir);
+            string tempPath = Path.Combine(tempDir, fileName);
+            await File.WriteAllBytesAsync(tempPath, bytes);
+
+            // Upload sul server
+            string json = await ApiClient.UploadFileAsync("/api/quote-catalog/products/upload", tempPath);
+            var response = JsonSerializer.Deserialize<JsonElement>(json);
+
+            bool success = response.TryGetProperty("success", out var sp) && sp.GetBoolean();
+            if (success && response.TryGetProperty("data", out var dp))
+            {
+                // Costruisci URL completo per l'immagine
+                string relativePath = dp.GetString() ?? "";
+                string fullUrl = $"{App.ApiBaseUrl}{relativePath}";
+
+                await webView.CoreWebView2.ExecuteScriptAsync(
+                    $"onImageUploaded({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(fullUrl)})");
+            }
+            else
+            {
+                string error = response.TryGetProperty("message", out var mp) ? mp.GetString() ?? "Errore upload" : "Errore upload";
+                await webView.CoreWebView2.ExecuteScriptAsync(
+                    $"onImageUploadFailed({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(error)})");
+            }
+
+            // Pulisci file temporaneo
+            try { File.Delete(tempPath); } catch { }
+        }
+        catch (Exception ex)
+        {
+            await webView.CoreWebView2.ExecuteScriptAsync(
+                $"onImageUploadFailed({JsonSerializer.Serialize(uploadId)}, {JsonSerializer.Serialize(ex.Message)})");
+        }
     }
 
     /// <summary>Imposta il contenuto HTML nell'editor.</summary>

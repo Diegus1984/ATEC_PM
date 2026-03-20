@@ -17,7 +17,6 @@ public partial class QuoteProductDialog : Window
     private int? _editProductId;
     private int _categoryId;
     private ObservableCollection<VariantRow> _variants = new();
-    private string _attachmentPath = "";
 
     // Costruttore per NUOVO prodotto (da categoria selezionata)
     // Costruttore per NUOVO prodotto (da categoria selezionata)
@@ -59,9 +58,6 @@ public partial class QuoteProductDialog : Window
                 txtCode.Text = product.Code;
                 htmlEditor.SetContent(product.DescriptionRtf ?? "");
                 chkAutoInclude.IsChecked = product.AutoInclude;
-                _attachmentPath = product.AttachmentPath ?? "";
-                if (!string.IsNullOrEmpty(_attachmentPath))
-                    txtAttachment.Text = Path.GetFileName(_attachmentPath);
 
                 // Tipo
                 cmbItemType.SelectedIndex = product.ItemType == "content" ? 1 : 0;
@@ -120,7 +116,11 @@ public partial class QuoteProductDialog : Window
             itemType = t;
 
         string htmlContent = "";
-        try { htmlContent = await htmlEditor.GetContentAsync(); } catch { }
+        try { htmlContent = await htmlEditor.GetContentAsync(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore lettura editor: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
 
         var dto = new QuoteProductSaveDto
         {
@@ -129,7 +129,7 @@ public partial class QuoteProductDialog : Window
             Code = txtCode.Text.Trim(),
             Name = txtName.Text.Trim(),
             DescriptionRtf = htmlContent,
-            AttachmentPath = _attachmentPath,
+            AttachmentPath = "",
             AutoInclude = chkAutoInclude.IsChecked == true,
             SortOrder = 0,
             IsActive = true,
@@ -151,10 +151,22 @@ public partial class QuoteProductDialog : Window
         try
         {
             string body = JsonSerializer.Serialize(dto);
+            string json;
             if (_editProductId.HasValue)
-                await ApiClient.PutAsync($"/api/quote-catalog/products/{_editProductId}", body);
+                json = await ApiClient.PutAsync($"/api/quote-catalog/products/{_editProductId}", body);
             else
-                await ApiClient.PostAsync("/api/quote-catalog/products", body);
+                json = await ApiClient.PostAsync("/api/quote-catalog/products", body);
+
+            // Verifica risposta server
+            var doc = JsonDocument.Parse(json);
+            bool success = doc.RootElement.TryGetProperty("success", out var sp) && sp.GetBoolean();
+
+            if (!success)
+            {
+                string msg = doc.RootElement.TryGetProperty("message", out var mp) ? mp.GetString() ?? "Errore sconosciuto" : "Errore sconosciuto";
+                MessageBox.Show(msg, "Errore salvataggio", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
 
             DialogResult = true;
             Close();
@@ -163,27 +175,6 @@ public partial class QuoteProductDialog : Window
         {
             MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    // ── Gestione allegato ──
-
-    private void BtnSelectAttachment_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Seleziona allegato",
-            Filter = "Tutti i file (*.*)|*.*"
-        };
-        if (dlg.ShowDialog() != true) return;
-
-        string uploadsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "uploads", "products");
-        Directory.CreateDirectory(uploadsDir);
-        string fileName = $"att_{DateTime.Now:yyyyMMdd_HHmmss}_{Path.GetFileName(dlg.FileName)}";
-        string destPath = Path.Combine(uploadsDir, fileName);
-        File.Copy(dlg.FileName, destPath, true);
-
-        _attachmentPath = destPath;
-        txtAttachment.Text = Path.GetFileName(dlg.FileName);
     }
 
     private void BtnCancel_Click(object sender, RoutedEventArgs e)

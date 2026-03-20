@@ -56,6 +56,93 @@
 
     <!--
         ═══════════════════════════════════════════════════════════════
+        ROW ACTION BUTTONS — Pulsanti azione inline nelle righe DataGrid
+        Icone compatte 28×28, sfondo tenue, angoli arrotondati
+        ═══════════════════════════════════════════════════════════════
+    -->
+    <Style x:Key="RowEditBtn" TargetType="Button">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Background" Value="#4F6EF71A" />
+        <Setter Property="Foreground" Value="#4F6EF7" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Content" Value="✏" />
+        <Setter Property="ToolTip" Value="Modifica" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border
+                        x:Name="bd"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6"
+                        SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="#4F6EF733" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="#4F6EF74D" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="RowDeleteBtn" TargetType="Button">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Background" Value="#EF44441A" />
+        <Setter Property="Foreground" Value="#EF4444" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Content" Value="✕" />
+        <Setter Property="ToolTip" Value="Elimina" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border
+                        x:Name="bd"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6"
+                        SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="#EF444433" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="#EF44444D" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!--
+        ═══════════════════════════════════════════════════════════════
+        TOOLBAR BORDER — Barra azioni in cima alle pagine lista
+        Background bianco, bordo inferiore sottile, padding uniforme
+        ═══════════════════════════════════════════════════════════════
+    -->
+    <Style x:Key="ToolbarBorder" TargetType="Border">
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="#E4E7EC" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+
+    <!--
+        ═══════════════════════════════════════════════════════════════
         BOTTONE BASE — FlatBtn (Secondary / Default)
         Sfondo chiaro, bordo sottile, hover con cambio colore reale
         ═══════════════════════════════════════════════════════════════

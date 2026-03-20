@@ -61,7 +61,7 @@ public class QuoteDbService
             item_type ENUM('product','content') NOT NULL DEFAULT 'product',
             code VARCHAR(100) DEFAULT '',
             name VARCHAR(300) NOT NULL,
-            description_rtf TEXT,
+            description_rtf LONGTEXT,
             image_path VARCHAR(500) DEFAULT '',
             attachment_path VARCHAR(500) DEFAULT '',
             auto_include TINYINT(1) DEFAULT 0,
@@ -149,7 +149,7 @@ public class QuoteDbService
             item_type ENUM('product','content') NOT NULL DEFAULT 'product',
             code VARCHAR(100) DEFAULT '',
             name VARCHAR(300) NOT NULL,
-            description_rtf TEXT,
+            description_rtf LONGTEXT,
             unit VARCHAR(50) DEFAULT 'nr.',
             quantity DECIMAL(10,2) DEFAULT 1,
             cost_price DECIMAL(12,2) DEFAULT 0,
@@ -216,6 +216,10 @@ public class QuoteDbService
         AddColumnIfMissing(c, "quote_items", "is_active", "TINYINT(1) DEFAULT 1 AFTER sort_order");
         AddColumnIfMissing(c, "quote_items", "is_confirmed", "TINYINT(1) DEFAULT 0 AFTER is_active");
         AddColumnIfMissing(c, "quote_items", "parent_item_id", "INT NULL AFTER is_confirmed");
+
+        // description_rtf: TEXT → LONGTEXT per contenuti HTML con immagini
+        ModifyColumnIfNeeded(c, "quote_products", "description_rtf", "LONGTEXT");
+        ModifyColumnIfNeeded(c, "quote_items", "description_rtf", "LONGTEXT");
     }
 
     private static void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)
@@ -225,5 +229,14 @@ public class QuoteDbService
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'");
         if (exists == 0)
             c.Execute($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
+    }
+
+    private static void ModifyColumnIfNeeded(MySqlConnection c, string table, string column, string targetType)
+    {
+        string? currentType = c.ExecuteScalar<string>($@"
+            SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'");
+        if (currentType != null && !currentType.Equals(targetType, StringComparison.OrdinalIgnoreCase))
+            c.Execute($"ALTER TABLE {table} MODIFY COLUMN {column} {targetType}");
     }
 }

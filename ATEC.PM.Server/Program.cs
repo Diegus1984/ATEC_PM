@@ -107,6 +107,16 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 
 app.UseCors("All");
+
+// Serve file statici dalla cartella CMS uploads (allegati prodotti, immagini, ecc.)
+var cmsUploadsPath = app.Configuration["Uploads:CmsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads", "cms");
+Directory.CreateDirectory(cmsUploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(cmsUploadsPath),
+    RequestPath = "/uploads/cms"
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

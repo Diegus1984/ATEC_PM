@@ -11,6 +11,7 @@
 <textarea id="editor"></textarea>
 <script>
 var editorInstance = null;
+var pendingUploads = {};  // id -> { resolve, reject }
 
 function initEditor(initialContent) {
   tinymce.init({
@@ -35,7 +36,27 @@ function initEditor(initialContent) {
     image_advtab: true,
     image_caption: true,
     paste_data_images: true,
-    automatic_uploads: false,
+    automatic_uploads: true,
+    images_upload_handler: function(blobInfo) {
+      return new Promise(function(resolve, reject) {
+        var id = 'upload-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+        pendingUploads[id] = { resolve: resolve, reject: reject };
+
+        // Invia il file come base64 al C# per l'upload sul server
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage(JSON.stringify({
+            type: 'imageUpload',
+            uploadId: id,
+            fileName: blobInfo.filename() || ('image-' + Date.now() + '.png'),
+            base64: blobInfo.base64()
+          }));
+        } else {
+          // Fallback: usa base64 inline
+          resolve('data:' + blobInfo.blob().type + ';base64,' + blobInfo.base64());
+          delete pendingUploads[id];
+        }
+      });
+    },
     file_picker_types: 'image',
     file_picker_callback: function(callback, value, meta) {
       if (meta.filetype === 'image') {
@@ -78,6 +99,21 @@ function initEditor(initialContent) {
       });
     }
   });
+}
+
+// Chiamato dal C# dopo l'upload
+function onImageUploaded(uploadId, url) {
+  if (pendingUploads[uploadId]) {
+    pendingUploads[uploadId].resolve(url);
+    delete pendingUploads[uploadId];
+  }
+}
+
+function onImageUploadFailed(uploadId, error) {
+  if (pendingUploads[uploadId]) {
+    pendingUploads[uploadId].reject(error);
+    delete pendingUploads[uploadId];
+  }
 }
 
 function getContent() {

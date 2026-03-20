@@ -23,7 +23,7 @@ public partial class ProjectCostingControl : UserControl
     private CostingViewModel _vm = new();
 
     // Timer per debounce
-    private Timer _saveTimer;
+    private Timer? _saveTimer;
     private const int SaveDelayMs = 800;
 
     public ProjectCostingControl()

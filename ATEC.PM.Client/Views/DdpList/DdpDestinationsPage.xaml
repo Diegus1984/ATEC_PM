@@ -7,10 +7,7 @@
 
         <!--  TOOLBAR  -->
         <Border
-            Padding="16,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
@@ -32,11 +29,9 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
                     <Button
-                        Background="#2E90FA"
                         Click="BtnAdd_Click"
                         Content="+ Nuova Destinazione"
-                        Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource PrimaryBtn}" />
                     <Button
                         Click="BtnRefresh_Click"
                         Content="Aggiorna"

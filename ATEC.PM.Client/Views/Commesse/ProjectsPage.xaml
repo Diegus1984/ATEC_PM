@@ -19,8 +19,7 @@
             <DockPanel>
                 <!--  Toolbar  -->
                 <Border
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="0,0,0,1"
+                    Style="{StaticResource ToolbarBorder}"
                     DockPanel.Dock="Top">
                     <DockPanel>
                         <Button
@@ -28,14 +27,12 @@
                             Click="BtnNew_Click"
                             Content="+ Nuova"
                             Foreground="White"
-                            Style="{StaticResource FlatBtn}" />
+                            Style="{StaticResource PrimaryBtn}" />
                         <Button
                             HorizontalAlignment="Right"
-                            Background="#F3F4F6"
                             Click="BtnRefresh_Click"
                             Content="Aggiorna"
                             DockPanel.Dock="Right"
-                            Foreground="#374151"
                             Style="{StaticResource FlatBtn}" />
                     </DockPanel>
                 </Border>
@@ -117,30 +114,20 @@
                             Orientation="Horizontal">
                             <Button
                                 x:Name="btnHardDelete"
-                                Height="32"
-                                Padding="12,0"
                                 Background="#FEE2E2"
-                                BorderThickness="0"
                                 Click="BtnHardDelete_Click"
                                 Content="Elimina Commessa"
-                                Cursor="Hand"
-                                FontSize="12"
-                                FontWeight="SemiBold"
                                 Foreground="#DC2626"
+                                Style="{StaticResource FlatBtn}"
                                 Visibility="Collapsed" />
                             <Button
                                 x:Name="btnAction"
-                                Height="32"
                                 Margin="8,0,0,0"
-                                Padding="16,0"
                                 Background="#4F6EF7"
-                                BorderThickness="0"
                                 Click="BtnAction_Click"
                                 Content=""
-                                Cursor="Hand"
-                                FontSize="13"
-                                FontWeight="SemiBold"
                                 Foreground="White"
+                                Style="{StaticResource PrimaryBtn}"
                                 Visibility="Collapsed" />
                         </StackPanel>
                     </DockPanel>

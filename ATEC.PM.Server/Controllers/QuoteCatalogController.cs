@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
+using Serilog;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
@@ -13,7 +14,12 @@ namespace ATEC.PM.Server.Controllers;
 public class QuoteCatalogController : ControllerBase
 {
     private readonly QuoteDbService _qdb;
-    public QuoteCatalogController(QuoteDbService qdb) => _qdb = qdb;
+    private readonly IConfiguration _config;
+    public QuoteCatalogController(QuoteDbService qdb, IConfiguration config)
+    {
+        _qdb = qdb;
+        _config = config;
+    }
 
     // ═══════════════════════════════════════════════════════
     // PRICE LISTS — Listini
@@ -355,8 +361,20 @@ public class QuoteCatalogController : ControllerBase
     }
 
     [HttpPost("products")]
-    public IActionResult CreateProduct([FromBody] QuoteProductSaveDto dto)
+    public IActionResult CreateProduct([FromBody] QuoteProductSaveDto? dto)
     {
+        Log.Information("[QuoteProduct] POST /products chiamato");
+
+        if (dto == null)
+        {
+            Log.Warning("[QuoteProduct] DTO null — body non deserializzato");
+            return Ok(ApiResponse<int>.Fail("Dati non ricevuti (body vuoto o non valido)"));
+        }
+
+        Log.Information("[QuoteProduct] DTO ricevuto: Name={Name}, Code={Code}, CategoryId={CatId}, ItemType={Type}, AttachmentPath={Att}, DescriptionRtf.Length={DescLen}, Variants={VarCount}",
+            dto.Name, dto.Code, dto.CategoryId, dto.ItemType, dto.AttachmentPath,
+            dto.DescriptionRtf?.Length ?? 0, dto.Variants?.Count ?? 0);
+
         try
         {
             using var c = _qdb.Open();
@@ -369,6 +387,8 @@ public class QuoteCatalogController : ControllerBase
                     @ImagePath, @AttachmentPath, @AutoInclude, @SortOrder, @IsActive);
                 SELECT LAST_INSERT_ID()", dto, tx);
 
+            Log.Information("[QuoteProduct] Prodotto inserito con Id={ProductId}", productId);
+
             foreach (var v in dto.Variants)
             {
                 c.Execute(@"INSERT INTO quote_product_variants
@@ -379,19 +399,37 @@ public class QuoteCatalogController : ControllerBase
             }
 
             tx.Commit();
+            Log.Information("[QuoteProduct] Commit OK — prodotto {Id} creato con {VarCount} varianti", productId, dto.Variants.Count);
             return Ok(ApiResponse<int>.Ok(productId, "Prodotto creato"));
         }
-        catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[QuoteProduct] Errore creazione prodotto");
+            return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}"));
+        }
     }
 
     [HttpPut("products/{id}")]
-    public IActionResult UpdateProduct(int id, [FromBody] QuoteProductSaveDto dto)
+    public IActionResult UpdateProduct(int id, [FromBody] QuoteProductSaveDto? dto)
     {
+        Log.Information("[QuoteProduct] PUT /products/{Id} chiamato", id);
+
+        if (dto == null)
+        {
+            Log.Warning("[QuoteProduct] DTO null — body non deserializzato per Id={Id}", id);
+            return Ok(ApiResponse<string>.Fail("Dati non ricevuti (body vuoto o non valido)"));
+        }
+
+        Log.Information("[QuoteProduct] DTO ricevuto: Name={Name}, Code={Code}, CategoryId={CatId}, ItemType={Type}, AttachmentPath={Att}, DescriptionRtf.Length={DescLen}, Variants={VarCount}",
+            dto.Name, dto.Code, dto.CategoryId, dto.ItemType, dto.AttachmentPath,
+            dto.DescriptionRtf?.Length ?? 0, dto.Variants?.Count ?? 0);
+
         try
         {
             using var c = _qdb.Open();
             using var tx = c.BeginTransaction();
 
+            Log.Information("[QuoteProduct] Esecuzione UPDATE quote_products per Id={Id}", id);
             c.Execute(@"UPDATE quote_products SET category_id=@CategoryId, item_type=@ItemType,
                         code=@Code, name=@Name, description_rtf=@DescriptionRtf,
                         image_path=@ImagePath, attachment_path=@AttachmentPath,
@@ -399,9 +437,12 @@ public class QuoteCatalogController : ControllerBase
                         WHERE id=@Id",
                 new { dto.CategoryId, dto.ItemType, dto.Code, dto.Name, dto.DescriptionRtf,
                       dto.ImagePath, dto.AttachmentPath, dto.AutoInclude, dto.SortOrder, dto.IsActive, Id = id }, tx);
+            Log.Information("[QuoteProduct] UPDATE OK");
 
             // Strategia varianti: elimina le non presenti, aggiorna le esistenti, inserisci le nuove
             var incomingIds = dto.Variants.Where(v => v.Id > 0).Select(v => v.Id).ToList();
+            Log.Information("[QuoteProduct] Varianti: {Existing} esistenti, {Total} totali", incomingIds.Count, dto.Variants.Count);
+
             if (incomingIds.Count > 0)
                 c.Execute("DELETE FROM quote_product_variants WHERE product_id=@Pid AND id NOT IN @Ids",
                     new { Pid = id, Ids = incomingIds }, tx);
@@ -431,9 +472,75 @@ public class QuoteCatalogController : ControllerBase
             }
 
             tx.Commit();
+            Log.Information("[QuoteProduct] Commit OK — prodotto {Id} aggiornato", id);
             return Ok(ApiResponse<string>.Ok("Prodotto aggiornato"));
         }
-        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[QuoteProduct] Errore aggiornamento prodotto {Id}", id);
+            return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    /// <summary>Pulizia: rimuove base64 da description_rtf e pulisce image_path/attachment_path vecchi</summary>
+    [HttpPost("products/cleanup-images")]
+    public IActionResult CleanupOldImages()
+    {
+        try
+        {
+            using var c = _qdb.Open();
+
+            // Trova prodotti con base64 nel description_rtf
+            var products = c.Query<(int Id, string DescriptionRtf)>(
+                "SELECT id AS Id, description_rtf AS DescriptionRtf FROM quote_products WHERE description_rtf LIKE '%data:image%'").ToList();
+
+            int cleaned = 0;
+            foreach (var p in products)
+            {
+                // Rimuovi tag <img> con src base64
+                string html = System.Text.RegularExpressions.Regex.Replace(
+                    p.DescriptionRtf ?? "",
+                    @"<img[^>]*src\s*=\s*[""']data:image[^""']*[""'][^>]*\/?>",
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                c.Execute("UPDATE quote_products SET description_rtf=@Html WHERE id=@Id",
+                    new { Html = html, Id = p.Id });
+                cleaned++;
+            }
+
+            // Pulisci image_path e attachment_path con path locali
+            int pathsCleaned = c.Execute(@"
+                UPDATE quote_products SET image_path='', attachment_path=''
+                WHERE image_path LIKE 'C:%' OR image_path LIKE 'D:%'
+                   OR attachment_path LIKE 'C:%' OR attachment_path LIKE 'D:%'");
+
+            // Stessa pulizia per quote_items
+            var items = c.Query<(int Id, string DescriptionRtf)>(
+                "SELECT id AS Id, description_rtf AS DescriptionRtf FROM quote_items WHERE description_rtf LIKE '%data:image%'").ToList();
+
+            foreach (var item in items)
+            {
+                string html = System.Text.RegularExpressions.Regex.Replace(
+                    item.DescriptionRtf ?? "",
+                    @"<img[^>]*src\s*=\s*[""']data:image[^""']*[""'][^>]*\/?>",
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                c.Execute("UPDATE quote_items SET description_rtf=@Html WHERE id=@Id",
+                    new { Html = html, Id = item.Id });
+            }
+
+            Log.Information("[QuoteProduct] Cleanup: {Products} prodotti puliti, {Paths} path locali rimossi, {Items} quote_items puliti",
+                cleaned, pathsCleaned, items.Count);
+
+            return Ok(ApiResponse<string>.Ok($"Pulizia completata: {cleaned} prodotti, {items.Count} items, {pathsCleaned} path locali"));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[QuoteProduct] Errore cleanup immagini");
+            return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
     }
 
     [HttpDelete("products/{id}")]
@@ -446,6 +553,47 @@ public class QuoteCatalogController : ControllerBase
             return Ok(ApiResponse<string>.Ok("Prodotto eliminato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ── Upload allegato prodotto ──
+
+    [HttpPost("products/upload")]
+    [RequestSizeLimit(50_000_000)] // 50 MB
+    public IActionResult UploadProductAttachment(IFormFile file)
+    {
+        Log.Information("[QuoteProduct] POST /products/upload — FileName={Name}, Size={Size}",
+            file?.FileName ?? "null", file?.Length ?? 0);
+        try
+        {
+            if (file == null || file.Length == 0)
+            {
+                Log.Warning("[QuoteProduct] Upload fallito: file null o vuoto");
+                return Ok(ApiResponse<string>.Fail("Nessun file ricevuto"));
+            }
+
+            string cmsPath = _config["Uploads:CmsPath"]
+                ?? Path.Combine(AppContext.BaseDirectory, "uploads", "cms");
+            string productsDir = Path.Combine(cmsPath, "products");
+            Directory.CreateDirectory(productsDir);
+
+            // Nome sicuro con timestamp per evitare collisioni
+            string safeName = Path.GetFileName(file.FileName).Replace("..", "");
+            string fileName = $"att_{DateTime.Now:yyyyMMdd_HHmmss}_{safeName}";
+            string fullPath = Path.Combine(productsDir, fileName);
+
+            using (var stream = new FileStream(fullPath, FileMode.Create))
+                file.CopyTo(stream);
+
+            // Ritorna il path relativo per accesso via URL
+            string relativePath = $"/uploads/cms/products/{fileName}";
+            Log.Information("[QuoteProduct] Upload OK — salvato in {Path}", fullPath);
+            return Ok(ApiResponse<string>.Ok(relativePath, "File caricato"));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[QuoteProduct] Errore upload file");
+            return Ok(ApiResponse<string>.Fail($"Errore upload: {ex.Message}"));
+        }
     }
 
     [HttpPost("products/{id}/duplicate")]

@@ -18,7 +18,7 @@
                         Margin="0,0,16,0"
                         Click="BtnBack_Click"
                         Content="← Lista"
-                        Style="{StaticResource GhostBtn}" />
+                        Style="{StaticResource FlatBtn}" />
                     <TextBlock
                         x:Name="txtQuoteNumber"
                         VerticalAlignment="Center"

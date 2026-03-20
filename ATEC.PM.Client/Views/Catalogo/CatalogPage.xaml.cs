@@ -273,12 +273,14 @@ public partial class CatalogPage : Page
         ApplyFilter();
     }
 
-    private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        btnEdit.IsEnabled = btnDelete.IsEnabled = dgCatalog.SelectedItem != null;
+        if (dgCatalog.SelectedItem is CatalogItemListItem item)
+        {
+            var dlg = new CatalogItemDialog(item.Id) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) _ = Load();
+        }
     }
-
-    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) => BtnEdit_Click(sender, e);
 
     private void BtnNew_Click(object sender, RoutedEventArgs e)
     {
@@ -288,7 +290,7 @@ public partial class CatalogPage : Page
 
     private void BtnEdit_Click(object sender, RoutedEventArgs e)
     {
-        if (dgCatalog.SelectedItem is CatalogItemListItem item)
+        if (sender is FrameworkElement fe && fe.DataContext is CatalogItemListItem item)
         {
             var dlg = new CatalogItemDialog(item.Id) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) _ = Load();
@@ -297,7 +299,7 @@ public partial class CatalogPage : Page
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (dgCatalog.SelectedItem is CatalogItemListItem item &&
+        if (sender is FrameworkElement fe && fe.DataContext is CatalogItemListItem item &&
             MessageBox.Show($"Disattivare {item.Code} - {item.Description}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
         {
             await ApiClient.DeleteAsync($"/api/catalog/{item.Id}");

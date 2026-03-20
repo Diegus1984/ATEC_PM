@@ -6,8 +6,7 @@
 
     <DockPanel>
         <!-- TOOLBAR -->
-        <Border DockPanel.Dock="Top" Background="White"
-                BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" Padding="16,8">
+        <Border DockPanel.Dock="Top" Style="{StaticResource ToolbarBorder}">
             <DockPanel>
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="btnNew" Content="+ Crea Preventivo"
@@ -20,7 +19,7 @@
                             Style="{StaticResource FlatBtn}" Foreground="#B42318"
                             IsEnabled="False" Click="BtnDelete_Click" />
                     <Rectangle Width="1" Fill="#E4E7EC" Margin="12,2" />
-                    <Button Content="Aggiorna" Style="{StaticResource GhostBtn}"
+                    <Button Content="Aggiorna" Style="{StaticResource FlatBtn}"
                             Click="BtnRefresh_Click" />
                 </StackPanel>
 

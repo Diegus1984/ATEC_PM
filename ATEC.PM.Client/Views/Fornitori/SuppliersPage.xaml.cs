@@ -102,12 +102,14 @@ public partial class SuppliersPage : Page
         ApplyFilter();
     }
 
-    private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        btnEdit.IsEnabled = btnDelete.IsEnabled = dgSuppliers.SelectedItem != null;
+        if (dgSuppliers.SelectedItem is SupplierListItem s)
+        {
+            var dlg = new SupplierDialog(s.Id) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) _ = Load();
+        }
     }
-
-    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) => BtnEdit_Click(sender, e);
 
     private void BtnNew_Click(object sender, RoutedEventArgs e)
     {
@@ -117,7 +119,7 @@ public partial class SuppliersPage : Page
 
     private void BtnEdit_Click(object sender, RoutedEventArgs e)
     {
-        if (dgSuppliers.SelectedItem is SupplierListItem s)
+        if (sender is FrameworkElement fe && fe.DataContext is SupplierListItem s)
         {
             var dlg = new SupplierDialog(s.Id) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) _ = Load();
@@ -126,7 +128,7 @@ public partial class SuppliersPage : Page
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (dgSuppliers.SelectedItem is SupplierListItem s &&
+        if (sender is FrameworkElement fe && fe.DataContext is SupplierListItem s &&
             MessageBox.Show($"Disattivare {s.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
         {
             await ApiClient.DeleteAsync($"/api/suppliers/{s.Id}");

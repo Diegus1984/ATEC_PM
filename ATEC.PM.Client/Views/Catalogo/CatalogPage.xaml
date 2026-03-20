@@ -8,45 +8,20 @@
     <DockPanel>
         <!--  TOOLBAR  -->
         <Border
-            Padding="16,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel Orientation="Horizontal">
                     <Button
-                        Background="#2E90FA"
-                        BorderThickness="0"
                         Click="BtnNew_Click"
                         Content="+ Nuovo"
-                        Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
-                    <Button
-                        x:Name="btnEdit"
-                        Click="BtnEdit_Click"
-                        Content="Modifica"
-                        IsEnabled="False"
-                        Style="{StaticResource FlatBtn}" />
-                    <Button
-                        x:Name="btnDelete"
-                        Background="#FEF3F2"
-                        BorderBrush="#FECDCA"
-                        Click="BtnDelete_Click"
-                        Content="Elimina"
-                        Foreground="#B42318"
-                        IsEnabled="False"
-                        Style="{StaticResource FlatBtn}" />
-                    <Separator
-                        Width="1"
-                        Margin="4,0"
-                        Background="#E4E7EC" />
+                        Style="{StaticResource PrimaryBtn}" />
                     <Button
                         Background="#12B76A"
                         Click="BtnImportEasyfatt_Click"
                         Content="📥 Importa Easyfatt"
                         Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource SuccessBtn}" />
                 </StackPanel>
 
                 <StackPanel
@@ -109,11 +84,8 @@
                         Background="#E4E7EC" />
 
                     <Button
-                        Background="Transparent"
-                        BorderThickness="0"
                         Click="BtnClearFilters_Click"
                         Content="Reset Filtri"
-                        Foreground="#667085"
                         Style="{StaticResource FlatBtn}" />
                     <Button
                         Click="BtnRefresh_Click"
@@ -155,7 +127,6 @@
             ColumnHeaderHeight="65"
             IsReadOnly="True"
             MouseDoubleClick="Dg_DoubleClick"
-            SelectionChanged="Dg_SelectionChanged"
             SelectionMode="Single"
             Style="{StaticResource ModernDataGrid}">
 
@@ -372,6 +343,22 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 Text="{Binding ListPrice, StringFormat='{}{0:N2} €'}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="80" Header="">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                <Button
+                                    Click="BtnEdit_Click"
+                                    Style="{StaticResource RowEditBtn}" />
+                                <Button
+                                    Margin="4,0,0,0"
+                                    Click="BtnDelete_Click"
+                                    Style="{StaticResource RowDeleteBtn}" />
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

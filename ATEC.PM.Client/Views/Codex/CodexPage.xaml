@@ -7,20 +7,15 @@
     <DockPanel>
         <!--  TOOLBAR  -->
         <Border
-            Padding="20,15"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <Grid>
                 <StackPanel Orientation="Horizontal">
                     <Button
                         x:Name="btnGenerate"
-                        Background="#4F6EF7"
                         Click="BtnGenerate_Click"
                         Content="✚ Genera Codice"
-                        Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource PrimaryBtn}" />
 
                     <Separator
                         Width="1"
@@ -33,7 +28,7 @@
                         Click="BtnSync_Click"
                         Content="⟳ Sincronizza"
                         Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource SuccessBtn}" />
 
                     <Separator
                         Width="1"
@@ -41,11 +36,8 @@
                         Background="#E4E7EC" />
 
                     <Button
-                        Background="Transparent"
-                        BorderThickness="0"
                         Click="BtnClearFilters_Click"
                         Content="Pulisci Filtri"
-                        Foreground="#667085"
                         Style="{StaticResource FlatBtn}" />
 
                     <Button
@@ -1026,30 +1018,14 @@
                         <DataTemplate>
                             <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
                                 <Button
-                                    Width="28"
-                                    Height="28"
-                                    Background="#4F6EF71A"
-                                    BorderThickness="0"
                                     Click="BtnEditRow_Click"
-                                    Content="✏"
-                                    Cursor="Hand"
-                                    FontSize="12"
-                                    Foreground="#4F6EF7"
-                                    Tag="{Binding}"
-                                    ToolTip="Modifica" />
+                                    Style="{StaticResource RowEditBtn}"
+                                    Tag="{Binding}" />
                                 <Button
-                                    Width="28"
-                                    Height="28"
                                     Margin="4,0,0,0"
-                                    Background="#EF44441A"
-                                    BorderThickness="0"
                                     Click="BtnDeleteRow_Click"
-                                    Content="✕"
-                                    Cursor="Hand"
-                                    FontSize="12"
-                                    Foreground="#EF4444"
-                                    Tag="{Binding}"
-                                    ToolTip="Elimina" />
+                                    Style="{StaticResource RowDeleteBtn}"
+                                    Tag="{Binding}" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>

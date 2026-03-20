@@ -7,10 +7,7 @@
 
         <!--  TOOLBAR  -->
         <Border
-            Padding="16,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
@@ -32,16 +29,11 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
                     <Button
-                        Height="32"
-                        Padding="16,0"
                         Background="#4F6EF7"
-                        BorderThickness="0"
                         Click="BtnAdd_Click"
                         Content="+ Nuovo Reparto"
-                        Cursor="Hand"
-                        FontSize="13"
-                        FontWeight="SemiBold"
-                        Foreground="White" />
+                        Foreground="White"
+                        Style="{StaticResource PrimaryBtn}" />
                 </StackPanel>
             </DockPanel>
         </Border>

@@ -5,10 +5,20 @@
     Background="#F7F8FA">
 
     <Page.Resources>
-        <!--  Stile per nodi TreeView  -->
         <Style x:Key="TreeNodeStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="FilterBox" TargetType="TextBox">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
     </Page.Resources>
 
@@ -16,14 +26,9 @@
 
         <!--  ═══ TOOLBAR ═══  -->
         <Border
-            Padding="16,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <StackPanel Orientation="Horizontal">
-
-                <!--  Tipo  -->
                 <TextBlock
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
@@ -38,35 +43,11 @@
                     DisplayMemberPath="Display"
                     FontSize="13"
                     SelectionChanged="CmbType_SelectionChanged" />
-
-                <!--  Articolo  -->
-                <TextBlock
-                    Margin="20,0,8,0"
-                    VerticalAlignment="Center"
-                    FontSize="13"
-                    Foreground="#667085"
-                    Text="Articolo:" />
-                <ComboBox
-                    x:Name="cmbParent"
-                    Width="320"
-                    Height="32"
-                    Padding="8,4"
-                    DisplayMemberPath="Display"
-                    FontSize="13"
-                    IsEditable="True"
-                    SelectionChanged="CmbParent_SelectionChanged" />
-
-                <!--  Refresh  -->
                 <Button
-                    Width="32"
-                    Height="32"
                     Margin="12,0,0,0"
-                    Background="#F3F4F6"
-                    BorderThickness="0"
                     Click="BtnRefresh_Click"
                     Content="⟳"
-                    Cursor="Hand"
-                    FontSize="14"
+                    Style="{StaticResource FlatBtn}"
                     ToolTip="Aggiorna" />
             </StackPanel>
         </Border>
@@ -84,17 +65,17 @@
                     HorizontalAlignment="Left"
                     FontSize="12"
                     Foreground="#6B7280"
-                    Text="Seleziona un tipo e un articolo" />
+                    Text="Seleziona un tipo" />
                 <TextBlock
                     HorizontalAlignment="Right"
                     FontSize="11"
                     FontStyle="Italic"
                     Foreground="#9CA3AF"
-                    Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con    —    Trascina da sinistra nell'albero a destra" />
+                    Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con    —    Trascina da sotto nell'albero a destra" />
             </Grid>
         </Border>
 
-        <!--  ═══ CONTENUTO PRINCIPALE (split)  ═══  -->
+        <!--  ═══ CONTENUTO PRINCIPALE (split orizzontale)  ═══  -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="300" />
@@ -102,98 +83,178 @@
                 <ColumnDefinition Width="*" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
-            <!--  ── SINISTRA: Articoli disponibili ──  -->
-            <DockPanel Grid.Column="0">
+            <!--  ── SINISTRA: Due griglie ──  -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="150" />
+                    <RowDefinition Height="5" />
+                    <RowDefinition Height="*" MinHeight="150" />
+                </Grid.RowDefinitions>
 
-                <!--  Header + Search  -->
-                <Border
-                    Padding="12,8"
-                    Background="#F0F4FF"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="0,0,0,1"
-                    DockPanel.Dock="Top">
-                    <StackPanel>
-                        <DockPanel>
+                <!--  ══ GRIGLIA SUPERIORE: Compositi (501/601/701) ══  -->
+                <DockPanel Grid.Row="0">
+                    <Border
+                        Padding="12,8"
+                        Background="#F0F4FF"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="0,0,0,1"
+                        DockPanel.Dock="Top">
+                        <StackPanel>
                             <TextBlock
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                FontWeight="SemiBold"
                                 Foreground="#4F6EF7"
-                                Text="ARTICOLI DISPONIBILI" />
-                            <ComboBox
-                                x:Name="cmbSource"
-                                Width="120"
-                                Height="26"
-                                Margin="12,0,0,0"
-                                Padding="6,2"
-                                HorizontalAlignment="Left"
-                                FontSize="12"
-                                SelectionChanged="CmbSource_SelectionChanged">
-                                <ComboBoxItem Content="Codex" IsSelected="True" />
-                                <ComboBoxItem Content="Catalogo" />
-                            </ComboBox>
-                        </DockPanel>
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="140" />
-                                <ColumnDefinition Width="8" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox
-                                x:Name="txtSearchCodice"
-                                Grid.Column="0"
-                                Height="28"
-                                Padding="6,3"
-                                BorderBrush="#D0D5DD"
-                                FontSize="12"
-                                Tag="Codice"
-                                TextChanged="TxtSearch_TextChanged" />
-                            <TextBox
-                                x:Name="txtSearchDescr"
-                                Grid.Column="2"
-                                Height="28"
-                                Padding="6,3"
-                                BorderBrush="#D0D5DD"
-                                FontSize="12"
-                                Tag="Descrizione"
-                                TextChanged="TxtSearch_TextChanged" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                                Style="{StaticResource SectionHeader}"
+                                Text="COMPOSITI" />
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="txtTopSearchCode"
+                                    Grid.Column="0"
+                                    Style="{StaticResource FilterBox}"
+                                    Tag="Codice"
+                                    TextChanged="TxtTopSearch_TextChanged" />
+                                <TextBox
+                                    x:Name="txtTopSearchDescr"
+                                    Grid.Column="2"
+                                    Style="{StaticResource FilterBox}"
+                                    Tag="Descrizione"
+                                    TextChanged="TxtTopSearch_TextChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
-                <!--  DataGrid articoli  -->
-                <DataGrid
-                    x:Name="dgAvailable"
-                    AutoGenerateColumns="False"
-                    Background="White"
-                    BorderThickness="0"
-                    CanUserAddRows="False"
-                    CanUserDeleteRows="False"
-                    GridLinesVisibility="Horizontal"
-                    HeadersVisibility="Column"
-                    HorizontalGridLinesBrush="#F2F4F7"
-                    IsReadOnly="True"
-                    MouseDoubleClick="DgAvailable_MouseDoubleClick"
-                    PreviewMouseLeftButtonDown="DgAvailable_PreviewMouseLeftButtonDown"
-                    PreviewMouseMove="DgAvailable_PreviewMouseMove"
-                    RowHeight="32"
-                    SelectionMode="Single">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn
-                            Width="140"
-                            Binding="{Binding Codice}"
-                            FontSize="12"
-                            Header="Codice" />
-                        <DataGridTextColumn
-                            Width="*"
-                            Binding="{Binding Descr}"
-                            FontSize="12"
-                            Header="Descrizione" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
+                    <DataGrid
+                        x:Name="dgComposites"
+                        AutoGenerateColumns="False"
+                        Background="White"
+                        BorderThickness="0"
+                        CanUserAddRows="False"
+                        CanUserDeleteRows="False"
+                        GridLinesVisibility="Horizontal"
+                        HeadersVisibility="Column"
+                        HorizontalGridLinesBrush="#F2F4F7"
+                        IsReadOnly="True"
+                        RowHeight="32"
+                        SelectionChanged="DgComposites_SelectionChanged"
+                        SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn
+                                Width="140"
+                                Binding="{Binding Codice}"
+                                FontSize="12"
+                                Header="Codice" />
+                            <DataGridTextColumn
+                                Width="*"
+                                Binding="{Binding Descr}"
+                                FontSize="12"
+                                Header="Descrizione" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
 
-            <!--  SPLITTER  -->
+                <!--  SPLITTER ORIZZONTALE  -->
+                <GridSplitter
+                    Grid.Row="1"
+                    Height="5"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="#E4E7EC"
+                    ResizeDirection="Rows" />
+
+                <!--  ══ GRIGLIA INFERIORE: Articoli disponibili ══  -->
+                <DockPanel Grid.Row="2">
+                    <Border
+                        Padding="12,8"
+                        Background="#FFF8F0"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="0,0,0,1"
+                        DockPanel.Dock="Top">
+                        <StackPanel>
+                            <DockPanel>
+                                <TextBlock
+                                    Foreground="#D97706"
+                                    Style="{StaticResource SectionHeader}"
+                                    Text="ARTICOLI DISPONIBILI" />
+                                <ComboBox
+                                    x:Name="cmbChildType"
+                                    Width="120"
+                                    Height="26"
+                                    Margin="12,0,0,0"
+                                    Padding="6,2"
+                                    HorizontalAlignment="Left"
+                                    FontSize="12"
+                                    SelectionChanged="CmbChildType_SelectionChanged" />
+                                <ComboBox
+                                    x:Name="cmbSource"
+                                    Width="100"
+                                    Height="26"
+                                    Margin="8,0,0,0"
+                                    Padding="6,2"
+                                    HorizontalAlignment="Left"
+                                    FontSize="12"
+                                    SelectionChanged="CmbSource_SelectionChanged">
+                                    <ComboBoxItem Content="Codex" IsSelected="True" />
+                                    <ComboBoxItem Content="Catalogo" />
+                                </ComboBox>
+                            </DockPanel>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="txtSearchCodice"
+                                    Grid.Column="0"
+                                    Style="{StaticResource FilterBox}"
+                                    Tag="Codice"
+                                    TextChanged="TxtSearch_TextChanged" />
+                                <TextBox
+                                    x:Name="txtSearchDescr"
+                                    Grid.Column="2"
+                                    Style="{StaticResource FilterBox}"
+                                    Tag="Descrizione"
+                                    TextChanged="TxtSearch_TextChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <DataGrid
+                        x:Name="dgAvailable"
+                        AutoGenerateColumns="False"
+                        Background="White"
+                        BorderThickness="0"
+                        CanUserAddRows="False"
+                        CanUserDeleteRows="False"
+                        GridLinesVisibility="Horizontal"
+                        HeadersVisibility="Column"
+                        HorizontalGridLinesBrush="#F2F4F7"
+                        IsReadOnly="True"
+                        MouseDoubleClick="DgAvailable_MouseDoubleClick"
+                        PreviewMouseLeftButtonDown="DgAvailable_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="DgAvailable_PreviewMouseMove"
+                        RowHeight="32"
+                        SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn
+                                Width="140"
+                                Binding="{Binding Codice}"
+                                FontSize="12"
+                                Header="Codice" />
+                            <DataGridTextColumn
+                                Width="*"
+                                Binding="{Binding Descr}"
+                                FontSize="12"
+                                Header="Descrizione" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Grid>
+
+            <!--  SPLITTER VERTICALE  -->
             <GridSplitter
                 Grid.Column="1"
                 HorizontalAlignment="Stretch"
@@ -201,8 +262,6 @@
 
             <!--  ── DESTRA: Composizione (TreeView) ──  -->
             <DockPanel Grid.Column="2">
-
-                <!--  Header  -->
                 <Border
                     Padding="12,8"
                     Background="#F0FFF4"
@@ -217,7 +276,6 @@
                         Text="COMPOSIZIONE" />
                 </Border>
 
-                <!--  TreeView  -->
                 <TreeView
                     x:Name="tvComposition"
                     Padding="8"
@@ -227,15 +285,12 @@
                     DragOver="TvComposition_DragOver"
                     Drop="TvComposition_Drop"
                     FontSize="13">
-
                     <TreeView.Resources>
-                        <!--  Highlight per drop target  -->
                         <Style TargetType="TreeViewItem">
                             <Setter Property="Padding" Value="4,2" />
                             <Setter Property="IsExpanded" Value="True" />
                         </Style>
                     </TreeView.Resources>
-
                 </TreeView>
             </DockPanel>
 

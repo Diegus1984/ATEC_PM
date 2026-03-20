@@ -47,7 +47,19 @@
       "Bash(dotnet add:*)",
       "Bash(dotnet restore:*)",
       "Bash(curl -L -o ckeditor4.zip \"https://ckeditor.com/ckeditor-4/download/?type=full\")",
-      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install tinymce@5 --prefix ./tinymce-pkg)"
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\" \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install tinymce@5 --prefix ./tinymce-pkg)",
+      "Bash(find C:UsersdiegoDesktopATEC_PM_CSharp_v5ATEC_PM -name *QuoteProductDto* -o -name *QuoteProductSaveDto*)",
+      "Bash(find C:UsersdiegoDesktopATEC_PM_CSharp_v5ATEC_PM -name *.sql -o -name *migration* -o -name *schema*)",
+      "Bash(where mysql:*)",
+      "Read(//c/Program Files/MySQL/**)",
+      "Read(//c/xampp/mysql/bin/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(powershell -Command \"try { $login = Invoke-RestMethod -Uri ''http://localhost:5100/api/auth/login'' -Method Post -ContentType ''application/json'' -Body ''{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin\"\"}''; $token = $login.data.token; $result = Invoke-RestMethod -Uri ''http://localhost:5100/api/quote-catalog/products/cleanup-images'' -Method Post -Headers @{Authorization=\"\"Bearer $token\"\"}; $result | ConvertTo-Json } catch { $_Exception.Message }\")",
+      "Bash(powershell -Command \"$login = Invoke-RestMethod -Uri ''http://localhost:5100/api/auth/login'' -Method Post -ContentType ''application/json'' -Body ''{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin\"\"}''; Write-Host ''Token:'' $login.data.token\")",
+      "Bash(curl -s -X POST http://localhost:5100/api/auth/login -H \"Content-Type: application/json\" -d '{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin\"\"}')",
+      "Bash(curl -s -X POST http://localhost:5100/api/auth/login -H \"Content-Type: application/json\" -d \"{\"\"username\"\":\"\"admin\"\",\"\"password\"\":\"\"admin\"\"}\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoiQWRtaW4gQVRFQyIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IkFETUlOIiwiZXhwIjoxNzc0MDI1NTc2LCJpc3MiOiJBVEVDLlBNIiwiYXVkIjoiQVRFQy5QTSJ9.J_nuacTz5otVzCb8PAX2jgcFjAwu0OQUQry1NChsvS8\")",
+      "Bash(curl -s -X POST http://localhost:5100/api/quote-catalog/products/cleanup-images -H \"Authorization: Bearer $TOKEN\")"
     ]
   }
 }

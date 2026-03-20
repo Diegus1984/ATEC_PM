@@ -104,12 +104,14 @@ public partial class CustomersPage : Page
         ApplyFilter();
     }
 
-    private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        btnEdit.IsEnabled = btnDelete.IsEnabled = dgCustomers.SelectedItem != null;
+        if (dgCustomers.SelectedItem is CustomerListItem c)
+        {
+            var dlg = new CustomerDialog(c.Id) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) _ = Load();
+        }
     }
-
-    private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) => BtnEdit_Click(sender, e);
 
     private void BtnNew_Click(object sender, RoutedEventArgs e)
     {
@@ -119,7 +121,7 @@ public partial class CustomersPage : Page
 
     private void BtnEdit_Click(object sender, RoutedEventArgs e)
     {
-        if (dgCustomers.SelectedItem is CustomerListItem c)
+        if (sender is FrameworkElement fe && fe.DataContext is CustomerListItem c)
         {
             var dlg = new CustomerDialog(c.Id) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) _ = Load();
@@ -128,7 +130,7 @@ public partial class CustomersPage : Page
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (dgCustomers.SelectedItem is CustomerListItem c &&
+        if (sender is FrameworkElement fe && fe.DataContext is CustomerListItem c &&
             MessageBox.Show($"Disattivare {c.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
         {
             await ApiClient.DeleteAsync($"/api/customers/{c.Id}");

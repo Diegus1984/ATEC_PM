@@ -79,15 +79,9 @@
                 </StackPanel>
             </Grid>
 
-            <!--  ROW 1: Editor HTML + Allegato (prende tutto lo spazio)  -->
+            <!--  ROW 1: Editor HTML (prende tutto lo spazio)  -->
             <Grid Grid.Row="1" Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="200" />
-                </Grid.ColumnDefinitions>
-
-                <!--  Editor  -->
-                <DockPanel Grid.Column="0" Margin="0,0,12,0">
+                <DockPanel>
                     <TextBlock
                         DockPanel.Dock="Top"
                         FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"
@@ -96,22 +90,6 @@
                         <uc:HtmlEditor x:Name="htmlEditor" />
                     </Border>
                 </DockPanel>
-
-                <!--  Allegato  -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Allegato" Margin="0,0,0,4" />
-                    <Border Padding="8,6" Background="#F9FAFB" BorderBrush="#D0D5DD" BorderThickness="1" CornerRadius="4">
-                        <TextBlock x:Name="txtAttachment" FontSize="11" Foreground="#6B7280"
-                                   Text="Nessun allegato" TextTrimming="CharacterEllipsis" />
-                    </Border>
-                    <Button Margin="0,4,0,0" HorizontalAlignment="Stretch"
-                            Background="#16A34A" Click="BtnSelectAttachment_Click"
-                            Content="Seleziona allegato" Foreground="White"
-                            Style="{StaticResource FlatBtn}" />
-                    <TextBlock Margin="0,24,0,0" FontSize="11" FontWeight="SemiBold"
-                               Foreground="#9CA3AF" TextWrapping="Wrap"
-                               Text="Le immagini si inseriscono nell'editor con il menu Insert > Image." />
-                </StackPanel>
             </Grid>
 
             <!--  ROW 2: Varianti  -->

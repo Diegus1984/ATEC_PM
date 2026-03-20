@@ -7,20 +7,15 @@
     <DockPanel>
         <!--  TOOLBAR  -->
         <Border
-            Padding="20,15"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,0,0,1"
+            Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button
                         x:Name="btnBackupNow"
-                        Background="#4F6EF7"
                         Click="BtnBackupNow_Click"
                         Content="⬇ Esegui Backup"
-                        Foreground="White"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource PrimaryBtn}" />
 
                     <Separator
                         Width="1"
@@ -113,29 +108,26 @@
                             <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
                                 <Button
                                     Margin="0,0,8,0"
-                                    Padding="10,5"
                                     Background="#12B76A"
                                     Click="BtnRestore_Click"
                                     Content="Ripristina"
                                     Foreground="White"
-                                    Style="{StaticResource FlatBtn}"
+                                    Style="{StaticResource SuccessBtn}"
                                     Tag="{Binding FileName}" />
                                 <Button
                                     Margin="0,0,8,0"
-                                    Padding="10,5"
                                     Background="#4F6EF7"
                                     Click="BtnDownload_Click"
                                     Content="Scarica"
                                     Foreground="White"
-                                    Style="{StaticResource FlatBtn}"
+                                    Style="{StaticResource PrimaryBtn}"
                                     Tag="{Binding FileName}" />
                                 <Button
-                                    Padding="10,5"
                                     Background="#F04438"
                                     Click="BtnDelete_Click"
                                     Content="Elimina"
                                     Foreground="White"
-                                    Style="{StaticResource FlatBtn}"
+                                    Style="{StaticResource DangerBtn}"
                                     Tag="{Binding FileName}" />
                             </StackPanel>
                         </DataTemplate>
