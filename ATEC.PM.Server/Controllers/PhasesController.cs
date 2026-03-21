@@ -343,10 +343,19 @@ public class PhasesController : ControllerBase
     public IActionResult DeleteTemplate(int id)
     {
         using var c = _db.Open();
-        int inUse = c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM project_phases WHERE phase_template_id=@Id", new { Id = id });
-        if (inUse > 0)
-            return BadRequest(ApiResponse<string>.Fail($"Impossibile eliminare: {inUse} fasi usano questo template."));
+        var projects = c.Query<string>(@"
+            SELECT DISTINCT CONCAT(p.code, ' — ', p.title)
+            FROM project_phases pp
+            JOIN projects p ON p.id = pp.project_id
+            WHERE pp.phase_template_id = @Id
+            ORDER BY p.code", new { Id = id }).ToList();
+
+        if (projects.Count > 0)
+        {
+            string list = string.Join("\n", projects);
+            return BadRequest(ApiResponse<string>.Fail(
+                $"Impossibile eliminare: fase in uso in {projects.Count} commesse:\n{list}"));
+        }
 
         c.Execute("DELETE FROM phase_templates WHERE id=@Id", new { Id = id });
         return Ok(ApiResponse<bool>.Ok(true));

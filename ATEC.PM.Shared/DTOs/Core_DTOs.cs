@@ -36,5 +36,5 @@ public class LookupItem
 public class FieldUpdateRequest
 {
     public string Field { get; set; } = "";
-    public string Value { get; set; } = "";
+    public string? Value { get; set; } = "";
 }

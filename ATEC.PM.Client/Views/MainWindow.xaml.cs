@@ -94,17 +94,13 @@ public partial class MainWindow : Window
         btnBackup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione GESTIONE AVANZATA
-        btnFasiTemplate.Visibility = u.IsPm ? Visibility.Visible : Visibility.Collapsed;
-        btnReparti.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        expAvanzata.Visibility = (btnFasiTemplate.Visibility == Visibility.Visible ||
-                                  btnReparti.Visibility == Visibility.Visible ||
+        btnConfigSezioni.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        expAvanzata.Visibility = (btnConfigSezioni.Visibility == Visibility.Visible ||
                                   btnMaterialCat.Visibility == Visibility.Visible ||
-                                  btnCostSections.Visibility == Visibility.Visible ||
                                   btnDdpDest.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
         btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnCostSections.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
         btnDdpDest.Visibility = (u.IsPm || u.IsResponsible) ? Visibility.Visible : Visibility.Collapsed;
 
 
@@ -142,9 +138,7 @@ public partial class MainWindow : Window
             case "Fornitori": PageContent.Navigate(new SuppliersPage()); break;
             case "Catalogo": PageContent.Navigate(new CatalogPage()); break;
             case "Utenti": PageContent.Navigate(new UsersPage()); break;
-            case "FasiTemplate": PageContent.Navigate(new PhaseTemplatesPage()); break;
-            case "Reparti": PageContent.Navigate(new DepartmentsPage()); break;
-            case "SezioniCosto": PageContent.Navigate(new CostSectionsPage()); break;
+            case "ConfigurazioneSezioni": PageContent.Navigate(new CostSectionsTreePage()); break;
             case "CategorieMateriali": PageContent.Navigate(new MaterialCategoriesPage()); break;
             case "Codex": PageContent.Navigate(new CodexPage()); break;
             case "CodexComposizione": PageContent.Navigate(new CodexCompositionPage()); break;

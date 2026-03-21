@@ -212,9 +212,7 @@
                         <!--  GESTIONE AVANZATA  -->
                         <Expander x:Name="expAvanzata" Header="GESTIONE AVANZATA" IsExpanded="False" Style="{StaticResource NavExpander}">
                             <StackPanel>
-                                <Button x:Name="btnFasiTemplate" Click="Nav_Click" Content="  Fasi Template" Style="{StaticResource NavBtn}" Tag="FasiTemplate" />
-                                <Button x:Name="btnReparti" Click="Nav_Click" Content="  Reparti" Style="{StaticResource NavBtn}" Tag="Reparti" />
-                                <Button x:Name="btnCostSections" Click="Nav_Click" Content="  Sezioni Costo" Style="{StaticResource NavBtn}" Tag="SezioniCosto" />
+                                <Button x:Name="btnConfigSezioni" Click="Nav_Click" Content="  Configurazione Sezioni" Style="{StaticResource NavBtn}" Tag="ConfigurazioneSezioni" />
                                 <Button x:Name="btnMaterialCat" Click="Nav_Click" Content="  Cat. Materiali" Style="{StaticResource NavBtn}" Tag="CategorieMateriali" />
                                 <Button x:Name="btnDdpDest" Click="Nav_Click" Content="  Destinazioni DDP" Style="{StaticResource NavBtn}" Tag="DestinazioniDdp" />
                                 <Button x:Name="btnBackup" Click="Nav_Click" Content="  Backup DB" Style="{StaticResource NavBtn}" Tag="Backup" />
