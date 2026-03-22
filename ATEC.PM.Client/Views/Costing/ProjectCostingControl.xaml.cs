@@ -51,6 +51,15 @@ public partial class ProjectCostingControl : UserControl
         _ = LoadData();
     }
 
+    public void LoadForPreventivo(int quoteId, bool readOnly = false)
+    {
+        _sectionEmployeesCache.Clear();
+        _projectId = quoteId;
+        _readOnly = readOnly;
+        _apiBasePath = $"/api/preventivi/{quoteId}/costing";
+        _ = LoadData();
+    }
+
     // ══════════════════════════════════════════════════════════════
     // LOAD DATA CON STATI PRESERVATI
     // ══════════════════════════════════════════════════════════════
@@ -59,7 +68,8 @@ public partial class ProjectCostingControl : UserControl
     {
         try
         {
-            // Salva stati di espansione prima del reload
+            // Salva stati di espansione e posizione scroll prima del reload
+            double scrollOffset = mainScrollViewer.VerticalOffset;
             var expandedGroups = _vm.Groups?.Where(g => g.IsExpanded).Select(g => g.Name).ToHashSet() ?? new();
             var expandedSections = _vm.Groups?.SelectMany(g => g.Sections)
                 .Where(s => s.IsDetailExpanded).Select(s => s.Id).ToHashSet() ?? new();
@@ -101,6 +111,10 @@ public partial class ProjectCostingControl : UserControl
                     ms.IsDetailExpanded = true;
 
             DataContext = _vm;
+
+            // Ripristina posizione scroll
+            _ = Dispatcher.InvokeAsync(() => mainScrollViewer.ScrollToVerticalOffset(scrollOffset),
+                System.Windows.Threading.DispatcherPriority.Loaded);
 
             // RecalcGrandTotals chiama RecalcDistribution che ribilancia automaticamente
             if (IsOfferMode)
@@ -317,27 +331,69 @@ public partial class ProjectCostingControl : UserControl
     {
         if (sender is not Button btn || btn.Tag is not int secId) return;
 
-        if (!await ConfirmAction("Aggiungi materiale", "Aggiungere un nuovo materiale?"))
-            return;
+        MaterialSectionVM? sec = FindMaterialSection(secId);
+        if (sec == null) return;
+
+        var dlg = new CatalogPickerDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true || dlg.SelectedItems.Count == 0) return;
+
+        await ExecuteWithLoading(async () =>
+        {
+            foreach (var item in dlg.SelectedItems)
+            {
+                decimal markup = item.MarkupValue > 0 ? item.MarkupValue : sec.DefaultMarkup;
+
+                var req = new ProjectMaterialItemSaveRequest
+                {
+                    SectionId = secId,
+                    Description = string.IsNullOrEmpty(item.VariantName)
+                        ? item.ProductName
+                        : $"{item.ProductName} — {item.VariantName}",
+                    Quantity = item.Quantity,
+                    UnitCost = item.MarkupValue > 0 ? Math.Round(item.SellPrice / item.MarkupValue, 4) : item.SellPrice,
+                    MarkupValue = markup,
+                    ItemType = "MATERIAL"
+                };
+                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
+            }
+            await LoadData();
+            ShowTemporaryMessage($"{dlg.SelectedItems.Count} materiali aggiunti");
+        });
+    }
+
+    private async void BtnAddFromCatalog_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int secId) return;
 
         MaterialSectionVM? sec = FindMaterialSection(secId);
         if (sec == null) return;
 
+        var dlg = new CatalogPickerDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true || dlg.SelectedItems.Count == 0) return;
+
         await ExecuteWithLoading(async () =>
         {
-            var req = new ProjectMaterialItemSaveRequest
+            foreach (var item in dlg.SelectedItems)
             {
-                SectionId = secId,
-                Description = "",
-                Quantity = 1,
-                UnitCost = 0,
-                MarkupValue = sec.DefaultMarkup,
-                ItemType = "MATERIAL"
-            };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
+                decimal markup = item.MarkupValue > 0 ? item.MarkupValue : sec.DefaultMarkup;
+
+                var req = new ProjectMaterialItemSaveRequest
+                {
+                    SectionId = secId,
+                    Description = string.IsNullOrEmpty(item.VariantName)
+                        ? item.ProductName
+                        : $"{item.ProductName} — {item.VariantName}",
+                    Quantity = item.Quantity,
+                    UnitCost = item.MarkupValue > 0 ? Math.Round(item.SellPrice / item.MarkupValue, 4) : item.SellPrice,
+                    MarkupValue = markup,
+                    ItemType = "MATERIAL"
+                };
+                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                await ApiClient.PostAsync($"{_apiBasePath}/material-items", json);
+            }
             await LoadData();
-            ShowTemporaryMessage("Materiale aggiunto");
+            ShowTemporaryMessage($"{dlg.SelectedItems.Count} materiali aggiunti da catalogo");
         });
     }
 

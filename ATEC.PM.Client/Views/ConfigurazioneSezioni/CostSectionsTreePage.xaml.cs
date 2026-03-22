@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -89,6 +90,7 @@ public partial class CostSectionsTreePage : Page
     private DragDropAdorner? _dragAdorner;
 
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions _jsonWriteOpt = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     private static readonly Dictionary<string, string> GroupColors = new()
     {
@@ -168,33 +170,30 @@ public partial class CostSectionsTreePage : Page
     {
         try
         {
-            string dJson = await ApiClient.GetAsync("/api/departments");
-            var dDoc = JsonDocument.Parse(dJson);
-            if (dDoc.RootElement.GetProperty("success").GetBoolean())
-                _departments = JsonSerializer.Deserialize<List<DepartmentDto>>(
-                    dDoc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
+            // Fetch parallelo di tutte le risorse
+            var dTask = ApiClient.GetAsync("/api/departments");
+            var gTask = ApiClient.GetAsync("/api/cost-sections/groups");
+            var tTask = ApiClient.GetAsync("/api/cost-sections/templates");
+            var pTask = ApiClient.GetAsync("/api/phases/templates");
+            await Task.WhenAll(dTask, gTask, tTask, pTask);
 
-            string gJson = await ApiClient.GetAsync("/api/cost-sections/groups");
-            var gDoc = JsonDocument.Parse(gJson);
-            if (gDoc.RootElement.GetProperty("success").GetBoolean())
-                _groups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
-                    gDoc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
-
-            string tJson = await ApiClient.GetAsync("/api/cost-sections/templates");
-            var tDoc = JsonDocument.Parse(tJson);
-            if (tDoc.RootElement.GetProperty("success").GetBoolean())
-                _templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
-                    tDoc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
-
-            string pJson = await ApiClient.GetAsync("/api/phases/templates");
-            var pDoc = JsonDocument.Parse(pJson);
-            if (pDoc.RootElement.GetProperty("success").GetBoolean())
-                _phases = JsonSerializer.Deserialize<List<PhaseTemplateDto>>(
-                    pDoc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
+            _departments = DeserializeList<DepartmentDto>(dTask.Result);
+            _groups = DeserializeList<CostSectionGroupDto>(gTask.Result);
+            _templates = DeserializeList<CostSectionTemplateDto>(tTask.Result);
+            _phases = DeserializeList<PhaseTemplateDto>(pTask.Result);
 
             RenderAll();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private static List<T> DeserializeList<T>(string json)
+    {
+        var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.GetProperty("success").GetBoolean())
+            return JsonSerializer.Deserialize<List<T>>(
+                doc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
+        return new();
     }
 
     private void RenderAll()
@@ -501,7 +500,7 @@ public partial class CostSectionsTreePage : Page
                 costSectionTemplateId = (int?)null,
                 sortOrder = maxSort,
                 isDefault = false
-            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }, _jsonWriteOpt);
 
             string result = await ApiClient.PostAsync("/api/phases/templates", json);
             var doc = JsonDocument.Parse(result);
@@ -582,9 +581,7 @@ public partial class CostSectionsTreePage : Page
             TextTrimming = TextTrimming.CharacterEllipsis
         });
 
-        var sp = dp;
-
-        badge.Child = sp;
+        badge.Child = dp;
         badge.AllowDrop = true;
         badge.PreviewMouseLeftButtonDown += PhaseBadge_PreviewMouseLeftButtonDown;
         badge.PreviewMouseMove += PhaseBadge_PreviewMouseMove;
@@ -593,8 +590,17 @@ public partial class CostSectionsTreePage : Page
         return badge;
     }
 
-    private void TxtSearchPhase_TextChanged(object sender, TextChangedEventArgs e)
+    private CancellationTokenSource? _phaseSearchCts;
+
+    private async void TxtSearchPhase_TextChanged(object sender, TextChangedEventArgs e)
     {
+        _phaseSearchCts?.Cancel();
+        _phaseSearchCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(250, _phaseSearchCts.Token);
+        }
+        catch (TaskCanceledException) { return; }
         RenderPhases(txtSearchPhase.Text.Trim());
     }
 
@@ -1409,7 +1415,7 @@ public partial class CostSectionsTreePage : Page
         try
         {
             string json = JsonSerializer.Serialize(new { departmentIds = newIds },
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                _jsonWriteOpt);
             await ApiClient.PutAsync($"/api/cost-sections/templates/{section.Id}/departments", json);
 
             section.DepartmentIds = newIds;
@@ -1425,7 +1431,7 @@ public partial class CostSectionsTreePage : Page
         try
         {
             string json = JsonSerializer.Serialize(new { departmentIds = newIds },
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                _jsonWriteOpt);
             await ApiClient.PutAsync($"/api/cost-sections/templates/{section.Id}/departments", json);
 
             section.DepartmentIds = newIds;
@@ -1529,8 +1535,8 @@ public partial class CostSectionsTreePage : Page
             "Tipo", MessageBoxButton.YesNo, MessageBoxImage.Question);
         string sectionType = result == MessageBoxResult.Yes ? "DA_CLIENTE" : "IN_SEDE";
 
-        int maxSort = _templates.Where(t => t.GroupId == group.Id).Any()
-            ? _templates.Where(t => t.GroupId == group.Id).Max(t => t.SortOrder) + 1 : 1;
+        var groupTemplates = _templates.Where(t => t.GroupId == group.Id).ToList();
+        int maxSort = groupTemplates.Count > 0 ? groupTemplates.Max(t => t.SortOrder) + 1 : 1;
 
         try
         {
@@ -1543,7 +1549,7 @@ public partial class CostSectionsTreePage : Page
                 sortOrder = maxSort,
                 isActive = true,
                 departmentIds = new List<int>()
-            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }, _jsonWriteOpt);
 
             string res = await ApiClient.PostAsync("/api/cost-sections/templates", json);
             var doc = JsonDocument.Parse(res);
@@ -1586,17 +1592,11 @@ public partial class CostSectionsTreePage : Page
         try
         {
             string json = JsonSerializer.Serialize(new { name, sortOrder = maxSort, isActive = true },
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                _jsonWriteOpt);
             await ApiClient.PostAsync("/api/cost-sections/groups", json);
             await LoadData();
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
-
-    private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new CostSectionTemplateDialog(_groups, _departments) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true) await LoadData();
     }
 
     // ══════════════════════════════════════════════════════════════

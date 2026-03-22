@@ -1,0 +1,140 @@
+<Window
+    x:Class="ATEC.PM.Client.Views.Preventivi.NewPreventivoDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Nuovo Preventivo"
+    Width="500"
+    Height="480"
+    Background="#F7F8FA"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  Cliente  -->
+        <StackPanel Grid.Row="0">
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Cliente *" />
+            <ComboBox
+                x:Name="cmbCustomer"
+                Height="32"
+                Margin="0,4,0,0"
+                DisplayMemberPath="Name"
+                FontSize="13"
+                IsEditable="True"
+                SelectedValuePath="Id" />
+        </StackPanel>
+
+        <!--  Titolo  -->
+        <StackPanel Grid.Row="1" Margin="0,12,0,0">
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Titolo *" />
+            <TextBox
+                x:Name="txtTitle"
+                Height="32"
+                Margin="0,4,0,0"
+                Padding="8,5"
+                BorderBrush="#E4E7EC"
+                FontSize="13" />
+        </StackPanel>
+
+        <!--  Tipo Preventivo  -->
+        <StackPanel Grid.Row="2" Margin="0,12,0,0">
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Tipo Preventivo" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                <RadioButton
+                    x:Name="rbServizio"
+                    Content="Servizio"
+                    FontSize="13"
+                    IsChecked="True" />
+                <RadioButton
+                    x:Name="rbImpianto"
+                    Margin="20,0,0,0"
+                    Content="Impianto"
+                    FontSize="13" />
+            </StackPanel>
+        </StackPanel>
+
+        <!--  Listino  -->
+        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Listino" />
+            <ComboBox
+                x:Name="cmbPriceList"
+                Height="32"
+                Margin="0,4,0,0"
+                DisplayMemberPath="Name"
+                FontSize="13"
+                SelectionChanged="cmbPriceList_SelectionChanged"
+                SelectedValuePath="Id" />
+        </StackPanel>
+
+        <!--  Gruppo Template  -->
+        <StackPanel Grid.Row="4" Margin="0,12,0,0">
+            <TextBlock
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#374151"
+                Text="Gruppo Template" />
+            <ComboBox
+                x:Name="cmbGroup"
+                Height="32"
+                Margin="0,4,0,0"
+                DisplayMemberPath="Name"
+                FontSize="13"
+                SelectedValuePath="Id" />
+        </StackPanel>
+
+        <!--  Buttons  -->
+        <StackPanel
+            Grid.Row="6"
+            Margin="0,16,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                Height="32"
+                Padding="20,0"
+                Background="#F3F4F6"
+                BorderThickness="0"
+                Click="BtnCancel_Click"
+                Content="Annulla"
+                Cursor="Hand"
+                FontSize="13"
+                Foreground="#374151" />
+            <Button
+                Height="32"
+                Margin="8,0,0,0"
+                Padding="20,0"
+                Background="#4F6EF7"
+                BorderThickness="0"
+                Click="BtnSave_Click"
+                Content="Crea Preventivo"
+                Cursor="Hand"
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="White" />
+        </StackPanel>
+    </Grid>
+</Window>

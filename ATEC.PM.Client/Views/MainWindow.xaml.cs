@@ -96,7 +96,6 @@ public partial class MainWindow : Window
         // Sezione GESTIONE AVANZATA
         btnConfigSezioni.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
         expAvanzata.Visibility = (btnConfigSezioni.Visibility == Visibility.Visible ||
-                                  btnMaterialCat.Visibility == Visibility.Visible ||
                                   btnDdpDest.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
 
         // Sezione REPORT / ADMIN
@@ -146,6 +145,7 @@ public partial class MainWindow : Window
             case "Backup": PageContent.Navigate(new BackupPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
             case "Preventivi": PageContent.Navigate(new Quotes.QuotesListPage()); break;
+            case "PreventiviUnificati": PageContent.Navigate(new Preventivi.PreventiviPage()); break;
             default: PageContent.Content = null; break;
         }
     }

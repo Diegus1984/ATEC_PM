@@ -92,34 +92,232 @@ public partial class QuoteCatalogPage : Page
         catch (Exception ex) { txtTreeStatus.Text = $"Errore: {ex.Message}"; }
     }
 
+    // Stato espansione salvato tra rebuild — set di chiavi "tipo|id" per tutti i livelli
+    private HashSet<string> _expandedKeys = new();
+    private string? _selectedKey;
+
+    private void SaveTreeState()
+    {
+        _expandedKeys.Clear();
+        _selectedKey = null;
+        SaveExpandedRecursive(treeGroups.Items);
+
+        if (treeGroups.SelectedItem is TreeViewItem sel && sel.Tag is ValueTuple<string, int, string> tag)
+            _selectedKey = $"{tag.Item1}|{tag.Item2}";
+    }
+
+    private void SaveExpandedRecursive(ItemCollection items)
+    {
+        foreach (TreeViewItem node in items)
+        {
+            if (node.IsExpanded && node.Tag is ValueTuple<string, int, string> tag)
+            {
+                _expandedKeys.Add($"{tag.Item1}|{tag.Item2}");
+                SaveExpandedRecursive(node.Items);
+            }
+        }
+    }
+
+    private void RestoreTreeState()
+    {
+        RestoreExpandedRecursive(treeGroups.Items);
+    }
+
+    private void RestoreExpandedRecursive(ItemCollection items)
+    {
+        foreach (TreeViewItem node in items)
+        {
+            if (node.Tag is ValueTuple<string, int, string> tag)
+            {
+                string key = $"{tag.Item1}|{tag.Item2}";
+                if (_expandedKeys.Contains(key))
+                {
+                    node.IsExpanded = true;
+                    RestoreExpandedRecursive(node.Items);
+                }
+                if (key == _selectedKey)
+                    node.IsSelected = true;
+            }
+        }
+    }
+
     private void BuildTree()
     {
+        SaveTreeState();
         treeGroups.Items.Clear();
 
-        foreach (var group in _tree.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase))
+        bool showAll = !SelectedPriceListId.HasValue;
+
+        if (showAll)
         {
-            var groupNode = new TreeViewItem
-            {
-                Header = BuildTreeHeader(group.Name, group.ProductCount, "#1A1D26", FontWeights.SemiBold),
-                Tag = ("group", group.Id, group.Name),
-                FontSize = 13,
-                IsExpanded = true,
-                ContextMenu = (ContextMenu)treeGroups.Resources["GroupContextMenu"]
-            };
+            var byPriceList = _tree.Groups
+                .GroupBy(g => new { Id = g.PriceListId ?? 0, Name = string.IsNullOrEmpty(g.PriceListName) ? "Senza listino" : g.PriceListName })
+                .OrderBy(pl => pl.Key.Name, _naturalComparer);
 
-            foreach (var cat in group.Categories.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            foreach (var plGroup in byPriceList)
             {
-                var catNode = new TreeViewItem
+                int plProductCount = plGroup.Sum(g => g.ProductCount);
+                var plNode = new TreeViewItem
                 {
-                    Header = BuildTreeHeader(cat.Name, cat.ProductCount, "#374151", FontWeights.Normal),
-                    Tag = ("category", cat.Id, cat.Name),
-                    FontSize = 13,
-                    ContextMenu = (ContextMenu)treeGroups.Resources["CategoryContextMenu"]
+                    Header = BuildTreeHeader(plGroup.Key.Name, plProductCount, "#4F6EF7", FontWeights.Bold),
+                    Tag = ("pricelist", plGroup.Key.Id, plGroup.Key.Name),
+                    FontSize = 14,
+                    IsExpanded = false
                 };
-                groupNode.Items.Add(catNode);
-            }
+                plNode.Expanded += AccordionNode_Expanded;
 
-            treeGroups.Items.Add(groupNode);
+                foreach (var group in plGroup.OrderBy(g => g.SortOrder).ThenBy(g => g.Name, _naturalComparer))
+                {
+                    var groupNode = BuildGroupNode(group);
+                    plNode.Items.Add(groupNode);
+                }
+
+                treeGroups.Items.Add(plNode);
+            }
+        }
+        else
+        {
+            foreach (var group in _tree.Groups.OrderBy(g => g.SortOrder).ThenBy(g => g.Name, _naturalComparer))
+            {
+                treeGroups.Items.Add(BuildGroupNode(group));
+            }
+        }
+
+        RestoreTreeState();
+    }
+
+    private void AccordionNode_Expanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem expandedNode) return;
+        // Chiudi i fratelli allo stesso livello
+        var parent = expandedNode.Parent;
+        ItemCollection siblings;
+        if (parent is TreeViewItem parentItem)
+            siblings = parentItem.Items;
+        else if (parent is TreeView tv)
+            siblings = tv.Items;
+        else return;
+
+        foreach (TreeViewItem sibling in siblings)
+        {
+            if (sibling != expandedNode && sibling.IsExpanded)
+                sibling.IsExpanded = false;
+        }
+        e.Handled = true;
+    }
+
+    private TreeViewItem BuildGroupNode(QuoteGroupDto group)
+    {
+        var groupNode = new TreeViewItem
+        {
+            Header = BuildTreeHeader(group.Name, group.ProductCount, "#1A1D26", FontWeights.SemiBold),
+            Tag = ("group", group.Id, group.Name),
+            FontSize = 13,
+            IsExpanded = false,
+            ContextMenu = (ContextMenu)treeGroups.Resources["GroupContextMenu"]
+        };
+        groupNode.Expanded += AccordionNode_Expanded;
+
+        foreach (var cat in group.Categories.OrderBy(c => c.Name, _naturalComparer))
+        {
+            var catNode = BuildCategoryNode(cat);
+            if (catNode != null) groupNode.Items.Add(catNode);
+        }
+
+        return groupNode;
+    }
+
+    private TreeViewItem? BuildCategoryNode(QuoteCategoryDto cat)
+    {
+        bool hasChildren = cat.Children != null && cat.Children.Count > 0;
+        bool hasProducts = cat.Products != null && cat.Products.Count > 0;
+        bool hasSubItems = hasChildren || hasProducts;
+        var catNode = new TreeViewItem
+        {
+            Header = BuildTreeHeader(cat.Name, cat.ProductCount, hasSubItems ? "#1A1D26" : "#374151", hasSubItems ? FontWeights.Medium : FontWeights.Normal),
+            Tag = ("category", cat.Id, cat.Name),
+            FontSize = 13,
+            ContextMenu = (ContextMenu)treeGroups.Resources["CategoryContextMenu"]
+        };
+
+        if (hasChildren)
+        {
+            catNode.Expanded += AccordionNode_Expanded;
+            foreach (var child in cat.Children.OrderBy(c => c.Name, _naturalComparer))
+            {
+                var childNode = BuildCategoryNode(child);
+                if (childNode != null) catNode.Items.Add(childNode);
+            }
+        }
+
+        // Aggiungi prodotti come foglie
+        if (hasProducts)
+        {
+            foreach (var prod in cat.Products!.OrderBy(p => p.Name, _naturalComparer))
+            {
+                var prodNode = new TreeViewItem
+                {
+                    Header = BuildProductHeader(prod.Name),
+                    Tag = ("product", prod.Id, prod.Name),
+                    FontSize = 12
+                };
+                catNode.Items.Add(prodNode);
+            }
+        }
+
+        return catNode;
+    }
+
+    private static StackPanel BuildProductHeader(string name)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        sp.Children.Add(new TextBlock
+        {
+            Text = name,
+            FontSize = 12,
+            Foreground = Brush("#6B7280"),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        return sp;
+    }
+
+    private static SolidColorBrush Brush(string hex) =>
+        new((Color)ColorConverter.ConvertFromString(hex));
+
+    /// <summary>Natural sort: "IRB 120" viene prima di "IRB 1200"</summary>
+    private static readonly NaturalStringComparer _naturalComparer = new();
+
+    private class NaturalStringComparer : IComparer<string>
+    {
+        public int Compare(string? x, string? y)
+        {
+            if (x == null && y == null) return 0;
+            if (x == null) return -1;
+            if (y == null) return 1;
+
+            int ix = 0, iy = 0;
+            while (ix < x.Length && iy < y.Length)
+            {
+                if (char.IsDigit(x[ix]) && char.IsDigit(y[iy]))
+                {
+                    // Confronta blocchi numerici
+                    int sx = ix, sy = iy;
+                    while (ix < x.Length && char.IsDigit(x[ix])) ix++;
+                    while (iy < y.Length && char.IsDigit(y[iy])) iy++;
+                    long nx = long.Parse(x[sx..ix]);
+                    long ny = long.Parse(y[sy..iy]);
+                    int cmp = nx.CompareTo(ny);
+                    if (cmp != 0) return cmp;
+                }
+                else
+                {
+                    int cmp = char.ToLowerInvariant(x[ix]).CompareTo(char.ToLowerInvariant(y[iy]));
+                    if (cmp != 0) return cmp;
+                    ix++;
+                    iy++;
+                }
+            }
+            return x.Length.CompareTo(y.Length);
         }
     }
 
@@ -169,38 +367,109 @@ public partial class QuoteCatalogPage : Page
                 btnNewProduct.Visibility = Visibility.Visible;
                 await LoadProducts(categoryId: id);
             }
+            else if (type == "product")
+            {
+                // Mostra solo questo prodotto nella lista
+                if (tvi.Parent is TreeViewItem parentNode && parentNode.Tag is ("category", int catId, string _))
+                {
+                    _selectedGroupId = null;
+                    _selectedCategoryId = catId;
+                    txtSectionTitle.Text = name;
+                    btnNewProduct.Visibility = Visibility.Visible;
+                    await LoadSingleProduct(id);
+                }
+            }
         }
     }
 
-    private void TxtTreeSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private CancellationTokenSource? _treeFilterCts;
+
+    private async void TxtTreeSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         string search = txtTreeSearch.Text.Trim().ToLower();
         txtTreeSearchPlaceholder.Visibility = string.IsNullOrEmpty(search)
             ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (TreeViewItem groupNode in treeGroups.Items)
+        _treeFilterCts?.Cancel();
+        _treeFilterCts = new CancellationTokenSource();
+        try
         {
-            bool anyChildVisible = false;
-            foreach (TreeViewItem catNode in groupNode.Items)
-            {
-                if (catNode.Tag is (string _, int _, string catName))
-                {
-                    bool match = string.IsNullOrEmpty(search) || catName.ToLower().Contains(search);
-                    catNode.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
-                    if (match) anyChildVisible = true;
-                }
-            }
-            if (groupNode.Tag is (string _, int _, string grpName))
-            {
-                bool groupMatch = string.IsNullOrEmpty(search) || grpName.ToLower().Contains(search);
-                groupNode.Visibility = (groupMatch || anyChildVisible) ? Visibility.Visible : Visibility.Collapsed;
-            }
+            await Task.Delay(250, _treeFilterCts.Token);
         }
+        catch (TaskCanceledException) { return; }
+
+        string[] terms = string.IsNullOrEmpty(search) ? Array.Empty<string>() : search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (TreeViewItem rootNode in treeGroups.Items)
+        {
+            bool rootVisible = FilterNodeRecursive(rootNode, terms);
+            rootNode.Visibility = rootVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Filtra ricorsivamente: un nodo è visibile se matcha o se un figlio matcha.
+    /// Se matcha, espande il percorso. Restituisce true se visibile.</summary>
+    private static bool FilterNodeRecursive(TreeViewItem node, string[] terms)
+    {
+        // Se nessun termine, mostra tutto
+        if (terms.Length == 0)
+        {
+            node.Visibility = Visibility.Visible;
+            foreach (TreeViewItem child in node.Items)
+                FilterNodeRecursive(child, terms);
+            return true;
+        }
+
+        // Controlla se questo nodo matcha (tutti i termini devono essere presenti nel nome)
+        string nodeName = "";
+        if (node.Tag is ValueTuple<string, int, string> tag)
+            nodeName = tag.Item3.ToLower();
+
+        bool selfMatch = terms.All(t => nodeName.Contains(t));
+
+        // Controlla ricorsivamente i figli
+        bool anyChildMatch = false;
+        foreach (TreeViewItem child in node.Items)
+        {
+            bool childVisible = FilterNodeRecursive(child, terms);
+            if (childVisible) anyChildMatch = true;
+        }
+
+        bool visible = selfMatch || anyChildMatch;
+        node.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
+        // Se un figlio matcha, espandi per mostrarlo
+        if (anyChildMatch && !selfMatch)
+            node.IsExpanded = true;
+
+        return visible;
     }
 
     // ══════════════════════════════════════════════════
     // PRODUCTS — Caricamento e filtro
     // ══════════════════════════════════════════════════
+
+    private async Task LoadSingleProduct(int productId)
+    {
+        txtProductStatus.Text = "Caricamento...";
+        try
+        {
+            string json = await ApiClient.GetAsync($"/api/quote-catalog/products/{productId}");
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                var product = JsonSerializer.Deserialize<QuoteProductDto>(
+                    doc.RootElement.GetProperty("data").GetRawText(),
+                    _jopt);
+                if (product != null)
+                {
+                    _allProducts = new List<ProductListItem> { new ProductListItem(product) };
+                    ApplyProductFilter();
+                }
+            }
+        }
+        catch (Exception ex) { txtProductStatus.Text = $"Errore: {ex.Message}"; }
+    }
 
     private async Task LoadProducts(int? categoryId = null, int? groupId = null)
     {
@@ -217,10 +486,10 @@ public partial class QuoteCatalogPage : Page
             {
                 var products = JsonSerializer.Deserialize<List<QuoteProductDto>>(
                     doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                    _jopt) ?? new();
 
                 _allProducts = products.Select(p => new ProductListItem(p))
-                    .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                    .OrderBy(p => p.Name, _naturalComparer).ToList();
                 ApplyProductFilter();
             }
         }
@@ -407,6 +676,176 @@ public partial class QuoteCatalogPage : Page
         }
     }
 
+    private async void BtnAddSubCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (treeGroups.SelectedItem is not TreeViewItem tvi || tvi.Tag is not ("category", int parentId, string parentName))
+            return;
+
+        // Trova il groupId risalendo il tree
+        int groupId = 0;
+        TreeViewItem? node = tvi;
+        while (node != null)
+        {
+            if (node.Tag is ("group", int gid, string _)) { groupId = gid; break; }
+            node = node.Parent as TreeViewItem;
+        }
+        if (groupId == 0) return;
+
+        string? subName = Microsoft.VisualBasic.Interaction.InputBox(
+            $"Nome sotto-categoria di '{parentName}':", "Nuova sotto-categoria", "");
+        if (string.IsNullOrWhiteSpace(subName)) return;
+
+        string body = JsonSerializer.Serialize(new { GroupId = groupId, ParentId = parentId, Name = subName.Trim() }, _jopt);
+        var json = await ApiClient.PostAsync("/api/quote-catalog/categories", body);
+        var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.GetProperty("success").GetBoolean())
+        {
+            _selectedCategoryId = parentId; // mantieni focus sul parent
+            await LoadTree();
+        }
+        else
+            MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
+    }
+
+    // ══════════════════════════════════════════════════
+    // DRAG & DROP — Sposta categorie
+    // ══════════════════════════════════════════════════
+
+    private Point _dragStartPoint;
+
+    private void TreeGroups_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStartPoint = e.GetPosition(null);
+    }
+
+    private void TreeGroups_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var diff = _dragStartPoint - e.GetPosition(null);
+        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        if (treeGroups.SelectedItem is TreeViewItem tvi)
+        {
+            if (tvi.Tag is ("category", int catId, string _))
+            {
+                DragDrop.DoDragDrop(tvi, catId, DragDropEffects.Move);
+            }
+            else if (tvi.Tag is ("product", int prodId, string _))
+            {
+                var data = new DataObject("ProductDrag", prodId);
+                DragDrop.DoDragDrop(tvi, data, DragDropEffects.Move);
+            }
+        }
+    }
+
+    private void TreeGroups_Drop(object sender, DragEventArgs e)
+    {
+        // Drop di un prodotto dalla lista
+        if (e.Data.GetDataPresent("ProductDrag"))
+        {
+            int productId = (int)e.Data.GetData("ProductDrag")!;
+            var target = FindTreeViewItemUnderMouse(e.GetPosition(treeGroups));
+            if (target?.Tag is ("category", int targetCatId, string _))
+                _ = MoveProductAsync(productId, targetCatId);
+            return;
+        }
+
+        // Drop di una categoria
+        if (!e.Data.GetDataPresent(typeof(int))) return;
+        int draggedCatId = (int)e.Data.GetData(typeof(int))!;
+
+        var catTarget = FindTreeViewItemUnderMouse(e.GetPosition(treeGroups));
+        if (catTarget == null) return;
+
+        int? newParentId = null;
+        int newGroupId = 0;
+
+        if (catTarget.Tag is ("category", int targetCatId2, string _))
+        {
+            if (targetCatId2 == draggedCatId) return;
+            newParentId = targetCatId2;
+            TreeViewItem? n = catTarget;
+            while (n != null)
+            {
+                if (n.Tag is ("group", int gid, string _)) { newGroupId = gid; break; }
+                n = n.Parent as TreeViewItem;
+            }
+        }
+        else if (catTarget.Tag is ("group", int gid2, string _))
+        {
+            newParentId = null;
+            newGroupId = gid2;
+        }
+        else return;
+
+        if (newGroupId == 0) return;
+        _ = MoveCategoryAsync(draggedCatId, newParentId, newGroupId);
+    }
+
+    private async Task MoveProductAsync(int productId, int newCategoryId)
+    {
+        string body = JsonSerializer.Serialize(new { CategoryId = newCategoryId }, _jopt);
+        var json = await ApiClient.PutAsync($"/api/quote-catalog/products/{productId}/move", body);
+        var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.GetProperty("success").GetBoolean())
+        {
+            await LoadTree();
+            await LoadProducts(categoryId: _selectedCategoryId, groupId: _selectedGroupId);
+        }
+        else
+            MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
+    }
+
+    private async Task MoveCategoryAsync(int catId, int? newParentId, int newGroupId)
+    {
+        string body = JsonSerializer.Serialize(new { NewParentId = newParentId, NewGroupId = newGroupId }, _jopt);
+        var json = await ApiClient.PutAsync($"/api/quote-catalog/categories/{catId}/move", body);
+        var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.GetProperty("success").GetBoolean())
+            await LoadTree();
+        else
+            MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
+    }
+
+    private TreeViewItem? FindTreeViewItemUnderMouse(Point position)
+    {
+        var hit = treeGroups.InputHitTest(position) as DependencyObject;
+        while (hit != null)
+        {
+            if (hit is TreeViewItem tvi) return tvi;
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+        return null;
+    }
+
+    // ══════════════════════════════════════════════════
+    // DRAG & DROP — Sposta prodotti dalla lista al tree
+    // ══════════════════════════════════════════════════
+
+    private Point _productDragStartPoint;
+
+    private void DgProducts_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _productDragStartPoint = e.GetPosition(null);
+    }
+
+    private void DgProducts_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        var diff = _productDragStartPoint - e.GetPosition(null);
+        if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        if (dgProducts.SelectedItem is ProductListItem product)
+        {
+            var data = new DataObject("ProductDrag", product.Id);
+            DragDrop.DoDragDrop(dgProducts, data, DragDropEffects.Move);
+        }
+    }
+
     // ══════════════════════════════════════════════════
     // PRODUCTS — CRUD
     // ══════════════════════════════════════════════════
@@ -439,7 +878,7 @@ public partial class QuoteCatalogPage : Page
                 {
                     var product = JsonSerializer.Deserialize<QuoteProductDto>(
                         doc.RootElement.GetProperty("data").GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        _jopt);
                     if (product != null)
                     {
                         var dlg = new QuoteProductDialog(product) { Owner = Window.GetWindow(this) };

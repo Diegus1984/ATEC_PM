@@ -102,9 +102,10 @@ public class CostSectionsController : ControllerBase
               FROM cost_section_template_departments sd
               JOIN departments d ON d.id = sd.department_id").ToList();
 
+        var deptsByTemplate = allDepts.ToLookup(d => d.SectionTemplateId);
         foreach (var tmpl in rows)
         {
-            var depts = allDepts.Where(d => d.SectionTemplateId == tmpl.Id).ToList();
+            var depts = deptsByTemplate[tmpl.Id].ToList();
             tmpl.DepartmentIds = depts.Select(d => d.DepartmentId).ToList();
             tmpl.DepartmentCodes = depts.Select(d => d.DepartmentCode).ToList();
         }

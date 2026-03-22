@@ -125,6 +125,7 @@
                             <DataGridTextColumn Width="*" MinWidth="150" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Header="Nome" />
                             <DataGridTextColumn Width="100" Binding="{Binding CostPrice, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Header="Costo az. &#x20AC;" />
                             <DataGridTextColumn Width="100" Binding="{Binding SellPrice, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Header="Prezzo cl. &#x20AC;" />
+                            <DataGridTextColumn Width="60" Binding="{Binding MarkupValue, UpdateSourceTrigger=PropertyChanged, StringFormat=N3}" Header="K" />
                             <DataGridTextColumn Width="70" Binding="{Binding DiscountPct, UpdateSourceTrigger=PropertyChanged}" Header="Sconto %" />
                             <DataGridTextColumn Width="60" Binding="{Binding VatPct, UpdateSourceTrigger=PropertyChanged}" Header="IVA %" />
                             <DataGridTextColumn Width="60" Binding="{Binding Unit, UpdateSourceTrigger=PropertyChanged}" Header="UdM" />

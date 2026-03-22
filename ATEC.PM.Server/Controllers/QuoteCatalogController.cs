@@ -111,8 +111,9 @@ public class QuoteCatalogController : ControllerBase
                 {whereGroup}
                 ORDER BY g.sort_order, g.name", new { PriceListId = priceListId }).ToList();
 
-            var categories = c.Query<QuoteCategoryDto>(@"
-                SELECT c.id AS Id, c.group_id AS GroupId, g.name AS GroupName,
+            var allCategories = c.Query<QuoteCategoryDto>(@"
+                SELECT c.id AS Id, c.group_id AS GroupId, c.parent_id AS ParentId,
+                       g.name AS GroupName,
                        c.name AS Name, c.description AS Description,
                        c.sort_order AS SortOrder, c.is_active AS IsActive,
                        (SELECT COUNT(*) FROM quote_products WHERE category_id = c.id) AS ProductCount
@@ -120,14 +121,38 @@ public class QuoteCatalogController : ControllerBase
                 JOIN quote_groups g ON g.id = c.group_id
                 ORDER BY c.sort_order, c.name").ToList();
 
+            // Costruisci gerarchia parent/child
+            var catById = allCategories.ToDictionary(c2 => c2.Id);
+            foreach (var cat in allCategories.Where(c2 => c2.ParentId.HasValue))
+            {
+                if (catById.TryGetValue(cat.ParentId!.Value, out var parent))
+                    parent.Children.Add(cat);
+            }
+            // Conta ricorsiva prodotti (parent include figli)
+            foreach (var cat in allCategories.Where(c2 => c2.Children.Count > 0))
+                cat.ProductCount += cat.Children.Sum(ch => ch.ProductCount);
+
+            // Carica prodotti (leggeri, solo per il tree)
+            var allProducts = c.Query<QuoteProductDto>(@"
+                SELECT id AS Id, category_id AS CategoryId, name AS Name, code AS Code,
+                       item_type AS ItemType, sort_order AS SortOrder
+                FROM quote_products ORDER BY sort_order, name").ToList();
+
+            // Annida prodotti nelle categorie
+            var productsByCategory = allProducts.ToLookup(p => p.CategoryId);
+            foreach (var cat in allCategories)
+                cat.Products = productsByCategory[cat.Id].ToList();
+
+            // Solo radici (parent_id == null) vanno nei gruppi
+            var rootCategories = allCategories.Where(c2 => !c2.ParentId.HasValue).ToList();
             foreach (var g in groups)
-                g.Categories = categories.Where(cat => cat.GroupId == g.Id).ToList();
+                g.Categories = rootCategories.Where(cat => cat.GroupId == g.Id).ToList();
 
             var tree = new QuoteCatalogTreeDto
             {
                 Groups = groups,
                 TotalGroups = groups.Count,
-                TotalCategories = categories.Count,
+                TotalCategories = allCategories.Count,
                 TotalProducts = groups.Sum(g => g.ProductCount)
             };
 
@@ -221,7 +246,8 @@ public class QuoteCatalogController : ControllerBase
             using var c = _qdb.Open();
             string where = groupId.HasValue ? "WHERE c.group_id = @GroupId" : "";
             var rows = c.Query<QuoteCategoryDto>($@"
-                SELECT c.id AS Id, c.group_id AS GroupId, g.name AS GroupName,
+                SELECT c.id AS Id, c.group_id AS GroupId, c.parent_id AS ParentId,
+                       g.name AS GroupName,
                        c.name AS Name, c.description AS Description,
                        c.sort_order AS SortOrder, c.is_active AS IsActive,
                        (SELECT COUNT(*) FROM quote_products WHERE category_id = c.id) AS ProductCount
@@ -241,8 +267,8 @@ public class QuoteCatalogController : ControllerBase
         {
             using var c = _qdb.Open();
             int id = (int)c.ExecuteScalar<long>(@"
-                INSERT INTO quote_categories (group_id, name, description, sort_order, is_active)
-                VALUES (@GroupId, @Name, @Description, @SortOrder, @IsActive);
+                INSERT INTO quote_categories (group_id, parent_id, name, description, sort_order, is_active)
+                VALUES (@GroupId, @ParentId, @Name, @Description, @SortOrder, @IsActive);
                 SELECT LAST_INSERT_ID()", dto);
             return Ok(ApiResponse<int>.Ok(id, "Categoria creata"));
         }
@@ -255,11 +281,35 @@ public class QuoteCatalogController : ControllerBase
         try
         {
             using var c = _qdb.Open();
-            c.Execute(@"UPDATE quote_categories SET group_id=@GroupId, name=@Name,
+            c.Execute(@"UPDATE quote_categories SET group_id=@GroupId, parent_id=@ParentId, name=@Name,
                         description=@Description, sort_order=@SortOrder, is_active=@IsActive
                         WHERE id=@Id",
-                new { dto.GroupId, dto.Name, dto.Description, dto.SortOrder, dto.IsActive, Id = id });
+                new { dto.GroupId, dto.ParentId, dto.Name, dto.Description, dto.SortOrder, dto.IsActive, Id = id });
             return Ok(ApiResponse<string>.Ok("Categoria aggiornata"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpPut("categories/{id}/move")]
+    public IActionResult MoveCategory(int id, [FromBody] CategoryMoveRequest req)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            // Impedisci di spostare una categoria sotto se stessa o un suo discendente
+            if (req.NewParentId.HasValue)
+            {
+                int? check = req.NewParentId;
+                while (check.HasValue)
+                {
+                    if (check.Value == id)
+                        return Ok(ApiResponse<string>.Fail("Non puoi spostare una categoria sotto se stessa"));
+                    check = c.ExecuteScalar<int?>("SELECT parent_id FROM quote_categories WHERE id=@Id", new { Id = check.Value });
+                }
+            }
+            c.Execute("UPDATE quote_categories SET parent_id=@ParentId, group_id=@GroupId WHERE id=@Id",
+                new { ParentId = req.NewParentId, GroupId = req.NewGroupId, Id = id });
+            return Ok(ApiResponse<string>.Ok("Categoria spostata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
@@ -287,7 +337,15 @@ public class QuoteCatalogController : ControllerBase
         {
             using var c = _qdb.Open();
             var conditions = new List<string>();
-            if (categoryId.HasValue) conditions.Add("p.category_id = @CategoryId");
+
+            // Se categoryId è specificato, includi anche tutte le sotto-categorie ricorsivamente
+            HashSet<int>? categoryIds = null;
+            if (categoryId.HasValue)
+            {
+                categoryIds = new HashSet<int> { categoryId.Value };
+                CollectChildCategoryIds(c, categoryId.Value, categoryIds);
+                conditions.Add($"p.category_id IN ({string.Join(",", categoryIds)})");
+            }
             if (groupId.HasValue) conditions.Add("cat.group_id = @GroupId");
             string where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
 
@@ -311,6 +369,7 @@ public class QuoteCatalogController : ControllerBase
                 var variants = c.Query<QuoteProductVariantDto>(@"
                     SELECT id AS Id, product_id AS ProductId, code AS Code, name AS Name,
                            cost_price AS CostPrice, sell_price AS SellPrice,
+                           COALESCE(markup_value,1.300) AS MarkupValue,
                            discount_pct AS DiscountPct, vat_pct AS VatPct,
                            unit AS Unit, default_qty AS DefaultQty, sort_order AS SortOrder
                     FROM quote_product_variants
@@ -350,6 +409,7 @@ public class QuoteCatalogController : ControllerBase
             product.Variants = c.Query<QuoteProductVariantDto>(@"
                 SELECT id AS Id, product_id AS ProductId, code AS Code, name AS Name,
                        cost_price AS CostPrice, sell_price AS SellPrice,
+                       COALESCE(markup_value,1.300) AS MarkupValue,
                        discount_pct AS DiscountPct, vat_pct AS VatPct,
                        unit AS Unit, default_qty AS DefaultQty, sort_order AS SortOrder
                 FROM quote_product_variants WHERE product_id = @Id
@@ -392,9 +452,9 @@ public class QuoteCatalogController : ControllerBase
             foreach (var v in dto.Variants)
             {
                 c.Execute(@"INSERT INTO quote_product_variants
-                    (product_id, code, name, cost_price, sell_price, discount_pct, vat_pct, unit, default_qty, sort_order)
-                    VALUES (@ProductId, @Code, @Name, @CostPrice, @SellPrice, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
-                    new { ProductId = productId, v.Code, v.Name, v.CostPrice, v.SellPrice,
+                    (product_id, code, name, cost_price, sell_price, markup_value, discount_pct, vat_pct, unit, default_qty, sort_order)
+                    VALUES (@ProductId, @Code, @Name, @CostPrice, @SellPrice, @MarkupValue, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
+                    new { ProductId = productId, v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue,
                           v.DiscountPct, v.VatPct, v.Unit, v.DefaultQty, v.SortOrder }, tx);
             }
 
@@ -455,18 +515,18 @@ public class QuoteCatalogController : ControllerBase
                 if (v.Id > 0)
                 {
                     c.Execute(@"UPDATE quote_product_variants SET code=@Code, name=@Name,
-                                cost_price=@CostPrice, sell_price=@SellPrice, discount_pct=@DiscountPct,
-                                vat_pct=@VatPct, unit=@Unit, default_qty=@DefaultQty, sort_order=@SortOrder
+                                cost_price=@CostPrice, sell_price=@SellPrice, markup_value=@MarkupValue,
+                                discount_pct=@DiscountPct, vat_pct=@VatPct, unit=@Unit, default_qty=@DefaultQty, sort_order=@SortOrder
                                 WHERE id=@Id",
-                        new { v.Code, v.Name, v.CostPrice, v.SellPrice, v.DiscountPct,
+                        new { v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue, v.DiscountPct,
                               v.VatPct, v.Unit, v.DefaultQty, v.SortOrder, v.Id }, tx);
                 }
                 else
                 {
                     c.Execute(@"INSERT INTO quote_product_variants
-                        (product_id, code, name, cost_price, sell_price, discount_pct, vat_pct, unit, default_qty, sort_order)
-                        VALUES (@Pid, @Code, @Name, @CostPrice, @SellPrice, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
-                        new { Pid = id, v.Code, v.Name, v.CostPrice, v.SellPrice,
+                        (product_id, code, name, cost_price, sell_price, markup_value, discount_pct, vat_pct, unit, default_qty, sort_order)
+                        VALUES (@Pid, @Code, @Name, @CostPrice, @SellPrice, @MarkupValue, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
+                        new { Pid = id, v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue,
                               v.DiscountPct, v.VatPct, v.Unit, v.DefaultQty, v.SortOrder }, tx);
                 }
             }
@@ -480,6 +540,19 @@ public class QuoteCatalogController : ControllerBase
             Log.Error(ex, "[QuoteProduct] Errore aggiornamento prodotto {Id}", id);
             return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}"));
         }
+    }
+
+    [HttpPut("products/{id}/move")]
+    public IActionResult MoveProduct(int id, [FromBody] ProductMoveRequest req)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            c.Execute("UPDATE quote_products SET category_id=@CategoryId WHERE id=@Id",
+                new { req.CategoryId, Id = id });
+            return Ok(ApiResponse<string>.Ok("Prodotto spostato"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
     /// <summary>Pulizia: rimuove base64 da description_rtf e pulisce image_path/attachment_path vecchi</summary>
@@ -618,8 +691,8 @@ public class QuoteCatalogController : ControllerBase
                 SELECT LAST_INSERT_ID()", new { Id = id }, tx);
 
             c.Execute(@"INSERT INTO quote_product_variants
-                (product_id, code, name, cost_price, sell_price, discount_pct, vat_pct, unit, default_qty, sort_order)
-                SELECT @NewId, code, name, cost_price, sell_price, discount_pct, vat_pct, unit, default_qty, sort_order
+                (product_id, code, name, cost_price, sell_price, markup_value, discount_pct, vat_pct, unit, default_qty, sort_order)
+                SELECT @NewId, code, name, cost_price, sell_price, COALESCE(markup_value,1.300), discount_pct, vat_pct, unit, default_qty, sort_order
                 FROM quote_product_variants WHERE product_id=@Id",
                 new { NewId = newId, Id = id }, tx);
 
@@ -686,9 +759,9 @@ public class QuoteCatalogController : ControllerBase
                             foreach (var v in prod.Variants)
                             {
                                 c.Execute(@"
-                                    INSERT INTO quote_product_variants (product_id, code, name, cost_price, sell_price, vat_pct, sort_order)
-                                    VALUES (@PId, @Code, @Name, @Cost, @Price, @Vat, @Sort)",
-                                    new { PId = pId, v.Code, v.Name, Cost = v.CostPrice, Price = v.SellPrice, Vat = v.VatPct, Sort = vSort++ }, tx);
+                                    INSERT INTO quote_product_variants (product_id, code, name, cost_price, sell_price, markup_value, vat_pct, sort_order)
+                                    VALUES (@PId, @Code, @Name, @Cost, @Price, @Markup, @Vat, @Sort)",
+                                    new { PId = pId, v.Code, v.Name, Cost = v.CostPrice, Price = v.SellPrice, Markup = v.MarkupValue, Vat = v.VatPct, Sort = vSort++ }, tx);
                                 totalVars++;
                             }
                         }
@@ -701,5 +774,16 @@ public class QuoteCatalogController : ControllerBase
             return Ok(ApiResponse<string>.Ok(msg));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore import: {ex.Message}")); }
+    }
+
+    // Helper: raccoglie ricorsivamente tutti gli ID delle sotto-categorie
+    private static void CollectChildCategoryIds(MySqlConnector.MySqlConnection c, int parentId, HashSet<int> result)
+    {
+        var children = c.Query<int>("SELECT id FROM quote_categories WHERE parent_id=@ParentId", new { ParentId = parentId }).ToList();
+        foreach (int childId in children)
+        {
+            result.Add(childId);
+            CollectChildCategoryIds(c, childId, result);
+        }
     }
 }

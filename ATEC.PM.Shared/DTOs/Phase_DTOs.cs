@@ -38,6 +38,7 @@ public class PhaseListItem
 public class PhaseAssignmentDto
 {
     public int Id { get; set; }
+    public int ProjectPhaseId { get; set; }
     public int EmployeeId { get; set; }
     public string EmployeeName { get; set; } = "";
     public string AssignRole { get; set; } = "MEMBER";

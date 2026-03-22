@@ -313,62 +313,79 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 
 ---
 
-## Blocco 9 — Fusione Preventivi + Offerte ❌ DA FARE
+## Blocco 9 — Preventivi Unificati + Configurazione Sezioni 🔧 IN CORSO
 
-**Preventivi e offerte sono la stessa cosa.** Il Blocco 9 fonde i due moduli in uno solo, prendendo le funzionalità migliori di ciascuno.
+### 9a. Configurazione Sezioni (pagina unificata) ✅
 
-### Decisioni aperte (da definire prima di procedere)
+Sostituisce le vecchie pagine Fasi Template, Reparti e Sezioni Costo in un'unica interfaccia tree drag & drop.
 
-| # | Decisione | Opzioni | Stato |
+| Funzionalità | Stato | Note |
+|---|---|---|
+| CostSectionsTreePage (tree unificato) | ✅ | Gruppi → Sezioni → Fasi Template + Reparti, tutto in drag & drop |
+| Drag fasi template nel tree | ✅ | Collega fase → sezione costo |
+| Drag reparti nelle fasi | ✅ | Assegna reparto → fase |
+| Accordion (uno solo aperto per livello) | ✅ | Sia nel tree che nei pannelli fasi |
+| Creazione inline fasi/reparti/sezioni/gruppi | ✅ | Bottoni +, doppio click per modifica |
+| Eliminazione con verifica uso | ✅ | Mostra dove è usata la fase se in uso |
+| Riordino fasi con frecce ▲▼ | ✅ | Aggiorna sort_order via API |
+| DragDropAdorner (visual feedback) | ✅ | Oggetto segue il mouse durante drag |
+| Vecchie pagine eliminate | ✅ | FasiTemplate/, Reparti/, CostSectionsPage rimossi |
+| Menu aggiornato | ✅ | Un solo bottone "Configurazione Sezioni" |
+
+### 9b. Preventivi Unificati (nuova pagina) 🔧
+
+Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi. Due tipi: SERVICE (catalogo semplice) e IMPIANTO (catalogo + costing + conversione).
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| PreventiviPage (TreeView + Detail) | ✅ | Stessa struttura OffersPage ma per quotes |
+| NewPreventivoDialog | ✅ | Tipo SERVICE/IMPIANTO, cliente, listino, gruppo |
+| ConvertPreventivoDialog | ✅ | Selezione PM per conversione IMPIANTO → Commessa |
+| DB: quote_type su quotes | ✅ | ENUM SERVICE/IMPIANTO |
+| DB: tabelle costing quote_cost_* | ✅ | Mirror di offer_cost_* per preventivi IMPIANTO |
+| PreventiviController (API) | ✅ | List, Create (con init costing), Convert |
+| PreventiviCostingController (API) | ✅ | Clone OfferCosting su tabelle quote_cost_* |
+| ProjectCostingControl.LoadForPreventivo | ✅ | Terzo mode: /api/preventivi/{id}/costing |
+| Layout pannelli (info + contenuto) | ✅ | IMPIANTO: CostingControl full-width, SERVICE: catalogo |
+| Status transitions + PDF | ✅ | Riusa QuotesController per items/status/pdf |
+| CatalogPickerDialog | ✅ | Picker prodotti dal catalogo CMS per sezioni materiali |
+| Materiali dal catalogo → costing | ✅ | Bottone "Riga Materiale" apre picker, inserisce con K dal catalogo |
+| Sezione materiali piatta | ✅ | Una sola sezione "Materiali" per preventivo (non 8 categorie) |
+| Pannello catalogo SERVICE | ❌ | Portare gestione voci/varianti nel pannello SERVICE |
+| Pannello info editabile | ❌ | Contatti, pagamento, validità, note, opzioni PDF |
+
+### 9c. Catalogo CMS — Miglioramenti ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Categorie nidificabili (parent_id) | ✅ | Gerarchia ricorsiva senza limiti di livello |
+| Sotto-categoria da context menu | ✅ | Tasto destro → "+ Sotto-categoria" |
+| Drag & drop categorie nel tree | ✅ | Sposta categoria sotto altra categoria o gruppo |
+| Drag & drop prodotti nel tree | ✅ | Sposta prodotto da lista o tree verso altra categoria |
+| Prodotti come foglie nel tree | ✅ | Ogni categoria mostra i prodotti come nodi figlio |
+| Click su prodotto → dettaglio singolo | ✅ | Mostra solo quel prodotto nella lista a destra |
+| Click su categoria → tutti i prodotti ricorsivi | ✅ | Include prodotti delle sotto-categorie |
+| Natural sort (IRB 120 prima di IRB 1200) | ✅ | NaturalStringComparer custom |
+| Ricerca ricorsiva multi-termine con debounce | ✅ | Cerca in gruppi, categorie, prodotti a qualsiasi profondità |
+| Tree con listini come radice (Tutti i listini) | ✅ | Listino → Gruppo → Categoria → Prodotto |
+| Accordion (uno solo aperto per livello) | ✅ | Gruppi e categorie |
+| Stato tree preservato dopo operazioni | ✅ | HashSet di chiavi espanse, ricorsivo |
+| GridSplitter ridimensionabile | ✅ | Pannello tree allargabile a mano |
+| Campo K (markup_value) sulle varianti | ✅ | DB + DTO + UI nel dialog prodotti |
+| K calcolato da sell_price/cost_price | ✅ | Applicato in bulk su varianti esistenti |
+| Cat. Materiali rimossa dal menu | ✅ | K gestito dal catalogo, non da pagina separata |
+| Riorganizzazione listino Automation Technology | ✅ | Da ~35 gruppi sparsi a 8 gruppi ordinati |
+| Fix encoding UTF-8 (€, ò, °) | ✅ | Correzione caratteri corrotti nel DB |
+| Consolidamento codice | ✅ | Rimosso dead code, fix bug drag DataGrid, _jopt shared, debounce, ToLookup server |
+
+### 9d. Da completare
+
+| Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| D1 | Strategia fusione | **A**: Offerte come base + features CMS, **B**: CMS come base + conversione | ☐ |
-| D2 | Costing | Avanzato (struttura/contingency/margine) vs Semplice (costo/vendita/utile) | ☐ |
-| D3 | Mapping verso commessa | Come le voci catalogo diventano fasi/BOM/budget ore | ☐ |
-| D4 | Codice unico | OF2026xxx o PRV-2026-xxxx o altro formato | ☐ |
-| D5 | UI lista | TreeView (per cliente/anno) o DataGrid (con filtri) | ☐ |
-| D6 | Offerte vecchie | Migrare o lasciare com'è sono | ☐ |
-
-### Roadmap fusione (post-decisioni)
-
-| Fase | Descrizione | Sessioni | Dipende da |
-|---|---|---|---|
-| F1 — Decisioni | Definire risposte alle 6 decisioni | 1 discussione | — |
-| F2 — Fusione DB | Unificare tabelle o creare ponte tra schemi | 1-2 | F1 |
-| F3 — Fusione UI | Una sola coppia di pagine con features migliori + rich text editor + upload allegati/immagini | 2-3 | F2 |
-| F4 — Conversione commessa | Adattare conversione al nuovo schema. Mapping voci catalogo → fasi/BOM | 1-2 | F3 |
-| F5 — PDF aggiornato | Adattare QuotePdfService al schema fuso + logo + layout personalizzabile | 1 | F3 |
-| F6 — Revisioni | Sistema revisioni con snapshot JSON + storico completo | 1 | F3 |
-| F7 — Dashboard CMC | KPI: preventivi emessi, tasso conversione, pipeline, utile medio + grafici OxyPlot | 1-2 | F3 |
-| F8 — Ruolo CMC | CMC nel RBAC. Menu/pagine visibili per ruolo | 1 | F7 |
-| F9 — Cleanup | Rimuovere modulo non più usato. Pulizia codice e DB | 1 | F4 |
-
-**Totale stimato: 10-14 sessioni**
-
-### Inventario — cosa abbiamo da entrambi i moduli
-
-**Dal modulo Offerte (Blocco 7):**
-- Conversione in commessa funzionante
-- Costing avanzato (sezioni/risorse/materiali/pricing)
-- ProjectCostingControl riusabile
-- Revisioni con copia completa
-- Notifiche OFFER_CONVERTED
-
-**Dal modulo Preventivi CMS (Blocco 8):**
-- Catalogo template (Gruppi→Categorie→Prodotti→Varianti)
-- Auto-populate dal template
-- Aggiunta rapida con doppio-click + duplicate detection
-- Generazione PDF professionale
-- Dirty tracking con snapshot
-- Doppio prezzo costo/vendita con utile per riga
-
-**Da costruire nella fusione:**
-- Ponte tra voci catalogo e sezioni costo
-- UI unificata (una sola lista + un solo dettaglio)
-- Mapping conversione: voci catalogo → fasi progetto + BOM
-- Rich text editor per descrizione prodotto
-- Upload allegati/immagini per prodotto
-- Dashboard CMC con KPI
-- Ruolo CMC nel RBAC
+| Pannello catalogo SERVICE nel preventivo | ❌ | ALTA | Gestione voci/varianti come QuoteDetailPage |
+| Pannello info editabile nel preventivo | ❌ | MEDIA | Contatti, condizioni, note |
+| Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
+| Addormentare pagine vecchie (Offerte, Preventivi CMS) | ❌ | BASSA | Quando il nuovo è completo |
 
 ---
 
@@ -385,44 +402,47 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 
 ---
 
-## Struttura File Modulo CMS
+## Struttura File
 
 ```
+Views/ConfigurazioneSezioni/
+  CostSectionsTreePage.xaml/.cs     ← Pagina unificata: gruppi, sezioni, fasi, reparti (drag & drop)
+  CostSectionTemplateDialog.xaml/.cs ← Dialog creazione sezione
+  DepartmentDialog.xaml/.cs         ← Dialog creazione/modifica reparto
+
+Views/Preventivi/
+  PreventiviPage.xaml/.cs           ← TreeView cliente/anno + detail (SERVICE o IMPIANTO)
+  NewPreventivoDialog.xaml/.cs      ← Dialog creazione con tipo SERVICE/IMPIANTO
+  ConvertPreventivoDialog.xaml/.cs  ← Dialog selezione PM per conversione
+
 Views/Cms/
-  QuoteCatalogPage.xaml/.cs         ← TreeView Gruppi→Categorie + DataGrid prodotti + Import Excel
+  QuoteCatalogPage.xaml/.cs         ← TreeView Listino→Gruppi→Categorie→Prodotti + drag & drop + natural sort
   QuoteGroupDialog.xaml/.cs         ← CRUD gruppi
   QuoteCategoryDialog.xaml/.cs      ← CRUD categorie
-  QuoteProductDialog.xaml/.cs       ← Editor prodotto con TinyMCE + griglia varianti + allegato
-  QuotesListPage.xaml/.cs           ← Lista preventivi con filtri e badge stato
-  NewQuoteDialog.xaml/.cs           ← Dialog creazione con selezione listino+cliente+template
-  QuoteDetailPage.xaml/.cs          ← Dettaglio completo + toggle Attiva/Conferma varianti
-  AddQuoteItemDialog.xaml/.cs       ← Aggiunta voci da catalogo con doppio-click
-  Converters/
-    QuoteCatalogConverters.cs       ← Tipo prodotto/contenuto badge
-    QuoteStatusConverters.cs        ← Badge stato preventivo
+  QuoteProductDialog.xaml/.cs       ← Editor prodotto con TinyMCE + griglia varianti + K markup + allegato
+  QuotesListPage.xaml/.cs           ← Lista preventivi CMS (vecchia, da addormentare)
+  NewQuoteDialog.xaml/.cs           ← Dialog creazione CMS (vecchia)
+  QuoteDetailPage.xaml/.cs          ← Dettaglio CMS (vecchia)
 
-UserControls/
-  HtmlEditor.xaml/.cs               ← WebView2 + TinyMCE 5 (riutilizzabile)
-
-Assets/tinymce/
-  editor.html                       ← HTML host per TinyMCE
-  tinymce/                          ← TinyMCE 5 self-hosted (npm)
-
-Views/Codex/
-  CodexPage.xaml/.cs                ← Lista articoli codex con filtri
-  CodexCompositionPage.xaml/.cs     ← Composizione 501/601/701 con drag&drop
-  QuantityDialog.xaml/.cs           ← Dialog quantità
-
-Server/Services/
-  QuoteDbService.cs                 ← DB modulo preventivi (10 tabelle incl. quote_price_lists)
-  QuotePdfService.cs                ← Generatore PDF con QuestPDF
+Views/Costing/
+  ProjectCostingControl.xaml/.cs    ← Control riusabile: Load() / LoadForOffer() / LoadForPreventivo()
+  CatalogPickerDialog.xaml/.cs      ← Picker prodotti dal catalogo per sezioni materiali
+  ViewModels/                       ← CostingViewModel, CostGroupVM, CostSectionVM, etc.
 
 Server/Controllers/
-  QuoteCatalogController.cs         ← API catalogo + listini + import Excel
-  QuotesController.cs               ← API preventivi + AddProductWithAllVariants
+  PreventiviController.cs           ← API preventivi unificati (list, create con costing init, convert)
+  PreventiviCostingController.cs    ← API costing preventivi (mirror OfferCosting su quote_cost_*)
+  QuoteCatalogController.cs         ← API catalogo + categorie nidificabili + move prodotti/categorie
+  QuotesController.cs               ← API preventivi CMS (items, status, pdf)
+  OffersController.cs               ← API offerte (vecchia, da addormentare)
+  OfferCostingController.cs         ← API costing offerte (vecchia)
+
+Server/Services/
+  QuoteDbService.cs                 ← DB: quote_type, quote_cost_*, parent_id categorie, markup varianti
+  QuotePdfService.cs                ← Generatore PDF con QuestPDF
 
 Shared/DTOs/
-  Quote_DTOs.cs                     ← Tutti i DTO (incl. PriceList, Import, varianti attive)
+  Quote_DTOs.cs                     ← DTO con QuoteType, ParentId, MarkupValue, CategoryMoveRequest, ProductMoveRequest
 ```
 
 ---

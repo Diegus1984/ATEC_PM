@@ -59,19 +59,21 @@ public class PhasesController : ControllerBase
             WHERE pp.project_id = @ProjectId
             ORDER BY pp.sort_order", new { ProjectId = projectId }).ToList();
 
-        // Carica assegnazioni per ogni fase
-        foreach (PhaseListItem phase in phases)
-        {
-            phase.Assignments = c.Query<PhaseAssignmentDto>(@"
-    SELECT pa.id, pa.employee_id AS EmployeeId,
-           CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
-           pa.assign_role AS AssignRole, pa.planned_hours AS PlannedHours,
-           COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te 
-                     WHERE te.project_phase_id = @PhaseId AND te.employee_id = pa.employee_id), 0) AS HoursWorked
-    FROM phase_assignments pa
-    JOIN employees e ON e.id = pa.employee_id
-    WHERE pa.project_phase_id = @PhaseId", new { PhaseId = phase.Id }).ToList();
-        }
+        // Carica tutte le assegnazioni in un'unica query
+        var phaseIds = phases.Select(p => p.Id).ToList();
+        var allAssignments = phaseIds.Count > 0 ? c.Query<PhaseAssignmentDto>(@"
+            SELECT pa.id, pa.project_phase_id AS ProjectPhaseId, pa.employee_id AS EmployeeId,
+                   CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
+                   pa.assign_role AS AssignRole, pa.planned_hours AS PlannedHours,
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te
+                             WHERE te.project_phase_id = pa.project_phase_id AND te.employee_id = pa.employee_id), 0) AS HoursWorked
+            FROM phase_assignments pa
+            JOIN employees e ON e.id = pa.employee_id
+            WHERE pa.project_phase_id IN @PhaseIds", new { PhaseIds = phaseIds }).ToList()
+            : new List<PhaseAssignmentDto>();
+        var assignmentsByPhase = allAssignments.ToLookup(a => a.ProjectPhaseId);
+        foreach (var phase in phases)
+            phase.Assignments = assignmentsByPhase[phase.Id].ToList();
 
         return Ok(ApiResponse<List<PhaseListItem>>.Ok(phases));
     }

@@ -228,6 +228,123 @@ public class QuoteDbService
 
         // Opzione nascondi quantità nel PDF
         AddColumnIfMissing(c, "quotes", "hide_quantities", "TINYINT(1) DEFAULT 0 AFTER show_summary_prices");
+
+        // ── Preventivi Unificati: tipo preventivo ──
+        AddColumnIfMissing(c, "quotes", "quote_type", "VARCHAR(20) NOT NULL DEFAULT 'SERVICE' AFTER status");
+
+        // ── Campo K (markup) sulle varianti catalogo ──
+        AddColumnIfMissing(c, "quote_product_variants", "markup_value", "DECIMAL(5,3) NOT NULL DEFAULT 1.300 AFTER sell_price");
+
+        // ── Categorie nidificabili (parent/child) ──
+        AddColumnIfMissing(c, "quote_categories", "parent_id", "INT NULL AFTER group_id");
+
+        // ── Flag auto_include su categorie materiali ──
+        AddColumnIfMissing(c, "material_categories", "auto_include_on_offer", "TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
+
+        // ── Tabelle costing per preventivi IMPIANTO (mirror di offer_cost_*) ──
+        CreateQuoteCostingTables(c);
+    }
+
+    private static void CreateQuoteCostingTables(MySqlConnection c)
+    {
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_cost_sections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            quote_id INT NOT NULL,
+            template_id INT NULL,
+            name VARCHAR(200) NOT NULL,
+            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
+            group_name VARCHAR(100) NOT NULL DEFAULT '',
+            sort_order INT NOT NULL DEFAULT 0,
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            contingency_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+            margin_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+            is_shadowed BOOLEAN NOT NULL DEFAULT FALSE,
+            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+            FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_cost_section_departments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            quote_cost_section_id INT NOT NULL,
+            department_id INT NOT NULL,
+            FOREIGN KEY (quote_cost_section_id) REFERENCES quote_cost_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_cost_resources (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            section_id INT NOT NULL,
+            employee_id INT NULL,
+            resource_name VARCHAR(200) NOT NULL DEFAULT '',
+            work_days DECIMAL(8,1) NOT NULL DEFAULT 0,
+            hours_per_day DECIMAL(4,1) NOT NULL DEFAULT 8,
+            hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.450,
+            num_trips INT NOT NULL DEFAULT 0,
+            km_per_trip DECIMAL(8,1) NOT NULL DEFAULT 0,
+            cost_per_km DECIMAL(6,3) NOT NULL DEFAULT 0,
+            daily_food DECIMAL(8,2) NOT NULL DEFAULT 0,
+            daily_hotel DECIMAL(8,2) NOT NULL DEFAULT 0,
+            allowance_days INT NOT NULL DEFAULT 0,
+            daily_allowance DECIMAL(8,2) NOT NULL DEFAULT 0,
+            sort_order INT NOT NULL DEFAULT 0,
+            FOREIGN KEY (section_id) REFERENCES quote_cost_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_material_sections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            quote_id INT NOT NULL,
+            category_id INT NULL,
+            name VARCHAR(200) NOT NULL,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES material_categories(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_material_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            section_id INT NOT NULL,
+            description VARCHAR(500) NOT NULL DEFAULT '',
+            quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
+            unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
+            item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
+            sort_order INT NOT NULL DEFAULT 0,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            contingency_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+            margin_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+            is_shadowed BOOLEAN NOT NULL DEFAULT FALSE,
+            FOREIGN KEY (section_id) REFERENCES quote_material_sections(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            quote_id INT NOT NULL UNIQUE,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0.1300,
+            negotiation_margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0500,
+            travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+            allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing_distribution (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            quote_id INT NOT NULL,
+            section_type VARCHAR(20) NOT NULL,
+            section_id INT NOT NULL,
+            section_name VARCHAR(200) NOT NULL DEFAULT '',
+            sale_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
     private static void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)

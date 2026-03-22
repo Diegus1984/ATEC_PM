@@ -748,6 +748,7 @@
 
             <!--  Contenuto Principale con Scroll  -->
             <ScrollViewer
+                x:Name="mainScrollViewer"
                 Padding="16"
                 VerticalScrollBarVisibility="Auto"
                 Visibility="{Binding ShowContent, Converter={StaticResource BoolToVis}}">
@@ -1304,7 +1305,7 @@
                                                             <Button
                                                                 Padding="12,6"
                                                                 Click="BtnAddCommission_Click"
-                                                                Content="💰 Provvigione"
+                                                                Content="Provvigione"
                                                                 FontSize="11"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 Tag="{Binding Id}" />

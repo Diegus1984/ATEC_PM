@@ -117,8 +117,7 @@
                                                                     FontSize="9"
                                                                     Foreground="#9CA3AF"
                                                                     Text="▼" />
-                                                                <ContentPresenter
-                                                                    VerticalAlignment="Center" />
+                                                                <ContentPresenter VerticalAlignment="Center" />
                                                             </DockPanel>
                                                         </Border>
                                                         <ControlTemplate.Triggers>
@@ -183,47 +182,137 @@
                                         </Border>
                                     </Grid>
                                 </Button>
-                                <Button Click="Nav_Click" Content="  Commesse" Style="{StaticResource NavBtn}" Tag="Commesse" />
-                                <Button Click="Nav_Click" Content="  Offerte" Style="{StaticResource NavBtn}" Tag="Offerte" />
-                                <Button Click="Nav_Click" Content="  Cat. Preventivi" Style="{StaticResource NavBtn}" Tag="CatalogoPreventivi" />
-                                <Button Click="Nav_Click" Content="  Preventivi" Style="{StaticResource NavBtn}" Tag="Preventivi" />
-                                <Button Click="Nav_Click" Content="  Timesheet" Style="{StaticResource NavBtn}" Tag="Timesheet" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Commesse"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Commesse" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Offerte"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Offerte" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Cat. Preventivi"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="CatalogoPreventivi" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Preventivi"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Preventivi" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Preventivi (Nuovo)"
+                                    FontWeight="SemiBold"
+                                    Foreground="#4F6EF7"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="PreventiviUnificati" />
+                                <Button
+                                    Click="Nav_Click"
+                                    Content="  Timesheet"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Timesheet" />
                             </StackPanel>
                         </Expander>
 
                         <!--  GESTIONE  -->
-                        <Expander x:Name="expGestione" Header="GESTIONE" Style="{StaticResource NavExpander}">
+                        <Expander
+                            x:Name="expGestione"
+                            Header="GESTIONE"
+                            Style="{StaticResource NavExpander}">
                             <StackPanel>
-                                <Button x:Name="btnClienti" Click="Nav_Click" Content="  Clienti" Style="{StaticResource NavBtn}" Tag="Clienti" />
-                                <Button x:Name="btnFornitori" Click="Nav_Click" Content="  Fornitori" Style="{StaticResource NavBtn}" Tag="Fornitori" />
-                                <Button x:Name="btnCatalogo" Click="Nav_Click" Content="  Catalogo Articoli" Style="{StaticResource NavBtn}" Tag="Catalogo" />
-                                <Button x:Name="btnCodex" Click="Nav_Click" Content="  Codex Articoli" Style="{StaticResource NavBtn}" Tag="Codex" />
-                                <Button x:Name="btnCodexComposition" Click="Nav_Click" Content="  Composizione Codex" Style="{StaticResource NavBtn}" Tag="CodexComposizione" />
+                                <Button
+                                    x:Name="btnClienti"
+                                    Click="Nav_Click"
+                                    Content="  Clienti"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Clienti" />
+                                <Button
+                                    x:Name="btnFornitori"
+                                    Click="Nav_Click"
+                                    Content="  Fornitori"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Fornitori" />
+                                <Button
+                                    x:Name="btnCatalogo"
+                                    Click="Nav_Click"
+                                    Content="  Catalogo Articoli"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Catalogo" />
+                                <Button
+                                    x:Name="btnCodex"
+                                    Click="Nav_Click"
+                                    Content="  Codex Articoli"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Codex" />
+                                <Button
+                                    x:Name="btnCodexComposition"
+                                    Click="Nav_Click"
+                                    Content="  Composizione Codex"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="CodexComposizione" />
                             </StackPanel>
                         </Expander>
 
                         <!--  AMMINISTRAZIONE  -->
-                        <Expander x:Name="expAdmin" Header="AMMINISTRAZIONE" Style="{StaticResource NavExpander}">
+                        <Expander
+                            x:Name="expAdmin"
+                            Header="AMMINISTRAZIONE"
+                            Style="{StaticResource NavExpander}">
                             <StackPanel>
-                                <Button x:Name="btnUtenti" Click="Nav_Click" Content="  Utenti" Style="{StaticResource NavBtn}" Tag="Utenti" />
+                                <Button
+                                    x:Name="btnUtenti"
+                                    Click="Nav_Click"
+                                    Content="  Utenti"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Utenti" />
                             </StackPanel>
                         </Expander>
 
                         <!--  GESTIONE AVANZATA  -->
-                        <Expander x:Name="expAvanzata" Header="GESTIONE AVANZATA" IsExpanded="False" Style="{StaticResource NavExpander}">
+                        <Expander
+                            x:Name="expAvanzata"
+                            Header="GESTIONE AVANZATA"
+                            IsExpanded="False"
+                            Style="{StaticResource NavExpander}">
                             <StackPanel>
-                                <Button x:Name="btnConfigSezioni" Click="Nav_Click" Content="  Configurazione Sezioni" Style="{StaticResource NavBtn}" Tag="ConfigurazioneSezioni" />
-                                <Button x:Name="btnMaterialCat" Click="Nav_Click" Content="  Cat. Materiali" Style="{StaticResource NavBtn}" Tag="CategorieMateriali" />
-                                <Button x:Name="btnDdpDest" Click="Nav_Click" Content="  Destinazioni DDP" Style="{StaticResource NavBtn}" Tag="DestinazioniDdp" />
-                                <Button x:Name="btnBackup" Click="Nav_Click" Content="  Backup DB" Style="{StaticResource NavBtn}" Tag="Backup" />
+                                <Button
+                                    x:Name="btnConfigSezioni"
+                                    Click="Nav_Click"
+                                    Content="  Configurazione Sezioni"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="ConfigurazioneSezioni" />
+                                <Button
+                                    x:Name="btnDdpDest"
+                                    Click="Nav_Click"
+                                    Content="  Destinazioni DDP"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="DestinazioniDdp" />
+                                <Button
+                                    x:Name="btnBackup"
+                                    Click="Nav_Click"
+                                    Content="  Backup DB"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Backup" />
                             </StackPanel>
                         </Expander>
 
                         <!--  SESSIONE  -->
-                        <Expander Header="SESSIONE" IsExpanded="False" Style="{StaticResource NavExpander}">
+                        <Expander
+                            Header="SESSIONE"
+                            IsExpanded="False"
+                            Style="{StaticResource NavExpander}">
                             <StackPanel>
-                                <Button Click="BtnLogout_Click" Content="  Logout" Style="{StaticResource NavBtn}" />
-                                <Button Click="BtnExit_Click" Content="  Esci" Style="{StaticResource NavBtn}" />
+                                <Button
+                                    Click="BtnLogout_Click"
+                                    Content="  Logout"
+                                    Style="{StaticResource NavBtn}" />
+                                <Button
+                                    Click="BtnExit_Click"
+                                    Content="  Esci"
+                                    Style="{StaticResource NavBtn}" />
                             </StackPanel>
                         </Expander>
                     </StackPanel>

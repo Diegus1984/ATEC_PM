@@ -6,9 +6,20 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="280" MinWidth="200" MaxWidth="600" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
+
+        <!-- Splitter per ridimensionare il pannello tree -->
+        <GridSplitter
+            Grid.Column="1"
+            Width="4"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Stretch"
+            Background="#E4E7EC"
+            Cursor="SizeWE"
+            ResizeBehavior="PreviousAndNext" />
 
         <!--  ══════════════════════════════════════════════  -->
         <!--  LEFT: Tree Gruppi → Categorie  -->
@@ -116,6 +127,10 @@
                     Padding="4"
                     Background="White"
                     BorderThickness="0"
+                    AllowDrop="True"
+                    PreviewMouseLeftButtonDown="TreeGroups_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="TreeGroups_PreviewMouseMove"
+                    Drop="TreeGroups_Drop"
                     SelectedItemChanged="Tree_SelectedItemChanged">
                     <TreeView.ItemContainerStyle>
                         <Style TargetType="TreeViewItem">
@@ -129,6 +144,8 @@
                             <MenuItem Click="BtnDeleteGroup_Click" Header="Elimina gruppo" />
                         </ContextMenu>
                         <ContextMenu x:Key="CategoryContextMenu">
+                            <MenuItem Click="BtnAddSubCategory_Click" Header="+ Sotto-categoria" FontWeight="SemiBold" />
+                            <Separator />
                             <MenuItem Click="BtnEditCategory_Click" Header="Modifica categoria" />
                             <MenuItem Click="BtnDeleteCategory_Click" Header="Elimina categoria" />
                         </ContextMenu>
@@ -140,7 +157,7 @@
         <!--  ══════════════════════════════════════════════  -->
         <!--  RIGHT: Prodotti della categoria selezionata  -->
         <!--  ══════════════════════════════════════════════  -->
-        <Border Grid.Column="1">
+        <Border Grid.Column="2">
             <DockPanel>
                 <!--  Header destro  -->
                 <Border
@@ -212,6 +229,8 @@
                     IsReadOnly="True"
                     MouseDoubleClick="DgProducts_DoubleClick"
                     SelectionChanged="DgProducts_SelectionChanged"
+                    PreviewMouseLeftButtonDown="DgProducts_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="DgProducts_PreviewMouseMove"
                     SelectionMode="Single"
                     RowDetailsVisibilityMode="Collapsed"
                     Style="{StaticResource ModernDataGrid}">

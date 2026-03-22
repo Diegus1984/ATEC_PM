@@ -42,12 +42,14 @@ public class QuoteCategoryDto
 {
     public int Id { get; set; }
     public int GroupId { get; set; }
+    public int? ParentId { get; set; }
     public string GroupName { get; set; } = "";
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public int ProductCount { get; set; }
+    public List<QuoteCategoryDto> Children { get; set; } = new();
     public List<QuoteProductDto> Products { get; set; } = new();
 }
 
@@ -77,6 +79,7 @@ public class QuoteProductVariantDto
     public string Name { get; set; } = "";
     public decimal CostPrice { get; set; }
     public decimal SellPrice { get; set; }
+    public decimal MarkupValue { get; set; } = 1.300m;
     public decimal DiscountPct { get; set; }
     public decimal VatPct { get; set; } = 22.00m;
     public string Unit { get; set; } = "nr.";
@@ -97,10 +100,22 @@ public class QuoteGroupSaveDto
 public class QuoteCategorySaveDto
 {
     public int GroupId { get; set; }
+    public int? ParentId { get; set; }
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+}
+
+public class CategoryMoveRequest
+{
+    public int? NewParentId { get; set; }
+    public int NewGroupId { get; set; }
+}
+
+public class ProductMoveRequest
+{
+    public int CategoryId { get; set; }
 }
 
 public class QuoteProductSaveDto
@@ -125,6 +140,7 @@ public class QuoteProductVariantSaveDto
     public string Name { get; set; } = "";
     public decimal CostPrice { get; set; }
     public decimal SellPrice { get; set; }
+    public decimal MarkupValue { get; set; } = 1.300m;
     public decimal DiscountPct { get; set; }
     public decimal VatPct { get; set; } = 22.00m;
     public string Unit { get; set; } = "nr.";
@@ -163,6 +179,7 @@ public class QuoteDto
     public string PaymentType { get; set; } = "";
     public string Language { get; set; } = "it";
     public string Status { get; set; } = "draft";
+    public string QuoteType { get; set; } = "SERVICE";
     public int Revision { get; set; }
     public int? PriceListId { get; set; }
     public string PriceListName { get; set; } = "";
@@ -223,6 +240,7 @@ public class QuoteItemDto
 
 public class QuoteSaveDto
 {
+    public string QuoteType { get; set; } = "SERVICE";
     public int? PriceListId { get; set; }
     public string Title { get; set; } = "";
     public int CustomerId { get; set; }
@@ -353,6 +371,7 @@ public class QuoteCatalogImportVariant
     public string Description { get; set; } = "";
     public decimal SellPrice { get; set; }
     public decimal CostPrice { get; set; }
+    public decimal MarkupValue { get; set; } = 1.300m;
     public decimal VatPct { get; set; } = 22;
 }
 
