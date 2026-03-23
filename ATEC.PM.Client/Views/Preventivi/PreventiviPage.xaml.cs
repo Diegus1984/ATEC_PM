@@ -361,11 +361,12 @@ public partial class PreventiviPage : Page
             // Load items (products + auto-includes) for both types
             LoadServiceItems(quote);
 
+            // Always unsubscribe to prevent leaks when switching between quotes
+            costingTreeControl.PricingUpdated -= OnPricingUpdated;
+
             // Load costing for IMPIANTO type
             if (isPlant)
             {
-                bool readOnly = quote.Status is "converted" or "rejected" or "expired";
-                costingTreeControl.PricingUpdated -= OnPricingUpdated;
                 costingTreeControl.PricingUpdated += OnPricingUpdated;
                 costingTreeControl.LoadForPreventivo(quoteId);
             }

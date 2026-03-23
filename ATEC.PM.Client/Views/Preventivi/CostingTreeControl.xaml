@@ -10,8 +10,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <local:InverseBoolToVisConverter x:Key="InverseBoolToVis" />
-        <local:BoolToAngleConverter x:Key="BoolToAngle" />
-        <local:HexToBrushConverter x:Key="HexToBrush" />
+        <!-- BoolToAngle and HexToBrush are defined globally in Converters.xaml -->
 
         <!--  NumericTextBox style  -->
         <Style x:Key="NumericTextBox" TargetType="TextBox">
@@ -95,24 +94,6 @@
             </Button>
         </DataTemplate>
 
-        <!--  Delete Material Button Template  -->
-        <DataTemplate x:Key="DeleteMaterialButton">
-            <Button
-                Width="22"
-                Height="22"
-                Background="#EF44441A"
-                BorderThickness="0"
-                Click="BtnDeleteMaterial_Click"
-                Cursor="Hand"
-                Tag="{Binding Mode=OneWay}"
-                ToolTip="Elimina materiale">
-                <TextBlock
-                    FontSize="9"
-                    FontWeight="Bold"
-                    Foreground="#EF4444"
-                    Text="X" />
-            </Button>
-        </DataTemplate>
 
         <!--  DataGrid cell style  -->
         <Style x:Key="CostingCell" TargetType="DataGridCell">

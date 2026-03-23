@@ -11,6 +11,8 @@ namespace ATEC.PM.Client.Views.Preventivi;
 
 public partial class CostingTreeControl : UserControl
 {
+    private static readonly JsonSerializerOptions _jopt = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions _joptCamel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private int _quoteId;
     private string _apiBasePath = "";
     private ObservableCollection<CostingTreeRow> _resourceRows = new();
@@ -18,7 +20,7 @@ public partial class CostingTreeControl : UserControl
     private ObservableCollection<MaterialProductGroup> _materialProducts = new();
     private int _nextNodeId = 1;
     private bool _isLoading;
-    private List<CostingTreeRow> _allRows = new();
+
     private Dictionary<int, List<EmployeeCostLookup>> _employeeCache = new();
     private bool _suppressEmployeeChange;
     private PricingVM _pricingVM = new();
@@ -84,7 +86,7 @@ public partial class CostingTreeControl : UserControl
             if (!doc.RootElement.TryGetProperty("data", out var dataEl)) return;
 
             var data = JsonSerializer.Deserialize<ProjectCostingData>(dataEl.GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                _jopt);
             if (data == null) return;
 
             _lastData = data;
@@ -128,7 +130,7 @@ public partial class CostingTreeControl : UserControl
     {
         _resourceRows.Clear();
         _nextNodeId = 1;
-        _allRows.Clear();
+
 
         if (data.CostSections == null) return;
 
@@ -195,7 +197,7 @@ public partial class CostingTreeControl : UserControl
                             DailyAllowance = res.DailyAllowance
                         };
                         sectionNode.Children.Add(resNode);
-                        _allRows.Add(resNode);
+
 
                         secCost += resNode.TotalCost;
                         secSale += resNode.TotalSale;
@@ -208,7 +210,7 @@ public partial class CostingTreeControl : UserControl
                 sectionNode.SumTotalHours = sectionNode.Children.Sum(r => r.TotalHours);
                 sectionNode.ResourceCount = sectionNode.Children.Count;
                 groupNode.Children.Add(sectionNode);
-                _allRows.Add(sectionNode);
+
 
                 groupCost += secCost;
                 groupSale += secSale;
@@ -222,7 +224,7 @@ public partial class CostingTreeControl : UserControl
             groupNode.SumTotalHours = groupHours;
             groupNode.ResourceCount = groupNode.Children.Sum(s => s.ResourceCount);
             _resourceRows.Add(groupNode);
-            _allRows.Add(groupNode);
+
         }
     }
 
@@ -516,7 +518,7 @@ public partial class CostingTreeControl : UserControl
                     var doc = JsonDocument.Parse(json);
                     var dataJson = doc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json;
                     var employees = JsonSerializer.Deserialize<List<EmployeeCostLookup>>(dataJson,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                        _jopt) ?? new();
                     _employeeCache[sectionId] = employees;
                 }
                 else
@@ -605,10 +607,10 @@ public partial class CostingTreeControl : UserControl
                 {
                     if (dataEl.TryGetProperty("groups", out var grpEl))
                         groups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
-                            grpEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                            grpEl.GetRawText(), _jopt) ?? new();
                     if (dataEl.TryGetProperty("templates", out var tmplEl))
                         templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
-                            tmplEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                            tmplEl.GetRawText(), _jopt) ?? new();
                 }
             }
 
@@ -647,7 +649,7 @@ public partial class CostingTreeControl : UserControl
                 {
                     templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
                         tmplEl.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                        _jopt) ?? new();
                 }
             }
 
@@ -710,16 +712,10 @@ public partial class CostingTreeControl : UserControl
 
         try
         {
-            var json = await ApiClient.GetAsync(_apiBasePath);
-            var rawDoc = JsonDocument.Parse(json!);
-            var dataJson = rawDoc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json!;
-            var data = JsonSerializer.Deserialize<ProjectCostingData>(dataJson,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
             int materialSectionId;
-            if (data?.MaterialSections?.Count > 0)
+            if (_lastData?.MaterialSections?.Count > 0)
             {
-                materialSectionId = data.MaterialSections[0].Id;
+                materialSectionId = _lastData.MaterialSections[0].Id;
             }
             else
             {
@@ -862,25 +858,22 @@ public partial class CostingTreeControl : UserControl
     /// </summary>
     private async Task EnsureParentHasChildren(int parentId)
     {
-        // Check if parent already has children
-        var json = await ApiClient.GetAsync(_apiBasePath);
-        var rawDoc = JsonDocument.Parse(json!);
-        var dataJson = rawDoc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json!;
-        var data = JsonSerializer.Deserialize<ProjectCostingData>(dataJson,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        // Check locally if parent already has children
+        var group = _materialProducts.FirstOrDefault(g => g.ParentId == parentId);
+        if (group == null || group.Variants.Count > 1) return; // already has multiple children
 
-        if (data?.MaterialSections == null) return;
+        // Use _lastData to get parent's original values
+        if (_lastData?.MaterialSections == null) return;
 
-        foreach (var section in data.MaterialSections)
+        foreach (var section in _lastData.MaterialSections)
         {
             if (section.Items == null) continue;
             var parent = section.Items.FirstOrDefault(i => i.Id == parentId);
             if (parent == null) continue;
 
             bool hasChildren = section.Items.Any(i => i.ParentItemId == parentId);
-            if (hasChildren) return; // already has children, nothing to do
+            if (hasChildren) return;
 
-            // Parent is a legacy flat item with actual data — create a child copy
             if (parent.Quantity > 0 || parent.UnitCost > 0)
             {
                 var childBody = new
@@ -1413,7 +1406,7 @@ public partial class CostingTreeControl : UserControl
                 travelMarkup = 1.000m,
                 allowanceMarkup = 1.000m
             };
-            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            string json = JsonSerializer.Serialize(req, _joptCamel);
             await ApiClient.PutAsync($"{_apiBasePath}/pricing", json);
         }
         catch (Exception ex)
@@ -1439,7 +1432,7 @@ public partial class CostingTreeControl : UserControl
                     marginPinned = sec.MarginPinned,
                     isShadowed = sec.IsShadowed
                 };
-                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                string json = JsonSerializer.Serialize(req, _joptCamel);
                 await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
             }
             catch { }
@@ -1457,7 +1450,7 @@ public partial class CostingTreeControl : UserControl
                     marginPinned = item.MarginPinned,
                     isShadowed = item.IsShadowed
                 };
-                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                string json = JsonSerializer.Serialize(req, _joptCamel);
                 await ApiClient.PutAsync($"{_apiBasePath}/material-items/{item.Id}/distribution", json);
             }
             catch { }

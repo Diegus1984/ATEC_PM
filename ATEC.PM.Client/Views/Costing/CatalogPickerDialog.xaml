@@ -209,7 +209,7 @@
                                                                     <TextBlock FontSize="12" FontWeight="Medium" Foreground="#1A1D26"
                                                                                Text="{Binding VariantName}" TextTrimming="CharacterEllipsis" />
                                                                     <TextBlock FontSize="10" Foreground="#9CA3AF" Text="{Binding VariantCode}"
-                                                                               Visibility="{Binding VariantCode, Converter={x:Static local:StringToVisConverter.Instance}}" />
+                                                                               Visibility="{Binding VariantCode, Converter={StaticResource StringToVisibility}}" />
                                                                 </StackPanel>
 
                                                                 <TextBlock Grid.Column="2" FontSize="12" Foreground="#374151"

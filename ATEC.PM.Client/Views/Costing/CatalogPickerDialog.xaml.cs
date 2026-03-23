@@ -16,15 +16,6 @@ using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.Costing;
 
-/// <summary>Converter: non-empty string → Visible, else Collapsed</summary>
-public class StringToVisConverter : IValueConverter
-{
-    public static readonly StringToVisConverter Instance = new();
-    public object Convert(object value, Type t, object p, CultureInfo c) =>
-        value is string s && !string.IsNullOrWhiteSpace(s) ? Visibility.Visible : Visibility.Collapsed;
-    public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotImplementedException();
-}
-
 /// <summary>Group of variants for a single product (shown as card with header + indented variants)</summary>
 internal class PickerProductGroup
 {
@@ -59,7 +50,6 @@ internal class PickerVariantItem : INotifyPropertyChanged
 public partial class CatalogPickerDialog : Window
 {
     private static readonly JsonSerializerOptions _jopt = new() { PropertyNameCaseInsensitive = true };
-    private List<PickerVariantItem> _currentItems = new();
 
     internal List<PickerVariantItem> SelectedItems { get; private set; } = new();
 
@@ -73,6 +63,13 @@ public partial class CatalogPickerDialog : Window
     {
         InitializeComponent();
         icCart.ItemsSource = _cart;
+        _searchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _searchTimer.Tick += (_, _) =>
+        {
+            _searchTimer.Stop();
+            if (_treeData.HasValue)
+                RebuildTreeFiltered(_treeData.Value, txtSearch.Text.Trim().ToLowerInvariant());
+        };
         Loaded += async (_, _) =>
         {
             await LoadPriceLists();
@@ -137,7 +134,7 @@ public partial class CatalogPickerDialog : Window
     }
 
     private JsonElement? _treeData;
-    private System.Windows.Threading.DispatcherTimer? _searchTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _searchTimer;
 
     private void BuildTree(JsonElement data)
     {
@@ -259,16 +256,7 @@ public partial class CatalogPickerDialog : Window
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text) ? Visibility.Visible : Visibility.Collapsed;
-
-        // Debounce: rebuild tree after 300ms
-        _searchTimer?.Stop();
-        _searchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _searchTimer.Tick += (_, _) =>
-        {
-            _searchTimer.Stop();
-            if (_treeData.HasValue)
-                RebuildTreeFiltered(_treeData.Value, txtSearch.Text.Trim().ToLowerInvariant());
-        };
+        _searchTimer.Stop();
         _searchTimer.Start();
     }
 
@@ -344,7 +332,7 @@ public partial class CatalogPickerDialog : Window
 
     private void PopulateVariants(List<QuoteProductDto> products)
     {
-        _currentItems = new List<PickerVariantItem>();
+
         var groups = new ObservableCollection<PickerProductGroup>();
 
         foreach (var p in products)
@@ -364,7 +352,7 @@ public partial class CatalogPickerDialog : Window
                     Quantity = 1
                 };
                 variants.Add(item);
-                _currentItems.Add(item);
+
             }
 
             if (variants.Count > 0)
@@ -372,11 +360,11 @@ public partial class CatalogPickerDialog : Window
         }
 
         icProductGroups.ItemsSource = groups;
-        UpdateSelectionCount();
+        UpdateCartCount();
     }
 
     // ══════════════════════════════════════════════════
-    // SELECTION COUNT
+    // CART MANAGEMENT
     // ══════════════════════════════════════════════════
 
     private void Variant_CheckChanged(object sender, RoutedEventArgs e)
@@ -397,8 +385,6 @@ public partial class CatalogPickerDialog : Window
         pnlCart.Visibility = _cart.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateCartCount();
     }
-
-    private void UpdateSelectionCount() => UpdateCartCount();
 
     // ══════════════════════════════════════════════════
     // BUTTONS

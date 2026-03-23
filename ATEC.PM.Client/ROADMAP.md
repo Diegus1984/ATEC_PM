@@ -345,14 +345,29 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | DB: tabelle costing quote_cost_* | ✅ | Mirror di offer_cost_* per preventivi IMPIANTO |
 | PreventiviController (API) | ✅ | List, Create (con init costing), Convert |
 | PreventiviCostingController (API) | ✅ | Clone OfferCosting su tabelle quote_cost_* |
-| ProjectCostingControl.LoadForPreventivo | ✅ | Terzo mode: /api/preventivi/{id}/costing |
-| Layout pannelli (info + contenuto) | ✅ | IMPIANTO: CostingControl full-width, SERVICE: catalogo |
+| CostingTreeControl.LoadForPreventivo | ✅ | Terzo mode: /api/preventivi/{id}/costing |
+| Layout IMPIANTO (stile QuoteDetailPage) | ✅ | Info header + CostingTree + Contenuti Auto + Riepilogo + Note (card separate) |
 | Status transitions + PDF | ✅ | Riusa QuotesController per items/status/pdf |
-| CatalogPickerDialog | ✅ | Picker prodotti dal catalogo CMS per sezioni materiali |
-| Materiali dal catalogo → costing | ✅ | Bottone "Riga Materiale" apre picker, inserisce con K dal catalogo |
-| Sezione materiali piatta | ✅ | Una sola sezione "Materiali" per preventivo (non 8 categorie) |
-| Pannello catalogo SERVICE | ❌ | Portare gestione voci/varianti nel pannello SERVICE |
-| Pannello info editabile | ❌ | Contatti, pagamento, validità, note, opzioni PDF |
+| CatalogPickerDialog (albero completo) | ✅ | Listino→Gruppo→Categoria→Prodotto con ricerca, carrello multi-selezione, varianti raggruppate |
+| Materiali con gerarchia parent/varianti | ✅ | parent_item_id su quote_material_items, UI prodotto→varianti come QuoteDetailPage |
+| AddMaterialVariantDialog | ✅ | Aggiunta variante locale: descrizione, costo, K, qtà, anteprima vendita |
+| Layout materiali a colonne allineate | ✅ | Header colonne (DESCRIZIONE, QTA, COSTO UNIT., COSTO TOT., K, VENDITA) + grid allineata |
+| Distribuzione prezzo materiali corretta | ✅ | Leaf items (varianti) nella distribuzione, non parent header |
+| EnsureParentHasChildren (legacy conversion) | ✅ | Converte item flat in parent+figlio prima di aggiungere variante |
+| Contenuti automatici (auto_include) | ✅ | Sezione separata nell'IMPIANTO, bottone "Ricarica dal catalogo" |
+| API reload-auto-includes | ✅ | POST /api/quotes/{id}/reload-auto-includes — pulisce e ri-inserisce da catalogo |
+| Pannello info editabile | ✅ | Contatti, pagamento, validità, opzioni PDF, note (card separate) |
+
+### 9e. Pulizia Varianti Catalogo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Rimozione colonne obsolete da quote_product_variants | ✅ | Rimossi: sell_price, discount_pct, vat_pct, unit, default_qty |
+| SellPrice = CostPrice × MarkupValue (computed) | ✅ | Su DTO, dialog, catalogo — read-only ovunque |
+| QuoteProductDialog semplificato | ✅ | Solo: Codice, Nome, Costo az., K, Prezzo cl. (computed) |
+| QuoteCatalogPage varianti aggiornate | ✅ | Header + righe: Codice, Nome, Costo az., K, Prezzo cl. |
+| Migration automatica DB | ✅ | ALTER TABLE + DROP COLUMN con try/catch |
+| Controller aggiornati | ✅ | QuoteCatalog, Quotes, Preventivi — default qty=1, unit="nr.", disc=0, vat=22 |
 
 ### 9c. Catalogo CMS — Miglioramenti ✅
 
@@ -382,8 +397,8 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Pannello catalogo SERVICE nel preventivo | ❌ | ALTA | Gestione voci/varianti come QuoteDetailPage |
-| Pannello info editabile nel preventivo | ❌ | MEDIA | Contatti, condizioni, note |
+| Generazione PDF preventivo IMPIANTO | ❌ | ALTA | PDF con costing, materiali, riepilogo distribuzione, contenuti automatici |
+| Pannello catalogo SERVICE nel preventivo | ❌ | MEDIA | Gestione voci/varianti come QuoteDetailPage |
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
 | Addormentare pagine vecchie (Offerte, Preventivi CMS) | ❌ | BASSA | Quando il nuovo è completo |
 
@@ -412,6 +427,9 @@ Views/ConfigurazioneSezioni/
 
 Views/Preventivi/
   PreventiviPage.xaml/.cs           ← TreeView cliente/anno + detail (SERVICE o IMPIANTO)
+  CostingTreeControl.xaml/.cs       ← Control costing: risorse + materiali (parent/varianti) + pricing + distribuzione
+  CostingTreeModel.cs               ← Model: CostingTreeRow, MaterialTreeRow, MaterialProductGroup, PricingVM, DistributionRowVM
+  AddMaterialVariantDialog.xaml/.cs ← Dialog aggiunta variante materiale locale (descrizione, costo, K, qtà)
   NewPreventivoDialog.xaml/.cs      ← Dialog creazione con tipo SERVICE/IMPIANTO
   ConvertPreventivoDialog.xaml/.cs  ← Dialog selezione PM per conversione
 

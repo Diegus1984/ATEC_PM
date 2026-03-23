@@ -8,38 +8,12 @@ using System.Windows.Media;
 
 namespace ATEC.PM.Client.Views.Preventivi;
 
-// ── Converters ──
+// ── Converters (only ones not already in AppConverters.cs) ──
 
 public class InverseBoolToVisConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is true ? Visibility.Collapsed : Visibility.Visible;
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
-}
-
-public class BoolToAngleConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is true ? 90.0 : 0.0;
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
-}
-
-public class HexToBrushConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (value is string hex && !string.IsNullOrEmpty(hex))
-        {
-            try
-            {
-                return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-            }
-            catch { }
-        }
-        return new SolidColorBrush(Colors.Gray);
-    }
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }
