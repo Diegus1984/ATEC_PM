@@ -28,6 +28,9 @@ public partial class App : Application
 
     private void App_Startup(object sender, StartupEventArgs e)
     {
+        Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense(
+            "Ngo9BigBOggjHTQxAR8/V1JHaF5cWWdCf1FpRmJGdld5fUVHYVZUTXxaS00DNHVRdkdlWXxcc3RTQ2ZeWU1xXURWYEo=");
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.File(

@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:costing="clr-namespace:ATEC.PM.Client.Views.Costing"
+    xmlns:prev="clr-namespace:ATEC.PM.Client.Views.Preventivi"
     Background="#F7F8FA"
     Loaded="Page_Loaded">
 
@@ -451,25 +452,317 @@
 
                         <!-- Two-panel layout: Info sx + Contenuto dx -->
                         <Grid>
-                            <!-- Contenuto principale (full width) -->
-                            <Grid>
-                                <!-- IMPIANTO: ProjectCostingControl (ore + materiali + scheda prezzi) -->
-                                <costing:ProjectCostingControl
-                                    x:Name="costingControl"
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="280" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- LEFT: Editable info panel -->
+                            <Border Grid.Column="0" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,1,0">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="16,16,16,16">
+
+                                        <!-- TITOLO -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Titolo" Margin="0,0,0,4" />
+                                        <TextBox x:Name="txtEditTitle" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- READ-ONLY: Numero -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Numero" Margin="0,14,0,4" />
+                                        <TextBlock x:Name="txtInfoNumero" FontSize="13" Foreground="#374151" Padding="8,6" />
+
+                                        <!-- READ-ONLY: Cliente -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Cliente" Margin="0,10,0,4" />
+                                        <TextBlock x:Name="txtInfoCliente" FontSize="13" FontWeight="SemiBold" Foreground="#2563EB" Padding="8,6" />
+
+                                        <!-- READ-ONLY: Creato da -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Creato da" Margin="0,10,0,4" />
+                                        <TextBlock x:Name="txtInfoCreatoDa" FontSize="13" Foreground="#374151" Padding="8,6" />
+
+                                        <!-- READ-ONLY: Data -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Data" Margin="0,10,0,4" />
+                                        <TextBlock x:Name="txtInfoData" FontSize="13" Foreground="#374151" Padding="8,6" />
+
+                                        <!-- READ-ONLY: Tipo -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Tipo" Margin="0,10,0,4" />
+                                        <TextBlock x:Name="txtInfoTipo" FontSize="13" Foreground="#374151" Padding="8,6" />
+
+                                        <!-- Separator -->
+                                        <Border Height="1" Background="#E4E7EC" Margin="0,16,0,12" />
+
+                                        <!-- CONTATTO: Nome -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Referente 1" Margin="0,0,0,4" />
+                                        <TextBox x:Name="txtEditContact1" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- CONTATTO: Email -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Referente 2" Margin="0,10,0,4" />
+                                        <TextBox x:Name="txtEditContact2" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- CONTATTO: Telefono -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Referente 3" Margin="0,10,0,4" />
+                                        <TextBox x:Name="txtEditContact3" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Separator -->
+                                        <Border Height="1" Background="#E4E7EC" Margin="0,16,0,12" />
+
+                                        <!-- Tipo pagamento -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Tipo pagamento" Margin="0,0,0,4" />
+                                        <TextBox x:Name="txtEditPaymentType" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Validita (gg) -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Validit&#224; offerta (gg)" Margin="0,10,0,4" />
+                                        <TextBox x:Name="txtEditValidityDays" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Tempi consegna (gg) -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Tempi consegna (gg)" Margin="0,10,0,4" />
+                                        <TextBox x:Name="txtEditDeliveryDays" FontSize="13" Padding="8,6" Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Separator -->
+                                        <Border Height="1" Background="#E4E7EC" Margin="0,16,0,12" />
+
+                                        <!-- Note interne -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Note interne" Margin="0,0,0,4" />
+                                        <TextBox x:Name="txtEditNotesInternal" FontSize="12" Padding="8,6" Height="80"
+                                                 AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                                 Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Note preventivo -->
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#6B7280" Text="Note preventivo" Margin="0,10,0,4" />
+                                        <TextBox x:Name="txtEditNotesQuote" FontSize="12" Padding="8,6" Height="80"
+                                                 AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                                 Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                 LostFocus="InfoField_LostFocus">
+                                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6" /></Style></TextBox.Resources>
+                                        </TextBox>
+
+                                        <!-- Separator -->
+                                        <Border Height="1" Background="#E4E7EC" Margin="0,16,0,12" />
+
+                                        <!-- PDF Options -->
+                                        <TextBlock FontSize="11" FontWeight="Bold" Foreground="#6B7280" Text="OPZIONI PDF" Margin="0,0,0,8" />
+                                        <CheckBox x:Name="chkShowItemPrices" Content="Prezzi su articoli" FontSize="12" Margin="0,0,0,6"
+                                                  IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                        <CheckBox x:Name="chkShowSummary" Content="Riepilogo finale" FontSize="12" Margin="0,0,0,6"
+                                                  IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                        <CheckBox x:Name="chkShowSummaryPrices" Content="Prezzi su riepilogo" FontSize="12" Margin="0,0,0,6"
+                                                  IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                        <CheckBox x:Name="chkHideQuantities" Content="Nascondi quantit&#224;" FontSize="12" Margin="0,0,0,6"
+                                                  Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+
+                                        <!-- Separator -->
+                                        <Border Height="1" Background="#E4E7EC" Margin="0,16,0,12" />
+
+                                        <!-- TOTALS (read-only) -->
+                                        <TextBlock FontSize="11" FontWeight="Bold" Foreground="#6B7280" Text="TOTALI" Margin="0,0,0,8" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="24" />
+                                                <RowDefinition Height="24" />
+                                                <RowDefinition Height="2" />
+                                                <RowDefinition Height="28" />
+                                            </Grid.RowDefinitions>
+
+                                            <TextBlock Grid.Row="0" Grid.Column="0" FontSize="12" Foreground="#6B7280" Text="Subtotale" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="txtInfoSubtotal" Grid.Row="0" Grid.Column="1" FontSize="12" Foreground="#374151" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Row="1" Grid.Column="0" FontSize="12" Foreground="#6B7280" Text="Sconto" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="txtInfoDiscount" Grid.Row="1" Grid.Column="1" FontSize="12" Foreground="#DC2626" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                            <Border Grid.Row="2" Grid.ColumnSpan="2" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" />
+
+                                            <TextBlock Grid.Row="3" Grid.Column="0" FontSize="13" FontWeight="Bold" Foreground="#111827" Text="Totale" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="txtInfoTotal" Grid.Row="3" Grid.Column="1" FontSize="13" FontWeight="Bold" Foreground="#111827" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        </Grid>
+
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+
+                            <!-- RIGHT: Contenuto principale -->
+                            <Grid Grid.Column="1">
+                                <!-- IMPIANTO: CostingTreeControl (SfTreeGrid) -->
+                                <prev:CostingTreeControl
+                                    x:Name="costingTreeControl"
                                     Visibility="Collapsed" />
 
-                                <!-- SERVICE: Catalogo semplice -->
+                                <!-- SERVICE: Catalogo prodotti -->
                                 <Border
                                     x:Name="pnlServiceCatalog"
                                     Background="#FAFBFC"
                                     Visibility="Collapsed">
                                     <DockPanel>
-                                        <Border Padding="20,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" DockPanel.Dock="Top">
-                                            <TextBlock FontSize="14" FontWeight="Bold" Foreground="#1A1D26" Text="Catalogo Prodotti" />
+                                        <!-- Toolbar -->
+                                        <Border Padding="20,10" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" DockPanel.Dock="Top">
+                                            <DockPanel>
+                                                <TextBlock FontSize="14" FontWeight="Bold" Foreground="#1A1D26" Text="Prodotti &amp; Contenuti" VerticalAlignment="Center" />
+                                                <Button
+                                                    x:Name="btnServiceAddProduct"
+                                                    HorizontalAlignment="Right"
+                                                    DockPanel.Dock="Right"
+                                                    Background="#16A34A"
+                                                    Click="BtnServiceAddProduct_Click"
+                                                    Content="+ Aggiungi Prodotto"
+                                                    Cursor="Hand"
+                                                    FontSize="12"
+                                                    Foreground="White"
+                                                    Style="{StaticResource PrimaryBtn}" />
+                                            </DockPanel>
                                         </Border>
-                                        <Border Padding="20,20">
-                                            <TextBlock FontSize="13" Foreground="#9CA3AF" Text="Catalogo items - coming soon" />
+
+                                        <!-- Totals footer -->
+                                        <Border Padding="20,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="180" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="26" />
+                                                    <RowDefinition Height="26" />
+                                                    <RowDefinition Height="2" />
+                                                    <RowDefinition Height="30" />
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="Subtotale" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceSubtotal" Grid.Row="0" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#374151" />
+
+                                                <TextBlock Grid.Row="1" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="Sconto" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceDiscount" Grid.Row="1" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#DC2626" />
+
+                                                <Border Grid.Row="2" Grid.ColumnSpan="2" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" />
+
+                                                <TextBlock Grid.Row="3" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="14" FontWeight="Bold" Foreground="#111827" Text="Totale" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceTotal" Grid.Row="3" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="14" FontWeight="Bold" Foreground="#111827" />
+                                            </Grid>
                                         </Border>
+
+                                        <!-- Product list -->
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <StackPanel>
+                                                <ItemsControl x:Name="icServiceProducts" Padding="8,4,8,4">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,4" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="6" Background="White">
+                                                                <StackPanel>
+                                                                    <!-- Product header -->
+                                                                    <Border Padding="12,10" Background="#F8FAFC" CornerRadius="6,6,0,0" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                                                                        <DockPanel>
+                                                                            <Border Padding="6,3" Margin="0,0,10,0" VerticalAlignment="Center" CornerRadius="4"
+                                                                                    Background="{Binding TypeBadgeColor}">
+                                                                                <TextBlock Text="{Binding TypeBadgeLabel}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                                                            </Border>
+
+                                                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                                <TextBlock Text="{Binding TotalDisplay}" FontSize="13" FontWeight="Bold" Foreground="#111827"
+                                                                                           VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                                                <Button Content="+" ToolTip="Aggiungi variante" Width="28" Height="28"
+                                                                                        FontSize="14" FontWeight="Bold" Cursor="Hand"
+                                                                                        Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
+                                                                                        Click="BtnServiceAddVariant_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                                                <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
+                                                                                        FontSize="11" Cursor="Hand"
+                                                                                        Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                                        Click="BtnServiceRemoveProduct_Click" Tag="{Binding ParentId}"
+                                                                                        ToolTip="Rimuovi prodotto" Padding="0" />
+                                                                            </StackPanel>
+
+                                                                            <TextBlock Text="{Binding ParentName}" FontSize="13" FontWeight="SemiBold"
+                                                                                       Foreground="#1A1D26" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                        </DockPanel>
+                                                                    </Border>
+
+                                                                    <!-- Variants -->
+                                                                    <ItemsControl ItemsSource="{Binding Variants}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <Border Padding="12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                                                                    <DockPanel>
+                                                                                        <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                                                                                  VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                                                  Checked="ServiceVariantToggle_Changed"
+                                                                                                  Unchecked="ServiceVariantToggle_Changed" />
+
+                                                                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                                            <TextBlock Text="{Binding LineTotalDisplay}" FontSize="12" FontWeight="SemiBold"
+                                                                                                       Foreground="{Binding TotalColor}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                                                            <Button Content="X" Width="22" Height="22"
+                                                                                                    FontSize="10" Cursor="Hand"
+                                                                                                    Background="Transparent" BorderThickness="0" Foreground="#9CA3AF"
+                                                                                                    Click="BtnServiceRemoveVariant_Click" Tag="{Binding Id}"
+                                                                                                    ToolTip="Rimuovi variante" Padding="0" />
+                                                                                        </StackPanel>
+
+                                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                                            <TextBlock Text="{Binding Name}" FontSize="12" Foreground="#374151"
+                                                                                                       Width="250" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                                                            <TextBox Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                                     Width="55" Height="26" FontSize="11" TextAlignment="Right" Margin="8,0"
+                                                                                                     LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+                                                                                            <TextBlock Text="{Binding Unit}" FontSize="11" Foreground="#6B7280"
+                                                                                                       Width="35" VerticalAlignment="Center" />
+                                                                                            <TextBox Text="{Binding SellPriceText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                                     Width="85" Height="26" FontSize="11" TextAlignment="Right" Margin="4,0"
+                                                                                                     LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+                                                                                            <TextBlock Text="&#8364;" FontSize="11" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                                                            <TextBox Text="{Binding DiscountPctText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                                     Width="45" Height="26" FontSize="11" TextAlignment="Right" Margin="4,0"
+                                                                                                     LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+                                                                                            <TextBlock Text="%" FontSize="11" Foreground="#6B7280" VerticalAlignment="Center" />
+                                                                                        </StackPanel>
+                                                                                    </DockPanel>
+                                                                                </Border>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- Empty placeholder -->
+                                                <TextBlock x:Name="txtServiceNoProducts"
+                                                           Text="Nessun prodotto aggiunto. Clicca '+ Aggiungi Prodotto' per iniziare."
+                                                           FontSize="12" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="0,30,0,30"
+                                                           Visibility="Collapsed" />
+                                            </StackPanel>
+                                        </ScrollViewer>
                                     </DockPanel>
                                 </Border>
                             </Grid>

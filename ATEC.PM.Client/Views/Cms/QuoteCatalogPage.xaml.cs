@@ -243,7 +243,7 @@ public partial class QuoteCatalogPage : Page
         if (hasChildren)
         {
             catNode.Expanded += AccordionNode_Expanded;
-            foreach (var child in cat.Children.OrderBy(c => c.Name, _naturalComparer))
+            foreach (var child in (cat.Children ?? new()).OrderBy(c => c.Name, _naturalComparer))
             {
                 var childNode = BuildCategoryNode(child);
                 if (childNode != null) catNode.Items.Add(childNode);

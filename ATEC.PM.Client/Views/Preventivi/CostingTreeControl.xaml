@@ -1,0 +1,375 @@
+<UserControl
+    x:Class="ATEC.PM.Client.Views.Preventivi.CostingTreeControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
+    xmlns:local="clr-namespace:ATEC.PM.Client.Views.Preventivi"
+    Background="#F7F8FA">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <local:InverseBoolToVisConverter x:Key="InverseBoolToVis" />
+        <local:NodeTypeToFontWeightConverter x:Key="NodeTypeToFontWeight" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- HEADER: Impegno Risorse -->
+        <Border Grid.Row="0" Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <TextBlock FontSize="15" FontWeight="Bold" Foreground="#1A1D26" Text="IMPEGNO RISORSE" VerticalAlignment="Center" />
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
+                    <Button x:Name="btnAddGroup" Click="BtnAddGroup_Click"
+                            Content="+ Gruppo" Cursor="Hand" Margin="0,0,8,0"
+                            Background="#6B7280" Foreground="White" FontSize="12"
+                            Padding="12,6" BorderThickness="0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="btnAddSection" Click="BtnAddSection_Click"
+                            Content="+ Sezione" Cursor="Hand" Margin="0,0,8,0"
+                            Background="#3B82F6" Foreground="White" FontSize="12"
+                            Padding="12,6" BorderThickness="0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="btnAddResource" Click="BtnAddResource_Click"
+                            Content="+ Risorsa" Cursor="Hand"
+                            Background="#16A34A" Foreground="White" FontSize="12"
+                            Padding="12,6" BorderThickness="0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- RESOURCES TREE GRID -->
+        <syncfusion:SfTreeGrid
+            x:Name="treeGridResources"
+            Grid.Row="1"
+            AutoExpandMode="RootNodesExpanded"
+            AutoGenerateColumns="False"
+            ChildPropertyName="Children"
+            AllowEditing="True"
+            EditTrigger="OnTap"
+            LiveNodeUpdateMode="AllowDataShaping"
+            SelectionMode="Single"
+            NavigationMode="Cell"
+            ColumnSizer="Star"
+            HeaderRowHeight="32"
+            RowHeight="36"
+            CurrentCellBeginEdit="TreeGrid_CurrentCellBeginEdit"
+            CurrentCellEndEdit="TreeGrid_CurrentCellEndEdit">
+
+            <syncfusion:SfTreeGrid.ContextMenu>
+                <ContextMenu x:Name="treeContextMenu" Opened="TreeContextMenu_Opened">
+                    <MenuItem x:Name="menuAddResource" Header="+ Aggiungi Risorsa" Click="MenuAddResource_Click" />
+                    <MenuItem x:Name="menuAddSection" Header="+ Aggiungi Sezione" Click="MenuAddSection_Click" />
+                    <Separator x:Name="menuSep1" />
+                    <MenuItem x:Name="menuDeleteResource" Header="Elimina Risorsa" Click="MenuDeleteResource_Click" Foreground="#DC2626" />
+                    <MenuItem x:Name="menuDeleteSection" Header="Elimina Sezione" Click="MenuDeleteSection_Click" Foreground="#DC2626" />
+                </ContextMenu>
+            </syncfusion:SfTreeGrid.ContextMenu>
+
+            <syncfusion:SfTreeGrid.Columns>
+                <syncfusion:TreeGridTemplateColumn
+                    MappingName="DisplayName"
+                    HeaderText="SEZIONE / RISORSA"
+                    Width="300"
+                    AllowEditing="False">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <!-- GROUP: just text bold -->
+                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="4,0"
+                                           FontWeight="Bold" FontSize="13"
+                                           Visibility="{Binding IsGroup, Converter={StaticResource BoolToVis}}" />
+                                <!-- SECTION: text + add button -->
+                                <DockPanel Visibility="{Binding IsSection, Converter={StaticResource BoolToVis}}">
+                                    <Button Content="+" DockPanel.Dock="Right" Cursor="Hand"
+                                            Tag="{Binding}" Click="BtnAddResourceInSection_Click"
+                                            Width="22" Height="22" Margin="4,0,2,0"
+                                            FontSize="14" FontWeight="Bold" Foreground="#16A34A"
+                                            Background="Transparent" BorderThickness="1" BorderBrush="#16A34A"
+                                            VerticalAlignment="Center" HorizontalContentAlignment="Center"
+                                            ToolTip="Aggiungi risorsa">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Cursor="Hand">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="4,0"
+                                               FontWeight="SemiBold" />
+                                </DockPanel>
+                                <!-- RESOURCE: ComboBox for employee selection -->
+                                <ComboBox x:Name="cmbEmployee"
+                                          Tag="{Binding}"
+                                          DisplayMemberPath="FullName"
+                                          IsEditable="True"
+                                          Text="{Binding DisplayName}"
+                                          DropDownOpened="EmployeeCombo_DropDownOpened"
+                                          SelectionChanged="EmployeeCombo_SelectionChanged"
+                                          Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}"
+                                          Margin="2,1" Padding="4,2" BorderThickness="0"
+                                          Background="Transparent" FontSize="12" />
+                            </Grid>
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTextColumn
+                    MappingName="DepartmentCode"
+                    HeaderText="REP"
+                    Width="60"
+                    AllowEditing="False"
+                    TextAlignment="Center" />
+
+                <syncfusion:TreeGridTemplateColumn MappingName="WorkDays" HeaderText="GG" Width="60">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock TextAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding WorkDays, StringFormat={}{0:#}}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsResource}" Value="False">
+                                                <Setter Property="Text" Value="{Binding SumWorkDays, StringFormat={}{0:#}}" />
+                                                <Setter Property="Foreground" Value="#6B7280" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
+                        <DataTemplate>
+                            <TextBox Text="{Binding WorkDays, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="HoursPerDay" HeaderText="ORE/G" Width="60">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding HoursPerDay, StringFormat={}{0:#}}" TextAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
+                        <DataTemplate>
+                            <TextBox Text="{Binding HoursPerDay, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="TotalHours" HeaderText="TOT ORE" Width="70" AllowEditing="False">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock TextAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding TotalHours, StringFormat={}{0:#}}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsResource}" Value="False">
+                                                <Setter Property="Text" Value="{Binding SumTotalHours, StringFormat={}{0:#}}" />
+                                                <Setter Property="Foreground" Value="#6B7280" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="HourlyCost" HeaderText="€/H" Width="80" AllowEditing="False">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding HourlyCost, StringFormat='{}{0:N2} €'}" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="TotalCost" HeaderText="COSTO NETTO" Width="110" AllowEditing="False">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding TotalCost, StringFormat='{}{0:N2} €'}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TotalCost}" Value="0">
+                                                <Setter Property="Foreground" Value="#B0B0B0" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="MarkupValue" HeaderText="K" Width="70">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding MarkupValue, StringFormat='{}{0:N3}'}" TextAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
+                        <DataTemplate>
+                            <TextBox Text="{Binding MarkupValue, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTemplateColumn MappingName="TotalSale" HeaderText="PREZZO VENDITA" Width="120" AllowEditing="False">
+                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#16A34A">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding TotalSale, StringFormat='{}{0:N2} €'}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TotalSale}" Value="0">
+                                                <Setter Property="Foreground" Value="#B0B0B0" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
+                </syncfusion:TreeGridTemplateColumn>
+
+                <syncfusion:TreeGridTextColumn
+                    MappingName="TypeLabel"
+                    HeaderText="TIPO"
+                    Width="70"
+                    AllowEditing="False"
+                    TextAlignment="Center" />
+            </syncfusion:SfTreeGrid.Columns>
+        </syncfusion:SfTreeGrid>
+
+        <!-- SEPARATOR -->
+        <Border Grid.Row="2" Height="1" Background="#E4E7EC" />
+
+        <!-- MATERIALI HEADER -->
+        <Border Grid.Row="3" Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <TextBlock FontSize="15" FontWeight="Bold" Foreground="#1A1D26" Text="MATERIALI" VerticalAlignment="Center" />
+                <Button x:Name="btnAddMaterial" Click="BtnAddMaterial_Click"
+                        HorizontalAlignment="Right" DockPanel.Dock="Right"
+                        Content="+ Materiale" Cursor="Hand"
+                        Background="#16A34A" Foreground="White" FontSize="12"
+                        Padding="12,6" BorderThickness="0">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </DockPanel>
+        </Border>
+
+        <!-- MATERIALS DATA GRID -->
+        <syncfusion:SfDataGrid
+            x:Name="dataGridMaterials"
+            Grid.Row="4"
+            AutoGenerateColumns="False"
+            AllowEditing="True"
+            EditTrigger="OnTap"
+            SelectionMode="Single"
+            NavigationMode="Cell"
+            ColumnSizer="Star"
+            HeaderRowHeight="32"
+            RowHeight="36"
+            MaxHeight="300"
+            CurrentCellEndEdit="MaterialGrid_CurrentCellEndEdit">
+
+            <syncfusion:SfDataGrid.Columns>
+                <syncfusion:GridTextColumn
+                    MappingName="Description"
+                    HeaderText="DESCRIZIONE"
+                    Width="280" />
+
+                <syncfusion:GridTextColumn
+                    MappingName="ItemType"
+                    HeaderText="TIPO"
+                    Width="90"
+                    AllowEditing="False"
+                    TextAlignment="Center" />
+
+                <syncfusion:GridNumericColumn
+                    MappingName="Quantity"
+                    HeaderText="QTÀ"
+                    Width="60"
+                    NumberDecimalDigits="0"
+                    TextAlignment="Center" />
+
+                <syncfusion:GridCurrencyColumn
+                    MappingName="UnitCost"
+                    HeaderText="COSTO UNIT."
+                    Width="100"
+                    CurrencyDecimalDigits="2"
+                    TextAlignment="Right" />
+
+                <syncfusion:GridCurrencyColumn
+                    MappingName="TotalCost"
+                    HeaderText="COSTO TOT."
+                    Width="100"
+                    AllowEditing="False"
+                    CurrencyDecimalDigits="2"
+                    TextAlignment="Right" />
+
+                <syncfusion:GridNumericColumn
+                    MappingName="MarkupValue"
+                    HeaderText="K"
+                    Width="70"
+                    NumberDecimalDigits="3"
+                    TextAlignment="Center" />
+
+                <syncfusion:GridCurrencyColumn
+                    MappingName="TotalSale"
+                    HeaderText="VENDITA"
+                    Width="110"
+                    AllowEditing="False"
+                    CurrencyDecimalDigits="2"
+                    TextAlignment="Right" />
+            </syncfusion:SfDataGrid.Columns>
+        </syncfusion:SfDataGrid>
+    </Grid>
+</UserControl>

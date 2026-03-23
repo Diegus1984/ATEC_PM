@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -6,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Client.Views.Quotes;
 using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.Preventivi;
@@ -14,10 +16,15 @@ public partial class PreventiviPage : Page
 {
     private List<QuoteDto> _allQuotes = new();
     private int _selectedQuoteId;
+    private QuoteDto? _selectedQuote;
+    private ObservableCollection<QuoteProductGroup> _serviceProducts = new();
+    private bool _suppressServiceToggle;
+    private bool _suppressInfoSave;
 
     public PreventiviPage()
     {
         InitializeComponent();
+        icServiceProducts.ItemsSource = _serviceProducts;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -281,6 +288,9 @@ public partial class PreventiviPage : Page
             if (quote == null) return;
 
             _selectedQuoteId = quote.Id;
+            _selectedQuote = quote;
+
+            _suppressInfoSave = true;
 
             // Header
             txtSectionTitle.Text = $"{quote.QuoteNumber} \u2014 {quote.Title}";
@@ -289,24 +299,54 @@ public partial class PreventiviPage : Page
             txtQuoteStatus.Text = quote.Status.ToUpperInvariant();
             SetStatusBadgeColors(quote.Status);
 
-            // Info
+            // Info strip
             txtQuoteCustomer.Text = quote.CustomerName;
             txtQuoteCreatedBy.Text = $"di {quote.CreatedByName}";
             txtQuoteDate.Text = quote.CreatedAt.ToString("dd/MM/yyyy");
 
             // Type badge
             bool isPlant = quote.QuoteType == "IMPIANTO";
-
-            // Info strip badges
             brdTypeBadge.Background = Brush(isPlant ? "#FFF7ED" : "#F0FDF4");
             txtQuoteType.Text = isPlant ? "IMPIANTO" : "SERVIZIO";
             txtQuoteType.Foreground = Brush(isPlant ? "#EA580C" : "#059669");
+
+            // Editable fields
+            txtEditTitle.Text = quote.Title;
+            txtEditContact1.Text = quote.ContactName1;
+            txtEditContact2.Text = quote.ContactName2;
+            txtEditContact3.Text = quote.ContactName3;
+            txtEditPaymentType.Text = quote.PaymentType;
+            txtEditValidityDays.Text = quote.ValidityDays.ToString();
+            txtEditDeliveryDays.Text = quote.DeliveryDays.ToString();
+            txtEditNotesInternal.Text = quote.NotesInternal;
+            txtEditNotesQuote.Text = quote.NotesQuote;
+
+            // Read-only info panel
+            txtInfoNumero.Text = quote.QuoteNumber;
+            txtInfoCliente.Text = quote.CustomerName;
+            txtInfoCreatoDa.Text = quote.CreatedByName;
+            txtInfoData.Text = quote.CreatedAt.ToString("dd/MM/yyyy");
+            txtInfoTipo.Text = isPlant ? "IMPIANTO" : "SERVIZIO";
+
+            // PDF options
+            chkShowItemPrices.IsChecked = quote.ShowItemPrices;
+            chkShowSummary.IsChecked = quote.ShowSummary;
+            chkShowSummaryPrices.IsChecked = quote.ShowSummaryPrices;
+            chkHideQuantities.IsChecked = quote.HideQuantities;
+
+            // Totals
+            txtInfoSubtotal.Text = $"{quote.Subtotal:N2} \u20ac";
+            decimal discAmt = quote.Subtotal * quote.DiscountPct / 100 + quote.DiscountAbs;
+            txtInfoDiscount.Text = discAmt > 0 ? $"-{discAmt:N2} \u20ac" : "0,00 \u20ac";
+            txtInfoTotal.Text = $"{quote.Total:N2} \u20ac";
+
+            _suppressInfoSave = false;
 
             // Action buttons visibility
             UpdateActionButtons(quote.Status, quote.QuoteType);
 
             // Show IMPIANTO (costing) or SERVICE (catalogo) panel
-            costingControl.Visibility = isPlant ? Visibility.Visible : Visibility.Collapsed;
+            costingTreeControl.Visibility = isPlant ? Visibility.Visible : Visibility.Collapsed;
             pnlServiceCatalog.Visibility = isPlant ? Visibility.Collapsed : Visibility.Visible;
 
             // Show detail, hide placeholder
@@ -322,7 +362,12 @@ public partial class PreventiviPage : Page
             if (isPlant)
             {
                 bool readOnly = quote.Status is "converted" or "rejected" or "expired";
-                costingControl.LoadForPreventivo(quoteId, readOnly);
+                costingTreeControl.LoadForPreventivo(quoteId);
+            }
+            else
+            {
+                // SERVICE: load catalog items
+                LoadServiceItems(quote);
             }
         }
         catch (Exception ex)
@@ -491,6 +536,235 @@ public partial class PreventiviPage : Page
             Process.Start(new ProcessStartInfo(tempPath) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // EDITABLE INFO PANEL — Auto-save on LostFocus
+    // ═══════════════════════════════════════════════════════
+
+    private async void InfoField_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
+        await SaveQuoteInfo();
+    }
+
+    private async void InfoCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
+        await SaveQuoteInfo();
+    }
+
+    private async Task SaveQuoteInfo()
+    {
+        try
+        {
+            var dto = new QuoteSaveDto
+            {
+                Title = txtEditTitle.Text.Trim(),
+                CustomerId = _selectedQuote!.CustomerId,
+                QuoteType = _selectedQuote.QuoteType,
+                ContactName1 = txtEditContact1.Text.Trim(),
+                ContactName2 = txtEditContact2.Text.Trim(),
+                ContactName3 = txtEditContact3.Text.Trim(),
+                PaymentType = txtEditPaymentType.Text.Trim(),
+                ValidityDays = int.TryParse(txtEditValidityDays.Text, out int vd) ? vd : 60,
+                DeliveryDays = int.TryParse(txtEditDeliveryDays.Text, out int dd) ? dd : 0,
+                NotesInternal = txtEditNotesInternal.Text,
+                NotesQuote = txtEditNotesQuote.Text,
+                ShowItemPrices = chkShowItemPrices.IsChecked == true,
+                ShowSummary = chkShowSummary.IsChecked == true,
+                ShowSummaryPrices = chkShowSummaryPrices.IsChecked == true,
+                HideQuantities = chkHideQuantities.IsChecked == true,
+                GroupId = _selectedQuote.GroupId,
+                DiscountPct = _selectedQuote.DiscountPct,
+                DiscountAbs = _selectedQuote.DiscountAbs,
+                AssignedTo = _selectedQuote.AssignedTo
+            };
+
+            string body = JsonSerializer.Serialize(dto);
+            await ApiClient.PutAsync($"/api/quotes/{_selectedQuoteId}", body);
+
+            // Update header title to reflect changes
+            txtSectionTitle.Text = $"{_selectedQuote.QuoteNumber} \u2014 {txtEditTitle.Text.Trim()}";
+        }
+        catch { /* silent save */ }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // SERVICE CATALOG — Items management
+    // ═══════════════════════════════════════════════════════
+
+    private void LoadServiceItems(QuoteDto quote)
+    {
+        _suppressServiceToggle = true;
+
+        _serviceProducts.Clear();
+
+        var items = quote.Items.OrderBy(i => i.SortOrder).ToList();
+        var parents = items.Where(i => i.ParentItemId == null).ToList();
+
+        foreach (var parent in parents)
+        {
+            var variants = items
+                .Where(i => i.ParentItemId == parent.Id)
+                .Select(v => new QuoteVariantRow(v))
+                .ToList();
+
+            _serviceProducts.Add(new QuoteProductGroup(parent, variants));
+        }
+
+        txtServiceNoProducts.Visibility = _serviceProducts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateServiceTotals(quote);
+
+        _suppressServiceToggle = false;
+    }
+
+    private void UpdateServiceTotals(QuoteDto quote)
+    {
+        txtServiceSubtotal.Text = $"{quote.Subtotal:N2} \u20ac";
+        decimal discountAmount = quote.Subtotal * quote.DiscountPct / 100 + quote.DiscountAbs;
+        txtServiceDiscount.Text = discountAmount > 0 ? $"-{discountAmount:N2} \u20ac" : "0,00 \u20ac";
+        txtServiceTotal.Text = $"{quote.Total:N2} \u20ac";
+    }
+
+    private void BtnServiceAddProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedQuoteId == 0) return;
+
+        var dlg = new AddQuoteItemDialog(_selectedQuoteId) { Owner = Window.GetWindow(this) };
+        dlg.ItemAdded += async () => await ReloadServiceItems();
+        dlg.ShowDialog();
+    }
+
+    private async void BtnServiceRemoveProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+
+        var group = _serviceProducts.FirstOrDefault(g => g.ParentId == parentId);
+        string name = group?.ParentName ?? $"#{parentId}";
+
+        if (MessageBox.Show($"Rimuovere '{name}' e tutte le sue varianti?", "Conferma",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}");
+            if (group != null)
+            {
+                foreach (var v in group.Variants)
+                    await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{v.Id}");
+            }
+            await ReloadServiceItems();
+        }
+    }
+
+    private async void BtnServiceRemoveVariant_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is int variantId)
+        {
+            await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{variantId}");
+            await ReloadServiceItems();
+        }
+    }
+
+    private async void BtnServiceAddVariant_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+
+        var group = _serviceProducts.FirstOrDefault(g => g.ParentId == parentId);
+        if (group == null) return;
+
+        var dlg = new AddLocalVariantDialog(group.ParentName) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true)
+        {
+            var dto = new QuoteItemSaveDto
+            {
+                Code = dlg.VariantCode,
+                Name = dlg.VariantName,
+                Unit = dlg.VariantUnit,
+                Quantity = dlg.VariantQty,
+                SellPrice = dlg.VariantPrice,
+                CostPrice = dlg.VariantCost,
+                VatPct = 22,
+                IsActive = true
+            };
+            string body = JsonSerializer.Serialize(dto);
+            await ApiClient.PostAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}/variant", body);
+            await ReloadServiceItems();
+        }
+    }
+
+    private async void ServiceVariantToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressServiceToggle) return;
+        if (sender is not CheckBox cb || cb.DataContext is not QuoteVariantRow row) return;
+
+        try
+        {
+            var dto = BuildServiceVariantDto(row);
+            string body = JsonSerializer.Serialize(dto);
+            await ApiClient.PutAsync($"/api/quotes/{_selectedQuoteId}/items/{row.Id}", body);
+            await ReloadServiceItems();
+        }
+        catch { }
+    }
+
+    private async void ServiceVariantField_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressServiceToggle) return;
+        if (sender is not TextBox tb || tb.DataContext is not QuoteVariantRow row) return;
+
+        try
+        {
+            row.ParseTexts();
+            var dto = BuildServiceVariantDto(row);
+            string body = JsonSerializer.Serialize(dto);
+            await ApiClient.PutAsync($"/api/quotes/{_selectedQuoteId}/items/{row.Id}", body);
+            await ReloadServiceItems();
+        }
+        catch { }
+    }
+
+    private static QuoteItemSaveDto BuildServiceVariantDto(QuoteVariantRow row)
+    {
+        return new QuoteItemSaveDto
+        {
+            ProductId = row.ProductId,
+            VariantId = row.VariantId,
+            ItemType = "product",
+            Code = row.Code,
+            Name = row.Name,
+            DescriptionRtf = row.DescriptionRtf,
+            Unit = row.Unit,
+            Quantity = row.Quantity,
+            CostPrice = row.CostPrice,
+            SellPrice = row.SellPrice,
+            DiscountPct = row.DiscountPct,
+            VatPct = row.VatPct,
+            SortOrder = row.SortOrder,
+            IsActive = row.IsActive,
+            IsConfirmed = row.IsConfirmed,
+            ParentItemId = row.ParentItemId
+        };
+    }
+
+    private async Task ReloadServiceItems()
+    {
+        if (_selectedQuoteId == 0) return;
+
+        try
+        {
+            var json = await ApiClient.GetAsync($"/api/quotes/{_selectedQuoteId}");
+            var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var quote = JsonSerializer.Deserialize<QuoteDto>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (quote == null) return;
+            _selectedQuote = quote;
+            LoadServiceItems(quote);
+        }
+        catch { }
     }
 
     // ═══════════════════════════════════════════════════════
