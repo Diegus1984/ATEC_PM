@@ -98,6 +98,7 @@ public class ProjectMaterialItemDto
 {
     public int Id { get; set; }
     public int SectionId { get; set; }
+    public int? ParentItemId { get; set; }
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
@@ -117,6 +118,7 @@ public class ProjectMaterialItemSaveRequest
 {
     public int Id { get; set; }
     public int SectionId { get; set; }
+    public int? ParentItemId { get; set; }
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }

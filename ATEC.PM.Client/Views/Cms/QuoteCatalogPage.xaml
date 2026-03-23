@@ -248,17 +248,13 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="100" />
                                                 <ColumnDefinition Width="100" />
-                                                <ColumnDefinition Width="70" />
-                                                <ColumnDefinition Width="60" />
                                                 <ColumnDefinition Width="80" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="Codice" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" />
                                             <TextBlock Grid.Column="1" Text="Nome" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" />
-                                            <TextBlock Grid.Column="2" Text="Prezzo cl." FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
-                                            <TextBlock Grid.Column="3" Text="Costo az." FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
-                                            <TextBlock Grid.Column="4" Text="Sconto" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Center" />
-                                            <TextBlock Grid.Column="5" Text="IVA" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Center" />
-                                            <TextBlock Grid.Column="6" Text="Qtà" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
+                                            <TextBlock Grid.Column="2" Text="Costo az." FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
+                                            <TextBlock Grid.Column="3" Text="K" FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="4" Text="Prezzo cl." FontSize="10" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
                                         </Grid>
                                     </Border>
                                     <ItemsControl ItemsSource="{Binding Variants}">
@@ -272,28 +268,20 @@
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="100" />
                                                             <ColumnDefinition Width="100" />
-                                                            <ColumnDefinition Width="70" />
-                                                            <ColumnDefinition Width="60" />
                                                             <ColumnDefinition Width="80" />
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Grid.Column="0" Text="{Binding Code}" FontSize="12"
                                                                    Foreground="#6B7280" VerticalAlignment="Center" />
                                                         <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12"
                                                                    FontWeight="Medium" Foreground="#1A1D26" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Column="2" Text="{Binding SellPriceFormatted}" FontSize="12"
-                                                                   FontWeight="SemiBold" Foreground="#111827" VerticalAlignment="Center"
-                                                                   HorizontalAlignment="Right" />
-                                                        <TextBlock Grid.Column="3" Text="{Binding CostPriceFormatted}" FontSize="12"
+                                                        <TextBlock Grid.Column="2" Text="{Binding CostPriceFormatted}" FontSize="12"
                                                                    Foreground="#16A34A" VerticalAlignment="Center"
                                                                    HorizontalAlignment="Right" />
-                                                        <TextBlock Grid.Column="4" Text="{Binding DiscountFormatted}" FontSize="12"
+                                                        <TextBlock Grid.Column="3" Text="{Binding MarkupFormatted}" FontSize="12"
                                                                    Foreground="#9CA3AF" VerticalAlignment="Center"
                                                                    HorizontalAlignment="Center" />
-                                                        <TextBlock Grid.Column="5" Text="{Binding VatFormatted}" FontSize="12"
-                                                                   Foreground="#9CA3AF" VerticalAlignment="Center"
-                                                                   HorizontalAlignment="Center" />
-                                                        <TextBlock Grid.Column="6" Text="{Binding QtyFormatted}" FontSize="12"
-                                                                   Foreground="#6B7280" VerticalAlignment="Center"
+                                                        <TextBlock Grid.Column="4" Text="{Binding SellPriceFormatted}" FontSize="12"
+                                                                   FontWeight="SemiBold" Foreground="#111827" VerticalAlignment="Center"
                                                                    HorizontalAlignment="Right" />
                                                     </Grid>
                                                 </Border>

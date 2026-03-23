@@ -4,14 +4,42 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media;
 
 namespace ATEC.PM.Client.Views.Preventivi;
 
 // ── Converters ──
+
 public class InverseBoolToVisConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is true ? Visibility.Collapsed : Visibility.Visible;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+public class BoolToAngleConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? 90.0 : 0.0;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+public class HexToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is string hex && !string.IsNullOrEmpty(hex))
+        {
+            try
+            {
+                return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+            }
+            catch { }
+        }
+        return new SolidColorBrush(Colors.Gray);
+    }
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }
@@ -24,23 +52,9 @@ public class NodeTypeToFontWeightConverter : IValueConverter
         => throw new NotImplementedException();
 }
 
-/// <summary>Returns empty string for non-RESOURCE rows on resource-only columns.</summary>
-public class ResourceOnlyValueConverter : IMultiValueConverter
-{
-    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (values.Length < 2) return "";
-        var nodeType = values[1] as string;
-        if (nodeType != "RESOURCE") return "";
-        return values[0]?.ToString() ?? "";
-    }
-    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
-        => throw new NotImplementedException();
-}
-
 /// <summary>
-/// Unified row model for SfTreeGrid costing view.
-/// Represents Groups, Sections, and Resources in a flat self-referential structure.
+/// Unified row model for costing view.
+/// Represents Groups, Sections, and Resources in a nested structure.
 /// </summary>
 public class CostingTreeRow : INotifyPropertyChanged
 {
@@ -48,8 +62,16 @@ public class CostingTreeRow : INotifyPropertyChanged
     public int NodeId { get; set; }
     public int ParentNodeId { get; set; }
 
-    // Nested collection for SfTreeGrid ChildPropertyName
+    // Nested collection for children
     public ObservableCollection<CostingTreeRow> Children { get; set; } = new();
+
+    // ── Expand/Collapse state ──
+    private bool _isExpanded = true;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set { _isExpanded = value; OnPropertyChanged(); }
+    }
 
     // ── Aggregate properties for GROUP/SECTION rows ──
     private decimal _sumWorkDays;
@@ -258,12 +280,13 @@ public class CostingTreeRow : INotifyPropertyChanged
 }
 
 /// <summary>
-/// Material row for the materials SfTreeGrid (flat, no hierarchy needed).
+/// Material row for the materials DataGrid (flat, no hierarchy needed).
 /// </summary>
 public class MaterialTreeRow : INotifyPropertyChanged
 {
     public int DbId { get; set; }
     public int SectionId { get; set; }
+    public int? ParentItemId { get; set; }
 
     private string _description = "";
     public string Description
@@ -325,5 +348,181 @@ public class MaterialTreeRow : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// Product group for the materials section (parent + variants hierarchy).
+/// </summary>
+public class MaterialProductGroup : INotifyPropertyChanged
+{
+    public int ParentId { get; set; }
+    public int SectionId { get; set; }
+    public string ParentName { get; set; } = "";
+    public ObservableCollection<MaterialTreeRow> Variants { get; set; } = new();
+
+    public decimal TotalCost => Variants.Sum(v => v.TotalCost);
+    public decimal TotalSale => Variants.Sum(v => v.TotalSale);
+    public string TotalDisplay => $"{TotalSale:N2} \u20ac";
+
+    public void NotifyTotals()
+    {
+        OnPropertyChanged(nameof(TotalCost));
+        OnPropertyChanged(nameof(TotalSale));
+        OnPropertyChanged(nameof(TotalDisplay));
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// Pricing ViewModel for Scheda Prezzi + Distribuzione Prezzo.
+/// Mirrors the CostingViewModel pricing logic from ProjectCostingControl.
+/// </summary>
+public class PricingVM : INotifyPropertyChanged
+{
+    // ── Totali alimentati dal control ──
+    private decimal _totalResourceSale;
+    public decimal TotalResourceSale
+    {
+        get => _totalResourceSale;
+        set { _totalResourceSale = value; OnPropertyChanged(); NotifyAllPricing(); }
+    }
+
+    private decimal _totalMaterialSale;
+    public decimal TotalMaterialSale
+    {
+        get => _totalMaterialSale;
+        set { _totalMaterialSale = value; OnPropertyChanged(); NotifyAllPricing(); }
+    }
+
+    private decimal _totalTravelSale;
+    public decimal TotalTravelSale
+    {
+        get => _totalTravelSale;
+        set { _totalTravelSale = value; OnPropertyChanged(); NotifyAllPricing(); }
+    }
+
+    // ── Scheda Prezzi ──
+    private decimal _contingencyPct = 0.130m;
+    public decimal ContingencyPct
+    {
+        get => _contingencyPct;
+        set { _contingencyPct = value; OnPropertyChanged(); NotifyAllPricing(); }
+    }
+
+    private decimal _negotiationMarginPct = 0.050m;
+    public decimal NegotiationMarginPct
+    {
+        get => _negotiationMarginPct;
+        set { _negotiationMarginPct = value; OnPropertyChanged(); NotifyAllPricing(); }
+    }
+
+    public decimal NetPrice => TotalResourceSale + TotalMaterialSale + TotalTravelSale;
+    public decimal ContingencyAmount => NetPrice * ContingencyPct;
+    public decimal OfferPrice => NetPrice + ContingencyAmount;
+    public decimal NegotiationMarginAmount => OfferPrice * NegotiationMarginPct;
+    public decimal FinalOfferPrice => OfferPrice + NegotiationMarginAmount;
+
+    // ── Distribuzione pesi macro-categoria ──
+    public decimal ResourceDistributed => NetPrice > 0 ? FinalOfferPrice * (TotalResourceSale / NetPrice) : 0;
+    public decimal MaterialDistributed => NetPrice > 0 ? FinalOfferPrice * (TotalMaterialSale / NetPrice) : 0;
+    public decimal TravelDistributed => NetPrice > 0 ? FinalOfferPrice * (TotalTravelSale / NetPrice) : 0;
+
+    // ── Distribuzione per sezione ──
+    public ObservableCollection<DistributionRowVM> DistributionRows { get; set; } = new();
+
+    public decimal TotalCombinedSale => NetPrice;
+
+    public decimal TotalDistContingencyCheck => DistributionRows.Sum(r => r.ContingencyAmount);
+    public decimal TotalDistMarginCheck => DistributionRows.Sum(r => r.MarginAmount);
+
+    private void NotifyAllPricing()
+    {
+        OnPropertyChanged(nameof(NetPrice));
+        OnPropertyChanged(nameof(ContingencyAmount));
+        OnPropertyChanged(nameof(OfferPrice));
+        OnPropertyChanged(nameof(NegotiationMarginAmount));
+        OnPropertyChanged(nameof(FinalOfferPrice));
+        OnPropertyChanged(nameof(ResourceDistributed));
+        OnPropertyChanged(nameof(MaterialDistributed));
+        OnPropertyChanged(nameof(TravelDistributed));
+        OnPropertyChanged(nameof(TotalCombinedSale));
+        OnPropertyChanged(nameof(TotalDistContingencyCheck));
+        OnPropertyChanged(nameof(TotalDistMarginCheck));
+    }
+
+    public void NotifyDistributionTotals()
+    {
+        OnPropertyChanged(nameof(TotalDistContingencyCheck));
+        OnPropertyChanged(nameof(TotalDistMarginCheck));
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// Row in the distribution table (mirrors DistributionRowVM from CostingViewModel).
+/// </summary>
+public class DistributionRowVM : INotifyPropertyChanged
+{
+    /// "R" = sezione risorse, "M" = item materiale
+    public string RowType { get; set; } = "R";
+    public int SectionId { get; set; }
+    public int ItemId { get; set; }
+    public string TypeBadge => RowType == "M" ? "M" : "R";
+    public string TypeBadgeColor => RowType == "M" ? "#7C3AED" : "#2563EB";
+
+    private string _sectionName = "";
+    public string SectionName { get => _sectionName; set { _sectionName = value; OnPropertyChanged(); } }
+
+    private decimal _saleAmount;
+    public decimal SaleAmount { get => _saleAmount; set { _saleAmount = value; OnPropertyChanged(); OnPropertyChanged(nameof(DisplaySaleAmount)); } }
+
+    private decimal _contingencyPct;
+    public decimal ContingencyPct { get => _contingencyPct; set { _contingencyPct = value; OnPropertyChanged(); } }
+
+    private decimal _contingencyAmount;
+    public decimal ContingencyAmount { get => _contingencyAmount; set { _contingencyAmount = value; OnPropertyChanged(); } }
+
+    private bool _isContingencyPinned;
+    public bool IsContingencyPinned { get => _isContingencyPinned; set { _isContingencyPinned = value; OnPropertyChanged(); OnPropertyChanged(nameof(ContingencyPinIcon)); } }
+    public string ContingencyPinIcon => IsContingencyPinned ? "\U0001F512" : "";
+
+    private decimal _marginPct;
+    public decimal MarginPct { get => _marginPct; set { _marginPct = value; OnPropertyChanged(); } }
+
+    private decimal _marginAmount;
+    public decimal MarginAmount { get => _marginAmount; set { _marginAmount = value; OnPropertyChanged(); } }
+
+    private bool _isMarginPinned;
+    public bool IsMarginPinned { get => _isMarginPinned; set { _isMarginPinned = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginPinIcon)); } }
+    public string MarginPinIcon => IsMarginPinned ? "\U0001F512" : "";
+
+    private decimal _sectionTotal;
+    public decimal SectionTotal { get => _sectionTotal; set { _sectionTotal = value; OnPropertyChanged(); } }
+
+    // ── Shadow ──
+    private bool _isShadowed;
+    public bool IsShadowed
+    {
+        get => _isShadowed;
+        set { _isShadowed = value; OnPropertyChanged(); OnPropertyChanged(nameof(EyeIcon)); OnPropertyChanged(nameof(DisplaySaleAmount)); }
+    }
+    public string EyeIcon => IsShadowed ? "\U0001F441\u200D\U0001F5E8" : "\U0001F441";
+    public decimal DisplaySaleAmount => IsShadowed ? 0m : SaleAmount;
+
+    private decimal _shadowedAmount;
+    public decimal ShadowedAmount { get => _shadowedAmount; set { _shadowedAmount = value; OnPropertyChanged(); } }
+
+    private decimal _shadowedPct;
+    public decimal ShadowedPct { get => _shadowedPct; set { _shadowedPct = value; OnPropertyChanged(); } }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

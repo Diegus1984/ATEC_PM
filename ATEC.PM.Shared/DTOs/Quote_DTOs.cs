@@ -78,12 +78,8 @@ public class QuoteProductVariantDto
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public decimal CostPrice { get; set; }
-    public decimal SellPrice { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
-    public decimal DiscountPct { get; set; }
-    public decimal VatPct { get; set; } = 22.00m;
-    public string Unit { get; set; } = "nr.";
-    public decimal DefaultQty { get; set; } = 1;
+    public decimal SellPrice => CostPrice * MarkupValue;
     public int SortOrder { get; set; }
 }
 
@@ -139,12 +135,7 @@ public class QuoteProductVariantSaveDto
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public decimal CostPrice { get; set; }
-    public decimal SellPrice { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
-    public decimal DiscountPct { get; set; }
-    public decimal VatPct { get; set; } = 22.00m;
-    public string Unit { get; set; } = "nr.";
-    public decimal DefaultQty { get; set; } = 1;
     public int SortOrder { get; set; }
 }
 
@@ -369,10 +360,8 @@ public class QuoteCatalogImportVariant
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
-    public decimal SellPrice { get; set; }
     public decimal CostPrice { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
-    public decimal VatPct { get; set; } = 22;
 }
 
 public class QuoteStatsDto

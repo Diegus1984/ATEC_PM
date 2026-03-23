@@ -18,6 +18,7 @@ public partial class PreventiviPage : Page
     private int _selectedQuoteId;
     private QuoteDto? _selectedQuote;
     private ObservableCollection<QuoteProductGroup> _serviceProducts = new();
+    private ObservableCollection<QuoteProductGroup> _autoIncludes = new();
     private bool _suppressServiceToggle;
     private bool _suppressInfoSave;
 
@@ -25,6 +26,7 @@ public partial class PreventiviPage : Page
     {
         InitializeComponent();
         icServiceProducts.ItemsSource = _serviceProducts;
+        icImpAutoIncludes.ItemsSource = _autoIncludes;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -321,11 +323,8 @@ public partial class PreventiviPage : Page
             txtEditNotesInternal.Text = quote.NotesInternal;
             txtEditNotesQuote.Text = quote.NotesQuote;
 
-            // Read-only info panel
-            txtInfoNumero.Text = quote.QuoteNumber;
+            // Read-only info fields (horizontal header)
             txtInfoCliente.Text = quote.CustomerName;
-            txtInfoCreatoDa.Text = quote.CreatedByName;
-            txtInfoData.Text = quote.CreatedAt.ToString("dd/MM/yyyy");
             txtInfoTipo.Text = isPlant ? "IMPIANTO" : "SERVIZIO";
 
             // PDF options
@@ -334,19 +333,20 @@ public partial class PreventiviPage : Page
             chkShowSummaryPrices.IsChecked = quote.ShowSummaryPrices;
             chkHideQuantities.IsChecked = quote.HideQuantities;
 
-            // Totals
-            txtInfoSubtotal.Text = $"{quote.Subtotal:N2} \u20ac";
-            decimal discAmt = quote.Subtotal * quote.DiscountPct / 100 + quote.DiscountAbs;
-            txtInfoDiscount.Text = discAmt > 0 ? $"-{discAmt:N2} \u20ac" : "0,00 \u20ac";
-            txtInfoTotal.Text = $"{quote.Total:N2} \u20ac";
+            // Riepilogo — populated after costing loads via CostingTreeControl.PricingUpdated event
+            if (quote.QuoteType != "IMPIANTO")
+            {
+                // For SERVICE, show simple totals
+                txtSumFinal.Text = $"{quote.Total:N2} €";
+            }
 
             _suppressInfoSave = false;
 
             // Action buttons visibility
             UpdateActionButtons(quote.Status, quote.QuoteType);
 
-            // Show IMPIANTO (costing) or SERVICE (catalogo) panel
-            costingTreeControl.Visibility = isPlant ? Visibility.Visible : Visibility.Collapsed;
+            // Show IMPIANTO (full-page layout) or SERVICE (catalogo) panel
+            pnlImpiantoLayout.Visibility = isPlant ? Visibility.Visible : Visibility.Collapsed;
             pnlServiceCatalog.Visibility = isPlant ? Visibility.Collapsed : Visibility.Visible;
 
             // Show detail, hide placeholder
@@ -358,22 +358,35 @@ public partial class PreventiviPage : Page
             var sb = (Storyboard)FindResource("FadeIn");
             sb.Begin(this);
 
+            // Load items (products + auto-includes) for both types
+            LoadServiceItems(quote);
+
             // Load costing for IMPIANTO type
             if (isPlant)
             {
                 bool readOnly = quote.Status is "converted" or "rejected" or "expired";
+                costingTreeControl.PricingUpdated -= OnPricingUpdated;
+                costingTreeControl.PricingUpdated += OnPricingUpdated;
                 costingTreeControl.LoadForPreventivo(quoteId);
-            }
-            else
-            {
-                // SERVICE: load catalog items
-                LoadServiceItems(quote);
             }
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Errore: {ex.Message}");
         }
+    }
+
+    private void OnPricingUpdated()
+    {
+        var rows = costingTreeControl.GetDistributionRows();
+        var visibleRows = rows
+            .Where(r => !r.IsShadowed)
+            .Select(r => new { Name = r.SectionName, TotalFormatted = $"{r.SectionTotal:N2} €" })
+            .ToList();
+        icRiepilogo.ItemsSource = visibleRows;
+
+        var s = costingTreeControl.GetPricingSummary();
+        txtSumFinal.Text = $"{s.Final:N2} €";
     }
 
     private void SetStatusBadgeColors(string status)
@@ -539,6 +552,57 @@ public partial class PreventiviPage : Page
     }
 
     // ═══════════════════════════════════════════════════════
+    // CONTENUTI AUTOMATICI
+    // ═══════════════════════════════════════════════════════
+
+    private async void BtnReloadAutoIncludes_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedQuoteId == 0) return;
+
+        if (MessageBox.Show("Ricaricare i contenuti automatici dal catalogo?\nI contenuti automatici attuali verranno sostituiti.",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var json = await ApiClient.PostAsync($"/api/quotes/{_selectedQuoteId}/reload-auto-includes", "{}");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                await ReloadServiceItems();
+            }
+            else
+            {
+                MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
+            }
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    private async void BtnRemoveImpAutoInclude_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+        if (_selectedQuoteId == 0) return;
+
+        var group = _autoIncludes.FirstOrDefault(g => g.ParentId == parentId);
+        string name = group?.ParentName ?? $"#{parentId}";
+
+        if (MessageBox.Show($"Rimuovere '{name}'?", "Conferma",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}");
+            if (group != null)
+            {
+                foreach (var v in group.Variants)
+                    await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{v.Id}");
+            }
+            await ReloadServiceItems();
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
+    // ═══════════════════════════════════════════════════════
     // EDITABLE INFO PANEL — Auto-save on LostFocus
     // ═══════════════════════════════════════════════════════
 
@@ -599,6 +663,7 @@ public partial class PreventiviPage : Page
         _suppressServiceToggle = true;
 
         _serviceProducts.Clear();
+        _autoIncludes.Clear();
 
         var items = quote.Items.OrderBy(i => i.SortOrder).ToList();
         var parents = items.Where(i => i.ParentItemId == null).ToList();
@@ -610,10 +675,17 @@ public partial class PreventiviPage : Page
                 .Select(v => new QuoteVariantRow(v))
                 .ToList();
 
-            _serviceProducts.Add(new QuoteProductGroup(parent, variants));
+            var group = new QuoteProductGroup(parent, variants);
+
+            if (parent.IsAutoInclude)
+                _autoIncludes.Add(group);
+            else
+                _serviceProducts.Add(group);
         }
 
         txtServiceNoProducts.Visibility = _serviceProducts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        txtImpNoAutoIncludes.Visibility = _autoIncludes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        txtImpAutoCount.Text = _autoIncludes.Count > 0 ? $"({_autoIncludes.Count})" : "";
         UpdateServiceTotals(quote);
 
         _suppressServiceToggle = false;

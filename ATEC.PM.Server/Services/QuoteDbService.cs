@@ -80,15 +80,19 @@ public class QuoteDbService
             code VARCHAR(100) DEFAULT '',
             name VARCHAR(300) NOT NULL,
             cost_price DECIMAL(12,2) DEFAULT 0,
-            sell_price DECIMAL(12,2) DEFAULT 0,
-            discount_pct DECIMAL(5,2) DEFAULT 0,
-            vat_pct DECIMAL(5,2) DEFAULT 22.00,
-            unit VARCHAR(50) DEFAULT 'nr.',
-            default_qty DECIMAL(10,2) DEFAULT 1,
+            markup_value DECIMAL(5,3) DEFAULT 1.300,
             sort_order INT DEFAULT 0,
             FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE CASCADE,
             INDEX idx_product (product_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Migration: add markup_value, drop obsolete columns
+        try { c.Execute("ALTER TABLE quote_product_variants ADD COLUMN markup_value DECIMAL(5,3) DEFAULT 1.300 AFTER cost_price"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN sell_price"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN discount_pct"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN vat_pct"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN unit"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN default_qty"); } catch { }
 
         // ──────────────────────────────────────────────────
         // QUOTES — Preventivi
@@ -310,6 +314,7 @@ public class QuoteDbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_material_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             section_id INT NOT NULL,
+            parent_item_id INT NULL,
             description VARCHAR(500) NOT NULL DEFAULT '',
             quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
             unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
@@ -321,8 +326,13 @@ public class QuoteDbService
             contingency_pinned BOOLEAN NOT NULL DEFAULT FALSE,
             margin_pinned BOOLEAN NOT NULL DEFAULT FALSE,
             is_shadowed BOOLEAN NOT NULL DEFAULT FALSE,
-            FOREIGN KEY (section_id) REFERENCES quote_material_sections(id) ON DELETE CASCADE
+            FOREIGN KEY (section_id) REFERENCES quote_material_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Migration: add parent_item_id if missing
+        try { c.Execute("ALTER TABLE quote_material_items ADD COLUMN parent_item_id INT NULL AFTER section_id"); } catch { }
+        try { c.Execute("ALTER TABLE quote_material_items ADD FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE"); } catch { }
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing (
             id INT AUTO_INCREMENT PRIMARY KEY,

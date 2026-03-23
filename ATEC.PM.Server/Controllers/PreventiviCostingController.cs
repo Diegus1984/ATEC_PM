@@ -52,7 +52,7 @@ public class PreventiviCostingController : ControllerBase
         var allResources = c.Query<ProjectCostResourceDto>(@"SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId, r.resource_name AS ResourceName, r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay, r.hourly_cost AS HourlyCost, r.markup_value AS MarkupValue, r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm, r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel, r.allowance_days AS AllowanceDays, r.daily_allowance AS DailyAllowance, r.sort_order AS SortOrder FROM quote_cost_resources r JOIN quote_cost_sections s ON s.id = r.section_id WHERE s.quote_id=@quoteId ORDER BY r.sort_order", new { quoteId }).ToList();
         foreach (var sec in sections) sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
         var matSections = c.Query<ProjectMaterialSectionDto>(@"SELECT id, quote_id AS ProjectId, category_id AS CategoryId, name, markup_value AS MarkupValue, commission_markup AS CommissionMarkup, sort_order AS SortOrder, is_enabled AS IsEnabled FROM quote_material_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
-        var allItems = c.Query<ProjectMaterialItemDto>(@"SELECT i.id, i.section_id AS SectionId, i.description AS Description, i.quantity AS Quantity, i.unit_cost AS UnitCost, i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder, i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct, i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned, COALESCE(i.is_shadowed,0) AS IsShadowed FROM quote_material_items i JOIN quote_material_sections s ON s.id = i.section_id WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
+        var allItems = c.Query<ProjectMaterialItemDto>(@"SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId, i.description AS Description, i.quantity AS Quantity, i.unit_cost AS UnitCost, i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder, i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct, i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned, COALESCE(i.is_shadowed,0) AS IsShadowed FROM quote_material_items i JOIN quote_material_sections s ON s.id = i.section_id WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
         foreach (var ms in matSections) ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
         var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"SELECT id, quote_id AS ProjectId, contingency_pct AS ContingencyPct, negotiation_margin_pct AS NegotiationMarginPct, travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup FROM quote_pricing WHERE quote_id=@quoteId", new { quoteId }) ?? new ProjectPricingDto { ProjectId = quoteId };
         return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData { ProjectId = quoteId, IsInitialized = true, CostSections = sections, MaterialSections = matSections, Pricing = pricing }));
@@ -147,8 +147,20 @@ public class PreventiviCostingController : ControllerBase
     public IActionResult AddMaterialItem(int quoteId, [FromBody] ProjectMaterialItemSaveRequest req)
     {
         using var c = _db.Open();
-        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order) VALUES (@SectionId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder); SELECT LAST_INSERT_ID();", req);
+        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, description, quantity, unit_cost, markup_value, item_type, sort_order) VALUES (@SectionId, @ParentItemId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder); SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Materiale aggiunto"));
+    }
+
+    [HttpPost("material-items/{parentId}/variant")]
+    public IActionResult AddMaterialVariant(int quoteId, int parentId, [FromBody] ProjectMaterialItemSaveRequest req)
+    {
+        using var c = _db.Open();
+        var parent = c.QueryFirstOrDefault<dynamic>("SELECT section_id FROM quote_material_items WHERE id=@parentId", new { parentId });
+        if (parent == null) return NotFound(ApiResponse<string>.Fail("Prodotto padre non trovato"));
+        req.SectionId = (int)parent.section_id;
+        req.ParentItemId = parentId;
+        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, description, quantity, unit_cost, markup_value, item_type, sort_order) VALUES (@SectionId, @ParentItemId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder); SELECT LAST_INSERT_ID();", req);
+        return Ok(ApiResponse<int>.Ok(id, "Variante aggiunta"));
     }
 
     [HttpPut("material-items/{id}")]

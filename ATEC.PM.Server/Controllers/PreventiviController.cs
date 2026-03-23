@@ -324,7 +324,7 @@ public class PreventiviController : ControllerBase
         string autoSql = @"
             SELECT p.id AS ProductId, p.item_type, p.code, p.name, p.description_rtf,
                    v.id AS VariantId, v.code AS VarCode, v.name AS VarName,
-                   v.cost_price, v.sell_price, v.discount_pct, v.vat_pct, v.unit, v.default_qty
+                   v.cost_price, v.markup_value
             FROM quote_products p
             JOIN quote_categories cat ON cat.id = p.category_id
             JOIN quote_groups g ON g.id = cat.group_id
@@ -363,10 +363,12 @@ public class PreventiviController : ControllerBase
 
                 foreach (var v in grp.Where(x => x.VariantId != null))
                 {
-                    decimal qty = v.default_qty ?? 1m;
-                    decimal sell = v.sell_price ?? 0m;
                     decimal cost = v.cost_price ?? 0m;
-                    decimal disc = v.discount_pct ?? 0m;
+                    decimal markup = v.markup_value ?? 1m;
+                    decimal qty = 1m;
+                    decimal sell = cost * markup;
+                    decimal disc = 0m;
+                    decimal vat = 22m;
                     decimal lt = qty * sell * (1 - disc / 100m);
                     decimal lp = lt - (qty * cost);
 
@@ -378,8 +380,8 @@ public class PreventiviController : ControllerBase
                             @Cost, @Sell, @Disc, @Vat, @LT, @LP, @Sort, 0, 0, @ParentId, 1)",
                         new { QId = quoteId, PId = grp.Key, VId = (int?)v.VariantId,
                               Code = (string)(v.VarCode ?? ""), Name = (string)(v.VarName ?? productName),
-                              Unit = (string?)(v.unit) ?? "nr.", Qty = qty,
-                              Cost = cost, Sell = sell, Disc = disc, Vat = v.vat_pct ?? 22m,
+                              Unit = "nr.", Qty = qty,
+                              Cost = cost, Sell = sell, Disc = disc, Vat = vat,
                               LT = lt, LP = lp, Sort = sortOrder++, ParentId = parentId }, tx);
                 }
             }

@@ -2,374 +2,1641 @@
     x:Class="ATEC.PM.Client.Views.Preventivi.CostingTreeControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:syncfusion="http://schemas.syncfusion.com/wpf"
     xmlns:local="clr-namespace:ATEC.PM.Client.Views.Preventivi"
-    Background="#F7F8FA">
+    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+    Background="#F7F8FA"
+    FontFamily="Segoe UI">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <local:InverseBoolToVisConverter x:Key="InverseBoolToVis" />
-        <local:NodeTypeToFontWeightConverter x:Key="NodeTypeToFontWeight" />
+        <local:BoolToAngleConverter x:Key="BoolToAngle" />
+        <local:HexToBrushConverter x:Key="HexToBrush" />
+
+        <!--  NumericTextBox style  -->
+        <Style x:Key="NumericTextBox" TargetType="TextBox">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="#1A1D26" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#9CA3AF" />
+                </Trigger>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#4F6EF7" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  SecondaryButton style  -->
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#4F6EF7" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#4F6EF7" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F3F4F6" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  Rounded Button Template  -->
+        <ControlTemplate x:Key="RoundedButton" TargetType="Button">
+            <Border
+                Padding="{TemplateBinding Padding}"
+                Background="{TemplateBinding Background}"
+                CornerRadius="6"
+                Cursor="Hand">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </ControlTemplate>
+
+        <!--  Delete Button Template  -->
+        <DataTemplate x:Key="DeleteResourceButton">
+            <Button
+                Width="22"
+                Height="22"
+                Background="#EF44441A"
+                BorderThickness="0"
+                Click="BtnDeleteResourceInRow_Click"
+                Cursor="Hand"
+                Tag="{Binding Mode=OneWay}"
+                ToolTip="Elimina risorsa">
+                <TextBlock
+                    FontSize="9"
+                    FontWeight="Bold"
+                    Foreground="#EF4444"
+                    Text="X" />
+            </Button>
+        </DataTemplate>
+
+        <!--  Delete Material Button Template  -->
+        <DataTemplate x:Key="DeleteMaterialButton">
+            <Button
+                Width="22"
+                Height="22"
+                Background="#EF44441A"
+                BorderThickness="0"
+                Click="BtnDeleteMaterial_Click"
+                Cursor="Hand"
+                Tag="{Binding Mode=OneWay}"
+                ToolTip="Elimina materiale">
+                <TextBlock
+                    FontSize="9"
+                    FontWeight="Bold"
+                    Foreground="#EF4444"
+                    Text="X" />
+            </Button>
+        </DataTemplate>
+
+        <!--  DataGrid cell style  -->
+        <Style x:Key="CostingCell" TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border
+                            Padding="4,2"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#EBF0FF" />
+                    <Setter Property="Foreground" Value="#1A1D26" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  DataGrid column header style  -->
+        <Style x:Key="CostingColumnHeader" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#F9FAFB" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+        </Style>
+
+        <!--  Resource DataGrid template (IN_SEDE)  -->
+        <DataTemplate x:Key="ResourceGridInSede">
+            <DataGrid
+                MaxWidth="1200"
+                HorizontalAlignment="Left"
+                AlternatingRowBackground="#F9FAFB"
+                AutoGenerateColumns="False"
+                Background="Transparent"
+                BorderThickness="0"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CellEditEnding="ResourceGrid_CellEditEnding"
+                CellStyle="{StaticResource CostingCell}"
+                ColumnHeaderHeight="28"
+                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                FontSize="12"
+                GridLinesVisibility="Horizontal"
+                HeadersVisibility="Column"
+                HorizontalGridLinesBrush="#F3F4F6"
+                ItemsSource="{Binding Children}"
+                RowBackground="Transparent"
+                RowHeight="36"
+                SelectionMode="Single">
+                <DataGrid.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#EBF0FF" />
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#F3F4F6" />
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26" />
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <!--  RISORSA (ComboBox)  -->
+                    <DataGridTemplateColumn Width="2*" Header="RISORSA">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    Padding="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate>
+                                <ComboBox
+                                    DisplayMemberPath="FullName"
+                                    IsEditable="True"
+                                    IsTextSearchEnabled="True"
+                                    Loaded="EmployeeCombo_Loaded"
+                                    SelectionChanged="EmployeeCombo_SelectionChanged"
+                                    StaysOpenOnEdit="True" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!--  REP  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding DepartmentCode}"
+                        Header="REP"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  GG  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="GG">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  ORE/G  -->
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="ORE/G">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  TOT ORE  -->
+                    <DataGridTextColumn
+                        Width="65"
+                        Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
+                        Header="TOT ORE"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  EUR/H  -->
+                    <DataGridTextColumn
+                        Width="70"
+                        Binding="{Binding HourlyCost, StringFormat=N2}"
+                        Header="EUR/H"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Foreground" Value="#4F6EF7" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  COSTO NETTO  -->
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                        Header="COSTO NETTO"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  K  -->
+                    <DataGridTextColumn
+                        Width="70"
+                        Binding="{Binding MarkupValue, StringFormat=N3, UpdateSourceTrigger=LostFocus}"
+                        Header="K">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  PREZZO VENDITA  -->
+                    <DataGridTextColumn
+                        Width="100"
+                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                        Header="VENDITA"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,8,0" />
+                                <Setter Property="Foreground" Value="#059669" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!--  Delete  -->
+                    <DataGridTemplateColumn
+                        Width="30"
+                        CellTemplate="{StaticResource DeleteResourceButton}"
+                        Header="" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DataTemplate>
+
+        <!--  Resource DataGrid template (DA_CLIENTE) - includes travel columns  -->
+        <DataTemplate x:Key="ResourceGridDaCliente">
+            <DataGrid
+                MaxWidth="1200"
+                HorizontalAlignment="Left"
+                AlternatingRowBackground="#F9FAFB"
+                AutoGenerateColumns="False"
+                Background="Transparent"
+                BorderThickness="0"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CellEditEnding="ResourceGrid_CellEditEnding"
+                CellStyle="{StaticResource CostingCell}"
+                ColumnHeaderHeight="28"
+                ColumnHeaderStyle="{StaticResource CostingColumnHeader}"
+                FontSize="12"
+                GridLinesVisibility="Horizontal"
+                HeadersVisibility="Column"
+                HorizontalGridLinesBrush="#F3F4F6"
+                ItemsSource="{Binding Children}"
+                RowBackground="Transparent"
+                RowHeight="36"
+                SelectionMode="Single">
+                <DataGrid.Resources>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#EBF0FF" />
+                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#F3F4F6" />
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26" />
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <!--  RISORSA  -->
+                    <DataGridTemplateColumn Width="2*" Header="RISORSA">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock
+                                    Padding="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate>
+                                <ComboBox
+                                    DisplayMemberPath="FullName"
+                                    IsEditable="True"
+                                    IsTextSearchEnabled="True"
+                                    Loaded="EmployeeCombo_Loaded"
+                                    SelectionChanged="EmployeeCombo_SelectionChanged"
+                                    StaysOpenOnEdit="True" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellEditingTemplate>
+                    </DataGridTemplateColumn>
+                    <!--  REP  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding DepartmentCode}"
+                        Header="REP"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  GG  -->
+                    <DataGridTextColumn
+                        Width="45"
+                        Binding="{Binding WorkDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="GG">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  ORE/G  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding HoursPerDay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="ORE/G">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  TOT ORE  -->
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding TotalHours, StringFormat=F1, Mode=OneWay}"
+                        Header="TOT ORE"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  EUR/H  -->
+                    <DataGridTextColumn
+                        Width="60"
+                        Binding="{Binding HourlyCost, StringFormat=N2}"
+                        Header="€/H"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                                <Setter Property="Foreground" Value="#4F6EF7" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  COSTO  -->
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding TotalCost, StringFormat=N2, Mode=OneWay}"
+                        Header="COSTO"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  K  -->
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding MarkupValue, StringFormat=N3, UpdateSourceTrigger=LostFocus}"
+                        Header="K">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  VENDITA  -->
+                    <DataGridTextColumn
+                        Width="85"
+                        Binding="{Binding TotalSale, StringFormat=N2, Mode=OneWay}"
+                        Header="VENDITA"
+                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                                <Setter Property="Foreground" Value="#059669" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  VIAGGI  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding NumTrips, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="VIAGGI">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  KM  -->
+                    <DataGridTextColumn
+                        Width="45"
+                        Binding="{Binding KmPerTrip, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="KM">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  €/KM  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                        Header="€/KM">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  VITTO/G  -->
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                        Header="VITTO/G">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  HOTEL/G  -->
+                    <DataGridTextColumn
+                        Width="55"
+                        Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                        Header="HOTEL/G">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                                <Setter Property="Margin" Value="0,0,4,0" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  GG IND.  -->
+                    <DataGridTextColumn
+                        Width="50"
+                        Binding="{Binding AllowanceDays, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                        Header="GG IND.">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!--  €/G IND. (ComboBox 0/20/40/60)  -->
+                    <DataGridTemplateColumn Width="65" Header="€/G IND.">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox
+                                    Width="55"
+                                    HorizontalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="12"
+                                    SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
+                                    SelectionChanged="AllowanceCombo_SelectionChanged">
+                                    <ComboBox.Items>
+                                        <sys:Decimal>0</sys:Decimal>
+                                        <sys:Decimal>20</sys:Decimal>
+                                        <sys:Decimal>40</sys:Decimal>
+                                        <sys:Decimal>60</sys:Decimal>
+                                    </ComboBox.Items>
+                                </ComboBox>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <!--  Delete  -->
+                    <DataGridTemplateColumn
+                        Width="30"
+                        CellTemplate="{StaticResource DeleteResourceButton}"
+                        Header="" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- HEADER: Impegno Risorse -->
-        <Border Grid.Row="0" Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <TextBlock FontSize="15" FontWeight="Bold" Foreground="#1A1D26" Text="IMPEGNO RISORSE" VerticalAlignment="Center" />
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button x:Name="btnAddGroup" Click="BtnAddGroup_Click"
-                            Content="+ Gruppo" Cursor="Hand" Margin="0,0,8,0"
-                            Background="#6B7280" Foreground="White" FontSize="12"
-                            Padding="12,6" BorderThickness="0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                    <Button x:Name="btnAddSection" Click="BtnAddSection_Click"
-                            Content="+ Sezione" Cursor="Hand" Margin="0,0,8,0"
-                            Background="#3B82F6" Foreground="White" FontSize="12"
-                            Padding="12,6" BorderThickness="0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                    <Button x:Name="btnAddResource" Click="BtnAddResource_Click"
-                            Content="+ Risorsa" Cursor="Hand"
-                            Background="#16A34A" Foreground="White" FontSize="12"
-                            Padding="12,6" BorderThickness="0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                </StackPanel>
-            </DockPanel>
-        </Border>
+        <!--  MAIN SCROLLABLE CONTENT  -->
+        <ScrollViewer
+            x:Name="mainScrollViewer"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel>
 
-        <!-- RESOURCES TREE GRID -->
-        <syncfusion:SfTreeGrid
-            x:Name="treeGridResources"
-            Grid.Row="1"
-            AutoExpandMode="RootNodesExpanded"
-            AutoGenerateColumns="False"
-            ChildPropertyName="Children"
-            AllowEditing="True"
-            EditTrigger="OnTap"
-            LiveNodeUpdateMode="AllowDataShaping"
-            SelectionMode="Single"
-            NavigationMode="Cell"
-            ColumnSizer="Star"
-            HeaderRowHeight="32"
-            RowHeight="36"
-            CurrentCellBeginEdit="TreeGrid_CurrentCellBeginEdit"
-            CurrentCellEndEdit="TreeGrid_CurrentCellEndEdit">
+                <!--  ========== IMPEGNO RISORSE (collapsible) ==========  -->
+                <Border
+                    Margin="0,0,0,4"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel>
+                        <Border
+                            x:Name="resourcesHeader"
+                            Padding="12,6"
+                            Background="#2563EB"
+                            CornerRadius="8,8,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="ResourcesHeader_Click">
+                            <DockPanel>
+                                <TextBlock x:Name="txtResourceTotals" DockPanel.Dock="Right"
+                                           VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#C8FFFFFF" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Path x:Name="resourcesArrow" Width="8" Height="10" Margin="4,0,8,0" VerticalAlignment="Center"
+                                          Data="M 0,0 L 5,5 L 0,10" Stroke="#FFFFFF90" StrokeThickness="1.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="90" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="White"
+                                               Text="IMPEGNO RISORSE" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <StackPanel x:Name="resourcesContent" Margin="8,4">
 
-            <syncfusion:SfTreeGrid.ContextMenu>
-                <ContextMenu x:Name="treeContextMenu" Opened="TreeContextMenu_Opened">
-                    <MenuItem x:Name="menuAddResource" Header="+ Aggiungi Risorsa" Click="MenuAddResource_Click" />
-                    <MenuItem x:Name="menuAddSection" Header="+ Aggiungi Sezione" Click="MenuAddSection_Click" />
-                    <Separator x:Name="menuSep1" />
-                    <MenuItem x:Name="menuDeleteResource" Header="Elimina Risorsa" Click="MenuDeleteResource_Click" Foreground="#DC2626" />
-                    <MenuItem x:Name="menuDeleteSection" Header="Elimina Sezione" Click="MenuDeleteSection_Click" Foreground="#DC2626" />
-                </ContextMenu>
-            </syncfusion:SfTreeGrid.ContextMenu>
+                            <!--  ========== RESOURCE GROUPS (Expanders) ==========  -->
+                            <ItemsControl x:Name="groupsItemsControl" ItemsSource="{Binding}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:CostingTreeRow}">
+                                        <StackPanel Margin="0,2,0,0">
 
-            <syncfusion:SfTreeGrid.Columns>
-                <syncfusion:TreeGridTemplateColumn
-                    MappingName="DisplayName"
-                    HeaderText="SEZIONE / RISORSA"
-                    Width="300"
-                    AllowEditing="False">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Grid>
-                                <!-- GROUP: just text bold -->
-                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="4,0"
-                                           FontWeight="Bold" FontSize="13"
-                                           Visibility="{Binding IsGroup, Converter={StaticResource BoolToVis}}" />
-                                <!-- SECTION: text + add button -->
-                                <DockPanel Visibility="{Binding IsSection, Converter={StaticResource BoolToVis}}">
-                                    <Button Content="+" DockPanel.Dock="Right" Cursor="Hand"
-                                            Tag="{Binding}" Click="BtnAddResourceInSection_Click"
-                                            Width="22" Height="22" Margin="4,0,2,0"
-                                            FontSize="14" FontWeight="Bold" Foreground="#16A34A"
-                                            Background="Transparent" BorderThickness="1" BorderBrush="#16A34A"
-                                            VerticalAlignment="Center" HorizontalContentAlignment="Center"
-                                            ToolTip="Aggiungi risorsa">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Cursor="Hand">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <!--  GROUP HEADER (colored bar)  -->
+                                            <Border
+                                                Padding="10,4"
+                                                Background="{Binding GroupColor, Converter={StaticResource HexToBrush}}"
+                                                CornerRadius="4"
+                                                Cursor="Hand"
+                                                MouseLeftButtonDown="GroupHeader_Click">
+                                                <DockPanel>
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        DockPanel.Dock="Right"
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="#C8FFFFFF">
+                                                        <Run Text="GG " /><Run Text="{Binding SumWorkDays, StringFormat=F0, Mode=OneWay}" />
+                                                        <Run Text="  Ore " /><Run Text="{Binding SumTotalHours, StringFormat=F0, Mode=OneWay}" />
+                                                        <Run Text="  Netto " /><Run Text="{Binding TotalCost, StringFormat=N2, Mode=OneWay}" />
+                                                        <Run Text=" EUR  |  Vendita " /><Run Text="{Binding TotalSale, StringFormat=N2, Mode=OneWay}" />
+                                                        <Run Text=" EUR" />
+                                                    </TextBlock>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Path
+                                                            Width="8"
+                                                            Height="10"
+                                                            Margin="4,0,8,0"
+                                                            VerticalAlignment="Center"
+                                                            Data="M 0,0 L 5,5 L 0,10"
+                                                            RenderTransformOrigin="0.5,0.5"
+                                                            Stroke="#FFFFFF90"
+                                                            StrokeThickness="1.5">
+                                                            <Path.RenderTransform>
+                                                                <RotateTransform Angle="{Binding IsExpanded, Converter={StaticResource BoolToAngle}}" />
+                                                            </Path.RenderTransform>
+                                                        </Path>
+                                                        <TextBlock
+                                                            VerticalAlignment="Center"
+                                                            FontSize="12"
+                                                            FontWeight="Bold"
+                                                            Foreground="White"
+                                                            Text="{Binding DisplayName}" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+
+                                            <!--  GROUP CONTENT (sections)  -->
+                                            <StackPanel Margin="16,8,0,0" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+
+                                                <ItemsControl ItemsSource="{Binding Children}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type local:CostingTreeRow}">
+                                                            <Border
+                                                                Margin="0,0,0,6"
+                                                                Background="White"
+                                                                BorderBrush="#E4E7EC"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4">
+                                                                <StackPanel>
+
+                                                                    <!--  SECTION HEADER  -->
+                                                                    <Grid
+                                                                        Height="36"
+                                                                        Background="#F1F3F5"
+                                                                        Cursor="Hand"
+                                                                        MouseLeftButtonDown="SectionHeader_Click">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*" />
+                                                                            <ColumnDefinition Width="60" />
+                                                                            <ColumnDefinition Width="100" />
+                                                                            <ColumnDefinition Width="100" />
+                                                                            <ColumnDefinition Width="70" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <StackPanel
+                                                                            Grid.Column="0"
+                                                                            Margin="12,0,0,0"
+                                                                            VerticalAlignment="Center"
+                                                                            Orientation="Horizontal">
+                                                                            <Path
+                                                                                Width="7"
+                                                                                Height="9"
+                                                                                Margin="0,0,8,0"
+                                                                                VerticalAlignment="Center"
+                                                                                Data="M 0,0 L 4.5,4.5 L 0,9"
+                                                                                Stroke="#9CA3AF"
+                                                                                StrokeThickness="1.5">
+                                                                                <Path.RenderTransform>
+                                                                                    <RotateTransform Angle="{Binding IsExpanded, Converter={StaticResource BoolToAngle}}" />
+                                                                                </Path.RenderTransform>
+                                                                            </Path>
+                                                                            <TextBlock
+                                                                                FontSize="13"
+                                                                                FontWeight="SemiBold"
+                                                                                Foreground="#1A1D26"
+                                                                                Text="{Binding DisplayName}" />
+                                                                        </StackPanel>
+
+                                                                        <TextBlock
+                                                                            Grid.Column="1"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="11"
+                                                                            Foreground="#6B7280"
+                                                                            Text="{Binding ResourceCount, StringFormat='{}{0} ris.'}" />
+
+                                                                        <TextBlock
+                                                                            Grid.Column="2"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="12"
+                                                                            FontWeight="SemiBold"
+                                                                            Foreground="#1A1D26"
+                                                                            Text="{Binding TotalCost, StringFormat='{}{0:N2} EUR'}" />
+
+                                                                        <TextBlock
+                                                                            Grid.Column="3"
+                                                                            Margin="0,0,8,0"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="12"
+                                                                            FontWeight="Bold"
+                                                                            Foreground="#059669"
+                                                                            Text="{Binding TotalSale, StringFormat='{}{0:N2} EUR'}" />
+
+                                                                        <TextBlock
+                                                                            Grid.Column="4"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center"
+                                                                            FontSize="11"
+                                                                            Foreground="#6B7280"
+                                                                            Text="{Binding TypeLabel}" />
+
+                                                                        <!--  Add Resource button  -->
+                                                                        <Button
+                                                                            Grid.Column="5"
+                                                                            Width="24"
+                                                                            Height="24"
+                                                                            Margin="4,0,8,0"
+                                                                            VerticalAlignment="Center"
+                                                                            Background="Transparent"
+                                                                            BorderBrush="#16A34A"
+                                                                            BorderThickness="1"
+                                                                            Click="BtnAddResourceInSection_Click"
+                                                                            Content="+"
+                                                                            Cursor="Hand"
+                                                                            FontSize="14"
+                                                                            FontWeight="Bold"
+                                                                            Foreground="#16A34A"
+                                                                            Tag="{Binding Mode=OneWay}"
+                                                                            ToolTip="Aggiungi risorsa">
+                                                                            <Button.Template>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border
+                                                                                        Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="4"
+                                                                                        Cursor="Hand">
+                                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                    </Border>
+                                                                                </ControlTemplate>
+                                                                            </Button.Template>
+                                                                        </Button>
+                                                                    </Grid>
+
+                                                                    <!--  SECTION CONTENT (resource DataGrid - switches template based on type)  -->
+                                                                    <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                                                                        <ContentControl Margin="0,0,0,4" Content="{Binding}">
+                                                                            <ContentControl.Style>
+                                                                                <Style TargetType="ContentControl">
+                                                                                    <Setter Property="ContentTemplate" Value="{StaticResource ResourceGridInSede}" />
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding IsDaCliente}" Value="True">
+                                                                                            <Setter Property="ContentTemplate" Value="{StaticResource ResourceGridDaCliente}" />
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </ContentControl.Style>
+                                                                        </ContentControl>
+                                                                    </StackPanel>
+
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Buttons under resources grid -->
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,4">
+                                <Button Click="BtnAddGroup_Click" Content="+ Gruppo" Cursor="Hand" Margin="0,0,6,0"
+                                        Background="#6B7280" Foreground="White" FontSize="11" Padding="10,4" BorderThickness="0"
+                                        Template="{StaticResource RoundedButton}" />
+                                <Button Click="BtnAddSection_Click" Content="+ Sezione" Cursor="Hand"
+                                        Background="#3B82F6" Foreground="White" FontSize="11" Padding="10,4" BorderThickness="0"
+                                        Template="{StaticResource RoundedButton}" />
+                            </StackPanel>
+
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!--  ========== MATERIALI SECTION ==========  -->
+                <Border
+                    Margin="0,8,0,0"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel>
+                        <!--  MATERIALI HEADER (collapsible, with totals)  -->
+                        <Border x:Name="materialHeader" Padding="12,6" Background="#1A1D26" CornerRadius="8,8,0,0"
+                                Cursor="Hand" MouseLeftButtonDown="MaterialHeader_Click">
+                            <DockPanel>
+                                <TextBlock x:Name="txtMaterialTotals" DockPanel.Dock="Right"
+                                           VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#C8FFFFFF" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Path x:Name="materialArrow" Width="8" Height="10" Margin="4,0,8,0" VerticalAlignment="Center"
+                                          Data="M 0,0 L 5,5 L 0,10" Stroke="#FFFFFF90" StrokeThickness="1.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="90" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="White" Text="MATERIALI" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <StackPanel x:Name="materialContent" Margin="0,4,0,0">
+
+                            <ItemsControl x:Name="icMaterialProducts" Padding="0,4,0,4">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="8,4" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="6" Background="White">
+                                            <StackPanel>
+                                                <!-- Product header -->
+                                                <Border Padding="12,10" Background="#F8FAFC" CornerRadius="6,6,0,0" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                                                    <DockPanel>
+                                                        <Border Padding="6,3" Margin="0,0,10,0" VerticalAlignment="Center" CornerRadius="4" Background="#7C3AED">
+                                                            <TextBlock Text="MAT" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                                        </Border>
+
+                                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding TotalDisplay}" FontSize="13" FontWeight="Bold" Foreground="#111827"
+                                                                       VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                            <Button Content="+" ToolTip="Aggiungi variante locale" Width="28" Height="28"
+                                                                    FontSize="14" FontWeight="Bold" Cursor="Hand"
+                                                                    Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
+                                                                    Click="BtnAddMaterialVariant_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                            <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
+                                                                    FontSize="11" Cursor="Hand"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                    Click="BtnDeleteMaterialProduct_Click" Tag="{Binding ParentId}"
+                                                                    ToolTip="Rimuovi prodotto" Padding="0" />
+                                                        </StackPanel>
+
+                                                        <TextBlock Text="{Binding ParentName}" FontSize="13" FontWeight="SemiBold"
+                                                                   Foreground="#1A1D26" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    </DockPanel>
                                                 </Border>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="4,0"
-                                               FontWeight="SemiBold" />
-                                </DockPanel>
-                                <!-- RESOURCE: ComboBox for employee selection -->
-                                <ComboBox x:Name="cmbEmployee"
-                                          Tag="{Binding}"
-                                          DisplayMemberPath="FullName"
-                                          IsEditable="True"
-                                          Text="{Binding DisplayName}"
-                                          DropDownOpened="EmployeeCombo_DropDownOpened"
-                                          SelectionChanged="EmployeeCombo_SelectionChanged"
-                                          Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}"
-                                          Margin="2,1" Padding="4,2" BorderThickness="0"
-                                          Background="Transparent" FontSize="12" />
+
+                                                <!-- Column headers -->
+                                                <Border Padding="12,4" Background="#F1F3F5" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="65" />
+                                                            <ColumnDefinition Width="100" />
+                                                            <ColumnDefinition Width="100" />
+                                                            <ColumnDefinition Width="70" />
+                                                            <ColumnDefinition Width="110" />
+                                                            <ColumnDefinition Width="30" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="DESCRIZIONE" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" />
+                                                        <TextBlock Grid.Column="1" Text="QTA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="2" Text="COSTO UNIT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="6,0,0,0" />
+                                                        <TextBlock Grid.Column="3" Text="COSTO TOT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                        <TextBlock Grid.Column="4" Text="K" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="4,0,0,0" />
+                                                        <TextBlock Grid.Column="5" Text="VENDITA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- Variants -->
+                                                <ItemsControl ItemsSource="{Binding Variants}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Padding="12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="65" />
+                                                                        <ColumnDefinition Width="100" />
+                                                                        <ColumnDefinition Width="100" />
+                                                                        <ColumnDefinition Width="70" />
+                                                                        <ColumnDefinition Width="110" />
+                                                                        <ColumnDefinition Width="30" />
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <!-- Descrizione -->
+                                                                    <TextBlock Grid.Column="0" Text="{Binding Description}" FontSize="12" Foreground="#374151"
+                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+
+                                                                    <!-- Qtà -->
+                                                                    <TextBox Grid.Column="1" Text="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
+                                                                             Height="28" FontSize="12" TextAlignment="Right" Padding="6,4"
+                                                                             Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                                             LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
+
+                                                                    <!-- Costo unitario -->
+                                                                    <TextBox Grid.Column="2" Text="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                                                                             Height="28" FontSize="12" TextAlignment="Right" Padding="6,4" Margin="6,0,0,0"
+                                                                             Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                                             LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
+
+                                                                    <!-- Costo totale (read-only) -->
+                                                                    <TextBlock Grid.Column="3" Text="{Binding TotalCost, StringFormat=N2}" FontSize="12" FontWeight="SemiBold"
+                                                                               Foreground="#374151" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0" />
+
+                                                                    <!-- K (markup) -->
+                                                                    <TextBox Grid.Column="4" Text="{Binding MarkupValue, StringFormat=N3, UpdateSourceTrigger=LostFocus}"
+                                                                             Height="28" FontSize="12" TextAlignment="Center" Padding="6,4" Margin="4,0,0,0"
+                                                                             Background="#F9FAFB" BorderBrush="#D1D5DB"
+                                                                             LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
+
+                                                                    <!-- Vendita (read-only) -->
+                                                                    <TextBlock Grid.Column="5" FontSize="12" FontWeight="Bold" Foreground="#059669"
+                                                                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0">
+                                                                        <TextBlock.Text>
+                                                                            <Binding Path="TotalSale" StringFormat="{}{0:N2} &#x20AC;" />
+                                                                        </TextBlock.Text>
+                                                                    </TextBlock>
+
+                                                                    <!-- Elimina -->
+                                                                    <Button Grid.Column="6" Content="X" Width="22" Height="22"
+                                                                            FontSize="10" Cursor="Hand"
+                                                                            Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                            Click="BtnDeleteMaterial_Click" Tag="{Binding Mode=OneWay}"
+                                                                            ToolTip="Rimuovi" Padding="0" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Button under materials -->
+                            <Button Click="BtnAddMaterial_Click" Content="+ Aggiungi Materiale" Cursor="Hand"
+                                    Margin="8,6,0,8" HorizontalAlignment="Left"
+                                    Background="#16A34A" Foreground="White" FontSize="11" Padding="10,4" BorderThickness="0"
+                                    Template="{StaticResource RoundedButton}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!--  ========== SCHEDA PREZZI ==========  -->
+                <Border
+                    x:Name="pricingSection"
+                    Margin="0,8,0,16"
+                    Background="White"
+                    BorderBrush="#E4E7EC"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel>
+                        <!--  SCHEDA PREZZI HEADER (collapsible)  -->
+                        <Border
+                            x:Name="pricingHeader"
+                            Padding="12,6"
+                            Background="#059669"
+                            CornerRadius="8,8,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="PricingHeader_Click">
+                            <DockPanel>
+                                <TextBlock
+                                    x:Name="txtFinalPriceHeader"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    DockPanel.Dock="Right"
+                                    FontSize="14"
+                                    FontWeight="Bold"
+                                    Foreground="White" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Path
+                                        x:Name="pricingArrow"
+                                        Width="8"
+                                        Height="10"
+                                        Margin="4,0,8,0"
+                                        VerticalAlignment="Center"
+                                        Data="M 0,0 L 5,5 L 0,10"
+                                        Stroke="#FFFFFF90"
+                                        StrokeThickness="1.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="90" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        FontWeight="Bold"
+                                        Foreground="White"
+                                        Text="SCHEDA PREZZI  |  FINAL OFFER PRICE" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <StackPanel x:Name="pricingContent" Margin="16,8">
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="150" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <!--  NET COST  -->
+                                <Border
+                                    Grid.Row="0"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,0,0,8"
+                                    Padding="12,8"
+                                    Background="#F3F4F6"
+                                    CornerRadius="4">
+                                    <DockPanel>
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="#1A1D26">
+                                            <Run Text="{Binding NetPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" />
+                                        </TextBlock>
+                                        <TextBlock
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Foreground="#6B7280"
+                                            Text="NET COST (risorse + materiali + trasferte)" />
+                                    </DockPanel>
+                                </Border>
+
+                                <!--  Contingency  -->
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="0"
+                                    Margin="8,4,0,4"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#6B7280"
+                                    Text="+ Contingency" />
+
+                                <TextBox
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Width="80"
+                                    HorizontalAlignment="Right"
+                                    GotFocus="MarkupTextBox_GotFocus"
+                                    KeyDown="PricingPct_KeyDown"
+                                    LostFocus="PricingPct_LostFocus"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Tag="contingency"
+                                    Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="2"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding ContingencyAmount, StringFormat=N2}" />
+
+                                <!--  OFFER PRICE  -->
+                                <Border
+                                    Grid.Row="2"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,12,0,12"
+                                    Padding="12,8"
+                                    Background="#1A1D26"
+                                    CornerRadius="4">
+                                    <DockPanel>
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="16"
+                                            FontWeight="Bold"
+                                            Foreground="#4F6EF7">
+                                            <Run Text="{Binding OfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" />
+                                        </TextBlock>
+                                        <TextBlock
+                                            FontSize="13"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="OFFER PRICE" />
+                                    </DockPanel>
+                                </Border>
+
+                                <!--  Margine trattativa  -->
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="0"
+                                    Margin="8,4,0,4"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#6B7280"
+                                    Text="+ Margine trattativa" />
+
+                                <TextBox
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Width="80"
+                                    HorizontalAlignment="Right"
+                                    GotFocus="MarkupTextBox_GotFocus"
+                                    KeyDown="PricingPct_KeyDown"
+                                    LostFocus="PricingPct_LostFocus"
+                                    Style="{StaticResource NumericTextBox}"
+                                    Tag="negotiation"
+                                    Text="{Binding NegotiationMarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="2"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="#1A1D26"
+                                    Text="{Binding NegotiationMarginAmount, StringFormat=N2}" />
+
+                                <!--  FINAL OFFER PRICE  -->
+                                <Border
+                                    Grid.Row="4"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,8,0,0"
+                                    Padding="12,10"
+                                    Background="#059669"
+                                    CornerRadius="4">
+                                    <DockPanel>
+                                        <TextBlock
+                                            DockPanel.Dock="Right"
+                                            FontSize="18"
+                                            FontWeight="Bold"
+                                            Foreground="White">
+                                            <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" />
+                                        </TextBlock>
+                                        <TextBlock
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="FINAL OFFER PRICE" />
+                                    </DockPanel>
+                                </Border>
+
+                                <!--  Pulsante ridistribuzione  -->
                             </Grid>
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                </syncfusion:TreeGridTemplateColumn>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                <syncfusion:TreeGridTextColumn
-                    MappingName="DepartmentCode"
-                    HeaderText="REP"
-                    Width="60"
-                    AllowEditing="False"
-                    TextAlignment="Center" />
+                <!--  ========== DISTRIBUZIONE PREZZO ==========  -->
+                <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,8,0,0" CornerRadius="8">
+                <StackPanel x:Name="distributionSection">
+                    <Border x:Name="distHeader" Padding="12,6" Background="#7C3AED" CornerRadius="8,8,0,0"
+                            Cursor="Hand" MouseLeftButtonDown="DistributionHeader_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <Path x:Name="distArrow" Width="8" Height="10" Margin="4,0,8,0" VerticalAlignment="Center"
+                                  Data="M 0,0 L 5,5 L 0,10" Stroke="#FFFFFF90" StrokeThickness="1.5">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="90" />
+                                </Path.RenderTransform>
+                            </Path>
+                            <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="White" Text="DISTRIBUZIONE PREZZO" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel x:Name="distContent" Margin="16,8">
 
-                <syncfusion:TreeGridTemplateColumn MappingName="WorkDays" HeaderText="GG" Width="60">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock TextAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="{Binding WorkDays, StringFormat={}{0:#}}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsResource}" Value="False">
-                                                <Setter Property="Text" Value="{Binding SumWorkDays, StringFormat={}{0:#}}" />
-                                                <Setter Property="Foreground" Value="#6B7280" />
-                                                <Setter Property="FontWeight" Value="SemiBold" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding WorkDays, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
-                </syncfusion:TreeGridTemplateColumn>
+                    <!--  4 Summary Cards  -->
+                    <UniformGrid Margin="0,0,0,12" Columns="4">
+                        <Border
+                            Margin="0,0,4,0"
+                            Padding="12,10"
+                            Background="White"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#6B7280"
+                                    Text="RISORSE" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="#2563EB">
+                                    <Run Text="{Binding ResourceDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <Border
+                            Margin="2,0"
+                            Padding="12,10"
+                            Background="White"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#6B7280"
+                                    Text="MATERIALI" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="#7C3AED">
+                                    <Run Text="{Binding MaterialDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <Border
+                            Margin="2,0"
+                            Padding="12,10"
+                            Background="White"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#6B7280"
+                                    Text="TRASFERTE" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="#D97706">
+                                    <Run Text="{Binding TravelDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <Border
+                            Margin="4,0,0,0"
+                            Padding="12,10"
+                            Background="#059669"
+                            BorderThickness="0">
+                            <StackPanel>
+                                <TextBlock
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#FFFFFFB0"
+                                    Text="TOTALE OFFERTA" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    Foreground="White">
+                                    <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
 
-                <syncfusion:TreeGridTemplateColumn MappingName="HoursPerDay" HeaderText="ORE/G" Width="60">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding HoursPerDay, StringFormat={}{0:#}}" TextAlignment="Center" VerticalAlignment="Center"
-                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding HoursPerDay, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTemplateColumn MappingName="TotalHours" HeaderText="TOT ORE" Width="70" AllowEditing="False">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock TextAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="{Binding TotalHours, StringFormat={}{0:#}}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsResource}" Value="False">
-                                                <Setter Property="Text" Value="{Binding SumTotalHours, StringFormat={}{0:#}}" />
-                                                <Setter Property="Foreground" Value="#6B7280" />
-                                                <Setter Property="FontWeight" Value="SemiBold" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTemplateColumn MappingName="HourlyCost" HeaderText="€/H" Width="80" AllowEditing="False">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding HourlyCost, StringFormat='{}{0:N2} €'}" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
-                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTemplateColumn MappingName="TotalCost" HeaderText="COSTO NETTO" Width="110" AllowEditing="False">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="{Binding TotalCost, StringFormat='{}{0:N2} €'}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding TotalCost}" Value="0">
-                                                <Setter Property="Foreground" Value="#B0B0B0" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTemplateColumn MappingName="MarkupValue" HeaderText="K" Width="70">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding MarkupValue, StringFormat='{}{0:N3}'}" TextAlignment="Center" VerticalAlignment="Center"
-                                       Visibility="{Binding IsResource, Converter={StaticResource BoolToVis}}" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                    <syncfusion:TreeGridTemplateColumn.EditTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding MarkupValue, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" />
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.EditTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTemplateColumn MappingName="TotalSale" HeaderText="PREZZO VENDITA" Width="120" AllowEditing="False">
-                    <syncfusion:TreeGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#16A34A">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="{Binding TotalSale, StringFormat='{}{0:N2} €'}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding TotalSale}" Value="0">
-                                                <Setter Property="Foreground" Value="#B0B0B0" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </syncfusion:TreeGridTemplateColumn.CellTemplate>
-                </syncfusion:TreeGridTemplateColumn>
-
-                <syncfusion:TreeGridTextColumn
-                    MappingName="TypeLabel"
-                    HeaderText="TIPO"
-                    Width="70"
-                    AllowEditing="False"
-                    TextAlignment="Center" />
-            </syncfusion:SfTreeGrid.Columns>
-        </syncfusion:SfTreeGrid>
-
-        <!-- SEPARATOR -->
-        <Border Grid.Row="2" Height="1" Background="#E4E7EC" />
-
-        <!-- MATERIALI HEADER -->
-        <Border Grid.Row="3" Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <TextBlock FontSize="15" FontWeight="Bold" Foreground="#1A1D26" Text="MATERIALI" VerticalAlignment="Center" />
-                <Button x:Name="btnAddMaterial" Click="BtnAddMaterial_Click"
-                        HorizontalAlignment="Right" DockPanel.Dock="Right"
-                        Content="+ Materiale" Cursor="Hand"
-                        Background="#16A34A" Foreground="White" FontSize="12"
-                        Padding="12,6" BorderThickness="0">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Cursor="Hand">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <!--  Distribution table (editable)  -->
+                    <Border
+                        Background="White"
+                        BorderBrush="#E4E7EC"
+                        BorderThickness="1">
+                        <StackPanel>
+                            <!--  Header  -->
+                            <Grid Height="28" Background="#F9FAFB">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="25" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="25" />
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="25" />
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="110" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Margin="4,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#6B7280"
+                                    Text="SEZIONE" />
+                                <TextBlock
+                                    Grid.Column="3"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#6B7280"
+                                    Text="VENDITA" />
+                                <TextBlock
+                                    Grid.Column="5"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#D97706"
+                                    Text="CONT %" />
+                                <TextBlock
+                                    Grid.Column="6"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#D97706"
+                                    Text="CONT EUR" />
+                                <TextBlock
+                                    Grid.Column="8"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#7C3AED"
+                                    Text="MARG %" />
+                                <TextBlock
+                                    Grid.Column="9"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#7C3AED"
+                                    Text="MARG EUR" />
+                                <TextBlock
+                                    Grid.Column="10"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#0891B2"
+                                    Text="SHADOW EUR" />
+                                <TextBlock
+                                    Grid.Column="11"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="#0891B2"
+                                    Text="SH %" />
+                                <TextBlock
+                                    Grid.Column="12"
+                                    Margin="0,0,8,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    FontWeight="Bold"
+                                    Foreground="#1A1D26"
+                                    Text="TOTALE SEZ." />
+                            </Grid>
+                            <!--  Rows  -->
+                            <ItemsControl x:Name="distributionItemsControl" ItemsSource="{Binding DistributionRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border
+                                            Padding="0,3"
+                                            BorderBrush="#F3F4F6"
+                                            BorderThickness="0,0,0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="28" />
+                                                    <ColumnDefinition Width="25" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="25" />
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="25" />
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="100" />
+                                                    <ColumnDefinition Width="80" />
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="110" />
+                                                </Grid.ColumnDefinitions>
+                                                <!--  Eye toggle  -->
+                                                <Button
+                                                    Grid.Column="0"
+                                                    Width="22"
+                                                    Height="22"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Click="ShadowToggle_Click"
+                                                    Content="{Binding EyeIcon, Mode=OneWay}"
+                                                    Cursor="Hand"
+                                                    FontSize="12"
+                                                    ToolTip="Nascondi voce e spalma costo sulle altre" />
+                                                <!--  Badge R/M  -->
+                                                <Border
+                                                    Grid.Column="1"
+                                                    Width="18"
+                                                    Height="18"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="{Binding TypeBadgeColor, Converter={StaticResource HexToAlphaBrush}, ConverterParameter=30}"
+                                                    CornerRadius="2">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="9"
+                                                        FontWeight="Bold"
+                                                        Foreground="{Binding TypeBadgeColor, Converter={StaticResource HexToBrush}}"
+                                                        Text="{Binding TypeBadge}" />
+                                                </Border>
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    Margin="4,0"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    Foreground="#1A1D26"
+                                                    Text="{Binding SectionName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    Grid.Column="3"
+                                                    Margin="0,0,8,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    Foreground="#6B7280">
+                                                    <Run Text="{Binding DisplaySaleAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                                <TextBlock
+                                                    Grid.Column="4"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    Text="{Binding ContingencyPinIcon, Mode=OneWay}"
+                                                    ToolTip="Bloccato manualmente" />
+                                                <TextBox
+                                                    Grid.Column="5"
+                                                    Height="22"
+                                                    Foreground="#D97706"
+                                                    GotFocus="MarkupTextBox_GotFocus"
+                                                    KeyDown="DistPct_KeyDown"
+                                                    LostFocus="DistPct_LostFocus"
+                                                    Style="{StaticResource NumericTextBox}"
+                                                    Tag="contingency"
+                                                    Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+                                                <TextBlock
+                                                    Grid.Column="6"
+                                                    Margin="0,0,8,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    Foreground="#D97706">
+                                                    <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                                <TextBlock
+                                                    Grid.Column="7"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    Text="{Binding MarginPinIcon, Mode=OneWay}"
+                                                    ToolTip="Bloccato manualmente" />
+                                                <TextBox
+                                                    Grid.Column="8"
+                                                    Height="22"
+                                                    Foreground="#7C3AED"
+                                                    GotFocus="MarkupTextBox_GotFocus"
+                                                    KeyDown="DistPct_KeyDown"
+                                                    LostFocus="DistPct_LostFocus"
+                                                    Style="{StaticResource NumericTextBox}"
+                                                    Tag="margin"
+                                                    Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+                                                <TextBlock
+                                                    Grid.Column="9"
+                                                    Margin="0,0,8,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    Foreground="#7C3AED">
+                                                    <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                                <TextBlock
+                                                    Grid.Column="10"
+                                                    Margin="0,0,8,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    Foreground="#0891B2">
+                                                    <Run Text="{Binding ShadowedAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                                <TextBlock
+                                                    Grid.Column="11"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    Foreground="#0891B2"
+                                                    Text="{Binding ShadowedPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
+                                                <TextBlock
+                                                    Grid.Column="12"
+                                                    Margin="0,0,8,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="#1A1D26">
+                                                    <Run Text="{Binding SectionTotal, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!--  Footer  -->
+                            <Border
+                                Padding="0,5"
+                                Background="#F3F4F6"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="0,1,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="25" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="25" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="25" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="110" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="4,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26"
+                                        Text="TOTALE" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#1A1D26">
+                                        <Run Text="{Binding TotalCombinedSale, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                    <TextBlock
+                                        Grid.Column="6"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#D97706">
+                                        <Run Text="{Binding TotalDistContingencyCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                    <TextBlock
+                                        Grid.Column="9"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#7C3AED">
+                                        <Run Text="{Binding TotalDistMarginCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                    <TextBlock
+                                        Grid.Column="12"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Foreground="#059669">
+                                        <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
+                                </Grid>
                             </Border>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </DockPanel>
-        </Border>
+                        </StackPanel>
+                    </Border>
 
-        <!-- MATERIALS DATA GRID -->
-        <syncfusion:SfDataGrid
-            x:Name="dataGridMaterials"
-            Grid.Row="4"
-            AutoGenerateColumns="False"
-            AllowEditing="True"
-            EditTrigger="OnTap"
-            SelectionMode="Single"
-            NavigationMode="Cell"
-            ColumnSizer="Star"
-            HeaderRowHeight="32"
-            RowHeight="36"
-            MaxHeight="300"
-            CurrentCellEndEdit="MaterialGrid_CurrentCellEndEdit">
+                    <!-- Ridistribuisci button -->
+                    <Button Margin="0,8,0,8" Padding="14,8"
+                            HorizontalAlignment="Left"
+                            Click="BtnGenerateDistribution_Click"
+                            Content="🔄 Ridistribuisci (reset pin)"
+                            FontSize="11"
+                            Style="{StaticResource SecondaryButton}" />
+                    </StackPanel>
+                </StackPanel>
+                </Border>
 
-            <syncfusion:SfDataGrid.Columns>
-                <syncfusion:GridTextColumn
-                    MappingName="Description"
-                    HeaderText="DESCRIZIONE"
-                    Width="280" />
-
-                <syncfusion:GridTextColumn
-                    MappingName="ItemType"
-                    HeaderText="TIPO"
-                    Width="90"
-                    AllowEditing="False"
-                    TextAlignment="Center" />
-
-                <syncfusion:GridNumericColumn
-                    MappingName="Quantity"
-                    HeaderText="QTÀ"
-                    Width="60"
-                    NumberDecimalDigits="0"
-                    TextAlignment="Center" />
-
-                <syncfusion:GridCurrencyColumn
-                    MappingName="UnitCost"
-                    HeaderText="COSTO UNIT."
-                    Width="100"
-                    CurrencyDecimalDigits="2"
-                    TextAlignment="Right" />
-
-                <syncfusion:GridCurrencyColumn
-                    MappingName="TotalCost"
-                    HeaderText="COSTO TOT."
-                    Width="100"
-                    AllowEditing="False"
-                    CurrencyDecimalDigits="2"
-                    TextAlignment="Right" />
-
-                <syncfusion:GridNumericColumn
-                    MappingName="MarkupValue"
-                    HeaderText="K"
-                    Width="70"
-                    NumberDecimalDigits="3"
-                    TextAlignment="Center" />
-
-                <syncfusion:GridCurrencyColumn
-                    MappingName="TotalSale"
-                    HeaderText="VENDITA"
-                    Width="110"
-                    AllowEditing="False"
-                    CurrencyDecimalDigits="2"
-                    TextAlignment="Right" />
-            </syncfusion:SfDataGrid.Columns>
-        </syncfusion:SfDataGrid>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

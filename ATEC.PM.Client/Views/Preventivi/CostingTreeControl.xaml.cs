@@ -1,11 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using System.Windows.Input;
 using ATEC.PM.Client.Views.Costing;
 using ATEC.PM.Shared.DTOs;
-using Syncfusion.UI.Xaml.Grid;
-using Syncfusion.UI.Xaml.TreeGrid;
 using System.Text.Json;
 
 namespace ATEC.PM.Client.Views.Preventivi;
@@ -16,11 +15,32 @@ public partial class CostingTreeControl : UserControl
     private string _apiBasePath = "";
     private ObservableCollection<CostingTreeRow> _resourceRows = new();
     private ObservableCollection<MaterialTreeRow> _materialRows = new();
+    private ObservableCollection<MaterialProductGroup> _materialProducts = new();
     private int _nextNodeId = 1;
     private bool _isLoading;
     private List<CostingTreeRow> _allRows = new();
     private Dictionary<int, List<EmployeeCostLookup>> _employeeCache = new();
     private bool _suppressEmployeeChange;
+    private PricingVM _pricingVM = new();
+    private bool _isPricingUpdating;
+
+    /// <summary>Fired after pricing data is loaded/recalculated. Subscribers can read GetPricingSummary().</summary>
+    public event Action? PricingUpdated;
+
+    /// <summary>Returns distribution rows for external riepilogo.</summary>
+    public IReadOnlyList<DistributionRowVM> GetDistributionRows()
+        => _pricingVM.DistributionRows.ToList();
+
+    /// <summary>Returns current pricing summary for external UI.</summary>
+    public (decimal Resources, decimal Materials, decimal Travel, decimal Net, decimal ContPct, decimal ContAmt,
+            decimal Offer, decimal MargPct, decimal MargAmt, decimal Final) GetPricingSummary()
+    {
+        return (_pricingVM.ResourceDistributed, _pricingVM.MaterialDistributed, _pricingVM.TravelDistributed,
+                _pricingVM.NetPrice, _pricingVM.ContingencyPct, _pricingVM.ContingencyAmount,
+                _pricingVM.OfferPrice, _pricingVM.NegotiationMarginPct, _pricingVM.NegotiationMarginAmount,
+                _pricingVM.FinalOfferPrice);
+    }
+    private ProjectCostingData? _lastData;
 
     // Color mapping for groups
     private static readonly Dictionary<string, string> GroupColors = new()
@@ -51,10 +71,15 @@ public partial class CostingTreeControl : UserControl
         _isLoading = true;
         try
         {
+            // Save expanded state
+            var expandedGroups = _resourceRows.Where(g => g.IsExpanded).Select(g => g.DisplayName).ToHashSet();
+            var expandedSections = _resourceRows.SelectMany(g => g.Children)
+                .Where(s => s.IsExpanded).Select(s => s.DbId).ToHashSet();
+            double scrollOffset = mainScrollViewer.VerticalOffset;
+
             var json = await ApiClient.GetAsync(_apiBasePath);
             if (json == null) return;
 
-            // API returns wrapped response: { success, data, message }
             var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.TryGetProperty("data", out var dataEl)) return;
 
@@ -62,14 +87,31 @@ public partial class CostingTreeControl : UserControl
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (data == null) return;
 
-            treeGridResources.ItemsSource = null;
-            dataGridMaterials.ItemsSource = null;
+            _lastData = data;
 
             BuildResourceTree(data);
             BuildMaterialList(data);
 
-            treeGridResources.ItemsSource = _resourceRows;
-            dataGridMaterials.ItemsSource = _materialRows;
+            // Restore expanded state
+            foreach (var grp in _resourceRows)
+            {
+                grp.IsExpanded = expandedGroups.Contains(grp.DisplayName) || expandedGroups.Count == 0;
+                foreach (var sec in grp.Children)
+                {
+                    sec.IsExpanded = expandedSections.Contains(sec.DbId) || expandedSections.Count == 0;
+                }
+            }
+
+            groupsItemsControl.ItemsSource = _resourceRows;
+            icMaterialProducts.ItemsSource = _materialProducts;
+
+            // Build pricing
+            BuildPricing(data);
+            NotifyPricingUpdated();
+
+            // Restore scroll position
+            _ = Dispatcher.InvokeAsync(() => mainScrollViewer.ScrollToVerticalOffset(scrollOffset),
+                System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
@@ -104,7 +146,8 @@ public partial class CostingTreeControl : UserControl
                 NodeId = _nextNodeId++,
                 NodeType = "GROUP",
                 DisplayName = group.Key,
-                GroupColor = groupColor
+                GroupColor = groupColor,
+                IsExpanded = true
             };
 
             foreach (var section in group.OrderBy(s => s.SortOrder))
@@ -118,7 +161,8 @@ public partial class CostingTreeControl : UserControl
                     DbId = section.Id,
                     DisplayName = section.Name ?? "",
                     SectionType = section.SectionType ?? "IN_SEDE",
-                    GroupColor = groupColor
+                    GroupColor = groupColor,
+                    IsExpanded = true
                 };
 
                 if (section.Resources != null)
@@ -141,6 +185,7 @@ public partial class CostingTreeControl : UserControl
                             TotalSale = res.WorkDays * res.HoursPerDay * res.HourlyCost * res.MarkupValue,
                             SectionType = section.SectionType ?? "IN_SEDE",
                             GroupColor = groupColor,
+                            DepartmentCode = "",
                             NumTrips = res.NumTrips,
                             KmPerTrip = res.KmPerTrip,
                             CostPerKm = res.CostPerKm > 0 ? res.CostPerKm : 0.90m,
@@ -184,78 +229,182 @@ public partial class CostingTreeControl : UserControl
     private void BuildMaterialList(ProjectCostingData data)
     {
         _materialRows.Clear();
+        _materialProducts.Clear();
         if (data.MaterialSections == null) return;
 
         foreach (var section in data.MaterialSections)
         {
             if (section.Items == null) continue;
-            foreach (var item in section.Items.OrderBy(i => i.SortOrder))
+            var allItems = section.Items.OrderBy(i => i.SortOrder).ToList();
+
+            // Parents = items without parent_item_id
+            var parents = allItems.Where(i => i.ParentItemId == null).ToList();
+            // Orphan children (legacy data without parent) become standalone rows
+            var orphans = allItems.Where(i => i.ParentItemId != null && !parents.Any(p => p.Id == i.ParentItemId)).ToList();
+
+            foreach (var parent in parents)
             {
-                _materialRows.Add(new MaterialTreeRow
+                var children = allItems.Where(i => i.ParentItemId == parent.Id).ToList();
+
+                if (children.Count == 0)
                 {
-                    DbId = item.Id,
+                    // Legacy item: no children, treat as single-variant product
+                    var row = BuildMaterialRow(parent, section.Id);
+                    _materialRows.Add(row);
+                    var group = new MaterialProductGroup
+                    {
+                        ParentId = parent.Id,
+                        SectionId = section.Id,
+                        ParentName = parent.Description ?? "",
+                        Variants = new ObservableCollection<MaterialTreeRow> { row }
+                    };
+                    _materialProducts.Add(group);
+                }
+                else
+                {
+                    // Product with variants
+                    var variants = new ObservableCollection<MaterialTreeRow>();
+                    foreach (var child in children)
+                    {
+                        var row = BuildMaterialRow(child, section.Id);
+                        _materialRows.Add(row);
+                        variants.Add(row);
+                    }
+                    var group = new MaterialProductGroup
+                    {
+                        ParentId = parent.Id,
+                        SectionId = section.Id,
+                        ParentName = parent.Description ?? "",
+                        Variants = variants
+                    };
+                    _materialProducts.Add(group);
+                }
+            }
+
+            // Orphan items (legacy without parents)
+            foreach (var orphan in orphans)
+            {
+                var row = BuildMaterialRow(orphan, section.Id);
+                _materialRows.Add(row);
+                var group = new MaterialProductGroup
+                {
+                    ParentId = orphan.Id,
                     SectionId = section.Id,
-                    Description = item.Description ?? "",
-                    ItemType = item.ItemType ?? "MATERIAL",
-                    Quantity = item.Quantity,
-                    UnitCost = item.UnitCost,
-                    MarkupValue = item.MarkupValue > 0 ? item.MarkupValue : 1.300m,
-                    TotalCost = item.Quantity * item.UnitCost,
-                    TotalSale = item.Quantity * item.UnitCost * (item.MarkupValue > 0 ? item.MarkupValue : 1.300m)
-                });
+                    ParentName = orphan.Description ?? "",
+                    Variants = new ObservableCollection<MaterialTreeRow> { row }
+                };
+                _materialProducts.Add(group);
             }
         }
     }
 
-    // ── Editing control: only resources can be edited ──
-    private void TreeGrid_CurrentCellBeginEdit(object sender, TreeGridCurrentCellBeginEditEventArgs e)
+    private static MaterialTreeRow BuildMaterialRow(ProjectMaterialItemDto item, int sectionId)
     {
-        var treeNode = treeGridResources.GetNodeAtRowIndex(e.RowColumnIndex.RowIndex);
-        if (treeNode?.Item is CostingTreeRow row)
+        return new MaterialTreeRow
         {
-            if (!row.IsResource)
-            {
-                e.Cancel = true;
-                return;
-            }
+            DbId = item.Id,
+            SectionId = sectionId,
+            ParentItemId = item.ParentItemId,
+            Description = item.Description ?? "",
+            ItemType = item.ItemType ?? "MATERIAL",
+            Quantity = item.Quantity,
+            UnitCost = item.UnitCost,
+            MarkupValue = item.MarkupValue > 0 ? item.MarkupValue : 1.300m,
+            TotalCost = item.Quantity * item.UnitCost,
+            TotalSale = item.Quantity * item.UnitCost * (item.MarkupValue > 0 ? item.MarkupValue : 1.300m)
+        };
+    }
 
-            var colIndex = e.RowColumnIndex.ColumnIndex;
-            var col = treeGridResources.Columns.ElementAtOrDefault(colIndex);
-            var colName = col?.MappingName;
-            var editableColumns = new[] { "WorkDays", "HoursPerDay", "MarkupValue" };
-            if (colName != null && !editableColumns.Contains(colName))
-            {
-                e.Cancel = true;
-            }
+    // ══════════════════════════════════════════════════
+    // GROUP / SECTION / MATERIAL / PRICING EXPAND/COLLAPSE
+    // ══════════════════════════════════════════════════
+
+    private bool _resourcesExpanded = true;
+    private bool _materialExpanded = true;
+    private bool _pricingExpanded = true;
+    private bool _distExpanded = true;
+
+    private void ResourcesHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        _resourcesExpanded = !_resourcesExpanded;
+        resourcesContent.Visibility = _resourcesExpanded ? Visibility.Visible : Visibility.Collapsed;
+        ((RotateTransform)resourcesArrow.RenderTransform).Angle = _resourcesExpanded ? 90 : 0;
+    }
+
+    private void GroupHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is CostingTreeRow row && row.IsGroup)
+        {
+            row.IsExpanded = !row.IsExpanded;
         }
     }
 
-    // ── Auto-save on edit end ──
-    private async void TreeGrid_CurrentCellEndEdit(object sender, CurrentCellEndEditEventArgs e)
+    private void MaterialHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        _materialExpanded = !_materialExpanded;
+        materialContent.Visibility = _materialExpanded ? Visibility.Visible : Visibility.Collapsed;
+        ((RotateTransform)materialArrow.RenderTransform).Angle = _materialExpanded ? 90 : 0;
+    }
+
+    private void PricingHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        _pricingExpanded = !_pricingExpanded;
+        pricingContent.Visibility = _pricingExpanded ? Visibility.Visible : Visibility.Collapsed;
+        ((RotateTransform)pricingArrow.RenderTransform).Angle = _pricingExpanded ? 90 : 0;
+    }
+
+    private void DistributionHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        _distExpanded = !_distExpanded;
+        distContent.Visibility = _distExpanded ? Visibility.Visible : Visibility.Collapsed;
+        ((RotateTransform)distArrow.RenderTransform).Angle = _distExpanded ? 90 : 0;
+    }
+
+    private void SectionHeader_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is CostingTreeRow row && row.IsSection)
+        {
+            row.IsExpanded = !row.IsExpanded;
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // RESOURCE GRID EDITING (auto-save on LostFocus)
+    // ══════════════════════════════════════════════════
+
+    private async void ResourceGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         if (_isLoading) return;
-        // Get the edited row from the tree grid
-        var treeNode = treeGridResources.GetNodeAtRowIndex(e.RowColumnIndex.RowIndex);
-        if (treeNode?.Item is CostingTreeRow row && row.IsResource && row.IsDirty)
+        if (e.EditAction == DataGridEditAction.Cancel) return;
+        if (e.Row.Item is not CostingTreeRow row || !row.IsResource) return;
+
+        // Defer save to after binding updates
+        await Dispatcher.InvokeAsync(async () =>
         {
-            row.IsDirty = false;
-            await SaveResourceAsync(row);
-            RecalcParentTotals();
-        }
+            if (row.IsDirty)
+            {
+                row.IsDirty = false;
+                await SaveResourceAsync(row);
+                RecalcParentTotals();
+            }
+        }, System.Windows.Threading.DispatcherPriority.DataBind);
     }
 
-    private async void MaterialGrid_CurrentCellEndEdit(object sender, CurrentCellEndEditEventArgs e)
+    private async void MaterialVariantField_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
-        var rowIndex = e.RowColumnIndex.RowIndex;
-        var recordIndex = dataGridMaterials.ResolveToRecordIndex(rowIndex);
-        if (recordIndex >= 0 && recordIndex < _materialRows.Count)
+        if (sender is not TextBox tb) return;
+        if (tb.Tag is not MaterialTreeRow mat) return;
+
+        if (mat.IsDirty)
         {
-            var mat = _materialRows[recordIndex];
-            if (mat.IsDirty)
+            mat.IsDirty = false;
+            await SaveMaterialAsync(mat);
+            // Rebuild pricing after material change
+            if (_lastData != null)
             {
-                mat.IsDirty = false;
-                await SaveMaterialAsync(mat);
+                BuildPricing(_lastData);
+                NotifyPricingUpdated();
             }
         }
     }
@@ -344,14 +493,150 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    // ── Add section ──
+    // ══════════════════════════════════════════════════
+    // EMPLOYEE COMBOBOX
+    // ══════════════════════════════════════════════════
+
+    private async void EmployeeCombo_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ComboBox cmb) return;
+        if (cmb.DataContext is not CostingTreeRow row || !row.IsResource) return;
+
+        int sectionId = row.SectionDbId ?? 0;
+        if (sectionId == 0) return;
+
+        // Load employees for this section (cached)
+        if (!_employeeCache.ContainsKey(sectionId))
+        {
+            try
+            {
+                var json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
+                if (json != null)
+                {
+                    var doc = JsonDocument.Parse(json);
+                    var dataJson = doc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json;
+                    var employees = JsonSerializer.Deserialize<List<EmployeeCostLookup>>(dataJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                    _employeeCache[sectionId] = employees;
+                }
+                else
+                {
+                    _employeeCache[sectionId] = new();
+                }
+            }
+            catch { _employeeCache[sectionId] = new(); }
+        }
+
+        // Filter out employees already assigned in this section
+        var usedEmployeeIds = new HashSet<int>();
+        foreach (var grp in _resourceRows)
+        {
+            foreach (var sec in grp.Children)
+            {
+                if (sec.DbId == sectionId)
+                {
+                    foreach (var res in sec.Children)
+                    {
+                        if (res.EmployeeId.HasValue && res.DbId != row.DbId)
+                            usedEmployeeIds.Add(res.EmployeeId.Value);
+                    }
+                }
+            }
+        }
+        var filteredEmployees = _employeeCache[sectionId]
+            .Where(emp => !usedEmployeeIds.Contains(emp.Id))
+            .ToList();
+
+        _suppressEmployeeChange = true;
+        cmb.ItemsSource = filteredEmployees;
+        if (row.EmployeeId.HasValue)
+            cmb.SelectedItem = filteredEmployees.FirstOrDefault(emp => emp.Id == row.EmployeeId.Value);
+        _suppressEmployeeChange = false;
+    }
+
+    private async void EmployeeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEmployeeChange || _isLoading) return;
+        if (sender is not ComboBox cmb) return;
+        if (cmb.DataContext is not CostingTreeRow row || !row.IsResource) return;
+        if (cmb.SelectedItem is not EmployeeCostLookup emp) return;
+
+        row.EmployeeId = emp.Id;
+        row.DisplayName = emp.FullName;
+        row.HourlyCost = emp.HourlyCost;
+        row.MarkupValue = emp.DefaultMarkup > 0 ? emp.DefaultMarkup : 1.450m;
+        row.DepartmentCode = emp.DepartmentCode;
+        row.TotalCost = row.TotalHours * row.HourlyCost;
+        row.TotalSale = row.TotalCost * row.MarkupValue;
+
+        await SaveResourceAsync(row);
+        RecalcParentTotals();
+    }
+
+    private async void AllowanceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        if (sender is not ComboBox cmb) return;
+        if (cmb.DataContext is not CostingTreeRow row || !row.IsResource) return;
+        if (cmb.SelectedItem is decimal val)
+        {
+            row.DailyAllowance = val;
+            await SaveResourceAsync(row);
+            RecalcParentTotals();
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // ADD / DELETE BUTTONS
+    // ══════════════════════════════════════════════════
+
+    private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
+            var groups = new List<CostSectionGroupDto>();
+            var templates = new List<CostSectionTemplateDto>();
+
+            if (json != null)
+            {
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("data", out var dataEl))
+                {
+                    if (dataEl.TryGetProperty("groups", out var grpEl))
+                        groups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
+                            grpEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                    if (dataEl.TryGetProperty("templates", out var tmplEl))
+                        templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
+                            tmplEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                }
+            }
+
+            if (groups.Count == 0)
+            {
+                MessageBox.Show("Tutti i gruppi sono gia' presenti.", "Info",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dlg = new AddCostGroupDialog(_quoteId, groups, templates, _apiBasePath);
+            if (dlg.ShowDialog() == true)
+                await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
     {
-        string groupName = FindGroupNameFromSelection();
+        string groupName = "GESTIONE";
+        if (_resourceRows.Count > 0)
+            groupName = _resourceRows[0].DisplayName;
 
         try
         {
-            // Get available templates (wrapped in ApiResponse)
             var json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
             var templates = new List<CostSectionTemplateDto>();
             if (json != null)
@@ -380,21 +665,14 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    // ── Add resource ──
-    private async void BtnAddResource_Click(object sender, RoutedEventArgs e)
+    private async void BtnAddResourceInSection_Click(object sender, RoutedEventArgs e)
     {
-        int? sectionId = FindSectionIdFromSelection();
-
-        if (sectionId == null)
-        {
-            MessageBox.Show("Nessuna sezione disponibile. Crea prima una sezione.", "Info",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (sender is not Button btn) return;
+        if (btn.Tag is not CostingTreeRow row || !row.IsSection) return;
 
         try
         {
-            var body = new { sectionId = sectionId.Value };
+            var body = new { sectionId = row.DbId };
             await ApiClient.PostAsync($"{_apiBasePath}/resources",
                 JsonSerializer.Serialize(body));
             await LoadDataAsync();
@@ -406,7 +684,25 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    // ── Add material ──
+    private async void BtnDeleteResourceInRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        if (btn.Tag is not CostingTreeRow row || !row.IsResource) return;
+
+        if (MessageBox.Show($"Eliminare la risorsa '{row.DisplayName}'?", "Conferma",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.DeleteAsync($"{_apiBasePath}/resources/{row.DbId}");
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private async void BtnAddMaterial_Click(object sender, RoutedEventArgs e)
     {
         var picker = new CatalogPickerDialog();
@@ -414,7 +710,6 @@ public partial class CostingTreeControl : UserControl
 
         try
         {
-            // Find or create material section
             var json = await ApiClient.GetAsync(_apiBasePath);
             var rawDoc = JsonDocument.Parse(json!);
             var dataJson = rawDoc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json!;
@@ -434,20 +729,44 @@ public partial class CostingTreeControl : UserControl
                 materialSectionId = secObj.GetProperty("id").GetInt32();
             }
 
-            foreach (var v in picker.SelectedVariants)
+            // Group selected variants by product
+            var byProduct = picker.SelectedVariants.GroupBy(v => v.ProductId);
+
+            foreach (var productGroup in byProduct)
             {
-                var itemBody = new
+                string productName = productGroup.First().ProductName;
+
+                // Create parent item (product)
+                var parentBody = new
                 {
                     sectionId = materialSectionId,
-                    description = $"{v.ProductName} - {v.VariantName}",
-                    quantity = v.Quantity,
-                    unitCost = v.SellPrice > 0 ? v.SellPrice : v.CostPrice,
+                    description = productName,
+                    quantity = 0m,
+                    unitCost = 0m,
                     markupValue = 1.300m,
-                    itemType = "MATERIAL"
+                    itemType = "PRODUCT"
                 };
+                var parentResult = await ApiClient.PostAsync($"{_apiBasePath}/material-items",
+                    JsonSerializer.Serialize(parentBody));
+                var parentObj = JsonSerializer.Deserialize<JsonElement>(parentResult!);
+                int parentId = parentObj.GetProperty("data").GetInt32();
 
-                await ApiClient.PostAsync($"{_apiBasePath}/material-items",
-                    JsonSerializer.Serialize(itemBody));
+                // Create child items (variants)
+                foreach (var v in productGroup)
+                {
+                    var childBody = new
+                    {
+                        description = v.VariantName,
+                        quantity = v.Quantity,
+                        unitCost = v.CostPrice,
+                        markupValue = v.SellPrice > 0 && v.CostPrice > 0
+                            ? Math.Round(v.SellPrice / v.CostPrice, 3)
+                            : 1.300m,
+                        itemType = "MATERIAL"
+                    };
+                    await ApiClient.PostAsync($"{_apiBasePath}/material-items/{parentId}/variant",
+                        JsonSerializer.Serialize(childBody));
+                }
             }
 
             await LoadDataAsync();
@@ -459,118 +778,17 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    // ── Add resource directly from section row button ──
-    private async void BtnAddResourceInSection_Click(object sender, RoutedEventArgs e)
+    private async void BtnDeleteMaterial_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Button btn) return;
-        if (btn.Tag is not CostingTreeRow row || !row.IsSection) return;
+        if (sender is not Button btn) return;
+        if (btn.Tag is not MaterialTreeRow mat) return;
 
-        try
-        {
-            var body = new { sectionId = row.DbId };
-            await ApiClient.PostAsync($"{_apiBasePath}/resources",
-                JsonSerializer.Serialize(body));
-            await LoadDataAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore",
-                MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    // ══════════════════════════════════════════════════
-    // EMPLOYEE COMBOBOX
-    // ══════════════════════════════════════════════════
-
-    private async void EmployeeCombo_DropDownOpened(object sender, EventArgs e)
-    {
-        if (sender is not System.Windows.Controls.ComboBox cmb) return;
-        if (cmb.Tag is not CostingTreeRow row || !row.IsResource) return;
-
-        int sectionId = row.SectionDbId ?? 0;
-        if (sectionId == 0) return;
-
-        // Load employees for this section (cached)
-        if (!_employeeCache.ContainsKey(sectionId))
-        {
-            try
-            {
-                var json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
-                if (json != null)
-                {
-                    var doc = JsonDocument.Parse(json);
-                    var dataJson = doc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json;
-                    var employees = JsonSerializer.Deserialize<List<EmployeeCostLookup>>(dataJson,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                    _employeeCache[sectionId] = employees;
-                }
-                else
-                {
-                    _employeeCache[sectionId] = new();
-                }
-            }
-            catch { _employeeCache[sectionId] = new(); }
-        }
-
-        _suppressEmployeeChange = true;
-        cmb.ItemsSource = _employeeCache[sectionId];
-        // Select current employee
-        if (row.EmployeeId.HasValue)
-            cmb.SelectedItem = _employeeCache[sectionId].FirstOrDefault(emp => emp.Id == row.EmployeeId.Value);
-        _suppressEmployeeChange = false;
-    }
-
-    private async void EmployeeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        if (_suppressEmployeeChange || _isLoading) return;
-        if (sender is not System.Windows.Controls.ComboBox cmb) return;
-        if (cmb.Tag is not CostingTreeRow row || !row.IsResource) return;
-        if (cmb.SelectedItem is not EmployeeCostLookup emp) return;
-
-        row.EmployeeId = emp.Id;
-        row.DisplayName = emp.FullName;
-        row.HourlyCost = emp.HourlyCost;
-        row.MarkupValue = emp.DefaultMarkup > 0 ? emp.DefaultMarkup : 1.450m;
-        row.DepartmentCode = emp.DepartmentCode;
-        row.TotalCost = row.TotalHours * row.HourlyCost;
-        row.TotalSale = row.TotalCost * row.MarkupValue;
-
-        await SaveResourceAsync(row);
-        RecalcParentTotals();
-    }
-
-    // ══════════════════════════════════════════════════
-    // CONTEXT MENU
-    // ══════════════════════════════════════════════════
-
-    private void TreeContextMenu_Opened(object sender, RoutedEventArgs e)
-    {
-        var row = treeGridResources.SelectedItem as CostingTreeRow;
-        bool isGroup = row?.IsGroup == true;
-        bool isSection = row?.IsSection == true;
-        bool isResource = row?.IsResource == true;
-
-        menuAddResource.Visibility = (isSection || isResource) ? Visibility.Visible : Visibility.Collapsed;
-        menuAddSection.Visibility = (isGroup || isSection) ? Visibility.Visible : Visibility.Collapsed;
-        menuSep1.Visibility = (isSection || isResource) ? Visibility.Visible : Visibility.Collapsed;
-        menuDeleteResource.Visibility = isResource ? Visibility.Visible : Visibility.Collapsed;
-        menuDeleteSection.Visibility = isSection ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void MenuAddResource_Click(object sender, RoutedEventArgs e) => BtnAddResource_Click(sender, e);
-    private void MenuAddSection_Click(object sender, RoutedEventArgs e) => BtnAddSection_Click(sender, e);
-
-    private async void MenuDeleteResource_Click(object sender, RoutedEventArgs e)
-    {
-        if (treeGridResources.SelectedItem is not CostingTreeRow row || !row.IsResource) return;
-
-        if (MessageBox.Show($"Eliminare la risorsa '{row.DisplayName}'?", "Conferma",
+        if (MessageBox.Show($"Eliminare la variante '{mat.Description}'?", "Conferma",
             MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
         {
-            await ApiClient.DeleteAsync($"{_apiBasePath}/resources/{row.DbId}");
+            await ApiClient.DeleteAsync($"{_apiBasePath}/material-items/{mat.DbId}");
             await LoadDataAsync();
         }
         catch (Exception ex)
@@ -579,20 +797,19 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    private async void MenuDeleteSection_Click(object sender, RoutedEventArgs e)
+    private async void BtnDeleteMaterialProduct_Click(object sender, RoutedEventArgs e)
     {
-        if (treeGridResources.SelectedItem is not CostingTreeRow row || !row.IsSection) return;
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+        var group = _materialProducts.FirstOrDefault(g => g.ParentId == parentId);
+        string name = group?.ParentName ?? $"#{parentId}";
 
-        string msg = row.Children.Count > 0
-            ? $"La sezione '{row.DisplayName}' contiene {row.Children.Count} risorse. Eliminare tutto?"
-            : $"Eliminare la sezione '{row.DisplayName}'?";
-
-        if (MessageBox.Show(msg, "Conferma",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"Eliminare '{name}' e tutte le sue varianti?", "Conferma",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
         {
-            await ApiClient.DeleteAsync($"{_apiBasePath}/sections/{row.DbId}");
+            // Delete parent (CASCADE deletes children)
+            await ApiClient.DeleteAsync($"{_apiBasePath}/material-items/{parentId}");
             await LoadDataAsync();
         }
         catch (Exception ex)
@@ -601,84 +818,102 @@ public partial class CostingTreeControl : UserControl
         }
     }
 
-    // ══════════════════════════════════════════════════
-    // ADD GROUP
-    // ══════════════════════════════════════════════════
-
-    private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
+    private async void BtnAddMaterialVariant_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            var json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
-            var groups = new List<CostSectionGroupDto>();
-            var templates = new List<CostSectionTemplateDto>();
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+        var group = _materialProducts.FirstOrDefault(g => g.ParentId == parentId);
+        if (group == null) return;
 
-            if (json != null)
+        var dlg = new AddMaterialVariantDialog(group.ParentName)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            try
             {
-                var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("data", out var dataEl))
+                // If the parent is a legacy item (no children in DB), convert it first:
+                // create a child copy of the parent's data so it doesn't get lost
+                await EnsureParentHasChildren(parentId);
+
+                var body = new
                 {
-                    if (dataEl.TryGetProperty("groups", out var grpEl))
-                        groups = JsonSerializer.Deserialize<List<CostSectionGroupDto>>(
-                            grpEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                    if (dataEl.TryGetProperty("templates", out var tmplEl))
-                        templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
-                            tmplEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                }
-            }
-
-            if (groups.Count == 0)
-            {
-                MessageBox.Show("Tutti i gruppi sono già presenti.", "Info",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            var dlg = new AddCostGroupDialog(_quoteId, groups, templates, _apiBasePath);
-            if (dlg.ShowDialog() == true)
+                    description = dlg.Description,
+                    quantity = dlg.Quantity,
+                    unitCost = dlg.UnitCost,
+                    markupValue = dlg.MarkupValue,
+                    itemType = "MATERIAL"
+                };
+                await ApiClient.PostAsync($"{_apiBasePath}/material-items/{parentId}/variant",
+                    JsonSerializer.Serialize(body));
                 await LoadDataAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    // ══════════════════════════════════════════════════
-    // FIND SECTION FROM SELECTION
-    // ══════════════════════════════════════════════════
-
-    private string FindGroupNameFromSelection()
-    {
-        var selected = treeGridResources.SelectedItem as CostingTreeRow;
-        if (selected == null) return "GESTIONE";
-
-        if (selected.IsGroup) return selected.DisplayName;
-
-        // Walk up nested structure
-        foreach (var grp in _resourceRows)
-        {
-            if (grp.Children.Any(s => s.NodeId == selected.NodeId)) return grp.DisplayName;
-            foreach (var sec in grp.Children)
+            }
+            catch (Exception ex)
             {
-                if (sec.Children.Any(r => r.NodeId == selected.NodeId)) return grp.DisplayName;
+                MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        return "GESTIONE";
     }
 
-    private int? FindSectionIdFromSelection()
+    /// <summary>
+    /// If a parent material item has no children in DB (legacy flat item),
+    /// create a child copy of its data so the original info is preserved as a variant.
+    /// Then clear the parent's cost data (it becomes a pure header).
+    /// </summary>
+    private async Task EnsureParentHasChildren(int parentId)
     {
-        var selected = treeGridResources.SelectedItem as CostingTreeRow;
-        if (selected == null) return null;
-        if (selected.IsSection) return selected.DbId;
-        if (selected.IsResource) return selected.SectionDbId;
+        // Check if parent already has children
+        var json = await ApiClient.GetAsync(_apiBasePath);
+        var rawDoc = JsonDocument.Parse(json!);
+        var dataJson = rawDoc.RootElement.TryGetProperty("data", out var dEl) ? dEl.GetRawText() : json!;
+        var data = JsonSerializer.Deserialize<ProjectCostingData>(dataJson,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        // If group selected, return first section
-        if (selected.IsGroup)
-            return selected.Children.FirstOrDefault()?.DbId;
-        return null;
+        if (data?.MaterialSections == null) return;
+
+        foreach (var section in data.MaterialSections)
+        {
+            if (section.Items == null) continue;
+            var parent = section.Items.FirstOrDefault(i => i.Id == parentId);
+            if (parent == null) continue;
+
+            bool hasChildren = section.Items.Any(i => i.ParentItemId == parentId);
+            if (hasChildren) return; // already has children, nothing to do
+
+            // Parent is a legacy flat item with actual data — create a child copy
+            if (parent.Quantity > 0 || parent.UnitCost > 0)
+            {
+                var childBody = new
+                {
+                    description = parent.Description,
+                    quantity = parent.Quantity,
+                    unitCost = parent.UnitCost,
+                    markupValue = parent.MarkupValue > 0 ? parent.MarkupValue : 1.300m,
+                    itemType = "MATERIAL"
+                };
+                await ApiClient.PostAsync($"{_apiBasePath}/material-items/{parentId}/variant",
+                    JsonSerializer.Serialize(childBody));
+
+                // Clear parent's cost data (it's now just a header)
+                var clearBody = new
+                {
+                    description = parent.Description,
+                    quantity = 0m,
+                    unitCost = 0m,
+                    markupValue = 1.300m,
+                    itemType = "PRODUCT",
+                    sortOrder = parent.SortOrder
+                };
+                await ApiClient.PutAsync($"{_apiBasePath}/material-items/{parentId}",
+                    JsonSerializer.Serialize(clearBody));
+            }
+            return;
+        }
     }
+
+    // ══════════════════════════════════════════════════
+    // HELPERS
+    // ══════════════════════════════════════════════════
 
     private static int GetGroupSortOrder(string groupName) => groupName switch
     {
@@ -688,4 +923,544 @@ public partial class CostingTreeControl : UserControl
         "OPZIONE" => 4,
         _ => 99
     };
+
+    // ══════════════════════════════════════════════════
+    // SCHEDA PREZZI + DISTRIBUZIONE PREZZO
+    // ══════════════════════════════════════════════════
+
+    private void BuildPricing(ProjectCostingData data)
+    {
+        // Load pricing percentages from data
+        decimal contingencyPct = NormalizePct(data.Pricing?.ContingencyPct ?? 0.130m);
+        decimal negotiationPct = NormalizePct(data.Pricing?.NegotiationMarginPct ?? 0.050m);
+
+        // Calculate totals from tree rows
+        decimal totalResourceSale = _resourceRows.Sum(g => g.TotalSale);
+        decimal totalMaterialSale = _materialRows.Sum(m => m.TotalSale);
+
+        // Travel totals from DA_CLIENTE sections
+        decimal totalTravelSale = 0;
+        foreach (var grp in _resourceRows)
+        {
+            foreach (var sec in grp.Children)
+            {
+                if (sec.IsDaCliente)
+                {
+                    foreach (var res in sec.Children)
+                    {
+                        totalTravelSale += res.TravelTotal + res.AccommodationTotal + res.AllowanceTotal;
+                    }
+                }
+            }
+        }
+
+        _pricingVM = new PricingVM
+        {
+            TotalResourceSale = totalResourceSale,
+            TotalMaterialSale = totalMaterialSale,
+            TotalTravelSale = totalTravelSale,
+            ContingencyPct = contingencyPct,
+            NegotiationMarginPct = negotiationPct
+        };
+
+        // Build distribution rows
+        BuildDistributionRows(data);
+
+        // Bind pricing sections
+        pricingSection.DataContext = _pricingVM;
+        distributionSection.DataContext = _pricingVM;
+        UpdateFinalPriceHeader();
+    }
+
+    private void NotifyPricingUpdated()
+    {
+        UpdateHeaderTotals();
+        UpdateFinalPriceHeader();
+        PricingUpdated?.Invoke();
+    }
+
+    private void UpdateHeaderTotals()
+    {
+        var resCost = _resourceRows.Sum(g => g.TotalCost);
+        var resSale = _resourceRows.Sum(g => g.TotalSale);
+        txtResourceTotals.Text = $"Netto {resCost:N2} EUR  |  Vendita {resSale:N2} EUR";
+
+        var matCost = _materialRows.Sum(m => m.TotalCost);
+        var matSale = _materialRows.Sum(m => m.TotalSale);
+        txtMaterialTotals.Text = $"Netto {matCost:N2} EUR  |  Vendita {matSale:N2} EUR";
+    }
+
+    private void UpdateFinalPriceHeader()
+    {
+        txtFinalPriceHeader.Text = $"{_pricingVM.FinalOfferPrice:N2} EUR";
+    }
+
+    private void BuildDistributionRows(ProjectCostingData data)
+    {
+        // Preserve shadow state
+        var shadowState = _pricingVM.DistributionRows.ToDictionary(
+            r => $"{r.RowType}_{r.SectionId}_{r.ItemId}",
+            r => r.IsShadowed);
+
+        _pricingVM.DistributionRows.Clear();
+
+        // Resource sections (unique by name)
+        var allSections = (data.CostSections ?? new())
+            .Where(s => s.IsEnabled)
+            .GroupBy(s => s.Name?.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        // Material items: use the same leaf items from _materialRows to ensure consistency
+        var allMatItems = _materialRows
+            .Select(r => new ProjectMaterialItemDto
+            {
+                Id = r.DbId,
+                SectionId = r.SectionId,
+                ParentItemId = r.ParentItemId,
+                Description = r.Description,
+                Quantity = r.Quantity,
+                UnitCost = r.UnitCost,
+                MarkupValue = r.MarkupValue,
+                ItemType = r.ItemType
+            })
+            .ToList();
+        // Restore distribution data (contingency/margin pins) from original data
+        var allFlatItems = (data.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new()).ToList();
+        foreach (var mat in allMatItems)
+        {
+            var orig = allFlatItems.FirstOrDefault(i => i.Id == mat.Id);
+            if (orig != null)
+            {
+                mat.ContingencyPct = orig.ContingencyPct;
+                mat.MarginPct = orig.MarginPct;
+                mat.ContingencyPinned = orig.ContingencyPinned;
+                mat.MarginPinned = orig.MarginPinned;
+                mat.IsShadowed = orig.IsShadowed;
+            }
+        }
+
+        // Calculate sale amounts from tree rows
+        var sectionSales = new Dictionary<int, decimal>();
+        foreach (var grp in _resourceRows)
+            foreach (var sec in grp.Children)
+                sectionSales[sec.DbId] = sec.TotalSale;
+
+        var materialSales = new Dictionary<int, decimal>();
+        foreach (var mat in _materialRows)
+            materialSales[mat.DbId] = mat.TotalSale;
+
+        // Step 1: Rebalance contingency %
+        RebalanceDistPct(allSections, allMatItems, sectionSales, materialSales, "contingency");
+
+        // Step 2: Rebalance margin %
+        RebalanceDistPct(allSections, allMatItems, sectionSales, materialSales, "margin");
+
+        // Step 3: Build rows
+        foreach (var sec in allSections)
+        {
+            decimal sale = sectionSales.GetValueOrDefault(sec.Id, 0);
+            if (sale == 0) continue;
+
+            var row = new DistributionRowVM
+            {
+                RowType = "R",
+                SectionId = sec.Id,
+                ItemId = 0,
+                SectionName = sec.Name ?? "",
+                SaleAmount = sale,
+                ContingencyPct = sec.ContingencyPct,
+                ContingencyAmount = sec.ContingencyPct * _pricingVM.ContingencyAmount,
+                IsContingencyPinned = sec.ContingencyPinned,
+                MarginPct = sec.MarginPct,
+                MarginAmount = sec.MarginPct * _pricingVM.NegotiationMarginAmount,
+                IsMarginPinned = sec.MarginPinned,
+                IsShadowed = sec.IsShadowed,
+                SectionTotal = sale + (sec.ContingencyPct * _pricingVM.ContingencyAmount) + (sec.MarginPct * _pricingVM.NegotiationMarginAmount)
+            };
+
+            string key = $"R_{sec.Id}_0";
+            if (shadowState.TryGetValue(key, out bool wasShadowed))
+                row.IsShadowed = wasShadowed;
+
+            _pricingVM.DistributionRows.Add(row);
+        }
+
+        foreach (var item in allMatItems)
+        {
+            decimal sale = materialSales.GetValueOrDefault(item.Id, 0);
+            if (sale == 0) continue;
+
+            var row = new DistributionRowVM
+            {
+                RowType = "M",
+                SectionId = 0,
+                ItemId = item.Id,
+                SectionName = item.Description ?? "",
+                SaleAmount = sale,
+                ContingencyPct = item.ContingencyPct,
+                ContingencyAmount = item.ContingencyPct * _pricingVM.ContingencyAmount,
+                IsContingencyPinned = item.ContingencyPinned,
+                MarginPct = item.MarginPct,
+                MarginAmount = item.MarginPct * _pricingVM.NegotiationMarginAmount,
+                IsMarginPinned = item.MarginPinned,
+                IsShadowed = item.IsShadowed,
+                SectionTotal = sale + (item.ContingencyPct * _pricingVM.ContingencyAmount) + (item.MarginPct * _pricingVM.NegotiationMarginAmount)
+            };
+
+            string key = $"M_0_{item.Id}";
+            if (shadowState.TryGetValue(key, out bool wasShadowed))
+                row.IsShadowed = wasShadowed;
+
+            _pricingVM.DistributionRows.Add(row);
+        }
+
+        // Step 4: Recalc shadow
+        RecalcShadow();
+        _pricingVM.NotifyDistributionTotals();
+    }
+
+    private void RebalanceDistPct(
+        List<ProjectCostSectionDto> sections,
+        List<ProjectMaterialItemDto> matItems,
+        Dictionary<int, decimal> sectionSales,
+        Dictionary<int, decimal> materialSales,
+        string field)
+    {
+        bool isContingency = field == "contingency";
+
+        decimal pinnedSum = 0;
+        var unpinned = new List<(Action<decimal> Set, decimal Sale)>();
+
+        foreach (var s in sections)
+        {
+            decimal sale = sectionSales.GetValueOrDefault(s.Id, 0);
+            if (sale == 0) continue;
+
+            bool pinned = isContingency ? s.ContingencyPinned : s.MarginPinned;
+            decimal pct = isContingency ? s.ContingencyPct : s.MarginPct;
+
+            if (pinned)
+                pinnedSum += pct;
+            else
+                unpinned.Add((v => { if (isContingency) s.ContingencyPct = v; else s.MarginPct = v; }, sale));
+        }
+
+        foreach (var i in matItems)
+        {
+            decimal sale = materialSales.GetValueOrDefault(i.Id, 0);
+            if (sale == 0) continue;
+
+            bool pinned = isContingency ? i.ContingencyPinned : i.MarginPinned;
+            decimal pct = isContingency ? i.ContingencyPct : i.MarginPct;
+
+            if (pinned)
+                pinnedSum += pct;
+            else
+                unpinned.Add((v => { if (isContingency) i.ContingencyPct = v; else i.MarginPct = v; }, sale));
+        }
+
+        decimal remaining = Math.Max(0, 1m - pinnedSum);
+        decimal totalSale = unpinned.Sum(u => u.Sale);
+
+        foreach (var (set, sale) in unpinned)
+            set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
+    }
+
+    private void RecalcShadow()
+    {
+        var shadowed = _pricingVM.DistributionRows.Where(r => r.IsShadowed).ToList();
+        var visible = _pricingVM.DistributionRows.Where(r => !r.IsShadowed).ToList();
+
+        decimal totalShadowedSale = shadowed.Sum(r => r.SaleAmount);
+        decimal totalVisibleSale = visible.Sum(r => r.SaleAmount);
+
+        foreach (var row in _pricingVM.DistributionRows)
+        {
+            if (row.IsShadowed)
+            {
+                row.ShadowedAmount = 0;
+                row.ShadowedPct = 0;
+                row.SectionTotal = 0;
+            }
+            else if (totalVisibleSale > 0 && totalShadowedSale > 0)
+            {
+                decimal quota = row.SaleAmount / totalVisibleSale;
+                row.ShadowedAmount = Math.Round(totalShadowedSale * quota, 2);
+                row.ShadowedPct = quota;
+                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount + row.ShadowedAmount;
+            }
+            else
+            {
+                row.ShadowedAmount = 0;
+                row.ShadowedPct = 0;
+                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+            }
+        }
+    }
+
+    private void RecalcDistributionInPlace()
+    {
+        foreach (var row in _pricingVM.DistributionRows)
+        {
+            row.ContingencyAmount = row.ContingencyPct * _pricingVM.ContingencyAmount;
+            row.MarginAmount = row.MarginPct * _pricingVM.NegotiationMarginAmount;
+            row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+        }
+        RecalcShadow();
+        _pricingVM.NotifyDistributionTotals();
+    }
+
+    private static decimal NormalizePct(decimal value) => value > 1m ? value / 100m : value;
+
+    // ── Pricing event handlers ──
+
+    private void MarkupTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb) tb.SelectAll();
+    }
+
+    private async void PricingPct_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb)
+        {
+            e.Handled = true;
+            await ApplyAndSavePricing(tb);
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private async void PricingPct_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            await ApplyAndSavePricing(tb);
+    }
+
+    private async Task ApplyAndSavePricing(TextBox tb)
+    {
+        if (_isPricingUpdating) return;
+        _isPricingUpdating = true;
+
+        try
+        {
+            string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
+            if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
+            if (val > 1m) val /= 100m;
+
+            string tag = tb.Tag?.ToString() ?? "";
+            bool changed = false;
+
+            if (tag == "contingency" && val != _pricingVM.ContingencyPct)
+            { _pricingVM.ContingencyPct = val; changed = true; }
+            else if (tag == "negotiation" && val != _pricingVM.NegotiationMarginPct)
+            { _pricingVM.NegotiationMarginPct = val; changed = true; }
+
+            if (!changed) return;
+
+            RecalcDistributionInPlace();
+            NotifyPricingUpdated();
+            await SavePricingMarkups();
+            await SaveAllDistributions();
+        }
+        finally { _isPricingUpdating = false; }
+    }
+
+    private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("Resettare tutti i blocchi e ridistribuire proporzionalmente?",
+            "Ridistribuisci", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        if (_lastData == null) return;
+
+        // Reset all pins in underlying data
+        foreach (var sec in _lastData.CostSections ?? new())
+        { sec.ContingencyPinned = false; sec.MarginPinned = false; }
+        foreach (var ms in _lastData.MaterialSections ?? new())
+            foreach (var item in ms.Items ?? new())
+            { item.ContingencyPinned = false; item.MarginPinned = false; }
+
+        BuildDistributionRows(_lastData);
+        await SaveAllDistributions();
+    }
+
+    private async void ShadowToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is DistributionRowVM row)
+        {
+            row.IsShadowed = !row.IsShadowed;
+
+            // Sync shadow state back to underlying data
+            if (_lastData != null)
+            {
+                if (row.RowType == "R")
+                {
+                    var sec = (_lastData.CostSections ?? new()).FirstOrDefault(s => s.Id == row.SectionId);
+                    if (sec != null) sec.IsShadowed = row.IsShadowed;
+                }
+                else
+                {
+                    var item = (_lastData.MaterialSections ?? new())
+                        .SelectMany(ms => ms.Items ?? new())
+                        .FirstOrDefault(i => i.Id == row.ItemId);
+                    if (item != null) item.IsShadowed = row.IsShadowed;
+                }
+            }
+
+            RecalcShadow();
+            _pricingVM.NotifyDistributionTotals();
+            await SaveAllDistributions();
+        }
+    }
+
+    private async void DistPct_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb)
+        {
+            e.Handled = true;
+            await ApplyDistPct(tb);
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private async void DistPct_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            await ApplyDistPct(tb);
+    }
+
+    private async Task ApplyDistPct(TextBox tb)
+    {
+        if (tb.DataContext is not DistributionRowVM distRow) return;
+
+        string field = tb.Tag?.ToString() ?? "";
+        string raw = tb.Text.Replace("%", "").Replace(",", ".").Trim();
+        if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return;
+        val /= 100m;
+
+        if (_lastData == null) return;
+
+        // PIN the edited row and sync to underlying data
+        if (distRow.RowType == "R")
+        {
+            var sec = (_lastData.CostSections ?? new()).FirstOrDefault(s => s.Id == distRow.SectionId);
+            if (sec == null) return;
+
+            if (field == "contingency")
+            {
+                decimal otherPinned = (_lastData.CostSections ?? new())
+                    .Where(s => s.ContingencyPinned && s.Id != sec.Id).Sum(s => s.ContingencyPct)
+                    + (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new())
+                    .Where(i => i.ContingencyPinned).Sum(i => i.ContingencyPct);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                sec.ContingencyPinned = true;
+                sec.ContingencyPct = val;
+            }
+            else
+            {
+                decimal otherPinned = (_lastData.CostSections ?? new())
+                    .Where(s => s.MarginPinned && s.Id != sec.Id).Sum(s => s.MarginPct)
+                    + (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new())
+                    .Where(i => i.MarginPinned).Sum(i => i.MarginPct);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                sec.MarginPinned = true;
+                sec.MarginPct = val;
+            }
+        }
+        else
+        {
+            var item = (_lastData.MaterialSections ?? new())
+                .SelectMany(ms => ms.Items ?? new())
+                .FirstOrDefault(i => i.Id == distRow.ItemId);
+            if (item == null) return;
+
+            if (field == "contingency")
+            {
+                decimal otherPinned = (_lastData.CostSections ?? new())
+                    .Where(s => s.ContingencyPinned).Sum(s => s.ContingencyPct)
+                    + (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new())
+                    .Where(i => i.ContingencyPinned && i.Id != item.Id).Sum(i => i.ContingencyPct);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                item.ContingencyPinned = true;
+                item.ContingencyPct = val;
+            }
+            else
+            {
+                decimal otherPinned = (_lastData.CostSections ?? new())
+                    .Where(s => s.MarginPinned).Sum(s => s.MarginPct)
+                    + (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new())
+                    .Where(i => i.MarginPinned && i.Id != item.Id).Sum(i => i.MarginPct);
+                val = Math.Min(val, Math.Max(0, 1m - otherPinned));
+                item.MarginPinned = true;
+                item.MarginPct = val;
+            }
+        }
+
+        BuildDistributionRows(_lastData);
+        await SaveAllDistributions();
+    }
+
+    // ── API save methods ──
+
+    private async Task SavePricingMarkups()
+    {
+        try
+        {
+            var req = new
+            {
+                contingencyPct = _pricingVM.ContingencyPct,
+                negotiationMarginPct = _pricingVM.NegotiationMarginPct,
+                travelMarkup = 1.000m,
+                allowanceMarkup = 1.000m
+            };
+            string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PutAsync($"{_apiBasePath}/pricing", json);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore salvataggio pricing: {ex.Message}", "Errore",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task SaveAllDistributions()
+    {
+        if (_lastData == null) return;
+
+        foreach (var sec in (_lastData.CostSections ?? new()).Where(s => s.IsEnabled))
+        {
+            try
+            {
+                var req = new
+                {
+                    contingencyPct = sec.ContingencyPct,
+                    marginPct = sec.MarginPct,
+                    contingencyPinned = sec.ContingencyPinned,
+                    marginPinned = sec.MarginPinned,
+                    isShadowed = sec.IsShadowed
+                };
+                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
+            }
+            catch { }
+        }
+
+        foreach (var item in (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new()))
+        {
+            try
+            {
+                var req = new
+                {
+                    contingencyPct = item.ContingencyPct,
+                    marginPct = item.MarginPct,
+                    contingencyPinned = item.ContingencyPinned,
+                    marginPinned = item.MarginPinned,
+                    isShadowed = item.IsShadowed
+                };
+                string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                await ApiClient.PutAsync($"{_apiBasePath}/material-items/{item.Id}/distribution", json);
+            }
+            catch { }
+        }
+    }
 }

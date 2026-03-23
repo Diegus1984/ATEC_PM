@@ -1088,9 +1088,8 @@ public partial class QuoteCatalogPage : Page
                     Code = row.Cell(15).GetString().Trim(),
                     Name = row.Cell(16).GetString().Trim(),
                     Description = row.Cell(17).GetString().Trim(),
-                    SellPrice = row.Cell(18).IsEmpty() ? 0 : (decimal)row.Cell(18).GetDouble(),
                     CostPrice = row.Cell(19).IsEmpty() ? 0 : (decimal)row.Cell(19).GetDouble(),
-                    VatPct = row.Cell(20).IsEmpty() ? 22 : (decimal)row.Cell(20).GetDouble()
+                    MarkupValue = row.Cell(20).IsEmpty() ? 1.300m : (decimal)row.Cell(20).GetDouble()
                 });
             }
         }
@@ -1134,11 +1133,7 @@ public class ProductListItem
             Code = v.Code,
             Name = v.Name,
             CostPrice = v.CostPrice,
-            SellPrice = v.SellPrice,
-            DiscountPct = v.DiscountPct,
-            VatPct = v.VatPct,
-            Unit = v.Unit,
-            DefaultQty = v.DefaultQty
+            MarkupValue = v.MarkupValue > 0 ? v.MarkupValue : 1.300m
         }).ToList();
 
         if (p.ItemType == "content" || p.Variants.Count == 0)
@@ -1169,14 +1164,9 @@ public class VariantDisplayItem
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public decimal CostPrice { get; set; }
-    public decimal SellPrice { get; set; }
-    public decimal DiscountPct { get; set; }
-    public decimal VatPct { get; set; }
-    public string Unit { get; set; } = "nr.";
-    public decimal DefaultQty { get; set; } = 1;
+    public decimal MarkupValue { get; set; } = 1.300m;
+    public decimal SellPrice => CostPrice * MarkupValue;
     public string SellPriceFormatted => $"{SellPrice:N2}€";
     public string CostPriceFormatted => $"{CostPrice:N2}€";
-    public string DiscountFormatted => DiscountPct > 0 ? $"{DiscountPct:N1}%" : "—";
-    public string VatFormatted => $"{VatPct:N0}%";
-    public string QtyFormatted => $"{DefaultQty:G} {Unit}";
+    public string MarkupFormatted => $"x{MarkupValue:N3}";
 }

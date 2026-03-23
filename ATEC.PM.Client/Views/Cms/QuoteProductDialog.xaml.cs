@@ -72,11 +72,7 @@ public partial class QuoteProductDialog : Window
                         Code = v.Code,
                         Name = v.Name,
                         CostPrice = v.CostPrice,
-                        SellPrice = v.SellPrice,
-                        DiscountPct = v.DiscountPct,
-                        VatPct = v.VatPct,
-                        Unit = v.Unit,
-                        DefaultQty = v.DefaultQty,
+                        MarkupValue = v.MarkupValue,
                         SortOrder = v.SortOrder
                     });
                 }
@@ -139,11 +135,7 @@ public partial class QuoteProductDialog : Window
                 Code = v.Code ?? "",
                 Name = v.Name ?? "",
                 CostPrice = v.CostPrice,
-                SellPrice = v.SellPrice,
-                DiscountPct = v.DiscountPct,
-                VatPct = v.VatPct,
-                Unit = v.Unit ?? "nr.",
-                DefaultQty = v.DefaultQty,
+                MarkupValue = v.MarkupValue,
                 SortOrder = i
             }).ToList()
         };
@@ -197,22 +189,12 @@ public class VariantRow : INotifyPropertyChanged
     public string Name { get => _name; set { _name = value; Notify(); } }
 
     private decimal _costPrice;
-    public decimal CostPrice { get => _costPrice; set { _costPrice = value; Notify(); } }
+    public decimal CostPrice { get => _costPrice; set { _costPrice = value; Notify(); Notify(nameof(SellPrice)); } }
 
-    private decimal _sellPrice;
-    public decimal SellPrice { get => _sellPrice; set { _sellPrice = value; Notify(); } }
+    private decimal _markupValue = 1;
+    public decimal MarkupValue { get => _markupValue; set { _markupValue = value; Notify(); Notify(nameof(SellPrice)); } }
 
-    private decimal _discountPct;
-    public decimal DiscountPct { get => _discountPct; set { _discountPct = value; Notify(); } }
-
-    private decimal _vatPct = 22.00m;
-    public decimal VatPct { get => _vatPct; set { _vatPct = value; Notify(); } }
-
-    private string _unit = "nr.";
-    public string Unit { get => _unit; set { _unit = value; Notify(); } }
-
-    private decimal _defaultQty = 1;
-    public decimal DefaultQty { get => _defaultQty; set { _defaultQty = value; Notify(); } }
+    public decimal SellPrice => CostPrice * MarkupValue;
 
     public int SortOrder { get; set; }
 

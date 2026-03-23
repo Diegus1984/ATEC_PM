@@ -2,6 +2,7 @@
     x:Class="ATEC.PM.Client.Views.Costing.CatalogPickerDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:ATEC.PM.Client.Views.Costing"
     Title="Seleziona prodotti dal catalogo"
     Width="900"
     Height="600"
@@ -11,46 +12,50 @@
 
     <DockPanel>
 
-        <!--  BOTTOM BAR  -->
-        <Border
-            Padding="16,12"
-            Background="White"
-            BorderBrush="#E4E7EC"
-            BorderThickness="0,1,0,0"
-            DockPanel.Dock="Bottom">
+        <!--  BOTTOM: Cart + Buttons  -->
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
             <DockPanel>
-                <TextBlock
-                    x:Name="txtSelectionCount"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="#6B7280"
-                    Text="0 varianti selezionate" />
-                <StackPanel
-                    HorizontalAlignment="Right"
-                    DockPanel.Dock="Right"
-                    Orientation="Horizontal">
-                    <Button
-                        Width="90"
-                        Height="34"
-                        Background="#F3F4F6"
-                        BorderThickness="0"
-                        Click="BtnCancel_Click"
-                        Content="Annulla"
-                        Cursor="Hand"
-                        Foreground="#374151" />
-                    <Button
-                        x:Name="btnAdd"
-                        Width="110"
-                        Height="34"
-                        Margin="8,0,0,0"
-                        Background="#4F6EF7"
-                        BorderThickness="0"
-                        Click="BtnAdd_Click"
-                        Content="Aggiungi"
-                        Cursor="Hand"
-                        FontWeight="SemiBold"
-                        Foreground="White" />
-                </StackPanel>
+                <!--  Button bar  -->
+                <Border Padding="16,10" DockPanel.Dock="Bottom" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0">
+                    <DockPanel>
+                        <TextBlock x:Name="txtSelectionCount" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Text="0 elementi nel carrello" />
+                        <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Width="90" Height="34" Background="#F3F4F6" BorderThickness="0"
+                                    Click="BtnCancel_Click" Content="Annulla" Cursor="Hand" Foreground="#374151" />
+                            <Button x:Name="btnConfirm" Width="110" Height="34" Margin="8,0,0,0"
+                                    Background="#4F6EF7" BorderThickness="0" Click="BtnConfirm_Click"
+                                    Content="Conferma" Cursor="Hand" FontWeight="SemiBold" Foreground="White" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!--  Cart list (collapsible)  -->
+                <Border x:Name="pnlCart" MaxHeight="180" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="icCart" Padding="8,4">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,2" Padding="10,5" Background="#FAFBFC" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="4">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="X" Width="20" Height="20" FontSize="9"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#DC2626" Cursor="Hand"
+                                                    Click="BtnRemoveFromCart_Click" Tag="{Binding}" Padding="0" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding SellPrice, StringFormat='{}{0:N2} &#x20AC;'}"
+                                                       FontSize="11" FontWeight="SemiBold" Foreground="#059669" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding CostPrice, StringFormat='{}{0:N2} &#x20AC;'}"
+                                                       FontSize="11" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <TextBlock FontSize="11" Foreground="#374151" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding ProductName, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text=" — " Foreground="#9CA3AF" />
+                                                <Run Text="{Binding VariantName, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
             </DockPanel>
         </Border>
 
@@ -108,6 +113,23 @@
                             Text="Caricamento..." />
                     </Border>
 
+                    <!--  Search bar  -->
+                    <Border Padding="8,6" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1" DockPanel.Dock="Top">
+                        <Grid>
+                            <TextBox x:Name="txtSearch" Height="32" Padding="10,0,10,0"
+                                     VerticalContentAlignment="Center" Background="#F9FAFB"
+                                     BorderBrush="#D1D5DB" FontSize="12"
+                                     TextChanged="TxtSearch_TextChanged">
+                                <TextBox.Resources>
+                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="16" /></Style>
+                                </TextBox.Resources>
+                            </TextBox>
+                            <TextBlock x:Name="txtSearchPlaceholder" Margin="12,0,0,0"
+                                       VerticalAlignment="Center" FontSize="12" Foreground="#9CA3AF"
+                                       IsHitTestVisible="False" Text="Cerca gruppo o categoria..." />
+                        </Grid>
+                    </Border>
+
                     <!--  TreeView  -->
                     <TreeView
                         x:Name="treeCatalog"
@@ -117,7 +139,7 @@
                         SelectedItemChanged="Tree_SelectedItemChanged">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
-                                <Setter Property="Padding" Value="4,4" />
+                                <Setter Property="Padding" Value="4,3" />
                                 <Setter Property="FontSize" Value="13" />
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -153,121 +175,66 @@
                             Text="Seleziona una categoria" />
                     </Border>
 
-                    <!--  Variant list  -->
-                    <ListView
-                        x:Name="lstVariants"
-                        Background="#F7F8FA"
-                        BorderThickness="0"
-                        ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="Padding" Value="0" />
-                                <Setter Property="Margin" Value="8,4,8,0" />
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ListViewItem">
-                                            <Border
-                                                Padding="12,8"
-                                                Background="White"
-                                                BorderBrush="#E4E7EC"
-                                                BorderThickness="1"
-                                                CornerRadius="4">
-                                                <ContentPresenter />
+                    <!--  Grouped variant list  -->
+                    <ScrollViewer x:Name="lstVariants" VerticalScrollBarVisibility="Auto" Background="#F7F8FA">
+                        <ItemsControl x:Name="icProductGroups" Padding="8,4">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,4" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="6" Background="White">
+                                        <StackPanel>
+                                            <!-- Product header -->
+                                            <Border Padding="12,8" Background="#F8FAFC" CornerRadius="6,6,0,0" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                                                <TextBlock Text="{Binding ProductName}" FontSize="13" FontWeight="Bold" Foreground="#1A1D26" />
                                             </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
 
-                                    <!--  Checkbox  -->
-                                    <CheckBox
-                                        Grid.Column="0"
-                                        Margin="0,0,10,0"
-                                        VerticalAlignment="Center"
-                                        Checked="Variant_CheckChanged"
-                                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                        Unchecked="Variant_CheckChanged" />
+                                            <!-- Variants indented -->
+                                            <ItemsControl ItemsSource="{Binding Variants}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Padding="8,6,12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                                            <Grid Margin="16,0,0,0">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="90" />
+                                                                    <ColumnDefinition Width="90" />
+                                                                    <ColumnDefinition Width="60" />
+                                                                </Grid.ColumnDefinitions>
 
-                                    <!--  Name + Code  -->
-                                    <StackPanel
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontSize="13"
-                                            FontWeight="SemiBold"
-                                            Foreground="#1A1D26"
-                                            Text="{Binding VariantName}"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <TextBlock
-                                            FontSize="11"
-                                            Foreground="#9CA3AF"
-                                            Text="{Binding VariantCode}" />
-                                    </StackPanel>
+                                                                <CheckBox Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
+                                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                          Checked="Variant_CheckChanged" Unchecked="Variant_CheckChanged" />
 
-                                    <!--  Cost price  -->
-                                    <StackPanel
-                                        Grid.Column="2"
-                                        Margin="12,0"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontSize="10"
-                                            Foreground="#9CA3AF"
-                                            Text="costo" />
-                                        <TextBlock
-                                            FontSize="13"
-                                            Foreground="#374151"
-                                            Text="{Binding CostPrice, StringFormat='€ {0:N2}'}" />
-                                    </StackPanel>
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                    <TextBlock FontSize="12" FontWeight="Medium" Foreground="#1A1D26"
+                                                                               Text="{Binding VariantName}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock FontSize="10" Foreground="#9CA3AF" Text="{Binding VariantCode}"
+                                                                               Visibility="{Binding VariantCode, Converter={x:Static local:StringToVisConverter.Instance}}" />
+                                                                </StackPanel>
 
-                                    <!--  Sell price  -->
-                                    <StackPanel
-                                        Grid.Column="3"
-                                        Margin="12,0"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontSize="10"
-                                            Foreground="#9CA3AF"
-                                            Text="vendita" />
-                                        <TextBlock
-                                            FontSize="13"
-                                            Foreground="#374151"
-                                            Text="{Binding SellPrice, StringFormat='€ {0:N2}'}" />
-                                    </StackPanel>
+                                                                <TextBlock Grid.Column="2" FontSize="12" Foreground="#374151"
+                                                                           VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                                           Text="{Binding CostPrice, StringFormat='{}{0:N2} &#x20AC;'}" />
 
-                                    <!--  Quantity  -->
-                                    <StackPanel
-                                        Grid.Column="4"
-                                        Margin="12,0,0,0"
-                                        VerticalAlignment="Center">
-                                        <TextBlock
-                                            FontSize="10"
-                                            Foreground="#9CA3AF"
-                                            Text="qty" />
-                                        <TextBox
-                                            Width="50"
-                                            Height="26"
-                                            Padding="4,2"
-                                            BorderBrush="#E4E7EC"
-                                            FontSize="13"
-                                            Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                            TextAlignment="Center" />
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                                                                <TextBlock Grid.Column="3" FontSize="12" FontWeight="SemiBold" Foreground="#059669"
+                                                                           VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                                           Text="{Binding SellPrice, StringFormat='{}{0:N2} &#x20AC;'}" />
+
+                                                                <TextBox Grid.Column="4" Width="45" Height="24" Margin="8,0,0,0"
+                                                                         FontSize="11" TextAlignment="Center" Padding="2"
+                                                                         BorderBrush="#D1D5DB" Background="#F9FAFB"
+                                                                         Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
         </Grid>

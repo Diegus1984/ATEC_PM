@@ -368,10 +368,7 @@ public class QuoteCatalogController : ControllerBase
                 var productIds = products.Select(p => p.Id).ToList();
                 var variants = c.Query<QuoteProductVariantDto>(@"
                     SELECT id AS Id, product_id AS ProductId, code AS Code, name AS Name,
-                           cost_price AS CostPrice, sell_price AS SellPrice,
-                           COALESCE(markup_value,1.300) AS MarkupValue,
-                           discount_pct AS DiscountPct, vat_pct AS VatPct,
-                           unit AS Unit, default_qty AS DefaultQty, sort_order AS SortOrder
+                           cost_price AS CostPrice, markup_value AS MarkupValue, sort_order AS SortOrder
                     FROM quote_product_variants
                     WHERE product_id IN @Ids
                     ORDER BY sort_order, name", new { Ids = productIds }).ToList();
@@ -408,10 +405,7 @@ public class QuoteCatalogController : ControllerBase
 
             product.Variants = c.Query<QuoteProductVariantDto>(@"
                 SELECT id AS Id, product_id AS ProductId, code AS Code, name AS Name,
-                       cost_price AS CostPrice, sell_price AS SellPrice,
-                       COALESCE(markup_value,1.300) AS MarkupValue,
-                       discount_pct AS DiscountPct, vat_pct AS VatPct,
-                       unit AS Unit, default_qty AS DefaultQty, sort_order AS SortOrder
+                       cost_price AS CostPrice, markup_value AS MarkupValue, sort_order AS SortOrder
                 FROM quote_product_variants WHERE product_id = @Id
                 ORDER BY sort_order, name", new { Id = id }).ToList();
 
@@ -452,10 +446,9 @@ public class QuoteCatalogController : ControllerBase
             foreach (var v in dto.Variants)
             {
                 c.Execute(@"INSERT INTO quote_product_variants
-                    (product_id, code, name, cost_price, sell_price, markup_value, discount_pct, vat_pct, unit, default_qty, sort_order)
-                    VALUES (@ProductId, @Code, @Name, @CostPrice, @SellPrice, @MarkupValue, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
-                    new { ProductId = productId, v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue,
-                          v.DiscountPct, v.VatPct, v.Unit, v.DefaultQty, v.SortOrder }, tx);
+                    (product_id, code, name, cost_price, markup_value, sort_order)
+                    VALUES (@ProductId, @Code, @Name, @CostPrice, @MarkupValue, @SortOrder)",
+                    new { ProductId = productId, v.Code, v.Name, v.CostPrice, v.MarkupValue, v.SortOrder }, tx);
             }
 
             tx.Commit();
@@ -515,19 +508,16 @@ public class QuoteCatalogController : ControllerBase
                 if (v.Id > 0)
                 {
                     c.Execute(@"UPDATE quote_product_variants SET code=@Code, name=@Name,
-                                cost_price=@CostPrice, sell_price=@SellPrice, markup_value=@MarkupValue,
-                                discount_pct=@DiscountPct, vat_pct=@VatPct, unit=@Unit, default_qty=@DefaultQty, sort_order=@SortOrder
+                                cost_price=@CostPrice, markup_value=@MarkupValue, sort_order=@SortOrder
                                 WHERE id=@Id",
-                        new { v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue, v.DiscountPct,
-                              v.VatPct, v.Unit, v.DefaultQty, v.SortOrder, v.Id }, tx);
+                        new { v.Code, v.Name, v.CostPrice, v.MarkupValue, v.SortOrder, v.Id }, tx);
                 }
                 else
                 {
                     c.Execute(@"INSERT INTO quote_product_variants
-                        (product_id, code, name, cost_price, sell_price, markup_value, discount_pct, vat_pct, unit, default_qty, sort_order)
-                        VALUES (@Pid, @Code, @Name, @CostPrice, @SellPrice, @MarkupValue, @DiscountPct, @VatPct, @Unit, @DefaultQty, @SortOrder)",
-                        new { Pid = id, v.Code, v.Name, v.CostPrice, v.SellPrice, v.MarkupValue,
-                              v.DiscountPct, v.VatPct, v.Unit, v.DefaultQty, v.SortOrder }, tx);
+                        (product_id, code, name, cost_price, markup_value, sort_order)
+                        VALUES (@Pid, @Code, @Name, @CostPrice, @MarkupValue, @SortOrder)",
+                        new { Pid = id, v.Code, v.Name, v.CostPrice, v.MarkupValue, v.SortOrder }, tx);
                 }
             }
 
@@ -759,9 +749,9 @@ public class QuoteCatalogController : ControllerBase
                             foreach (var v in prod.Variants)
                             {
                                 c.Execute(@"
-                                    INSERT INTO quote_product_variants (product_id, code, name, cost_price, sell_price, markup_value, vat_pct, sort_order)
-                                    VALUES (@PId, @Code, @Name, @Cost, @Price, @Markup, @Vat, @Sort)",
-                                    new { PId = pId, v.Code, v.Name, Cost = v.CostPrice, Price = v.SellPrice, Markup = v.MarkupValue, Vat = v.VatPct, Sort = vSort++ }, tx);
+                                    INSERT INTO quote_product_variants (product_id, code, name, cost_price, markup_value, sort_order)
+                                    VALUES (@PId, @Code, @Name, @Cost, @Markup, @Sort)",
+                                    new { PId = pId, v.Code, v.Name, Cost = v.CostPrice, Markup = v.MarkupValue, Sort = vSort++ }, tx);
                                 totalVars++;
                             }
                         }
