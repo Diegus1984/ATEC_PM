@@ -416,9 +416,44 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 |---|---|---|
 | Endpoint PDF detecta IMPIANTO | ✅ | Carica costing data + genera con GenerateImpianto |
 | Copertina + contenuti + condizioni | ✅ | Stessa struttura SERVICE, senza prodotti catalogo CMS |
-| Distribuzione per sezione (non-shadowed) | ✅ | Tabella con badge R/M, vendita + contingency + margine + totale |
+| Descrizioni materiali con RTF+immagini nel PDF | ✅ | RenderDescription per ogni parent materiale con description_rtf |
+| Distribuzione come riepilogo commerciale | ✅ | Nome sezione + prezzo totale (niente dati interni al cliente) |
 | Scheda prezzi (NET → OFFER → FINAL) | ✅ | Risorse + Materiali + Trasferte → percentuali → prezzo finale |
+| Contenuti auto-include su pagina nuova | ✅ | PageBreak() prima di ogni contenuto automatico |
 | Firma + footer | ✅ | Pagina finale con firma per accettazione |
+
+### 9h. Materiali — Funzionalità Avanzate ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| is_active su varianti materiale | ✅ | Checkbox toggle, opacity 0.5 su disattivate, totali filtrati |
+| Toggle switch iOS-style (ToggleSwitchStyle) | ✅ | Stile XAML puro con animazione pallino, VisualStateManager, hover glow |
+| FK catalogo (product_id/variant_id) | ✅ | Sync bidirezionale con catalogo CMS |
+| 5 pulsanti azione prodotto | ✅ | Refresh da catalogo, push a catalogo, edit RTF, clona, elimina |
+| Editor RTF materiali (MaterialRtfDialog) | ✅ | TinyMCE/WebView2 con save description_rtf |
+| Clone prodotto + varianti | ✅ | POST clone con copia parent + figli |
+| Delete cascade | ✅ | Elimina parent + tutte le varianti figlie |
+| Descrizioni varianti editabili inline | ✅ | TextBox LostFocus con save automatico |
+
+### 9i. Revisioni e Duplicazioni Preventivi ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| DB: parent_quote_id + status superseded | ✅ | Migration automatica, ENUM aggiornato |
+| Endpoint POST /{id}/revision | ✅ | Copia completa (items + costing), vecchia → SUPERATA, numero "PRV-XXXX Rev N" |
+| Endpoint POST /{id}/duplicate | ✅ | Nuovo numero indipendente, nessun legame, titolo "(copia)" |
+| Context menu tasto destro su TreeView | ✅ | Crea Revisione, Duplica, Riattiva, Elimina |
+| TreeView con revisioni nidificate | ✅ | Revisioni come figli del master, card grigia per SUPERATA |
+| Riattiva ultima revisione superata | ✅ | Solo sull'ultima Rev della catena, PUT status → draft |
+| Elimina con riattivazione automatica | ✅ | Se elimini l'ultima Rev, la precedente torna a draft |
+
+### 9j. Popolamento Catalogo da Web ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Ricerca web specifiche tecniche per codice | ✅ | WebSearch per part number → descrizione HTML strutturata |
+| Template descrizione coerente | ✅ | h3 titolo, Part Number, Tipo, Specifiche, Compatibilità, descrizione funzionale IT |
+| Batch update 32 schede DSQC | ✅ | 3 agenti paralleli, categorie S2/S3, S4/S4C/S4C+, IRC5 |
 
 ### 9d. Da completare
 
@@ -427,6 +462,7 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Pannello catalogo SERVICE nel preventivo | ❌ | MEDIA | Gestione voci/varianti come QuoteDetailPage |
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
 | Addormentare pagine vecchie (Offerte, Preventivi CMS) | ❌ | BASSA | Quando il nuovo è completo |
+| Popolamento descrizioni DSQC rimanenti (~38 schede) | ❌ | BASSA | Serie 345/346, 266, 377, YB |
 
 ---
 
@@ -498,12 +534,16 @@ Views/ConfigurazioneSezioni/
   DepartmentDialog.xaml/.cs         ← Dialog creazione/modifica reparto
 
 Views/Preventivi/
-  PreventiviPage.xaml/.cs           ← TreeView cliente/anno + detail (SERVICE o IMPIANTO)
-  CostingTreeControl.xaml/.cs       ← Control costing: risorse + materiali (parent/varianti) + pricing + distribuzione
+  PreventiviPage.xaml/.cs           ← TreeView cliente/anno + detail (SERVICE o IMPIANTO) + context menu revisioni/duplica
+  CostingTreeControl.xaml/.cs       ← Control costing: risorse + materiali (parent/varianti) + pricing + distribuzione + 5 pulsanti azione
   CostingTreeModel.cs               ← Model: CostingTreeRow, MaterialTreeRow, MaterialProductGroup, PricingVM, DistributionRowVM
   AddMaterialVariantDialog.xaml/.cs ← Dialog aggiunta variante materiale locale (descrizione, costo, K, qtà)
+  MaterialRtfDialog.xaml/.cs        ← Dialog editor RTF (TinyMCE) per descrizione prodotto materiale
   NewPreventivoDialog.xaml/.cs      ← Dialog creazione con tipo SERVICE/IMPIANTO
   ConvertPreventivoDialog.xaml/.cs  ← Dialog selezione PM per conversione
+
+Resources/
+  ToggleSwitchStyle.xaml             ← Toggle switch iOS-style per CheckBox (VisualStateManager, animazione, hover glow)
 
 Views/Cms/
   QuoteCatalogPage.xaml/.cs         ← TreeView Listino→Gruppi→Categorie→Prodotti + drag & drop + natural sort
