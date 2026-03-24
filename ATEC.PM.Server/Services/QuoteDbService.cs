@@ -344,6 +344,10 @@ public class QuoteDbService
             FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Migration: parent_quote_id per revisioni + status superseded
+        try { c.Execute("ALTER TABLE quotes ADD COLUMN parent_quote_id INT NULL AFTER revision"); } catch { }
+        try { c.Execute("ALTER TABLE quotes MODIFY COLUMN status ENUM('draft','sent','negotiation','accepted','rejected','expired','converted','superseded') NOT NULL DEFAULT 'draft'"); } catch { }
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing_distribution (
             id INT AUTO_INCREMENT PRIMARY KEY,
             quote_id INT NOT NULL,

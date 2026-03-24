@@ -645,7 +645,7 @@ public class QuotesController : ControllerBase
             string currentStatus = c.ExecuteScalar<string>("SELECT status FROM quotes WHERE id=@Id", new { Id = id }) ?? "";
 
             // Validazione: lo stato deve essere valido
-            var validStatuses = new[] { "draft", "sent", "negotiation", "accepted", "rejected", "expired", "converted" };
+            var validStatuses = new[] { "draft", "sent", "negotiation", "accepted", "rejected", "expired", "converted", "superseded" };
             if (!validStatuses.Contains(dto.NewStatus))
                 return Ok(ApiResponse<string>.Fail($"Stato '{dto.NewStatus}' non valido"));
             if (currentStatus == dto.NewStatus)

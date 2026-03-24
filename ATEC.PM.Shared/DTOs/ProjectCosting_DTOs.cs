@@ -201,3 +201,19 @@ public class SectionDistributionDto
     public bool MarginPinned { get; set; }
     public bool IsShadowed { get; set; }
 }
+
+public class BatchDistributionItem
+{
+    public int Id { get; set; }
+    public decimal ContingencyPct { get; set; }
+    public decimal MarginPct { get; set; }
+    public bool ContingencyPinned { get; set; }
+    public bool MarginPinned { get; set; }
+    public bool IsShadowed { get; set; }
+}
+
+public class BatchDistributionRequest
+{
+    public List<BatchDistributionItem>? Sections { get; set; }
+    public List<BatchDistributionItem>? MaterialItems { get; set; }
+}

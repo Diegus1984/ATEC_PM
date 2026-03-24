@@ -596,7 +596,7 @@
                                     <Path x:Name="resourcesArrow" Width="8" Height="10" Margin="4,0,8,0" VerticalAlignment="Center"
                                           Data="M 0,0 L 5,5 L 0,10" Stroke="#FFFFFF90" StrokeThickness="1.5">
                                         <Path.RenderTransform>
-                                            <RotateTransform Angle="90" />
+                                            <RotateTransform Angle="0" />
                                         </Path.RenderTransform>
                                     </Path>
                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="White"
@@ -604,10 +604,18 @@
                                 </StackPanel>
                             </DockPanel>
                         </Border>
-                        <StackPanel x:Name="resourcesContent" Margin="8,4">
+                        <StackPanel x:Name="resourcesContent" Margin="8,4" Visibility="Collapsed">
 
                             <!--  ========== RESOURCE GROUPS (Expanders) ==========  -->
-                            <ItemsControl x:Name="groupsItemsControl" ItemsSource="{Binding}">
+                            <ItemsControl x:Name="groupsItemsControl" ItemsSource="{Binding}"
+                                          VirtualizingStackPanel.IsVirtualizing="True"
+                                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                          ScrollViewer.CanContentScroll="True">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type local:CostingTreeRow}">
                                         <StackPanel Margin="0,2,0,0">

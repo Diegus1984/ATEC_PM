@@ -79,39 +79,40 @@ public partial class CostingTreeControl : UserControl
                 .Where(s => s.IsExpanded).Select(s => s.DbId).ToHashSet();
             double scrollOffset = mainScrollViewer.VerticalOffset;
 
+            // ── FRAME 1: Fetch + deserializza (off UI thread) ──
             var json = await ApiClient.GetAsync(_apiBasePath);
             if (json == null) return;
 
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("data", out var dataEl)) return;
-
-            var data = JsonSerializer.Deserialize<ProjectCostingData>(dataEl.GetRawText(),
-                _jopt);
+            var data = await Task.Run(() =>
+            {
+                var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out var dataEl)) return null;
+                return JsonSerializer.Deserialize<ProjectCostingData>(dataEl.GetRawText(), _jopt);
+            });
             if (data == null) return;
-
             _lastData = data;
 
+            // Build tutto subito (la UI è collassata → nessun costo di rendering)
             BuildResourceTree(data);
             BuildMaterialList(data);
 
-            // Restore expanded state
+            // Restore: solo i gruppi/sezioni che erano espansi prima del reload
+            // Al primo load _isFirstLoad è true → tutto chiuso
+            bool isReload = expandedGroups.Count > 0 || expandedSections.Count > 0;
             foreach (var grp in _resourceRows)
             {
-                grp.IsExpanded = expandedGroups.Contains(grp.DisplayName) || expandedGroups.Count == 0;
+                grp.IsExpanded = isReload && expandedGroups.Contains(grp.DisplayName);
                 foreach (var sec in grp.Children)
-                {
-                    sec.IsExpanded = expandedSections.Contains(sec.DbId) || expandedSections.Count == 0;
-                }
+                    sec.IsExpanded = isReload && expandedSections.Contains(sec.DbId);
             }
 
             groupsItemsControl.ItemsSource = _resourceRows;
             icMaterialProducts.ItemsSource = _materialProducts;
 
-            // Build pricing
             BuildPricing(data);
             NotifyPricingUpdated();
 
-            // Restore scroll position
+            // Restore scroll
             _ = Dispatcher.InvokeAsync(() => mainScrollViewer.ScrollToVerticalOffset(scrollOffset),
                 System.Windows.Threading.DispatcherPriority.Loaded);
         }
@@ -332,10 +333,11 @@ public partial class CostingTreeControl : UserControl
     // GROUP / SECTION / MATERIAL / PRICING EXPAND/COLLAPSE
     // ══════════════════════════════════════════════════
 
-    private bool _resourcesExpanded = true;
-    private bool _materialExpanded = true;
-    private bool _pricingExpanded = true;
-    private bool _distExpanded = true;
+    private bool _resourcesExpanded = false;
+    private bool _materialExpanded = false;  // Lazy: parte collassato
+    private bool _pricingExpanded = false;   // Lazy: parte collassato
+    private bool _distExpanded = false;      // Lazy: parte collassato
+
 
     private void ResourcesHeader_Click(object sender, MouseButtonEventArgs e)
     {
@@ -398,7 +400,7 @@ public partial class CostingTreeControl : UserControl
             {
                 row.IsDirty = false;
                 await SaveResourceAsync(row);
-                RecalcParentTotals();
+                RecalcParentTotalsFor(row);
             }
         }, System.Windows.Threading.DispatcherPriority.DataBind);
     }
@@ -517,29 +519,66 @@ public partial class CostingTreeControl : UserControl
     }
 
     // ── Recalculate parent totals after resource edit ──
+    /// <summary>Ricalcola TUTTI i totali (usato solo al load iniziale)</summary>
     private void RecalcParentTotals()
     {
         foreach (var grp in _resourceRows)
+            RecalcGroup(grp);
+    }
+
+    /// <summary>Ricalcola solo la sezione e il suo gruppo padre (usato dopo edit singolo)</summary>
+    private void RecalcParentTotalsFor(CostingTreeRow row)
+    {
+        // Trova la sezione e il gruppo di questa risorsa
+        foreach (var grp in _resourceRows)
         {
-            decimal grpCost = 0, grpSale = 0, grpDays = 0, grpHours = 0;
             foreach (var sec in grp.Children)
             {
-                sec.TotalCost = sec.Children.Sum(r => r.TotalCost);
-                sec.TotalSale = sec.Children.Sum(r => r.TotalSale);
-                sec.SumWorkDays = sec.Children.Sum(r => r.WorkDays);
-                sec.SumTotalHours = sec.Children.Sum(r => r.TotalHours);
-                sec.ResourceCount = sec.Children.Count;
-                grpCost += sec.TotalCost;
-                grpSale += sec.TotalSale;
-                grpDays += sec.SumWorkDays;
-                grpHours += sec.SumTotalHours;
+                if (sec.Children.Contains(row) || sec == row)
+                {
+                    RecalcSection(sec);
+                    RecalcGroupFromSections(grp);
+                    return;
+                }
             }
-            grp.TotalCost = grpCost;
-            grp.TotalSale = grpSale;
-            grp.SumWorkDays = grpDays;
-            grp.SumTotalHours = grpHours;
-            grp.ResourceCount = grp.Children.Sum(s => s.ResourceCount);
         }
+        // Fallback: ricalcola tutto
+        RecalcParentTotals();
+    }
+
+    private static void RecalcSection(CostingTreeRow sec)
+    {
+        sec.TotalCost = sec.Children.Sum(r => r.TotalCost);
+        sec.TotalSale = sec.Children.Sum(r => r.TotalSale);
+        sec.SumWorkDays = sec.Children.Sum(r => r.WorkDays);
+        sec.SumTotalHours = sec.Children.Sum(r => r.TotalHours);
+        sec.ResourceCount = sec.Children.Count;
+    }
+
+    private static void RecalcGroupFromSections(CostingTreeRow grp)
+    {
+        decimal grpCost = 0, grpSale = 0, grpDays = 0, grpHours = 0;
+        int count = 0;
+        foreach (var sec in grp.Children)
+        {
+            grpCost += sec.TotalCost;
+            grpSale += sec.TotalSale;
+            grpDays += sec.SumWorkDays;
+            grpHours += sec.SumTotalHours;
+            count += sec.ResourceCount;
+        }
+        grp.TotalCost = grpCost;
+        grp.TotalSale = grpSale;
+        grp.SumWorkDays = grpDays;
+        grp.SumTotalHours = grpHours;
+        grp.ResourceCount = count;
+    }
+
+    private static void RecalcGroup(CostingTreeRow grp)
+    {
+        foreach (var sec in grp.Children)
+            RecalcSection(sec);
+        RecalcGroupFromSections(grp);
     }
 
     // ══════════════════════════════════════════════════
@@ -576,20 +615,15 @@ public partial class CostingTreeControl : UserControl
             catch { _employeeCache[sectionId] = new(); }
         }
 
-        // Filter out employees already assigned in this section
+        // Filter out employees already assigned in this section (lookup diretto, no triple-loop)
         var usedEmployeeIds = new HashSet<int>();
-        foreach (var grp in _resourceRows)
+        var section = _resourceRows.SelectMany(g => g.Children).FirstOrDefault(s => s.DbId == sectionId);
+        if (section != null)
         {
-            foreach (var sec in grp.Children)
+            foreach (var res in section.Children)
             {
-                if (sec.DbId == sectionId)
-                {
-                    foreach (var res in sec.Children)
-                    {
-                        if (res.EmployeeId.HasValue && res.DbId != row.DbId)
-                            usedEmployeeIds.Add(res.EmployeeId.Value);
-                    }
-                }
+                if (res.EmployeeId.HasValue && res.DbId != row.DbId)
+                    usedEmployeeIds.Add(res.EmployeeId.Value);
             }
         }
         var filteredEmployees = _employeeCache[sectionId]
@@ -619,7 +653,7 @@ public partial class CostingTreeControl : UserControl
         row.TotalSale = row.TotalCost * row.MarkupValue;
 
         await SaveResourceAsync(row);
-        RecalcParentTotals();
+        RecalcParentTotalsFor(row);
     }
 
     private async void AllowanceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -631,7 +665,7 @@ public partial class CostingTreeControl : UserControl
         {
             row.DailyAllowance = val;
             await SaveResourceAsync(row);
-            RecalcParentTotals();
+            RecalcParentTotalsFor(row);
         }
     }
 
@@ -1163,12 +1197,12 @@ public partial class CostingTreeControl : UserControl
 
     private void UpdateHeaderTotals()
     {
-        var resCost = _resourceRows.Sum(g => g.TotalCost);
-        var resSale = _resourceRows.Sum(g => g.TotalSale);
+        decimal resCost = 0, resSale = 0;
+        foreach (var g in _resourceRows) { resCost += g.TotalCost; resSale += g.TotalSale; }
         txtResourceTotals.Text = $"Netto {resCost:N2} EUR  |  Vendita {resSale:N2} EUR";
 
-        var matCost = _materialRows.Sum(m => m.TotalCost);
-        var matSale = _materialRows.Sum(m => m.TotalSale);
+        decimal matCost = 0, matSale = 0;
+        foreach (var m in _materialRows) { matCost += m.TotalCost; matSale += m.TotalSale; }
         txtMaterialTotals.Text = $"Netto {matCost:N2} EUR  |  Vendita {matSale:N2} EUR";
     }
 
@@ -1608,40 +1642,24 @@ public partial class CostingTreeControl : UserControl
     {
         if (_lastData == null) return;
 
-        foreach (var sec in (_lastData.CostSections ?? new()).Where(s => s.IsEnabled))
+        try
         {
-            try
+            var batch = new
             {
-                var req = new
+                sections = (_lastData.CostSections ?? new()).Where(s => s.IsEnabled).Select(s => new
                 {
-                    contingencyPct = sec.ContingencyPct,
-                    marginPct = sec.MarginPct,
-                    contingencyPinned = sec.ContingencyPinned,
-                    marginPinned = sec.MarginPinned,
-                    isShadowed = sec.IsShadowed
-                };
-                string json = JsonSerializer.Serialize(req, _joptCamel);
-                await ApiClient.PutAsync($"{_apiBasePath}/sections/{sec.Id}/distribution", json);
-            }
-            catch { }
-        }
-
-        foreach (var item in (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new()))
-        {
-            try
-            {
-                var req = new
+                    id = s.Id, contingencyPct = s.ContingencyPct, marginPct = s.MarginPct,
+                    contingencyPinned = s.ContingencyPinned, marginPinned = s.MarginPinned, isShadowed = s.IsShadowed
+                }).ToList(),
+                materialItems = (_lastData.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new()).Select(i => new
                 {
-                    contingencyPct = item.ContingencyPct,
-                    marginPct = item.MarginPct,
-                    contingencyPinned = item.ContingencyPinned,
-                    marginPinned = item.MarginPinned,
-                    isShadowed = item.IsShadowed
-                };
-                string json = JsonSerializer.Serialize(req, _joptCamel);
-                await ApiClient.PutAsync($"{_apiBasePath}/material-items/{item.Id}/distribution", json);
-            }
-            catch { }
+                    id = i.Id, contingencyPct = i.ContingencyPct, marginPct = i.MarginPct,
+                    contingencyPinned = i.ContingencyPinned, marginPinned = i.MarginPinned, isShadowed = i.IsShadowed
+                }).ToList()
+            };
+            await ApiClient.PutAsync($"{_apiBasePath}/distributions/batch",
+                JsonSerializer.Serialize(batch, _joptCamel));
         }
+        catch { }
     }
 }

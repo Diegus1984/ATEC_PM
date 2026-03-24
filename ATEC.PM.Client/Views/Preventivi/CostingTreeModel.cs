@@ -143,7 +143,7 @@ public class CostingTreeRow : INotifyPropertyChanged
     public decimal HourlyCost
     {
         get => _hourlyCost;
-        set { _hourlyCost = value; OnPropertyChanged(); RecalcCosts(); }
+        set { if (_hourlyCost == value) return; _hourlyCost = value; OnPropertyChanged(); RecalcCosts(); }
     }
 
     private decimal _markupValue;
@@ -164,14 +164,14 @@ public class CostingTreeRow : INotifyPropertyChanged
     public int NumTrips
     {
         get => _numTrips;
-        set { _numTrips = value; OnPropertyChanged(); OnPropertyChanged(nameof(TravelTotal)); }
+        set { if (_numTrips == value) return; _numTrips = value; OnPropertyChanged(); OnPropertyChanged(nameof(TravelTotal)); }
     }
 
     private decimal _kmPerTrip;
     public decimal KmPerTrip
     {
         get => _kmPerTrip;
-        set { _kmPerTrip = value; OnPropertyChanged(); OnPropertyChanged(nameof(TravelTotal)); }
+        set { if (_kmPerTrip == value) return; _kmPerTrip = value; OnPropertyChanged(); OnPropertyChanged(nameof(TravelTotal)); }
     }
 
     private decimal _costPerKm = 0.90m;
@@ -284,28 +284,28 @@ public class MaterialTreeRow : INotifyPropertyChanged
     public bool IsActive
     {
         get => _isActive;
-        set { _isActive = value; OnPropertyChanged(); RecalcTotals(); }
+        set { if (_isActive == value) return; _isActive = value; OnPropertyChanged(); RecalcTotals(); }
     }
 
     private decimal _quantity = 1;
     public decimal Quantity
     {
         get => _quantity;
-        set { _quantity = value; OnPropertyChanged(); RecalcTotals(); }
+        set { if (_quantity == value) return; _quantity = value; OnPropertyChanged(); RecalcTotals(); }
     }
 
     private decimal _unitCost;
     public decimal UnitCost
     {
         get => _unitCost;
-        set { _unitCost = value; OnPropertyChanged(); RecalcTotals(); }
+        set { if (_unitCost == value) return; _unitCost = value; OnPropertyChanged(); RecalcTotals(); }
     }
 
     private decimal _markupValue = 1.300m;
     public decimal MarkupValue
     {
         get => _markupValue;
-        set { _markupValue = value; OnPropertyChanged(); RecalcTotals(); }
+        set { if (_markupValue == value) return; _markupValue = value; OnPropertyChanged(); RecalcTotals(); }
     }
 
     private decimal _totalCost;

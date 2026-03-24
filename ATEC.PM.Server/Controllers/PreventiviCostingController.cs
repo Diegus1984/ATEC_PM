@@ -382,4 +382,28 @@ public class PreventiviCostingController : ControllerBase
         c.Execute(@"UPDATE quote_material_items SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed WHERE id=@Id", new { ContPct = req.ContingencyPct, MargPct = req.MarginPct, ContPin = req.ContingencyPinned, MargPin = req.MarginPinned, Shadowed = req.IsShadowed, Id = id });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));
     }
+
+    /// <summary>Salva tutte le distribuzioni in un unico batch (1 request invece di N)</summary>
+    [HttpPut("distributions/batch")]
+    public IActionResult SaveAllDistributionsBatch(int quoteId, [FromBody] BatchDistributionRequest req)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+        try
+        {
+            foreach (var s in req.Sections ?? new())
+                c.Execute(@"UPDATE quote_cost_sections SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed WHERE id=@Id AND quote_id=@qid",
+                    new { ContPct = s.ContingencyPct, MargPct = s.MarginPct, ContPin = s.ContingencyPinned, MargPin = s.MarginPinned, Shadowed = s.IsShadowed, s.Id, qid = quoteId }, tx);
+            foreach (var m in req.MaterialItems ?? new())
+                c.Execute(@"UPDATE quote_material_items SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed WHERE id=@Id",
+                    new { ContPct = m.ContingencyPct, MargPct = m.MarginPct, ContPin = m.ContingencyPinned, MargPin = m.MarginPinned, Shadowed = m.IsShadowed, m.Id }, tx);
+            tx.Commit();
+            return Ok(ApiResponse<string>.Ok("", $"Salvate {(req.Sections?.Count ?? 0) + (req.MaterialItems?.Count ?? 0)} distribuzioni"));
+        }
+        catch (Exception ex)
+        {
+            tx.Rollback();
+            return StatusCode(500, ApiResponse<string>.Fail(ex.Message));
+        }
+    }
 }

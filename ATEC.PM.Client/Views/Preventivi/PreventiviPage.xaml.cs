@@ -104,14 +104,46 @@ public partial class PreventiviPage : Page
                 };
                 yearNode.Header = BuildYearHeader(yearGroup.Key, yearGroup.Count());
 
-                foreach (var quote in yearGroup.OrderByDescending(q => q.CreatedAt))
+                // Separa master (no parent) e revisioni (con parent)
+                var masters = yearGroup.Where(q => q.ParentQuoteId == null).OrderByDescending(q => q.CreatedAt).ToList();
+                var revisions = yearGroup.Where(q => q.ParentQuoteId != null).ToList();
+                var revByParent = revisions.ToLookup(q => q.ParentQuoteId!.Value);
+
+                foreach (var quote in masters)
                 {
                     var quoteNode = new TreeViewItem
                     {
                         Tag = $"quote|{quote.Id}",
+                        ContextMenu = BuildQuoteContextMenu(quote)
                     };
                     quoteNode.Header = BuildQuoteHeader(quote);
+
+                    // Aggiungi revisioni come figli
+                    foreach (var rev in revByParent[quote.Id].OrderBy(r => r.Revision))
+                    {
+                        var revNode = new TreeViewItem
+                        {
+                            Tag = $"quote|{rev.Id}",
+                            ContextMenu = BuildQuoteContextMenu(rev)
+                        };
+                        revNode.Header = BuildQuoteHeader(rev);
+                        quoteNode.Items.Add(revNode);
+                    }
+
                     yearNode.Items.Add(quoteNode);
+                }
+
+                // Revisioni orfane (il master non è in questo anno/filtro)
+                var orphanRevs = revisions.Where(r => !masters.Any(m => m.Id == r.ParentQuoteId)).ToList();
+                foreach (var rev in orphanRevs.OrderByDescending(q => q.CreatedAt))
+                {
+                    var revNode = new TreeViewItem
+                    {
+                        Tag = $"quote|{rev.Id}",
+                        ContextMenu = BuildQuoteContextMenu(rev)
+                    };
+                    revNode.Header = BuildQuoteHeader(rev);
+                    yearNode.Items.Add(revNode);
                 }
 
                 string yearKey = $"customer|{custGroup.Key}|year|{yearGroup.Key}";
@@ -182,6 +214,7 @@ public partial class PreventiviPage : Page
             "rejected" => ("#FEF2F2", "#EF4444", "#991B1B", "#F87171"),
             "expired" => ("#F9FAFB", "#9CA3AF", "#6B7280", "#D1D5DB"),
             "converted" => ("#F0FDF4", "#10B981", "#065F46", "#34D399"),
+            "superseded" => ("#F3F4F6", "#9CA3AF", "#9CA3AF", "#D1D5DB"),
             _ => ("#FFFFFF", "#D1D5DB", "#374151", "#9CA3AF")
         };
 
@@ -258,6 +291,235 @@ public partial class PreventiviPage : Page
         cardContainer.Child = mainDock;
 
         return cardContainer;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // CONTEXT MENU (tasto destro sul preventivo)
+    // ═══════════════════════════════════════════════════════
+
+    private ContextMenu BuildQuoteContextMenu(QuoteDto quote)
+    {
+        var menu = new ContextMenu();
+
+        var miRevision = new MenuItem
+        {
+            Header = "Crea Revisione",
+            Tag = quote.Id,
+            Icon = new TextBlock { Text = "\U0001F504", FontSize = 14 } // 🔄
+        };
+        miRevision.Click += CtxCreateRevision_Click;
+
+        var miDuplicate = new MenuItem
+        {
+            Header = "Duplica Preventivo",
+            Tag = quote.Id,
+            Icon = new TextBlock { Text = "\U0001F4CB", FontSize = 14 } // 📋
+        };
+        miDuplicate.Click += CtxDuplicate_Click;
+
+        menu.Items.Add(miRevision);
+        menu.Items.Add(miDuplicate);
+
+        // Riattiva: solo su revisione superata che è l'ultima della catena
+        if (quote.Status == "superseded" && quote.ParentQuoteId.HasValue)
+        {
+            int masterId = quote.ParentQuoteId.Value;
+            var allRevisions = _allQuotes
+                .Where(q => q.ParentQuoteId == masterId || q.Id == masterId)
+                .OrderBy(q => q.Revision)
+                .ToList();
+            var lastSuperseded = allRevisions
+                .Where(q => q.Status == "superseded")
+                .OrderByDescending(q => q.Revision)
+                .FirstOrDefault();
+            // Mostra "Riattiva" solo se non esiste una revisione attiva (draft/sent/ecc.) con Rev più alto
+            bool hasActiveAfter = allRevisions.Any(q => q.Revision > quote.Revision && q.Status != "superseded");
+
+            if (lastSuperseded?.Id == quote.Id && !hasActiveAfter)
+            {
+                menu.Items.Add(new Separator());
+                var miReactivate = new MenuItem
+                {
+                    Header = "Riattiva Revisione",
+                    Tag = quote.Id,
+                    Icon = new TextBlock { Text = "\u2705", FontSize = 14 }, // ✅
+                    Foreground = Brush("#059669")
+                };
+                miReactivate.Click += CtxReactivate_Click;
+                menu.Items.Add(miReactivate);
+            }
+        }
+
+        // Se non è converted, aggiungi elimina
+        if (quote.Status != "converted")
+        {
+            menu.Items.Add(new Separator());
+            var miDelete = new MenuItem
+            {
+                Header = "Elimina Preventivo",
+                Tag = quote.Id,
+                Icon = new TextBlock { Text = "\u274C", FontSize = 14 }, // ❌
+                Foreground = Brush("#DC2626")
+            };
+            miDelete.Click += CtxDelete_Click;
+            menu.Items.Add(miDelete);
+        }
+
+        return menu;
+    }
+
+    private async void CtxCreateRevision_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not int quoteId) return;
+
+        var quote = _allQuotes.FirstOrDefault(q => q.Id == quoteId);
+        string label = quote?.QuoteNumber ?? $"#{quoteId}";
+
+        var result = MessageBox.Show(
+            $"Creare una revisione di {label}?\n\nLa versione attuale verrà marcata come SUPERATA.",
+            "Conferma Revisione", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var json = await ApiClient.PostAsync($"/api/preventivi/{quoteId}/revision", "{}");
+            if (json != null)
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(json);
+                bool success = doc.RootElement.TryGetProperty("success", out var sProp) && sProp.GetBoolean();
+                string msg = doc.RootElement.TryGetProperty("message", out var mProp) ? mProp.GetString() ?? "" : "";
+
+                if (success)
+                {
+                    MessageBox.Show(msg, "Revisione Creata", MessageBoxButton.OK, MessageBoxImage.Information);
+                    int newId = doc.RootElement.GetProperty("data").GetInt32();
+                    await LoadQuotes();
+                    await LoadQuoteDetail(newId);
+                }
+                else
+                {
+                    MessageBox.Show(msg, "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void CtxDuplicate_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not int quoteId) return;
+
+        var quote = _allQuotes.FirstOrDefault(q => q.Id == quoteId);
+        string label = quote?.QuoteNumber ?? $"#{quoteId}";
+
+        var result = MessageBox.Show(
+            $"Duplicare {label} come nuovo preventivo indipendente?",
+            "Conferma Duplicazione", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var json = await ApiClient.PostAsync($"/api/preventivi/{quoteId}/duplicate", "{}");
+            if (json != null)
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(json);
+                bool success = doc.RootElement.TryGetProperty("success", out var sProp) && sProp.GetBoolean();
+                string msg = doc.RootElement.TryGetProperty("message", out var mProp) ? mProp.GetString() ?? "" : "";
+
+                if (success)
+                {
+                    MessageBox.Show(msg, "Duplicazione Completata", MessageBoxButton.OK, MessageBoxImage.Information);
+                    int newId = doc.RootElement.GetProperty("data").GetInt32();
+                    await LoadQuotes();
+                    await LoadQuoteDetail(newId);
+                }
+                else
+                {
+                    MessageBox.Show(msg, "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void CtxDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not int quoteId) return;
+
+        var quote = _allQuotes.FirstOrDefault(q => q.Id == quoteId);
+        if (quote == null) return;
+        string label = quote.QuoteNumber ?? $"#{quoteId}";
+
+        // Trova la revisione precedente (superata) da riattivare
+        QuoteDto? prevRevision = null;
+        if (quote.ParentQuoteId.HasValue)
+        {
+            int masterId = quote.ParentQuoteId.Value;
+            prevRevision = _allQuotes
+                .Where(q => (q.ParentQuoteId == masterId || q.Id == masterId) && q.Revision < quote.Revision)
+                .OrderByDescending(q => q.Revision)
+                .FirstOrDefault();
+        }
+
+        string msg = $"Eliminare definitivamente {label}?\n\nQuesta azione non può essere annullata.";
+        if (prevRevision != null && prevRevision.Status == "superseded")
+            msg += $"\n\nLa revisione precedente ({prevRevision.QuoteNumber}) verrà riattivata.";
+
+        var result = MessageBox.Show(msg, "Conferma Eliminazione", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.DeleteAsync($"/api/quotes/{quoteId}");
+
+            // Riattiva la revisione precedente
+            if (prevRevision != null && prevRevision.Status == "superseded")
+            {
+                await ApiClient.PutAsync($"/api/quotes/{prevRevision.Id}/status",
+                    System.Text.Json.JsonSerializer.Serialize(new { newStatus = "draft", notes = "Riattivato" }));
+            }
+
+            await LoadQuotes();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void CtxReactivate_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not int quoteId) return;
+
+        var quote = _allQuotes.FirstOrDefault(q => q.Id == quoteId);
+        if (quote == null) return;
+        string label = quote.QuoteNumber ?? $"#{quoteId}";
+
+        var result = MessageBox.Show(
+            $"Riattivare {label}?\n\nLo stato tornerà a BOZZA.",
+            "Conferma Riattivazione", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PutAsync($"/api/quotes/{quoteId}/status",
+                System.Text.Json.JsonSerializer.Serialize(new { newStatus = "draft", notes = "Riattivato" }));
+            await LoadQuotes();
+            await LoadQuoteDetail(quoteId);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // ═══════════════════════════════════════════════════════

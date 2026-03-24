@@ -172,6 +172,7 @@ public class QuoteDto
     public string Status { get; set; } = "draft";
     public string QuoteType { get; set; } = "SERVICE";
     public int Revision { get; set; }
+    public int? ParentQuoteId { get; set; }
     public int? PriceListId { get; set; }
     public string PriceListName { get; set; } = "";
     public int? GroupId { get; set; }
