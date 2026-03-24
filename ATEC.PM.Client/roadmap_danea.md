@@ -17,7 +17,7 @@
 | **TDocTestate** | Header documenti (fatture, DDT, ordini, preventivi, NC) |
 | **TDocRighe** | Righe dettaglio di ogni documento |
 | **TDocIva** | Spaccatura IVA per documento |
-| **TTipiDoc** | Anagrafica tipi documento |
+| **TTipiDoc** | Anagrafica  tipi documento |
 | **TAnagrafica** | Clienti e fornitori |
 
 ---
