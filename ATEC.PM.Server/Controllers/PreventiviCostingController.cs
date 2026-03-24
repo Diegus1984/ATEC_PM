@@ -12,7 +12,8 @@ namespace ATEC.PM.Server.Controllers;
 public class PreventiviCostingController : ControllerBase
 {
     private readonly DbService _db;
-    public PreventiviCostingController(DbService db) => _db = db;
+    private readonly QuoteDbService _qdb;
+    public PreventiviCostingController(DbService db, QuoteDbService qdb) { _db = db; _qdb = qdb; }
 
     [HttpPut("sections/{sectionId}/departments")]
     public IActionResult SetSectionDepartments(int quoteId, int sectionId, [FromBody] SectionDepartmentsRequest req)
@@ -52,7 +53,7 @@ public class PreventiviCostingController : ControllerBase
         var allResources = c.Query<ProjectCostResourceDto>(@"SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId, r.resource_name AS ResourceName, r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay, r.hourly_cost AS HourlyCost, r.markup_value AS MarkupValue, r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm, r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel, r.allowance_days AS AllowanceDays, r.daily_allowance AS DailyAllowance, r.sort_order AS SortOrder FROM quote_cost_resources r JOIN quote_cost_sections s ON s.id = r.section_id WHERE s.quote_id=@quoteId ORDER BY r.sort_order", new { quoteId }).ToList();
         foreach (var sec in sections) sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
         var matSections = c.Query<ProjectMaterialSectionDto>(@"SELECT id, quote_id AS ProjectId, category_id AS CategoryId, name, markup_value AS MarkupValue, commission_markup AS CommissionMarkup, sort_order AS SortOrder, is_enabled AS IsEnabled FROM quote_material_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
-        var allItems = c.Query<ProjectMaterialItemDto>(@"SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId, i.description AS Description, i.quantity AS Quantity, i.unit_cost AS UnitCost, i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder, i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct, i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned, COALESCE(i.is_shadowed,0) AS IsShadowed FROM quote_material_items i JOIN quote_material_sections s ON s.id = i.section_id WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
+        var allItems = c.Query<ProjectMaterialItemDto>(@"SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId, i.product_id AS ProductId, i.variant_id AS VariantId, COALESCE(i.code,'') AS Code, i.description AS Description, i.description_rtf AS DescriptionRtf, i.quantity AS Quantity, i.unit_cost AS UnitCost, i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder, i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct, i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned, COALESCE(i.is_shadowed,0) AS IsShadowed, COALESCE(i.is_active,1) AS IsActive FROM quote_material_items i JOIN quote_material_sections s ON s.id = i.section_id WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
         foreach (var ms in matSections) ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
         var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"SELECT id, quote_id AS ProjectId, contingency_pct AS ContingencyPct, negotiation_margin_pct AS NegotiationMarginPct, travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup FROM quote_pricing WHERE quote_id=@quoteId", new { quoteId }) ?? new ProjectPricingDto { ProjectId = quoteId };
         return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData { ProjectId = quoteId, IsInitialized = true, CostSections = sections, MaterialSections = matSections, Pricing = pricing }));
@@ -147,7 +148,7 @@ public class PreventiviCostingController : ControllerBase
     public IActionResult AddMaterialItem(int quoteId, [FromBody] ProjectMaterialItemSaveRequest req)
     {
         using var c = _db.Open();
-        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, description, quantity, unit_cost, markup_value, item_type, sort_order) VALUES (@SectionId, @ParentItemId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder); SELECT LAST_INSERT_ID();", req);
+        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, product_id, variant_id, code, description, description_rtf, quantity, unit_cost, markup_value, item_type, sort_order, is_active) VALUES (@SectionId, @ParentItemId, @ProductId, @VariantId, @Code, @Description, @DescriptionRtf, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder, @IsActive); SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Materiale aggiunto"));
     }
 
@@ -159,7 +160,10 @@ public class PreventiviCostingController : ControllerBase
         if (parent == null) return NotFound(ApiResponse<string>.Fail("Prodotto padre non trovato"));
         req.SectionId = (int)parent.section_id;
         req.ParentItemId = parentId;
-        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, description, quantity, unit_cost, markup_value, item_type, sort_order) VALUES (@SectionId, @ParentItemId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder); SELECT LAST_INSERT_ID();", req);
+        // Varianti locali sempre in coda
+        int maxSort = c.ExecuteScalar<int>("SELECT COALESCE(MAX(sort_order),0) FROM quote_material_items WHERE parent_item_id=@parentId", new { parentId });
+        req.SortOrder = maxSort + 1;
+        int id = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, product_id, variant_id, code, description, description_rtf, quantity, unit_cost, markup_value, item_type, sort_order, is_active) VALUES (@SectionId, @ParentItemId, @ProductId, @VariantId, @Code, @Description, @DescriptionRtf, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder, @IsActive); SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Variante aggiunta"));
     }
 
@@ -168,7 +172,7 @@ public class PreventiviCostingController : ControllerBase
     {
         using var c = _db.Open();
         req.Id = id;
-        c.Execute(@"UPDATE quote_material_items SET description=@Description, quantity=@Quantity, unit_cost=@UnitCost, markup_value=@MarkupValue, item_type=@ItemType, sort_order=@SortOrder WHERE id=@Id", req);
+        c.Execute(@"UPDATE quote_material_items SET description=@Description, code=@Code, description_rtf=@DescriptionRtf, quantity=@Quantity, unit_cost=@UnitCost, markup_value=@MarkupValue, item_type=@ItemType, sort_order=@SortOrder, is_active=@IsActive WHERE id=@Id", req);
         return Ok(ApiResponse<string>.Ok("", "Materiale aggiornato"));
     }
 
@@ -176,8 +180,111 @@ public class PreventiviCostingController : ControllerBase
     public IActionResult DeleteMaterialItem(int quoteId, int id)
     {
         using var c = _db.Open();
+        // Elimina anche figli (varianti)
+        c.Execute("DELETE FROM quote_material_items WHERE parent_item_id=@id", new { id });
         c.Execute("DELETE FROM quote_material_items WHERE id=@id", new { id });
         return Ok(ApiResponse<string>.Ok("", "Materiale eliminato"));
+    }
+
+    /// <summary>Toggle is_active su una variante materiale</summary>
+    [HttpPatch("material-items/{id}/toggle-active")]
+    public IActionResult ToggleMaterialItemActive(int quoteId, int id, [FromBody] ToggleActiveRequest req)
+    {
+        using var c = _db.Open();
+        c.Execute("UPDATE quote_material_items SET is_active=@IsActive WHERE id=@id", new { req.IsActive, id });
+        return Ok(ApiResponse<string>.Ok("", "Stato aggiornato"));
+    }
+
+    /// <summary>Clona un prodotto materiale (parent + varianti)</summary>
+    [HttpPost("material-items/{id}/clone")]
+    public IActionResult CloneMaterialItem(int quoteId, int id)
+    {
+        using var c = _db.Open();
+        var item = c.QueryFirstOrDefault<ProjectMaterialItemDto>(@"SELECT id, section_id AS SectionId, parent_item_id AS ParentItemId, product_id AS ProductId, variant_id AS VariantId, COALESCE(code,'') AS Code, description AS Description, description_rtf AS DescriptionRtf, quantity AS Quantity, unit_cost AS UnitCost, markup_value AS MarkupValue, item_type AS ItemType, sort_order AS SortOrder, COALESCE(is_active,1) AS IsActive FROM quote_material_items WHERE id=@id", new { id });
+        if (item == null) return NotFound();
+
+        using var tx = c.BeginTransaction();
+        // Clona parent
+        int newParentId = (int)c.ExecuteScalar<long>(@"INSERT INTO quote_material_items (section_id, parent_item_id, product_id, variant_id, code, description, description_rtf, quantity, unit_cost, markup_value, item_type, sort_order, is_active) VALUES (@SectionId, @ParentItemId, @ProductId, @VariantId, @Code, @Description, @DescriptionRtf, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder, @IsActive); SELECT LAST_INSERT_ID();", item, tx);
+
+        // Clona varianti figlie
+        var children = c.Query<ProjectMaterialItemDto>(@"SELECT id, section_id AS SectionId, product_id AS ProductId, variant_id AS VariantId, COALESCE(code,'') AS Code, description AS Description, description_rtf AS DescriptionRtf, quantity AS Quantity, unit_cost AS UnitCost, markup_value AS MarkupValue, item_type AS ItemType, sort_order AS SortOrder, COALESCE(is_active,1) AS IsActive FROM quote_material_items WHERE parent_item_id=@id", new { id }, tx).ToList();
+        foreach (var child in children)
+        {
+            child.ParentItemId = newParentId;
+            c.Execute(@"INSERT INTO quote_material_items (section_id, parent_item_id, product_id, variant_id, code, description, description_rtf, quantity, unit_cost, markup_value, item_type, sort_order, is_active) VALUES (@SectionId, @ParentItemId, @ProductId, @VariantId, @Code, @Description, @DescriptionRtf, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder, @IsActive)", child, tx);
+        }
+        tx.Commit();
+        return Ok(ApiResponse<int>.Ok(newParentId, "Prodotto clonato"));
+    }
+
+    /// <summary>Aggiorna locale da catalogo (refresh varianti + prezzi)</summary>
+    [HttpPost("material-items/{id}/refresh-from-catalog")]
+    public IActionResult RefreshFromCatalog(int quoteId, int id)
+    {
+        using var c = _db.Open();
+        using var cmsConn = _qdb.Open();
+
+        var item = c.QueryFirstOrDefault<dynamic>("SELECT product_id, section_id FROM quote_material_items WHERE id=@id AND parent_item_id IS NULL", new { id });
+        if (item == null) return NotFound(ApiResponse<string>.Fail("Prodotto non trovato"));
+        int? productId = (int?)item.product_id;
+        if (productId == null) return BadRequest(ApiResponse<string>.Fail("Nessun prodotto catalogo collegato"));
+
+        // Leggi dati catalogo
+        var product = cmsConn.QueryFirstOrDefault<dynamic>("SELECT name, description_rtf FROM quote_products WHERE id=@productId", new { productId });
+        if (product == null) return NotFound(ApiResponse<string>.Fail("Prodotto non trovato nel catalogo"));
+        var catVariants = cmsConn.Query<dynamic>("SELECT id, code, name, cost_price, markup_value FROM quote_product_variants WHERE product_id=@productId ORDER BY id", new { productId }).ToList();
+
+        using var tx = c.BeginTransaction();
+        // Aggiorna parent
+        c.Execute("UPDATE quote_material_items SET description=@Name, description_rtf=@Rtf WHERE id=@id",
+            new { Name = (string)product.name, Rtf = (string?)product.description_rtf, id }, tx);
+
+        // Elimina vecchie varianti
+        c.Execute("DELETE FROM quote_material_items WHERE parent_item_id=@id", new { id }, tx);
+
+        // Reinserisci dal catalogo
+        int sectionId = (int)item.section_id;
+        foreach (var v in catVariants)
+        {
+            decimal markup = v.markup_value != null ? (decimal)v.markup_value : 1.300m;
+            c.Execute(@"INSERT INTO quote_material_items (section_id, parent_item_id, product_id, variant_id, code, description, quantity, unit_cost, markup_value, item_type, sort_order, is_active) VALUES (@sid, @pid, @prodId, @vid, @code, @name, 0, @cost, @markup, 'MATERIAL', 0, 1)",
+                new { sid = sectionId, pid = id, prodId = productId, vid = (int)v.id, code = (string?)v.code ?? "", name = (string)v.name, cost = (decimal)v.cost_price, markup }, tx);
+        }
+        tx.Commit();
+        return Ok(ApiResponse<string>.Ok("", "Aggiornato dal catalogo"));
+    }
+
+    /// <summary>Push locale → catalogo (aggiorna prezzi varianti nel catalogo)</summary>
+    [HttpPost("material-items/{id}/push-to-catalog")]
+    public IActionResult PushToCatalog(int quoteId, int id)
+    {
+        using var c = _db.Open();
+        using var cmsConn = _qdb.Open();
+
+        var item = c.QueryFirstOrDefault<dynamic>("SELECT product_id FROM quote_material_items WHERE id=@id AND parent_item_id IS NULL", new { id });
+        if (item == null) return NotFound();
+        int? productId = (int?)item.product_id;
+        if (productId == null) return BadRequest(ApiResponse<string>.Fail("Nessun prodotto catalogo collegato"));
+
+        // Leggi varianti locali con variant_id
+        var localVariants = c.Query<dynamic>("SELECT variant_id, description, unit_cost, markup_value, code FROM quote_material_items WHERE parent_item_id=@id AND variant_id IS NOT NULL", new { id }).ToList();
+
+        using var tx = cmsConn.BeginTransaction();
+        // Aggiorna parent description_rtf
+        var parentLocal = c.QueryFirstOrDefault<dynamic>("SELECT description, description_rtf FROM quote_material_items WHERE id=@id", new { id });
+        if (parentLocal != null)
+            cmsConn.Execute("UPDATE quote_products SET name=@Name, description_rtf=@Rtf WHERE id=@productId",
+                new { Name = (string)parentLocal.description, Rtf = (string?)parentLocal.description_rtf, productId }, tx);
+
+        // Aggiorna varianti
+        foreach (var v in localVariants)
+        {
+            cmsConn.Execute("UPDATE quote_product_variants SET name=@name, cost_price=@cost, markup_value=@markup, code=@code WHERE id=@vid",
+                new { name = (string)v.description, cost = (decimal)v.unit_cost, markup = (decimal)v.markup_value, code = (string?)v.code, vid = (int)v.variant_id }, tx);
+        }
+        tx.Commit();
+        return Ok(ApiResponse<string>.Ok("", "Catalogo aggiornato"));
     }
 
     [HttpPut("pricing")]

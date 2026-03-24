@@ -1,0 +1,45 @@
+<Window
+    x:Class="ATEC.PM.Client.Views.Admin.AddFeatureDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Nuova Feature"
+    Width="420"
+    SizeToContent="Height"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="20">
+        <TextBlock FontWeight="SemiBold" Text="Chiave (es. nav.mia_pagina)" />
+        <TextBox x:Name="txtKey" Margin="0,4,0,12" Padding="6,6" />
+
+        <TextBlock FontWeight="SemiBold" Text="Nome visualizzato" />
+        <TextBox x:Name="txtName" Margin="0,4,0,12" Padding="6,6" />
+
+        <TextBlock FontWeight="SemiBold" Text="Categoria" />
+        <ComboBox x:Name="cboCategory" Margin="0,4,0,12" Padding="6,6" SelectedIndex="0">
+            <ComboBoxItem Content="navigation" />
+            <ComboBoxItem Content="action" />
+            <ComboBoxItem Content="data" />
+        </ComboBox>
+
+        <TextBlock FontWeight="SemiBold" Text="Livello minimo" />
+        <ComboBox x:Name="cboLevel" Margin="0,4,0,16" Padding="6,6"
+                  DisplayMemberPath="Name"
+                  SelectedValuePath="Value"
+                  SelectedIndex="0" />
+
+        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+            <Button
+                Content="Annulla"
+                Margin="0,0,8,0"
+                Padding="16,8"
+                IsCancel="True"
+                Style="{StaticResource FlatBtn}" />
+            <Button
+                Content="Crea"
+                Padding="16,8"
+                Style="{StaticResource PrimaryBtn}"
+                Click="BtnOk_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

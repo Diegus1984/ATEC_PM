@@ -187,8 +187,9 @@
                                                     <DataTemplate>
                                                         <Border Padding="12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
                                                             <DockPanel>
-                                                                <!-- Checkbox attiva -->
+                                                                <!-- Toggle attiva -->
                                                                 <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                                                          Style="{StaticResource ToggleSwitchStyle}"
                                                                           VerticalAlignment="Center" Margin="0,0,8,0"
                                                                           Checked="VariantToggle_Changed"
                                                                           Unchecked="VariantToggle_Changed" />

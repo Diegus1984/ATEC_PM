@@ -357,6 +357,23 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Contenuti automatici (auto_include) | ✅ | Sezione separata nell'IMPIANTO, bottone "Ricarica dal catalogo" |
 | API reload-auto-includes | ✅ | POST /api/quotes/{id}/reload-auto-includes — pulisce e ri-inserisce da catalogo |
 | Pannello info editabile | ✅ | Contatti, pagamento, validità, opzioni PDF, note (card separate) |
+| Materiali: is_active su varianti | ✅ | Checkbox attiva/disattiva, opacity 0.5, totali filtrati |
+| Materiali: FK catalogo (product_id/variant_id) | ✅ | Sync bidirezionale con catalogo CMS |
+| Materiali: 5 pulsanti azione prodotto | ✅ | Refresh da catalogo, push a catalogo, edit RTF, clona, elimina |
+| Materiali: editor RTF (TinyMCE) | ✅ | MaterialRtfDialog con HtmlEditor, salva description_rtf |
+| Materiali: clone prodotto + varianti | ✅ | POST clone con copia parent + figli |
+| Materiali: delete cascade | ✅ | Elimina parent + tutte le varianti figlie |
+
+### 9f. Gestione Permessi (VisiWin-style) ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Tabella auth_levels (livelli gerarchici) | ✅ | 5 livelli: Operatore → Developer, ereditarietà |
+| Tabella auth_features (feature → min level) | ✅ | page_key + min_level configurabile |
+| Attached property Auth.Feature | ✅ | Applicato direttamente su qualsiasi elemento XAML |
+| PermissionEngine (cache + CanAccess) | ✅ | Caricamento all'avvio, auto-register feature mancanti |
+| Pagina admin Gestione Permessi | ✅ | Griglia feature × livelli con ComboBox nomi livello |
+| Converter RoleToVisibilityConverter | ✅ | Visibilità basata su livello utente corrente |
 
 ### 9e. Pulizia Varianti Catalogo ✅
 
@@ -393,25 +410,77 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Fix encoding UTF-8 (€, ò, °) | ✅ | Correzione caratteri corrotti nel DB |
 | Consolidamento codice | ✅ | Rimosso dead code, fix bug drag DataGrid, _jopt shared, debounce, ToLookup server |
 
+### 9g. PDF Preventivo IMPIANTO ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Endpoint PDF detecta IMPIANTO | ✅ | Carica costing data + genera con GenerateImpianto |
+| Copertina + contenuti + condizioni | ✅ | Stessa struttura SERVICE, senza prodotti catalogo CMS |
+| Distribuzione per sezione (non-shadowed) | ✅ | Tabella con badge R/M, vendita + contingency + margine + totale |
+| Scheda prezzi (NET → OFFER → FINAL) | ✅ | Risorse + Materiali + Trasferte → percentuali → prezzo finale |
+| Firma + footer | ✅ | Pagina finale con firma per accettazione |
+
 ### 9d. Da completare
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Generazione PDF preventivo IMPIANTO | ❌ | ALTA | PDF con costing, materiali, riepilogo distribuzione, contenuti automatici |
 | Pannello catalogo SERVICE nel preventivo | ❌ | MEDIA | Gestione voci/varianti come QuoteDetailPage |
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
 | Addormentare pagine vecchie (Offerte, Preventivi CMS) | ❌ | BASSA | Quando il nuovo è completo |
 
 ---
 
-## Blocco 10 — Prossimi Step Generali
+## Blocco 10 — Sistema Permessi a Livelli (stile VisiWin7) ✅ COMPLETATO
+
+### 10a. Architettura Permessi ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Tabelle DB auth_levels + auth_features | ✅ | 5 livelli gerarchici (TECH→RESP→PM→ADMIN→DEV), 24 feature con min_level |
+| AuthLevelController (API CRUD) | ✅ | 6 endpoint: GET livelli, GET/POST/PUT/DELETE feature, GET /features/my |
+| DTO AuthLevel_DTOs.cs | ✅ | AuthLevelDto, AuthFeatureDto, UpdateAuthFeatureRequest, CreateAuthFeatureRequest |
+| PermissionEngine con cache a livelli | ✅ | LoadFeatures() al login, CanAccess(key), IsDisabledOnly(key), fallback retrocompatibile |
+| Caricamento feature al login | ✅ | GET /api/auth-levels/features/my dopo autenticazione, ClearFeatures() al logout |
+
+### 10b. Attached Property (stile VisiWin) ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Auth.Feature attached property | ✅ | `auth:Auth.Feature="nav.clienti"` direttamente sul bottone — zero code-behind |
+| Auth.AutoHide attached property | ✅ | `auth:Auth.AutoHide="True"` su Expander — nasconde sezione se tutti i figli Collapsed |
+| Supporto behavior HIDDEN/DISABLED | ✅ | HIDDEN=Collapsed, DISABLED=visibile grigio (opacity 0.4) non cliccabile |
+| Rimosso ApplySidebarPermissions() | ✅ | Tutto dichiarativo nel XAML, nessuna lista centralizzata |
+| Rimossi x:Name dai bottoni sidebar | ✅ | Non servono più, l'attached property lavora in autonomia |
+
+### 10c. Pagina Admin Permessi ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| AuthLevelsPage (DataGrid interattiva) | ✅ | Griglia: feature key, nome, categoria, livello minimo (ComboBox con nomi da DB), checkmark per ruolo, modo H/D |
+| Legenda livelli colorata | ✅ | Badge colorati: TECH(blu), RESP(giallo), PM(verde), ADMIN(rosso), DEV(viola) |
+| Checkmark calcolate automaticamente | ✅ | Colonne T/R/PM/A/D con ✓ calcolato da min_level (ereditarietà gerarchica) |
+| ComboBox livelli da DB | ✅ | Nomi livelli caricati da auth_levels, non hardcoded |
+| Salvataggio immediato su modifica | ✅ | PUT su cambio ComboBox livello o behavior, guard anti-loop |
+| AddFeatureDialog con livelli da DB | ✅ | Creazione nuove feature: chiave, nome, categoria, livello minimo |
+| Eliminazione feature con conferma | ✅ | Pulsante X per riga |
+| Bottone "Permessi" nella sidebar | ✅ | Sezione AMMINISTRAZIONE, visibile solo livello 3+ |
+
+### 10d. Converter XAML ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| AuthFeatureToVisibilityConverter | ✅ | ConverterParameter="nav.clienti" → Visible/Collapsed (per uso fuori sidebar) |
+| AuthFeatureToEnabledConverter | ✅ | Per behavior DISABLED in qualsiasi pagina |
+
+---
+
+## Blocco 11 — Prossimi Step Generali
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
 | Notifica TIMESHEET_ANOMALY | ❌ | ALTA | Ore giornaliere > 10h, fase sfora budget > 150% |
 | Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
 | Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze via email |
-| Separazione ruoli (menu per ruolo) | ❌ | MEDIA | ADMIN/PM/CMC/TECH vedono pagine diverse |
 | Sicurezza (bcrypt, HTTPS, rate limiting) | ❌ | MEDIA | Migrazione SHA2→bcrypt |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
 
@@ -420,6 +489,9 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 ## Struttura File
 
 ```
+Helpers/
+  Auth.cs                            ← Attached property Auth.Feature + Auth.AutoHide (permessi VisiWin-style direttamente nel XAML)
+
 Views/ConfigurazioneSezioni/
   CostSectionsTreePage.xaml/.cs     ← Pagina unificata: gruppi, sezioni, fasi, reparti (drag & drop)
   CostSectionTemplateDialog.xaml/.cs ← Dialog creazione sezione
@@ -442,12 +514,17 @@ Views/Cms/
   NewQuoteDialog.xaml/.cs           ← Dialog creazione CMS (vecchia)
   QuoteDetailPage.xaml/.cs          ← Dettaglio CMS (vecchia)
 
+Views/Admin/
+  AuthLevelsPage.xaml/.cs            ← Pagina gestione permessi: griglia feature × livelli, ComboBox livello minimo, checkmark ereditarietà
+  AddFeatureDialog.xaml/.cs          ← Dialog creazione nuova feature (chiave, nome, categoria, livello)
+
 Views/Costing/
   ProjectCostingControl.xaml/.cs    ← Control riusabile: Load() / LoadForOffer() / LoadForPreventivo()
   CatalogPickerDialog.xaml/.cs      ← Picker prodotti dal catalogo per sezioni materiali
   ViewModels/                       ← CostingViewModel, CostGroupVM, CostSectionVM, etc.
 
 Server/Controllers/
+  AuthLevelController.cs            ← API permessi a livelli (CRUD feature, GET /features/my per login)
   PreventiviController.cs           ← API preventivi unificati (list, create con costing init, convert)
   PreventiviCostingController.cs    ← API costing preventivi (mirror OfferCosting su quote_cost_*)
   QuoteCatalogController.cs         ← API catalogo + categorie nidificabili + move prodotti/categorie
@@ -460,6 +537,7 @@ Server/Services/
   QuotePdfService.cs                ← Generatore PDF con QuestPDF
 
 Shared/DTOs/
+  AuthLevel_DTOs.cs                 ← DTO livelli e feature permessi (AuthLevelDto, AuthFeatureDto, UpdateAuthFeatureRequest, CreateAuthFeatureRequest)
   Quote_DTOs.cs                     ← DTO con QuoteType, ParentId, MarkupValue, CategoryMoveRequest, ProductMoveRequest
 ```
 
@@ -485,4 +563,5 @@ Shared/DTOs/
 - **Views organizzate in sottocartelle**: Commesse/, Clienti/, Utenti/, Reparti/, FasiTemplate/, Materiali/, Easyfatt/, Catalogo/, Codex/, Cms/, Costing/, etc. Root: solo LoginWindow + MainWindow
 - **Sidebar collassabile**: Expander con freccia ▼/▶, sezioni Principale/Gestione/Admin/Avanzata/Sessione
 - **TinyMCE 5 self-hosted**: no API key, no CDN — npm install tinymce@5, copiato in Assets/tinymce/tinymce/
+- **Permessi a livelli (VisiWin-style)**: attached property `auth:Auth.Feature="nav.xxx"` direttamente sul bottone XAML — zero code-behind. Tabelle auth_levels + auth_features, PermissionEngine.CanAccess("feature.key"), ereditarietà gerarchica automatica (livello N vede tutto ciò che è ≤ N), behavior HIDDEN/DISABLED. Per aggiungere un nuovo bottone con permessi: `<Button auth:Auth.Feature="nav.mia_pagina" .../>` + riga in auth_features dalla pagina admin
 - **L'utente comunica in italiano**

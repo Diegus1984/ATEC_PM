@@ -807,7 +807,17 @@ public class QuotesController : ControllerBase
                 FROM quote_items WHERE quote_id = @Id
                 ORDER BY sort_order", new { Id = id }).ToList();
 
-            byte[] pdf = _pdf.Generate(quote);
+            byte[] pdf;
+            if (quote.QuoteType == "IMPIANTO")
+            {
+                // Carica dati costing per IMPIANTO
+                var costingData = LoadCostingData(c, id);
+                pdf = _pdf.GenerateImpianto(quote, costingData);
+            }
+            else
+            {
+                pdf = _pdf.Generate(quote);
+            }
             string fileName = $"{quote.QuoteNumber.Replace("/", "-")}.pdf";
             return File(pdf, "application/pdf", fileName);
         }
@@ -881,5 +891,65 @@ public class QuotesController : ControllerBase
             new { Sub = subtotal, Vat = vatTotal, Tot = total, TotVat = totalWithVat,
                   Cost = costTotal, Profit = profit, Id = quoteId },
             (System.Data.IDbTransaction?)tx);
+    }
+
+    /// <summary>Carica dati costing per preventivo IMPIANTO (usato per PDF)</summary>
+    private static ProjectCostingData LoadCostingData(MySqlConnector.MySqlConnection c, int quoteId)
+    {
+        var sections = c.Query<ProjectCostSectionDto>(@"
+            SELECT id, quote_id AS ProjectId, template_id AS TemplateId, name, section_type AS SectionType,
+                   group_name AS GroupName, sort_order AS SortOrder, is_enabled AS IsEnabled,
+                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
+                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned,
+                   COALESCE(is_shadowed,0) AS IsShadowed
+            FROM quote_cost_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
+
+        var allResources = c.Query<ProjectCostResourceDto>(@"
+            SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId,
+                   r.resource_name AS ResourceName, r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay,
+                   r.hourly_cost AS HourlyCost, r.markup_value AS MarkupValue,
+                   r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm,
+                   r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel,
+                   r.allowance_days AS AllowanceDays, r.daily_allowance AS DailyAllowance,
+                   r.sort_order AS SortOrder
+            FROM quote_cost_resources r
+            JOIN quote_cost_sections s ON s.id = r.section_id
+            WHERE s.quote_id=@quoteId ORDER BY r.sort_order", new { quoteId }).ToList();
+        foreach (var sec in sections)
+            sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
+
+        var matSections = c.Query<ProjectMaterialSectionDto>(@"
+            SELECT id, quote_id AS ProjectId, name, markup_value AS MarkupValue,
+                   commission_markup AS CommissionMarkup, sort_order AS SortOrder, is_enabled AS IsEnabled
+            FROM quote_material_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
+
+        var allItems = c.Query<ProjectMaterialItemDto>(@"
+            SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId,
+                   i.product_id AS ProductId, i.variant_id AS VariantId,
+                   COALESCE(i.code,'') AS Code, i.description AS Description,
+                   i.description_rtf AS DescriptionRtf,
+                   i.quantity AS Quantity, i.unit_cost AS UnitCost,
+                   i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder,
+                   i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
+                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned,
+                   COALESCE(i.is_shadowed,0) AS IsShadowed, COALESCE(i.is_active,1) AS IsActive
+            FROM quote_material_items i
+            JOIN quote_material_sections s ON s.id = i.section_id
+            WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
+        foreach (var ms in matSections)
+            ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
+
+        var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
+            SELECT id, quote_id AS ProjectId, contingency_pct AS ContingencyPct,
+                   negotiation_margin_pct AS NegotiationMarginPct,
+                   travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup
+            FROM quote_pricing WHERE quote_id=@quoteId", new { quoteId })
+            ?? new ProjectPricingDto { ProjectId = quoteId };
+
+        return new ProjectCostingData
+        {
+            ProjectId = quoteId, IsInitialized = true,
+            CostSections = sections, MaterialSections = matSections, Pricing = pricing
+        };
     }
 }

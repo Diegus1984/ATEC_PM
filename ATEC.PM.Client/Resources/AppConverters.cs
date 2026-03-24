@@ -376,3 +376,40 @@ public class EuroCurrencyConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }
+
+/// <summary>
+/// Converter per visibilità basata su feature key (sistema permessi a livelli).
+/// ConverterParameter = "nav.clienti" (feature key).
+/// Ritorna Visible se l'utente ha il livello sufficiente, Collapsed altrimenti.
+/// </summary>
+public class AuthFeatureToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        string featureKey = parameter?.ToString() ?? "";
+        if (string.IsNullOrEmpty(featureKey)) return Visibility.Visible;
+        return ATEC.PM.Shared.PermissionEngine.CanAccess(featureKey)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Converter per IsEnabled basata su feature key.
+/// Per feature con behavior DISABLED: visibile ma non cliccabile.
+/// </summary>
+public class AuthFeatureToEnabledConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        string featureKey = parameter?.ToString() ?? "";
+        if (string.IsNullOrEmpty(featureKey)) return true;
+        return ATEC.PM.Shared.PermissionEngine.CanAccess(featureKey);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}

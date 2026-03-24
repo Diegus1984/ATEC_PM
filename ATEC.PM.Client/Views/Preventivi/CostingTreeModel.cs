@@ -261,12 +261,16 @@ public class MaterialTreeRow : INotifyPropertyChanged
     public int DbId { get; set; }
     public int SectionId { get; set; }
     public int? ParentItemId { get; set; }
+    public int? ProductId { get; set; }
+    public int? VariantId { get; set; }
+    public string Code { get; set; } = "";
+    public string? DescriptionRtf { get; set; }
 
     private string _description = "";
     public string Description
     {
         get => _description;
-        set { _description = value; OnPropertyChanged(); }
+        set { _description = value; OnPropertyChanged(); IsDirty = true; }
     }
 
     private string _itemType = "MATERIAL";
@@ -274,6 +278,13 @@ public class MaterialTreeRow : INotifyPropertyChanged
     {
         get => _itemType;
         set { _itemType = value; OnPropertyChanged(); }
+    }
+
+    private bool _isActive = true;
+    public bool IsActive
+    {
+        get => _isActive;
+        set { _isActive = value; OnPropertyChanged(); RecalcTotals(); }
     }
 
     private decimal _quantity = 1;
@@ -315,8 +326,8 @@ public class MaterialTreeRow : INotifyPropertyChanged
 
     private void RecalcTotals()
     {
-        TotalCost = Quantity * UnitCost;
-        TotalSale = TotalCost * MarkupValue;
+        TotalCost = IsActive ? Quantity * UnitCost : 0;
+        TotalSale = IsActive ? Quantity * UnitCost * MarkupValue : 0;
         IsDirty = true;
     }
 
@@ -332,11 +343,16 @@ public class MaterialProductGroup : INotifyPropertyChanged
 {
     public int ParentId { get; set; }
     public int SectionId { get; set; }
+    public int? ProductId { get; set; }
     public string ParentName { get; set; } = "";
+    public string? DescriptionRtf { get; set; }
     public ObservableCollection<MaterialTreeRow> Variants { get; set; } = new();
 
-    public decimal TotalCost => Variants.Sum(v => v.TotalCost);
-    public decimal TotalSale => Variants.Sum(v => v.TotalSale);
+    /// <summary>Ha un ProductId collegato al catalogo?</summary>
+    public bool HasCatalogLink => ProductId.HasValue && ProductId.Value > 0;
+
+    public decimal TotalCost => Variants.Where(v => v.IsActive).Sum(v => v.TotalCost);
+    public decimal TotalSale => Variants.Where(v => v.IsActive).Sum(v => v.TotalSale);
     public string TotalDisplay => $"{TotalSale:N2} \u20ac";
 
     public void NotifyTotals()
@@ -485,9 +501,11 @@ public class DistributionRowVM : INotifyPropertyChanged
     public bool IsShadowed
     {
         get => _isShadowed;
-        set { _isShadowed = value; OnPropertyChanged(); OnPropertyChanged(nameof(EyeIcon)); OnPropertyChanged(nameof(DisplaySaleAmount)); }
+        set { _isShadowed = value; OnPropertyChanged(); OnPropertyChanged(nameof(EyeIcon)); OnPropertyChanged(nameof(DisplaySaleAmount)); OnPropertyChanged(nameof(RowBackground)); OnPropertyChanged(nameof(RowOpacity)); }
     }
     public string EyeIcon => IsShadowed ? "\U0001F441\u200D\U0001F5E8" : "\U0001F441";
+    public string RowBackground => IsShadowed ? "#FEF2F2" : "Transparent";
+    public double RowOpacity => IsShadowed ? 0.5 : 1.0;
     public decimal DisplaySaleAmount => IsShadowed ? 0m : SaleAmount;
 
     private decimal _shadowedAmount;

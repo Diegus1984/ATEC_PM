@@ -1,0 +1,28 @@
+<Window x:Class="ATEC.PM.Client.Views.Preventivi.MaterialRtfDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:uc="clr-namespace:ATEC.PM.Client.UserControls"
+        Title="Modifica descrizione prodotto" Width="900" Height="650"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="txtTitle" Grid.Row="0" FontSize="14" FontWeight="SemiBold"
+                   Foreground="#1A1D26" Margin="0,0,0,8" />
+
+        <uc:HtmlEditor x:Name="htmlEditor" Grid.Row="1" />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Annulla" Width="90" Height="32" Margin="0,0,8,0"
+                    Background="#F3F4F6" Foreground="#374151" BorderThickness="1" BorderBrush="#D1D5DB"
+                    Click="BtnCancel_Click" Cursor="Hand" />
+            <Button Content="Salva" Width="90" Height="32"
+                    Background="#2563EB" Foreground="White" BorderThickness="0" FontWeight="SemiBold"
+                    Click="BtnSave_Click" Cursor="Hand" />
+        </StackPanel>
+    </Grid>
+</Window>

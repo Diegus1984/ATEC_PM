@@ -2,6 +2,7 @@
     x:Class="ATEC.PM.Client.Views.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:auth="clr-namespace:ATEC.PM.Client.Helpers"
     Title="ATEC PM - Gestione Commesse"
     Width="1920"
     Height="1080"
@@ -183,26 +184,31 @@
                                     </Grid>
                                 </Button>
                                 <Button
+                                    auth:Auth.Feature="nav.commesse"
                                     Click="Nav_Click"
                                     Content="  Commesse"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Commesse" />
                                 <Button
+                                    auth:Auth.Feature="nav.offerte"
                                     Click="Nav_Click"
                                     Content="  Offerte"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Offerte" />
                                 <Button
+                                    auth:Auth.Feature="nav.cat_preventivi"
                                     Click="Nav_Click"
                                     Content="  Cat. Preventivi"
                                     Style="{StaticResource NavBtn}"
                                     Tag="CatalogoPreventivi" />
                                 <Button
+                                    auth:Auth.Feature="nav.preventivi"
                                     Click="Nav_Click"
                                     Content="  Preventivi"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Preventivi" />
                                 <Button
+                                    auth:Auth.Feature="nav.preventivi_nuovo"
                                     Click="Nav_Click"
                                     Content="  Preventivi (Nuovo)"
                                     FontWeight="SemiBold"
@@ -210,6 +216,7 @@
                                     Style="{StaticResource NavBtn}"
                                     Tag="PreventiviUnificati" />
                                 <Button
+                                    auth:Auth.Feature="nav.timesheet"
                                     Click="Nav_Click"
                                     Content="  Timesheet"
                                     Style="{StaticResource NavBtn}"
@@ -219,36 +226,36 @@
 
                         <!--  GESTIONE  -->
                         <Expander
-                            x:Name="expGestione"
+                            auth:Auth.AutoHide="True"
                             Header="GESTIONE"
                             Style="{StaticResource NavExpander}">
                             <StackPanel>
                                 <Button
-                                    x:Name="btnClienti"
+                                    auth:Auth.Feature="nav.clienti"
                                     Click="Nav_Click"
                                     Content="  Clienti"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Clienti" />
                                 <Button
-                                    x:Name="btnFornitori"
+                                    auth:Auth.Feature="nav.fornitori"
                                     Click="Nav_Click"
                                     Content="  Fornitori"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Fornitori" />
                                 <Button
-                                    x:Name="btnCatalogo"
+                                    auth:Auth.Feature="nav.catalogo"
                                     Click="Nav_Click"
                                     Content="  Catalogo Articoli"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Catalogo" />
                                 <Button
-                                    x:Name="btnCodex"
+                                    auth:Auth.Feature="nav.codex"
                                     Click="Nav_Click"
                                     Content="  Codex Articoli"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Codex" />
                                 <Button
-                                    x:Name="btnCodexComposition"
+                                    auth:Auth.Feature="nav.codex_composizione"
                                     Click="Nav_Click"
                                     Content="  Composizione Codex"
                                     Style="{StaticResource NavBtn}"
@@ -258,40 +265,46 @@
 
                         <!--  AMMINISTRAZIONE  -->
                         <Expander
-                            x:Name="expAdmin"
+                            auth:Auth.AutoHide="True"
                             Header="AMMINISTRAZIONE"
                             Style="{StaticResource NavExpander}">
                             <StackPanel>
                                 <Button
-                                    x:Name="btnUtenti"
+                                    auth:Auth.Feature="nav.utenti"
                                     Click="Nav_Click"
                                     Content="  Utenti"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Utenti" />
+                                <Button
+                                    auth:Auth.Feature="nav.permessi"
+                                    Click="Nav_Click"
+                                    Content="  Permessi"
+                                    Style="{StaticResource NavBtn}"
+                                    Tag="Permessi" />
                             </StackPanel>
                         </Expander>
 
                         <!--  GESTIONE AVANZATA  -->
                         <Expander
-                            x:Name="expAvanzata"
+                            auth:Auth.AutoHide="True"
                             Header="GESTIONE AVANZATA"
                             IsExpanded="False"
                             Style="{StaticResource NavExpander}">
                             <StackPanel>
                                 <Button
-                                    x:Name="btnConfigSezioni"
+                                    auth:Auth.Feature="nav.config_sezioni"
                                     Click="Nav_Click"
                                     Content="  Configurazione Sezioni"
                                     Style="{StaticResource NavBtn}"
                                     Tag="ConfigurazioneSezioni" />
                                 <Button
-                                    x:Name="btnDdpDest"
+                                    auth:Auth.Feature="nav.ddp_destinazioni"
                                     Click="Nav_Click"
                                     Content="  Destinazioni DDP"
                                     Style="{StaticResource NavBtn}"
                                     Tag="DestinazioniDdp" />
                                 <Button
-                                    x:Name="btnBackup"
+                                    auth:Auth.Feature="nav.backup"
                                     Click="Nav_Click"
                                     Content="  Backup DB"
                                     Style="{StaticResource NavBtn}"

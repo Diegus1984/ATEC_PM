@@ -4,7 +4,6 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared;
-using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -23,7 +22,7 @@ public partial class MainWindow : Window
             ? $"{parts[0][0]}{parts[1][0]}".ToUpper()
             : (App.UserFullName ?? "AT").Substring(0, Math.Min(2, (App.UserFullName ?? "").Length)).ToUpper();
 
-        ApplySidebarPermissions();
+        // I permessi sono applicati direttamente nel XAML via auth:Auth.Feature
         StartBadgePolling();
     }
 
@@ -81,40 +80,6 @@ public partial class MainWindow : Window
         projectsPage.NavigateToSection(projectId, section);
     }
 
-    private void ApplySidebarPermissions()
-    {
-        var u = App.CurrentUser;
-
-        // Sezione GESTIONE
-        btnClienti.Visibility = PermissionEngine.CanAccessClienti(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnFornitori.Visibility = PermissionEngine.CanAccessFornitori(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnCatalogo.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnCodex.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnCodexComposition.Visibility = PermissionEngine.CanAccessCatalogo(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnBackup.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-
-        // Sezione GESTIONE AVANZATA
-        btnConfigSezioni.Visibility = u.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
-        expAvanzata.Visibility = (btnConfigSezioni.Visibility == Visibility.Visible ||
-                                  btnDdpDest.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
-
-        // Sezione REPORT / ADMIN
-        btnUtenti.Visibility = PermissionEngine.CanAccessUtenti(u) ? Visibility.Visible : Visibility.Collapsed;
-        btnDdpDest.Visibility = (u.IsPm || u.IsResponsible) ? Visibility.Visible : Visibility.Collapsed;
-
-
-        // Nascondi label sezione se tutti i bottoni sono collassati
-        bool anyGestione = btnClienti.Visibility == Visibility.Visible ||
-                   btnFornitori.Visibility == Visibility.Visible ||
-                   btnCatalogo.Visibility == Visibility.Visible ||
-                   btnCodex.Visibility == Visibility.Visible ||
-                   btnCodexComposition.Visibility == Visibility.Visible;
-        expGestione.Visibility = anyGestione ? Visibility.Visible : Visibility.Collapsed;
-
-        bool anyAdmin = btnUtenti.Visibility == Visibility.Visible || btnBackup.Visibility == Visibility.Visible;
-        expAdmin.Visibility = anyAdmin ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private void Nav_Click(object sender, RoutedEventArgs e)
     {
         Button btn = (Button)sender;
@@ -143,6 +108,7 @@ public partial class MainWindow : Window
             case "CodexComposizione": PageContent.Navigate(new CodexCompositionPage()); break;
             case "DestinazioniDdp": PageContent.Navigate(new DdpDestinationsPage()); break;
             case "Backup": PageContent.Navigate(new BackupPage()); break;
+            case "Permessi": PageContent.Navigate(new Admin.AuthLevelsPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
             case "Preventivi": PageContent.Navigate(new Quotes.QuotesListPage()); break;
             case "PreventiviUnificati": PageContent.Navigate(new Preventivi.PreventiviPage()); break;
@@ -159,6 +125,7 @@ public partial class MainWindow : Window
             App.UserRole = "";
             App.UserId = 0;
             App.CurrentUser = new();
+            PermissionEngine.ClearFeatures();
 
             new LoginWindow().Show();
             Close();

@@ -1,0 +1,200 @@
+<Page
+    x:Class="ATEC.PM.Client.Views.Admin.AuthLevelsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Gestione Permessi">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- HEADER -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,16">
+            <Button
+                Content="+ Nuova Feature"
+                DockPanel.Dock="Right"
+                Padding="16,8"
+                Style="{StaticResource PrimaryBtn}"
+                Click="BtnAddFeature_Click" />
+            <StackPanel>
+                <TextBlock
+                    FontSize="22"
+                    FontWeight="Bold"
+                    Foreground="#1A1D26"
+                    Text="Gestione Permessi" />
+                <TextBlock
+                    Margin="0,4,0,0"
+                    FontSize="13"
+                    Foreground="#6B7280"
+                    Text="Configura i livelli di accesso per ogni funzione (stile VisiWin). Il livello superiore eredita tutti i permessi dei livelli inferiori." />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- LEGENDA LIVELLI -->
+        <Border Grid.Row="1" Margin="0,0,0,12" Padding="12,8" Background="#F3F4F6" CornerRadius="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#374151" Text="Livelli:  " />
+                <Border Margin="4,0" Padding="8,4" Background="#E0F2FE" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#0369A1" Text="0 - Tecnico" />
+                </Border>
+                <Border Margin="4,0" Padding="8,4" Background="#FEF3C7" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#92400E" Text="1 - Resp. Reparto" />
+                </Border>
+                <Border Margin="4,0" Padding="8,4" Background="#D1FAE5" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#065F46" Text="2 - Project Manager" />
+                </Border>
+                <Border Margin="4,0" Padding="8,4" Background="#FEE2E2" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#991B1B" Text="3 - Amministratore" />
+                </Border>
+                <Border Margin="4,0" Padding="8,4" Background="#E9D5FF" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#6B21A8" Text="4 - Developer" />
+                </Border>
+                <Border Margin="24,0,4,0" Padding="8,4" Background="#F3F4F6" CornerRadius="4">
+                    <TextBlock FontSize="12" Foreground="#6B7280" Text="H = Nascosto  |  D = Disabilitato" />
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- DATAGRID FEATURE -->
+        <DataGrid
+            x:Name="dgFeatures"
+            Grid.Row="2"
+            AutoGenerateColumns="False"
+            CanUserAddRows="False"
+            CanUserDeleteRows="False"
+            CanUserReorderColumns="False"
+            HeadersVisibility="Column"
+            IsReadOnly="True"
+            SelectionMode="Single"
+            Style="{StaticResource ModernDataGrid}"
+            CellStyle="{StaticResource ModernCell}"
+            ColumnHeaderStyle="{StaticResource ModernColumnHeader}"
+            RowStyle="{StaticResource ModernRow}">
+            <DataGrid.Columns>
+                <!-- CATEGORIA -->
+                <DataGridTextColumn
+                    Width="120"
+                    Binding="{Binding Category}"
+                    Header="Categoria" />
+
+                <!-- FEATURE KEY -->
+                <DataGridTextColumn
+                    Width="180"
+                    Binding="{Binding FeatureKey}"
+                    Header="Chiave" />
+
+                <!-- NOME -->
+                <DataGridTextColumn
+                    Width="200"
+                    Binding="{Binding DisplayName}"
+                    Header="Nome" />
+
+                <!-- LIVELLO MINIMO (ComboBox) -->
+                <DataGridTemplateColumn Width="160" Header="Min. Livello">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox
+                                Width="145"
+                                HorizontalAlignment="Center"
+                                ItemsSource="{Binding LevelOptions}"
+                                DisplayMemberPath="Name"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding MinLevel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                SelectionChanged="CboLevel_Changed" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- CHECKMARK COLUMNS: T, R, PM, A, D -->
+                <DataGridTemplateColumn Width="40" Header="T">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="#10B981"
+                                Text="{Binding CheckTech}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Width="40" Header="R">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="#10B981"
+                                Text="{Binding CheckResp}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Width="40" Header="PM">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="#10B981"
+                                Text="{Binding CheckPm}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Width="40" Header="A">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="#10B981"
+                                Text="{Binding CheckAdmin}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Width="40" Header="D">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="#10B981"
+                                Text="{Binding CheckDev}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- BEHAVIOR TOGGLE -->
+                <DataGridTemplateColumn Width="80" Header="Modo">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox
+                                Width="60"
+                                HorizontalAlignment="Center"
+                                SelectedValue="{Binding Behavior, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                SelectedValuePath="Tag"
+                                SelectionChanged="CboBehavior_Changed">
+                                <ComboBoxItem Content="H" Tag="HIDDEN" />
+                                <ComboBoxItem Content="D" Tag="DISABLED" />
+                            </ComboBox>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- DELETE -->
+                <DataGridTemplateColumn Width="50" Header="">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button
+                                Content="X"
+                                Padding="4,2"
+                                Style="{StaticResource RowDeleteBtn}"
+                                Click="BtnDeleteFeature_Click" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Page>

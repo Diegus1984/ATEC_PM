@@ -257,7 +257,9 @@ public partial class CostingTreeControl : UserControl
                     {
                         ParentId = parent.Id,
                         SectionId = section.Id,
+                        ProductId = parent.ProductId,
                         ParentName = parent.Description ?? "",
+                        DescriptionRtf = parent.DescriptionRtf,
                         Variants = new ObservableCollection<MaterialTreeRow> { row }
                     };
                     _materialProducts.Add(group);
@@ -276,7 +278,9 @@ public partial class CostingTreeControl : UserControl
                     {
                         ParentId = parent.Id,
                         SectionId = section.Id,
+                        ProductId = parent.ProductId,
                         ParentName = parent.Description ?? "",
+                        DescriptionRtf = parent.DescriptionRtf,
                         Variants = variants
                     };
                     _materialProducts.Add(group);
@@ -302,18 +306,25 @@ public partial class CostingTreeControl : UserControl
 
     private static MaterialTreeRow BuildMaterialRow(ProjectMaterialItemDto item, int sectionId)
     {
+        bool active = item.IsActive;
+        decimal mk = item.MarkupValue > 0 ? item.MarkupValue : 1.300m;
         return new MaterialTreeRow
         {
             DbId = item.Id,
             SectionId = sectionId,
             ParentItemId = item.ParentItemId,
+            ProductId = item.ProductId,
+            VariantId = item.VariantId,
+            Code = item.Code ?? "",
+            DescriptionRtf = item.DescriptionRtf,
             Description = item.Description ?? "",
             ItemType = item.ItemType ?? "MATERIAL",
+            IsActive = active,
             Quantity = item.Quantity,
             UnitCost = item.UnitCost,
-            MarkupValue = item.MarkupValue > 0 ? item.MarkupValue : 1.300m,
-            TotalCost = item.Quantity * item.UnitCost,
-            TotalSale = item.Quantity * item.UnitCost * (item.MarkupValue > 0 ? item.MarkupValue : 1.300m)
+            MarkupValue = mk,
+            TotalCost = active ? item.Quantity * item.UnitCost : 0,
+            TotalSale = active ? item.Quantity * item.UnitCost * mk : 0
         };
     }
 
@@ -395,8 +406,11 @@ public partial class CostingTreeControl : UserControl
     private async void MaterialVariantField_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
-        if (sender is not TextBox tb) return;
-        if (tb.Tag is not MaterialTreeRow mat) return;
+
+        // Supporta TextBox standard e controlli Syncfusion (CurrencyTextBox, DoubleTextBox ecc.)
+        MaterialTreeRow? mat = null;
+        if (sender is FrameworkElement fe && fe.Tag is MaterialTreeRow m) mat = m;
+        if (mat == null) return;
 
         if (mat.IsDirty)
         {
@@ -408,6 +422,36 @@ public partial class CostingTreeControl : UserControl
                 BuildPricing(_lastData);
                 NotifyPricingUpdated();
             }
+        }
+    }
+
+    private async void MaterialParentName_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isLoading) return;
+        if (sender is not TextBox tb) return;
+        if (tb.Tag is not MaterialProductGroup group) return;
+
+        try
+        {
+            // Aggiorna descrizione del parent item nel DB via PUT
+            var body = new
+            {
+                description = group.ParentName,
+                code = "",
+                descriptionRtf = group.DescriptionRtf ?? "",
+                quantity = 0m,
+                unitCost = 0m,
+                markupValue = 1.300m,
+                itemType = "PRODUCT",
+                sortOrder = 0,
+                isActive = true
+            };
+            await ApiClient.PutAsync($"{_apiBasePath}/material-items/{group.ParentId}",
+                JsonSerializer.Serialize(body));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -452,11 +496,14 @@ public partial class CostingTreeControl : UserControl
             var body = new
             {
                 sectionId = mat.SectionId,
+                code = mat.Code,
                 description = mat.Description,
+                descriptionRtf = mat.DescriptionRtf,
                 quantity = mat.Quantity,
                 unitCost = mat.UnitCost,
                 markupValue = mat.MarkupValue,
-                itemType = mat.ItemType
+                itemType = mat.ItemType,
+                isActive = mat.IsActive
             };
 
             await ApiClient.PutAsync($"{_apiBasePath}/material-items/{mat.DbId}",
@@ -730,12 +777,14 @@ public partial class CostingTreeControl : UserControl
 
             foreach (var productGroup in byProduct)
             {
+                int productId = productGroup.Key;
                 string productName = productGroup.First().ProductName;
 
-                // Create parent item (product)
+                // Create parent item (product) con FK catalogo
                 var parentBody = new
                 {
                     sectionId = materialSectionId,
+                    productId,
                     description = productName,
                     quantity = 0m,
                     unitCost = 0m,
@@ -747,22 +796,30 @@ public partial class CostingTreeControl : UserControl
                 var parentObj = JsonSerializer.Deserialize<JsonElement>(parentResult!);
                 int parentId = parentObj.GetProperty("data").GetInt32();
 
-                // Create child items (variants)
+                // Create child items — TUTTE le varianti del prodotto
                 foreach (var v in productGroup)
                 {
                     var childBody = new
                     {
                         description = v.VariantName,
+                        code = v.VariantCode,
+                        variantId = v.VariantId,
+                        productId,
                         quantity = v.Quantity,
                         unitCost = v.CostPrice,
                         markupValue = v.SellPrice > 0 && v.CostPrice > 0
                             ? Math.Round(v.SellPrice / v.CostPrice, 3)
                             : 1.300m,
-                        itemType = "MATERIAL"
+                        itemType = "MATERIAL",
+                        isActive = v.Quantity > 0  // attiva solo se qty > 0
                     };
                     await ApiClient.PostAsync($"{_apiBasePath}/material-items/{parentId}/variant",
                         JsonSerializer.Serialize(childBody));
                 }
+
+                // Refresh da catalogo per ottenere description_rtf
+                await ApiClient.PostAsync($"{_apiBasePath}/material-items/{parentId}/refresh-from-catalog",
+                    JsonSerializer.Serialize(new { }));
             }
 
             await LoadDataAsync();
@@ -905,6 +962,138 @@ public partial class CostingTreeControl : UserControl
     }
 
     // ══════════════════════════════════════════════════
+    // MATERIAL PRODUCT ACTIONS (5 pulsanti)
+    // ══════════════════════════════════════════════════
+
+    /// <summary>Toggle is_active su variante materiale</summary>
+    private async void ChkMaterialActive_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox chk || chk.Tag is not MaterialTreeRow mat) return;
+        try
+        {
+            await ApiClient.PatchAsync($"{_apiBasePath}/material-items/{mat.DbId}/toggle-active",
+                JsonSerializer.Serialize(new { isActive = mat.IsActive }));
+
+            // Aggiorna totali del gruppo e header materiali
+            var group = _materialProducts.FirstOrDefault(g => g.Variants.Contains(mat));
+            group?.NotifyTotals();
+            UpdateHeaderTotals();
+        }
+        catch (Exception ex)
+        {
+            mat.IsActive = !mat.IsActive; // rollback
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>1: Aggiorna locale da catalogo</summary>
+    private async void BtnRefreshMaterialFromCatalog_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
+        if (!group.HasCatalogLink)
+        {
+            MessageBox.Show("Questo prodotto non è collegato al catalogo.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show($"Sovrascrivere '{group.ParentName}' con i dati del catalogo?\nLe modifiche locali andranno perse.",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"{_apiBasePath}/material-items/{group.ParentId}/refresh-from-catalog",
+                JsonSerializer.Serialize(new { }));
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>2: Push locale → catalogo</summary>
+    private async void BtnPushMaterialToCatalog_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
+        if (!group.HasCatalogLink)
+        {
+            MessageBox.Show("Questo prodotto non è collegato al catalogo.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show($"Aggiornare il catalogo con i dati locali di '{group.ParentName}'?",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"{_apiBasePath}/material-items/{group.ParentId}/push-to-catalog",
+                JsonSerializer.Serialize(new { }));
+            MessageBox.Show("Catalogo aggiornato.", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>3: Modifica descrizione RTF</summary>
+    private async void BtnEditMaterialRtf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
+
+        var dlg = new MaterialRtfDialog(group.ParentName, group.DescriptionRtf)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                group.DescriptionRtf = dlg.HtmlContent;
+                // Salva description_rtf nel DB
+                var body = new
+                {
+                    description = group.ParentName,
+                    code = "",
+                    descriptionRtf = dlg.HtmlContent,
+                    quantity = 0m,
+                    unitCost = 0m,
+                    markupValue = 1.300m,
+                    itemType = "PRODUCT",
+                    sortOrder = 0,
+                    isActive = true
+                };
+                await ApiClient.PutAsync($"{_apiBasePath}/material-items/{group.ParentId}",
+                    JsonSerializer.Serialize(body));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Errore salvataggio: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    /// <summary>4: Clona prodotto materiale</summary>
+    private async void BtnCloneMaterialProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
+
+        var result = MessageBox.Show(
+            $"Duplicare \"{group.ParentName}\" con tutte le varianti?",
+            "Conferma duplicazione", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"{_apiBasePath}/material-items/{group.ParentId}/clone",
+                JsonSerializer.Serialize(new { }));
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ══════════════════════════════════════════════════
     // HELPERS
     // ══════════════════════════════════════════════════
 
@@ -988,52 +1177,61 @@ public partial class CostingTreeControl : UserControl
         txtFinalPriceHeader.Text = $"{_pricingVM.FinalOfferPrice:N2} EUR";
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // DISTRIBUZIONE COSTI — unico flusso consolidato
+    //
+    // Regola fondamentale: le righe SHADOWED (occhiolino) sono
+    // "assenti" dalla tabella. Non ricevono percentuali, non ricevono
+    // importi. Il loro costo base (SaleAmount) viene spalmato
+    // proporzionalmente sulle righe visibili come ShadowedAmount.
+    //
+    // Flusso:
+    //   1. RebalanceDistPct()  — distribuisce % tra le righe visibili
+    //   2. ApplyAmounts()      — calcola EUR da % (righe visibili)
+    //                           + azzera tutto sulle shadowed
+    //   3. ApplyShadow()       — spalma il costo delle shadowed sulle visibili
+    // ══════════════════════════════════════════════════════════════
+
     private void BuildDistributionRows(ProjectCostingData data)
     {
-        // Preserve shadow state
+        // Preserve shadow state from UI (toggle occhiolino può essere cambiato senza save)
         var shadowState = _pricingVM.DistributionRows.ToDictionary(
             r => $"{r.RowType}_{r.SectionId}_{r.ItemId}",
             r => r.IsShadowed);
 
         _pricingVM.DistributionRows.Clear();
 
-        // Resource sections (unique by name)
+        // ── Raccogli dati sorgente ──
+
         var allSections = (data.CostSections ?? new())
             .Where(s => s.IsEnabled)
             .GroupBy(s => s.Name?.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
 
-        // Material items: use the same leaf items from _materialRows to ensure consistency
         var allMatItems = _materialRows
             .Select(r => new ProjectMaterialItemDto
             {
-                Id = r.DbId,
-                SectionId = r.SectionId,
-                ParentItemId = r.ParentItemId,
-                Description = r.Description,
-                Quantity = r.Quantity,
-                UnitCost = r.UnitCost,
-                MarkupValue = r.MarkupValue,
-                ItemType = r.ItemType
+                Id = r.DbId, SectionId = r.SectionId, ParentItemId = r.ParentItemId,
+                Description = r.Description, Quantity = r.Quantity,
+                UnitCost = r.UnitCost, MarkupValue = r.MarkupValue, ItemType = r.ItemType
             })
             .ToList();
-        // Restore distribution data (contingency/margin pins) from original data
+
+        // Ripristina pin/shadow dai dati originali DB
         var allFlatItems = (data.MaterialSections ?? new()).SelectMany(ms => ms.Items ?? new()).ToList();
         foreach (var mat in allMatItems)
         {
             var orig = allFlatItems.FirstOrDefault(i => i.Id == mat.Id);
-            if (orig != null)
-            {
-                mat.ContingencyPct = orig.ContingencyPct;
-                mat.MarginPct = orig.MarginPct;
-                mat.ContingencyPinned = orig.ContingencyPinned;
-                mat.MarginPinned = orig.MarginPinned;
-                mat.IsShadowed = orig.IsShadowed;
-            }
+            if (orig == null) continue;
+            mat.ContingencyPct = orig.ContingencyPct;
+            mat.MarginPct = orig.MarginPct;
+            mat.ContingencyPinned = orig.ContingencyPinned;
+            mat.MarginPinned = orig.MarginPinned;
+            mat.IsShadowed = orig.IsShadowed;
         }
 
-        // Calculate sale amounts from tree rows
+        // Vendite da tree rows
         var sectionSales = new Dictionary<int, decimal>();
         foreach (var grp in _resourceRows)
             foreach (var sec in grp.Children)
@@ -1043,40 +1241,28 @@ public partial class CostingTreeControl : UserControl
         foreach (var mat in _materialRows)
             materialSales[mat.DbId] = mat.TotalSale;
 
-        // Step 1: Rebalance contingency %
+        // ── 1. Distribuisci percentuali (solo righe visibili) ──
         RebalanceDistPct(allSections, allMatItems, sectionSales, materialSales, "contingency");
-
-        // Step 2: Rebalance margin %
         RebalanceDistPct(allSections, allMatItems, sectionSales, materialSales, "margin");
 
-        // Step 3: Build rows
+        // ── 2. Crea DistributionRowVM ──
         foreach (var sec in allSections)
         {
             decimal sale = sectionSales.GetValueOrDefault(sec.Id, 0);
             if (sale == 0) continue;
 
-            var row = new DistributionRowVM
-            {
-                RowType = "R",
-                SectionId = sec.Id,
-                ItemId = 0,
-                SectionName = sec.Name ?? "",
-                SaleAmount = sale,
-                ContingencyPct = sec.ContingencyPct,
-                ContingencyAmount = sec.ContingencyPct * _pricingVM.ContingencyAmount,
-                IsContingencyPinned = sec.ContingencyPinned,
-                MarginPct = sec.MarginPct,
-                MarginAmount = sec.MarginPct * _pricingVM.NegotiationMarginAmount,
-                IsMarginPinned = sec.MarginPinned,
-                IsShadowed = sec.IsShadowed,
-                SectionTotal = sale + (sec.ContingencyPct * _pricingVM.ContingencyAmount) + (sec.MarginPct * _pricingVM.NegotiationMarginAmount)
-            };
-
+            bool shadowed = sec.IsShadowed;
             string key = $"R_{sec.Id}_0";
-            if (shadowState.TryGetValue(key, out bool wasShadowed))
-                row.IsShadowed = wasShadowed;
+            if (shadowState.TryGetValue(key, out bool uiShadowed)) shadowed = uiShadowed;
 
-            _pricingVM.DistributionRows.Add(row);
+            _pricingVM.DistributionRows.Add(new DistributionRowVM
+            {
+                RowType = "R", SectionId = sec.Id, ItemId = 0,
+                SectionName = sec.Name ?? "", SaleAmount = sale,
+                ContingencyPct = sec.ContingencyPct, IsContingencyPinned = sec.ContingencyPinned,
+                MarginPct = sec.MarginPct, IsMarginPinned = sec.MarginPinned,
+                IsShadowed = shadowed
+            });
         }
 
         foreach (var item in allMatItems)
@@ -1084,35 +1270,29 @@ public partial class CostingTreeControl : UserControl
             decimal sale = materialSales.GetValueOrDefault(item.Id, 0);
             if (sale == 0) continue;
 
-            var row = new DistributionRowVM
-            {
-                RowType = "M",
-                SectionId = 0,
-                ItemId = item.Id,
-                SectionName = item.Description ?? "",
-                SaleAmount = sale,
-                ContingencyPct = item.ContingencyPct,
-                ContingencyAmount = item.ContingencyPct * _pricingVM.ContingencyAmount,
-                IsContingencyPinned = item.ContingencyPinned,
-                MarginPct = item.MarginPct,
-                MarginAmount = item.MarginPct * _pricingVM.NegotiationMarginAmount,
-                IsMarginPinned = item.MarginPinned,
-                IsShadowed = item.IsShadowed,
-                SectionTotal = sale + (item.ContingencyPct * _pricingVM.ContingencyAmount) + (item.MarginPct * _pricingVM.NegotiationMarginAmount)
-            };
-
+            bool shadowed = item.IsShadowed;
             string key = $"M_0_{item.Id}";
-            if (shadowState.TryGetValue(key, out bool wasShadowed))
-                row.IsShadowed = wasShadowed;
+            if (shadowState.TryGetValue(key, out bool uiShadowed)) shadowed = uiShadowed;
 
-            _pricingVM.DistributionRows.Add(row);
+            _pricingVM.DistributionRows.Add(new DistributionRowVM
+            {
+                RowType = "M", SectionId = 0, ItemId = item.Id,
+                SectionName = item.Description ?? "", SaleAmount = sale,
+                ContingencyPct = item.ContingencyPct, IsContingencyPinned = item.ContingencyPinned,
+                MarginPct = item.MarginPct, IsMarginPinned = item.MarginPinned,
+                IsShadowed = shadowed
+            });
         }
 
-        // Step 4: Recalc shadow
-        RecalcShadow();
-        _pricingVM.NotifyDistributionTotals();
+        // ── 3. Calcola importi + shadow ──
+        ApplyAmountsAndShadow();
     }
 
+    /// <summary>
+    /// Distribuisce le % di contingency/margin tra le righe NON shadowed.
+    /// Le shadowed ricevono 0%. Le pinned mantengono il loro valore.
+    /// Le unpinned si dividono il rimanente proporzionalmente alla vendita.
+    /// </summary>
     private void RebalanceDistPct(
         List<ProjectCostSectionDto> sections,
         List<ProjectMaterialItemDto> matItems,
@@ -1120,87 +1300,88 @@ public partial class CostingTreeControl : UserControl
         Dictionary<int, decimal> materialSales,
         string field)
     {
-        bool isContingency = field == "contingency";
-
+        bool isCont = field == "contingency";
         decimal pinnedSum = 0;
         var unpinned = new List<(Action<decimal> Set, decimal Sale)>();
 
         foreach (var s in sections)
         {
+            if (s.IsShadowed) { ZeroPct(s, isCont); continue; }
             decimal sale = sectionSales.GetValueOrDefault(s.Id, 0);
             if (sale == 0) continue;
-
-            bool pinned = isContingency ? s.ContingencyPinned : s.MarginPinned;
-            decimal pct = isContingency ? s.ContingencyPct : s.MarginPct;
-
-            if (pinned)
-                pinnedSum += pct;
+            if (isCont ? s.ContingencyPinned : s.MarginPinned)
+                pinnedSum += isCont ? s.ContingencyPct : s.MarginPct;
             else
-                unpinned.Add((v => { if (isContingency) s.ContingencyPct = v; else s.MarginPct = v; }, sale));
+                unpinned.Add((v => { if (isCont) s.ContingencyPct = v; else s.MarginPct = v; }, sale));
         }
 
         foreach (var i in matItems)
         {
+            if (i.IsShadowed) { ZeroPct(i, isCont); continue; }
             decimal sale = materialSales.GetValueOrDefault(i.Id, 0);
             if (sale == 0) continue;
-
-            bool pinned = isContingency ? i.ContingencyPinned : i.MarginPinned;
-            decimal pct = isContingency ? i.ContingencyPct : i.MarginPct;
-
-            if (pinned)
-                pinnedSum += pct;
+            if (isCont ? i.ContingencyPinned : i.MarginPinned)
+                pinnedSum += isCont ? i.ContingencyPct : i.MarginPct;
             else
-                unpinned.Add((v => { if (isContingency) i.ContingencyPct = v; else i.MarginPct = v; }, sale));
+                unpinned.Add((v => { if (isCont) i.ContingencyPct = v; else i.MarginPct = v; }, sale));
         }
 
         decimal remaining = Math.Max(0, 1m - pinnedSum);
         decimal totalSale = unpinned.Sum(u => u.Sale);
-
         foreach (var (set, sale) in unpinned)
-            set(totalSale > 0 ? Math.Round(sale / totalSale * remaining, 4) : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
+            set(totalSale > 0
+                ? Math.Round(sale / totalSale * remaining, 4)
+                : Math.Round(remaining / Math.Max(1, unpinned.Count), 4));
+
+        static void ZeroPct(dynamic dto, bool isCont)
+        {
+            if (isCont) dto.ContingencyPct = 0m; else dto.MarginPct = 0m;
+        }
     }
 
-    private void RecalcShadow()
+    /// <summary>
+    /// Unico punto che calcola gli importi EUR su tutte le righe distribuzione.
+    /// Shadowed: tutto a zero. Visibili: importi da %, poi shadow spalmato.
+    /// </summary>
+    private void ApplyAmountsAndShadow()
     {
-        var shadowed = _pricingVM.DistributionRows.Where(r => r.IsShadowed).ToList();
-        var visible = _pricingVM.DistributionRows.Where(r => !r.IsShadowed).ToList();
+        decimal contPool = _pricingVM.ContingencyAmount;
+        decimal margPool = _pricingVM.NegotiationMarginAmount;
 
-        decimal totalShadowedSale = shadowed.Sum(r => r.SaleAmount);
-        decimal totalVisibleSale = visible.Sum(r => r.SaleAmount);
-
+        // Azzera shadowed, calcola visibili
         foreach (var row in _pricingVM.DistributionRows)
         {
             if (row.IsShadowed)
             {
-                row.ShadowedAmount = 0;
-                row.ShadowedPct = 0;
+                row.ContingencyPct = 0; row.ContingencyAmount = 0;
+                row.MarginPct = 0; row.MarginAmount = 0;
+                row.ShadowedAmount = 0; row.ShadowedPct = 0;
                 row.SectionTotal = 0;
             }
-            else if (totalVisibleSale > 0 && totalShadowedSale > 0)
+            else
+            {
+                row.ContingencyAmount = row.ContingencyPct * contPool;
+                row.MarginAmount = row.MarginPct * margPool;
+                row.ShadowedAmount = 0; row.ShadowedPct = 0;
+                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+            }
+        }
+
+        // Spalma il costo delle righe shadowed sulle visibili (proporzionale alla vendita)
+        decimal totalShadowedSale = _pricingVM.DistributionRows.Where(r => r.IsShadowed).Sum(r => r.SaleAmount);
+        decimal totalVisibleSale = _pricingVM.DistributionRows.Where(r => !r.IsShadowed).Sum(r => r.SaleAmount);
+
+        if (totalShadowedSale > 0 && totalVisibleSale > 0)
+        {
+            foreach (var row in _pricingVM.DistributionRows.Where(r => !r.IsShadowed))
             {
                 decimal quota = row.SaleAmount / totalVisibleSale;
                 row.ShadowedAmount = Math.Round(totalShadowedSale * quota, 2);
                 row.ShadowedPct = quota;
-                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount + row.ShadowedAmount;
-            }
-            else
-            {
-                row.ShadowedAmount = 0;
-                row.ShadowedPct = 0;
-                row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
+                row.SectionTotal += row.ShadowedAmount;
             }
         }
-    }
 
-    private void RecalcDistributionInPlace()
-    {
-        foreach (var row in _pricingVM.DistributionRows)
-        {
-            row.ContingencyAmount = row.ContingencyPct * _pricingVM.ContingencyAmount;
-            row.MarginAmount = row.MarginPct * _pricingVM.NegotiationMarginAmount;
-            row.SectionTotal = row.SaleAmount + row.ContingencyAmount + row.MarginAmount;
-        }
-        RecalcShadow();
         _pricingVM.NotifyDistributionTotals();
     }
 
@@ -1250,7 +1431,7 @@ public partial class CostingTreeControl : UserControl
 
             if (!changed) return;
 
-            RecalcDistributionInPlace();
+            ApplyAmountsAndShadow();
             NotifyPricingUpdated();
             await SavePricingMarkups();
             await SaveAllDistributions();
@@ -1274,36 +1455,42 @@ public partial class CostingTreeControl : UserControl
             { item.ContingencyPinned = false; item.MarginPinned = false; }
 
         BuildDistributionRows(_lastData);
+        NotifyPricingUpdated();
         await SaveAllDistributions();
     }
 
     private async void ShadowToggle_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.DataContext is DistributionRowVM row)
-        {
-            row.IsShadowed = !row.IsShadowed;
+        if (sender is not Button btn || btn.DataContext is not DistributionRowVM row) return;
 
-            // Sync shadow state back to underlying data
-            if (_lastData != null)
+        row.IsShadowed = !row.IsShadowed;
+
+        // Sync shadow state back to underlying data
+        if (_lastData != null)
+        {
+            if (row.RowType == "R")
             {
-                if (row.RowType == "R")
-                {
-                    var sec = (_lastData.CostSections ?? new()).FirstOrDefault(s => s.Id == row.SectionId);
-                    if (sec != null) sec.IsShadowed = row.IsShadowed;
-                }
-                else
-                {
-                    var item = (_lastData.MaterialSections ?? new())
-                        .SelectMany(ms => ms.Items ?? new())
-                        .FirstOrDefault(i => i.Id == row.ItemId);
-                    if (item != null) item.IsShadowed = row.IsShadowed;
-                }
+                var sec = (_lastData.CostSections ?? new()).FirstOrDefault(s => s.Id == row.SectionId);
+                if (sec != null) sec.IsShadowed = row.IsShadowed;
+            }
+            else
+            {
+                var item = (_lastData.MaterialSections ?? new())
+                    .SelectMany(ms => ms.Items ?? new())
+                    .FirstOrDefault(i => i.Id == row.ItemId);
+                if (item != null) item.IsShadowed = row.IsShadowed;
             }
 
-            RecalcShadow();
-            _pricingVM.NotifyDistributionTotals();
-            await SaveAllDistributions();
+            // Rebuild completo: RebalanceDistPct ridistribuisce le % includendo/escludendo la riga
+            BuildDistributionRows(_lastData);
         }
+        else
+        {
+            ApplyAmountsAndShadow();
+        }
+
+        NotifyPricingUpdated();
+        await SaveAllDistributions();
     }
 
     private async void DistPct_KeyDown(object sender, KeyEventArgs e)
@@ -1390,6 +1577,7 @@ public partial class CostingTreeControl : UserControl
         }
 
         BuildDistributionRows(_lastData);
+        NotifyPricingUpdated();
         await SaveAllDistributions();
     }
 

@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -60,6 +62,9 @@ public partial class LoginWindow : Window
                 // Carica reparti e competenze per il PermissionEngine
                 await LoadUserContextAsync();
 
+                // Carica feature e livelli per il sistema permessi a livelli
+                await LoadAuthFeaturesAsync();
+
                 new MainWindow().Show();
                 Close();
             }
@@ -114,6 +119,54 @@ public partial class LoginWindow : Window
                 Enumerable.Empty<string>(),
                 Enumerable.Empty<string>(),
                 Enumerable.Empty<string>());
+        }
+    }
+
+    private static async Task LoadAuthFeaturesAsync()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/auth-levels/features/my");
+            JsonDocument doc = JsonDocument.Parse(json);
+            JsonElement root = doc.RootElement;
+
+            if (!root.GetProperty("success").GetBoolean()) return;
+
+            JsonElement data = root.GetProperty("data");
+            int userLevel = data.GetProperty("userLevel").GetInt32();
+
+            var features = new List<AuthFeatureDto>();
+            foreach (JsonElement f in data.GetProperty("features").EnumerateArray())
+            {
+                features.Add(new AuthFeatureDto
+                {
+                    Id = f.GetProperty("id").GetInt32(),
+                    FeatureKey = f.GetProperty("featureKey").GetString() ?? "",
+                    DisplayName = f.GetProperty("displayName").GetString() ?? "",
+                    Category = f.GetProperty("category").GetString() ?? "",
+                    MinLevel = f.GetProperty("minLevel").GetInt32(),
+                    Behavior = f.GetProperty("behavior").GetString() ?? "HIDDEN"
+                });
+            }
+
+            var levels = new List<AuthLevelDto>();
+            foreach (JsonElement l in data.GetProperty("levels").EnumerateArray())
+            {
+                levels.Add(new AuthLevelDto
+                {
+                    Id = l.GetProperty("id").GetInt32(),
+                    LevelValue = l.GetProperty("levelValue").GetInt32(),
+                    RoleName = l.GetProperty("roleName").GetString() ?? "",
+                    DisplayName = l.GetProperty("displayName").GetString() ?? "",
+                    SortOrder = l.GetProperty("sortOrder").GetInt32()
+                });
+            }
+
+            PermissionEngine.LoadFeatures(features, levels, userLevel);
+        }
+        catch
+        {
+            // Se il server non supporta ancora i livelli, fallback silenzioso
         }
     }
 

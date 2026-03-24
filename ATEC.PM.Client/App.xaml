@@ -14,6 +14,7 @@
                 <ResourceDictionary Source="/Resources/TreeviewStyles.xaml" />
                 <ResourceDictionary Source="/Resources/ComboStyles.xaml" />
                 <ResourceDictionary Source="/Resources/TextBlockStyles.xaml" />
+                <ResourceDictionary Source="/Resources/ToggleSwitchStyle.xaml" />
                 <ResourceDictionary Source="/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

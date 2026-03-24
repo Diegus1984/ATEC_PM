@@ -736,8 +736,72 @@ public class DbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ══════════════════════════════════════════════════════════
+        // SISTEMA PERMESSI A LIVELLI (stile VisiWin7)
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS auth_levels (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            level_value INT NOT NULL UNIQUE,
+            role_name VARCHAR(30) NOT NULL UNIQUE,
+            display_name VARCHAR(50) NOT NULL,
+            sort_order INT DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS auth_features (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            feature_key VARCHAR(100) NOT NULL UNIQUE,
+            display_name VARCHAR(100) NOT NULL,
+            category VARCHAR(50) DEFAULT 'navigation',
+            min_level INT NOT NULL DEFAULT 0,
+            behavior VARCHAR(20) DEFAULT 'HIDDEN'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
         // SEED DATA
         // ══════════════════════════════════════════════════════════
+
+        // Seed livelli autorizzazione
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_levels") == 0)
+        {
+            c.Execute(@"INSERT INTO auth_levels (level_value, role_name, display_name, sort_order) VALUES
+                (0, 'TECH',          'Tecnico',          0),
+                (1, 'RESP_REPARTO',  'Resp. Reparto',    1),
+                (2, 'PM',            'Project Manager',  2),
+                (3, 'ADMIN',         'Amministratore',   3),
+                (4, 'DEVELOPER',     'Developer',        4)");
+            Console.WriteLine("[DB] Seed auth_levels completato.");
+        }
+
+        // Seed feature con livello minimo
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_features") == 0)
+        {
+            c.Execute(@"INSERT INTO auth_features (feature_key, display_name, category, min_level, behavior) VALUES
+                ('nav.dashboard',         'Dashboard',               'navigation', 0, 'HIDDEN'),
+                ('nav.timesheet',         'Timesheet',               'navigation', 0, 'HIDDEN'),
+                ('nav.commesse',          'Commesse',                'navigation', 0, 'HIDDEN'),
+                ('nav.preventivi_nuovo',  'Preventivi (Nuovo)',      'navigation', 1, 'HIDDEN'),
+                ('nav.preventivi',        'Preventivi',              'navigation', 2, 'HIDDEN'),
+                ('nav.offerte',           'Offerte',                 'navigation', 2, 'HIDDEN'),
+                ('nav.cat_preventivi',    'Cat. Preventivi',         'navigation', 2, 'HIDDEN'),
+                ('nav.clienti',           'Clienti',                 'navigation', 2, 'HIDDEN'),
+                ('nav.fornitori',         'Fornitori',               'navigation', 2, 'HIDDEN'),
+                ('nav.catalogo',          'Catalogo Articoli',       'navigation', 1, 'HIDDEN'),
+                ('nav.codex',             'Codex Articoli',          'navigation', 1, 'HIDDEN'),
+                ('nav.codex_composizione','Composizione Codex',      'navigation', 1, 'HIDDEN'),
+                ('nav.utenti',            'Utenti',                  'navigation', 3, 'HIDDEN'),
+                ('nav.config_sezioni',    'Configurazione Sezioni',  'navigation', 3, 'HIDDEN'),
+                ('nav.ddp_destinazioni',  'Destinazioni DDP',        'navigation', 1, 'HIDDEN'),
+                ('nav.backup',            'Backup DB',               'navigation', 3, 'HIDDEN'),
+                ('nav.permessi',          'Gestione Permessi',       'navigation', 3, 'HIDDEN'),
+                ('action.create_project', 'Crea Commessa',           'action',     2, 'DISABLED'),
+                ('action.edit_project',   'Modifica Commessa',       'action',     2, 'DISABLED'),
+                ('action.delete_project', 'Elimina Commessa',        'action',     3, 'HIDDEN'),
+                ('data.budget',           'Dati Budget',             'data',       2, 'HIDDEN'),
+                ('data.costs',            'Dati Costi',              'data',       2, 'HIDDEN'),
+                ('data.revenue',          'Dati Ricavi',             'data',       2, 'HIDDEN'),
+                ('data.hourly_cost',      'Costo Orario',            'data',       3, 'HIDDEN')");
+            Console.WriteLine("[DB] Seed auth_features completato.");
+        }
 
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
         {

@@ -511,6 +511,325 @@ public class QuotePdfService
         }).GeneratePdf();
     }
 
+    // ═══════════════════════════════════════════════════════
+    // GENERATE IMPIANTO — PDF con costing, materiali, distribuzione
+    // ═══════════════════════════════════════════════════════
+
+    // Colori gruppi (stessi del client CostingTreeControl)
+    private static readonly Dictionary<string, string> GroupColors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["GESTIONE"] = "#3B82F6",
+        ["PRESCHIERAMENTO"] = "#F59E0B",
+        ["INSTALLAZIONE"] = "#8B5CF6",
+        ["OPZIONE"] = "#EF4444"
+    };
+
+    public byte[] GenerateImpianto(QuoteDto quote, ProjectCostingData costing)
+    {
+        var allItems = quote.Items.OrderBy(i => i.SortOrder).ToList();
+        var normalItems = allItems.Where(i => !i.IsAutoInclude).ToList();
+        var autoIncludeItems = allItems.Where(i => i.IsAutoInclude).ToList();
+        // IMPIANTO: NO prodotti catalogo CMS — solo contenuti (content) e auto-include
+        var contentItems = normalItems.Where(i => i.ItemType == "content" && i.ParentItemId == null).ToList();
+        var autoIncludeParents = autoIncludeItems.Where(i => i.ParentItemId == null).ToList();
+        string quoteRef = $"Prev. {quote.QuoteNumber}";
+
+        // Costing calculations
+        var enabledSections = (costing.CostSections ?? new()).Where(s => s.IsEnabled).ToList();
+        var groups = enabledSections.GroupBy(s => s.GroupName ?? "ALTRO").OrderBy(g => g.First().SortOrder);
+        var matSections = (costing.MaterialSections ?? new()).Where(s => s.IsEnabled).ToList();
+        var allMatItems = matSections.SelectMany(ms => ms.Items ?? new()).ToList();
+        var pricing = costing.Pricing ?? new();
+
+        // Totali risorse
+        decimal totalResourceCost = enabledSections.Sum(s => (s.Resources ?? new()).Sum(r => r.TotalCost));
+        decimal totalResourceSale = enabledSections.Sum(s => (s.Resources ?? new()).Sum(r => r.TotalSale));
+        decimal totalTravelCost = enabledSections.Sum(s => (s.Resources ?? new()).Sum(r => r.TravelTotal + r.AccommodationTotal));
+        decimal totalAllowanceCost = enabledSections.Sum(s => (s.Resources ?? new()).Sum(r => r.AllowanceTotal));
+
+        // Totali materiali (solo leaf items — parent esclusi)
+        var leafMatItems = allMatItems.Where(i => !allMatItems.Any(c => c.ParentItemId == i.Id)).ToList();
+        decimal totalMaterialCost = leafMatItems.Sum(i => i.TotalCost);
+        decimal totalMaterialSale = leafMatItems.Sum(i => i.TotalSale);
+
+        // Pricing
+        decimal netPrice = totalResourceSale + totalMaterialSale;
+        decimal contingencyAmt = netPrice * pricing.ContingencyPct;
+        decimal offerPrice = netPrice + contingencyAmt;
+        decimal marginAmt = offerPrice * pricing.NegotiationMarginPct;
+        decimal finalPrice = offerPrice + marginAmt;
+
+        // Distribuzione (solo non-shadowed)
+        var distSections = enabledSections
+            .GroupBy(s => s.Name?.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Where(s => !s.IsShadowed)
+            .ToList();
+        var distMatItems = leafMatItems.Where(i => !i.IsShadowed).ToList();
+
+        return Document.Create(container =>
+        {
+            // ═══ COPERTINA (identica al SERVICE) ═══
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(0);
+                page.Content().Column(col =>
+                {
+                    col.Item().Height(6).Background(BluePrimary);
+                    col.Item().Padding(60).Column(inner =>
+                    {
+                        inner.Item().Height(80);
+                        inner.Item().Text("Preventivo riservato per").FontSize(14).FontColor(TextLight);
+                        inner.Item().Height(12);
+                        inner.Item().Text(quote.CustomerName).FontSize(28).Bold().FontColor(TextDark);
+                        inner.Item().Height(30);
+                        inner.Item().Width(80).Height(3).Background(BluePrimary);
+                        inner.Item().Height(30);
+                        inner.Item().Text(quote.Title).FontSize(18).FontColor(TextMedium).LineHeight(1.4f);
+                    });
+                    col.Item().ExtendVertical().AlignBottom().Padding(60).Column(bottom =>
+                    {
+                        bottom.Item().LineHorizontal(1).LineColor(BorderColor);
+                        bottom.Item().Height(12);
+                        bottom.Item().Row(row =>
+                        {
+                            row.RelativeItem().Text($"N. {quote.QuoteNumber}").FontSize(11).FontColor(TextMedium);
+                            if (quote.Revision > 0)
+                                row.ConstantItem(80).Text($"Rev. {quote.Revision}").FontSize(11).FontColor("#D97706");
+                            row.ConstantItem(120).AlignRight().Text($"Data: {quote.CreatedAt:dd/MM/yyyy}").FontSize(11).FontColor(TextMedium);
+                        });
+                    });
+                    col.Item().Height(6).Background(BluePrimary);
+                });
+                page.Footer().Text("");
+            });
+
+            // ═══ CONTENUTO: descrizioni + contenuti + condizioni ═══
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.MarginTop(1.5f, Unit.Centimetre);
+                page.MarginBottom(1.5f, Unit.Centimetre);
+                page.MarginHorizontal(2, Unit.Centimetre);
+                page.Header().Element(c => ComposePageHeader(c, quote));
+                page.Footer().Element(c => ComposeFooter(c, quoteRef));
+
+                page.Content().Column(col =>
+                {
+                    // Destinatario
+                    col.Item().Background(BgLight).Border(1).BorderColor(BorderColor).Padding(12).Column(dest =>
+                    {
+                        dest.Item().Text("Spett.le").FontSize(9).FontColor(TextLight);
+                        dest.Item().Text(quote.CustomerName).FontSize(12).Bold().FontColor(TextDark);
+                        if (!string.IsNullOrEmpty(quote.ContactName1))
+                            dest.Item().Text($"Alla c.a. {quote.ContactName1}").FontSize(9).FontColor(TextMedium);
+                        if (!string.IsNullOrEmpty(quote.ContactName2))
+                            dest.Item().Text($"c.c. {quote.ContactName2}").FontSize(9).FontColor(TextMedium);
+                        if (!string.IsNullOrEmpty(quote.ContactName3))
+                            dest.Item().Text($"c.c. {quote.ContactName3}").FontSize(9).FontColor(TextMedium);
+                    });
+                    col.Item().Height(8);
+
+                    // Info
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text($"Data: {quote.CreatedAt:dd/MM/yyyy}").FontSize(9).FontColor(TextMedium);
+                            c.Item().Text($"N° Preventivo: {quote.QuoteNumber}").FontSize(9).FontColor(TextMedium);
+                        });
+                    });
+                    col.Item().Height(12);
+                    col.Item().Text("PREVENTIVO").FontSize(16).Bold().FontColor(BluePrimary);
+                    col.Item().Height(8);
+                    col.Item().Text("In riferimento alla Vostra gradita richiesta, siamo lieti di sottoporvi la nostra migliore offerta.")
+                        .FontSize(9).FontColor(TextMedium).LineHeight(1.4f);
+                    col.Item().Height(16);
+
+                    // ── Descrizioni prodotti materiale (con foto, ogni prodotto su pagina nuova) ──
+                    var matParents = allMatItems.Where(i => i.ParentItemId == null && !string.IsNullOrEmpty(i.DescriptionRtf)).ToList();
+                    foreach (var matParent in matParents)
+                    {
+                        col.Item().PageBreak();
+                        col.Item().Column(section =>
+                        {
+                            section.Item().Height(8);
+                            section.Item().Background("#7C3AED").Padding(8)
+                                .Text((matParent.Description ?? "").ToUpperInvariant()).FontSize(11).Bold().FontColor(Colors.White);
+                            section.Item().Height(8);
+                            section.Item().Element(c => RenderDescription(c, matParent.DescriptionRtf!));
+                            section.Item().Height(12);
+                        });
+                    }
+
+                    // Contenuti normali
+                    foreach (var content in contentItems)
+                    {
+                        col.Item().Column(section =>
+                        {
+                            section.Item().Height(8);
+                            section.Item().Background(BluePrimary).Padding(8)
+                                .Text(content.Name.ToUpperInvariant()).FontSize(11).Bold().FontColor(Colors.White);
+                            section.Item().Height(8);
+                            if (!string.IsNullOrEmpty(content.DescriptionRtf))
+                                section.Item().Element(c => RenderDescription(c, content.DescriptionRtf));
+                            section.Item().Height(12);
+                        });
+                    }
+
+                    // Auto-include (ogni contenuto su pagina nuova)
+                    foreach (var autoParent in autoIncludeParents)
+                    {
+                        col.Item().PageBreak();
+                        col.Item().Column(section =>
+                        {
+                            section.Item().Height(8);
+                            section.Item().Background(BluePrimary).Padding(8)
+                                .Text(autoParent.Name.ToUpperInvariant()).FontSize(11).Bold().FontColor(Colors.White);
+                            section.Item().Height(8);
+                            if (!string.IsNullOrEmpty(autoParent.DescriptionRtf))
+                                section.Item().Element(c => RenderDescription(c, autoParent.DescriptionRtf));
+                            section.Item().Height(12);
+                        });
+                    }
+
+                    // Condizioni
+                    bool hasConditions = quote.ValidityDays > 0 || quote.DeliveryDays > 0
+                        || !string.IsNullOrEmpty(quote.PaymentType) || !string.IsNullOrEmpty(quote.NotesQuote);
+                    if (hasConditions)
+                    {
+                        col.Item().Height(8);
+                        col.Item().Background(BluePrimary).Padding(8)
+                            .Text("CONDIZIONI DI VENDITA").FontSize(11).Bold().FontColor(Colors.White);
+                        col.Item().Height(10);
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(cd => { cd.ConstantColumn(160); cd.RelativeColumn(); });
+                            void CR(string l, string v)
+                            {
+                                table.Cell().Border(0.5f).BorderColor(BorderColor).Padding(6).Text(l).FontSize(9).Bold().FontColor(TextMedium);
+                                table.Cell().Border(0.5f).BorderColor(BorderColor).Padding(6).Text(v).FontSize(9).FontColor(TextDark).LineHeight(1.3f);
+                            }
+                            if (quote.ValidityDays > 0) CR("Validità offerta", $"{quote.ValidityDays} giorni solari, dalla data di emissione offerta.");
+                            if (quote.DeliveryDays > 0) CR("Tempo di consegna", $"{quote.DeliveryDays} giorni lavorativi dalla conferma d'ordine.");
+                            CR("Prezzi", "I prezzi sono da considerarsi esclusi di IVA.");
+                            if (!string.IsNullOrEmpty(quote.PaymentType)) CR("Pagamento", quote.PaymentType);
+                            if (!string.IsNullOrEmpty(quote.NotesQuote)) CR("Note", quote.NotesQuote);
+                        });
+                    }
+                });
+            });
+
+            // ═══ PAGINA RIEPILOGO DISTRIBUZIONE ═══
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.MarginTop(1.5f, Unit.Centimetre);
+                page.MarginBottom(1.5f, Unit.Centimetre);
+                page.MarginHorizontal(2, Unit.Centimetre);
+                page.Header().Element(c => ComposePageHeader(c, quote));
+                page.Footer().Element(c => ComposeFooter(c, quoteRef));
+
+                page.Content().Column(col =>
+                {
+                    // ── RIEPILOGO PREVENTIVO ──
+                    col.Item().Background(BluePrimary).Padding(8)
+                        .Text("RIEPILOGO PREVENTIVO").FontSize(11).Bold().FontColor(Colors.White);
+                    col.Item().Height(8);
+
+                    // Tabella commerciale: Nome voce → Prezzo totale (incluso contingency+margine spalmato)
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(cd =>
+                        {
+                            cd.RelativeColumn(4);   // Voce
+                            cd.ConstantColumn(100);  // Importo
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Background("#1E40AF").Padding(6)
+                                .Text("Voce").FontSize(8).Bold().FontColor(Colors.White);
+                            header.Cell().Background("#1E40AF").Padding(6).AlignRight()
+                                .Text("Importo").FontSize(8).Bold().FontColor(Colors.White);
+                        });
+
+                        // Calcolo distribuzione commerciale:
+                        // Ogni riga visibile riceve una quota proporzionale del prezzo finale
+                        // (contingency + margine + shadow spalmato) in base alla sua % di vendita sul totale visibile
+                        decimal visibleSaleTotal = distSections.Sum(s => (s.Resources ?? new()).Sum(r => r.TotalSale))
+                                                 + distMatItems.Sum(i => i.TotalSale);
+
+                        int ri = 0;
+                        decimal grandTotal = 0;
+
+                        // Righe risorse (solo non-shadowed con vendita > 0)
+                        foreach (var sec in distSections)
+                        {
+                            decimal sale = (sec.Resources ?? new()).Sum(r => r.TotalSale);
+                            if (sale == 0) continue;
+                            decimal pct = visibleSaleTotal > 0 ? sale / visibleSaleTotal : 0;
+                            decimal total = Math.Round(finalPrice * pct, 2);
+                            grandTotal += total;
+                            string bg = ri++ % 2 == 0 ? "#FFFFFF" : BgLight;
+
+                            table.Cell().Background(bg).Padding(6)
+                                .Text(sec.Name ?? "").FontSize(9).FontColor(TextDark);
+                            table.Cell().Background(bg).Padding(6).AlignRight()
+                                .Text($"€ {total:N2}").FontSize(9).FontColor(TextDark);
+                        }
+
+                        // Righe materiali (solo non-shadowed con vendita > 0)
+                        foreach (var item in distMatItems)
+                        {
+                            if (item.TotalSale == 0) continue;
+                            decimal pct = visibleSaleTotal > 0 ? item.TotalSale / visibleSaleTotal : 0;
+                            decimal total = Math.Round(finalPrice * pct, 2);
+                            grandTotal += total;
+                            string bg = ri++ % 2 == 0 ? "#FFFFFF" : BgLight;
+
+                            table.Cell().Background(bg).Padding(6)
+                                .Text(item.Description ?? "").FontSize(9).FontColor(TextDark);
+                            table.Cell().Background(bg).Padding(6).AlignRight()
+                                .Text($"€ {total:N2}").FontSize(9).FontColor(TextDark);
+                        }
+
+                        // Riga TOTALE (usa finalPrice per evitare discrepanze arrotondamento)
+                        table.Cell().Background(BluePrimary).Padding(6)
+                            .Text("TOTALE").FontSize(10).Bold().FontColor(Colors.White);
+                        table.Cell().Background(BluePrimary).Padding(6).AlignRight()
+                            .Text($"€ {finalPrice:N2}").FontSize(10).Bold().FontColor(Colors.White);
+                    });
+
+                    col.Item().Height(30);
+
+                    // ── Firma ──
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("Data di conferma").FontSize(9).FontColor(TextLight);
+                            c.Item().Height(30);
+                            c.Item().LineHorizontal(1).LineColor("#9CA3AF");
+                        });
+                        row.ConstantItem(40);
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("Firma per accettazione").FontSize(9).FontColor(TextLight);
+                            c.Item().Height(30);
+                            c.Item().LineHorizontal(1).LineColor("#9CA3AF");
+                        });
+                    });
+
+                    col.Item().Height(8);
+                    col.Item().Text($"N° Preventivo: {quote.QuoteNumber}").FontSize(9).FontColor(TextMedium);
+                    col.Item().Text(quote.CustomerName).FontSize(9).Bold().FontColor(TextDark);
+                });
+            });
+        }).GeneratePdf();
+    }
+
     // ═══════════════════════════════════════════════
     // PAGE HEADER (pagine 2+)
     // ═══════════════════════════════════════════════
@@ -635,11 +954,13 @@ public class QuotePdfService
     {
         if (string.IsNullOrWhiteSpace(html)) return;
 
-        // Estrai immagini
-        var imgMatches = Regex.Matches(html, @"<img[^>]+src\s*=\s*""([^""]+)""", RegexOptions.IgnoreCase);
+        // Estrai immagini (con dimensioni opzionali da attributi width/height)
+        var imgMatches = Regex.Matches(html, @"<img[^>]+src\s*=\s*""([^""]+)""[^>]*>", RegexOptions.IgnoreCase);
         foreach (Match m in imgMatches)
         {
-            string src = m.Groups[1].Value;
+            var srcMatch = Regex.Match(m.Value, @"src\s*=\s*""([^""]+)""", RegexOptions.IgnoreCase);
+            if (!srcMatch.Success) continue;
+            string src = srcMatch.Groups[1].Value;
             string? localPath = ResolveImagePath(src);
             if (localPath != null && File.Exists(localPath))
             {
@@ -647,7 +968,8 @@ public class QuotePdfService
                 {
                     byte[] imgBytes = File.ReadAllBytes(localPath);
                     col.Item().Height(4);
-                    col.Item().Image(imgBytes, ImageScaling.FitArea);
+                    // Limita altezza immagine per evitare che occupi tutta la pagina
+                    col.Item().MaxHeight(250).Image(imgBytes, ImageScaling.FitArea);
                     col.Item().Height(4);
                 }
                 catch { }

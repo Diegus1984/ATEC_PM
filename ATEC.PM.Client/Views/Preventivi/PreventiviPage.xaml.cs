@@ -545,7 +545,10 @@ public partial class PreventiviPage : Page
                 return;
             }
 
+            // Sovrascrive il file precedente (se non è bloccato dal viewer)
             var tempPath = Path.Combine(Path.GetTempPath(), $"preventivo_{_selectedQuoteId}.pdf");
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* bloccato dal viewer, sovrascriviamo */ }
+
             File.WriteAllBytes(tempPath, bytes);
             Process.Start(new ProcessStartInfo(tempPath) { UseShellExecute = true });
         }

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:ATEC.PM.Client.Views.Preventivi"
     xmlns:sys="clr-namespace:System;assembly=mscorlib"
+    xmlns:sf="clr-namespace:Syncfusion.Windows.Shared;assembly=Syncfusion.Shared.WPF"
     Background="#F7F8FA"
     FontFamily="Segoe UI">
 
@@ -866,6 +867,27 @@
                                                                     FontSize="14" FontWeight="Bold" Cursor="Hand"
                                                                     Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
                                                                     Click="BtnAddMaterialVariant_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                            <!-- 1: Aggiorna da catalogo -->
+                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna da catalogo"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#2563EB"
+                                                                    Click="BtnRefreshMaterialFromCatalog_Click" Tag="{Binding}"
+                                                                    Content="&#x21BB;" FontSize="14" Padding="0" />
+                                                            <!-- 2: Aggiorna catalogo -->
+                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna catalogo da locale"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#16A34A"
+                                                                    Click="BtnPushMaterialToCatalog_Click" Tag="{Binding}"
+                                                                    Content="&#x21A5;" FontSize="14" Padding="0" />
+                                                            <!-- 3: Modifica contenuto RTF -->
+                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Modifica descrizione"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#D97706"
+                                                                    Click="BtnEditMaterialRtf_Click" Tag="{Binding}"
+                                                                    Content="&#x270E;" FontSize="14" Padding="0" />
+                                                            <!-- 4: Clona -->
+                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Clona prodotto"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#7C3AED"
+                                                                    Click="BtnCloneMaterialProduct_Click" Tag="{Binding}"
+                                                                    Content="&#x2398;" FontSize="14" Padding="0" />
+                                                            <!-- 5: Elimina -->
                                                             <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
                                                                     FontSize="11" Cursor="Hand"
                                                                     Background="Transparent" BorderThickness="0" Foreground="#DC2626"
@@ -873,8 +895,12 @@
                                                                     ToolTip="Rimuovi prodotto" Padding="0" />
                                                         </StackPanel>
 
-                                                        <TextBlock Text="{Binding ParentName}" FontSize="13" FontWeight="SemiBold"
-                                                                   Foreground="#1A1D26" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <TextBox Text="{Binding ParentName, UpdateSourceTrigger=LostFocus}"
+                                                                 FontSize="13" FontWeight="SemiBold"
+                                                                 Foreground="#1A1D26" VerticalAlignment="Center"
+                                                                 Background="Transparent" BorderThickness="0"
+                                                                 Padding="2,2"
+                                                                 LostFocus="MaterialParentName_LostFocus" Tag="{Binding Mode=OneWay}" />
                                                     </DockPanel>
                                                 </Border>
 
@@ -882,6 +908,7 @@
                                                 <Border Padding="12,4" Background="#F1F3F5" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="36" />
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="65" />
                                                             <ColumnDefinition Width="100" />
@@ -890,12 +917,12 @@
                                                             <ColumnDefinition Width="110" />
                                                             <ColumnDefinition Width="30" />
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" Text="DESCRIZIONE" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" />
-                                                        <TextBlock Grid.Column="1" Text="QTA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
-                                                        <TextBlock Grid.Column="2" Text="COSTO UNIT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="6,0,0,0" />
-                                                        <TextBlock Grid.Column="3" Text="COSTO TOT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
-                                                        <TextBlock Grid.Column="4" Text="K" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="4,0,0,0" />
-                                                        <TextBlock Grid.Column="5" Text="VENDITA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                        <TextBlock Grid.Column="1" Text="DESCRIZIONE" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" />
+                                                        <TextBlock Grid.Column="2" Text="QTA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="3" Text="COSTO UNIT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="6,0,0,0" />
+                                                        <TextBlock Grid.Column="4" Text="COSTO TOT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                        <TextBlock Grid.Column="5" Text="K" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="4,0,0,0" />
+                                                        <TextBlock Grid.Column="6" Text="VENDITA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
                                                     </Grid>
                                                 </Border>
 
@@ -904,8 +931,19 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Border Padding="12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                                                <Setter Property="Background" Value="#F9FAFB" />
+                                                                                <Setter Property="Opacity" Value="0.5" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="56" />
                                                                         <ColumnDefinition Width="*" />
                                                                         <ColumnDefinition Width="65" />
                                                                         <ColumnDefinition Width="100" />
@@ -915,34 +953,49 @@
                                                                         <ColumnDefinition Width="30" />
                                                                     </Grid.ColumnDefinitions>
 
-                                                                    <!-- Descrizione -->
-                                                                    <TextBlock Grid.Column="0" Text="{Binding Description}" FontSize="12" Foreground="#374151"
-                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                                                                    <!-- Attiva (toggle switch) -->
+                                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsActive}" VerticalAlignment="Center"
+                                                                              Style="{StaticResource ToggleSwitchStyle}"
+                                                                              Click="ChkMaterialActive_Click" Tag="{Binding Mode=OneWay}" />
+
+                                                                    <!-- Descrizione (editabile) -->
+                                                                    <TextBox Grid.Column="1" Text="{Binding Description, UpdateSourceTrigger=LostFocus}"
+                                                                             FontSize="12" Foreground="#374151"
+                                                                             VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                             Background="Transparent" BorderThickness="0"
+                                                                             Padding="2,4"
+                                                                             LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
 
                                                                     <!-- Qtà -->
-                                                                    <TextBox Grid.Column="1" Text="{Binding Quantity, StringFormat=F0, UpdateSourceTrigger=LostFocus}"
-                                                                             Height="28" FontSize="12" TextAlignment="Right" Padding="6,4"
+                                                                    <sf:DoubleTextBox Grid.Column="2" Value="{Binding Quantity, UpdateSourceTrigger=LostFocus}"
+                                                                             NumberDecimalDigits="0"
+                                                                             MinValue="0" MaxValue="99999"
+                                                                             Height="28" FontSize="12" Padding="6,4"
                                                                              Background="#F9FAFB" BorderBrush="#D1D5DB"
                                                                              LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
 
                                                                     <!-- Costo unitario -->
-                                                                    <TextBox Grid.Column="2" Text="{Binding UnitCost, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
-                                                                             Height="28" FontSize="12" TextAlignment="Right" Padding="6,4" Margin="6,0,0,0"
+                                                                    <sf:CurrencyTextBox Grid.Column="3" Value="{Binding UnitCost, UpdateSourceTrigger=LostFocus}"
+                                                                             CurrencyDecimalDigits="2" CurrencySymbol=""
+                                                                             MinValue="0" MaxValue="9999999"
+                                                                             Height="28" FontSize="12" Padding="6,4" Margin="6,0,0,0"
                                                                              Background="#F9FAFB" BorderBrush="#D1D5DB"
                                                                              LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
 
                                                                     <!-- Costo totale (read-only) -->
-                                                                    <TextBlock Grid.Column="3" Text="{Binding TotalCost, StringFormat=N2}" FontSize="12" FontWeight="SemiBold"
+                                                                    <TextBlock Grid.Column="4" Text="{Binding TotalCost, StringFormat=N2}" FontSize="12" FontWeight="SemiBold"
                                                                                Foreground="#374151" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0" />
 
                                                                     <!-- K (markup) -->
-                                                                    <TextBox Grid.Column="4" Text="{Binding MarkupValue, StringFormat=N3, UpdateSourceTrigger=LostFocus}"
-                                                                             Height="28" FontSize="12" TextAlignment="Center" Padding="6,4" Margin="4,0,0,0"
+                                                                    <sf:DoubleTextBox Grid.Column="5" Value="{Binding MarkupValue, UpdateSourceTrigger=LostFocus}"
+                                                                             NumberDecimalDigits="3"
+                                                                             MinValue="0" MaxValue="99"
+                                                                             Height="28" FontSize="12" Padding="6,4" Margin="4,0,0,0"
                                                                              Background="#F9FAFB" BorderBrush="#D1D5DB"
                                                                              LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
 
                                                                     <!-- Vendita (read-only) -->
-                                                                    <TextBlock Grid.Column="5" FontSize="12" FontWeight="Bold" Foreground="#059669"
+                                                                    <TextBlock Grid.Column="6" FontSize="12" FontWeight="Bold" Foreground="#059669"
                                                                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0">
                                                                         <TextBlock.Text>
                                                                             <Binding Path="TotalSale" StringFormat="{}{0:N2} &#x20AC;" />
@@ -950,7 +1003,7 @@
                                                                     </TextBlock>
 
                                                                     <!-- Elimina -->
-                                                                    <Button Grid.Column="6" Content="X" Width="22" Height="22"
+                                                                    <Button Grid.Column="7" Content="X" Width="22" Height="22"
                                                                             FontSize="10" Cursor="Hand"
                                                                             Background="Transparent" BorderThickness="0" Foreground="#DC2626"
                                                                             Click="BtnDeleteMaterial_Click" Tag="{Binding Mode=OneWay}"
@@ -1390,9 +1443,10 @@
                                     <DataTemplate>
                                         <Border
                                             Padding="0,3"
+                                            Background="{Binding RowBackground}"
                                             BorderBrush="#F3F4F6"
                                             BorderThickness="0,0,0,1">
-                                            <Grid>
+                                            <Grid Opacity="{Binding RowOpacity}">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="28" />
                                                     <ColumnDefinition Width="25" />

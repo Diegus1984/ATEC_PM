@@ -38,3 +38,8 @@ public class FieldUpdateRequest
     public string Field { get; set; } = "";
     public string? Value { get; set; } = "";
 }
+
+public class ToggleActiveRequest
+{
+    public bool IsActive { get; set; }
+}

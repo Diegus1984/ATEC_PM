@@ -99,7 +99,11 @@ public class ProjectMaterialItemDto
     public int Id { get; set; }
     public int SectionId { get; set; }
     public int? ParentItemId { get; set; }
+    public int? ProductId { get; set; }
+    public int? VariantId { get; set; }
+    public string Code { get; set; } = "";
     public string Description { get; set; } = "";
+    public string? DescriptionRtf { get; set; }
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
@@ -110,8 +114,9 @@ public class ProjectMaterialItemDto
     public bool ContingencyPinned { get; set; }
     public bool MarginPinned { get; set; }
     public bool IsShadowed { get; set; }
-    public decimal TotalCost => Quantity * UnitCost;
-    public decimal TotalSale => Quantity * UnitCost * MarkupValue;
+    public bool IsActive { get; set; } = true;
+    public decimal TotalCost => IsActive ? Quantity * UnitCost : 0;
+    public decimal TotalSale => IsActive ? Quantity * UnitCost * MarkupValue : 0;
 }
 
 public class ProjectMaterialItemSaveRequest
@@ -119,12 +124,17 @@ public class ProjectMaterialItemSaveRequest
     public int Id { get; set; }
     public int SectionId { get; set; }
     public int? ParentItemId { get; set; }
+    public int? ProductId { get; set; }
+    public int? VariantId { get; set; }
+    public string Code { get; set; } = "";
     public string Description { get; set; } = "";
+    public string? DescriptionRtf { get; set; }
     public decimal Quantity { get; set; } = 1;
     public decimal UnitCost { get; set; }
     public decimal MarkupValue { get; set; } = 1.300m;
     public string ItemType { get; set; } = "MATERIAL";
     public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 
