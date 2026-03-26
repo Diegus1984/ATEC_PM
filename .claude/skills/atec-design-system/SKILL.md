@@ -14,6 +14,11 @@ description: ATEC PM WPF design system. Use this skill whenever generating, edit
 - **Compact density**: Maximum data visibility, 4px base unit
 - **Consistency**: Every control follows the same rules
 
+### Eccezioni consentite
+- **ToggleSwitchStyle**: CornerRadius (pallino rotondo) + DropShadowEffect (ombra leggera sul thumb) — necessari per la forma del controllo
+- **Card/Border prodotti**: CornerRadius="6" consentito su card prodotto/sezione per distinguerle dallo sfondo
+- **Badge stati**: CornerRadius su badge di stato (DRAFT, INVIATA, ecc.) e badge tipo (Prod., MAT, R)
+
 ## Color Palette
 
 ### Primary (Blue Corporate)

@@ -203,7 +203,7 @@ public partial class PreventiviPage : Page
         };
     }
 
-    private static Border BuildQuoteHeader(QuoteDto q)
+    private Border BuildQuoteHeader(QuoteDto q)
     {
         (string bg, string accent, string fgTitle, string fgSub) = q.Status switch
         {
@@ -229,7 +229,7 @@ public partial class PreventiviPage : Page
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Margin = new Thickness(0, 3, 4, 3),
-            Width = 200,
+            Width = 260,
             ClipToBounds = true
         };
 
@@ -286,6 +286,37 @@ public partial class PreventiviPage : Page
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
+
+        // Riga pulsanti azione rapida
+        var btnRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+
+        Button MakeBtn(string text, string tooltip, string fg, RoutedEventHandler handler)
+        {
+            var btn = new Button
+            {
+                Content = text, ToolTip = tooltip,
+                FontSize = 10, Cursor = System.Windows.Input.Cursors.Hand,
+                Width = 22, Height = 20, Padding = new Thickness(0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Foreground = Brush(fg),
+                Tag = q.Id
+            };
+            btn.Click += handler;
+            return btn;
+        }
+
+        btnRow.Children.Add(MakeBtn("PDF", "Scarica PDF", "#6B7280", CardPdf_Click));
+        btnRow.Children.Add(MakeBtn("⎘", "Duplica", "#6B7280", CardDuplicate_Click));
+        btnRow.Children.Add(MakeBtn("Rev", "Crea revisione", "#6B7280", CardRevision_Click));
+        if (q.Status is "draft" or "rejected")
+            btnRow.Children.Add(MakeBtn("✕", "Elimina", "#DC2626", CardDelete_Click));
+
+        sp.Children.Add(btnRow);
 
         mainDock.Children.Add(sp);
         cardContainer.Child = mainDock;
@@ -366,6 +397,43 @@ public partial class PreventiviPage : Page
         }
 
         return menu;
+    }
+
+    // ── Card quick-action handlers ──
+    private async void CardPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int quoteId) return;
+        try
+        {
+            byte[]? bytes = await ApiClient.GetBytesAsync($"/api/quotes/{quoteId}/pdf");
+            if (bytes == null) return;
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"preventivo_{quoteId}.pdf");
+            System.IO.File.WriteAllBytes(path, bytes);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore PDF: {ex.Message}"); }
+    }
+
+    private void CardDuplicate_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int quoteId) return;
+        // Riusa la logica del context menu
+        var fakeMenuItem = new MenuItem { Tag = quoteId };
+        CtxDuplicate_Click(fakeMenuItem, e);
+    }
+
+    private void CardRevision_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int quoteId) return;
+        var fakeMenuItem = new MenuItem { Tag = quoteId };
+        CtxCreateRevision_Click(fakeMenuItem, e);
+    }
+
+    private void CardDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int quoteId) return;
+        var fakeMenuItem = new MenuItem { Tag = quoteId };
+        CtxDelete_Click(fakeMenuItem, e);
     }
 
     private async void CtxCreateRevision_Click(object sender, RoutedEventArgs e)
@@ -1174,6 +1242,10 @@ public partial class PreventiviPage : Page
     {
         if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
         group.IsExpanded = !group.IsExpanded;
+
+        // Ruota il triangolo
+        if (btn.Content is TextBlock tb && tb.RenderTransform is RotateTransform rt)
+            rt.Angle = group.IsExpanded ? 0 : -90;
     }
 
     // ── Refresh prodotto da catalogo ──
@@ -1256,6 +1328,41 @@ public partial class PreventiviPage : Page
     }
 
     // ── Auto-includes: Rimuovi ──
+    // ── Edit RTF contenuto auto-include (SERVICE) ──
+    private async void BtnServiceEditAutoIncludeRtf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
+        await EditAutoIncludeRtf(group);
+    }
+
+    // ── Edit RTF contenuto auto-include (IMPIANTO) ──
+    private async void BtnEditAutoIncludeRtf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
+        await EditAutoIncludeRtf(group);
+    }
+
+    private async Task EditAutoIncludeRtf(QuoteProductGroup group)
+    {
+        var dlg = new MaterialRtfDialog(group.ParentName, group.DescriptionRtf)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                group.DescriptionRtf = dlg.HtmlContent;
+                await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/items/{group.ParentId}/field",
+                    JsonSerializer.Serialize(new { field = "description_rtf", value = dlg.HtmlContent }));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
     private async void BtnServiceRemoveAutoInclude_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not int parentId) return;

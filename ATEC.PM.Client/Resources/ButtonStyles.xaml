@@ -62,6 +62,11 @@
     <SolidColorBrush x:Key="SidebarHoverBrush" Color="{StaticResource SidebarHoverColor}" />
     <SolidColorBrush x:Key="SidebarDividerBrush" Color="{StaticResource SidebarDividerColor}" />
 
+    <!--  Bordi  -->
+    <Color x:Key="BorderColor">#E4E7EC</Color>
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="BorderLightBrush" Color="#F3F4F6" />
+
     <!--  Alias retrocompatibilità  -->
     <SolidColorBrush x:Key="PrimaryBlueBrush" Color="{StaticResource PrimaryColor}" />
 

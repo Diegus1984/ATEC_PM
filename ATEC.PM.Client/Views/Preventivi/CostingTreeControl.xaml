@@ -743,7 +743,7 @@
                                                                             VerticalAlignment="Center"
                                                                             FontSize="12"
                                                                             FontWeight="Bold"
-                                                                            Foreground="#059669"
+                                                                            Foreground="#1A1D26"
                                                                             Text="{Binding TotalSale, StringFormat='{}{0:N2} EUR'}" />
 
                                                                         <TextBlock
@@ -837,7 +837,7 @@
                     CornerRadius="8">
                     <StackPanel>
                         <!--  MATERIALI HEADER (collapsible, with totals)  -->
-                        <Border x:Name="materialHeader" Padding="12,6" Background="#1A1D26" CornerRadius="8,8,0,0"
+                        <Border x:Name="materialHeader" Padding="12,6" Background="#2563EB" CornerRadius="8,8,0,0"
                                 Cursor="Hand" MouseLeftButtonDown="MaterialHeader_Click">
                             <DockPanel>
                                 <TextBlock x:Name="txtMaterialTotals" DockPanel.Dock="Right"
@@ -864,7 +864,7 @@
                                                 <!-- Product header -->
                                                 <Border Padding="12,10" Background="#F8FAFC" CornerRadius="6,6,0,0" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
                                                     <DockPanel>
-                                                        <Border Padding="6,3" Margin="0,0,10,0" VerticalAlignment="Center" CornerRadius="4" Background="#7C3AED">
+                                                        <Border Padding="6,3" Margin="0,0,10,0" VerticalAlignment="Center" CornerRadius="4" Background="#2563EB">
                                                             <TextBlock Text="MAT" FontSize="10" FontWeight="Bold" Foreground="White" />
                                                         </Border>
 
@@ -887,12 +887,12 @@
                                                                     Content="&#x21A5;" FontSize="14" Padding="0" />
                                                             <!-- 3: Modifica contenuto RTF -->
                                                             <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Modifica descrizione"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#D97706"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
                                                                     Click="BtnEditMaterialRtf_Click" Tag="{Binding}"
                                                                     Content="&#x270E;" FontSize="14" Padding="0" />
                                                             <!-- 4: Clona -->
                                                             <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Clona prodotto"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#7C3AED"
+                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
                                                                     Click="BtnCloneMaterialProduct_Click" Tag="{Binding}"
                                                                     Content="&#x2398;" FontSize="14" Padding="0" />
                                                             <!-- 5: Elimina -->
@@ -1003,7 +1003,7 @@
                                                                              LostFocus="MaterialVariantField_LostFocus" Tag="{Binding Mode=OneWay}" />
 
                                                                     <!-- Vendita (read-only) -->
-                                                                    <TextBlock Grid.Column="6" FontSize="12" FontWeight="Bold" Foreground="#059669"
+                                                                    <TextBlock Grid.Column="6" FontSize="12" FontWeight="Bold" Foreground="#1A1D26"
                                                                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0">
                                                                         <TextBlock.Text>
                                                                             <Binding Path="TotalSale" StringFormat="{}{0:N2} &#x20AC;" />
@@ -1049,7 +1049,7 @@
                         <Border
                             x:Name="pricingHeader"
                             Padding="12,6"
-                            Background="#059669"
+                            Background="#2563EB"
                             CornerRadius="8,8,0,0"
                             Cursor="Hand"
                             MouseLeftButtonDown="PricingHeader_Click">
@@ -1164,14 +1164,14 @@
                                     Grid.ColumnSpan="3"
                                     Margin="0,12,0,12"
                                     Padding="12,8"
-                                    Background="#1A1D26"
+                                    Background="#1E40AF"
                                     CornerRadius="4">
                                     <DockPanel>
                                         <TextBlock
                                             DockPanel.Dock="Right"
                                             FontSize="16"
                                             FontWeight="Bold"
-                                            Foreground="#4F6EF7">
+                                            Foreground="White">
                                             <Run Text="{Binding OfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" />
                                         </TextBlock>
                                         <TextBlock
@@ -1220,7 +1220,7 @@
                                     Grid.ColumnSpan="3"
                                     Margin="0,8,0,0"
                                     Padding="12,10"
-                                    Background="#059669"
+                                    Background="#2563EB"
                                     CornerRadius="4">
                                     <DockPanel>
                                         <TextBlock
@@ -1247,7 +1247,7 @@
                 <!--  ========== DISTRIBUZIONE PREZZO ==========  -->
                 <Border Background="White" BorderBrush="#E4E7EC" BorderThickness="1" Margin="0,8,0,0" CornerRadius="8">
                 <StackPanel x:Name="distributionSection">
-                    <Border x:Name="distHeader" Padding="12,6" Background="#7C3AED" CornerRadius="8,8,0,0"
+                    <Border x:Name="distHeader" Padding="12,6" Background="#2563EB" CornerRadius="8,8,0,0"
                             Cursor="Hand" MouseLeftButtonDown="DistributionHeader_Click">
                         <StackPanel Orientation="Horizontal">
                             <Path x:Name="distArrow" Width="8" Height="10" Margin="4,0,8,0" VerticalAlignment="Center"
@@ -1299,7 +1299,7 @@
                                     Margin="0,4,0,0"
                                     FontSize="16"
                                     FontWeight="Bold"
-                                    Foreground="#7C3AED">
+                                    Foreground="#6B7280">
                                     <Run Text="{Binding MaterialDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                             </StackPanel>
                         </Border>
@@ -1319,14 +1319,14 @@
                                     Margin="0,4,0,0"
                                     FontSize="16"
                                     FontWeight="Bold"
-                                    Foreground="#D97706">
+                                    Foreground="#6B7280">
                                     <Run Text="{Binding TravelDistributed, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                             </StackPanel>
                         </Border>
                         <Border
                             Margin="4,0,0,0"
                             Padding="12,10"
-                            Background="#059669"
+                            Background="#2563EB"
                             BorderThickness="0">
                             <StackPanel>
                                 <TextBlock
@@ -1390,7 +1390,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#D97706"
+                                    Foreground="#6B7280"
                                     Text="CONT %" />
                                 <TextBlock
                                     Grid.Column="6"
@@ -1399,7 +1399,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#D97706"
+                                    Foreground="#6B7280"
                                     Text="CONT EUR" />
                                 <TextBlock
                                     Grid.Column="8"
@@ -1407,7 +1407,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#7C3AED"
+                                    Foreground="#6B7280"
                                     Text="MARG %" />
                                 <TextBlock
                                     Grid.Column="9"
@@ -1416,7 +1416,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#7C3AED"
+                                    Foreground="#6B7280"
                                     Text="MARG EUR" />
                                 <TextBlock
                                     Grid.Column="10"
@@ -1425,7 +1425,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#0891B2"
+                                    Foreground="#6B7280"
                                     Text="SHADOW EUR" />
                                 <TextBlock
                                     Grid.Column="11"
@@ -1433,7 +1433,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     FontWeight="SemiBold"
-                                    Foreground="#0891B2"
+                                    Foreground="#6B7280"
                                     Text="SH %" />
                                 <TextBlock
                                     Grid.Column="12"
@@ -1528,7 +1528,7 @@
                                                 <TextBox
                                                     Grid.Column="5"
                                                     Height="22"
-                                                    Foreground="#D97706"
+                                                    Foreground="#6B7280"
                                                     GotFocus="MarkupTextBox_GotFocus"
                                                     KeyDown="DistPct_KeyDown"
                                                     LostFocus="DistPct_LostFocus"
@@ -1541,7 +1541,7 @@
                                                     HorizontalAlignment="Right"
                                                     VerticalAlignment="Center"
                                                     FontSize="11"
-                                                    Foreground="#D97706">
+                                                    Foreground="#6B7280">
                                                     <Run Text="{Binding ContingencyAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                                 <TextBlock
                                                     Grid.Column="7"
@@ -1553,7 +1553,7 @@
                                                 <TextBox
                                                     Grid.Column="8"
                                                     Height="22"
-                                                    Foreground="#7C3AED"
+                                                    Foreground="#6B7280"
                                                     GotFocus="MarkupTextBox_GotFocus"
                                                     KeyDown="DistPct_KeyDown"
                                                     LostFocus="DistPct_LostFocus"
@@ -1566,7 +1566,7 @@
                                                     HorizontalAlignment="Right"
                                                     VerticalAlignment="Center"
                                                     FontSize="11"
-                                                    Foreground="#7C3AED">
+                                                    Foreground="#6B7280">
                                                     <Run Text="{Binding MarginAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                                 <TextBlock
                                                     Grid.Column="10"
@@ -1574,14 +1574,14 @@
                                                     HorizontalAlignment="Right"
                                                     VerticalAlignment="Center"
                                                     FontSize="11"
-                                                    Foreground="#0891B2">
+                                                    Foreground="#6B7280">
                                                     <Run Text="{Binding ShadowedAmount, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                                 <TextBlock
                                                     Grid.Column="11"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
                                                     FontSize="10"
-                                                    Foreground="#0891B2"
+                                                    Foreground="#6B7280"
                                                     Text="{Binding ShadowedPct, Converter={StaticResource PctToString}, Mode=OneWay}" />
                                                 <TextBlock
                                                     Grid.Column="12"
@@ -1643,7 +1643,7 @@
                                         VerticalAlignment="Center"
                                         FontSize="11"
                                         FontWeight="Bold"
-                                        Foreground="#D97706">
+                                        Foreground="#6B7280">
                                         <Run Text="{Binding TotalDistContingencyCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                     <TextBlock
                                         Grid.Column="9"
@@ -1652,7 +1652,7 @@
                                         VerticalAlignment="Center"
                                         FontSize="11"
                                         FontWeight="Bold"
-                                        Foreground="#7C3AED">
+                                        Foreground="#6B7280">
                                         <Run Text="{Binding TotalDistMarginCheck, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                     <TextBlock
                                         Grid.Column="12"
@@ -1661,7 +1661,7 @@
                                         VerticalAlignment="Center"
                                         FontSize="11"
                                         FontWeight="Bold"
-                                        Foreground="#059669">
+                                        Foreground="#1A1D26">
                                         <Run Text="{Binding FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" EUR" /></TextBlock>
                                 </Grid>
                             </Border>

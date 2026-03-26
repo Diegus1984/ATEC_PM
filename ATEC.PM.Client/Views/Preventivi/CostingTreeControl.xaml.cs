@@ -45,12 +45,13 @@ public partial class CostingTreeControl : UserControl
     private ProjectCostingData? _lastData;
 
     // Color mapping for groups
+    // Colore uniforme per tutti i gruppi (design system: blu corporate)
     private static readonly Dictionary<string, string> GroupColors = new()
     {
-        ["GESTIONE"] = "#3B82F6",
-        ["PRESCHIERAMENTO"] = "#F59E0B",
-        ["INSTALLAZIONE"] = "#8B5CF6",
-        ["OPZIONE"] = "#EF4444"
+        ["GESTIONE"] = "#2563EB",
+        ["PRESCHIERAMENTO"] = "#2563EB",
+        ["INSTALLAZIONE"] = "#2563EB",
+        ["OPZIONE"] = "#2563EB"
     };
 
     public CostingTreeControl()

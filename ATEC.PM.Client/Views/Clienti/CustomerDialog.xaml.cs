@@ -9,6 +9,7 @@ namespace ATEC.PM.Client.Views;
 public partial class CustomerDialog : Window
 {
     private readonly int _id;
+    public int CreatedCustomerId { get; private set; }
 
     public CustomerDialog(int id = 0)
     {
@@ -69,6 +70,10 @@ public partial class CustomerDialog : Window
             var doc = JsonDocument.Parse(result);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
+                if (_id == 0 && doc.RootElement.TryGetProperty("data", out var dataEl))
+                    CreatedCustomerId = dataEl.GetInt32();
+                else
+                    CreatedCustomerId = _id;
                 DialogResult = true;
                 Close();
             }
