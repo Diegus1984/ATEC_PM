@@ -99,7 +99,10 @@
       "Bash(curl -s http://127.0.0.1:5100/api/danea-sync/explore/tables)",
       "Bash(cmd //c \"taskkill /PID 2004 /F\")",
       "Bash(cmd //c \"taskkill /PID 3656 /F\")",
-      "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -type f \\\\\\(-name *.db -o -name *.sql \\\\\\))"
+      "Bash(find /c/Users/diego/Desktop/ATEC_PM_CSharp_v5/ATEC_PM -type f \\\\\\(-name *.db -o -name *.sql \\\\\\))",
+      "Bash(git clone:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(ls /c/Tools/csharp-lsp-mcp/publish/*.exe)"
     ]
   }
 }

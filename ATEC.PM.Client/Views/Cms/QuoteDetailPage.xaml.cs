@@ -619,6 +619,15 @@ public class QuoteProductGroup : INotifyPropertyChanged
 
     public ObservableCollection<QuoteVariantRow> Variants { get; set; } = new();
 
+    // Expand/collapse
+    private bool _isExpanded = true;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set { _isExpanded = value; Notify(); Notify(nameof(ExpandAngle)); }
+    }
+    public double ExpandAngle => _isExpanded ? 0 : -90;
+
     // Display
     public string TypeBadgeLabel => ItemType == "content" ? "Cont." : "Prod.";
     public SolidColorBrush TypeBadgeColor => new(
@@ -692,7 +701,11 @@ public class QuoteVariantRow : INotifyPropertyChanged
     public string QuantityText { get; set; } = "1";
     public string SellPriceText { get; set; } = "0";
     public string DiscountPctText { get; set; } = "0";
+    public string CostPriceText { get; set; } = "0";
+    public string MarkupText { get; set; } = "1.000";
+    public decimal MarkupValue { get; set; } = 1.0m;
 
+    public string CostTotalDisplay => $"{CostPrice * Quantity:N2}";
     public string LineTotalDisplay => IsActive ? $"{LineTotal:N2}€" : "—";
     public SolidColorBrush TotalColor => new(
         (Color)ColorConverter.ConvertFromString(IsActive ? "#111827" : "#9CA3AF"));
@@ -721,13 +734,19 @@ public class QuoteVariantRow : INotifyPropertyChanged
         QuantityText = dto.Quantity.ToString("G");
         SellPriceText = dto.SellPrice.ToString("N2");
         DiscountPctText = dto.DiscountPct.ToString("G");
+        CostPriceText = dto.CostPrice.ToString("N2");
+        MarkupValue = dto.CostPrice > 0 ? dto.SellPrice / dto.CostPrice : 1.0m;
+        MarkupText = MarkupValue.ToString("N3");
     }
 
     public void ParseTexts()
     {
         if (decimal.TryParse(QuantityText, out decimal q)) Quantity = q;
+        if (decimal.TryParse(CostPriceText, out decimal cp)) CostPrice = cp;
+        if (decimal.TryParse(MarkupText, out decimal k)) { MarkupValue = k; SellPrice = CostPrice * k; }
         if (decimal.TryParse(SellPriceText, out decimal p)) SellPrice = p;
         if (decimal.TryParse(DiscountPctText, out decimal d)) DiscountPct = d;
+        LineTotal = Quantity * SellPrice * (1 - DiscountPct / 100);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

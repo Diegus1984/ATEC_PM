@@ -698,40 +698,88 @@
                                         </DockPanel>
                                     </Border>
 
-                                    <!-- Totals footer -->
+                                    <!-- Footer: sconto + checkbox a sinistra, riepilogo a destra -->
                                     <Border Padding="20,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="180" />
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="26" />
-                                                <RowDefinition Height="26" />
-                                                <RowDefinition Height="2" />
-                                                <RowDefinition Height="30" />
-                                            </Grid.RowDefinitions>
+                                        <DockPanel>
+                                            <!-- Sinistra: sconto + checkbox opzioni PDF -->
+                                            <StackPanel DockPanel.Dock="Left" VerticalAlignment="Top" Width="380">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="Sconto sul TOTALE:" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBox x:Name="txtServiceDiscountPct" Width="60" Height="26" FontSize="11" TextAlignment="Right"
+                                                             LostFocus="ServiceDiscountPct_LostFocus" />
+                                                    <TextBlock Text="%" FontSize="12" Foreground="#6B7280" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                                </StackPanel>
+                                                <CheckBox x:Name="chkServiceShowItemPrices" Margin="0,0,0,6" Content="Visualizza prezzi sulle pagine dei singoli articoli" FontSize="12" IsChecked="True" />
+                                                <CheckBox x:Name="chkServiceShowSummary" Margin="0,0,0,6" Content="Attiva il riepilogo finale" FontSize="12" IsChecked="True" />
+                                                <CheckBox x:Name="chkServiceShowSummaryPrices" Content="Visualizza prezzi dei singoli articoli sul riepilogo" FontSize="12" IsChecked="True" />
+                                                <CheckBox x:Name="chkServiceHideQuantities" Margin="0,6,0,0" Content="Nascondi dettagli (costo, qtà, sconto) dal riepilogo" FontSize="12" IsChecked="False" />
+                                            </StackPanel>
 
-                                            <TextBlock Grid.Row="0" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="12" Foreground="#6B7280" Text="Subtotale" Margin="0,0,12,0" />
-                                            <TextBlock x:Name="txtServiceSubtotal" Grid.Row="0" Grid.Column="1"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="12" Foreground="#374151" />
+                                            <!-- Destra: riepilogo economico completo -->
+                                            <Grid HorizontalAlignment="Right" Width="320">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="120" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="24" />
+                                                    <RowDefinition Height="24" />
+                                                    <RowDefinition Height="24" />
+                                                    <RowDefinition Height="2" />
+                                                    <RowDefinition Height="28" />
+                                                    <RowDefinition Height="24" />
+                                                    <RowDefinition Height="2" />
+                                                    <RowDefinition Height="24" />
+                                                    <RowDefinition Height="24" />
+                                                </Grid.RowDefinitions>
 
-                                            <TextBlock Grid.Row="1" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="12" Foreground="#6B7280" Text="Sconto" Margin="0,0,12,0" />
-                                            <TextBlock x:Name="txtServiceDiscount" Grid.Row="1" Grid.Column="1"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="12" Foreground="#DC2626" />
+                                                <TextBlock Grid.Row="0" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="TOTALE" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceSubtotal" Grid.Row="0" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#374151" />
 
-                                            <Border Grid.Row="2" Grid.ColumnSpan="2" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" />
+                                                <TextBlock Grid.Row="1" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="TOTALE IVA" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceVat" Grid.Row="1" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#374151" />
 
-                                            <TextBlock Grid.Row="3" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="14" FontWeight="Bold" Foreground="#111827" Text="Totale" Margin="0,0,12,0" />
-                                            <TextBlock x:Name="txtServiceTotal" Grid.Row="3" Grid.Column="1"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       FontSize="14" FontWeight="Bold" Foreground="#111827" />
-                                        </Grid>
+                                                <TextBlock Grid.Row="2" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="SCONTO" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceDiscount" Grid.Row="2" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#DC2626" />
+
+                                                <Border Grid.Row="3" Grid.ColumnSpan="2" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" />
+
+                                                <TextBlock Grid.Row="4" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="14" FontWeight="Bold" Foreground="#111827" Text="TOTALE IMPONIBILE" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceTotal" Grid.Row="4" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="14" FontWeight="Bold" Foreground="#111827" />
+
+                                                <TextBlock Grid.Row="5" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#6B7280" Text="TOTALE IVA INCLUSA" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceTotalVat" Grid.Row="5" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" Foreground="#374151" />
+
+                                                <Border Grid.Row="6" Grid.ColumnSpan="2" BorderBrush="#E4E7EC" BorderThickness="0,1,0,0" />
+
+                                                <TextBlock Grid.Row="7" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" FontWeight="Bold" Foreground="#2563EB" Text="TOTALE COSTI AZIENDALI" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceCost" Grid.Row="7" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" FontWeight="Bold" Foreground="#2563EB" />
+
+                                                <TextBlock Grid.Row="8" Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" FontWeight="Bold" Foreground="#2563EB" Text="UTILE" Margin="0,0,12,0" />
+                                                <TextBlock x:Name="txtServiceProfit" Grid.Row="8" Grid.Column="1"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontSize="12" FontWeight="Bold" Foreground="#2563EB" />
+                                            </Grid>
+                                        </DockPanel>
                                     </Border>
 
                                     <!-- Product list -->
@@ -753,61 +801,148 @@
                                                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                                             <TextBlock Text="{Binding TotalDisplay}" FontSize="13" FontWeight="Bold" Foreground="#111827"
                                                                                        VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                                            <!-- + Variante -->
                                                                             <Button Content="+" ToolTip="Aggiungi variante" Width="28" Height="28"
                                                                                     FontSize="14" FontWeight="Bold" Cursor="Hand"
                                                                                     Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
                                                                                     Click="BtnServiceAddVariant_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                                            <!-- Refresh da catalogo -->
+                                                                            <Button ToolTip="Aggiorna da catalogo" Width="28" Height="28" Margin="4,0,0,0"
+                                                                                    FontSize="12" Cursor="Hand" Content="&#x21BB;"
+                                                                                    Background="Transparent" BorderThickness="0" Foreground="#2563EB"
+                                                                                    Click="BtnServiceRefreshProduct_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                                            <!-- Edit RTF -->
+                                                                            <Button ToolTip="Modifica descrizione" Width="28" Height="28" Margin="4,0,0,0"
+                                                                                    FontSize="12" Cursor="Hand" Content="&#x270E;"
+                                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
+                                                                                    Click="BtnServiceEditRtf_Click" Tag="{Binding}" Padding="0" />
+                                                                            <!-- Clona -->
+                                                                            <Button ToolTip="Duplica prodotto" Width="28" Height="28" Margin="4,0,0,0"
+                                                                                    FontSize="12" Cursor="Hand" Content="&#x2398;"
+                                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
+                                                                                    Click="BtnServiceCloneProduct_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                                            <!-- Elimina -->
                                                                             <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
                                                                                     FontSize="11" Cursor="Hand"
                                                                                     Background="Transparent" BorderThickness="0" Foreground="#DC2626"
                                                                                     Click="BtnServiceRemoveProduct_Click" Tag="{Binding ParentId}"
                                                                                     ToolTip="Rimuovi prodotto" Padding="0" />
+                                                                            <!-- Expand/Collapse -->
+                                                                            <Button Width="28" Height="28" Margin="4,0,0,0"
+                                                                                    Cursor="Hand" Background="Transparent" BorderThickness="0"
+                                                                                    Click="BtnServiceToggleExpand_Click" Tag="{Binding}">
+                                                                                <TextBlock Text="▼" FontSize="10" Foreground="#9CA3AF"
+                                                                                           RenderTransformOrigin="0.5,0.5">
+                                                                                    <TextBlock.RenderTransform>
+                                                                                        <RotateTransform Angle="{Binding ExpandAngle}" />
+                                                                                    </TextBlock.RenderTransform>
+                                                                                </TextBlock>
+                                                                            </Button>
                                                                         </StackPanel>
 
-                                                                        <TextBlock Text="{Binding ParentName}" FontSize="13" FontWeight="SemiBold"
-                                                                                   Foreground="#1A1D26" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBox Text="{Binding ParentName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                 FontSize="13" FontWeight="SemiBold" Foreground="#1A1D26"
+                                                                                 VerticalAlignment="Center" BorderThickness="0" Background="Transparent"
+                                                                                 Padding="2,0" LostFocus="ServiceProductName_LostFocus" Tag="{Binding ParentId}" />
                                                                     </DockPanel>
                                                                 </Border>
 
+                                                                <!-- Header colonne varianti -->
+                                                                <Border Padding="12,4" Background="#FAFBFC" Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="56" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                            <ColumnDefinition Width="65" />
+                                                                            <ColumnDefinition Width="100" />
+                                                                            <ColumnDefinition Width="100" />
+                                                                            <ColumnDefinition Width="70" />
+                                                                            <ColumnDefinition Width="110" />
+                                                                            <ColumnDefinition Width="30" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Grid.Column="1" Text="DESCRIZIONE" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" />
+                                                                        <TextBlock Grid.Column="2" Text="QTA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" />
+                                                                        <TextBlock Grid.Column="3" Text="COSTO UNIT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="6,0,0,0" />
+                                                                        <TextBlock Grid.Column="4" Text="COSTO TOT." FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                                        <TextBlock Grid.Column="5" Text="K" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Center" Margin="4,0,0,0" />
+                                                                        <TextBlock Grid.Column="6" Text="VENDITA" FontSize="10" FontWeight="Bold" Foreground="#9CA3AF" HorizontalAlignment="Right" Margin="8,0" />
+                                                                    </Grid>
+                                                                </Border>
+
                                                                 <!-- Variants -->
-                                                                <ItemsControl ItemsSource="{Binding Variants}">
+                                                                <ItemsControl ItemsSource="{Binding Variants}"
+                                                                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
                                                                     <ItemsControl.ItemTemplate>
                                                                         <DataTemplate>
                                                                             <Border Padding="12,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
-                                                                                <DockPanel>
-                                                                                    <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay}"
-                                                                                              VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                                <Border.Style>
+                                                                                    <Style TargetType="Border">
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                                                                <Setter Property="Background" Value="#F9FAFB" />
+                                                                                                <Setter Property="Opacity" Value="0.5" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </Border.Style>
+                                                                                <Grid>
+                                                                                    <Grid.ColumnDefinitions>
+                                                                                        <ColumnDefinition Width="56" />
+                                                                                        <ColumnDefinition Width="*" />
+                                                                                        <ColumnDefinition Width="65" />
+                                                                                        <ColumnDefinition Width="100" />
+                                                                                        <ColumnDefinition Width="100" />
+                                                                                        <ColumnDefinition Width="70" />
+                                                                                        <ColumnDefinition Width="110" />
+                                                                                        <ColumnDefinition Width="30" />
+                                                                                    </Grid.ColumnDefinitions>
+
+                                                                                    <!-- Toggle -->
+                                                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                                                                              Style="{StaticResource ToggleSwitchStyle}"
+                                                                                              VerticalAlignment="Center"
                                                                                               Checked="ServiceVariantToggle_Changed"
                                                                                               Unchecked="ServiceVariantToggle_Changed" />
 
-                                                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding LineTotalDisplay}" FontSize="12" FontWeight="SemiBold"
-                                                                                                   Foreground="{Binding TotalColor}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                                        <Button Content="X" Width="22" Height="22"
-                                                                                                FontSize="10" Cursor="Hand"
-                                                                                                Background="Transparent" BorderThickness="0" Foreground="#9CA3AF"
-                                                                                                Click="BtnServiceRemoveVariant_Click" Tag="{Binding Id}"
-                                                                                                ToolTip="Rimuovi variante" Padding="0" />
-                                                                                    </StackPanel>
+                                                                                    <!-- Descrizione -->
+                                                                                    <TextBox Grid.Column="1" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                             FontSize="12" Foreground="#374151"
+                                                                                             VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                                             Background="Transparent" BorderThickness="0" Padding="2,4"
+                                                                                             LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
 
-                                                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="#374151"
-                                                                                                   Width="250" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                                                        <TextBox Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                                                                 Width="55" Height="26" FontSize="11" TextAlignment="Right" Margin="8,0"
-                                                                                                 LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
-                                                                                        <TextBlock Text="{Binding Unit}" FontSize="11" Foreground="#6B7280"
-                                                                                                   Width="35" VerticalAlignment="Center" />
-                                                                                        <TextBox Text="{Binding SellPriceText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                                                                 Width="85" Height="26" FontSize="11" TextAlignment="Right" Margin="4,0"
-                                                                                                 LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
-                                                                                        <TextBlock Text="&#8364;" FontSize="11" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                                        <TextBox Text="{Binding DiscountPctText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                                                                 Width="45" Height="26" FontSize="11" TextAlignment="Right" Margin="4,0"
-                                                                                                 LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
-                                                                                        <TextBlock Text="%" FontSize="11" Foreground="#6B7280" VerticalAlignment="Center" />
-                                                                                    </StackPanel>
-                                                                                </DockPanel>
+                                                                                    <!-- Qtà -->
+                                                                                    <TextBox Grid.Column="2" Text="{Binding QuantityText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                             Height="26" FontSize="11" TextAlignment="Right"
+                                                                                             LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+
+                                                                                    <!-- Costo Unit. -->
+                                                                                    <TextBox Grid.Column="3" Text="{Binding CostPriceText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                             Height="26" FontSize="11" TextAlignment="Right" Margin="6,0,0,0"
+                                                                                             LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+
+                                                                                    <!-- Costo Tot. (read-only) -->
+                                                                                    <TextBlock Grid.Column="4" Text="{Binding CostTotalDisplay}" FontSize="11"
+                                                                                               Foreground="#6B7280" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0" />
+
+                                                                                    <!-- K -->
+                                                                                    <TextBox Grid.Column="5" Text="{Binding MarkupText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                                             Height="26" FontSize="11" TextAlignment="Center" Margin="4,0,0,0"
+                                                                                             LostFocus="ServiceVariantField_LostFocus" Tag="{Binding Id}" />
+
+                                                                                    <!-- Vendita -->
+                                                                                    <TextBlock Grid.Column="6" FontSize="12" FontWeight="SemiBold"
+                                                                                               Foreground="#16A34A" HorizontalAlignment="Right"
+                                                                                               VerticalAlignment="Center" Margin="8,0"
+                                                                                               Text="{Binding LineTotalDisplay}" />
+
+                                                                                    <!-- Rimuovi -->
+                                                                                    <Button Grid.Column="7" Content="x" Width="22" Height="22"
+                                                                                            FontSize="10" Cursor="Hand"
+                                                                                            Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                                            Click="BtnServiceRemoveVariant_Click" Tag="{Binding Id}"
+                                                                                            ToolTip="Rimuovi variante" Padding="0" />
+                                                                                </Grid>
                                                                             </Border>
                                                                         </DataTemplate>
                                                                     </ItemsControl.ItemTemplate>
@@ -818,6 +953,49 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
 
+                                            <!-- ═══ CONTENUTI AUTOMATICI ═══ -->
+                                            <Border x:Name="pnlServiceAutoIncludes" Margin="8,8,8,0" Background="White"
+                                                    BorderBrush="#E4E7EC" BorderThickness="1" Visibility="Collapsed">
+                                                <StackPanel>
+                                                    <Border Padding="12,8" Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="0,0,0,1">
+                                                        <DockPanel>
+                                                            <Button DockPanel.Dock="Right" Content="Ricarica dal catalogo"
+                                                                    FontSize="11" Cursor="Hand" Padding="8,4"
+                                                                    Background="White" Foreground="#16A34A" BorderBrush="#BBF7D0" BorderThickness="1"
+                                                                    Click="BtnServiceReloadAutoIncludes_Click" />
+                                                            <TextBlock VerticalAlignment="Center">
+                                                                <Run Text="CONTENUTI AUTOMATICI" FontWeight="Bold" FontSize="12" Foreground="#166534" />
+                                                                <Run x:Name="txtServiceAutoCount" Text="" FontSize="11" Foreground="#6B7280" />
+                                                            </TextBlock>
+                                                        </DockPanel>
+                                                    </Border>
+                                                    <ItemsControl x:Name="icServiceAutoIncludes" Padding="4">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Padding="8,6" BorderBrush="#F3F4F6" BorderThickness="0,0,0,1">
+                                                                    <DockPanel>
+                                                                        <Button DockPanel.Dock="Right" Content="x" Width="22" Height="22"
+                                                                                FontSize="10" Cursor="Hand"
+                                                                                Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                                Click="BtnServiceRemoveAutoInclude_Click" Tag="{Binding ParentId}"
+                                                                                ToolTip="Rimuovi" Padding="0" />
+                                                                        <TextBlock Text="{Binding ParentName}" FontSize="12" Foreground="#374151"
+                                                                                   VerticalAlignment="Center" FontStyle="Italic" />
+                                                                    </DockPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Bottone aggiungi centrato -->
+                                            <Button Background="#16A34A" Foreground="White" FontSize="12" Cursor="Hand"
+                                                    Content="+ Aggiungi al preventivo" Padding="16,8" Margin="0,12"
+                                                    HorizontalAlignment="Center"
+                                                    Style="{StaticResource PrimaryBtn}"
+                                                    Click="BtnServiceAddProduct_Click" />
+
                                             <!-- Empty placeholder -->
                                             <TextBlock x:Name="txtServiceNoProducts"
                                                        Text="Nessun prodotto aggiunto. Clicca '+ Aggiungi Prodotto' per iniziare."
@@ -826,6 +1004,30 @@
                                         </StackPanel>
                                     </ScrollViewer>
                                 </DockPanel>
+                            </Border>
+
+                            <!-- ═══ NOTE ═══ -->
+                            <Border x:Name="pnlServiceNotes" Background="White" Margin="0,8,0,0" Padding="20,16"
+                                    BorderBrush="#E4E7EC" BorderThickness="1" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="20" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="NOTE AD USO INTERNO" FontSize="11" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,6" />
+                                        <TextBox x:Name="txtServiceNotesInternal" AcceptsReturn="True" TextWrapping="Wrap"
+                                                 Height="120" FontSize="12" VerticalScrollBarVisibility="Auto"
+                                                 LostFocus="ServiceNotes_LostFocus" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="NOTE SU PREVENTIVO" FontSize="11" FontWeight="Bold" Foreground="#6B7280" Margin="0,0,0,6" />
+                                        <TextBox x:Name="txtServiceNotesQuote" AcceptsReturn="True" TextWrapping="Wrap"
+                                                 Height="120" FontSize="12" VerticalScrollBarVisibility="Auto"
+                                                 LostFocus="ServiceNotes_LostFocus" />
+                                    </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
                     </DockPanel>

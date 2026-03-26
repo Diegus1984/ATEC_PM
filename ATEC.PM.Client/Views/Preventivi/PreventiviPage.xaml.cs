@@ -949,7 +949,22 @@ public partial class PreventiviPage : Page
                 _serviceProducts.Add(group);
         }
 
+        icServiceAutoIncludes.ItemsSource = _autoIncludes;
+
+        // Sconto, note, checkbox
+        txtServiceDiscountPct.Text = quote.DiscountPct.ToString("N2");
+        txtServiceNotesInternal.Text = quote.NotesInternal ?? "";
+        txtServiceNotesQuote.Text = quote.NotesQuote ?? "";
+        chkServiceShowItemPrices.IsChecked = quote.ShowItemPrices;
+        chkServiceShowSummary.IsChecked = quote.ShowSummary;
+        chkServiceShowSummaryPrices.IsChecked = quote.ShowSummaryPrices;
+        chkServiceHideQuantities.IsChecked = quote.HideQuantities;
+        pnlServiceNotes.Visibility = Visibility.Visible;
+
         txtServiceNoProducts.Visibility = _serviceProducts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        pnlServiceAutoIncludes.Visibility = _autoIncludes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        txtServiceAutoCount.Text = _autoIncludes.Count > 0 ? $" ({_autoIncludes.Count})" : "";
+        // Aggiorna anche pannello IMPIANTO se visibile
         txtImpNoAutoIncludes.Visibility = _autoIncludes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         txtImpAutoCount.Text = _autoIncludes.Count > 0 ? $"({_autoIncludes.Count})" : "";
         UpdateServiceTotals(quote);
@@ -962,7 +977,11 @@ public partial class PreventiviPage : Page
         txtServiceSubtotal.Text = $"{quote.Subtotal:N2} \u20ac";
         decimal discountAmount = quote.Subtotal * quote.DiscountPct / 100 + quote.DiscountAbs;
         txtServiceDiscount.Text = discountAmount > 0 ? $"-{discountAmount:N2} \u20ac" : "0,00 \u20ac";
+        txtServiceVat.Text = $"{quote.VatTotal:N2} \u20ac";
         txtServiceTotal.Text = $"{quote.Total:N2} \u20ac";
+        txtServiceTotalVat.Text = $"{quote.TotalWithVat:N2} \u20ac";
+        txtServiceCost.Text = $"{quote.CostTotal:N2} \u20ac";
+        txtServiceProfit.Text = $"{quote.Profit:N2} \u20ac";
     }
 
     private void BtnServiceAddProduct_Click(object sender, RoutedEventArgs e)
@@ -1103,6 +1122,146 @@ public partial class PreventiviPage : Page
             LoadServiceItems(quote);
         }
         catch { }
+    }
+
+    // ── Sconto % ──
+    private async void ServiceDiscountPct_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_selectedQuoteId == 0) return;
+        if (!decimal.TryParse(txtServiceDiscountPct.Text, out decimal pct)) return;
+
+        try
+        {
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/field",
+                JsonSerializer.Serialize(new { field = "discount_pct", value = pct.ToString() }));
+            await ReloadServiceItems();
+        }
+        catch { }
+    }
+
+    // ── Note ──
+    private async void ServiceNotes_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_selectedQuoteId == 0) return;
+
+        try
+        {
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/field",
+                JsonSerializer.Serialize(new { field = "notes_internal", value = txtServiceNotesInternal.Text }));
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/field",
+                JsonSerializer.Serialize(new { field = "notes_quote", value = txtServiceNotesQuote.Text }));
+        }
+        catch { }
+    }
+
+    // ── Salva nome prodotto parent ──
+    private async void ServiceProductName_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressServiceToggle) return;
+        if (sender is not TextBox tb || tb.Tag is not int parentId) return;
+        if (tb.DataContext is not QuoteProductGroup group) return;
+
+        try
+        {
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}/field",
+                JsonSerializer.Serialize(new { field = "name", value = group.ParentName }));
+        }
+        catch { }
+    }
+
+    // ── Expand/Collapse varianti ──
+    private void BtnServiceToggleExpand_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
+        group.IsExpanded = !group.IsExpanded;
+    }
+
+    // ── Refresh prodotto da catalogo ──
+    private async void BtnServiceRefreshProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+
+        if (MessageBox.Show("Aggiornare il prodotto e le varianti dal catalogo? Le modifiche locali verranno sovrascritte.",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}/refresh-from-catalog", "{}");
+            await ReloadServiceItems();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ── Edit RTF descrizione prodotto ──
+    private async void BtnServiceEditRtf_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
+
+        var dlg = new MaterialRtfDialog(group.ParentName, group.DescriptionRtf)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                group.DescriptionRtf = dlg.HtmlContent;
+                var body = new { descriptionRtf = dlg.HtmlContent };
+                await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/items/{group.ParentId}/field",
+                    JsonSerializer.Serialize(new { field = "description_rtf", value = dlg.HtmlContent }));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    // ── Clona prodotto + varianti ──
+    private async void BtnServiceCloneProduct_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+
+        if (MessageBox.Show("Duplicare questo prodotto con tutte le varianti?",
+            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}/clone", "{}");
+            await ReloadServiceItems();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ── Auto-includes: Ricarica dal catalogo ──
+    private async void BtnServiceReloadAutoIncludes_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedQuoteId == 0) return;
+
+        try
+        {
+            await ApiClient.PostAsync($"/api/quotes/{_selectedQuoteId}/reload-auto-includes", "{}");
+            await ReloadServiceItems();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ── Auto-includes: Rimuovi ──
+    private async void BtnServiceRemoveAutoInclude_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int parentId) return;
+
+        await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}");
+        await ReloadServiceItems();
     }
 
     // ═══════════════════════════════════════════════════════

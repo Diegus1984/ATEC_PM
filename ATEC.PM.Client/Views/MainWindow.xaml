@@ -8,28 +8,32 @@
     Height="1080"
     MinWidth="1024"
     MinHeight="600"
-    Background="#F7F8FA"
+    Background="{StaticResource Gray50Brush}"
+    FontFamily="Segoe UI"
     WindowStartupLocation="CenterScreen"
     WindowState="Maximized">
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="150" />
+            <ColumnDefinition Width="220" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!--  SIDEBAR  -->
-        <Border Grid.Column="0" Background="#1A1D26">
+        <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}">
             <DockPanel>
-                <StackPanel Margin="16,20,16,24" DockPanel.Dock="Top">
+
+                <!--  LOGO  -->
+                <StackPanel Margin="16,16,16,12" DockPanel.Dock="Top">
                     <StackPanel Orientation="Horizontal">
                         <Border
                             Width="32"
                             Height="32"
-                            Background="#4F6EF7">
+                            Background="{StaticResource PrimaryBrush}">
                             <TextBlock
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
+                                FontFamily="Segoe UI"
                                 FontSize="14"
                                 FontWeight="Bold"
                                 Foreground="White"
@@ -38,6 +42,7 @@
                         <TextBlock
                             Margin="10,0,0,0"
                             VerticalAlignment="Center"
+                            FontFamily="Segoe UI"
                             FontSize="16"
                             FontWeight="Bold"
                             Foreground="White"
@@ -45,50 +50,53 @@
                     </StackPanel>
                     <Border
                         Height="1"
-                        Margin="0,16,0,0"
-                        Background="#2A2D36" />
+                        Margin="0,12,0,0"
+                        Background="{StaticResource SidebarDividerBrush}" />
                 </StackPanel>
 
+                <!--  USER INFO (bottom)  -->
                 <Border
-                    Padding="16,12"
-                    BorderBrush="#2A2D36"
+                    Padding="16,10"
+                    BorderBrush="{StaticResource SidebarDividerBrush}"
                     BorderThickness="0,1,0,0"
                     DockPanel.Dock="Bottom">
                     <StackPanel Orientation="Horizontal">
                         <Border
-                            Width="34"
-                            Height="34"
-                            Background="#4F6EF7">
+                            Width="32"
+                            Height="32"
+                            Background="{StaticResource PrimaryBrush}">
                             <TextBlock
                                 x:Name="txtInitials"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                FontSize="13"
+                                FontFamily="Segoe UI"
+                                FontSize="12"
                                 FontWeight="SemiBold"
                                 Foreground="White" />
                         </Border>
-                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Margin="8,0,0,0" VerticalAlignment="Center">
                             <TextBlock
                                 x:Name="txtUserName"
-                                FontSize="13"
+                                FontFamily="Segoe UI"
+                                FontSize="12"
                                 FontWeight="SemiBold"
                                 Foreground="White" />
                             <TextBlock
                                 x:Name="txtRole"
+                                FontFamily="Segoe UI"
                                 FontSize="11"
-                                Foreground="#6B7280" />
+                                Foreground="{StaticResource Gray400Brush}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
+                <!--  NAVIGATION  -->
                 <ScrollViewer Margin="8,0" VerticalScrollBarVisibility="Auto">
                     <ScrollViewer.Resources>
-                        <!--  Stile Expander per sidebar scura  -->
                         <Style x:Key="NavExpander" TargetType="Expander">
                             <Setter Property="IsExpanded" Value="True" />
                             <Setter Property="BorderThickness" Value="0" />
                             <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="Foreground" Value="#4A4D56" />
                             <Setter Property="Margin" Value="0,4,0,0" />
                             <Setter Property="Template">
                                 <Setter.Value>
@@ -108,33 +116,34 @@
                                                         <Border
                                                             x:Name="bd"
                                                             Padding="{TemplateBinding Padding}"
-                                                            Background="{TemplateBinding Background}"
-                                                            CornerRadius="4">
+                                                            Background="{TemplateBinding Background}">
                                                             <DockPanel>
                                                                 <TextBlock
                                                                     x:Name="arrow"
                                                                     Width="14"
                                                                     DockPanel.Dock="Left"
+                                                                    FontFamily="Segoe UI"
                                                                     FontSize="9"
-                                                                    Foreground="#9CA3AF"
-                                                                    Text="▼" />
+                                                                    Foreground="{StaticResource Gray400Brush}"
+                                                                    Text="&#x25BC;" />
                                                                 <ContentPresenter VerticalAlignment="Center" />
                                                             </DockPanel>
                                                         </Border>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsChecked" Value="False">
-                                                                <Setter TargetName="arrow" Property="Text" Value="▶" />
+                                                                <Setter TargetName="arrow" Property="Text" Value="&#x25B6;" />
                                                             </Trigger>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="bd" Property="Background" Value="#2A2D36" />
+                                                                <Setter TargetName="bd" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>
                                                 </ToggleButton.Template>
                                                 <TextBlock
+                                                    FontFamily="Segoe UI"
                                                     FontSize="11"
                                                     FontWeight="SemiBold"
-                                                    Foreground="#9CA3AF"
+                                                    Foreground="{StaticResource Gray400Brush}"
                                                     Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}" />
                                             </ToggleButton>
                                             <ContentPresenter
@@ -165,17 +174,17 @@
                                         <TextBlock VerticalAlignment="Center" Text="  Dashboard" />
                                         <Border
                                             x:Name="badgeNotif"
-                                            Height="18"
-                                            MinWidth="18"
+                                            Height="16"
+                                            MinWidth="16"
                                             Padding="4,0"
                                             HorizontalAlignment="Right"
-                                            Background="#DC2626"
-                                            CornerRadius="9"
+                                            Background="{StaticResource DangerBrush}"
                                             Visibility="Collapsed">
                                             <TextBlock
                                                 x:Name="txtBadgeCount"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
+                                                FontFamily="Segoe UI"
                                                 FontSize="10"
                                                 FontWeight="Bold"
                                                 Foreground="White"
@@ -189,30 +198,30 @@
                                     Content="  Commesse"
                                     Style="{StaticResource NavBtn}"
                                     Tag="Commesse" />
-                                <Button
+                                <!-- ADDORMENTATA: sostituita da PreventiviPage tipo IMPIANTO -->
+                                <!--<Button
                                     auth:Auth.Feature="nav.offerte"
                                     Click="Nav_Click"
                                     Content="  Offerte"
                                     Style="{StaticResource NavBtn}"
-                                    Tag="Offerte" />
+                                    Tag="Offerte" />-->
                                 <Button
                                     auth:Auth.Feature="nav.cat_preventivi"
                                     Click="Nav_Click"
                                     Content="  Cat. Preventivi"
                                     Style="{StaticResource NavBtn}"
                                     Tag="CatalogoPreventivi" />
-                                <Button
+                                <!-- ADDORMENTATA: sostituita da PreventiviPage (Nuovo) -->
+                                <!--<Button
                                     auth:Auth.Feature="nav.preventivi"
                                     Click="Nav_Click"
                                     Content="  Preventivi"
                                     Style="{StaticResource NavBtn}"
-                                    Tag="Preventivi" />
+                                    Tag="Preventivi" />-->
                                 <Button
                                     auth:Auth.Feature="nav.preventivi_nuovo"
                                     Click="Nav_Click"
-                                    Content="  Preventivi (Nuovo)"
-                                    FontWeight="SemiBold"
-                                    Foreground="#4F6EF7"
+                                    Content="  Preventivi"
                                     Style="{StaticResource NavBtn}"
                                     Tag="PreventiviUnificati" />
                                 <Button
@@ -294,7 +303,7 @@
                                 <Button
                                     auth:Auth.Feature="nav.config_sezioni"
                                     Click="Nav_Click"
-                                    Content="  Configurazione Sezioni"
+                                    Content="  Config. Sezioni"
                                     Style="{StaticResource NavBtn}"
                                     Tag="ConfigurazioneSezioni" />
                                 <Button
@@ -337,21 +346,22 @@
         <Border Grid.Column="1">
             <DockPanel>
                 <Border
-                    Padding="24,12"
+                    Padding="24,10"
                     Background="White"
-                    BorderBrush="#E4E7EC"
+                    BorderBrush="{StaticResource Gray300Brush}"
                     BorderThickness="0,0,0,1"
                     DockPanel.Dock="Top">
                     <TextBlock
                         x:Name="txtPageTitle"
-                        FontSize="20"
-                        FontWeight="Bold"
-                        Foreground="#1A1D26"
+                        FontFamily="Segoe UI"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Gray900Brush}"
                         Text="Dashboard" />
                 </Border>
                 <Frame
                     x:Name="PageContent"
-                    Margin="5"
+                    Margin="0"
                     JournalOwnership="OwnsJournal"
                     NavigationUIVisibility="Hidden" />
             </DockPanel>

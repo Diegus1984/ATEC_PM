@@ -761,6 +761,103 @@ public class QuotesController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════
+    // ITEM ACTIONS (clone, field patch)
+    // ═══════════════════════════════════════════════════════
+
+    [HttpPost("{quoteId}/items/{itemId}/clone")]
+    public IActionResult CloneItem(int quoteId, int itemId)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            using var tx = c.BeginTransaction();
+
+            // Copia parent
+            var parent = c.QueryFirstOrDefault<QuoteItemDto>(@"
+                SELECT id AS Id, item_type AS ItemType, code AS Code, name AS Name,
+                       description_rtf AS DescriptionRtf, unit AS Unit, quantity AS Quantity,
+                       cost_price AS CostPrice, sell_price AS SellPrice, discount_pct AS DiscountPct,
+                       vat_pct AS VatPct, line_total AS LineTotal, sort_order AS SortOrder,
+                       COALESCE(is_active,1) AS IsActive, COALESCE(is_auto_include,0) AS IsAutoInclude,
+                       product_id AS ProductId, variant_id AS VariantId
+                FROM quote_items WHERE id=@itemId AND quote_id=@quoteId", new { itemId, quoteId }, tx);
+            if (parent == null) return NotFound();
+
+            int maxSort = c.ExecuteScalar<int>("SELECT COALESCE(MAX(sort_order),0) FROM quote_items WHERE quote_id=@quoteId", new { quoteId }, tx);
+
+            int newParentId = (int)c.ExecuteScalar<long>(@"
+                INSERT INTO quote_items (quote_id, item_type, code, name, description_rtf, unit, quantity,
+                    cost_price, sell_price, discount_pct, vat_pct, line_total, sort_order, is_active, is_auto_include, product_id, variant_id)
+                VALUES (@quoteId, @ItemType, @Code, @Name, @DescriptionRtf, @Unit, @Quantity,
+                    @CostPrice, @SellPrice, @DiscountPct, @VatPct, @LineTotal, @sort, @IsActive, @IsAutoInclude, @ProductId, @VariantId);
+                SELECT LAST_INSERT_ID();",
+                new { quoteId, parent.ItemType, parent.Code, parent.Name, parent.DescriptionRtf, parent.Unit,
+                      parent.Quantity, parent.CostPrice, parent.SellPrice, parent.DiscountPct, parent.VatPct,
+                      parent.LineTotal, sort = maxSort + 1, parent.IsActive, parent.IsAutoInclude, parent.ProductId, parent.VariantId }, tx);
+
+            // Copia figli
+            var children = c.Query<QuoteItemDto>(@"
+                SELECT item_type AS ItemType, code AS Code, name AS Name, description_rtf AS DescriptionRtf,
+                       unit AS Unit, quantity AS Quantity, cost_price AS CostPrice, sell_price AS SellPrice,
+                       discount_pct AS DiscountPct, vat_pct AS VatPct, line_total AS LineTotal,
+                       sort_order AS SortOrder, COALESCE(is_active,1) AS IsActive,
+                       product_id AS ProductId, variant_id AS VariantId
+                FROM quote_items WHERE parent_item_id=@itemId AND quote_id=@quoteId
+                ORDER BY sort_order", new { itemId, quoteId }, tx).ToList();
+
+            foreach (var child in children)
+            {
+                c.Execute(@"
+                    INSERT INTO quote_items (quote_id, item_type, code, name, description_rtf, unit, quantity,
+                        cost_price, sell_price, discount_pct, vat_pct, line_total, sort_order, is_active,
+                        parent_item_id, product_id, variant_id)
+                    VALUES (@quoteId, @ItemType, @Code, @Name, @DescriptionRtf, @Unit, @Quantity,
+                        @CostPrice, @SellPrice, @DiscountPct, @VatPct, @LineTotal, @SortOrder, @IsActive,
+                        @parentId, @ProductId, @VariantId)",
+                    new { quoteId, child.ItemType, child.Code, child.Name, child.DescriptionRtf, child.Unit,
+                          child.Quantity, child.CostPrice, child.SellPrice, child.DiscountPct, child.VatPct,
+                          child.LineTotal, child.SortOrder, child.IsActive, parentId = newParentId,
+                          child.ProductId, child.VariantId }, tx);
+            }
+
+            tx.Commit();
+            RecalcTotals(c, quoteId, null);
+            return Ok(ApiResponse<int>.Ok(newParentId, "Prodotto duplicato"));
+        }
+        catch (Exception ex) { return StatusCode(500, $"Errore clone: {ex.Message}"); }
+    }
+
+    [HttpPatch("{id}/field")]
+    public IActionResult UpdateQuoteField(int id, [FromBody] FieldUpdateRequest req)
+    {
+        var allowed = new HashSet<string> { "title", "discount_pct", "discount_abs", "notes_internal", "notes_quote",
+            "show_item_prices", "show_summary", "show_summary_prices", "hide_quantities",
+            "contact_name1", "contact_name2", "contact_name3", "delivery_days", "validity_days", "payment_type" };
+        if (!allowed.Contains(req.Field))
+            return BadRequest($"Campo '{req.Field}' non consentito");
+
+        using var c = _qdb.Open();
+        c.Execute($"UPDATE quotes SET `{req.Field}`=@Value WHERE id=@id", new { Value = req.Value, id });
+        RecalcTotals(c, id, null);
+        return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
+    }
+
+    [HttpPatch("{quoteId}/items/{itemId}/field")]
+    public IActionResult UpdateItemField(int quoteId, int itemId, [FromBody] FieldUpdateRequest req)
+    {
+        var allowed = new HashSet<string> { "name", "code", "description_rtf", "unit", "quantity",
+            "cost_price", "sell_price", "discount_pct", "vat_pct", "is_active", "sort_order" };
+        if (!allowed.Contains(req.Field))
+            return BadRequest($"Campo '{req.Field}' non consentito");
+
+        using var c = _qdb.Open();
+        c.Execute($"UPDATE quote_items SET `{req.Field}`=@Value WHERE id=@itemId AND quote_id=@quoteId",
+            new { Value = req.Value, itemId, quoteId });
+        RecalcTotals(c, quoteId, null);
+        return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
+    }
+
+    // ═══════════════════════════════════════════════════════
     // PDF
     // ═══════════════════════════════════════════════════════
 

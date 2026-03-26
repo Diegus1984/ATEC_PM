@@ -455,14 +455,41 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Template descrizione coerente | ✅ | h3 titolo, Part Number, Tipo, Specifiche, Compatibilità, descrizione funzionale IT |
 | Batch update 32 schede DSQC | ✅ | 3 agenti paralleli, categorie S2/S3, S4/S4C/S4C+, IRC5 |
 
+### 9k. Pannello SERVICE completo ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| ToggleSwitchStyle su varianti SERVICE | ✅ | Stesso stile IMPIANTO |
+| Layout varianti a griglia allineata | ✅ | Toggle, Descrizione, QTA, COSTO UNIT., COSTO TOT., K, VENDITA, x |
+| Expand/collapse varianti con ▼/▲ | ✅ | Bottone in header prodotto |
+| 5 pulsanti azione prodotto | ✅ | +Variante, Refresh, Edit RTF, Clona, Elimina |
+| Contenuti automatici con ricarica | ✅ | Pannello separato con bottone "Ricarica dal catalogo" |
+| Sconto % editabile | ✅ | TextBox con PATCH quotes/{id}/field |
+| 4 checkbox opzioni PDF | ✅ | ShowItemPrices, ShowSummary, ShowSummaryPrices, HideQuantities |
+| Riepilogo completo (7 righe) | ✅ | TOTALE, IVA, SCONTO, IMPONIBILE, IVA INCLUSA, COSTI AZ., UTILE |
+| Note (uso interno + preventivo) | ✅ | Due TextBox con save su LostFocus |
+| Descrizioni editabili (parent + varianti) | ✅ | TextBox inline con save automatico |
+| Endpoint PATCH quotes/{id}/field | ✅ | 15 campi consentiti (sconto, note, opzioni PDF, contatti, ecc.) |
+| Endpoint POST items/{id}/clone | ✅ | Copia parent + varianti |
+| Endpoint PATCH items/{id}/field | ✅ | Aggiornamento singolo campo item |
+
+### 9l. Pagine addormentate ✅
+
+| Pagina | Stato | Sostituita da |
+|---|---|---|
+| OffersPage / OfferViewPage | 💤 Nascosta | PreventiviPage tipo IMPIANTO |
+| QuotesListPage | 💤 Nascosta | PreventiviPage TreeView |
+| QuoteDetailPage | 💤 Nascosta | PreventiviPage pannello SERVICE |
+
+> **TODO**: eliminare definitivamente i file delle pagine addormentate + controller OffersController, OfferCostingController
+
 ### 9d. Da completare
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Pannello catalogo SERVICE nel preventivo | ❌ | MEDIA | Gestione voci/varianti come QuoteDetailPage |
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
-| Addormentare pagine vecchie (Offerte, Preventivi CMS) | ❌ | BASSA | Quando il nuovo è completo |
 | Popolamento descrizioni DSQC rimanenti (~38 schede) | ❌ | BASSA | Serie 345/346, 266, 377, YB |
+| Eliminazione definitiva pagine addormentate | ❌ | BASSA | OffersPage, QuoteDetailPage, QuotesListPage + controller |
 
 ---
 
