@@ -211,19 +211,12 @@
                                     Content="  Cat. Preventivi"
                                     Style="{StaticResource NavBtn}"
                                     Tag="CatalogoPreventivi" />
-                                <!-- ADDORMENTATA: sostituita da PreventiviPage (Nuovo) -->
-                                <!--<Button
+                                <Button
                                     auth:Auth.Feature="nav.preventivi"
                                     Click="Nav_Click"
                                     Content="  Preventivi"
                                     Style="{StaticResource NavBtn}"
-                                    Tag="Preventivi" />-->
-                                <Button
-                                    auth:Auth.Feature="nav.preventivi_nuovo"
-                                    Click="Nav_Click"
-                                    Content="  Preventivi"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="PreventiviUnificati" />
+                                    Tag="Preventivi" />
                                 <Button
                                     auth:Auth.Feature="nav.timesheet"
                                     Click="Nav_Click"

@@ -9,7 +9,7 @@ using System.Windows.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
-namespace ATEC.PM.Client.Views.Quotes;
+namespace ATEC.PM.Client.Views.Preventivi;
 
 public partial class AddQuoteItemDialog : Window
 {

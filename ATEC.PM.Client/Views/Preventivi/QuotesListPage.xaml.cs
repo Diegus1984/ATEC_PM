@@ -9,7 +9,7 @@ using System.Windows.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
-namespace ATEC.PM.Client.Views.Quotes;
+namespace ATEC.PM.Client.Views.Preventivi;
 
 public partial class QuotesListPage : Page
 {
@@ -70,6 +70,11 @@ public partial class QuotesListPage : Page
         ApplyFilter();
     }
 
+    private void TypeFilter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        ApplyFilter();
+    }
+
     private string F(string tag) =>
         _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
@@ -104,9 +109,14 @@ public partial class QuotesListPage : Page
         if (cmbStatusFilter?.SelectedItem is ComboBoxItem cbi && cbi.Tag is string s)
             statusFilter = s;
 
+        string typeFilter = "";
+        if (cmbTypeFilter?.SelectedItem is ComboBoxItem tbi && tbi.Tag is string t)
+            typeFilter = t;
+
         var filtered = _allQuotes.Where(q =>
         {
             if (!string.IsNullOrEmpty(statusFilter) && q.Status != statusFilter) return false;
+            if (!string.IsNullOrEmpty(typeFilter) && (q.QuoteType ?? "SERVICE") != typeFilter) return false;
             if (!Match(q.QuoteNumber, fNum)) return false;
             if (!Match(q.CustomerName, fCust)) return false;
             if (!Match(q.Title, fTitle)) return false;
@@ -131,9 +141,6 @@ public partial class QuotesListPage : Page
 
     private void DgQuotes_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        bool hasSel = dgQuotes.SelectedItem != null;
-        btnDuplicate.IsEnabled = hasSel;
-        btnDelete.IsEnabled = hasSel;
     }
 
     private void DgQuotes_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)

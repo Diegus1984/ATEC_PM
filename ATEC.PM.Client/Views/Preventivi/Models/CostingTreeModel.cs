@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace ATEC.PM.Client.Views.Preventivi;
+namespace ATEC.PM.Client.Views.Preventivi.Models;
 
 // ── Converters (only ones not already in AppConverters.cs) ──
 

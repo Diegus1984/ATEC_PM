@@ -1,5 +1,5 @@
 <Page
-    x:Class="ATEC.PM.Client.Views.Preventivi.PreventiviPage"
+    x:Class="ATEC.PM.Client.Views.Preventivi.QuoteDetailPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:costing="clr-namespace:ATEC.PM.Client.Views.Costing"
@@ -30,273 +30,16 @@
                 </ThicknessAnimation.EasingFunction>
             </ThicknessAnimation>
         </Storyboard>
-
-        <Style x:Key="SmoothTreeItem" TargetType="TreeViewItem">
-            <Setter Property="Padding" Value="6,4" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TreeViewItem">
-                        <StackPanel>
-                            <Border
-                                x:Name="Bd"
-                                Margin="0,1,0,1"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="6">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="20" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <Path
-                                        x:Name="Expander"
-                                        Grid.Column="0"
-                                        Width="8"
-                                        Height="10"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Data="M 0,0 L 5,5 L 0,10"
-                                        RenderTransformOrigin="0.5,0.5"
-                                        Stroke="#9CA3AF"
-                                        StrokeEndLineCap="Round"
-                                        StrokeLineJoin="Round"
-                                        StrokeStartLineCap="Round"
-                                        StrokeThickness="1.5">
-                                        <Path.RenderTransform>
-                                            <RotateTransform x:Name="ExpanderRotation" Angle="0" />
-                                        </Path.RenderTransform>
-                                    </Path>
-
-                                    <ContentPresenter
-                                        x:Name="PART_Header"
-                                        Grid.Column="1"
-                                        HorizontalAlignment="Stretch"
-                                        ContentSource="Header" />
-                                </Grid>
-                            </Border>
-
-                            <ItemsPresenter
-                                x:Name="ItemsHost"
-                                Margin="16,4,0,0"
-                                Opacity="0"
-                                Visibility="Collapsed">
-                                <ItemsPresenter.LayoutTransform>
-                                    <ScaleTransform x:Name="ItemsScale" ScaleY="0" />
-                                </ItemsPresenter.LayoutTransform>
-                            </ItemsPresenter>
-                        </StackPanel>
-
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="HasItems" Value="False">
-                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
-                            </Trigger>
-
-                            <Trigger Property="IsExpanded" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ItemsHost" Storyboard.TargetProperty="Visibility">
-                                                <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                    <DiscreteObjectKeyFrame.Value>
-                                                        <Visibility>Visible</Visibility>
-                                                    </DiscreteObjectKeyFrame.Value>
-                                                </DiscreteObjectKeyFrame>
-                                            </ObjectAnimationUsingKeyFrames>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ExpanderRotation"
-                                                Storyboard.TargetProperty="Angle"
-                                                To="90"
-                                                Duration="0:0:0.35">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ItemsScale"
-                                                Storyboard.TargetProperty="ScaleY"
-                                                To="1"
-                                                Duration="0:0:0.35">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ItemsHost"
-                                                Storyboard.TargetProperty="Opacity"
-                                                To="1"
-                                                Duration="0:0:0.35">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ExpanderRotation"
-                                                Storyboard.TargetProperty="Angle"
-                                                To="0"
-                                                Duration="0:0:0.35">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ItemsScale"
-                                                Storyboard.TargetProperty="ScaleY"
-                                                To="0"
-                                                Duration="0:0:0.35">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="ItemsHost"
-                                                Storyboard.TargetProperty="Opacity"
-                                                To="0"
-                                                Duration="0:0:0.25">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuarticEase EasingMode="EaseOut" />
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-
-                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ItemsHost" Storyboard.TargetProperty="Visibility">
-                                                <DiscreteObjectKeyFrame KeyTime="0:0:0.35">
-                                                    <DiscreteObjectKeyFrame.Value>
-                                                        <Visibility>Collapsed</Visibility>
-                                                    </DiscreteObjectKeyFrame.Value>
-                                                </DiscreteObjectKeyFrame>
-                                            </ObjectAnimationUsingKeyFrames>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
-                            </Trigger>
-
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#F3F4F6" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#EEF2FF" />
-                                <Setter TargetName="PART_Header" Property="TextElement.Foreground" Value="#4F6EF7" />
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsSelected" Value="True" />
-                                    <Condition Property="IsMouseOver" Value="True" />
-                                </MultiTrigger.Conditions>
-                                <Setter TargetName="Bd" Property="Background" Value="#E0E7FF" />
-                            </MultiTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Page.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <DockPanel>
+                <!-- Bottone Indietro -->
+                <Button DockPanel.Dock="Top" Content="&#x2190; Indietro"
+                        Click="BtnBack_Click" Cursor="Hand"
+                        FontSize="13" Foreground="#6B7280"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="16,8" HorizontalAlignment="Left" />
 
-        <!-- LEFT PANEL: Tree -->
-        <Border
-            Grid.Column="0"
-            Background="White"
-            BorderBrush="{StaticResource BorderBrush}"
-            BorderThickness="0,0,1,0">
-            <DockPanel>
-                <Border
-                    Style="{StaticResource ToolbarBorder}"
-                    DockPanel.Dock="Top">
-                    <DockPanel>
-                        <Button
-                            Background="#4F6EF7"
-                            Click="BtnNew_Click"
-                            Content="+ Nuovo"
-                            Foreground="White"
-                            Style="{StaticResource PrimaryBtn}" />
-                        <Button
-                            HorizontalAlignment="Right"
-                            Click="BtnRefresh_Click"
-                            Content="Aggiorna"
-                            DockPanel.Dock="Right"
-                            Style="{StaticResource FlatBtn}" />
-                    </DockPanel>
-                </Border>
-
-                <Border Padding="12,12,12,8" DockPanel.Dock="Top">
-                    <Grid>
-                        <TextBox
-                            x:Name="txtSearch"
-                            Height="36"
-                            Padding="12,0,12,0"
-                            VerticalContentAlignment="Center"
-                            Background="{StaticResource Gray50Brush}"
-                            BorderBrush="{StaticResource Gray300Brush}"
-                            FontSize="13"
-                            TextChanged="TxtSearch_Changed">
-                            <TextBox.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="18" />
-                                </Style>
-                            </TextBox.Resources>
-                        </TextBox>
-                        <TextBlock
-                            x:Name="txtSearchPlaceholder"
-                            Margin="14,0,0,0"
-                            VerticalAlignment="Center"
-                            FontSize="13"
-                            Foreground="{StaticResource Gray400Brush}"
-                            IsHitTestVisible="False"
-                            Text="Cerca preventivo o cliente..." />
-                    </Grid>
-                </Border>
-
-                <Border
-                    Padding="12,6"
-                    Background="{StaticResource Gray50Brush}"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="0,1,0,0"
-                    DockPanel.Dock="Bottom">
-                    <TextBlock
-                        x:Name="txtStatus"
-                        FontSize="11"
-                        FontWeight="Medium"
-                        Foreground="{StaticResource Gray400Brush}"
-                        Text="Caricamento..." />
-                </Border>
-
-                <TreeView
-                    x:Name="tree"
-                    Padding="8,4"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                    SelectedItemChanged="Tree_SelectedItemChanged">
-                    <TreeView.ItemContainerStyle>
-                        <StaticResource ResourceKey="SmoothTreeItem" />
-                    </TreeView.ItemContainerStyle>
-                </TreeView>
-            </DockPanel>
-        </Border>
-
-        <!-- RIGHT PANEL: Detail -->
-        <Border Grid.Column="1">
-            <DockPanel>
                 <!-- Header bar -->
                 <Border
                     Padding="30,16"
@@ -373,24 +116,6 @@
                 </Border>
 
                 <Grid>
-                    <!-- Placeholder -->
-                    <StackPanel
-                        x:Name="pnlPlaceholder"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="48"
-                            Foreground="#E4E7EC"
-                            Text="&#x1F4CB;" />
-                        <TextBlock
-                            Margin="0,16,0,0"
-                            HorizontalAlignment="Center"
-                            FontSize="15"
-                            FontWeight="Medium"
-                            Foreground="{StaticResource Gray400Brush}"
-                            Text="Seleziona un preventivo dall'albero per visualizzarne i dettagli" />
-                    </StackPanel>
 
                     <!-- Detail panel -->
                     <DockPanel
@@ -1053,7 +778,5 @@
                         </Grid> <!-- chiude CONTENT AREA -->
                     </DockPanel>
                 </Grid>
-            </DockPanel>
-        </Border>
-    </Grid>
+    </DockPanel>
 </Page>

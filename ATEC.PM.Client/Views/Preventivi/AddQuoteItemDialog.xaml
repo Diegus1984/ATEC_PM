@@ -1,5 +1,5 @@
 <Window
-    x:Class="ATEC.PM.Client.Views.Quotes.AddQuoteItemDialog"
+    x:Class="ATEC.PM.Client.Views.Preventivi.AddQuoteItemDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Aggiungi al Preventivo"

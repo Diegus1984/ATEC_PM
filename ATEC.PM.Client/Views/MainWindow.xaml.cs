@@ -96,7 +96,7 @@ public partial class MainWindow : Window
         {
             case "Dashboard": PageContent.Navigate(new DashboardPage()); break;
             case "Commesse": PageContent.Navigate(new ProjectsPage()); break;
-            case "Offerte": PageContent.Navigate(new OffersPage()); break;
+
             case "Timesheet": PageContent.Navigate(new TimesheetPage()); break;
             case "Clienti": PageContent.Navigate(new CustomersPage()); break;
             case "Fornitori": PageContent.Navigate(new SuppliersPage()); break;
@@ -110,8 +110,7 @@ public partial class MainWindow : Window
             case "Backup": PageContent.Navigate(new BackupPage()); break;
             case "Permessi": PageContent.Navigate(new Admin.AuthLevelsPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
-            case "Preventivi": PageContent.Navigate(new Quotes.QuotesListPage()); break;
-            case "PreventiviUnificati": PageContent.Navigate(new Preventivi.PreventiviPage()); break;
+            case "Preventivi": PageContent.Navigate(new Preventivi.QuotesListPage()); break;
             default: PageContent.Content = null; break;
         }
     }

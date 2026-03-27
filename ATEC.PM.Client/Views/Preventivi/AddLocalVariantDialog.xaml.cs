@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace ATEC.PM.Client.Views.Quotes;
+namespace ATEC.PM.Client.Views.Preventivi;
 
 public partial class AddLocalVariantDialog : Window
 {

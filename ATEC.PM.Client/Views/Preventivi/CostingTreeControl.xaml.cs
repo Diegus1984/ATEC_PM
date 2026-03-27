@@ -6,6 +6,7 @@ using System.Windows.Input;
 using ATEC.PM.Client.Views.Costing;
 using ATEC.PM.Shared.DTOs;
 using System.Text.Json;
+using ATEC.PM.Client.Views.Preventivi.Models;
 
 namespace ATEC.PM.Client.Views.Preventivi;
 

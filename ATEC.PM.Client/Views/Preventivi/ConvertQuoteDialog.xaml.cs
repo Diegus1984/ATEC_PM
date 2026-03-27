@@ -4,11 +4,11 @@ using ATEC.PM.Client.Services;
 
 namespace ATEC.PM.Client.Views.Preventivi;
 
-public partial class ConvertPreventivoDialog : Window
+public partial class ConvertQuoteDialog : Window
 {
     public int SelectedPmId { get; private set; }
 
-    public ConvertPreventivoDialog()
+    public ConvertQuoteDialog()
     {
         InitializeComponent();
         Loaded += async (_, _) => await LoadPmList();

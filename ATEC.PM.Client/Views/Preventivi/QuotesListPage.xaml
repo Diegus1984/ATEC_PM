@@ -1,5 +1,5 @@
 <Page
-    x:Class="ATEC.PM.Client.Views.Quotes.QuotesListPage"
+    x:Class="ATEC.PM.Client.Views.Preventivi.QuotesListPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="#F7F8FA">
@@ -12,12 +12,6 @@
                     <Button x:Name="btnNew" Content="+ Crea Preventivo"
                             Style="{StaticResource PrimaryBtn}" Margin="0,0,12,0"
                             Click="BtnNew_Click" />
-                    <Button x:Name="btnDuplicate" Content="Duplica"
-                            Style="{StaticResource FlatBtn}" Margin="0,0,8,0"
-                            IsEnabled="False" Click="BtnDuplicate_Click" />
-                    <Button x:Name="btnDelete" Content="Elimina"
-                            Style="{StaticResource FlatBtn}" Foreground="#B42318"
-                            IsEnabled="False" Click="BtnDelete_Click" />
                     <Rectangle Width="1" Fill="#E4E7EC" Margin="12,2" />
                     <Button Content="Aggiorna" Style="{StaticResource FlatBtn}"
                             Click="BtnRefresh_Click" />
@@ -26,8 +20,17 @@
                 <!-- Filtri a destra -->
                 <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right"
                             Orientation="Horizontal">
-                    <TextBlock Text="Stato:" VerticalAlignment="Center"
+                    <TextBlock Text="Tipo:" VerticalAlignment="Center"
                                FontSize="12" Foreground="#6B7280" Margin="0,0,6,0" />
+                    <ComboBox x:Name="cmbTypeFilter" Width="120" Height="32" FontSize="12"
+                              SelectionChanged="TypeFilter_Changed">
+                        <ComboBoxItem Content="Tutti" Tag="" IsSelected="True" />
+                        <ComboBoxItem Content="Servizio" Tag="SERVICE" />
+                        <ComboBoxItem Content="Impianto" Tag="IMPIANTO" />
+                    </ComboBox>
+
+                    <TextBlock Text="Stato:" VerticalAlignment="Center"
+                               FontSize="12" Foreground="#6B7280" Margin="12,0,6,0" />
                     <ComboBox x:Name="cmbStatusFilter" Width="140" Height="32" FontSize="12"
                               SelectionChanged="StatusFilter_Changed">
                         <ComboBoxItem Content="Tutti" Tag="" IsSelected="True" />
@@ -80,6 +83,40 @@
                         <DataTemplate>
                             <TextBlock Text="{Binding QuoteNumber}" Style="{StaticResource DgCellText}"
                                        FontWeight="SemiBold" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <!-- Tipo -->
+                <DataGridTemplateColumn Header="TIPO" Width="80" SortMemberPath="QuoteType">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Padding="4,2" HorizontalAlignment="Center">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="#F0FDF4" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding QuoteType}" Value="IMPIANTO">
+                                                <Setter Property="Background" Value="#FFF7ED" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock FontSize="10" FontWeight="Bold">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="SRV" />
+                                            <Setter Property="Foreground" Value="#059669" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding QuoteType}" Value="IMPIANTO">
+                                                    <Setter Property="Text" Value="IMP" />
+                                                    <Setter Property="Foreground" Value="#EA580C" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

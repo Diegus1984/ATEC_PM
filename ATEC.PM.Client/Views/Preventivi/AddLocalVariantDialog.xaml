@@ -1,5 +1,5 @@
 <Window
-    x:Class="ATEC.PM.Client.Views.Quotes.AddLocalVariantDialog"
+    x:Class="ATEC.PM.Client.Views.Preventivi.AddLocalVariantDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Aggiungi variante locale"

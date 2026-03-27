@@ -1,12 +1,15 @@
 using System.Text.Json;
 using System.Windows;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Client.Views; // CustomerDialog è in questo namespace
 
-namespace ATEC.PM.Client.Views;
+namespace ATEC.PM.Client.Views.Preventivi;
 
-public partial class NewOfferDialog : Window
+public partial class NewQuoteDialog : Window
 {
-    public NewOfferDialog()
+    public int CreatedQuoteId { get; private set; }
+
+    public NewQuoteDialog()
     {
         InitializeComponent();
         Loaded += async (_, _) => await LoadCustomers();
@@ -30,6 +33,18 @@ public partial class NewOfferDialog : Window
         catch (Exception ex) { MessageBox.Show($"Errore caricamento clienti: {ex.Message}"); }
     }
 
+    private async void BtnNewCustomer_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new CustomerDialog { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            // Ricarica la lista clienti e seleziona il nuovo
+            await LoadCustomers();
+            if (dlg.CreatedCustomerId > 0)
+                cmbCustomer.SelectedValue = dlg.CreatedCustomerId;
+        }
+    }
+
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
         if (cmbCustomer.SelectedValue is not int customerId)
@@ -46,17 +61,21 @@ public partial class NewOfferDialog : Window
 
         try
         {
+            string quoteType = rbImpianto.IsChecked == true ? "IMPIANTO" : "SERVICE";
+
             string body = JsonSerializer.Serialize(new
             {
                 CustomerId = customerId,
                 Title = txtTitle.Text.Trim(),
-                Description = txtDescription.Text.Trim()
+                QuoteType = quoteType
             });
 
-            var json = await ApiClient.PostAsync("/api/offers", body);
+            var json = await ApiClient.PostAsync("/api/preventivi", body);
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
+                if (doc.RootElement.TryGetProperty("data", out var dataEl))
+                    CreatedQuoteId = dataEl.GetInt32();
                 DialogResult = true;
                 Close();
             }
