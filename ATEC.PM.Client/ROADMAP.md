@@ -1,5 +1,19 @@
 # ATEC PM — Roadmap Aggiornata (Marzo 2026)
 
+## ⚠️ Istruzioni per Claude Code — Inizio Sessione
+
+**SEMPRE all'inizio di ogni sessione leggere:**
+1. `.claude/skills/atec-design-system/SKILL.md` — Design system (flat design, palette, spacing, brush)
+2. `.claude/skills/wpf-xaml-guide/SKILL.md` — Template XAML e pattern WPF
+3. Questo file `roadmap.md` — Stato attuale del progetto
+
+**Regole:**
+- Mai generare XAML senza aver letto il design system
+- Usare sempre `StaticResource` per colori — mai hardcodare hex nei XAML
+- Font: Segoe UI, 12px body, 11px secondary, 14px header
+- Spacing: multipli di 4px (4, 8, 12, 16, 20)
+- L'utente comunica in italiano
+
 ## Stack
 - **Client**: WPF .NET 8 (C#)
 - **Server**: ASP.NET Core Web API .NET 8
@@ -216,7 +230,7 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 | Funzionalità | Stato | Note |
 |---|---|---|
 | QuotesController (API CRUD completo) | ✅ | Codice PRV-2026-0001, auto-populate da template, gestione items, stati, duplicazione, ricalcolo totali, statistiche |
-| QuotesListPage (lista preventivi) | ✅ | DataGrid con filtri header, filtro stato, ricerca, colonne: numero, data, cliente, titolo, totale, utile, stato (badge colorato), agente |
+| QuotesHomePage (lista preventivi) | ✅ | DataGrid con filtri header, filtro stato, ricerca, colonne: numero, data, cliente, titolo, totale, utile, stato (badge colorato), agente |
 | NewQuoteDialog | ✅ | Selezione cliente (ComboBox ricercabile), template, condizioni, pagamento |
 | QuoteDetailPage (dettaglio completo) | ✅ | Header editabile, griglia voci, riepilogo economico (subtotale→IVA→sconto→imponibile→costi aziendali→UTILE), toggle PDF, note interne/preventivo, cambio stato |
 | AddQuoteItemDialog | ✅ | Doppio-click da catalogo con duplicate detection (pattern DDP), aggiornamento real-time della lista items |
@@ -473,15 +487,72 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Endpoint POST items/{id}/clone | ✅ | Copia parent + varianti |
 | Endpoint PATCH items/{id}/field | ✅ | Aggiornamento singolo campo item |
 
-### 9l. Pagine addormentate ✅
+### 9l. Ristrutturazione Navigazione Preventivi ✅
 
-| Pagina | Stato | Sostituita da |
+QuotesHomePage (DataGrid CMS) diventa la pagina principale "Preventivi". PreventiviPage perde il TreeView e diventa il dettaglio full-screen.
+
+| Funzionalità | Stato | Note |
 |---|---|---|
-| OffersPage / OfferViewPage | 💤 Nascosta | PreventiviPage tipo IMPIANTO |
-| QuotesListPage | 💤 Nascosta | PreventiviPage TreeView |
-| QuoteDetailPage | 💤 Nascosta | PreventiviPage pannello SERVICE |
+| QuotesHomePage come main page "Preventivi" | ✅ | DataGrid full screen con filtri, ricerca, pulsanti rapidi |
+| Colonna TIPO con badge IMP/SRV | ✅ | DataTrigger arancione/verde |
+| Filtro tipo (IMP/SRV/Tutti) | ✅ | ComboBox filtro nella toolbar |
+| Navigazione a PreventiviPage(quoteId) | ✅ | Doppio-click, Modifica, Nuovo → dettaglio full-screen |
+| NewPreventivoDialog semplificato | ✅ | Solo Cliente (con +Nuovo), Titolo, Tipo. Rimossi Listino e Gruppo Template |
+| Bottone + Nuovo Cliente nel dialog | ✅ | Apre CustomerDialog, ricarica lista, seleziona il nuovo |
+| PreventiviPage senza TreeView | ✅ | Pannello dettaglio full width, riceve quoteId dal costruttore |
+| Bottone ← Indietro | ✅ | NavigationService.GoBack() |
+| Cartella Offerts eliminata | ✅ | OffersPage, OfferViewPage rimossi |
+| Route MainWindow pulite | ✅ | Un solo bottone "Preventivi" → QuotesHomePage |
 
-> **TODO**: eliminare definitivamente i file delle pagine addormentate + controller OffersController, OfferCostingController
+### 9m. Riorganizzazione Cartelle Views ✅
+
+| Azione | Stato | Note |
+|---|---|---|
+| Merge cartelle Cms/ e Preventivi/ | ✅ | Tutti i file in Views/Quotes/ |
+| Rinomina file italiani → inglese | ✅ | PreventiviPage→QuoteDetailPage, NewPreventivoDialog→NewQuoteDialog, ConvertPreventivoDialog→ConvertQuoteDialog |
+| Eliminazione Offerts/ | ✅ | OffersPage, OfferViewPage, OfferCostingController rimossi |
+| Eliminazione file obsoleti Cms/ | ✅ | Vecchi QuoteDetailPage, NewQuoteDialog (sostituiti) |
+
+### 9n. Rinomina QuotesHomePage → QuotesHomePage ✅
+
+| Azione | Stato | Note |
+|---|---|---|
+| Rinomina classe e file | ✅ | QuotesHomePage → QuotesHomePage ovunque (XAML, code-behind, MainWindow, roadmap) |
+
+### 9o. Revisioni Preventivi — UI Lista e Read-Only ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Lista piatta con expand/collapse revisioni | ✅ | `QuoteDisplayRow` unificato (master + sub-row), toggle ▶/▼ inline nella DataGrid |
+| Badge "Rev N" e conteggio revisioni | ✅ | Badge blu DBEAFE su sotto-righe, badge conteggio "N rev" su master |
+| Stile visivo sotto-righe | ✅ | Background #F3F4F6, opacity 0.6 per SUPERATA, indent "↳" |
+| Bottone "Crea Revisione" in riga | ✅ | Nascosto su sotto-righe e righe superseded |
+| Crea revisione senza navigare al dettaglio | ✅ | Solo reload lista dopo POST /{id}/revision |
+| Click su revisione superseded → read-only | ✅ | `QuoteDetailPage(id, readOnly: true)` |
+| Read-only: guard `if (_readOnly) return;` su TUTTI gli handler | ✅ | 18 handler QuoteDetailPage + 18 handler CostingTreeControl |
+| Read-only: `IsReadOnlyMode` DependencyProperty | ✅ | Su QuoteDetailPage e CostingTreeControl, binding XAML per nascondere bottoni |
+| Read-only: converter `InverseBoolToVis` su bottoni azione | ✅ | Toolbar materiali, delete risorsa/variante, + Gruppo/Sezione, + Materiale, Ridistribuisci |
+| Read-only: `ApplyReadOnlyMode()` su campi info | ✅ | TextBox.IsReadOnly, CheckBox.IsEnabled, ComboBox.IsEnabled |
+| Read-only: badge "SUPERATA — SOLA LETTURA" | ✅ | Header status badge grigio |
+| Read-only: `pnlActions` nascosto | ✅ | Barra azioni superiore (Inviato, Accettato, Elimina, ecc.) collapsed |
+
+### 9p. Vista Raggruppata per Cliente ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Toggle "☰ Griglia / 👥 Per Cliente" nella toolbar | ✅ | Segmented control con bottone attivo blu #2563EB |
+| DataGrid.GroupStyle con HeaderTemplate | ✅ | Header azzurro #EFF6FF per ogni cliente: nome bold + badge conteggio |
+| CollectionViewSource con GroupDescription su CustomerName | ✅ | Ordinamento per cliente → data, filtri funzionano in entrambe le viste |
+| Persistenza preferenza vista | ✅ | `UserPreferences` salva in `%AppData%/ATEC_PM/user_prefs.json` |
+
+### 9q. UserPreferences Service ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| `UserPreferences.cs` (Services/) | ✅ | File JSON locale `%AppData%/ATEC_PM/user_prefs.json` |
+| API: `GetString/GetBool/GetInt` + `Set(key, value)` | ✅ | Thread-safe, lazy-loaded, auto-save |
+| Chiave `QuotesHomePage.ViewMode` | ✅ | `"grid"` o `"grouped"`, caricata al costruttore della pagina |
+| Riutilizzabile per qualsiasi preferenza UI | ✅ | Colonne, filtri, dimensioni finestre, ecc. |
 
 ### 9d. Da completare
 
@@ -489,7 +560,7 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 |---|---|---|---|
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
 | Popolamento descrizioni DSQC rimanenti (~38 schede) | ❌ | BASSA | Serie 345/346, 266, 377, YB |
-| Eliminazione definitiva pagine addormentate | ❌ | BASSA | OffersPage, QuoteDetailPage, QuotesListPage + controller |
+| Eliminazione OfferCostingController server | ❌ | BASSA | Non più referenziato da client |
 
 ---
 
@@ -545,6 +616,7 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
 | Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze via email |
 | Sicurezza (bcrypt, HTTPS, rate limiting) | ❌ | MEDIA | Migrazione SHA2→bcrypt |
+| Integrazione fatture Danea (Firebird) | ❌ | MEDIA | Struttura DB mappata in roadmap_danea.md |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
 
 ---
@@ -552,6 +624,10 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 ## Struttura File
 
 ```
+Services/
+  ApiClient.cs                       ← HTTP client wrapper per API backend
+  UserPreferences.cs                 ← Preferenze utente locali JSON (%AppData%/ATEC_PM/user_prefs.json)
+
 Helpers/
   Auth.cs                            ← Attached property Auth.Feature + Auth.AutoHide (permessi VisiWin-style direttamente nel XAML)
 
@@ -560,26 +636,22 @@ Views/ConfigurazioneSezioni/
   CostSectionTemplateDialog.xaml/.cs ← Dialog creazione sezione
   DepartmentDialog.xaml/.cs         ← Dialog creazione/modifica reparto
 
-Views/Preventivi/
-  PreventiviPage.xaml/.cs           ← TreeView cliente/anno + detail (SERVICE o IMPIANTO) + context menu revisioni/duplica
-  CostingTreeControl.xaml/.cs       ← Control costing: risorse + materiali (parent/varianti) + pricing + distribuzione + 5 pulsanti azione
+Views/Quotes/
+  QuotesHomePage.xaml/.cs            ← MAIN PAGE: DataGrid preventivi con filtri, ricerca, badge TIPO, toggle vista Griglia/Per Cliente
+  QuoteDetailPage.xaml/.cs          ← DETAIL PAGE: dettaglio full-screen (SERVICE o IMPIANTO), bottone ← Indietro
+  CostingTreeControl.xaml/.cs       ← Control costing IMPIANTO: risorse + materiali (parent/varianti) + pricing + distribuzione
   CostingTreeModel.cs               ← Model: CostingTreeRow, MaterialTreeRow, MaterialProductGroup, PricingVM, DistributionRowVM
-  AddMaterialVariantDialog.xaml/.cs ← Dialog aggiunta variante materiale locale (descrizione, costo, K, qtà)
-  MaterialRtfDialog.xaml/.cs        ← Dialog editor RTF (TinyMCE) per descrizione prodotto materiale
-  NewPreventivoDialog.xaml/.cs      ← Dialog creazione con tipo SERVICE/IMPIANTO
-  ConvertPreventivoDialog.xaml/.cs  ← Dialog selezione PM per conversione
+  AddMaterialVariantDialog.xaml/.cs ← Dialog aggiunta variante materiale locale
+  MaterialRtfDialog.xaml/.cs        ← Dialog editor RTF (TinyMCE) per descrizione prodotto
+  NewQuoteDialog.xaml/.cs           ← Dialog creazione: Cliente (+Nuovo), Titolo, Tipo SERVICE/IMPIANTO
+  ConvertQuoteDialog.xaml/.cs       ← Dialog selezione PM per conversione IMPIANTO → Commessa
+  QuoteCatalogPage.xaml/.cs         ← Catalogo: TreeView Listino→Gruppi→Categorie→Prodotti + drag & drop
+  QuoteGroupDialog.xaml/.cs         ← CRUD gruppi catalogo
+  QuoteCategoryDialog.xaml/.cs      ← CRUD categorie catalogo
+  QuoteProductDialog.xaml/.cs       ← Editor prodotto con TinyMCE + griglia varianti + K markup
 
 Resources/
   ToggleSwitchStyle.xaml             ← Toggle switch iOS-style per CheckBox (VisualStateManager, animazione, hover glow)
-
-Views/Cms/
-  QuoteCatalogPage.xaml/.cs         ← TreeView Listino→Gruppi→Categorie→Prodotti + drag & drop + natural sort
-  QuoteGroupDialog.xaml/.cs         ← CRUD gruppi
-  QuoteCategoryDialog.xaml/.cs      ← CRUD categorie
-  QuoteProductDialog.xaml/.cs       ← Editor prodotto con TinyMCE + griglia varianti + K markup + allegato
-  QuotesListPage.xaml/.cs           ← Lista preventivi CMS (vecchia, da addormentare)
-  NewQuoteDialog.xaml/.cs           ← Dialog creazione CMS (vecchia)
-  QuoteDetailPage.xaml/.cs          ← Dettaglio CMS (vecchia)
 
 Views/Admin/
   AuthLevelsPage.xaml/.cs            ← Pagina gestione permessi: griglia feature × livelli, ComboBox livello minimo, checkmark ereditarietà

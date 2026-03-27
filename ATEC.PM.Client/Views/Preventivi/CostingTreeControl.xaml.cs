@@ -21,6 +21,19 @@ public partial class CostingTreeControl : UserControl
     private ObservableCollection<MaterialProductGroup> _materialProducts = new();
     private int _nextNodeId = 1;
     private bool _isLoading;
+    /// <summary>DependencyProperty per binding XAML: nasconde bottoni azione quando true.</summary>
+    public static readonly DependencyProperty IsReadOnlyModeProperty =
+        DependencyProperty.Register(nameof(IsReadOnlyMode), typeof(bool), typeof(CostingTreeControl),
+            new PropertyMetadata(false));
+
+    public bool IsReadOnlyMode
+    {
+        get => (bool)GetValue(IsReadOnlyModeProperty);
+        set => SetValue(IsReadOnlyModeProperty, value);
+    }
+
+    // Alias per i guard nei handler
+    private bool _readOnly => IsReadOnlyMode;
 
     private Dictionary<int, List<EmployeeCostLookup>> _employeeCache = new();
     private bool _suppressEmployeeChange;
@@ -63,9 +76,10 @@ public partial class CostingTreeControl : UserControl
     /// <summary>
     /// Load costing data for a preventivo.
     /// </summary>
-    public void LoadForPreventivo(int quoteId)
+    public void LoadForPreventivo(int quoteId, bool readOnly = false)
     {
         _quoteId = quoteId;
+        IsReadOnlyMode = readOnly;
         _apiBasePath = $"/api/preventivi/{quoteId}/costing";
         _ = LoadDataAsync();
     }
@@ -117,6 +131,8 @@ public partial class CostingTreeControl : UserControl
             // Restore scroll
             _ = Dispatcher.InvokeAsync(() => mainScrollViewer.ScrollToVerticalOffset(scrollOffset),
                 System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // Read-only: nessun rendering speciale necessario — i guard nei Click handler bloccano le modifiche
         }
         catch (Exception ex)
         {
@@ -409,7 +425,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void MaterialVariantField_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_isLoading) return;
+        if (_readOnly || _isLoading) return;
 
         // Supporta TextBox standard e controlli Syncfusion (CurrencyTextBox, DoubleTextBox ecc.)
         MaterialTreeRow? mat = null;
@@ -431,7 +447,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void MaterialParentName_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_isLoading) return;
+        if (_readOnly || _isLoading) return;
         if (sender is not TextBox tb) return;
         if (tb.Tag is not MaterialProductGroup group) return;
 
@@ -641,7 +657,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void EmployeeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_suppressEmployeeChange || _isLoading) return;
+        if (_readOnly || _suppressEmployeeChange || _isLoading) return;
         if (sender is not ComboBox cmb) return;
         if (cmb.DataContext is not CostingTreeRow row || !row.IsResource) return;
         if (cmb.SelectedItem is not EmployeeCostLookup emp) return;
@@ -660,7 +676,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void AllowanceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_isLoading) return;
+        if (_readOnly || _isLoading) return;
         if (sender is not ComboBox cmb) return;
         if (cmb.DataContext is not CostingTreeRow row || !row.IsResource) return;
         if (cmb.SelectedItem is decimal val)
@@ -677,6 +693,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         try
         {
             var json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
@@ -716,6 +733,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnAddSection_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         string groupName = "GESTIONE";
         if (_resourceRows.Count > 0)
             groupName = _resourceRows[0].DisplayName;
@@ -752,6 +770,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnAddResourceInSection_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn) return;
         if (btn.Tag is not CostingTreeRow row || !row.IsSection) return;
 
@@ -771,6 +790,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnDeleteResourceInRow_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn) return;
         if (btn.Tag is not CostingTreeRow row || !row.IsResource) return;
 
@@ -790,6 +810,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnAddMaterial_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         var picker = new CatalogPickerDialog();
         if (picker.ShowDialog() != true || picker.SelectedVariants.Count == 0) return;
 
@@ -869,6 +890,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnDeleteMaterial_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn) return;
         if (btn.Tag is not MaterialTreeRow mat) return;
 
@@ -888,6 +910,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnDeleteMaterialProduct_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
         var group = _materialProducts.FirstOrDefault(g => g.ParentId == parentId);
         string name = group?.ParentName ?? $"#{parentId}";
@@ -909,6 +932,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnAddMaterialVariant_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
         var group = _materialProducts.FirstOrDefault(g => g.ParentId == parentId);
         if (group == null) return;
@@ -1004,6 +1028,7 @@ public partial class CostingTreeControl : UserControl
     /// <summary>Toggle is_active su variante materiale</summary>
     private async void ChkMaterialActive_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not CheckBox chk || chk.Tag is not MaterialTreeRow mat) return;
         try
         {
@@ -1025,6 +1050,7 @@ public partial class CostingTreeControl : UserControl
     /// <summary>1: Aggiorna locale da catalogo</summary>
     private async void BtnRefreshMaterialFromCatalog_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
         if (!group.HasCatalogLink)
         {
@@ -1049,6 +1075,7 @@ public partial class CostingTreeControl : UserControl
     /// <summary>2: Push locale → catalogo</summary>
     private async void BtnPushMaterialToCatalog_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
         if (!group.HasCatalogLink)
         {
@@ -1073,6 +1100,7 @@ public partial class CostingTreeControl : UserControl
     /// <summary>3: Modifica descrizione RTF</summary>
     private async void BtnEditMaterialRtf_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
 
         var dlg = new MaterialRtfDialog(group.ParentName, group.DescriptionRtf)
@@ -1110,6 +1138,7 @@ public partial class CostingTreeControl : UserControl
     /// <summary>4: Clona prodotto materiale</summary>
     private async void BtnCloneMaterialProduct_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not MaterialProductGroup group) return;
 
         var result = MessageBox.Show(
@@ -1432,6 +1461,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void PricingPct_KeyDown(object sender, KeyEventArgs e)
     {
+        if (_readOnly) return;
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
             e.Handled = true;
@@ -1442,6 +1472,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void PricingPct_LostFocus(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is TextBox tb)
             await ApplyAndSavePricing(tb);
     }
@@ -1477,6 +1508,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void BtnGenerateDistribution_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (MessageBox.Show("Resettare tutti i blocchi e ridistribuire proporzionalmente?",
             "Ridistribuisci", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
@@ -1497,6 +1529,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void ShadowToggle_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.DataContext is not DistributionRowVM row) return;
 
         row.IsShadowed = !row.IsShadowed;
@@ -1531,6 +1564,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void DistPct_KeyDown(object sender, KeyEventArgs e)
     {
+        if (_readOnly) return;
         if (e.Key == Key.Enter && sender is TextBox tb)
         {
             e.Handled = true;
@@ -1541,6 +1575,7 @@ public partial class CostingTreeControl : UserControl
 
     private async void DistPct_LostFocus(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is TextBox tb)
             await ApplyDistPct(tb);
     }

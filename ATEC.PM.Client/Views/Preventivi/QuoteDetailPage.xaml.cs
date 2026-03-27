@@ -22,12 +22,27 @@ public partial class QuoteDetailPage : Page
     private bool _suppressServiceToggle;
     private bool _suppressInfoSave;
 
+    /// <summary>DependencyProperty per binding XAML: nasconde bottoni azione quando true.</summary>
+    public static readonly DependencyProperty IsReadOnlyModeProperty =
+        DependencyProperty.Register(nameof(IsReadOnlyMode), typeof(bool), typeof(QuoteDetailPage),
+            new PropertyMetadata(false));
+
+    public bool IsReadOnlyMode
+    {
+        get => (bool)GetValue(IsReadOnlyModeProperty);
+        set => SetValue(IsReadOnlyModeProperty, value);
+    }
+
+    // Alias per i guard nei handler
+    private bool _readOnly => IsReadOnlyMode;
+
     public QuoteDetailPage() : this(0) { }
 
-    public QuoteDetailPage(int quoteId)
+    public QuoteDetailPage(int quoteId, bool readOnly = false)
     {
         _initialQuoteId = quoteId;
         InitializeComponent();
+        IsReadOnlyMode = readOnly;
         icServiceProducts.ItemsSource = _serviceProducts;
         icImpAutoIncludes.ItemsSource = _autoIncludes;
     }
@@ -44,7 +59,7 @@ public partial class QuoteDetailPage : Page
 
     private void BtnBack_Click(object sender, RoutedEventArgs e)
     {
-        NavigationService?.Navigate(new QuotesListPage());
+        NavigationService?.Navigate(new QuotesHomePage());
     }
 
     private async Task LoadQuoteDetail(int quoteId)
@@ -114,6 +129,10 @@ public partial class QuoteDetailPage : Page
 
             _suppressInfoSave = false;
 
+            // Read-only mode per revisioni superate
+            if (_readOnly)
+                ApplyReadOnlyMode();
+
             // Action buttons visibility
             UpdateActionButtons(quote.Status, quote.QuoteType);
 
@@ -139,7 +158,7 @@ public partial class QuoteDetailPage : Page
             if (isPlant)
             {
                 costingTreeControl.PricingUpdated += OnPricingUpdated;
-                costingTreeControl.LoadForPreventivo(quoteId);
+                costingTreeControl.LoadForPreventivo(quoteId, _readOnly);
             }
         }
         catch (Exception ex)
@@ -193,6 +212,47 @@ public partial class QuoteDetailPage : Page
         btnPdf.Visibility = Visibility.Visible;
     }
 
+    private void ApplyReadOnlyMode()
+    {
+        // Nasconde pulsanti azione (barra superiore)
+        pnlActions.Visibility = Visibility.Collapsed;
+
+        // Badge SOLA LETTURA nell'header
+        txtQuoteStatus.Text = "SUPERATA — SOLA LETTURA";
+        brdStatusBadge.Background = Brush("#E5E7EB");
+        txtQuoteStatus.Foreground = Brush("#6B7280");
+
+        // Disabilita campi info (IMPIANTO)
+        txtEditTitle.IsReadOnly = true;
+        txtEditContact1.IsReadOnly = true;
+        txtEditContact2.IsReadOnly = true;
+        txtEditContact3.IsReadOnly = true;
+        txtEditPaymentType.IsReadOnly = true;
+        txtEditValidityDays.IsReadOnly = true;
+        txtEditDeliveryDays.IsReadOnly = true;
+        txtEditNotesInternal.IsReadOnly = true;
+        txtEditNotesQuote.IsReadOnly = true;
+
+        // Disabilita checkbox PDF
+        chkShowItemPrices.IsEnabled = false;
+        chkShowSummary.IsEnabled = false;
+        chkShowSummaryPrices.IsEnabled = false;
+        chkHideQuantities.IsEnabled = false;
+
+        // Nascondi bottone aggiungi prodotto SERVICE (se esiste)
+        if (FindName("btnServiceAddProduct") is Button btnAdd)
+            btnAdd.Visibility = Visibility.Collapsed;
+
+        // Disabilita campi SERVICE (se visibili)
+        if (FindName("txtServiceNotesInternal") is TextBox ni) ni.IsReadOnly = true;
+        if (FindName("txtServiceNotesQuote") is TextBox nq) nq.IsReadOnly = true;
+        if (FindName("txtServiceDiscountPct") is TextBox sd) sd.IsReadOnly = true;
+        if (FindName("chkServiceShowItemPrices") is CheckBox c1) c1.IsEnabled = false;
+        if (FindName("chkServiceShowSummary") is CheckBox c2) c2.IsEnabled = false;
+        if (FindName("chkServiceShowSummaryPrices") is CheckBox c3) c3.IsEnabled = false;
+        if (FindName("chkServiceHideQuantities") is CheckBox c4) c4.IsEnabled = false;
+    }
+
     // ===============================================================
     // ACTIONS
     // ===============================================================
@@ -214,7 +274,7 @@ public partial class QuoteDetailPage : Page
 
     private async Task ChangeStatus(string newStatus)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         var confirm = MessageBox.Show($"Cambiare stato a {newStatus.ToUpperInvariant()}?",
             "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -237,7 +297,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnConvert_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         var dlg = new ConvertQuoteDialog { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() != true) return;
@@ -261,7 +321,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         var confirm = MessageBox.Show("Eliminare questo preventivo?", "Conferma",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -275,7 +335,7 @@ public partial class QuoteDetailPage : Page
             {
                 _selectedQuoteId = 0;
                 // Torna alla lista preventivi dopo eliminazione
-                NavigationService?.Navigate(new QuotesListPage());
+                NavigationService?.Navigate(new QuotesHomePage());
             }
             else
                 MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
@@ -312,7 +372,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnReloadAutoIncludes_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         if (MessageBox.Show("Ricaricare i contenuti automatici dal catalogo?\nI contenuti automatici attuali verranno sostituiti.",
             "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -335,6 +395,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnRemoveImpAutoInclude_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
         if (_selectedQuoteId == 0) return;
 
@@ -363,13 +424,13 @@ public partial class QuoteDetailPage : Page
 
     private async void InfoField_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
+        if (_readOnly || _suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
         await SaveQuoteInfo();
     }
 
     private async void InfoCheckBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (_suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
+        if (_readOnly || _suppressInfoSave || _selectedQuoteId == 0 || _selectedQuote == null) return;
         await SaveQuoteInfo();
     }
 
@@ -475,7 +536,7 @@ public partial class QuoteDetailPage : Page
 
     private void BtnServiceAddProduct_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         var dlg = new AddQuoteItemDialog(_selectedQuoteId) { Owner = Window.GetWindow(this) };
         dlg.ItemAdded += async () => await ReloadServiceItems();
@@ -484,6 +545,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnServiceRemoveProduct_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
 
         var group = _serviceProducts.FirstOrDefault(g => g.ParentId == parentId);
@@ -504,6 +566,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnServiceRemoveVariant_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is Button btn && btn.Tag is int variantId)
         {
             await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{variantId}");
@@ -513,6 +576,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnServiceAddVariant_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
 
         var group = _serviceProducts.FirstOrDefault(g => g.ParentId == parentId);
@@ -540,7 +604,7 @@ public partial class QuoteDetailPage : Page
 
     private async void ServiceVariantToggle_Changed(object sender, RoutedEventArgs e)
     {
-        if (_suppressServiceToggle) return;
+        if (_readOnly || _suppressServiceToggle) return;
         if (sender is not CheckBox cb || cb.DataContext is not QuoteVariantRow row) return;
 
         try
@@ -555,7 +619,7 @@ public partial class QuoteDetailPage : Page
 
     private async void ServiceVariantField_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_suppressServiceToggle) return;
+        if (_readOnly || _suppressServiceToggle) return;
         if (sender is not TextBox tb || tb.DataContext is not QuoteVariantRow row) return;
 
         try
@@ -616,7 +680,7 @@ public partial class QuoteDetailPage : Page
     // -- Sconto % --
     private async void ServiceDiscountPct_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
         if (!decimal.TryParse(txtServiceDiscountPct.Text, out decimal pct)) return;
 
         try
@@ -631,7 +695,7 @@ public partial class QuoteDetailPage : Page
     // -- Note --
     private async void ServiceNotes_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         try
         {
@@ -646,7 +710,7 @@ public partial class QuoteDetailPage : Page
     // -- Salva nome prodotto parent --
     private async void ServiceProductName_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_suppressServiceToggle) return;
+        if (_readOnly || _suppressServiceToggle) return;
         if (sender is not TextBox tb || tb.Tag is not int parentId) return;
         if (tb.DataContext is not QuoteProductGroup group) return;
 
@@ -672,6 +736,7 @@ public partial class QuoteDetailPage : Page
     // -- Refresh prodotto da catalogo --
     private async void BtnServiceRefreshProduct_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
 
         if (MessageBox.Show("Aggiornare il prodotto e le varianti dal catalogo? Le modifiche locali verranno sovrascritte.",
@@ -691,6 +756,7 @@ public partial class QuoteDetailPage : Page
     // -- Edit RTF descrizione prodotto --
     private async void BtnServiceEditRtf_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
 
         var dlg = new MaterialRtfDialog(group.ParentName, group.DescriptionRtf)
@@ -716,6 +782,7 @@ public partial class QuoteDetailPage : Page
     // -- Clona prodotto + varianti --
     private async void BtnServiceCloneProduct_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
 
         if (MessageBox.Show("Duplicare questo prodotto con tutte le varianti?",
@@ -735,7 +802,7 @@ public partial class QuoteDetailPage : Page
     // -- Auto-includes: Ricarica dal catalogo --
     private async void BtnServiceReloadAutoIncludes_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedQuoteId == 0) return;
+        if (_readOnly || _selectedQuoteId == 0) return;
 
         try
         {
@@ -751,6 +818,7 @@ public partial class QuoteDetailPage : Page
     // -- Edit RTF contenuto auto-include (SERVICE) --
     private async void BtnServiceEditAutoIncludeRtf_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
         await EditAutoIncludeRtf(group);
     }
@@ -758,6 +826,7 @@ public partial class QuoteDetailPage : Page
     // -- Edit RTF contenuto auto-include (IMPIANTO) --
     private async void BtnEditAutoIncludeRtf_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not QuoteProductGroup group) return;
         await EditAutoIncludeRtf(group);
     }
@@ -785,6 +854,7 @@ public partial class QuoteDetailPage : Page
 
     private async void BtnServiceRemoveAutoInclude_Click(object sender, RoutedEventArgs e)
     {
+        if (_readOnly) return;
         if (sender is not Button btn || btn.Tag is not int parentId) return;
 
         await ApiClient.DeleteAsync($"/api/quotes/{_selectedQuoteId}/items/{parentId}");

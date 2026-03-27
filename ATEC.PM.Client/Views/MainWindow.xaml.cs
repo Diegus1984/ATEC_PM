@@ -110,7 +110,7 @@ public partial class MainWindow : Window
             case "Backup": PageContent.Navigate(new BackupPage()); break;
             case "Permessi": PageContent.Navigate(new Admin.AuthLevelsPage()); break;
             case "CatalogoPreventivi": PageContent.Navigate(new Quotes.QuoteCatalogPage()); break;
-            case "Preventivi": PageContent.Navigate(new Preventivi.QuotesListPage()); break;
+            case "Preventivi": PageContent.Navigate(new Preventivi.QuotesHomePage()); break;
             default: PageContent.Content = null; break;
         }
     }

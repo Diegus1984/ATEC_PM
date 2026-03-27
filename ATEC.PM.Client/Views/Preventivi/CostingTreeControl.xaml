@@ -87,7 +87,8 @@
                 Click="BtnDeleteResourceInRow_Click"
                 Cursor="Hand"
                 Tag="{Binding Mode=OneWay}"
-                ToolTip="Elimina risorsa">
+                ToolTip="Elimina risorsa"
+                Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
                 <TextBlock
                     FontSize="9"
                     FontWeight="Bold"
@@ -772,7 +773,8 @@
                                                                             FontWeight="Bold"
                                                                             Foreground="#16A34A"
                                                                             Tag="{Binding Mode=OneWay}"
-                                                                            ToolTip="Aggiungi risorsa">
+                                                                            ToolTip="Aggiungi risorsa"
+                                                                            Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
                                                                             <Button.Template>
                                                                                 <ControlTemplate TargetType="Button">
                                                                                     <Border
@@ -816,7 +818,8 @@
                             </ItemsControl>
 
                             <!-- Buttons under resources grid -->
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,4">
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,4"
+                                        Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
                                 <Button Click="BtnAddGroup_Click" Content="+ Gruppo" Cursor="Hand" Margin="0,0,6,0"
                                         Background="#6B7280" Foreground="White" FontSize="11" Padding="10,4" BorderThickness="0"
                                         Template="{StaticResource RoundedButton}" />
@@ -872,36 +875,39 @@
                                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding TotalDisplay}" FontSize="13" FontWeight="Bold" Foreground="#111827"
                                                                        VerticalAlignment="Center" Margin="0,0,12,0" />
-                                                            <Button Content="+" ToolTip="Aggiungi variante locale" Width="28" Height="28"
-                                                                    FontSize="14" FontWeight="Bold" Cursor="Hand"
-                                                                    Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
-                                                                    Click="BtnAddMaterialVariant_Click" Tag="{Binding ParentId}" Padding="0" />
-                                                            <!-- 1: Aggiorna da catalogo -->
-                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna da catalogo"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#2563EB"
-                                                                    Click="BtnRefreshMaterialFromCatalog_Click" Tag="{Binding}"
-                                                                    Content="&#x21BB;" FontSize="14" Padding="0" />
-                                                            <!-- 2: Aggiorna catalogo -->
-                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna catalogo da locale"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#16A34A"
-                                                                    Click="BtnPushMaterialToCatalog_Click" Tag="{Binding}"
-                                                                    Content="&#x21A5;" FontSize="14" Padding="0" />
-                                                            <!-- 3: Modifica contenuto RTF -->
-                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Modifica descrizione"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
-                                                                    Click="BtnEditMaterialRtf_Click" Tag="{Binding}"
-                                                                    Content="&#x270E;" FontSize="14" Padding="0" />
-                                                            <!-- 4: Clona -->
-                                                            <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Clona prodotto"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#6B7280"
-                                                                    Click="BtnCloneMaterialProduct_Click" Tag="{Binding}"
-                                                                    Content="&#x2398;" FontSize="14" Padding="0" />
-                                                            <!-- 5: Elimina -->
-                                                            <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
-                                                                    FontSize="11" Cursor="Hand"
-                                                                    Background="Transparent" BorderThickness="0" Foreground="#DC2626"
-                                                                    Click="BtnDeleteMaterialProduct_Click" Tag="{Binding ParentId}"
-                                                                    ToolTip="Rimuovi prodotto" Padding="0" />
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
+                                                                <Button Content="+" ToolTip="Aggiungi variante locale" Width="28" Height="28"
+                                                                        FontSize="14" FontWeight="Bold" Cursor="Hand"
+                                                                        Background="#EFF6FF" Foreground="#2563EB" BorderBrush="#BFDBFE" BorderThickness="1"
+                                                                        Click="BtnAddMaterialVariant_Click" Tag="{Binding ParentId}" Padding="0" />
+                                                                <!-- 1: Aggiorna da catalogo -->
+                                                                <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna da catalogo"
+                                                                        Background="Transparent" BorderThickness="0" Foreground="#2563EB"
+                                                                        Click="BtnRefreshMaterialFromCatalog_Click" Tag="{Binding}"
+                                                                        Content="&#x21BB;" FontSize="14" Padding="0" />
+                                                                <!-- 2: Aggiorna catalogo -->
+                                                                <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Aggiorna catalogo da locale"
+                                                                        Background="Transparent" BorderThickness="0" Foreground="#16A34A"
+                                                                        Click="BtnPushMaterialToCatalog_Click" Tag="{Binding}"
+                                                                        Content="&#x21A5;" FontSize="14" Padding="0" />
+                                                                <!-- 3: Modifica contenuto RTF -->
+                                                                <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Modifica descrizione"
+                                                                        Background="Transparent" BorderThickness="0" Foreground="#6B7280"
+                                                                        Click="BtnEditMaterialRtf_Click" Tag="{Binding}"
+                                                                        Content="&#x270E;" FontSize="14" Padding="0" />
+                                                                <!-- 4: Clona -->
+                                                                <Button Width="28" Height="28" Margin="4,0,0,0" Cursor="Hand" ToolTip="Clona prodotto"
+                                                                        Background="Transparent" BorderThickness="0" Foreground="#6B7280"
+                                                                        Click="BtnCloneMaterialProduct_Click" Tag="{Binding}"
+                                                                        Content="&#x2398;" FontSize="14" Padding="0" />
+                                                                <!-- 5: Elimina -->
+                                                                <Button Content="X" Width="28" Height="28" Margin="4,0,0,0"
+                                                                        FontSize="11" Cursor="Hand"
+                                                                        Background="Transparent" BorderThickness="0" Foreground="#DC2626"
+                                                                        Click="BtnDeleteMaterialProduct_Click" Tag="{Binding ParentId}"
+                                                                        ToolTip="Rimuovi prodotto" Padding="0" />
+                                                            </StackPanel>
                                                         </StackPanel>
 
                                                         <TextBox Text="{Binding ParentName, UpdateSourceTrigger=LostFocus}"
@@ -1016,7 +1022,8 @@
                                                                             FontSize="10" Cursor="Hand"
                                                                             Background="Transparent" BorderThickness="0" Foreground="#DC2626"
                                                                             Click="BtnDeleteMaterial_Click" Tag="{Binding Mode=OneWay}"
-                                                                            ToolTip="Rimuovi" Padding="0" />
+                                                                            ToolTip="Rimuovi" Padding="0"
+                                                                            Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}" />
                                                                 </Grid>
                                                             </Border>
                                                         </DataTemplate>
@@ -1032,7 +1039,8 @@
                             <Button Click="BtnAddMaterial_Click" Content="+ Aggiungi Materiale" Cursor="Hand"
                                     Margin="8,6,0,8" HorizontalAlignment="Left"
                                     Background="#16A34A" Foreground="White" FontSize="11" Padding="10,4" BorderThickness="0"
-                                    Template="{StaticResource RoundedButton}" />
+                                    Template="{StaticResource RoundedButton}"
+                                    Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -1675,7 +1683,8 @@
                             Click="BtnGenerateDistribution_Click"
                             Content="🔄 Ridistribuisci (reset pin)"
                             FontSize="11"
-                            Style="{StaticResource SecondaryButton}" />
+                            Style="{StaticResource SecondaryButton}"
+                            Visibility="{Binding IsReadOnlyMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}" />
                     </StackPanel>
                 </StackPanel>
                 </Border>

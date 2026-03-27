@@ -38,7 +38,8 @@ public class QuotesController : ControllerBase
             var rows = c.Query<QuoteDto>($@"
                 SELECT q.id AS Id, q.quote_number AS QuoteNumber, q.title AS Title,
                        q.customer_id AS CustomerId, cu.company_name AS CustomerName,
-                       q.status AS Status, COALESCE(q.quote_type,'SERVICE') AS QuoteType, q.revision AS Revision,
+                       q.status AS Status, COALESCE(q.quote_type,'SERVICE') AS QuoteType,
+                       q.revision AS Revision, q.parent_quote_id AS ParentQuoteId,
                        q.group_id AS GroupId, g.name AS GroupName,
                        q.subtotal AS Subtotal, q.total AS Total, q.total_with_vat AS TotalWithVat,
                        q.cost_total AS CostTotal, q.profit AS Profit,

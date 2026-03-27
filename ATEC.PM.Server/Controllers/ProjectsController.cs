@@ -168,7 +168,18 @@ public class ProjectsController : ControllerBase
                 WHERE n.project_id = @Pid", new { Pid = id }, tx);
             c.Execute("DELETE FROM notifications WHERE project_id = @Pid", new { Pid = id }, tx);
 
-            // 3. DELETE progetto (FK CASCADE elimina fasi, timesheet, bom, costing, pricing, cashflow, chat, docs)
+            // 3. Elimina tabelle con FK non-CASCADE sulle fasi
+            c.Execute(@"
+                DELETE te FROM timesheet_entries te
+                JOIN project_phases pp ON pp.id = te.project_phase_id
+                WHERE pp.project_id = @Pid", new { Pid = id }, tx);
+
+            c.Execute(@"
+                DELETE pa FROM phase_assignments pa
+                JOIN project_phases pp ON pp.id = pa.project_phase_id
+                WHERE pp.project_id = @Pid", new { Pid = id }, tx);
+
+            // 4. DELETE progetto (FK CASCADE elimina fasi, bom, costing, pricing, cashflow, chat, docs)
             c.Execute("DELETE FROM projects WHERE id = @Id", new { Id = id }, tx);
 
             tx.Commit();
