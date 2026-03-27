@@ -94,15 +94,21 @@
                                 Foreground="White"
                                 Style="{StaticResource SuccessBtn}" />
                             <Border
+                                x:Name="separatorBeforePdf"
                                 Width="1"
                                 Margin="12,4"
                                 Background="#E4E7EC" />
                             <Button
                                 x:Name="btnPdf"
                                 Click="BtnPdf_Click"
-                                Content="PDF"
                                 Foreground="{StaticResource Gray500Brush}"
-                                Style="{StaticResource FlatBtn}" />
+                                Style="{StaticResource FlatBtn}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xEA90;" FontFamily="Segoe MDL2 Assets"
+                                               FontSize="14" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                    <TextBlock Text="PDF" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button
                                 x:Name="btnDelete"
                                 Margin="8,0,0,0"

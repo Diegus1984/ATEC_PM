@@ -160,6 +160,10 @@ public partial class QuoteDetailPage : Page
                 costingTreeControl.PricingUpdated += OnPricingUpdated;
                 costingTreeControl.LoadForPreventivo(quoteId, _readOnly);
             }
+
+            // Applica read-only dopo tutto il caricamento
+            if (_readOnly)
+                ApplyReadOnlyMode();
         }
         catch (Exception ex)
         {
@@ -178,6 +182,26 @@ public partial class QuoteDetailPage : Page
 
         var s = costingTreeControl.GetPricingSummary();
         txtSumFinal.Text = $"{s.Final:N2} \u20ac";
+
+        // Salva totale e utile nel preventivo IMPIANTO
+        if (_selectedQuoteId > 0 && !_readOnly)
+        {
+            decimal total = s.Final;
+            decimal profit = s.Final - s.TotalCost;
+            _ = SaveQuoteTotals(total, profit);
+        }
+    }
+
+    private async Task SaveQuoteTotals(decimal total, decimal profit)
+    {
+        try
+        {
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/field",
+                JsonSerializer.Serialize(new { field = "total", value = total.ToString("F2") }));
+            await ApiClient.PatchAsync($"/api/quotes/{_selectedQuoteId}/field",
+                JsonSerializer.Serialize(new { field = "profit", value = profit.ToString("F2") }));
+        }
+        catch { /* silent */ }
     }
 
     private void SetStatusBadgeColors(string status)
@@ -214,13 +238,27 @@ public partial class QuoteDetailPage : Page
 
     private void ApplyReadOnlyMode()
     {
-        // Nasconde pulsanti azione (barra superiore)
-        pnlActions.Visibility = Visibility.Collapsed;
+        // Nasconde tutti i pulsanti azione tranne PDF
+        btnSetSent.Visibility = Visibility.Collapsed;
+        btnSetAccepted.Visibility = Visibility.Collapsed;
+        btnSetRejected.Visibility = Visibility.Collapsed;
+        btnConvert.Visibility = Visibility.Collapsed;
+        btnDelete.Visibility = Visibility.Collapsed;
+        separatorBeforePdf.Visibility = Visibility.Collapsed;
 
         // Badge SOLA LETTURA nell'header
-        txtQuoteStatus.Text = "SUPERATA — SOLA LETTURA";
-        brdStatusBadge.Background = Brush("#E5E7EB");
-        txtQuoteStatus.Foreground = Brush("#6B7280");
+        if (_selectedQuote?.Status == "converted")
+        {
+            txtQuoteStatus.Text = "CONVERTITO — SOLA LETTURA";
+            brdStatusBadge.Background = Brush("#D1FAE5");
+            txtQuoteStatus.Foreground = Brush("#059669");
+        }
+        else
+        {
+            txtQuoteStatus.Text = "SUPERATA — SOLA LETTURA";
+            brdStatusBadge.Background = Brush("#E5E7EB");
+            txtQuoteStatus.Foreground = Brush("#6B7280");
+        }
 
         // Disabilita campi info (IMPIANTO)
         txtEditTitle.IsReadOnly = true;

@@ -197,18 +197,19 @@ Tutti completati. Vedi dettaglio nella versione precedente del roadmap.
 
 ---
 
-## Blocco 7 — Offerte Commerciali ✅ COMPLETATO
+## Blocco 7 — Offerte Commerciali 🗑️ RIMOSSO
 
-| Funzionalità | Stato | Note |
-|---|---|---|
-| OffersPage + OfferViewPage | ✅ | TreeView per cliente/anno, dettaglio con tab |
-| Codice OF{anno}{progressivo 3 cifre} | ✅ | OF2026001 |
-| Stati BOZZA→INVIATA→ACCETTATA→CONVERTITA | ✅ | + RIFIUTATA/PERSA/SUPERATA |
-| Revisioni con copia completa costing | ✅ | Vecchia → SUPERATA, nuova copia |
-| Conversione offerta → commessa | ✅ | Copia offer_* → project_*, crea fasi, notifica PM |
-| OfferCostingController (mirror ProjectCosting) | ✅ | Tabelle offer_* |
-| ProjectCostingControl riusato via _apiBasePath | ✅ | LoadForOffer(offerId) |
-| ConvertOfferDialog | ✅ | Seleziona PM da endpoint /api/employees/pm-list |
+Modulo completamente sostituito dal sistema Preventivi (Blocco 8/9). Tutto il codice e le tabelle DB sono stati rimossi.
+
+| Elemento rimosso | Note |
+|---|---|
+| OffersController.cs + OfferCostingController.cs | ~1000 righe server |
+| Offer_Models.cs (Shared) | Offer, OfferCreateDto, OfferUpdateDto |
+| 8 tabelle DB offer_* | offers, offer_cost_sections/departments/resources, offer_material_sections/items, offer_pricing/distribution |
+| quote_revisions (tabella vuota) | Revisioni gestite tramite parent_quote_id su quotes |
+| LoadForOffer() + IsOfferMode | Dead code in ProjectCostingControl |
+| Riferimento offerte in HardDelete | ProjectsController — ripristino offerta rimosso |
+| XAML IsOfferMode bindings | Colonne CONT.%/MARG.%, sezione distribuzione prezzo |
 
 ---
 
@@ -554,13 +555,53 @@ QuotesHomePage (DataGrid CMS) diventa la pagina principale "Preventivi". Prevent
 | Chiave `QuotesHomePage.ViewMode` | ✅ | `"grid"` o `"grouped"`, caricata al costruttore della pagina |
 | Riutilizzabile per qualsiasi preferenza UI | ✅ | Colonne, filtri, dimensioni finestre, ecc. |
 
+### 9r. Pulizia Modulo Offerte (Blocco 7) ✅
+
+| Elemento rimosso | Note |
+|---|---|
+| OffersController.cs + OfferCostingController.cs | ~1000 righe server eliminate |
+| Offer_Models.cs (Shared) | Offer, OfferCreateDto, OfferUpdateDto |
+| 8 tabelle DB offer_* | DROP TABLE offers, offer_cost_*, offer_material_*, offer_pricing* |
+| quote_revisions (tabella vuota) | Revisioni gestite tramite parent_quote_id su quotes |
+| LoadForOffer() + IsOfferMode | Dead code rimosso da ProjectCostingControl |
+| XAML bindings IsOfferMode | Colonne CONT.%/MARG.%, sezione distribuzione prezzo |
+| Riferimento offerte in HardDelete | ProjectsController — ripristino offerta rimosso |
+| Migration offer_* in DbService.cs | 10 AddColumnIfMissing su tabelle droppate |
+| FK timesheet_entries | Fixata con ON DELETE CASCADE |
+
+### 9s. Sidebar Hamburger Push (no Syncfusion) ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Header bar scura sempre visibile | ✅ | Hamburger ☰ + logo A + "ATEC PM" + titolo pagina + badge notifiche |
+| Drawer push (anima colonna Grid) | ✅ | DoubleAnimation 0↔280px, 200ms, QuadraticEase, AnimationProxy |
+| Toggle: click ☰ apre/chiude | ✅ | Il drawer resta aperto finché non si clicca ☰ |
+| Menu generato da code-behind | ✅ | `BuildNavMenu()` + `BuildNavUI()` con Expander + Button NavBtn |
+| Permessi programmatici | ✅ | `PermissionEngine.CanAccess()` nel builder, auto-hide gruppi vuoti |
+| Contenuto full-screen | ✅ | Frame occupa tutto lo schermo quando drawer è chiuso |
+| Zero dipendenze Syncfusion | ✅ | Puro WPF: Grid, Border, DoubleAnimation, ClipToBounds |
+
+### 9t. Conversione Preventivo → Commessa (UI) ✅
+
+| Funzionalità | Stato | Note |
+|---|---|---|
+| Bottone "Converti in Commessa" in QuotesHomePage | ✅ | Verde #059669, primo nella riga azioni, visibile solo IMPIANTO + accepted |
+| `CanConvert` property su QuoteDisplayRow | ✅ | `QuoteType == "IMPIANTO" && Status == "accepted" && !IsRevisionSubRow` |
+| Click → ConvertQuoteDialog → POST convert → reload | ✅ | Stessa logica di QuoteDetailPage |
+| Stato "converted" → read-only | ✅ | Badge "CONVERTITO" verde nella lista, dettaglio in sola lettura |
+| Badge "CONVERTITO — SOLA LETTURA" nel dettaglio | ✅ | Verde #D1FAE5, distinto dal grigio "SUPERATA" |
+| Bottoni nascosti per converted | ✅ | Invia, Revisione, Duplica, Converti nascosti; ComboBox stato → badge fisso |
+| Solo PDF visibile in read-only | ✅ | Icona 📄 + testo "PDF", tutti gli altri bottoni nascosti |
+| Salvataggio totale/utile IMPIANTO | ✅ | `OnPricingUpdated` → PATCH quotes/{id}/field total/profit |
+| Endpoint PATCH field: total, profit | ✅ | Aggiunti alla whitelist, skip RecalcTotals per evitare sovrascrittura |
+
 ### 9d. Da completare
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
 | Riorganizzazione listini Atec Service e LISTINO ATEC | ❌ | MEDIA | Come fatto per Automation Technology |
 | Popolamento descrizioni DSQC rimanenti (~38 schede) | ❌ | BASSA | Serie 345/346, 266, 377, YB |
-| Eliminazione OfferCostingController server | ❌ | BASSA | Non più referenziato da client |
+| ~~Eliminazione OfferCostingController server~~ | ✅ | — | Rimosso insieme a tutto il Blocco 7 |
 
 ---
 
@@ -668,8 +709,7 @@ Server/Controllers/
   PreventiviCostingController.cs    ← API costing preventivi (mirror OfferCosting su quote_cost_*)
   QuoteCatalogController.cs         ← API catalogo + categorie nidificabili + move prodotti/categorie
   QuotesController.cs               ← API preventivi CMS (items, status, pdf)
-  OffersController.cs               ← API offerte (vecchia, da addormentare)
-  OfferCostingController.cs         ← API costing offerte (vecchia)
+  # OffersController.cs / OfferCostingController.cs — RIMOSSI (Blocco 7 eliminato)
 
 Server/Services/
   QuoteDbService.cs                 ← DB: quote_type, quote_cost_*, parent_id categorie, markup varianti

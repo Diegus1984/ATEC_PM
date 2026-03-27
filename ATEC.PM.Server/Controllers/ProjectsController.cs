@@ -149,19 +149,7 @@ public class ProjectsController : ControllerBase
 
             using var tx = c.BeginTransaction();
 
-            // 1. Se il progetto è stato generato da un'offerta convertita → ripristina offerta
-            var offer = c.QueryFirstOrDefault<dynamic>(
-                "SELECT id, status FROM offers WHERE converted_project_id = @Pid",
-                new { Pid = id }, tx);
-
-            if (offer != null)
-            {
-                c.Execute(
-                    "UPDATE offers SET status = 'ACCETTATA', converted_project_id = NULL WHERE id = @Oid",
-                    new { Oid = (int)offer.id }, tx);
-            }
-
-            // 2. Cancella notifiche collegate
+            // 1. Cancella notifiche collegate
             c.Execute(@"
                 DELETE nr FROM notification_recipients nr
                 JOIN notifications n ON n.id = nr.notification_id

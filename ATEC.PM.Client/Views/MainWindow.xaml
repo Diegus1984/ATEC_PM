@@ -2,7 +2,6 @@
     x:Class="ATEC.PM.Client.Views.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:auth="clr-namespace:ATEC.PM.Client.Helpers"
     Title="ATEC PM - Gestione Commesse"
     Width="1920"
     Height="1080"
@@ -13,351 +12,175 @@
     WindowStartupLocation="CenterScreen"
     WindowState="Maximized">
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <!--  SIDEBAR  -->
-        <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}">
-            <DockPanel>
-
-                <!--  LOGO  -->
-                <StackPanel Margin="16,16,16,12" DockPanel.Dock="Top">
-                    <StackPanel Orientation="Horizontal">
-                        <Border
-                            Width="32"
-                            Height="32"
-                            Background="{StaticResource PrimaryBrush}">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontFamily="Segoe UI"
-                                FontSize="14"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Text="A" />
-                        </Border>
-                        <TextBlock
-                            Margin="10,0,0,0"
-                            VerticalAlignment="Center"
-                            FontFamily="Segoe UI"
-                            FontSize="16"
-                            FontWeight="Bold"
-                            Foreground="White"
-                            Text="ATEC PM" />
-                    </StackPanel>
-                    <Border
-                        Height="1"
-                        Margin="0,12,0,0"
-                        Background="{StaticResource SidebarDividerBrush}" />
-                </StackPanel>
-
-                <!--  USER INFO (bottom)  -->
-                <Border
-                    Padding="16,10"
-                    BorderBrush="{StaticResource SidebarDividerBrush}"
-                    BorderThickness="0,1,0,0"
-                    DockPanel.Dock="Bottom">
-                    <StackPanel Orientation="Horizontal">
-                        <Border
-                            Width="32"
-                            Height="32"
-                            Background="{StaticResource PrimaryBrush}">
-                            <TextBlock
-                                x:Name="txtInitials"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontFamily="Segoe UI"
-                                FontSize="12"
-                                FontWeight="SemiBold"
-                                Foreground="White" />
-                        </Border>
-                        <StackPanel Margin="8,0,0,0" VerticalAlignment="Center">
-                            <TextBlock
-                                x:Name="txtUserName"
-                                FontFamily="Segoe UI"
-                                FontSize="12"
-                                FontWeight="SemiBold"
-                                Foreground="White" />
-                            <TextBlock
-                                x:Name="txtRole"
-                                FontFamily="Segoe UI"
-                                FontSize="11"
-                                Foreground="{StaticResource Gray400Brush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!--  NAVIGATION  -->
-                <ScrollViewer Margin="8,0" VerticalScrollBarVisibility="Auto">
-                    <ScrollViewer.Resources>
-                        <Style x:Key="NavExpander" TargetType="Expander">
-                            <Setter Property="IsExpanded" Value="True" />
-                            <Setter Property="BorderThickness" Value="0" />
-                            <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="Margin" Value="0,4,0,0" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Expander">
-                                        <StackPanel>
-                                            <ToggleButton
-                                                x:Name="HeaderSite"
-                                                Margin="4,0"
-                                                Padding="8,6"
-                                                HorizontalContentAlignment="Left"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Cursor="Hand"
-                                                IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                                <ToggleButton.Template>
-                                                    <ControlTemplate TargetType="ToggleButton">
-                                                        <Border
-                                                            x:Name="bd"
-                                                            Padding="{TemplateBinding Padding}"
-                                                            Background="{TemplateBinding Background}">
-                                                            <DockPanel>
-                                                                <TextBlock
-                                                                    x:Name="arrow"
-                                                                    Width="14"
-                                                                    DockPanel.Dock="Left"
-                                                                    FontFamily="Segoe UI"
-                                                                    FontSize="9"
-                                                                    Foreground="{StaticResource Gray400Brush}"
-                                                                    Text="&#x25BC;" />
-                                                                <ContentPresenter VerticalAlignment="Center" />
-                                                            </DockPanel>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsChecked" Value="False">
-                                                                <Setter TargetName="arrow" Property="Text" Value="&#x25B6;" />
-                                                            </Trigger>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="bd" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </ToggleButton.Template>
-                                                <TextBlock
-                                                    FontFamily="Segoe UI"
-                                                    FontSize="11"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="{StaticResource Gray400Brush}"
-                                                    Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}" />
-                                            </ToggleButton>
-                                            <ContentPresenter
-                                                x:Name="ExpandSite"
-                                                Margin="0,2,0,0"
-                                                Visibility="Collapsed" />
-                                        </StackPanel>
+    <Window.Resources>
+        <!-- Stile Expander sidebar -->
+        <Style x:Key="NavExpander" TargetType="Expander">
+            <Setter Property="IsExpanded" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <StackPanel>
+                            <ToggleButton
+                                x:Name="HeaderSite"
+                                Margin="4,0" Padding="8,6"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="bd" Padding="{TemplateBinding Padding}"
+                                                Background="{TemplateBinding Background}">
+                                            <DockPanel>
+                                                <TextBlock x:Name="arrow" Width="14" DockPanel.Dock="Left"
+                                                           FontSize="9" Foreground="{StaticResource Gray400Brush}"
+                                                           Text="&#x25BC;" />
+                                                <ContentPresenter VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </Border>
                                         <ControlTemplate.Triggers>
-                                            <Trigger Property="IsExpanded" Value="True">
-                                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                                            <Trigger Property="IsChecked" Value="False">
+                                                <Setter TargetName="arrow" Property="Text" Value="&#x25B6;" />
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Background"
+                                                        Value="{StaticResource SidebarHoverBrush}" />
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ScrollViewer.Resources>
+                                </ToggleButton.Template>
+                                <TextBlock FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{StaticResource Gray400Brush}"
+                                           Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}" />
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpandSite" Margin="0,2,0,0" Visibility="Collapsed" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
-                    <StackPanel>
-                        <!--  PRINCIPALE  -->
-                        <Expander Header="PRINCIPALE" Style="{StaticResource NavExpander}">
-                            <StackPanel>
-                                <Button
-                                    Click="Nav_Click"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Dashboard">
-                                    <Grid>
-                                        <TextBlock VerticalAlignment="Center" Text="  Dashboard" />
-                                        <Border
-                                            x:Name="badgeNotif"
-                                            Height="16"
-                                            MinWidth="16"
-                                            Padding="4,0"
-                                            HorizontalAlignment="Right"
-                                            Background="{StaticResource DangerBrush}"
-                                            Visibility="Collapsed">
-                                            <TextBlock
-                                                x:Name="txtBadgeCount"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                FontFamily="Segoe UI"
-                                                FontSize="10"
-                                                FontWeight="Bold"
-                                                Foreground="White"
-                                                Text="0" />
-                                        </Border>
-                                    </Grid>
-                                </Button>
-                                <Button
-                                    auth:Auth.Feature="nav.commesse"
-                                    Click="Nav_Click"
-                                    Content="  Commesse"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Commesse" />
-                                <!-- ADDORMENTATA: sostituita da PreventiviPage tipo IMPIANTO -->
-                                <!--<Button
-                                    auth:Auth.Feature="nav.offerte"
-                                    Click="Nav_Click"
-                                    Content="  Offerte"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Offerte" />-->
-                                <Button
-                                    auth:Auth.Feature="nav.cat_preventivi"
-                                    Click="Nav_Click"
-                                    Content="  Cat. Preventivi"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="CatalogoPreventivi" />
-                                <Button
-                                    auth:Auth.Feature="nav.preventivi"
-                                    Click="Nav_Click"
-                                    Content="  Preventivi"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Preventivi" />
-                                <Button
-                                    auth:Auth.Feature="nav.timesheet"
-                                    Click="Nav_Click"
-                                    Content="  Timesheet"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Timesheet" />
-                            </StackPanel>
-                        </Expander>
+    <DockPanel>
+        <!-- HEADER BAR (sempre visibile in alto) -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource SidebarBgBrush}"
+                Height="48" Padding="8,0">
+            <DockPanel VerticalAlignment="Center">
+                <!-- Hamburger button -->
+                <Button x:Name="btnHamburger" Click="HamburgerButton_Click"
+                        Width="40" Height="40" Cursor="Hand"
+                        Background="Transparent" BorderThickness="0"
+                        DockPanel.Dock="Left">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="Transparent" Padding="8">
+                                <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="18" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background"
+                                            Value="{StaticResource SidebarHoverBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
 
-                        <!--  GESTIONE  -->
-                        <Expander
-                            auth:Auth.AutoHide="True"
-                            Header="GESTIONE"
-                            Style="{StaticResource NavExpander}">
-                            <StackPanel>
-                                <Button
-                                    auth:Auth.Feature="nav.clienti"
-                                    Click="Nav_Click"
-                                    Content="  Clienti"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Clienti" />
-                                <Button
-                                    auth:Auth.Feature="nav.fornitori"
-                                    Click="Nav_Click"
-                                    Content="  Fornitori"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Fornitori" />
-                                <Button
-                                    auth:Auth.Feature="nav.catalogo"
-                                    Click="Nav_Click"
-                                    Content="  Catalogo Articoli"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Catalogo" />
-                                <Button
-                                    auth:Auth.Feature="nav.codex"
-                                    Click="Nav_Click"
-                                    Content="  Codex Articoli"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Codex" />
-                                <Button
-                                    auth:Auth.Feature="nav.codex_composizione"
-                                    Click="Nav_Click"
-                                    Content="  Composizione Codex"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="CodexComposizione" />
-                            </StackPanel>
-                        </Expander>
-
-                        <!--  AMMINISTRAZIONE  -->
-                        <Expander
-                            auth:Auth.AutoHide="True"
-                            Header="AMMINISTRAZIONE"
-                            Style="{StaticResource NavExpander}">
-                            <StackPanel>
-                                <Button
-                                    auth:Auth.Feature="nav.utenti"
-                                    Click="Nav_Click"
-                                    Content="  Utenti"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Utenti" />
-                                <Button
-                                    auth:Auth.Feature="nav.permessi"
-                                    Click="Nav_Click"
-                                    Content="  Permessi"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Permessi" />
-                            </StackPanel>
-                        </Expander>
-
-                        <!--  GESTIONE AVANZATA  -->
-                        <Expander
-                            auth:Auth.AutoHide="True"
-                            Header="GESTIONE AVANZATA"
-                            IsExpanded="False"
-                            Style="{StaticResource NavExpander}">
-                            <StackPanel>
-                                <Button
-                                    auth:Auth.Feature="nav.config_sezioni"
-                                    Click="Nav_Click"
-                                    Content="  Config. Sezioni"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="ConfigurazioneSezioni" />
-                                <Button
-                                    auth:Auth.Feature="nav.ddp_destinazioni"
-                                    Click="Nav_Click"
-                                    Content="  Destinazioni DDP"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="DestinazioniDdp" />
-                                <Button
-                                    auth:Auth.Feature="nav.backup"
-                                    Click="Nav_Click"
-                                    Content="  Backup DB"
-                                    Style="{StaticResource NavBtn}"
-                                    Tag="Backup" />
-                            </StackPanel>
-                        </Expander>
-
-                        <!--  SESSIONE  -->
-                        <Expander
-                            Header="SESSIONE"
-                            IsExpanded="False"
-                            Style="{StaticResource NavExpander}">
-                            <StackPanel>
-                                <Button
-                                    Click="BtnLogout_Click"
-                                    Content="  Logout"
-                                    Style="{StaticResource NavBtn}" />
-                                <Button
-                                    Click="BtnExit_Click"
-                                    Content="  Esci"
-                                    Style="{StaticResource NavBtn}" />
-                            </StackPanel>
-                        </Expander>
-                    </StackPanel>
-                </ScrollViewer>
-            </DockPanel>
-        </Border>
-
-        <!--  MAIN CONTENT  -->
-        <Border Grid.Column="1">
-            <DockPanel>
-                <Border
-                    Padding="24,10"
-                    Background="White"
-                    BorderBrush="{StaticResource Gray300Brush}"
-                    BorderThickness="0,0,0,1"
-                    DockPanel.Dock="Top">
-                    <TextBlock
-                        x:Name="txtPageTitle"
-                        FontFamily="Segoe UI"
-                        FontSize="18"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Gray900Brush}"
-                        Text="Dashboard" />
+                <!-- Logo -->
+                <Border Width="28" Height="28" Background="{StaticResource PrimaryBrush}"
+                        Margin="4,0,0,0" DockPanel.Dock="Left">
+                    <TextBlock Text="A" FontSize="13" FontWeight="Bold" Foreground="White"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
-                <Frame
-                    x:Name="PageContent"
-                    Margin="0"
-                    JournalOwnership="OwnsJournal"
-                    NavigationUIVisibility="Hidden" />
+                <TextBlock Text="ATEC PM" FontSize="14" FontWeight="Bold" Foreground="White"
+                           VerticalAlignment="Center" Margin="8,0,0,0" DockPanel.Dock="Left" />
+
+                <!-- Badge notifiche (destra) -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Border x:Name="badgeNotif" Height="22" MinWidth="22" Padding="5,0"
+                            Background="{StaticResource DangerBrush}"
+                            Visibility="Collapsed" VerticalAlignment="Center">
+                        <TextBlock x:Name="txtBadgeCount" Text="0"
+                                   FontSize="11" FontWeight="Bold" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Titolo pagina -->
+                <TextBlock x:Name="txtPageTitle" Text="Dashboard"
+                           FontSize="16" FontWeight="SemiBold" Foreground="White"
+                           VerticalAlignment="Center" Margin="16,0,0,0" />
             </DockPanel>
         </Border>
-    </Grid>
+
+        <!-- Separatore -->
+        <Border DockPanel.Dock="Top" Height="1" Background="{StaticResource Gray300Brush}" />
+
+        <!-- CORPO: Sidebar push + Contenuto -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="colDrawer" Width="0" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- SIDEBAR (colonna 0, width animata) -->
+            <Border Grid.Column="0" Background="{StaticResource SidebarBgBrush}"
+                    ClipToBounds="True">
+                <DockPanel Width="280">
+                    <!-- User info (bottom) -->
+                    <Border DockPanel.Dock="Bottom" Padding="16,10"
+                            BorderBrush="{StaticResource SidebarDividerBrush}"
+                            BorderThickness="0,1,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" Background="{StaticResource PrimaryBrush}">
+                                <TextBlock x:Name="txtInitials" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="txtUserName" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="White" />
+                                <TextBlock x:Name="txtRole" FontSize="11"
+                                           Foreground="{StaticResource Gray400Brush}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Logo (top) -->
+                    <StackPanel DockPanel.Dock="Top" Margin="16,16,16,12">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" Background="{StaticResource PrimaryBrush}">
+                                <TextBlock Text="A" FontSize="14" FontWeight="Bold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="ATEC PM" FontSize="16" FontWeight="Bold" Foreground="White"
+                                       VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </StackPanel>
+                        <Border Height="1" Margin="0,12,0,0"
+                                Background="{StaticResource SidebarDividerBrush}" />
+                    </StackPanel>
+
+                    <!-- Menu navigazione -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,0">
+                        <StackPanel x:Name="navMenuPanel" />
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- CONTENUTO (colonna 1) -->
+            <Frame Grid.Column="1" x:Name="PageContent" Margin="0"
+                   JournalOwnership="OwnsJournal"
+                   NavigationUIVisibility="Hidden" />
+        </Grid>
+    </DockPanel>
 </Window>

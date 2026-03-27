@@ -18,7 +18,6 @@ public partial class ProjectCostingControl : UserControl
     private int _projectId;
     private string _apiBasePath = "";
     private bool _readOnly;
-    private bool IsOfferMode => _apiBasePath.Contains("/offers/");
     private Dictionary<int, List<EmployeeCostLookup>> _sectionEmployeesCache = new();
     private CostingViewModel _vm = new();
 
@@ -39,15 +38,6 @@ public partial class ProjectCostingControl : UserControl
         _projectId = projectId;
         if (string.IsNullOrEmpty(_apiBasePath))
             _apiBasePath = $"/api/projects/{_projectId}/costing";
-        _ = LoadData();
-    }
-
-    public void LoadForOffer(int offerId, bool readOnly = false)
-    {
-        _sectionEmployeesCache.Clear();
-        _projectId = offerId;
-        _readOnly = readOnly;
-        _apiBasePath = $"/api/offers/{offerId}/costing";
         _ = LoadData();
     }
 
@@ -93,7 +83,6 @@ public partial class ProjectCostingControl : UserControl
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
             _vm = CostingViewModel.FromData(_data);
-            _vm.IsOfferMode = IsOfferMode;
 
             // Ripristina stati di espansione
             foreach (var g in _vm.Groups)
@@ -115,10 +104,6 @@ public partial class ProjectCostingControl : UserControl
             // Ripristina posizione scroll
             _ = Dispatcher.InvokeAsync(() => mainScrollViewer.ScrollToVerticalOffset(scrollOffset),
                 System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // RecalcGrandTotals chiama RecalcDistribution che ribilancia automaticamente
-            if (IsOfferMode)
-                await SaveAllDistributions();
 
             _vm.StatusText = "Dati caricati";
         }
@@ -417,40 +402,11 @@ public partial class ProjectCostingControl : UserControl
 
             var allEmps = _sectionEmployeesCache[secId];
 
-            if (IsOfferMode)
-            {
-                await AddOfferResource(sec, allEmps);
-            }
-            else
-            {
-                await AddProjectResource(sec, allEmps);
-            }
+            await AddProjectResource(sec, allEmps);
 
             await LoadData();
             ShowTemporaryMessage("Risorsa aggiunta");
         });
-    }
-
-    private async Task AddOfferResource(CostSectionVM sec, List<EmployeeCostLookup> allEmps)
-    {
-        var anyEmp = allEmps.FirstOrDefault();
-        string deptCode = anyEmp?.DepartmentCode ?? "RIS";
-        decimal hourlyCost = anyEmp?.HourlyCost ?? 0;
-        decimal markup = anyEmp?.DefaultMarkup ?? 1.450m;
-        int counter = sec.Resources.Count + 1;
-
-        var req = new ProjectCostResourceSaveRequest
-        {
-            SectionId = sec.Id,
-            EmployeeId = null,
-            ResourceName = $"{deptCode} {counter}",
-            HourlyCost = hourlyCost,
-            MarkupValue = markup,
-            HoursPerDay = 8,
-            CostPerKm = 0.90m
-        };
-        string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await ApiClient.PostAsync($"{_apiBasePath}/resources", json);
     }
 
     private async Task AddProjectResource(CostSectionVM sec, List<EmployeeCostLookup> allEmps)
@@ -598,28 +554,7 @@ public partial class ProjectCostingControl : UserControl
             _sectionEmployeesCache[row.SectionId] = allEmployees;
         }
 
-        if (IsOfferMode)
-        {
-            SetupOfferModeCombo(combo, row, allEmployees);
-        }
-        else
-        {
-            SetupProjectModeCombo(combo, row, allEmployees);
-        }
-    }
-
-    private void SetupOfferModeCombo(ComboBox combo, CostResourceVM row, List<EmployeeCostLookup> allEmployees)
-    {
-        string deptCode = allEmployees.FirstOrDefault()?.DepartmentCode ?? "RIS";
-        var aliased = allEmployees.Select((emp, idx) => new EmployeeCostLookup
-        {
-            Id = emp.Id,
-            FullName = $"{deptCode} {idx + 1}",
-            DepartmentCode = emp.DepartmentCode,
-            HourlyCost = emp.HourlyCost,
-            DefaultMarkup = emp.DefaultMarkup
-        }).ToList();
-        combo.ItemsSource = aliased;
+        SetupProjectModeCombo(combo, row, allEmployees);
     }
 
     private void SetupProjectModeCombo(ComboBox combo, CostResourceVM row, List<EmployeeCostLookup> allEmployees)
@@ -643,20 +578,10 @@ public partial class ProjectCostingControl : UserControl
         if (combo.DataContext is not CostResourceVM row) return;
         if (combo.SelectedItem is not EmployeeCostLookup emp) return;
 
-        if (IsOfferMode)
-        {
-            row.EmployeeId = null;
-            row.ResourceName = emp.FullName;
-            row.HourlyCost = emp.HourlyCost;
-            row.MarkupValue = emp.DefaultMarkup;
-        }
-        else
-        {
-            row.EmployeeId = emp.Id;
-            row.ResourceName = emp.FullName;
-            row.HourlyCost = emp.HourlyCost;
-            row.MarkupValue = emp.DefaultMarkup;
-        }
+        row.EmployeeId = emp.Id;
+        row.ResourceName = emp.FullName;
+        row.HourlyCost = emp.HourlyCost;
+        row.MarkupValue = emp.DefaultMarkup;
 
         if (row.Id > 0)
             await SaveResource(row);
@@ -677,7 +602,7 @@ public partial class ProjectCostingControl : UserControl
             await Dispatcher.InvokeAsync(async () =>
             {
                 await SaveResource(row);
-                if (IsOfferMode) await SaveAllDistributions();
+                // Distribuzione salvata solo in CostingTreeControl
             });
         }, null, SaveDelayMs, Timeout.Infinite);
     }
@@ -693,7 +618,7 @@ public partial class ProjectCostingControl : UserControl
             await Dispatcher.InvokeAsync(async () =>
             {
                 await SaveMaterialItem(row);
-                if (IsOfferMode) await SaveAllDistributions();
+                // Distribuzione salvata solo in CostingTreeControl
             });
         }, null, SaveDelayMs, Timeout.Infinite);
     }

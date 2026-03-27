@@ -368,6 +368,9 @@
                                                 <DataTrigger Binding="{Binding IsSuperseded}" Value="True">
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsConverted}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </ComboBox.Style>
@@ -430,6 +433,22 @@
                                     <TextBlock Text="SUPERATA" FontSize="10" FontWeight="SemiBold"
                                                Foreground="#6B7280" />
                                 </Border>
+                                <!-- Badge statico per righe convertite -->
+                                <Border Padding="8,2" HorizontalAlignment="Left"
+                                        VerticalAlignment="Center" Background="#D1FAE5">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsConverted}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="CONVERTITO" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="#059669" />
+                                </Border>
                             </Grid>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
@@ -448,10 +467,35 @@
                 </DataGridTemplateColumn>
 
                 <!-- Azioni -->
-                <DataGridTemplateColumn Width="230" Header="">
+                <DataGridTemplateColumn Width="260" Header="">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="4,0">
+                                <!-- Converti in Commessa (solo IMPIANTO + accepted) -->
+                                <Button Tag="{Binding Id}" Click="RowBtnConvert_Click"
+                                        ToolTip="Converti in Commessa" Cursor="Hand"
+                                        Width="30" Height="26" Margin="1,0"
+                                        Background="#059669" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CanConvert}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" Padding="4,2">
+                                                <TextBlock Text="&#xE8FB;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
                                 <!-- Visualizza PDF -->
                                 <Button Tag="{Binding Id}" Click="RowBtnPreview_Click"
                                         ToolTip="Visualizza PDF" Cursor="Hand"
@@ -493,6 +537,9 @@
                                                 <DataTrigger Binding="{Binding IsSuperseded}" Value="True">
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsConverted}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Button.Style>
@@ -506,7 +553,7 @@
                                         </ControlTemplate>
                                     </Button.Template>
                                 </Button>
-                                <!-- Crea Revisione (solo righe master non-superseded) -->
+                                <!-- Crea Revisione (solo righe master non-superseded non-convertite) -->
                                 <Button Tag="{Binding Id}" Click="RowBtnRevision_Click"
                                         ToolTip="Crea revisione" Cursor="Hand"
                                         Width="30" Height="26" Margin="1,0"
@@ -518,6 +565,9 @@
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsSuperseded}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsConverted}" Value="True">
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -533,7 +583,7 @@
                                         </ControlTemplate>
                                     </Button.Template>
                                 </Button>
-                                <!-- Duplica (solo righe non-superseded) -->
+                                <!-- Duplica (solo righe non-superseded non-convertite) -->
                                 <Button Tag="{Binding Id}" Click="RowBtnDuplicate_Click"
                                         ToolTip="Duplica preventivo" Cursor="Hand"
                                         Width="30" Height="26" Margin="1,0"
@@ -542,6 +592,9 @@
                                         <Style TargetType="Button">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsSuperseded}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsConverted}" Value="True">
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                 </DataTrigger>
                                             </Style.Triggers>

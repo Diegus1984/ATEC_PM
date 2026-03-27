@@ -34,6 +34,8 @@ public class QuoteDisplayRow : INotifyPropertyChanged
     public bool IsSuperseded => Status == "superseded";
     public int RevisionCount { get; set; }
     public bool HasRevisions => RevisionCount > 0;
+    public bool CanConvert => QuoteType == "IMPIANTO" && Status == "accepted" && !IsRevisionSubRow;
+    public bool IsConverted => Status == "converted";
 
     // ID del master per questa catena di revisioni
     public int MasterId { get; set; }
@@ -358,7 +360,7 @@ public partial class QuotesHomePage : Page
     {
         if (dgQuotes.SelectedItem is QuoteDisplayRow row)
         {
-            bool readOnly = row.IsSuperseded;
+            bool readOnly = row.IsSuperseded || row.IsConverted;
             NavigationService?.Navigate(new QuoteDetailPage(row.Id, readOnly));
         }
     }
@@ -571,13 +573,44 @@ public partial class QuotesHomePage : Page
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
+    private async void RowBtnConvert_Click(object sender, RoutedEventArgs e)
+    {
+        int id = GetQuoteIdFromButton(sender);
+        if (id == 0) return;
+
+        QuoteDto? quote = _allQuotes.FirstOrDefault(q => q.Id == id);
+        string label = quote?.QuoteNumber ?? id.ToString();
+
+        var dlg = new ConvertQuoteDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            string body = JsonSerializer.Serialize(new { PmId = dlg.SelectedPmId });
+            string json = await ApiClient.PostAsync($"/api/preventivi/{id}/convert", body);
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+            {
+                string msg = doc.RootElement.GetProperty("message").GetString() ?? "Commessa creata";
+                MessageBox.Show(msg, "Conversione completata", MessageBoxButton.OK, MessageBoxImage.Information);
+                await Load();
+            }
+            else
+            {
+                string msg = doc.RootElement.GetProperty("message").GetString() ?? "Errore";
+                MessageBox.Show(msg, "Errore", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
     private void RowBtnEdit_Click(object sender, RoutedEventArgs e)
     {
         int id = GetQuoteIdFromButton(sender);
         if (id == 0) return;
 
-        // Se è una revisione superseded, apri in sola lettura
-        if (sender is Button btn && btn.DataContext is QuoteDisplayRow row && row.IsSuperseded)
+        // Se superseded o convertito, apri in sola lettura
+        if (sender is Button btn && btn.DataContext is QuoteDisplayRow row && (row.IsSuperseded || row.IsConverted))
         {
             NavigationService?.Navigate(new QuoteDetailPage(id, readOnly: true));
             return;

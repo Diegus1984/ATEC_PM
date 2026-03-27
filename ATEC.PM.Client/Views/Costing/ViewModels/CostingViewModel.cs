@@ -13,8 +13,6 @@ public class CostingViewModel : INotifyPropertyChanged
     public bool ShowInit => !IsInitialized;
     public bool ShowContent => IsInitialized;
 
-    public bool IsOfferMode { get; set; }
-
     private string _statusText = "";
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
 

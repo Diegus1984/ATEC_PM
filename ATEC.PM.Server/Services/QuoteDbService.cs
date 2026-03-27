@@ -171,18 +171,7 @@ public class QuoteDbService
             INDEX idx_quote (quote_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        c.Execute(@"CREATE TABLE IF NOT EXISTS quote_revisions (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            quote_id INT NOT NULL,
-            revision INT NOT NULL,
-            snapshot_json JSON NOT NULL,
-            change_notes TEXT,
-            created_by INT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
-            FOREIGN KEY (created_by) REFERENCES employees(id),
-            UNIQUE KEY uk_quote_rev (quote_id, revision)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // quote_revisions rimossa — revisioni gestite tramite parent_quote_id su quotes
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_documents (
             id INT AUTO_INCREMENT PRIMARY KEY,

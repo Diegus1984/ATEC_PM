@@ -839,42 +839,7 @@
                                         FontWeight="SemiBold"
                                         Foreground="#6B7280"
                                         Text="TIPO" />
-                                    <TextBlock
-                                        Grid.Column="5"
-                                        HorizontalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#D97706"
-                                        Text="CONT.%">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsOfferMode}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <TextBlock
-                                        Grid.Column="6"
-                                        HorizontalAlignment="Center"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#7C3AED"
-                                        Text="MARG.%">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsOfferMode}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                    <!-- Colonne CONT.% e MARG.% rimosse (legacy offerte) -->
                                 </Grid>
                             </Border>
 
@@ -1026,25 +991,7 @@
                                                                                 Text="{Binding TypeLabel}" />
                                                                         </Border>
 
-                                                                        <TextBox
-                                                                            Grid.Column="5"
-                                                                            Width="50"
-                                                                            Height="22"
-                                                                            IsReadOnly="True"
-                                                                            Style="{StaticResource NumericTextBox}"
-                                                                            Tag="contingency"
-                                                                            Text="{Binding ContingencyPct, Converter={StaticResource PctToString}, Mode=OneWay}"
-                                                                            Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
-
-                                                                        <TextBox
-                                                                            Grid.Column="6"
-                                                                            Width="50"
-                                                                            Height="22"
-                                                                            IsReadOnly="True"
-                                                                            Style="{StaticResource NumericTextBox}"
-                                                                            Tag="margin"
-                                                                            Text="{Binding MarginPct, Converter={StaticResource PctToString}, Mode=OneWay}"
-                                                                            Visibility="{Binding DataContext.IsOfferMode, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+                                                                        <!-- TextBox CONT.%/MARG.% rimossi (legacy offerte) -->
                                                                     </Grid>
 
                                                                     <!--  Dettaglio Sezione (espanso)  -->
@@ -1542,13 +1489,13 @@
                                     Content="🔄 Ridistribuisci (reset pin)"
                                     FontSize="11"
                                     Style="{StaticResource SecondaryButton}"
-                                    Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}" />
+                                    Visibility="Collapsed" />
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <!--  ═══ DISTRIBUZIONE PREZZO (offer only) ═══  -->
-                    <StackPanel Visibility="{Binding IsOfferMode, Converter={StaticResource BoolToVis}}">
+                    <!-- Sezione DISTRIBUZIONE PREZZO rimossa (legacy offerte) -->
+                    <StackPanel Visibility="Collapsed">
                         <Border
                             Height="1"
                             Margin="0,20,0,0"

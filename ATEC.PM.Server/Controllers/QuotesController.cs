@@ -833,13 +833,16 @@ public class QuotesController : ControllerBase
     {
         var allowed = new HashSet<string> { "title", "discount_pct", "discount_abs", "notes_internal", "notes_quote",
             "show_item_prices", "show_summary", "show_summary_prices", "hide_quantities",
-            "contact_name1", "contact_name2", "contact_name3", "delivery_days", "validity_days", "payment_type" };
+            "contact_name1", "contact_name2", "contact_name3", "delivery_days", "validity_days", "payment_type",
+            "total", "profit" };
         if (!allowed.Contains(req.Field))
             return BadRequest($"Campo '{req.Field}' non consentito");
 
         using var c = _qdb.Open();
         c.Execute($"UPDATE quotes SET `{req.Field}`=@Value WHERE id=@id", new { Value = req.Value, id });
-        RecalcTotals(c, id, null);
+        // Non ricalcolare totali se stiamo aggiornando total/profit direttamente (IMPIANTO costing)
+        if (req.Field != "total" && req.Field != "profit")
+            RecalcTotals(c, id, null);
         return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
     }
 

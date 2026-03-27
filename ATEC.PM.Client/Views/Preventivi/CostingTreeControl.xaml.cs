@@ -49,12 +49,16 @@ public partial class CostingTreeControl : UserControl
 
     /// <summary>Returns current pricing summary for external UI.</summary>
     public (decimal Resources, decimal Materials, decimal Travel, decimal Net, decimal ContPct, decimal ContAmt,
-            decimal Offer, decimal MargPct, decimal MargAmt, decimal Final) GetPricingSummary()
+            decimal Offer, decimal MargPct, decimal MargAmt, decimal Final, decimal TotalCost) GetPricingSummary()
     {
+        // Costo totale risorse + materiali (senza markup)
+        decimal resCost = _resourceRows.Sum(g => g.TotalCost);
+        decimal matCost = _materialProducts.Sum(p => p.TotalCost);
+
         return (_pricingVM.ResourceDistributed, _pricingVM.MaterialDistributed, _pricingVM.TravelDistributed,
                 _pricingVM.NetPrice, _pricingVM.ContingencyPct, _pricingVM.ContingencyAmount,
                 _pricingVM.OfferPrice, _pricingVM.NegotiationMarginPct, _pricingVM.NegotiationMarginAmount,
-                _pricingVM.FinalOfferPrice);
+                _pricingVM.FinalOfferPrice, resCost + matCost);
     }
     private ProjectCostingData? _lastData;
 

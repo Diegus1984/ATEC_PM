@@ -300,119 +300,10 @@ public class DbService
             FOREIGN KEY (pm_id) REFERENCES employees(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            offer_code VARCHAR(20) NOT NULL,
-            revision INT NOT NULL DEFAULT 1,
-            parent_offer_id INT NULL,
-            customer_id INT NOT NULL,
-            title VARCHAR(300) NOT NULL,
-            description TEXT,
-            created_by INT NOT NULL,
-            status VARCHAR(20) NOT NULL DEFAULT 'BOZZA',
-            converted_project_id INT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (parent_offer_id) REFERENCES offers(id) ON DELETE SET NULL,
-            FOREIGN KEY (customer_id) REFERENCES customers(id),
-            FOREIGN KEY (created_by) REFERENCES employees(id),
-            FOREIGN KEY (converted_project_id) REFERENCES projects(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
         // ══════════════════════════════════════════════════════════
-        // LIVELLO 4 — Dipendono da projects / offers
+        // LIVELLO 4 — Dipendono da projects
         // ══════════════════════════════════════════════════════════
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_cost_sections (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            offer_id INT NOT NULL,
-            template_id INT NULL,
-            name VARCHAR(200) NOT NULL,
-            section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
-            group_name VARCHAR(100) NOT NULL DEFAULT '',
-            sort_order INT NOT NULL DEFAULT 0,
-            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
-            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
-            FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE,
-            FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_cost_section_departments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            offer_cost_section_id INT NOT NULL,
-            department_id INT NOT NULL,
-            FOREIGN KEY (offer_cost_section_id) REFERENCES offer_cost_sections(id) ON DELETE CASCADE,
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_cost_resources (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            section_id INT NOT NULL,
-            employee_id INT NULL,
-            resource_name VARCHAR(200) NOT NULL DEFAULT '',
-            work_days DECIMAL(8,1) NOT NULL DEFAULT 0,
-            hours_per_day DECIMAL(4,1) NOT NULL DEFAULT 8,
-            hourly_cost DECIMAL(8,2) NOT NULL DEFAULT 0,
-            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.450,
-            num_trips INT NOT NULL DEFAULT 0,
-            km_per_trip DECIMAL(8,1) NOT NULL DEFAULT 0,
-            cost_per_km DECIMAL(6,3) NOT NULL DEFAULT 0,
-            daily_food DECIMAL(8,2) NOT NULL DEFAULT 0,
-            daily_hotel DECIMAL(8,2) NOT NULL DEFAULT 0,
-            allowance_days INT NOT NULL DEFAULT 0,
-            daily_allowance DECIMAL(8,2) NOT NULL DEFAULT 0,
-            sort_order INT NOT NULL DEFAULT 0,
-            FOREIGN KEY (section_id) REFERENCES offer_cost_sections(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_material_sections (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            offer_id INT NOT NULL,
-            category_id INT NULL,
-            name VARCHAR(200) NOT NULL,
-            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
-            commission_markup DECIMAL(5,3) NOT NULL DEFAULT 1.100,
-            sort_order INT NOT NULL DEFAULT 0,
-            is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-            FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES material_categories(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_material_items (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            section_id INT NOT NULL,
-            description VARCHAR(500) NOT NULL DEFAULT '',
-            quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
-            unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
-            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
-            item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
-            sort_order INT NOT NULL DEFAULT 0,
-            FOREIGN KEY (section_id) REFERENCES offer_material_sections(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_pricing (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            offer_id INT NOT NULL UNIQUE,
-            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0.1300,
-            negotiation_margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0500,
-            travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
-            allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
-            FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        c.Execute(@"CREATE TABLE IF NOT EXISTS offer_pricing_distribution (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    offer_id INT NOT NULL,
-                    section_type VARCHAR(20) NOT NULL,
-                    section_id INT NOT NULL,
-                    section_name VARCHAR(200) NOT NULL DEFAULT '',
-                    sale_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-                    contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
-                    margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
-                    FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // Tabelle offer_* rimosse (legacy — sostituite da quote_*)
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_phases (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -842,27 +733,17 @@ public class DbService
         AddColumnIfMissing(c, "bom_items", "danea_ref", "VARCHAR(100) DEFAULT '' AFTER requested_by");
         AddColumnIfMissing(c, "bom_items", "destination", "VARCHAR(200) DEFAULT '' AFTER date_received");
         AddColumnIfMissing(c, "bom_items", "ddp_type", "VARCHAR(20) DEFAULT 'COMMERCIAL' AFTER destination");
-        AddColumnIfMissing(c, "offer_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
-        AddColumnIfMissing(c, "offer_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
-        AddColumnIfMissing(c, "offer_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
-        AddColumnIfMissing(c, "offer_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
+        // Tabelle offer_* rimosse — migration solo su project_*
         AddColumnIfMissing(c, "project_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
         AddColumnIfMissing(c, "project_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
         AddColumnIfMissing(c, "project_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
         AddColumnIfMissing(c, "project_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
-        // Material items distribution
-        AddColumnIfMissing(c, "offer_material_items", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER sort_order");
-        AddColumnIfMissing(c, "offer_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
-        AddColumnIfMissing(c, "offer_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
-        AddColumnIfMissing(c, "offer_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
         AddColumnIfMissing(c, "project_material_items", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER sort_order");
         AddColumnIfMissing(c, "project_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
         AddColumnIfMissing(c, "project_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
         AddColumnIfMissing(c, "project_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
 
         // Shadow: nascondi voce e spalma costo
-        AddColumnIfMissing(c, "offer_cost_sections", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
-        AddColumnIfMissing(c, "offer_material_items", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
         AddColumnIfMissing(c, "project_cost_sections", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
         AddColumnIfMissing(c, "project_material_items", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
 
