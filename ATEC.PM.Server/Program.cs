@@ -107,6 +107,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 
 app.UseCors("All");
+app.UseHttpsRedirection();
 
 // Serve file statici dalla cartella CMS uploads (allegati prodotti, immagini, ecc.)
 var cmsUploadsPath = app.Configuration["Uploads:CmsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads", "cms");

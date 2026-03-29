@@ -55,12 +55,35 @@
                 FontWeight="SemiBold"
                 Foreground="#6B7280"
                 Text="DESCRIZIONE *" />
-            <TextBox
-                x:Name="txtDescription"
-                Height="32"
-                Padding="8,5"
-                BorderBrush="#E4E7EC"
-                FontSize="13" />
+            <Grid>
+                <TextBox
+                    x:Name="txtDescription"
+                    Height="32"
+                    Padding="8,5"
+                    BorderBrush="#E4E7EC"
+                    FontSize="13"
+                    TextChanged="TxtDescription_TextChanged"
+                    PreviewKeyDown="TxtDescription_PreviewKeyDown" />
+                <Popup
+                    x:Name="popSuggestions"
+                    PlacementTarget="{Binding ElementName=txtDescription}"
+                    Placement="Bottom"
+                    StaysOpen="False"
+                    Width="{Binding ActualWidth, ElementName=txtDescription}">
+                    <Border
+                        Background="White"
+                        BorderBrush="#D1D5DB"
+                        BorderThickness="1"
+                        MaxHeight="150">
+                        <ListBox
+                            x:Name="lstSuggestions"
+                            BorderThickness="0"
+                            FontSize="13"
+                            MouseDoubleClick="LstSuggestions_MouseDoubleClick"
+                            PreviewKeyDown="LstSuggestions_PreviewKeyDown" />
+                    </Border>
+                </Popup>
+            </Grid>
 
             <Grid Margin="0,12,0,0">
                 <Grid.ColumnDefinitions>

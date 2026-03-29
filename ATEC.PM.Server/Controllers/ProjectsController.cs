@@ -872,7 +872,8 @@ public class ProjectsController : ControllerBase
             SELECT p.code AS Code, p.title AS Title, p.status, p.priority,
                    p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
                    p.budget_total AS BudgetTotal, p.budget_hours_total AS BudgetHoursTotal,
-                   p.revenue AS Revenue, p.server_path AS ServerPath, p.notes AS Notes,
+                   p.revenue AS Revenue, p.description AS Description,
+                   p.server_path AS ServerPath, p.notes AS Notes,
                    COALESCE(cust.company_name, '') AS CustomerName,
                    COALESCE(CONCAT(pm.first_name,' ',pm.last_name), '') AS PmName
             FROM projects p

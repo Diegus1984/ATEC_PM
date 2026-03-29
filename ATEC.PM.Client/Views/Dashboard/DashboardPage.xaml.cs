@@ -147,7 +147,12 @@ public partial class DashboardPage : Page
             catch { }
         }
 
-        // TODO: navigare alla commessa/DDP relativa
+        // Naviga alla commessa/sezione relativa
+        if (notif.ProjectId.HasValue && notif.ProjectId > 0)
+        {
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            mainWindow?.NavigateToProject(notif.ProjectId.Value, notif.ReferenceType);
+        }
     }
 
     private async Task LoadDashboard()

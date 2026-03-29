@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Commessa"
     Width="540"
-    Height="620"
+    Height="710"
     Background="#F7F8FA"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner">
@@ -185,6 +185,16 @@
                         </ComboBox>
                     </StackPanel>
                 </Grid>
+
+                <TextBlock Style="{StaticResource Lbl}" Text="DESCRIZIONE" />
+                <TextBox
+                    x:Name="txtDescription"
+                    Height="60"
+                    Padding="8,6"
+                    AcceptsReturn="True"
+                    BorderBrush="#E4E7EC"
+                    FontSize="13"
+                    TextWrapping="Wrap" />
 
                 <TextBlock Style="{StaticResource Lbl}" Text="PATH SERVER" />
                 <TextBox x:Name="txtServerPath" Style="{StaticResource Inp}" />

@@ -96,7 +96,7 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Tipo MATERIAL / COMMISSION | ✅ | Badge provvigione, K provvigione separato |
 | Spese trasferta calcolate | ✅ | Auto da risorse DA_CLIENTE, K editabile |
 | Indennità trasferta calcolate | ✅ | Auto da risorse DA_CLIENTE, K editabile |
-| Autocomplete descrizioni da storico | ❌ | SELECT DISTINCT description FROM project_material_items |
+| Autocomplete descrizioni da storico | ✅ | Endpoint suggestions + popup autocomplete nel dialog materiali |
 
 ### 3d. Scheda Prezzi / Riepilogo ✅
 
@@ -653,11 +653,11 @@ QuotesHomePage (DataGrid CMS) diventa la pagina principale "Preventivi". Prevent
 
 | Funzionalità | Stato | Priorità | Note |
 |---|---|---|---|
-| Notifica TIMESHEET_ANOMALY | ❌ | ALTA | Ore giornaliere > 10h, fase sfora budget > 150% |
-| Autocomplete descrizioni materiali | ❌ | BASSA | SELECT DISTINCT da storico |
+| Notifica TIMESHEET_ANOMALY | ✅ | ALTA | Ore giornaliere > 10h (WARNING), fase sfora budget > 150% (ALARM) |
+| Autocomplete descrizioni materiali | ✅ | BASSA | Endpoint API + popup con suggerimenti nel dialog |
 | Notifiche Mail (SMTP Aruba) | 🅿️ | BASSA | Alert su scadenze via email |
-| Sicurezza (bcrypt, HTTPS, rate limiting) | ❌ | MEDIA | Migrazione SHA2→bcrypt |
-| Integrazione fatture Danea (Firebird) | ❌ | MEDIA | Struttura DB mappata in roadmap_danea.md |
+| Sicurezza (bcrypt, HTTPS, rate limiting) | ✅ | MEDIA | bcrypt dual-hash + HTTPS Kestrel + rate limiting con cleanup |
+| ~~Integrazione fatture Danea (Firebird)~~ | 🗑️ | — | Rimossa dalla roadmap (non necessaria) |
 | Deploy produzione | 🅿️ | BASSA | Server aziendale o cloud |
 
 ---

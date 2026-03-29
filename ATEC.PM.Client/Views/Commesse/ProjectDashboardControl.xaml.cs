@@ -62,6 +62,58 @@ public partial class ProjectDashboardControl : UserControl
         RenderHeader(d);
         RenderKpiRow(d, isPm);
 
+        // Descrizione commessa
+        if (!string.IsNullOrWhiteSpace(d.Description))
+        {
+            pnlContent.Children.Add(Title("Descrizione"));
+            pnlContent.Children.Add(Card(new TextBlock
+            {
+                Text = d.Description,
+                FontSize = 13,
+                Foreground = B("#374151"),
+                TextWrapping = TextWrapping.Wrap
+            }));
+        }
+
+        // Percorso cartella server
+        if (!string.IsNullOrWhiteSpace(d.ServerPath))
+        {
+            pnlContent.Children.Add(Title("Cartella Progetto"));
+            StackPanel spFolder = new() { Orientation = Orientation.Horizontal };
+            spFolder.Children.Add(new TextBlock
+            {
+                Text = d.ServerPath,
+                FontSize = 12,
+                Foreground = B("#6B7280"),
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 500
+            });
+            Button btnOpen = new()
+            {
+                Content = "Apri Cartella",
+                Height = 28,
+                Padding = new Thickness(12, 0, 12, 0),
+                Margin = new Thickness(12, 0, 0, 0),
+                Background = B("#2563EB"),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 12,
+                FontWeight = System.Windows.FontWeights.SemiBold,
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            string folderPath = d.ServerPath;
+            btnOpen.Click += (s, e) =>
+            {
+                if (System.IO.Directory.Exists(folderPath))
+                    System.Diagnostics.Process.Start("explorer.exe", folderPath);
+                else
+                    MessageBox.Show("Cartella non trovata.", "Errore");
+            };
+            spFolder.Children.Add(btnOpen);
+            pnlContent.Children.Add(Card(spFolder));
+        }
+
         if (!string.IsNullOrWhiteSpace(d.Notes))
         {
             pnlContent.Children.Add(Title("Note Commessa"));

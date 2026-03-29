@@ -54,7 +54,7 @@
                     Height="36"
                     Padding="8,6"
                     BorderBrush="#E4E7EC"
-                    Text="http://localhost:5100" />
+                    Text="https://localhost:5101" />
 
                 <TextBlock
                     Margin="0,16,0,6"

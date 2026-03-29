@@ -81,6 +81,7 @@ public partial class ProjectDialog : Window
             txtRevenue.Text = d.GetProperty("revenue").GetDecimal().ToString("F0");
             txtBudget.Text = d.GetProperty("budgetTotal").GetDecimal().ToString("F0");
             txtHours.Text = d.GetProperty("budgetHoursTotal").GetDecimal().ToString("F0");
+            txtDescription.Text = d.GetProperty("description").GetString() ?? "";
             txtServerPath.Text = d.GetProperty("serverPath").GetString() ?? "";
             txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
 
@@ -123,7 +124,7 @@ public partial class ProjectDialog : Window
                 title = txtTitle.Text,
                 customerId = (int)cmbCustomer.SelectedValue,
                 pmId = (int)cmbPm.SelectedValue,
-                description = "",
+                description = txtDescription.Text,
                 startDate = dpStart.SelectedDate?.ToString("yyyy-MM-dd"),
                 endDatePlanned = dpEnd.SelectedDate?.ToString("yyyy-MM-dd"),
                 budgetTotal = budget,

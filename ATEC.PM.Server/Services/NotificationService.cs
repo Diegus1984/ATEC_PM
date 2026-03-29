@@ -102,6 +102,7 @@ public class NotificationBackgroundService : BackgroundService
             try
             {
                 await CheckOverdueDdp();
+                await CheckTimesheetAnomalies();
                 await CleanupRetention();
             }
             catch (Exception ex)
@@ -157,6 +158,113 @@ public class NotificationBackgroundService : BackgroundService
 
         if (overdue.Count > 0)
             _log.LogInformation($"[Notifications] {overdue.Count} articoli scaduti notificati.");
+
+        await Task.CompletedTask;
+    }
+
+    private async Task CheckTimesheetAnomalies()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notifService = scope.ServiceProvider.GetRequiredService<NotificationService>();
+
+        using var c = db.Open();
+        int count = 0;
+
+        // ── ANOMALIA 1: Ore giornaliere > 10h (ultimi 2 giorni) ─────────
+        var excessiveHours = c.Query<dynamic>(@"
+            SELECT te.employee_id, te.work_date, SUM(te.hours) AS total_hours,
+                   CONCAT(e.first_name, ' ', e.last_name) AS employee_name
+            FROM timesheet_entries te
+            JOIN employees e ON e.id = te.employee_id
+            WHERE te.work_date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+            GROUP BY te.employee_id, te.work_date
+            HAVING SUM(te.hours) > 10
+            AND NOT EXISTS (
+                SELECT 1 FROM notifications n
+                WHERE n.notification_type = 'TIMESHEET_ANOMALY'
+                  AND n.reference_type = 'EMPLOYEE'
+                  AND n.reference_id = te.employee_id
+                  AND DATE(n.created_at) = te.work_date
+            )").ToList();
+
+        foreach (var row in excessiveHours)
+        {
+            int empId = (int)row.employee_id;
+            DateTime workDate = (DateTime)row.work_date;
+            decimal totalHours = (decimal)row.total_hours;
+            string empName = (string)row.employee_name;
+
+            // Destinatari: PM delle commesse dove ha lavorato quel giorno + ADMIN
+            List<int> recipients = c.Query<int>(@"
+                SELECT DISTINCT p.pm_id
+                FROM timesheet_entries te
+                JOIN project_phases pp ON pp.id = te.project_phase_id
+                JOIN projects p ON p.id = pp.project_id
+                WHERE te.employee_id = @EmpId AND te.work_date = @WorkDate AND p.pm_id IS NOT NULL",
+                new { EmpId = empId, WorkDate = workDate }).ToList();
+
+            // Aggiungi ADMIN
+            List<int> admins = c.Query<int>(
+                "SELECT id FROM employees WHERE user_role = 'ADMIN' AND status = 'ACTIVE'").ToList();
+            recipients.AddRange(admins);
+            recipients = recipients.Distinct().ToList();
+
+            if (recipients.Count == 0) continue;
+
+            notifService.Create(
+                "TIMESHEET_ANOMALY", "WARNING",
+                $"Ore anomale — {empName}",
+                $"{totalHours:N1}h registrate il {workDate:dd/MM/yyyy}",
+                "EMPLOYEE", empId, null, null, recipients);
+            count++;
+        }
+
+        // ── ANOMALIA 2: Fase sfora budget > 150% ────────────────────────
+        var overBudgetPhases = c.Query<dynamic>(@"
+            SELECT pp.id AS phase_id, pp.project_id, pp.budget_hours,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name,
+                   p.code AS project_code,
+                   SUM(te.hours) AS hours_worked,
+                   ROUND(SUM(te.hours) / pp.budget_hours * 100, 0) AS pct
+            FROM project_phases pp
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN projects p ON p.id = pp.project_id
+            JOIN timesheet_entries te ON te.project_phase_id = pp.id
+            WHERE pp.budget_hours > 0
+              AND p.status = 'ACTIVE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'TIMESHEET_ANOMALY'
+                    AND n.reference_type = 'PHASE'
+                    AND n.reference_id = pp.id
+              )
+            GROUP BY pp.id
+            HAVING (SUM(te.hours) / pp.budget_hours) > 1.5").ToList();
+
+        foreach (var row in overBudgetPhases)
+        {
+            int phaseId = (int)row.phase_id;
+            int projectId = (int)row.project_id;
+            decimal budgetHours = (decimal)row.budget_hours;
+            decimal hoursWorked = (decimal)row.hours_worked;
+            long pct = (long)row.pct;
+            string phaseName = (string)row.phase_name;
+            string projectCode = (string)row.project_code;
+
+            List<int> recipients = notifService.GetProjectPmIds(projectId);
+            if (recipients.Count == 0) continue;
+
+            notifService.Create(
+                "TIMESHEET_ANOMALY", "ALARM",
+                $"Fase sfora budget — {projectCode}",
+                $"{phaseName}: {hoursWorked:N1}h su {budgetHours:N1}h budget ({pct}%)",
+                "PHASE", phaseId, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0)
+            _log.LogInformation("[Notifications] {Count} anomalie timesheet notificate.", count);
 
         await Task.CompletedTask;
     }

@@ -395,6 +395,26 @@ public class ProjectCostingController : ControllerBase
         return Ok(ApiResponse<string>.Ok("", "Materiale eliminato"));
     }
 
+    /// <summary>Autocomplete descrizioni materiali già usate in tutti i progetti.</summary>
+    [HttpGet("material-items/suggestions")]
+    public IActionResult GetMaterialSuggestions(int projectId, [FromQuery] string q = "")
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+            return Ok(ApiResponse<List<string>>.Ok(new()));
+
+        using var c = _db.Open();
+        List<string> suggestions = c.Query<string>(@"
+            SELECT DISTINCT description
+            FROM project_material_items
+            WHERE description LIKE CONCAT('%', @Query, '%')
+              AND description != ''
+            ORDER BY description
+            LIMIT 15",
+            new { Query = q.Trim() }).ToList();
+
+        return Ok(ApiResponse<List<string>>.Ok(suggestions));
+    }
+
     // ══════════════════════════════════════════════════════════════
     // PRICING
     // ══════════════════════════════════════════════════════════════

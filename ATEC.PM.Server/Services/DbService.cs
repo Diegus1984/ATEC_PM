@@ -730,9 +730,11 @@ public class DbService
 
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM employees") == 0)
         {
+            string adminHash = BCrypt.Net.BCrypt.HashPassword("admin");
             c.Execute(@"INSERT INTO employees (first_name, last_name, email, username, password_hash, user_role, status)
-                VALUES ('Admin', 'ATEC', 'admin@atec.it', 'admin', SHA2('admin', 256), 'ADMIN', 'ACTIVE')");
-            Console.WriteLine("[DB] Utente admin di default creato (user: admin / pwd: admin)");
+                VALUES ('Admin', 'ATEC', 'admin@atec.it', 'admin', @Hash, 'ADMIN', 'ACTIVE')",
+                new { Hash = adminHash });
+            Console.WriteLine("[DB] Utente admin di default creato con bcrypt (user: admin / pwd: admin)");
         }
 
         // ══════════════════════════════════════════════════════════
