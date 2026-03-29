@@ -44,57 +44,39 @@ public class BudgetVsActualController : ControllerBase
         var resourcesBySection = resources.GroupBy(r => (int)r.SectionId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // ── CONSUNTIVO: singole entry timesheet ────────────────────
+        // ── CONSUNTIVO: usa view v_timesheet_with_section ────────────
         var actuals = c.Query<dynamic>(@"
             SELECT pcs.id AS CostSectionId,
-                   emp.id AS EmployeeId,
-                   CONCAT(emp.first_name, ' ', emp.last_name) AS EmployeeName,
-                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
-                   te.entry_type AS EntryType,
-                   te.work_date AS WorkDate,
-                   te.hours AS Hours,
-                   COALESCE(d.hourly_cost, 0) AS HourlyCost
-            FROM timesheet_entries te
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
-            JOIN employees emp ON emp.id = te.employee_id
-            LEFT JOIN (
-                SELECT employee_id, MIN(department_id) AS department_id 
-                FROM employee_departments 
-                GROUP BY employee_id
-            ) ed ON ed.employee_id = emp.id
-            LEFT JOIN departments d ON d.id = ed.department_id
-            JOIN project_cost_sections pcs 
-                 ON pcs.project_id = pp.project_id 
-                AND pcs.template_id = pt.cost_section_template_id
-            WHERE pp.project_id = @pid
-              AND pt.cost_section_template_id IS NOT NULL
+                   vt.employee_id AS EmployeeId,
+                   vt.employee_name AS EmployeeName,
+                   vt.phase_name AS PhaseName,
+                   vt.entry_type AS EntryType,
+                   vt.work_date AS WorkDate,
+                   vt.hours AS Hours,
+                   vt.hourly_cost AS HourlyCost
+            FROM v_timesheet_with_section vt
+            JOIN project_cost_sections pcs
+                 ON pcs.project_id = vt.project_id
+                AND pcs.template_id = vt.cost_section_template_id
+            WHERE vt.project_id = @pid
+              AND vt.cost_section_template_id IS NOT NULL
               AND pcs.is_enabled = 1
-            ORDER BY emp.last_name, te.work_date, pt.name",
+            ORDER BY vt.employee_name, vt.work_date, vt.phase_name",
             new { pid = projectId }).ToList();
 
         // Ore orfane (fasi senza cost_section_template_id)
         var orphanActuals = c.Query<dynamic>(@"
-            SELECT emp.id AS EmployeeId,
-                   CONCAT(emp.first_name, ' ', emp.last_name) AS EmployeeName,
-                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
-                   te.entry_type AS EntryType,
-                   te.work_date AS WorkDate,
-                   te.hours AS Hours,
-                   COALESCE(d.hourly_cost, 0) AS HourlyCost
-            FROM timesheet_entries te
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
-            JOIN employees emp ON emp.id = te.employee_id
-            LEFT JOIN (
-                SELECT employee_id, MIN(department_id) AS department_id 
-                FROM employee_departments 
-                GROUP BY employee_id
-            ) ed ON ed.employee_id = emp.id
-            LEFT JOIN departments d ON d.id = ed.department_id
-            WHERE pp.project_id = @pid
-              AND pt.cost_section_template_id IS NULL
-            ORDER BY emp.last_name, te.work_date, pt.name",
+            SELECT vt.employee_id AS EmployeeId,
+                   vt.employee_name AS EmployeeName,
+                   vt.phase_name AS PhaseName,
+                   vt.entry_type AS EntryType,
+                   vt.work_date AS WorkDate,
+                   vt.hours AS Hours,
+                   vt.hourly_cost AS HourlyCost
+            FROM v_timesheet_with_section vt
+            WHERE vt.project_id = @pid
+              AND vt.cost_section_template_id IS NULL
+            ORDER BY vt.employee_name, vt.work_date, vt.phase_name",
             new { pid = projectId }).ToList();
 
         var actualsBySection = actuals.GroupBy(a => (int)a.CostSectionId)

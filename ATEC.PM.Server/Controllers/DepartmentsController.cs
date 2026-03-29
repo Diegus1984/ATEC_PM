@@ -87,11 +87,8 @@ public class DepartmentsController : ControllerBase
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "code", "name", "hourly_cost", "default_markup", "sort_order", "is_active" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-
-        using var c = _db.Open();
-        c.Execute($"UPDATE departments SET {req.Field}=@Value WHERE id=@id", new { Value = req.Value, id });
+        string? error = _db.UpdateField("departments", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 

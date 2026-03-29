@@ -58,11 +58,8 @@ public class CostSectionsController : ControllerBase
     public IActionResult UpdateGroupField(int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "name", "sort_order", "is_active" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-
-        using var c = _db.Open();
-        c.Execute($"UPDATE cost_section_groups SET {req.Field}=@Value WHERE id=@id", new { Value = req.Value, id });
+        string? error = _db.UpdateField("cost_section_groups", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 
@@ -195,11 +192,8 @@ public class CostSectionsController : ControllerBase
     public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "name", "section_type", "group_id", "is_default", "sort_order", "is_active" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-
-        using var c = _db.Open();
-        c.Execute($"UPDATE cost_section_templates SET {req.Field}=@Value WHERE id=@id", new { Value = req.Value, id });
+        string? error = _db.UpdateField("cost_section_templates", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 

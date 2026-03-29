@@ -181,13 +181,9 @@ public class PhasesController : ControllerBase
     [HttpPatch("{id}/field")]
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        using var c = _db.Open();
-        string[] allowed = { "budget_hours", "budget_cost", "status", "progress_pct", "custom_name", "sort_order" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non modificabile."));
-
-        c.Execute($"UPDATE project_phases SET {req.Field}=@Value WHERE id=@Id",
-            new { Value = req.Value, Id = id });
+        var allowed = new HashSet<string> { "budget_hours", "budget_cost", "status", "progress_pct", "custom_name", "sort_order" };
+        string? error = _db.UpdateField("project_phases", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -331,13 +327,9 @@ public class PhasesController : ControllerBase
     [HttpPatch("templates/{id}/field")]
     public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        using var c = _db.Open();
-        string[] allowed = { "name", "category", "department_id", "cost_section_template_id", "sort_order", "is_default" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non modificabile."));
-
-        c.Execute($"UPDATE phase_templates SET {req.Field}=@Value WHERE id=@Id",
-            new { Value = req.Value, Id = id });
+        var allowed = new HashSet<string> { "name", "category", "department_id", "cost_section_template_id", "sort_order", "is_default" };
+        string? error = _db.UpdateField("phase_templates", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<bool>.Ok(true));
     }
 

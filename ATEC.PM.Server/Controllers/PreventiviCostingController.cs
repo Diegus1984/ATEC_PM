@@ -79,9 +79,9 @@ public class PreventiviCostingController : ControllerBase
     public IActionResult UpdateSectionField(int quoteId, int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "name", "is_enabled", "sort_order" };
-        if (!allowed.Contains(req.Field)) return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-        using var c = _db.Open();
-        c.Execute($"UPDATE quote_cost_sections SET {req.Field}=@Value WHERE id=@id AND quote_id=@quoteId", new { Value = req.Value, id, quoteId });
+        string? error = _db.UpdateField("quote_cost_sections", id, req.Field, req.Value, allowed,
+            "quote_id=@quoteId", new { quoteId });
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 
@@ -130,9 +130,9 @@ public class PreventiviCostingController : ControllerBase
     public IActionResult UpdateMaterialSectionField(int quoteId, int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "name", "markup_value", "commission_markup", "is_enabled", "sort_order" };
-        if (!allowed.Contains(req.Field)) return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-        using var c = _db.Open();
-        c.Execute($"UPDATE quote_material_sections SET {req.Field}=@Value WHERE id=@id AND quote_id=@quoteId", new { Value = req.Value, id, quoteId });
+        string? error = _db.UpdateField("quote_material_sections", id, req.Field, req.Value, allowed,
+            "quote_id=@quoteId", new { quoteId });
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 

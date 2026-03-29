@@ -62,11 +62,8 @@ public class MaterialCategoriesController : ControllerBase
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
         var allowed = new HashSet<string> { "name", "default_markup", "default_commission_markup", "sort_order", "is_active" };
-        if (!allowed.Contains(req.Field))
-            return BadRequest(ApiResponse<string>.Fail($"Campo '{req.Field}' non consentito"));
-
-        using var c = _db.Open();
-        c.Execute($"UPDATE material_categories SET {req.Field}=@Value WHERE id=@id", new { Value = req.Value, id });
+        string? error = _db.UpdateField("material_categories", id, req.Field, req.Value, allowed);
+        if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 

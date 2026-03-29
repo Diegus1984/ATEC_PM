@@ -19,6 +19,33 @@ public class DbService
         return conn;
     }
 
+    /// <summary>
+    /// Esegue UPDATE dinamico su un singolo campo con whitelist di sicurezza.
+    /// Restituisce null se ok, oppure il messaggio di errore se il campo non è consentito.
+    /// </summary>
+    public string? UpdateField(string table, int id, string field, string? value,
+        HashSet<string> allowedFields, string? extraWhere = null, object? extraParams = null)
+    {
+        if (!allowedFields.Contains(field))
+            return $"Campo '{field}' non consentito";
+
+        using var c = Open();
+        string where = extraWhere != null ? $"id=@id AND {extraWhere}" : "id=@id";
+        string sql = $"UPDATE `{table}` SET `{field}`=@Value WHERE {where}";
+
+        DynamicParameters dp = new();
+        dp.Add("Value", value);
+        dp.Add("id", id);
+        if (extraParams != null)
+        {
+            foreach (var prop in extraParams.GetType().GetProperties())
+                dp.Add(prop.Name, prop.GetValue(extraParams));
+        }
+
+        c.Execute(sql, dp);
+        return null;
+    }
+
     public string GetConfig(string key, string defaultValue = "")
     {
         using var c = Open();
@@ -755,6 +782,85 @@ public class DbService
         AddColumnIfMissing(c, "codex_compositions", "child_catalog_id", "INT NULL AFTER child_codex_id");
         // Rendere child_codex_id nullable (può essere NULL se figlio è da catalogo)
         try { c.Execute("ALTER TABLE codex_compositions MODIFY child_codex_id INT NULL"); } catch { }
+
+        // ══════════════════════════════════════════════════════════
+        // INDICI PERFORMANCE — FK e colonne usate in JOIN/WHERE
+        // ══════════════════════════════════════════════════════════
+
+        // Timesheet: query più frequenti (weekly view, BudgetVsActual)
+        AddIndexIfMissing(c, "timesheet_entries", "idx_te_phase_date", "project_phase_id, work_date");
+        AddIndexIfMissing(c, "timesheet_entries", "idx_te_employee", "employee_id");
+
+        // Phase assignments: JOIN in LoadPhases, BudgetVsActual
+        AddIndexIfMissing(c, "phase_assignments", "idx_pa_phase", "project_phase_id");
+        AddIndexIfMissing(c, "phase_assignments", "idx_pa_employee", "employee_id");
+
+        // Project phases: caricamento fasi per commessa
+        AddIndexIfMissing(c, "project_phases", "idx_pp_project", "project_id");
+
+        // Cost sections: apertura costing e BudgetVsActual
+        AddIndexIfMissing(c, "project_cost_sections", "idx_pcs_project", "project_id, is_enabled");
+        AddIndexIfMissing(c, "project_cost_sections", "idx_pcs_template", "template_id");
+
+        // Cost resources: dettaglio risorse per sezione
+        AddIndexIfMissing(c, "project_cost_resources", "idx_pcr_section", "section_id");
+
+        // Material sections e items
+        AddIndexIfMissing(c, "project_material_sections", "idx_pms_project", "project_id");
+        AddIndexIfMissing(c, "project_material_items", "idx_pmi_section", "section_id");
+
+        // Cashflow
+        AddIndexIfMissing(c, "project_cashflow_categories", "idx_pcc_project", "project_id");
+
+        // Chat
+        AddIndexIfMissing(c, "project_chats", "idx_pch_project", "project_id");
+        AddIndexIfMissing(c, "project_chat_messages", "idx_pcm_chat", "chat_id");
+
+        // BOM, Documents, Extra costs
+        AddIndexIfMissing(c, "bom_items", "idx_bom_project", "project_id");
+        AddIndexIfMissing(c, "documents", "idx_doc_project", "project_id");
+        AddIndexIfMissing(c, "extra_costs", "idx_ec_project", "project_id");
+
+        // Soft-delete filter columns
+        AddIndexIfMissing(c, "employees", "idx_emp_status", "status");
+        AddIndexIfMissing(c, "customers", "idx_cust_active", "is_active");
+        AddIndexIfMissing(c, "suppliers", "idx_sup_active", "is_active");
+
+        // ══════════════════════════════════════════════════════════
+        // VIEW — Timesheet con sezione costo (per BudgetVsActual)
+        // ══════════════════════════════════════════════════════════
+
+        try
+        {
+            c.Execute(@"CREATE OR REPLACE VIEW v_timesheet_with_section AS
+                SELECT
+                    te.id              AS entry_id,
+                    te.employee_id,
+                    te.project_phase_id,
+                    te.work_date,
+                    te.hours,
+                    te.entry_type,
+                    pp.project_id,
+                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name,
+                    pt.cost_section_template_id,
+                    CONCAT(emp.first_name, ' ', emp.last_name) AS employee_name,
+                    COALESCE(d.hourly_cost, 0) AS hourly_cost
+                FROM timesheet_entries te
+                JOIN project_phases pp   ON pp.id = te.project_phase_id
+                JOIN phase_templates pt  ON pt.id = pp.phase_template_id
+                JOIN employees emp       ON emp.id = te.employee_id
+                LEFT JOIN (
+                    SELECT employee_id, MIN(department_id) AS department_id
+                    FROM employee_departments
+                    GROUP BY employee_id
+                ) ed ON ed.employee_id = emp.id
+                LEFT JOIN departments d  ON d.id = ed.department_id");
+            Console.WriteLine("[DB Migration] View v_timesheet_with_section creata/aggiornata.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning view: {ex.Message}");
+        }
     }
 
     private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
@@ -807,6 +913,29 @@ public class DbService
         catch (Exception ex)
         {
             Console.WriteLine($"[DB Migration] Warning: {table}.{column}: {ex.Message}");
+        }
+    }
+
+    private void AddIndexIfMissing(MySqlConnection c, string table, string indexName, string columns)
+    {
+        try
+        {
+            int exists = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = @Table
+                  AND INDEX_NAME = @Index",
+                new { Table = table, Index = indexName });
+
+            if (exists == 0)
+            {
+                c.Execute($"ALTER TABLE `{table}` ADD INDEX `{indexName}` ({columns})");
+                Console.WriteLine($"[DB Migration] Aggiunto indice {indexName} su {table}({columns})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DB Migration] Warning: indice {indexName} su {table}: {ex.Message}");
         }
     }
 
