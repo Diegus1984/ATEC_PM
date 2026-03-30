@@ -76,6 +76,27 @@ public partial class QuoteDetailPage : Page
 
             if (quote == null) return;
 
+            // Se il preventivo non ha contenuti automatici, ricaricali dal catalogo
+            bool hasAutoIncludes = quote.Items?.Any(i => i.IsAutoInclude) ?? false;
+            if (!hasAutoIncludes)
+            {
+                try
+                {
+                    await ApiClient.PostAsync($"/api/quotes/{quoteId}/reload-auto-includes", "{}");
+                    // Ricarica il preventivo con gli auto-include appena inseriti
+                    json = await ApiClient.GetAsync($"/api/quotes/{quoteId}");
+                    doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.GetProperty("success").GetBoolean())
+                    {
+                        quote = JsonSerializer.Deserialize<QuoteDto>(
+                            doc.RootElement.GetProperty("data").GetRawText(),
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (quote == null) return;
+                    }
+                }
+                catch { }
+            }
+
             _selectedQuoteId = quote.Id;
             _selectedQuote = quote;
 
@@ -223,28 +244,11 @@ public partial class QuoteDetailPage : Page
 
     private void UpdateActionButtons(string status, string quoteType)
     {
-        bool isDraft = status == "draft";
-        bool isSent = status == "sent";
-        bool isAccepted = status == "accepted";
-        bool isPlant = quoteType == "IMPIANTO";
-
-        btnSetSent.Visibility = isDraft ? Visibility.Visible : Visibility.Collapsed;
-        btnSetAccepted.Visibility = isSent ? Visibility.Visible : Visibility.Collapsed;
-        btnSetRejected.Visibility = isDraft || isSent ? Visibility.Visible : Visibility.Collapsed;
-        btnConvert.Visibility = isAccepted && isPlant ? Visibility.Visible : Visibility.Collapsed;
-        btnDelete.Visibility = status is "draft" or "rejected" ? Visibility.Visible : Visibility.Collapsed;
         btnPdf.Visibility = Visibility.Visible;
     }
 
     private void ApplyReadOnlyMode()
     {
-        // Nasconde tutti i pulsanti azione tranne PDF
-        btnSetSent.Visibility = Visibility.Collapsed;
-        btnSetAccepted.Visibility = Visibility.Collapsed;
-        btnSetRejected.Visibility = Visibility.Collapsed;
-        btnConvert.Visibility = Visibility.Collapsed;
-        btnDelete.Visibility = Visibility.Collapsed;
-        separatorBeforePdf.Visibility = Visibility.Collapsed;
 
         // Badge SOLA LETTURA nell'header
         if (_selectedQuote?.Status == "converted")
@@ -550,7 +554,8 @@ public partial class QuoteDetailPage : Page
         pnlServiceNotes.Visibility = Visibility.Visible;
 
         txtServiceNoProducts.Visibility = _serviceProducts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        pnlServiceAutoIncludes.Visibility = _autoIncludes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // Contenuti automatici sempre visibili (sono clausole contrattuali obbligatorie)
+        pnlServiceAutoIncludes.Visibility = Visibility.Visible;
         txtServiceAutoCount.Text = _autoIncludes.Count > 0 ? $" ({_autoIncludes.Count})" : "";
         // Aggiorna anche pannello IMPIANTO se visibile
         txtImpNoAutoIncludes.Visibility = _autoIncludes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

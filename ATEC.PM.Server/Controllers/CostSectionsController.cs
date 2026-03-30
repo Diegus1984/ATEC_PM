@@ -23,7 +23,7 @@ public class CostSectionsController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<CostSectionGroupDto>(
-            "SELECT id, name, sort_order AS SortOrder, is_active AS IsActive FROM cost_section_groups ORDER BY sort_order").ToList();
+            "SELECT id, name, bg_color AS BgColor, text_color AS TextColor, sort_order AS SortOrder, is_active AS IsActive FROM cost_section_groups ORDER BY sort_order").ToList();
         return Ok(ApiResponse<List<CostSectionGroupDto>>.Ok(rows));
     }
 
@@ -57,7 +57,7 @@ public class CostSectionsController : ControllerBase
     [HttpPatch("groups/{id}/field")]
     public IActionResult UpdateGroupField(int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "sort_order", "is_active" };
+        var allowed = new HashSet<string> { "name", "bg_color", "text_color", "sort_order", "is_active" };
         string? error = _db.UpdateField("cost_section_groups", id, req.Field, req.Value, allowed);
         if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
@@ -88,7 +88,7 @@ public class CostSectionsController : ControllerBase
         using var c = _db.Open();
         var rows = c.Query<CostSectionTemplateDto>(
             @"SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId,
-                     g.name AS GroupName, t.is_default AS IsDefault, t.sort_order AS SortOrder, t.is_active AS IsActive
+                     g.name AS GroupName, t.is_default_project AS IsDefault, t.is_default_quote AS IsDefaultQuote, t.sort_order AS SortOrder, t.is_active AS IsActive
               FROM cost_section_templates t
               JOIN cost_section_groups g ON g.id = t.group_id
               ORDER BY t.sort_order").ToList();
@@ -122,8 +122,8 @@ public class CostSectionsController : ControllerBase
         using var tx = c.BeginTransaction();
 
         int id = (int)c.ExecuteScalar<long>(
-            @"INSERT INTO cost_section_templates (name, section_type, group_id, is_default, sort_order, is_active)
-              VALUES (@Name, @SectionType, @GroupId, @IsDefault, @SortOrder, @IsActive);
+            @"INSERT INTO cost_section_templates (name, section_type, group_id, is_default_project, is_default_quote, sort_order, is_active)
+              VALUES (@Name, @SectionType, @GroupId, @IsDefault, @IsDefaultQuote, @SortOrder, @IsActive);
               SELECT LAST_INSERT_ID();", req, tx);
 
         // Salva reparti associati
@@ -148,9 +148,9 @@ public class CostSectionsController : ControllerBase
 
         int rows = c.Execute(
             @"UPDATE cost_section_templates SET name=@Name, section_type=@SectionType,
-              group_id=@GroupId, is_default=@IsDefault, sort_order=@SortOrder, is_active=@IsActive
+              group_id=@GroupId, is_default_project=@IsDefault, is_default_quote=@IsDefaultQuote, sort_order=@SortOrder, is_active=@IsActive
               WHERE id=@id",
-            new { req.Name, req.SectionType, req.GroupId, req.IsDefault, req.SortOrder, req.IsActive, id }, tx);
+            new { req.Name, req.SectionType, req.GroupId, req.IsDefault, req.IsDefaultQuote, req.SortOrder, req.IsActive, id }, tx);
 
         if (rows == 0)
         {
@@ -191,7 +191,7 @@ public class CostSectionsController : ControllerBase
     [HttpPatch("templates/{id}/field")]
     public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "section_type", "group_id", "is_default", "sort_order", "is_active" };
+        var allowed = new HashSet<string> { "name", "section_type", "group_id", "is_default_project", "is_default_quote", "sort_order", "is_active" };
         string? error = _db.UpdateField("cost_section_templates", id, req.Field, req.Value, allowed);
         if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));

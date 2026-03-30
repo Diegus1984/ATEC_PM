@@ -640,7 +640,7 @@ public class PreventiviController : ControllerBase
             SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
             FROM cost_section_templates t
             JOIN cost_section_groups g ON g.id = t.group_id
-            WHERE t.is_default=1 AND t.is_active=1
+            WHERE t.is_default_quote=1 AND t.is_active=1
             ORDER BY t.sort_order", transaction: tx).ToList();
 
         foreach (var tmpl in templates)

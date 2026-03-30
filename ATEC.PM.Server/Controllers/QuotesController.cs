@@ -839,7 +839,8 @@ public class QuotesController : ControllerBase
             return BadRequest($"Campo '{req.Field}' non consentito");
 
         using var c = _qdb.Open();
-        c.Execute($"UPDATE quotes SET `{req.Field}`=@Value WHERE id=@id", new { Value = req.Value, id });
+        string? dbValue = NormalizeDecimalValue(req.Field, req.Value);
+        c.Execute($"UPDATE quotes SET `{req.Field}`=@Value WHERE id=@id", new { Value = dbValue, id });
         // Non ricalcolare totali se stiamo aggiornando total/profit direttamente (IMPIANTO costing)
         if (req.Field != "total" && req.Field != "profit")
             RecalcTotals(c, id, null);
@@ -855,10 +856,24 @@ public class QuotesController : ControllerBase
             return BadRequest($"Campo '{req.Field}' non consentito");
 
         using var c = _qdb.Open();
+        string? dbValue = NormalizeDecimalValue(req.Field, req.Value);
         c.Execute($"UPDATE quote_items SET `{req.Field}`=@Value WHERE id=@itemId AND quote_id=@quoteId",
-            new { Value = req.Value, itemId, quoteId });
+            new { Value = dbValue, itemId, quoteId });
         RecalcTotals(c, quoteId, null);
         return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
+    }
+
+    // Campi decimali nelle quote: converte virgola→punto per MySQL
+    private static readonly HashSet<string> _decimalFields = new()
+    {
+        "total", "profit", "discount_pct", "discount_abs", "delivery_days", "validity_days",
+        "quantity", "cost_price", "sell_price", "vat_pct", "sort_order"
+    };
+
+    private static string? NormalizeDecimalValue(string field, string? value)
+    {
+        if (value == null || !_decimalFields.Contains(field)) return value;
+        return value.Replace(',', '.');
     }
 
     // ═══════════════════════════════════════════════════════

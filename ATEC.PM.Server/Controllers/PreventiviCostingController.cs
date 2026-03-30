@@ -32,7 +32,7 @@ public class PreventiviCostingController : ControllerBase
     {
         using var c = _db.Open();
         var allGroups = c.Query<CostSectionGroupDto>("SELECT id, name, sort_order AS SortOrder, is_active AS IsActive FROM cost_section_groups WHERE is_active=1 ORDER BY sort_order").ToList();
-        var allTemplates = c.Query<CostSectionTemplateDto>(@"SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId, g.name AS GroupName, t.is_default AS IsDefault, t.sort_order AS SortOrder FROM cost_section_templates t JOIN cost_section_groups g ON g.id = t.group_id WHERE t.is_active=1 ORDER BY t.sort_order").ToList();
+        var allTemplates = c.Query<CostSectionTemplateDto>(@"SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId, g.name AS GroupName, t.is_default_project AS IsDefault, t.is_default_quote AS IsDefaultQuote, t.sort_order AS SortOrder FROM cost_section_templates t JOIN cost_section_groups g ON g.id = t.group_id WHERE t.is_active=1 ORDER BY t.sort_order").ToList();
         var usedTemplateIds = c.Query<int?>("SELECT template_id FROM quote_cost_sections WHERE quote_id=@quoteId AND template_id IS NOT NULL", new { quoteId }).Where(id => id.HasValue).Select(id => id!.Value).ToHashSet();
         var usedGroupNames = c.Query<string>("SELECT DISTINCT group_name FROM quote_cost_sections WHERE quote_id=@quoteId", new { quoteId }).ToHashSet();
         var availableTemplates = allTemplates.Where(t => !usedTemplateIds.Contains(t.Id)).ToList();

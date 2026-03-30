@@ -104,7 +104,7 @@
         </Style.Triggers>
     </Style>
 
-    <!--  ComboBox Inline  -->
+    <!--  ComboBox Inline (non editabile, solo selezione)  -->
     <Style x:Key="InlineComboBox" TargetType="ComboBox">
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
@@ -117,6 +117,24 @@
             <Trigger Property="IsDropDownOpen" Value="True">
                 <Setter Property="Background" Value="White" />
                 <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="BorderBrush" Value="#4F6EF7" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--  ComboBox Inline Editabile (con bordo visibile e freccia)  -->
+    <Style x:Key="InlineEditableComboBox" TargetType="ComboBox">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="#E4E7EC" />
+        <Setter Property="Background" Value="White" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Padding" Value="2,1" />
+        <Setter Property="IsEditable" Value="True" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="#9CA3AF" />
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
                 <Setter Property="BorderBrush" Value="#4F6EF7" />
             </Trigger>
         </Style.Triggers>

@@ -125,17 +125,19 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock
-                            Margin="0,0,0,4"
+                            Margin="0,0,0,8"
                             FontSize="11"
                             FontWeight="SemiBold"
                             Foreground="#6B7280"
-                            Text="DEFAULT" />
-                        <CheckBox
-                            x:Name="chkDefault"
-                            Margin="0,8,0,0"
-                            Content="Inserisci di default"
-                            FontSize="13"
-                            IsChecked="True" />
+                            Text="INCLUDI DI DEFAULT" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <CheckBox x:Name="chkDefaultProject" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" />
+                            <TextBlock Text="Commessa" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox x:Name="chkDefaultQuote" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" />
+                            <TextBlock Text="Preventivo" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
 

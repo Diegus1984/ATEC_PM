@@ -21,6 +21,7 @@ public partial class CostingTreeControl : UserControl
     private ObservableCollection<MaterialProductGroup> _materialProducts = new();
     private int _nextNodeId = 1;
     private bool _isLoading;
+    private List<ATEC.PM.Shared.DTOs.TariffOptionDto>? _tariffOptionsCache;
     /// <summary>DependencyProperty per binding XAML: nasconde bottoni azione quando true.</summary>
     public static readonly DependencyProperty IsReadOnlyModeProperty =
         DependencyProperty.Register(nameof(IsReadOnlyMode), typeof(bool), typeof(CostingTreeControl),
@@ -64,13 +65,9 @@ public partial class CostingTreeControl : UserControl
 
     // Color mapping for groups
     // Colore uniforme per tutti i gruppi (design system: blu corporate)
-    private static readonly Dictionary<string, string> GroupColors = new()
-    {
-        ["GESTIONE"] = "#2563EB",
-        ["PRESCHIERAMENTO"] = "#2563EB",
-        ["INSTALLAZIONE"] = "#2563EB",
-        ["OPZIONE"] = "#2563EB"
-    };
+    // Colori e ordine gruppi — caricati dal DB
+    private static Dictionary<string, string> GroupColors = new();
+    private static Dictionary<string, int> GroupSortOrders = new();
 
     public CostingTreeControl()
     {
@@ -98,6 +95,12 @@ public partial class CostingTreeControl : UserControl
             var expandedSections = _resourceRows.SelectMany(g => g.Children)
                 .Where(s => s.IsExpanded).Select(s => s.DbId).ToHashSet();
             double scrollOffset = mainScrollViewer.VerticalOffset;
+
+            // ── Carica tariffe trasferta ──
+            await LoadTariffOptionsAsync();
+
+            // ── Carica colori gruppi dal DB ──
+            await LoadGroupColorsAsync();
 
             // ── FRAME 1: Fetch + deserializza (off UI thread) ──
             var json = await ApiClient.GetAsync(_apiBasePath);
@@ -678,6 +681,279 @@ public partial class CostingTreeControl : UserControl
         RecalcParentTotalsFor(row);
     }
 
+    private async Task LoadTariffOptionsAsync()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/tariff-options");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            _tariffOptionsCache = System.Text.Json.JsonSerializer.Deserialize<List<ATEC.PM.Shared.DTOs.TariffOptionDto>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            var items = _tariffOptionsCache;
+
+            RefillTariffOptions(CostingTreeRow.CostPerKmOptions, items.Where(t => t.TariffType == "COST_PER_KM"));
+            RefillTariffOptions(CostingTreeRow.DailyFoodOptions, items.Where(t => t.TariffType == "DAILY_FOOD"));
+            RefillTariffOptions(CostingTreeRow.DailyHotelOptions, items.Where(t => t.TariffType == "DAILY_HOTEL"));
+            RefillTariffOptions(CostingTreeRow.DailyAllowanceOptions, items.Where(t => t.TariffType == "DAILY_ALLOWANCE"));
+
+            if (!CostingTreeRow.DailyAllowanceOptions.Contains(0m))
+                CostingTreeRow.DailyAllowanceOptions.Insert(0, 0m);
+        }
+        catch { }
+    }
+
+    private static void RefillTariffOptions(System.Collections.ObjectModel.ObservableCollection<decimal> col,
+        IEnumerable<ATEC.PM.Shared.DTOs.TariffOptionDto> items)
+    {
+        col.Clear();
+        foreach (decimal val in items.Select(t => t.Value).OrderBy(v => v))
+            col.Add(val);
+    }
+
+    private async Task LoadGroupColorsAsync()
+    {
+        try
+        {
+            string json = await ApiClient.GetAsync("/api/cost-sections/groups");
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+
+            var groups = System.Text.Json.JsonSerializer.Deserialize<List<ATEC.PM.Shared.DTOs.CostSectionGroupDto>>(
+                doc.RootElement.GetProperty("data").GetRawText(),
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+
+            foreach (var g in groups)
+            {
+                if (!string.IsNullOrEmpty(g.BgColor))
+                    GroupColors[g.Name] = g.BgColor;
+                GroupSortOrders[g.Name] = g.SortOrder;
+            }
+        }
+        catch { }
+    }
+
+    private static System.Windows.Media.SolidColorBrush HexBrush(string hex) =>
+        new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+
+    private static string? PromptTariffInput(string title, string label)
+    {
+        Window prompt = new()
+        {
+            Title = title, Width = 300, Height = 150,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = System.Windows.Media.Brushes.White
+        };
+        StackPanel sp = new() { Margin = new Thickness(16) };
+        sp.Children.Add(new TextBlock { Text = label, FontSize = 12, Margin = new Thickness(0, 0, 0, 8) });
+        TextBox txt = new() { FontSize = 13, Height = 28, Padding = new Thickness(6, 4, 6, 4) };
+        sp.Children.Add(txt);
+        StackPanel buttons = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        Button btnOk = new()
+        {
+            Content = "Aggiungi", Width = 80, Height = 28,
+            Background = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2563EB")),
+            Foreground = System.Windows.Media.Brushes.White,
+            BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold
+        };
+        Button btnCancel = new()
+        {
+            Content = "Annulla", Width = 70, Height = 28, Margin = new Thickness(8, 0, 0, 0),
+            Background = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F3F4F6")),
+            BorderThickness = new Thickness(0)
+        };
+        string? result = null;
+        btnOk.Click += (s, e) => { result = txt.Text; prompt.Close(); };
+        btnCancel.Click += (s, e) => prompt.Close();
+        buttons.Children.Add(btnOk); buttons.Children.Add(btnCancel);
+        sp.Children.Add(buttons);
+        prompt.Content = sp;
+        txt.Focus();
+        prompt.ShowDialog();
+        return result;
+    }
+
+    private static System.Collections.ObjectModel.ObservableCollection<decimal>? GetTariffOptions(string field) => field switch
+    {
+        "CostPerKm" => CostingTreeRow.CostPerKmOptions,
+        "DailyFood" => CostingTreeRow.DailyFoodOptions,
+        "DailyHotel" => CostingTreeRow.DailyHotelOptions,
+        "DailyAllowance" => CostingTreeRow.DailyAllowanceOptions,
+        _ => null
+    };
+
+    /// <summary>Mappa nome proprietà C# → tariff_type nel DB</summary>
+    private static string ToDbTariffType(string field) => field switch
+    {
+        "CostPerKm" => "COST_PER_KM",
+        "DailyFood" => "DAILY_FOOD",
+        "DailyHotel" => "DAILY_HOTEL",
+        "DailyAllowance" => "DAILY_ALLOWANCE",
+        _ => field
+    };
+
+    private void BtnTariffDrop_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not string field) return;
+        if (btn.DataContext is not CostingTreeRow row) return;
+
+        var options = GetTariffOptions(field);
+        if (options == null) return;
+
+        // Costruisci popup con lista valori + × per riga + bottone Aggiungi
+        StackPanel popContent = new();
+        System.Windows.Controls.Primitives.Popup? popup = null;
+
+        // Righe valori esistenti
+        foreach (decimal opt in options.ToList())
+        {
+            decimal capturedVal = opt;
+            DockPanel dp = new() { Margin = new Thickness(0, 1, 0, 1) };
+
+            // Bottone ×
+            Button btnX = new()
+            {
+                Content = "×", Width = 20, Height = 24, FontSize = 10, FontWeight = FontWeights.Bold,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = HexBrush("#DC2626"),
+                BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            btnX.Click += async (s2, e2) =>
+            {
+                // Cerca id della tariffa
+                string dbType = ToDbTariffType(field);
+                var tariffItem = _tariffOptionsCache?.FirstOrDefault(t => t.TariffType == dbType && t.Value == capturedVal);
+                if (tariffItem == null) return;
+                try
+                {
+                    string result = await ApiClient.DeleteAsync($"/api/tariff-options/{tariffItem.Id}");
+                    var doc = System.Text.Json.JsonDocument.Parse(result);
+                    if (doc.RootElement.GetProperty("success").GetBoolean())
+                    {
+                        if (popup != null) popup.IsOpen = false;
+                        await LoadTariffOptionsAsync();
+                    }
+                    else
+                        MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore",
+                            "Impossibile eliminare", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch (Exception ex) { MessageBox.Show(ex.Message); }
+            };
+            DockPanel.SetDock(btnX, Dock.Right);
+            dp.Children.Add(btnX);
+
+            // Valore cliccabile
+            string display = field == "CostPerKm"
+                ? capturedVal.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)
+                : capturedVal.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            Button btnVal = new()
+            {
+                Content = display, Height = 24, FontSize = 12,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(8, 0, 8, 0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = HexBrush("#111827"),
+                BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand
+            };
+            btnVal.Click += async (s2, e2) =>
+            {
+                if (popup != null) popup.IsOpen = false;
+                switch (field)
+                {
+                    case "CostPerKm": row.CostPerKm = capturedVal; break;
+                    case "DailyFood": row.DailyFood = capturedVal; break;
+                    case "DailyHotel": row.DailyHotel = capturedVal; break;
+                    case "DailyAllowance": row.DailyAllowance = capturedVal; break;
+                }
+                await SaveResourceAsync(row);
+                RecalcParentTotalsFor(row);
+            };
+            dp.Children.Add(btnVal);
+            popContent.Children.Add(dp);
+        }
+
+        // Separatore + bottone Nuovo valore
+        popContent.Children.Add(new Border
+        {
+            Height = 1, Background = HexBrush("#D1D5DB"),
+            Margin = new Thickness(4, 2, 4, 2)
+        });
+        Button btnAdd = new()
+        {
+            Content = "+ Nuovo valore", Height = 28, FontSize = 12, FontWeight = FontWeights.SemiBold,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(8, 0, 8, 0),
+            Background = HexBrush("#2563EB"),
+            Foreground = System.Windows.Media.Brushes.White,
+            BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand,
+            Margin = new Thickness(2)
+        };
+        btnAdd.Click += async (s2, e2) =>
+        {
+            if (popup != null) popup.IsOpen = false;
+
+            // Prompt per inserire il nuovo valore
+            string? input = PromptTariffInput("Aggiungi Tariffa", "Inserisci il nuovo valore:");
+            if (string.IsNullOrWhiteSpace(input)) return;
+            if (!decimal.TryParse(input, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out decimal newVal) || newVal <= 0)
+            {
+                MessageBox.Show("Valore non valido.", "Errore");
+                return;
+            }
+
+            try
+            {
+                string json = System.Text.Json.JsonSerializer.Serialize(
+                    new { tariffType = ToDbTariffType(field), value = newVal },
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                string result = await ApiClient.PostAsync("/api/tariff-options", json);
+                var doc = System.Text.Json.JsonDocument.Parse(result);
+                if (doc.RootElement.GetProperty("success").GetBoolean())
+                {
+                    await LoadTariffOptionsAsync();
+                    // Seleziona il nuovo valore nella riga
+                    switch (field)
+                    {
+                        case "CostPerKm": row.CostPerKm = newVal; break;
+                        case "DailyFood": row.DailyFood = newVal; break;
+                        case "DailyHotel": row.DailyHotel = newVal; break;
+                        case "DailyAllowance": row.DailyAllowance = newVal; break;
+                    }
+                    await SaveResourceAsync(row);
+                    RecalcParentTotalsFor(row);
+                }
+                else
+                    MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore", "Errore");
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message); }
+        };
+        popContent.Children.Add(btnAdd);
+
+        popup = new System.Windows.Controls.Primitives.Popup
+        {
+            PlacementTarget = btn,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false,
+            Child = new Border
+            {
+                Background = System.Windows.Media.Brushes.White,
+                BorderBrush = HexBrush("#D1D5DB"),
+                BorderThickness = new Thickness(1),
+                MinWidth = 130,
+                Padding = new Thickness(4),
+                Child = popContent
+            }
+        };
+        popup.IsOpen = true;
+    }
+
     private async void AllowanceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_readOnly || _isLoading) return;
@@ -769,6 +1045,41 @@ public partial class CostingTreeControl : UserControl
         {
             MessageBox.Show($"Errore: {ex.Message}", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void BtnAddSectionInGroup_Click(object sender, RoutedEventArgs e)
+    {
+        if (_readOnly) return;
+        if (sender is not Button btn || btn.Tag is not CostingTreeRow groupRow || !groupRow.IsGroup) return;
+
+        string groupName = groupRow.DisplayName;
+
+        try
+        {
+            var json = await ApiClient.GetAsync($"{_apiBasePath}/available-templates");
+            var templates = new List<CostSectionTemplateDto>();
+            if (json != null)
+            {
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("data", out var dataEl) &&
+                    dataEl.TryGetProperty("templates", out var tmplEl))
+                {
+                    templates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
+                        tmplEl.GetRawText(), _jopt) ?? new();
+                }
+            }
+
+            var groupTemplates = templates.Where(t =>
+                string.Equals(t.GroupName, groupName, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var dlg = new AddCostSectionDialog(_quoteId, groupName, groupTemplates, _apiBasePath);
+            if (dlg.ShowDialog() == true)
+                await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1166,14 +1477,8 @@ public partial class CostingTreeControl : UserControl
     // HELPERS
     // ══════════════════════════════════════════════════
 
-    private static int GetGroupSortOrder(string groupName) => groupName switch
-    {
-        "GESTIONE" => 1,
-        "PRESCHIERAMENTO" => 2,
-        "INSTALLAZIONE" => 3,
-        "OPZIONE" => 4,
-        _ => 99
-    };
+    private static int GetGroupSortOrder(string groupName) =>
+        GroupSortOrders.TryGetValue(groupName, out int order) ? order : 99;
 
     // ══════════════════════════════════════════════════
     // SCHEDA PREZZI + DISTRIBUZIONE PREZZO

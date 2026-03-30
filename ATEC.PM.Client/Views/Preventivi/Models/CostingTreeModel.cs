@@ -75,8 +75,10 @@ public class CostingTreeRow : INotifyPropertyChanged
     public string DisplayName
     {
         get => _displayName;
-        set { _displayName = value; OnPropertyChanged(); }
+        set { _displayName = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNameEmpty)); }
     }
+
+    public bool IsNameEmpty => string.IsNullOrWhiteSpace(_displayName) || _displayName.StartsWith("Risorsa ");
 
     private string _groupColor = "#3B82F6";
     public string GroupColor
@@ -214,6 +216,12 @@ public class CostingTreeRow : INotifyPropertyChanged
     }
 
     public decimal AllowanceTotal => AllowanceDays * DailyAllowance;
+
+    // ── Tariff options (statiche, caricate dall'API) ──
+    public static ObservableCollection<decimal> CostPerKmOptions { get; } = new() { 0.90m, 1.10m };
+    public static ObservableCollection<decimal> DailyFoodOptions { get; } = new() { 25m, 50m, 80m };
+    public static ObservableCollection<decimal> DailyHotelOptions { get; } = new() { 80m, 100m, 120m };
+    public static ObservableCollection<decimal> DailyAllowanceOptions { get; } = new() { 0m, 20m, 40m, 60m };
 
     // ── Totals (used at all levels) ──
     private decimal _totalCost;

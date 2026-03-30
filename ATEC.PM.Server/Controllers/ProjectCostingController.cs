@@ -32,7 +32,7 @@ public class ProjectCostingController : ControllerBase
                 SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
                 FROM cost_section_templates t
                 JOIN cost_section_groups g ON g.id = t.group_id
-                WHERE t.is_default=1 AND t.is_active=1
+                WHERE t.is_default_project=1 AND t.is_active=1
                 ORDER BY t.sort_order", transaction: tx).ToList();
 
             foreach (var tmpl in templates)
@@ -110,7 +110,7 @@ public class ProjectCostingController : ControllerBase
         // Sezioni template attive (tutte, non solo is_default)
         var allTemplates = c.Query<CostSectionTemplateDto>(@"
             SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId,
-                   g.name AS GroupName, t.is_default AS IsDefault, t.sort_order AS SortOrder
+                   g.name AS GroupName, t.is_default_project AS IsDefault, t.is_default_quote AS IsDefaultQuote, t.sort_order AS SortOrder
             FROM cost_section_templates t
             JOIN cost_section_groups g ON g.id = t.group_id
             WHERE t.is_active=1

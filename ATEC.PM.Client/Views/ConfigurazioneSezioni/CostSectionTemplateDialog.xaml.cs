@@ -57,7 +57,8 @@ public partial class CostSectionTemplateDialog : Window
                 name,
                 sectionType,
                 groupId,
-                isDefault = chkDefault.IsChecked == true,
+                isDefault = chkDefaultProject.IsChecked == true,
+                isDefaultQuote = chkDefaultQuote.IsChecked == true,
                 sortOrder,
                 isActive = true,
                 departmentIds = deptIds

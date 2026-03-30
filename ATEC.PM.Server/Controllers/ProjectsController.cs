@@ -167,7 +167,11 @@ public class ProjectsController : ControllerBase
                 JOIN project_phases pp ON pp.id = pa.project_phase_id
                 WHERE pp.project_id = @Pid", new { Pid = id }, tx);
 
-            // 4. DELETE progetto (FK CASCADE elimina fasi, bom, costing, pricing, cashflow, chat, docs)
+            // 4. Ripristina preventivi collegati (da "converted" → "accepted", azzera link commessa)
+            c.Execute(@"UPDATE quotes SET status='accepted', project_id=NULL, converted_at=NULL
+                        WHERE project_id=@Pid AND status='converted'", new { Pid = id }, tx);
+
+            // 5. DELETE progetto (FK CASCADE elimina fasi, bom, costing, pricing, cashflow, chat, docs)
             c.Execute("DELETE FROM projects WHERE id = @Id", new { Id = id }, tx);
 
             tx.Commit();

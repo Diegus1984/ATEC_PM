@@ -7,6 +7,8 @@ public class CostSectionGroupDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string BgColor { get; set; } = "#3B82F6";
+    public string TextColor { get; set; } = "#FFFFFF";
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 }
@@ -28,6 +30,7 @@ public class CostSectionTemplateDto
     public int GroupId { get; set; }
     public string GroupName { get; set; } = "";
     public bool IsDefault { get; set; } = true;
+    public bool IsDefaultQuote { get; set; } = true;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public List<int> DepartmentIds { get; set; } = new();
@@ -41,6 +44,7 @@ public class CostSectionTemplateSaveRequest
     public string SectionType { get; set; } = "IN_SEDE";
     public int GroupId { get; set; }
     public bool IsDefault { get; set; } = true;
+    public bool IsDefaultQuote { get; set; } = true;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public List<int> DepartmentIds { get; set; } = new();
@@ -50,4 +54,18 @@ public class CostSectionTemplateSaveRequest
 public class SectionDepartmentsRequest
 {
     public List<int> DepartmentIds { get; set; } = new();
+}
+
+// === TARIFFE TRASFERTA ===
+public class TariffOptionDto
+{
+    public int Id { get; set; }
+    public string TariffType { get; set; } = "";
+    public decimal Value { get; set; }
+}
+
+public class TariffOptionSaveRequest
+{
+    public string TariffType { get; set; } = "";
+    public decimal Value { get; set; }
 }

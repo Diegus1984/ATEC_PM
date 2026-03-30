@@ -149,6 +149,13 @@ public class DbService
             year INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        c.Execute(@"CREATE TABLE IF NOT EXISTS tariff_options (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tariff_type VARCHAR(30) NOT NULL,
+            value DECIMAL(10,3) NOT NULL,
+            UNIQUE KEY UQ_TariffVal (tariff_type, value)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_destinations (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(200) NOT NULL,
@@ -218,7 +225,8 @@ public class DbService
             name VARCHAR(200) NOT NULL,
             section_type VARCHAR(20) NOT NULL DEFAULT 'IN_SEDE',
             group_id INT NOT NULL,
-            is_default BOOLEAN NOT NULL DEFAULT TRUE,
+            is_default_project BOOLEAN NOT NULL DEFAULT TRUE,
+            is_default_quote BOOLEAN NOT NULL DEFAULT TRUE,
             sort_order INT NOT NULL DEFAULT 0,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             default_markup DECIMAL(5,3) NOT NULL DEFAULT 1.450,
@@ -721,6 +729,17 @@ public class DbService
             Console.WriteLine("[DB] Seed auth_features completato.");
         }
 
+        // Seed tariffe trasferta predefinite
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM tariff_options") == 0)
+        {
+            c.Execute(@"INSERT INTO tariff_options (tariff_type, value) VALUES
+                ('COST_PER_KM', 0.900), ('COST_PER_KM', 1.100),
+                ('DAILY_FOOD', 25.000), ('DAILY_FOOD', 50.000), ('DAILY_FOOD', 80.000),
+                ('DAILY_HOTEL', 80.000), ('DAILY_HOTEL', 100.000), ('DAILY_HOTEL', 120.000),
+                ('DAILY_ALLOWANCE', 20.000), ('DAILY_ALLOWANCE', 40.000), ('DAILY_ALLOWANCE', 60.000)");
+            Console.WriteLine("[DB] Seed tariff_options completato.");
+        }
+
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
         {
             c.Execute(@"INSERT INTO app_config (config_key, config_value, description) VALUES
@@ -779,6 +798,25 @@ public class DbService
         // Codex compositions: rimuovi UNIQUE constraint e colonna quantity (ogni riga = 1 pezzo)
         DropIndexIfExists(c, "codex_compositions", "uq_parent_child");
         DropColumnIfExists(c, "codex_compositions", "quantity");
+
+        // Colori gruppi centri di costo
+        AddColumnIfMissing(c, "cost_section_groups", "bg_color", "VARCHAR(10) NOT NULL DEFAULT '#3B82F6' AFTER name");
+        AddColumnIfMissing(c, "cost_section_groups", "text_color", "VARCHAR(10) NOT NULL DEFAULT '#FFFFFF' AFTER bg_color");
+
+        // Sdoppiamento is_default → is_default_project + is_default_quote
+        AddColumnIfMissing(c, "cost_section_templates", "is_default_quote", "BOOLEAN NOT NULL DEFAULT TRUE AFTER is_default");
+        // Rinomina is_default → is_default_project (se non già fatto)
+        try
+        {
+            int hasOld = c.ExecuteScalar<int>(@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cost_section_templates' AND COLUMN_NAME='is_default'");
+            if (hasOld > 0)
+            {
+                c.Execute("ALTER TABLE cost_section_templates CHANGE COLUMN is_default is_default_project BOOLEAN NOT NULL DEFAULT TRUE");
+                Console.WriteLine("[DB Migration] Rinominata is_default → is_default_project su cost_section_templates");
+            }
+        }
+        catch { }
 
         // Codex compositions: supporto figli da catalogo
         AddColumnIfMissing(c, "codex_compositions", "child_catalog_id", "INT NULL AFTER child_codex_id");

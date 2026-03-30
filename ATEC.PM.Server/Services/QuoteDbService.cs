@@ -234,6 +234,33 @@ public class QuoteDbService
         // ── Flag auto_include su categorie materiali ──
         AddColumnIfMissing(c, "material_categories", "auto_include_on_offer", "TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
 
+        // ── FK quotes.project_id: cambiare da RESTRICT a SET NULL per consentire eliminazione commesse ──
+        try
+        {
+            // Trova il nome della FK attuale su quotes.project_id
+            string? fkName = c.ExecuteScalar<string?>(@"
+                SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'quotes'
+                  AND COLUMN_NAME = 'project_id' AND REFERENCED_TABLE_NAME = 'projects'");
+
+            if (fkName != null)
+            {
+                // Verifica se è già ON DELETE SET NULL
+                string? deleteRule = c.ExecuteScalar<string?>(@"
+                    SELECT DELETE_RULE FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+                    WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = @Fk",
+                    new { Fk = fkName });
+
+                if (deleteRule != null && deleteRule != "SET NULL")
+                {
+                    c.Execute($"ALTER TABLE quotes DROP FOREIGN KEY `{fkName}`");
+                    c.Execute("ALTER TABLE quotes ADD CONSTRAINT `fk_quotes_project` FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL");
+                    Console.WriteLine("[DB Migration] FK quotes.project_id cambiata a ON DELETE SET NULL");
+                }
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"[DB Migration] Warning FK quotes.project_id: {ex.Message}"); }
+
         // ── Tabelle costing per preventivi IMPIANTO (mirror di offer_cost_*) ──
         CreateQuoteCostingTables(c);
     }

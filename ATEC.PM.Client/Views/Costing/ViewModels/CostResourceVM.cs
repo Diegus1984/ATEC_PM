@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -104,7 +105,14 @@ public class CostResourceVM : INotifyPropertyChanged
     public decimal AccommodationTotal => WorkDays * (DailyFood + DailyHotel);
     public decimal AllowanceTotal => AllowanceDays * DailyAllowance;
 
-    public static decimal[] AllowanceOptions => new[] { 0m, 20m, 40m, 60m };
+    // Tariff options caricate dall'API (ObservableCollection per notificare il binding WPF)
+    public static ObservableCollection<decimal> CostPerKmOptions { get; } = new() { 0.90m, 1.10m };
+    public static ObservableCollection<decimal> DailyFoodOptions { get; } = new() { 25m, 50m, 80m };
+    public static ObservableCollection<decimal> DailyHotelOptions { get; } = new() { 80m, 100m, 120m };
+    public static ObservableCollection<decimal> DailyAllowanceOptions { get; } = new() { 0m, 20m, 40m, 60m };
+
+    // Backward compat
+    public static decimal[] AllowanceOptions => DailyAllowanceOptions.ToArray();
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? name = null) =>

@@ -168,10 +168,14 @@
                     <DataGridTemplateColumn Width="2*" Header="RISORSA">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock
-                                    Padding="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Text="{Binding DisplayName}" />
+                                <Border Padding="8,0,0,0" Background="Transparent" Cursor="Hand" ToolTip="Doppio click per selezionare risorsa">
+                                    <Grid>
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                                        <TextBlock VerticalAlignment="Center" Foreground="#9CA3AF" FontStyle="Italic" FontSize="11"
+                                                   Text="Seleziona risorsa..."
+                                                   Visibility="{Binding IsNameEmpty, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                         <DataGridTemplateColumn.CellEditingTemplate>
@@ -340,10 +344,14 @@
                     <DataGridTemplateColumn Width="2*" Header="RISORSA">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock
-                                    Padding="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Text="{Binding DisplayName}" />
+                                <Border Padding="8,0,0,0" Background="Transparent" Cursor="Hand" ToolTip="Doppio click per selezionare risorsa">
+                                    <Grid>
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                                        <TextBlock VerticalAlignment="Center" Foreground="#9CA3AF" FontStyle="Italic" FontSize="11"
+                                                   Text="Seleziona risorsa..."
+                                                   Visibility="{Binding IsNameEmpty, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                         <DataGridTemplateColumn.CellEditingTemplate>
@@ -482,42 +490,51 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <!--  €/KM  -->
-                    <DataGridTextColumn
-                        Width="50"
-                        Binding="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
-                        Header="€/KM">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,4,0" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <!--  VITTO/G  -->
-                    <DataGridTextColumn
-                        Width="55"
-                        Binding="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
-                        Header="VITTO/G">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,4,0" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <!--  HOTEL/G  -->
-                    <DataGridTextColumn
-                        Width="55"
-                        Binding="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
-                        Header="HOTEL/G">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right" />
-                                <Setter Property="Margin" Value="0,0,4,0" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                    <!--  €/KM (TextBox + dropdown)  -->
+                    <DataGridTemplateColumn Width="65" Header="€/KM">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Width="20" Height="28" FontSize="9" Content="&#x25BC;"
+                                            Background="#2563EB" Foreground="White" BorderThickness="0"
+                                            Cursor="Hand" Click="BtnTariffDrop_Click" Tag="CostPerKm" />
+                                    <TextBox Text="{Binding CostPerKm, StringFormat=N2, UpdateSourceTrigger=LostFocus}"
+                                             Height="28" FontSize="12" Padding="4,3" BorderBrush="#D1D5DB" BorderThickness="1"
+                                             Background="White" HorizontalContentAlignment="Right" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <!--  VITTO/G (TextBox + dropdown)  -->
+                    <DataGridTemplateColumn Width="65" Header="VITTO/G">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Width="20" Height="28" FontSize="9" Content="&#x25BC;"
+                                            Background="#2563EB" Foreground="White" BorderThickness="0"
+                                            Cursor="Hand" Click="BtnTariffDrop_Click" Tag="DailyFood" />
+                                    <TextBox Text="{Binding DailyFood, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                                             Height="28" FontSize="12" Padding="4,3" BorderBrush="#D1D5DB" BorderThickness="1"
+                                             Background="White" HorizontalContentAlignment="Right" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <!--  HOTEL/G (TextBox + dropdown)  -->
+                    <DataGridTemplateColumn Width="65" Header="HOTEL/G">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Width="20" Height="28" FontSize="9" Content="&#x25BC;"
+                                            Background="#2563EB" Foreground="White" BorderThickness="0"
+                                            Cursor="Hand" Click="BtnTariffDrop_Click" Tag="DailyHotel" />
+                                    <TextBox Text="{Binding DailyHotel, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                                             Height="28" FontSize="12" Padding="4,3" BorderBrush="#D1D5DB" BorderThickness="1"
+                                             Background="White" HorizontalContentAlignment="Right" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <!--  GG IND.  -->
                     <DataGridTextColumn
                         Width="50"
@@ -529,25 +546,18 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <!--  €/G IND. (ComboBox 0/20/40/60)  -->
-                    <DataGridTemplateColumn Width="65" Header="€/G IND.">
+                    <!--  €/G IND. (TextBox + dropdown)  -->
+                    <DataGridTemplateColumn Width="70" Header="€/G IND.">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ComboBox
-                                    Width="55"
-                                    HorizontalAlignment="Center"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    FontSize="12"
-                                    SelectedItem="{Binding DailyAllowance, UpdateSourceTrigger=PropertyChanged}"
-                                    SelectionChanged="AllowanceCombo_SelectionChanged">
-                                    <ComboBox.Items>
-                                        <sys:Decimal>0</sys:Decimal>
-                                        <sys:Decimal>20</sys:Decimal>
-                                        <sys:Decimal>40</sys:Decimal>
-                                        <sys:Decimal>60</sys:Decimal>
-                                    </ComboBox.Items>
-                                </ComboBox>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Width="20" Height="28" FontSize="9" Content="&#x25BC;"
+                                            Background="#2563EB" Foreground="White" BorderThickness="0"
+                                            Cursor="Hand" Click="BtnTariffDrop_Click" Tag="DailyAllowance" />
+                                    <TextBox Text="{Binding DailyAllowance, StringFormat=N0, UpdateSourceTrigger=LostFocus}"
+                                             Height="28" FontSize="12" Padding="4,3" BorderBrush="#D1D5DB" BorderThickness="1"
+                                             Background="White" HorizontalContentAlignment="Right" />
+                                </DockPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -811,6 +821,13 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
+
+                                                <!-- + Sezione dentro il gruppo -->
+                                                <Button Click="BtnAddSectionInGroup_Click" Tag="{Binding}"
+                                                        Content="+ Sezione" Cursor="Hand" Margin="0,4,0,0"
+                                                        Background="#F3F4F6" Foreground="#374151" FontSize="11" FontWeight="SemiBold"
+                                                        Padding="10,4" BorderThickness="1" BorderBrush="#D1D5DB"
+                                                        HorizontalAlignment="Left" />
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>

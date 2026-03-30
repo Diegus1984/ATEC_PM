@@ -63,42 +63,6 @@
                             Visibility="Collapsed">
 
                             <Button
-                                x:Name="btnSetSent"
-                                Background="#3B82F6"
-                                Click="BtnSetSent_Click"
-                                Content="Invia"
-                                Foreground="White"
-                                Style="{StaticResource PrimaryBtn}" />
-                            <Button
-                                x:Name="btnSetAccepted"
-                                Margin="8,0,0,0"
-                                Background="#10B981"
-                                Click="BtnSetAccepted_Click"
-                                Content="Accetta"
-                                Foreground="White"
-                                Style="{StaticResource SuccessBtn}" />
-                            <Button
-                                x:Name="btnSetRejected"
-                                Margin="8,0,0,0"
-                                Background="#EF4444"
-                                Click="BtnSetRejected_Click"
-                                Content="Rifiuta"
-                                Foreground="White"
-                                Style="{StaticResource DangerBtn}" />
-                            <Button
-                                x:Name="btnConvert"
-                                Margin="8,0,0,0"
-                                Background="#10B981"
-                                Click="BtnConvert_Click"
-                                Content="Converti in Commessa"
-                                Foreground="White"
-                                Style="{StaticResource SuccessBtn}" />
-                            <Border
-                                x:Name="separatorBeforePdf"
-                                Width="1"
-                                Margin="12,4"
-                                Background="#E4E7EC" />
-                            <Button
                                 x:Name="btnPdf"
                                 Click="BtnPdf_Click"
                                 Foreground="{StaticResource Gray500Brush}"
@@ -109,14 +73,6 @@
                                     <TextBlock Text="PDF" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                            <Button
-                                x:Name="btnDelete"
-                                Margin="8,0,0,0"
-                                Background="#FEE2E2"
-                                Click="BtnDelete_Click"
-                                Content="Elimina"
-                                Foreground="{StaticResource DangerBrush}"
-                                Style="{StaticResource FlatBtn}" />
                         </StackPanel>
                     </DockPanel>
                 </Border>
@@ -335,14 +291,22 @@
 
                                             <!-- Left: PDF Options -->
                                             <StackPanel Grid.Column="0">
-                                                <CheckBox x:Name="chkShowItemPrices" Content="Visualizza prezzi sulle pagine dei singoli articoli" FontSize="12" Margin="0,0,0,6"
-                                                          IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
-                                                <CheckBox x:Name="chkShowSummary" Content="Attiva il riepilogo finale" FontSize="12" Margin="0,0,0,6"
-                                                          IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
-                                                <CheckBox x:Name="chkShowSummaryPrices" Content="Visualizza prezzi dei singoli articoli sul riepilogo" FontSize="12" Margin="0,0,0,6"
-                                                          IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
-                                                <CheckBox x:Name="chkHideQuantities" Content="Nascondi dettagli (costo, qt&#224;, sconto) dal riepilogo" FontSize="12" Margin="0,6,0,0"
-                                                          Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkShowItemPrices" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                                    <TextBlock Text="Visualizza prezzi sulle pagine dei singoli articoli" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkShowSummary" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                                    <TextBlock Text="Attiva il riepilogo finale" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkShowSummaryPrices" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                                    <TextBlock Text="Visualizza prezzi dei singoli articoli sul riepilogo" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                    <CheckBox x:Name="chkHideQuantities" Style="{StaticResource ToggleSwitchStyle}" Checked="InfoCheckBox_Changed" Unchecked="InfoCheckBox_Changed" />
+                                                    <TextBlock Text="Nascondi dettagli (costo, qtà, sconto) dal riepilogo" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
                                             </StackPanel>
 
                                             <!-- Right: Riepilogo offerta -->
@@ -478,10 +442,22 @@
                                                              LostFocus="ServiceDiscountPct_LostFocus" />
                                                     <TextBlock Text="%" FontSize="12" Foreground="{StaticResource Gray500Brush}" VerticalAlignment="Center" Margin="4,0,0,0" />
                                                 </StackPanel>
-                                                <CheckBox x:Name="chkServiceShowItemPrices" Margin="0,0,0,6" Content="Visualizza prezzi sulle pagine dei singoli articoli" FontSize="12" IsChecked="True" />
-                                                <CheckBox x:Name="chkServiceShowSummary" Margin="0,0,0,6" Content="Attiva il riepilogo finale" FontSize="12" IsChecked="True" />
-                                                <CheckBox x:Name="chkServiceShowSummaryPrices" Content="Visualizza prezzi dei singoli articoli sul riepilogo" FontSize="12" IsChecked="True" />
-                                                <CheckBox x:Name="chkServiceHideQuantities" Margin="0,6,0,0" Content="Nascondi dettagli (costo, qtà, sconto) dal riepilogo" FontSize="12" IsChecked="False" />
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkServiceShowItemPrices" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" />
+                                                    <TextBlock Text="Visualizza prezzi sulle pagine dei singoli articoli" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkServiceShowSummary" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" />
+                                                    <TextBlock Text="Attiva il riepilogo finale" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <CheckBox x:Name="chkServiceShowSummaryPrices" Style="{StaticResource ToggleSwitchStyle}" IsChecked="True" />
+                                                    <TextBlock Text="Visualizza prezzi dei singoli articoli sul riepilogo" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                    <CheckBox x:Name="chkServiceHideQuantities" Style="{StaticResource ToggleSwitchStyle}" IsChecked="False" />
+                                                    <TextBlock Text="Nascondi dettagli (costo, qtà, sconto) dal riepilogo" FontSize="12" Foreground="#374151" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                                </StackPanel>
                                             </StackPanel>
 
                                             <!-- Destra: riepilogo economico completo -->

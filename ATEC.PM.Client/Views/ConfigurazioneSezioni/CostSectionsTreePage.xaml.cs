@@ -92,10 +92,12 @@ public partial class CostSectionsTreePage : Page
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
     private static readonly JsonSerializerOptions _jsonWriteOpt = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
+    // Fallback — colori ora letti da group.BgColor
     private static readonly Dictionary<string, string> GroupColors = new()
     {
-        { "GESTIONE", "#2563EB" }, { "PRESCHIERAMENTO", "#7C3AED" },
-        { "INSTALLAZIONE", "#D97706" }, { "OPZIONE", "#DC2626" }
+        { "GESTIONE", "#2563EB" }, { "SITO PILOTA", "#059669" },
+        { "INSTALLAZIONE CLIENTE", "#D97706" }, { "POST COLLAUDO CLIENTE", "#DC2626" },
+        { "OPZIONI", "#7C3AED" }
     };
 
     private string? _lastExpandedGroup;
@@ -680,7 +682,8 @@ public partial class CostSectionsTreePage : Page
 
     private TreeViewItem BuildGroupNode(CostSectionGroupDto group, List<CostSectionTemplateDto> sections)
     {
-        string color = GroupColors.TryGetValue(group.Name.ToUpper(), out string? c) ? c : "#6B7280";
+        string color = !string.IsNullOrEmpty(group.BgColor) ? group.BgColor : "#6B7280";
+        string textColor = !string.IsNullOrEmpty(group.TextColor) ? group.TextColor : "#FFFFFF";
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         panel.Children.Add(new TextBlock
@@ -688,7 +691,7 @@ public partial class CostSectionsTreePage : Page
             Text = $"  {group.Name}",
             FontSize = 14,
             FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White,
+            Foreground = Brush(textColor),
             VerticalAlignment = VerticalAlignment.Center
         });
         panel.Children.Add(new TextBlock
@@ -815,13 +818,25 @@ public partial class CostSectionsTreePage : Page
             }
         });
 
+        // Edit section button (matita)
+        var btnEdit = new Button
+        {
+            Content = "✏", Width = 20, Height = 20, FontSize = 10,
+            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0x25, 0x63, 0xEB)), Foreground = Brush("#2563EB"),
+            BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+            Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Modifica sezione", Tag = section
+        };
+        btnEdit.Click += BtnEditSection_Click;
+        panel.Children.Add(btnEdit);
+
         // Delete section button
         var btnDel = new Button
         {
             Content = "✕", Width = 20, Height = 20, FontSize = 9,
             Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xEF, 0x44, 0x44)), Foreground = Brush("#EF4444"),
             BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
-            Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
             ToolTip = "Elimina sezione", Tag = section
         };
         btnDel.Click += BtnDeleteSection_Click;
@@ -1487,6 +1502,108 @@ public partial class CostSectionsTreePage : Page
             await UnlinkPhase(phase);
     }
 
+    private async void BtnEditSection_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not CostSectionTemplateDto section) return;
+
+        // Crea finestra di modifica
+        Window dlg = new()
+        {
+            Title = "Modifica Sezione Costo",
+            Width = 420, Height = 320,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White,
+            Owner = Window.GetWindow(this)
+        };
+
+        StackPanel sp = new() { Margin = new Thickness(20) };
+
+        // Nome
+        sp.Children.Add(new TextBlock { Text = "NOME", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
+        TextBox txtName = new() { Text = section.Name, FontSize = 13, Height = 32, Padding = new Thickness(8, 5, 8, 5), BorderBrush = Brush("#E4E7EC") };
+        sp.Children.Add(txtName);
+
+        // Ordine
+        StackPanel spSortOrder = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        spSortOrder.Children.Add(new TextBlock { Text = "ORDINE", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        TextBox txtSortOrder = new() { Text = section.SortOrder.ToString(), FontSize = 13, Width = 50, Height = 28, Padding = new Thickness(6, 3, 6, 3), BorderBrush = Brush("#E4E7EC"), HorizontalContentAlignment = HorizontalAlignment.Center };
+        spSortOrder.Children.Add(txtSortOrder);
+        sp.Children.Add(spSortOrder);
+
+        // Toggle Commessa
+        StackPanel spProject = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 6) };
+        CheckBox chkProject = new() { IsChecked = section.IsDefault, Style = (Style)FindResource("ToggleSwitchStyle") };
+        spProject.Children.Add(chkProject);
+        spProject.Children.Add(new TextBlock { Text = "Default Commessa", FontSize = 12, Foreground = Brush("#374151"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+        sp.Children.Add(spProject);
+
+        // Toggle Preventivo
+        StackPanel spQuote = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
+        CheckBox chkQuote = new() { IsChecked = section.IsDefaultQuote, Style = (Style)FindResource("ToggleSwitchStyle") };
+        spQuote.Children.Add(chkQuote);
+        spQuote.Children.Add(new TextBlock { Text = "Default Preventivo", FontSize = 12, Foreground = Brush("#374151"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+        sp.Children.Add(spQuote);
+
+        // Bottoni
+        StackPanel spButtons = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 8, 0) };
+        Button btnSave = new() { Content = "Salva", Width = 80, Height = 30, Background = Brush("#2563EB"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold };
+
+        bool saved = false;
+        btnCancel.Click += (s2, e2) => dlg.Close();
+        btnSave.Click += (s2, e2) => { saved = true; dlg.Close(); };
+        spButtons.Children.Add(btnCancel);
+        spButtons.Children.Add(btnSave);
+        sp.Children.Add(spButtons);
+
+        dlg.Content = sp;
+        txtName.Focus();
+        txtName.SelectAll();
+        dlg.ShowDialog();
+
+        if (!saved) return;
+
+        string newName = txtName.Text.Trim();
+        if (string.IsNullOrEmpty(newName)) return;
+
+        try
+        {
+            // Aggiorna nome
+            if (newName != section.Name)
+            {
+                string json = JsonSerializer.Serialize(new { field = "name", value = newName });
+                await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
+            }
+
+            // Aggiorna default commessa
+            bool newDefProject = chkProject.IsChecked == true;
+            if (newDefProject != section.IsDefault)
+            {
+                string json = JsonSerializer.Serialize(new { field = "is_default_project", value = newDefProject ? "1" : "0" });
+                await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
+            }
+
+            // Aggiorna default preventivo
+            bool newDefQuote = chkQuote.IsChecked == true;
+            if (newDefQuote != section.IsDefaultQuote)
+            {
+                string json = JsonSerializer.Serialize(new { field = "is_default_quote", value = newDefQuote ? "1" : "0" });
+                await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
+            }
+
+            // Aggiorna ordine
+            if (int.TryParse(txtSortOrder.Text, out int newSort) && newSort != section.SortOrder)
+            {
+                string json = JsonSerializer.Serialize(new { field = "sort_order", value = newSort.ToString() });
+                await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
+            }
+
+            await LoadData();
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message); }
+    }
+
     private async void BtnDeleteSection_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not CostSectionTemplateDto section) return;
@@ -1506,17 +1623,115 @@ public partial class CostSectionsTreePage : Page
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
+    // Palette colori disponibili per i gruppi
+    private static readonly string[] GroupColorPalette = new[]
+    {
+        "#2563EB", "#3B82F6", "#1D4ED8",  // Blu
+        "#059669", "#10B981", "#047857",  // Verde
+        "#D97706", "#F59E0B", "#B45309",  // Arancione
+        "#DC2626", "#EF4444", "#B91C1C",  // Rosso
+        "#7C3AED", "#8B5CF6", "#6D28D9",  // Viola
+        "#0891B2", "#06B6D4", "#0E7490",  // Ciano
+        "#BE185D", "#EC4899", "#9D174D",  // Rosa
+        "#374151", "#6B7280", "#1F2937",  // Grigio
+    };
+
     private async void BtnEditGroup_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not CostSectionGroupDto group) return;
 
-        string? newName = PromptInput("Rinomina Gruppo", "Nome:", group.Name);
-        if (newName == null || newName == group.Name) return;
+        Window dlg = new()
+        {
+            Title = "Modifica Gruppo",
+            Width = 420, Height = 350,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White,
+            Owner = Window.GetWindow(this)
+        };
+
+        StackPanel sp = new() { Margin = new Thickness(20) };
+
+        // Nome
+        sp.Children.Add(new TextBlock { Text = "NOME", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
+        TextBox txtName = new() { Text = group.Name, FontSize = 13, Height = 32, Padding = new Thickness(8, 5, 8, 5), BorderBrush = Brush("#E4E7EC") };
+        sp.Children.Add(txtName);
+
+        // Ordine
+        StackPanel spOrder = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        spOrder.Children.Add(new TextBlock { Text = "ORDINE", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        TextBox txtOrder = new() { Text = group.SortOrder.ToString(), FontSize = 13, Width = 50, Height = 28, Padding = new Thickness(6, 3, 6, 3), BorderBrush = Brush("#E4E7EC"), HorizontalContentAlignment = HorizontalAlignment.Center };
+        spOrder.Children.Add(txtOrder);
+        sp.Children.Add(spOrder);
+
+        // Colore sfondo
+        sp.Children.Add(new TextBlock { Text = "COLORE SFONDO", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 12, 0, 4) });
+        WrapPanel wpColors = new();
+        string selectedColor = group.BgColor ?? "#3B82F6";
+        Button? selectedBtn = null;
+
+        foreach (string hex in GroupColorPalette)
+        {
+            string capturedHex = hex;
+            Button btnColor = new()
+            {
+                Width = 28, Height = 28, Margin = new Thickness(0, 0, 4, 4),
+                Background = Brush(hex), BorderThickness = new Thickness(2),
+                BorderBrush = hex == selectedColor ? Brush("#1A1D26") : Brushes.Transparent,
+                Cursor = Cursors.Hand
+            };
+            if (hex == selectedColor) selectedBtn = btnColor;
+
+            btnColor.Click += (s2, e2) =>
+            {
+                // Deseleziona precedente
+                if (selectedBtn != null) selectedBtn.BorderBrush = Brushes.Transparent;
+                // Seleziona nuovo
+                btnColor.BorderBrush = Brush("#1A1D26");
+                selectedBtn = btnColor;
+                selectedColor = capturedHex;
+            };
+            wpColors.Children.Add(btnColor);
+        }
+        sp.Children.Add(wpColors);
+
+        // Bottoni
+        StackPanel spButtons = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0) };
+        Button btnSave = new() { Content = "Salva", Width = 80, Height = 30, Margin = new Thickness(8, 0, 0, 0), Background = Brush("#2563EB"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold };
+
+        bool saved = false;
+        btnCancel.Click += (s2, e2) => dlg.Close();
+        btnSave.Click += (s2, e2) => { saved = true; dlg.Close(); };
+        spButtons.Children.Add(btnCancel);
+        spButtons.Children.Add(btnSave);
+        sp.Children.Add(spButtons);
+
+        dlg.Content = sp;
+        txtName.Focus();
+        txtName.SelectAll();
+        dlg.ShowDialog();
+
+        if (!saved) return;
 
         try
         {
-            string json = JsonSerializer.Serialize(new { field = "name", value = newName });
-            await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
+            string newName = txtName.Text.Trim();
+            if (!string.IsNullOrEmpty(newName) && newName != group.Name)
+            {
+                string json = JsonSerializer.Serialize(new { field = "name", value = newName });
+                await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
+            }
+            if (selectedColor != group.BgColor)
+            {
+                string json = JsonSerializer.Serialize(new { field = "bg_color", value = selectedColor });
+                await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
+            }
+            if (int.TryParse(txtOrder.Text, out int newOrder) && newOrder != group.SortOrder)
+            {
+                string json = JsonSerializer.Serialize(new { field = "sort_order", value = newOrder.ToString() });
+                await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
+            }
             await LoadData();
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
@@ -1546,6 +1761,7 @@ public partial class CostSectionsTreePage : Page
                 sectionType,
                 groupId = group.Id,
                 isDefault = false,
+                isDefaultQuote = false,
                 sortOrder = maxSort,
                 isActive = true,
                 departmentIds = new List<int>()
