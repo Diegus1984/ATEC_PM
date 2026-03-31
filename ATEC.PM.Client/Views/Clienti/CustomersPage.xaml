@@ -6,7 +6,70 @@
     MinWidth="800"
     Background="#F7F8FA">
 
+    <Page.Resources>
+        <!-- Label stile per dettagli -->
+        <Style x:Key="DetailLbl" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+        </Style>
+        <!-- Valore readonly -->
+        <Style x:Key="DetailVal" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <!-- Input per modalita edit -->
+        <Style x:Key="DetailInp" TargetType="TextBox">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Background" Value="White" />
+        </Style>
+        <!-- Tab stile flat -->
+        <Style x:Key="DetailTabItem" TargetType="TabItem">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border
+                            x:Name="tabBorder"
+                            Padding="{TemplateBinding Padding}"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="0,0,0,2"
+                            Cursor="Hand">
+                            <ContentPresenter
+                                HorizontalAlignment="Center"
+                                ContentSource="Header" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="tabBorder" Property="BorderBrush" Value="#2563EB" />
+                                <Setter Property="Foreground" Value="#2563EB" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="#F3F4F6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
     <DockPanel>
+        <!-- Toolbar -->
         <Border
             Style="{StaticResource ToolbarBorder}"
             DockPanel.Dock="Top">
@@ -17,18 +80,15 @@
                         Click="BtnNew_Click"
                         Content="+ Nuovo Cliente"
                         Style="{StaticResource PrimaryBtn}" />
-
                     <Button
                         Click="BtnClearFilters_Click"
                         Content="Pulisci Filtri"
                         Style="{StaticResource FlatBtn}" />
-
                     <Button
                         Click="BtnRefresh_Click"
                         Content="Aggiorna"
                         Style="{StaticResource FlatBtn}" />
                 </StackPanel>
-
                 <Button
                     HorizontalAlignment="Right"
                     Background="#12B76A"
@@ -39,8 +99,10 @@
             </Grid>
         </Border>
 
+        <!-- Sync bar -->
         <uc:DaneaSyncBar x:Name="syncBar" DockPanel.Dock="Top" />
 
+        <!-- Status bar -->
         <Border
             Padding="20,10"
             Background="White"
@@ -63,146 +125,347 @@
             </Grid>
         </Border>
 
-        <DataGrid
-            x:Name="dgCustomers"
-            Margin="20"
-            IsReadOnly="True"
-            MouseDoubleClick="Dg_DoubleClick"
-            Style="{StaticResource ModernDataGrid}">
+        <!-- Main content: master-detail -->
+        <Grid Margin="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="colList" Width="2*" MinWidth="300" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="colDetail" Width="3*" MinWidth="300" />
+            </Grid.ColumnDefinitions>
 
-            <DataGrid.Columns>
-                <DataGridTemplateColumn Width="*" MinWidth="150">
-                    <DataGridTemplateColumn.HeaderTemplate>
-                        <DataTemplate>
-                            <StackPanel>
+            <!-- LEFT: DataGrid lista clienti -->
+            <DataGrid
+                x:Name="dgCustomers"
+                Grid.Column="0"
+                Margin="12,12,0,12"
+                IsReadOnly="True"
+                SelectionChanged="Dg_SelectionChanged"
+                MouseDoubleClick="Dg_DoubleClick"
+                Style="{StaticResource ModernDataGrid}">
+
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Width="*" MinWidth="150">
+                        <DataGridTemplateColumn.HeaderTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock FontWeight="Bold" Foreground="#667085" Text="Ragione Sociale" />
+                                    <TextBox
+                                        Loaded="Filter_Loaded"
+                                        Style="{StaticResource HeaderSearchBox}"
+                                        Tag="Name"
+                                        TextChanged="Filter_Changed" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.HeaderTemplate>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding CompanyName}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Width="130" MinWidth="80">
+                        <DataGridTemplateColumn.HeaderTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock FontWeight="Bold" Foreground="#667085" Text="P.IVA" />
+                                    <TextBox
+                                        Loaded="Filter_Loaded"
+                                        Style="{StaticResource HeaderSearchBox}"
+                                        Tag="Vat"
+                                        TextChanged="Filter_Changed" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.HeaderTemplate>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock VerticalAlignment="Center" Text="{Binding VatNumber}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn
+                        Width="110"
+                        MinWidth="70"
+                        Binding="{Binding Phone}"
+                        Header="Telefono" />
+
+                    <DataGridTemplateColumn Width="60" Header="">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                    <Button
+                                        Click="BtnDelete_Click"
+                                        Style="{StaticResource RowDeleteBtn}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- GridSplitter -->
+            <GridSplitter
+                x:Name="splitter"
+                Grid.Column="1"
+                Width="4"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Stretch"
+                Background="#E5E7EB"
+                Cursor="SizeWE"
+                DragCompleted="Splitter_DragCompleted" />
+
+            <!-- RIGHT: Pannello dettagli -->
+            <Border
+                Grid.Column="2"
+                Margin="0,12,12,12"
+                Background="White"
+                BorderBrush="#E4E7EC"
+                BorderThickness="1">
+
+                <Grid>
+                    <!-- Placeholder: nessun cliente selezionato -->
+                    <StackPanel
+                        x:Name="panelPlaceholder"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="14"
+                            Foreground="#9CA3AF"
+                            Text="Seleziona un cliente dalla lista" />
+                    </StackPanel>
+
+                    <!-- Dettagli cliente -->
+                    <DockPanel x:Name="panelDetail" Visibility="Collapsed">
+
+                        <!-- Header con nome cliente -->
+                        <Border
+                            Padding="16,12"
+                            Background="#F9FAFB"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="0,0,0,1"
+                            DockPanel.Dock="Top">
+                            <Grid>
                                 <TextBlock
-                                    FontWeight="Bold"
-                                    Foreground="#667085"
-                                    Text="Ragione Sociale" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Name"
-                                    TextChanged="Filter_Changed" />
+                                    x:Name="txtDetailTitle"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Foreground="#111827"
+                                    Text="Cliente"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Barra azioni in basso -->
+                        <Border
+                            Padding="16,10"
+                            Background="#F9FAFB"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="0,1,0,0"
+                            DockPanel.Dock="Bottom">
+                            <StackPanel Orientation="Horizontal">
+                                <!-- Modalita lettura -->
+                                <StackPanel x:Name="panelReadActions" Orientation="Horizontal">
+                                    <Button
+                                        Click="BtnEditInline_Click"
+                                        Content="Modifica"
+                                        Style="{StaticResource PrimaryBtn}" />
+                                </StackPanel>
+                                <!-- Modalita scrittura -->
+                                <StackPanel x:Name="panelEditActions" Orientation="Horizontal" Visibility="Collapsed">
+                                    <Button
+                                        Click="BtnSaveInline_Click"
+                                        Content="Salva"
+                                        Style="{StaticResource PrimaryBtn}" />
+                                    <Button
+                                        Margin="8,0,0,0"
+                                        Click="BtnCancelInline_Click"
+                                        Content="Annulla"
+                                        Style="{StaticResource FlatBtn}" />
+                                </StackPanel>
                             </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.HeaderTemplate>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
+                        </Border>
+
+                        <!-- Errore -->
+                        <Border
+                            x:Name="panelError"
+                            Padding="16,8"
+                            Background="#FEE2E2"
+                            BorderBrush="#DC2626"
+                            BorderThickness="0,0,0,1"
+                            DockPanel.Dock="Bottom"
+                            Visibility="Collapsed">
                             <TextBlock
-                                VerticalAlignment="Center"
-                                FontWeight="Medium"
-                                Text="{Binding CompanyName}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                                x:Name="txtDetailError"
+                                FontSize="12"
+                                Foreground="#DC2626"
+                                TextWrapping="Wrap" />
+                        </Border>
 
-                <DataGridTemplateColumn Width="140" MinWidth="100">
-                    <DataGridTemplateColumn.HeaderTemplate>
-                        <DataTemplate>
-                            <StackPanel>
-                                <TextBlock
-                                    FontWeight="Bold"
-                                    Foreground="#667085"
-                                    Text="Referente" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Contact"
-                                    TextChanged="Filter_Changed" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.HeaderTemplate>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" Text="{Binding ContactName}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                        <!-- Tab content -->
+                        <TabControl
+                            x:Name="tabDetail"
+                            Background="Transparent"
+                            BorderThickness="0">
 
-                <DataGridTemplateColumn Width="140" MinWidth="100">
-                    <DataGridTemplateColumn.HeaderTemplate>
-                        <DataTemplate>
-                            <StackPanel>
-                                <TextBlock
-                                    FontWeight="Bold"
-                                    Foreground="#667085"
-                                    Text="P.IVA" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Vat"
-                                    TextChanged="Filter_Changed" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.HeaderTemplate>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" Text="{Binding VatNumber}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                            <!-- Stile del TabControl per rimuovere bordi -->
+                            <TabControl.Style>
+                                <Style TargetType="TabControl">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="TabControl">
+                                                <DockPanel>
+                                                    <Border
+                                                        Padding="12,0"
+                                                        BorderBrush="#E4E7EC"
+                                                        BorderThickness="0,0,0,1"
+                                                        DockPanel.Dock="Top">
+                                                        <TabPanel IsItemsHost="True" />
+                                                    </Border>
+                                                    <ContentPresenter
+                                                        Margin="0"
+                                                        ContentSource="SelectedContent" />
+                                                </DockPanel>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TabControl.Style>
 
-                <DataGridTemplateColumn Width="180" MinWidth="120">
-                    <DataGridTemplateColumn.HeaderTemplate>
-                        <DataTemplate>
-                            <StackPanel>
-                                <TextBlock
-                                    FontWeight="Bold"
-                                    Foreground="#667085"
-                                    Text="Email" />
-                                <TextBox
-                                    Loaded="Filter_Loaded"
-                                    Style="{StaticResource HeaderSearchBox}"
-                                    Tag="Email"
-                                    TextChanged="Filter_Changed" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.HeaderTemplate>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock VerticalAlignment="Center" Text="{Binding Email}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                            <!-- TAB: Anagrafica -->
+                            <TabItem Header="Anagrafica" Style="{StaticResource DetailTabItem}">
+                                <ScrollViewer
+                                    Padding="16,12"
+                                    VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <!-- Ragione Sociale -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="RAGIONE SOCIALE" />
+                                        <TextBlock x:Name="lblCompanyName" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtCompanyName" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
 
-                <DataGridTextColumn
-                    Width="120"
-                    MinWidth="80"
-                    Binding="{Binding Phone}"
-                    Header="Telefono" />
-                <DataGridTextColumn
-                    Width="120"
-                    MinWidth="80"
-                    Binding="{Binding Pec}"
-                    Header="PEC" />
-                <DataGridTextColumn
-                    Width="100"
-                    MinWidth="70"
-                    Binding="{Binding FiscalCode}"
-                    Header="C.F." />
-                <DataGridTextColumn
-                    Width="80"
-                    MinWidth="60"
-                    Binding="{Binding SdiCode}"
-                    Header="SDI" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <!-- P.IVA -->
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Style="{StaticResource DetailLbl}" Text="P.IVA" />
+                                                <TextBlock x:Name="lblVatNumber" Style="{StaticResource DetailVal}" />
+                                                <TextBox x:Name="txtVatNumber" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                            </StackPanel>
+                                            <!-- C.F. -->
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Style="{StaticResource DetailLbl}" Text="CODICE FISCALE" />
+                                                <TextBlock x:Name="lblFiscalCode" Style="{StaticResource DetailVal}" />
+                                                <TextBox x:Name="txtFiscalCode" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                            </StackPanel>
+                                        </Grid>
 
-                <DataGridTemplateColumn Width="80" Header="">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-                                <Button
-                                    Click="BtnEdit_Click"
-                                    Style="{StaticResource RowEditBtn}" />
-                                <Button
-                                    Margin="4,0,0,0"
-                                    Click="BtnDelete_Click"
-                                    Style="{StaticResource RowDeleteBtn}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+                                        <!-- SDI -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Style="{StaticResource DetailLbl}" Text="CODICE SDI" />
+                                                <TextBlock x:Name="lblSdiCode" Style="{StaticResource DetailVal}" />
+                                                <TextBox x:Name="txtSdiCode" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Indirizzo -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="INDIRIZZO" />
+                                        <TextBlock x:Name="lblAddress" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtAddress" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+
+                            <!-- TAB: Contatti -->
+                            <TabItem Header="Contatti" Style="{StaticResource DetailTabItem}">
+                                <ScrollViewer
+                                    Padding="16,12"
+                                    VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <!-- Referente -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="REFERENTE" />
+                                        <TextBlock x:Name="lblContactName" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtContactName" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Telefono -->
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Style="{StaticResource DetailLbl}" Text="TELEFONO" />
+                                                <TextBlock x:Name="lblPhone" Style="{StaticResource DetailVal}" />
+                                                <TextBox x:Name="txtPhone" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                            </StackPanel>
+                                            <!-- Cellulare -->
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Style="{StaticResource DetailLbl}" Text="CELLULARE" />
+                                                <TextBlock x:Name="lblCell" Style="{StaticResource DetailVal}" />
+                                                <TextBox x:Name="txtCell" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Email -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="EMAIL" />
+                                        <TextBlock x:Name="lblEmail" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtEmail" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+
+                                        <!-- PEC -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="PEC" />
+                                        <TextBlock x:Name="lblPec" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtPec" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+
+                            <!-- TAB: Altro -->
+                            <TabItem Header="Altro" Style="{StaticResource DetailTabItem}">
+                                <ScrollViewer
+                                    Padding="16,12"
+                                    VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <!-- Condizioni pagamento -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="CONDIZIONI PAGAMENTO" />
+                                        <TextBlock x:Name="lblPaymentTerms" Style="{StaticResource DetailVal}" />
+                                        <TextBox x:Name="txtPaymentTerms" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
+
+                                        <!-- Note -->
+                                        <TextBlock Style="{StaticResource DetailLbl}" Text="NOTE" />
+                                        <TextBlock x:Name="lblNotes" Style="{StaticResource DetailVal}" />
+                                        <TextBox
+                                            x:Name="txtNotes"
+                                            Height="100"
+                                            Padding="6,4"
+                                            FontSize="12"
+                                            BorderBrush="#D1D5DB"
+                                            BorderThickness="1"
+                                            Margin="0,0,0,12"
+                                            Background="White"
+                                            AcceptsReturn="True"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
     </DockPanel>
 </Page>

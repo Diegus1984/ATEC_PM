@@ -63,6 +63,17 @@ public static class UserPreferences
         }
     }
 
+    public static double GetDouble(string key, double defaultValue = 0)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.TryGetValue(key, out JsonElement el) && el.ValueKind == JsonValueKind.Number)
+                return el.GetDouble();
+            return defaultValue;
+        }
+    }
+
     // ── Write ──
 
     public static void Set(string key, string value)
@@ -86,6 +97,16 @@ public static class UserPreferences
     }
 
     public static void Set(string key, int value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            _data[key] = JsonSerializer.SerializeToElement(value);
+            Save();
+        }
+    }
+
+    public static void Set(string key, double value)
     {
         EnsureLoaded();
         lock (_lock)

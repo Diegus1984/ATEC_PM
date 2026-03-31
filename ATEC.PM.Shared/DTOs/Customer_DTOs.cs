@@ -12,6 +12,9 @@ public class CustomerListItem
     public string VatNumber { get; set; } = "";
     public string FiscalCode { get; set; } = "";
     public string SdiCode { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string PaymentTerms { get; set; } = "";
     public bool IsActive { get; set; }
 }
 

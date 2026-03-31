@@ -19,10 +19,12 @@ public class CustomersController : ControllerBase
     {
         using var c = _db.Open();
         var rows = c.Query<CustomerListItem>(@"
-            SELECT id, company_name AS CompanyName, contact_name AS ContactName, 
-                   email, pec AS Pec, phone, cell AS Cell, 
-                   vat_number AS VatNumber, fiscal_code AS FiscalCode, 
-                   sdi_code AS SdiCode, is_active AS IsActive 
+            SELECT id, company_name AS CompanyName, contact_name AS ContactName,
+                   email, pec AS Pec, phone, cell AS Cell,
+                   vat_number AS VatNumber, fiscal_code AS FiscalCode,
+                   sdi_code AS SdiCode, address AS Address,
+                   notes AS Notes, payment_terms AS PaymentTerms,
+                   is_active AS IsActive
             FROM customers ORDER BY company_name").ToList();
         return Ok(ApiResponse<List<CustomerListItem>>.Ok(rows));
     }
