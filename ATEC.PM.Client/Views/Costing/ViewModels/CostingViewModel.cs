@@ -459,12 +459,6 @@ public class CostingViewModel : INotifyPropertyChanged
         vm.ContingencyPct = NormalizePct(data.Pricing.ContingencyPct);
         vm.NegotiationMarginPct = NormalizePct(data.Pricing.NegotiationMarginPct);
 
-        var colorMap = new Dictionary<string, string>
-        {
-            { "GESTIONE", "#2563EB" }, { "PRESCHIERAMENTO", "#7C3AED" },
-            { "INSTALLAZIONE", "#D97706" }, { "OPZIONE", "#DC2626" }
-        };
-
         // Risorse
         var groups = data.CostSections
             .Where(s => s.IsEnabled)
@@ -476,7 +470,7 @@ public class CostingViewModel : INotifyPropertyChanged
             var groupVM = new CostGroupVM
             {
                 Name = grp.Key,
-                Color = colorMap.TryGetValue(grp.Key, out string? c) ? c : "#6B7280"
+                Color = grp.First().GroupColor
             };
 
             foreach (var sec in grp.OrderBy(s => s.SortOrder))

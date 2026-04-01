@@ -19,6 +19,7 @@ public class BudgetVsActualData
 public class BvaGroupDto
 {
     public string GroupName { get; set; } = "";
+    public string Color { get; set; } = "#6B7280";
     public int SortOrder { get; set; }
     public List<BvaSectionDto> Sections { get; set; } = new();
     // Totali gruppo

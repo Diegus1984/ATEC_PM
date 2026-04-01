@@ -22,7 +22,7 @@ public partial class AddPhasesWindow : Window
         string lastCategory = "";
         foreach (PhaseTemplateDto t in _available.OrderBy(t => t.SortOrder))
         {
-            string cat = string.IsNullOrEmpty(t.DepartmentCode) ? "TRASVERSALE" : t.DepartmentCode;
+            string cat = string.IsNullOrEmpty(t.Category) ? "TRASVERSALE" : t.Category;
             if (cat != lastCategory)
             {
                 pnlTemplates.Children.Add(new TextBlock

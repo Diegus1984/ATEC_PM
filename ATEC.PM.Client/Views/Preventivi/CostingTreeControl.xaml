@@ -164,32 +164,12 @@
                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26" />
                 </DataGrid.Resources>
                 <DataGrid.Columns>
-                    <!--  RISORSA (ComboBox)  -->
-                    <DataGridTemplateColumn Width="2*" Header="RISORSA">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Border Padding="8,0,0,0" Background="Transparent" Cursor="Hand" ToolTip="Doppio click per selezionare risorsa">
-                                    <Grid>
-                                        <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
-                                        <TextBlock VerticalAlignment="Center" Foreground="#9CA3AF" FontStyle="Italic" FontSize="11"
-                                                   Text="Seleziona risorsa..."
-                                                   Visibility="{Binding IsNameEmpty, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                        <DataGridTemplateColumn.CellEditingTemplate>
-                            <DataTemplate>
-                                <ComboBox
-                                    DisplayMemberPath="FullName"
-                                    IsEditable="True"
-                                    IsTextSearchEnabled="True"
-                                    Loaded="EmployeeCombo_Loaded"
-                                    SelectionChanged="EmployeeCombo_SelectionChanged"
-                                    StaysOpenOnEdit="True" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellEditingTemplate>
-                    </DataGridTemplateColumn>
+                    <!--  RISORSA (acronimo reparto, readonly)  -->
+                    <DataGridTextColumn
+                        Width="2*"
+                        Binding="{Binding DisplayName}"
+                        Header="RISORSA"
+                        IsReadOnly="True" />
 
                     <!--  REP  -->
                     <DataGridTextColumn
@@ -340,32 +320,12 @@
                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1A1D26" />
                 </DataGrid.Resources>
                 <DataGrid.Columns>
-                    <!--  RISORSA  -->
-                    <DataGridTemplateColumn Width="2*" Header="RISORSA">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Border Padding="8,0,0,0" Background="Transparent" Cursor="Hand" ToolTip="Doppio click per selezionare risorsa">
-                                    <Grid>
-                                        <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
-                                        <TextBlock VerticalAlignment="Center" Foreground="#9CA3AF" FontStyle="Italic" FontSize="11"
-                                                   Text="Seleziona risorsa..."
-                                                   Visibility="{Binding IsNameEmpty, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                        <DataGridTemplateColumn.CellEditingTemplate>
-                            <DataTemplate>
-                                <ComboBox
-                                    DisplayMemberPath="FullName"
-                                    IsEditable="True"
-                                    IsTextSearchEnabled="True"
-                                    Loaded="EmployeeCombo_Loaded"
-                                    SelectionChanged="EmployeeCombo_SelectionChanged"
-                                    StaysOpenOnEdit="True" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellEditingTemplate>
-                    </DataGridTemplateColumn>
+                    <!--  RISORSA (acronimo reparto, readonly)  -->
+                    <DataGridTextColumn
+                        Width="2*"
+                        Binding="{Binding DisplayName}"
+                        Header="RISORSA"
+                        IsReadOnly="True" />
                     <!--  REP  -->
                     <DataGridTextColumn
                         Width="50"

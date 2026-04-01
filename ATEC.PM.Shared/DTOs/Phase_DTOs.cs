@@ -7,9 +7,6 @@ public class PhaseTemplateDto
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
-    public int? DepartmentId { get; set; }
-    public string DepartmentCode { get; set; } = "";
-    public string DepartmentName { get; set; } = "";
     public int? CostSectionTemplateId { get; set; }
     public string CostSectionName { get; set; } = "";
     public int SortOrder { get; set; }
@@ -21,9 +18,6 @@ public class PhaseListItem
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
-    public int? DepartmentId { get; set; }
-    public string DepartmentCode { get; set; } = "";
-    public string DepartmentName { get; set; } = "";
     public decimal BudgetHours { get; set; }
     public decimal BudgetCost { get; set; }
     public string Status { get; set; } = "";
@@ -54,7 +48,6 @@ public class PhaseSaveRequest
     public int ProjectId { get; set; }
     public int PhaseTemplateId { get; set; }
     public string CustomName { get; set; } = "";
-    public int? DepartmentId { get; set; }
     public decimal BudgetHours { get; set; }
     public decimal BudgetCost { get; set; }
     public string Status { get; set; } = "NOT_STARTED";
@@ -67,7 +60,6 @@ public class PhaseTemplateSaveRequest
 {
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
-    public int? DepartmentId { get; set; }
     public int? CostSectionTemplateId { get; set; }
     public int SortOrder { get; set; }
     public bool IsDefault { get; set; }

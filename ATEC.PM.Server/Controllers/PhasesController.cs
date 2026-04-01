@@ -24,14 +24,11 @@ public class PhasesController : ControllerBase
     {
         using var c = _db.Open();
         List<PhaseTemplateDto> rows = c.Query<PhaseTemplateDto>(@"
-            SELECT pt.id, pt.name, pt.category, pt.department_id AS DepartmentId,
-                   COALESCE(d.code,'') AS DepartmentCode,
-                   COALESCE(d.name,'') AS DepartmentName,
+            SELECT pt.id, pt.name, pt.category,
                    pt.cost_section_template_id AS CostSectionTemplateId,
                    COALESCE(cst.name,'') AS CostSectionName,
                    pt.sort_order AS SortOrder, pt.is_default AS IsDefault
             FROM phase_templates pt
-            LEFT JOIN departments d ON d.id = pt.department_id
             LEFT JOIN cost_section_templates cst ON cst.id = pt.cost_section_template_id
             ORDER BY pt.sort_order").ToList();
         return Ok(ApiResponse<List<PhaseTemplateDto>>.Ok(rows));
@@ -47,16 +44,13 @@ public class PhasesController : ControllerBase
             SELECT pp.id, pp.phase_template_id AS PhaseTemplateId,
                    pp.custom_name AS CustomName,
                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS Name,
-                   pt.category, pp.department_id AS DepartmentId,
-                   COALESCE(d.code,'') AS DepartmentCode,
-                   COALESCE(d.name,'') AS DepartmentName,
+                   pt.category,
                    COALESCE((SELECT SUM(pa.planned_hours) FROM phase_assignments pa WHERE pa.project_phase_id = pp.id), 0) AS BudgetHours, pp.budget_cost AS BudgetCost,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
                    COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
                    COALESCE(cst.name, '') AS CostSectionName
             FROM project_phases pp
             JOIN phase_templates pt ON pt.id = pp.phase_template_id
-            LEFT JOIN departments d ON d.id = pp.department_id
             LEFT JOIN cost_section_templates cst ON cst.id = pt.cost_section_template_id
             WHERE pp.project_id = @ProjectId
             ORDER BY pp.sort_order", new { ProjectId = projectId }).ToList();
@@ -87,24 +81,18 @@ public class PhasesController : ControllerBase
         using var c = _db.Open();
         using System.Data.IDbTransaction tx = c.BeginTransaction();
 
-        if (req.DepartmentId == null)
-            req.DepartmentId = c.ExecuteScalar<int?>(
-                "SELECT department_id FROM phase_templates WHERE id=@Id",
-                new { Id = req.PhaseTemplateId }, tx);
-
         int phaseId = c.ExecuteScalar<int>(@"
             INSERT INTO project_phases
-                (project_id, phase_template_id, custom_name, department_id,
+                (project_id, phase_template_id, custom_name,
                  budget_hours, budget_cost, status, progress_pct, sort_order)
             VALUES
-                (@ProjectId, @PhaseTemplateId, @CustomName, @DepartmentId,
+                (@ProjectId, @PhaseTemplateId, @CustomName,
                  @BudgetHours, @BudgetCost, @Status, @ProgressPct, @SortOrder);
             SELECT LAST_INSERT_ID()", new
         {
             req.ProjectId,
             req.PhaseTemplateId,
             req.CustomName,
-            req.DepartmentId,
             req.BudgetHours,
             req.BudgetCost,
             req.Status,
@@ -127,13 +115,13 @@ public class PhasesController : ControllerBase
         foreach (int tplId in req.TemplateIds)
         {
             var tpl = c.QueryFirstOrDefault<dynamic>(
-                "SELECT id, department_id, sort_order FROM phase_templates WHERE id=@Id",
+                "SELECT id, sort_order FROM phase_templates WHERE id=@Id",
                 new { Id = tplId }, tx);
             if (tpl == null) continue;
 
-            c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, department_id, sort_order)
-                VALUES (@ProjId, @TplId, @DeptId, @Sort)",
-                new { ProjId = req.ProjectId, TplId = (int)tpl.id, DeptId = (int?)tpl.department_id, Sort = (int)tpl.sort_order }, tx);
+            c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, sort_order)
+                VALUES (@ProjId, @TplId, @Sort)",
+                new { ProjId = req.ProjectId, TplId = (int)tpl.id, Sort = (int)tpl.sort_order }, tx);
         }
 
         tx.Commit();
@@ -149,13 +137,12 @@ public class PhasesController : ControllerBase
 
         c.Execute(@"
             UPDATE project_phases SET
-                custom_name=@CustomName, department_id=@DepartmentId,
+                custom_name=@CustomName,
                 budget_hours=@BudgetHours, budget_cost=@BudgetCost,
                 status=@Status, progress_pct=@ProgressPct, sort_order=@SortOrder
             WHERE id=@Id", new
         {
             req.CustomName,
-            req.DepartmentId,
             req.BudgetHours,
             req.BudgetCost,
             req.Status,
@@ -319,17 +306,17 @@ public class PhasesController : ControllerBase
     {
         using var c = _db.Open();
         int newId = c.ExecuteScalar<int>(@"
-            INSERT INTO phase_templates (name, category, department_id, cost_section_template_id, sort_order, is_default)
-            VALUES (@Name, @Category, @DepartmentId, @CostSectionTemplateId, @SortOrder, @IsDefault);
+            INSERT INTO phase_templates (name, category, cost_section_template_id, sort_order, is_default)
+            VALUES (@Name, @Category, @CostSectionTemplateId, @SortOrder, @IsDefault);
             SELECT LAST_INSERT_ID()",
-            new { req.Name, req.Category, req.DepartmentId, req.CostSectionTemplateId, req.SortOrder, IsDefault = req.IsDefault ? 1 : 0 });
+            new { req.Name, req.Category, req.CostSectionTemplateId, req.SortOrder, IsDefault = req.IsDefault ? 1 : 0 });
         return Ok(ApiResponse<int>.Ok(newId, "Template creato"));
     }
 
     [HttpPatch("templates/{id}/field")]
     public IActionResult UpdateTemplateField(int id, [FromBody] FieldUpdateRequest req)
     {
-        var allowed = new HashSet<string> { "name", "category", "department_id", "cost_section_template_id", "sort_order", "is_default" };
+        var allowed = new HashSet<string> { "name", "category", "cost_section_template_id", "sort_order", "is_default" };
         string? error = _db.UpdateField("phase_templates", id, req.Field, req.Value, allowed);
         if (error != null) return BadRequest(ApiResponse<string>.Fail(error));
         return Ok(ApiResponse<bool>.Ok(true));

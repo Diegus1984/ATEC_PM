@@ -14,13 +14,6 @@ public partial class PhasesManagementControl : UserControl
     private List<PhaseTemplateDto> _templates = new();
     private string _searchFilter = "";
 
-    private static readonly Dictionary<string, string> DeptColors = new()
-    {
-        { "ELE", "#2563EB" }, { "MEC", "#059669" }, { "PLC", "#7C3AED" },
-        { "ROB", "#DC2626" }, { "UTC", "#D97706" }, { "ACQ", "#0891B2" },
-        { "AMM", "#BE185D" }, { "",    "#6B7280" }
-    };
-
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
 
@@ -88,21 +81,21 @@ public partial class PhasesManagementControl : UserControl
         if (!string.IsNullOrWhiteSpace(_searchFilter))
             filtered = filtered.Where(p =>
                 p.Name.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase) ||
-                (p.DepartmentCode ?? "").Contains(_searchFilter, StringComparison.OrdinalIgnoreCase));
+                (p.CostSectionName ?? "").Contains(_searchFilter, StringComparison.OrdinalIgnoreCase));
 
         var groups = filtered
-            .GroupBy(p => string.IsNullOrEmpty(p.DepartmentCode) ? "" : p.DepartmentCode)
+            .GroupBy(p => string.IsNullOrEmpty(p.CostSectionName) ? "" : p.CostSectionName)
             .OrderBy(g => g.Key == "" ? "ZZZ" : g.Key);
 
         foreach (var group in groups)
         {
-            string deptCode = group.Key;
-            string deptColor = DeptColors.TryGetValue(deptCode, out string? col) ? col : "#6B7280";
-            string deptLabel = string.IsNullOrEmpty(deptCode) ? "TRASVERSALE" : deptCode;
+            string sectionName = group.Key;
+            string accentColor = "#2563EB";
+            string sectionLabel = string.IsNullOrEmpty(sectionName) ? "SENZA SEZIONE" : sectionName.ToUpperInvariant();
 
             Border groupHeader = new()
             {
-                Background = Brush(deptColor),
+                Background = Brush(accentColor),
                 Padding = new Thickness(12, 6, 12, 6),
                 Margin = new Thickness(0, 12, 0, 4)
             };
@@ -110,7 +103,7 @@ public partial class PhasesManagementControl : UserControl
             decimal grpWorked = group.Sum(p => p.HoursWorked);
             groupHeader.Child = new TextBlock
             {
-                Text = $"  {deptLabel}  —  {group.Count()} fasi  |  {grpWorked:N1} / {grpBudget:N0} h",
+                Text = $"  {sectionLabel}  —  {group.Count()} fasi  |  {grpWorked:N1} / {grpBudget:N0} h",
                 Foreground = Brushes.White,
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold
@@ -120,7 +113,7 @@ public partial class PhasesManagementControl : UserControl
             foreach (PhaseListItem phase in group.OrderBy(p => p.SortOrder))
             {
                 PhaseRowControl row = new();
-                row.Bind(phase, deptColor);
+                row.Bind(phase, accentColor);
                 row.PhaseChanged += async () => await LoadPhases();
                 row.SummaryChanged += () => UpdateSummary();
                 pnlPhases.Children.Add(row);

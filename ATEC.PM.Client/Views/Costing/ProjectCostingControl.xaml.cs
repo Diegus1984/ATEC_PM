@@ -435,11 +435,13 @@ public partial class ProjectCostingControl : UserControl
         }
 
         var first = available.First();
+        // Genera acronimo anonimo basato su codice reparto + contatore per sezione
+        string acronym = GenerateResourceAcronym(first.DepartmentCode, sec);
         var req2 = new ProjectCostResourceSaveRequest
         {
             SectionId = sec.Id,
             EmployeeId = first.Id,
-            ResourceName = first.FullName,
+            ResourceName = acronym,
             HourlyCost = first.HourlyCost,
             MarkupValue = first.DefaultMarkup,
             HoursPerDay = 8,
@@ -579,9 +581,12 @@ public partial class ProjectCostingControl : UserControl
         if (combo.SelectedItem is not EmployeeCostLookup emp) return;
 
         row.EmployeeId = emp.Id;
-        row.ResourceName = emp.FullName;
         row.HourlyCost = emp.HourlyCost;
         row.MarkupValue = emp.DefaultMarkup;
+
+        // Genera acronimo anonimo basato su codice reparto + contatore per sezione
+        CostSectionVM? sec = FindSection(row.SectionId);
+        row.ResourceName = GenerateResourceAcronym(emp.DepartmentCode, sec);
 
         if (row.Id > 0)
             await SaveResource(row);
@@ -895,6 +900,17 @@ public partial class ProjectCostingControl : UserControl
             if (sec != null) return sec;
         }
         return null;
+    }
+
+    /// <summary>Genera acronimo anonimo: codice reparto + contatore progressivo per sezione.</summary>
+    private static string GenerateResourceAcronym(string deptCode, CostSectionVM? section)
+    {
+        if (string.IsNullOrEmpty(deptCode)) deptCode = "RIS";
+        if (section == null) return $"{deptCode}1";
+        // Conta risorse esistenti nella sezione con lo stesso prefisso reparto
+        int count = section.Resources
+            .Count(r => (r.ResourceName ?? "").StartsWith(deptCode, StringComparison.OrdinalIgnoreCase));
+        return $"{deptCode}{count + 1}";
     }
 
     // Helper per mostrare messaggi temporanei

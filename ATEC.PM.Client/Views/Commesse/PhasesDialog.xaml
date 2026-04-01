@@ -108,13 +108,14 @@
                                 Style="{StaticResource FieldInput}"
                                 ToolTip="Lascia vuoto per usare il nome del template" />
 
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="REPARTO" />
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="REPARTO" Visibility="Collapsed" />
                             <ComboBox
                                 x:Name="cmbDepartment"
                                 Height="32"
                                 Padding="8,5"
                                 BorderBrush="#E4E7EC"
                                 FontSize="13"
+                                Visibility="Collapsed"
                                 SelectionChanged="CmbDepartment_SelectionChanged" />
 
                             <Grid Margin="0,4,0,0">

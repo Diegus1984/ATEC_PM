@@ -72,117 +72,6 @@
             </DataGrid>
         </DataTemplate>
 
-        <!--  ═══ CONSUNTIVO: Expander per dipendente ═══  -->
-        <DataTemplate x:Key="ActualGridTemplate">
-            <ItemsControl ItemsSource="{Binding ActualEmployees}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type local:BvaActualEmployeeVM}">
-                        <Border
-                            Margin="0,0,0,2"
-                            BorderBrush="#F3F4F6"
-                            BorderThickness="0,0,0,1">
-                            <StackPanel>
-                                <!--  Header dipendente  -->
-                                <Grid
-                                    Background="#FAFBFC"
-                                    Cursor="Hand"
-                                    MouseLeftButtonDown="EmployeeRow_Click">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="55" />
-                                        <ColumnDefinition Width="70" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel
-                                        Grid.Column="0"
-                                        Margin="4,4,0,4"
-                                        Orientation="Horizontal">
-                                        <TextBlock
-                                            Margin="0,0,6,0"
-                                            VerticalAlignment="Center"
-                                            FontSize="9"
-                                            Foreground="#9CA3AF"
-                                            RenderTransformOrigin="0.5,0.5"
-                                            Text="▶">
-                                            <TextBlock.RenderTransform>
-                                                <RotateTransform Angle="{Binding IsExpanded, Converter={StaticResource BoolToAngle}}" />
-                                            </TextBlock.RenderTransform>
-                                        </TextBlock>
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            FontSize="12"
-                                            FontWeight="SemiBold"
-                                            Foreground="#1A1D26"
-                                            Text="{Binding EmployeeName}" />
-                                    </StackPanel>
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Margin="0,0,4,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="11"
-                                        FontWeight="SemiBold"
-                                        Foreground="#1A1D26">
-                                        <Run Text="{Binding TotalHours, StringFormat=F1, Mode=OneWay}" /><Run Text=" h" /></TextBlock>
-                                    <TextBlock
-                                        Grid.Column="2"
-                                        Margin="0,0,4,0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center"
-                                        FontSize="11"
-                                        Foreground="#6B7280">
-                                        <Run Text="{Binding TotalCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
-                                </Grid>
-
-                                <!--  Dettaglio timbrature  -->
-                                <DataGrid
-                                    AutoGenerateColumns="False"
-                                    BorderThickness="0"
-                                    CanUserAddRows="False"
-                                    CanUserDeleteRows="False"
-                                    CanUserReorderColumns="False"
-                                    CanUserResizeRows="False"
-                                    CellStyle="{StaticResource BvaCell}"
-                                    ColumnHeaderHeight="24"
-                                    ColumnHeaderStyle="{StaticResource BvaColumnHeader}"
-                                    FontSize="11"
-                                    GridLinesVisibility="Horizontal"
-                                    HeadersVisibility="Column"
-                                    HorizontalGridLinesBrush="#F3F4F6"
-                                    IsReadOnly="True"
-                                    ItemsSource="{Binding Details}"
-                                    RowHeight="26"
-                                    SelectionMode="Single"
-                                    Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn
-                                            Width="80"
-                                            Binding="{Binding WorkDate, StringFormat=dd/MM/yyyy}"
-                                            Header="DATA" />
-                                        <DataGridTextColumn
-                                            Width="*"
-                                            Binding="{Binding PhaseName}"
-                                            Header="CAUSALE" />
-                                        <DataGridTextColumn
-                                            Width="55"
-                                            Binding="{Binding EntryType}"
-                                            Header="TIPO" />
-                                        <DataGridTextColumn
-                                            Width="45"
-                                            Binding="{Binding Hours, StringFormat=F1}"
-                                            Header="ORE" />
-                                        <DataGridTextColumn
-                                            Width="65"
-                                            Binding="{Binding TotalCost, StringFormat=N2}"
-                                            Header="COSTO €" />
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </DataTemplate>
-
         <!--  ═══ FASI ASSEGNATE: raggruppate per fase con tecnici ═══  -->
         <DataTemplate x:Key="PhasesGroupedTemplate">
             <ItemsControl ItemsSource="{Binding PhaseGroups}">
@@ -215,11 +104,6 @@
                                             FontWeight="SemiBold"
                                             Foreground="#1A1D26"
                                             Text="{Binding PhaseName}" />
-                                        <TextBlock
-                                            Margin="8,0,0,0"
-                                            FontSize="9"
-                                            Foreground="#9CA3AF"
-                                            Text="{Binding DeptCode}" />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>

@@ -5,28 +5,23 @@ using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.BudgetVsCosting;
 
-// Gruppo fase con lista tecnici per colonna FASI ASSEGNATE
+// ═══════════════════════════════════════════════════════════════
+// FASI ASSEGNATE — modelli per colonna centrale
+// ═══════════════════════════════════════════════════════════════
+
 public class BvaPhaseGroupVM : INotifyPropertyChanged
 {
     public int PhaseId { get; set; }
     public string PhaseName { get; set; } = "";
-    public string DeptCode { get; set; } = "";
     public decimal BudgetHours { get; set; }
     public decimal HoursWorked { get; set; }
     public int ProgressPct { get; set; }
-    public int? DepartmentId { get; set; }
 
     private ObservableCollection<BvaAssignmentRow> _assignments = new();
     public ObservableCollection<BvaAssignmentRow> Assignments
     {
         get => _assignments;
-        set
-        {
-            _assignments = value;
-            _assignments.CollectionChanged += (_, _) => Notify(nameof(HasAssignments));
-            Notify();
-            Notify(nameof(HasAssignments));
-        }
+        set { _assignments = value; _assignments.CollectionChanged += (_, _) => Notify(nameof(HasAssignments)); Notify(); Notify(nameof(HasAssignments)); }
     }
 
     public bool HasAssignments => Assignments.Count > 0;
@@ -40,7 +35,6 @@ public class BvaPhaseGroupVM : INotifyPropertyChanged
     private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 }
 
-// Riga tecnico dentro un gruppo fase
 public class BvaAssignmentRow
 {
     public int AssignmentId { get; set; }
@@ -50,6 +44,10 @@ public class BvaAssignmentRow
     public string Pct => PlannedHours > 0 ? $"{Math.Round(HoursWorked / PlannedHours * 100, 0)}%" : "0%";
     public bool CanDelete => HoursWorked == 0;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// VIEW MODEL PRINCIPALE
+// ═══════════════════════════════════════════════════════════════
 
 public class BvaViewModel : INotifyPropertyChanged
 {
@@ -78,7 +76,7 @@ public class BvaViewModel : INotifyPropertyChanged
 
     public static BvaViewModel FromData(BudgetVsActualData data, List<PhaseListItem>? phases = null, int projectId = 0)
     {
-        var vm = new BvaViewModel
+        BvaViewModel vm = new()
         {
             TotalBudgetHours = data.TotalBudgetHours,
             TotalBudgetCost = data.TotalBudgetCost,
@@ -93,8 +91,8 @@ public class BvaViewModel : INotifyPropertyChanged
             return vm;
         }
 
-        // Indice fasi per nome sezione per distribuzione rapida
-        var phasesBySectionName = (phases ?? new())
+        // Indice fasi per nome sezione
+        Dictionary<string, List<PhaseListItem>> phasesBySectionName = (phases ?? new())
             .GroupBy(p => p.CostSectionName ?? "", StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
@@ -115,15 +113,12 @@ public class BvaViewModel : INotifyPropertyChanged
     private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 }
 
+// ═══════════════════════════════════════════════════════════════
+// GRUPPO (Gestione, Installazione, ecc.)
+// ═══════════════════════════════════════════════════════════════
+
 public class BvaGroupVM : INotifyPropertyChanged
 {
-    private static readonly Dictionary<string, string> ColorMap = new()
-    {
-        { "GESTIONE", "#2563EB" }, { "PRESCHIERAMENTO", "#7C3AED" },
-        { "INSTALLAZIONE", "#D97706" }, { "OPZIONE", "#DC2626" },
-        { "NON ASSEGNATO", "#6B7280" }
-    };
-
     public string GroupName { get; set; } = "";
     public string Color { get; set; } = "#6B7280";
 
@@ -141,13 +136,12 @@ public class BvaGroupVM : INotifyPropertyChanged
     public string DeltaColor => DeltaHours > 0 ? "#DC2626" : "#059669";
     public bool HasDelta => DeltaHours != 0;
 
-    public static BvaGroupVM FromDto(BvaGroupDto dto, Dictionary<string, List<PhaseListItem>>? phasesBySectionName = null, int projectId = 0)
+    public static BvaGroupVM FromDto(BvaGroupDto dto, Dictionary<string, List<PhaseListItem>> phasesBySectionName, int projectId)
     {
-        string color = ColorMap.TryGetValue(dto.GroupName, out string? c) ? c : "#6B7280";
-        var vm = new BvaGroupVM
+        BvaGroupVM vm = new()
         {
             GroupName = dto.GroupName,
-            Color = color,
+            Color = dto.Color,
             BudgetHours = dto.BudgetHours,
             BudgetCost = dto.BudgetCost,
             ActualHours = dto.ActualHours,
@@ -161,6 +155,10 @@ public class BvaGroupVM : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 }
+
+// ═══════════════════════════════════════════════════════════════
+// SEZIONE (Documentazione Interna, Sviluppo SW, ecc.)
+// ═══════════════════════════════════════════════════════════════
 
 public class BvaSectionVM : INotifyPropertyChanged
 {
@@ -179,15 +177,12 @@ public class BvaSectionVM : INotifyPropertyChanged
     public ObservableCollection<BvaBudgetResourceDto> BudgetResources { get; set; } = new();
     public bool HasBudget => BudgetResources.Count > 0;
 
-    // Consuntivo
+    // Consuntivo (ore totali per il subtotale — dettaglio visibile nelle fasi)
     public decimal ActualHours { get; set; }
     public decimal ActualCost { get; set; }
-    public ObservableCollection<BvaActualEmployeeVM> ActualEmployees { get; set; } = new();
-    public bool HasActual => ActualEmployees.Count > 0;
 
-    // Fasi assegnate (colonna centrale) — raggruppate per fase con tecnici
+    // Fasi assegnate (colonna centrale)
     public ObservableCollection<BvaPhaseGroupVM> PhaseGroups { get; set; } = new();
-    public List<PhaseListItem> RawPhases { get; set; } = new();
     public int ProjectId { get; set; }
     public bool HasPhases => PhaseGroups.Count > 0;
 
@@ -197,9 +192,9 @@ public class BvaSectionVM : INotifyPropertyChanged
     public string DeltaColor => DeltaHours > 0 ? "#DC2626" : "#059669";
     public bool HasDelta => DeltaHours != 0;
 
-    public static BvaSectionVM FromDto(BvaSectionDto dto, Dictionary<string, List<PhaseListItem>>? phasesBySectionName = null, int projectId = 0)
+    public static BvaSectionVM FromDto(BvaSectionDto dto, Dictionary<string, List<PhaseListItem>> phasesBySectionName, int projectId)
     {
-        var vm = new BvaSectionVM
+        BvaSectionVM vm = new()
         {
             SectionName = dto.SectionName,
             SectionType = dto.SectionType,
@@ -210,32 +205,18 @@ public class BvaSectionVM : INotifyPropertyChanged
             ActualCost = dto.ActualCost,
             ProjectId = projectId
         };
-        foreach (var r in dto.BudgetResources) vm.BudgetResources.Add(r);
-        foreach (var e in dto.ActualEmployees)
-        {
-            var empVm = new BvaActualEmployeeVM
-            {
-                EmployeeName = e.EmployeeName,
-                TotalHours = e.TotalHours,
-                TotalCost = e.TotalCost
-            };
-            foreach (var d in e.Details) empVm.Details.Add(d);
-            vm.ActualEmployees.Add(empVm);
-        }
+
+        foreach (BvaBudgetResourceDto r in dto.BudgetResources) vm.BudgetResources.Add(r);
 
         // Fasi assegnate a questa sezione (match per nome sezione)
-        if (phasesBySectionName != null &&
-            phasesBySectionName.TryGetValue(dto.SectionName, out List<PhaseListItem>? sectionPhases))
+        if (phasesBySectionName.TryGetValue(dto.SectionName, out List<PhaseListItem>? sectionPhases))
         {
-            vm.RawPhases = sectionPhases.OrderBy(p => p.SortOrder).ToList();
-            foreach (PhaseListItem p in vm.RawPhases)
+            foreach (PhaseListItem p in sectionPhases.OrderBy(x => x.SortOrder))
             {
                 BvaPhaseGroupVM grp = new()
                 {
                     PhaseId = p.Id,
                     PhaseName = string.IsNullOrEmpty(p.CustomName) ? p.Name : p.CustomName,
-                    DeptCode = p.DepartmentCode ?? "",
-                    DepartmentId = p.DepartmentId,
                     BudgetHours = p.BudgetHours,
                     HoursWorked = p.HoursWorked,
                     ProgressPct = p.ProgressPct
@@ -256,21 +237,6 @@ public class BvaSectionVM : INotifyPropertyChanged
 
         return vm;
     }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-    private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-}
-
-public class BvaActualEmployeeVM : INotifyPropertyChanged
-{
-    public string EmployeeName { get; set; } = "";
-    public decimal TotalHours { get; set; }
-    public decimal TotalCost { get; set; }
-
-    private bool _isExpanded;
-    public bool IsExpanded { get => _isExpanded; set { _isExpanded = value; Notify(); } }
-
-    public ObservableCollection<BvaActualDetailDto> Details { get; set; } = new();
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));

@@ -21,8 +21,12 @@ public class BudgetVsActualController : ControllerBase
 
         // ── PREVENTIVO: sezioni + risorse ──────────────────────────
         var sections = c.Query<dynamic>(@"
-            SELECT s.id, s.name, s.section_type, s.group_name, s.sort_order, s.template_id
+            SELECT s.id, s.name, s.section_type, s.group_name, s.sort_order, s.template_id,
+                   COALESCE(csg.bg_color, '#6B7280') AS group_color,
+                   COALESCE(csg.sort_order, 99) AS group_sort
             FROM project_cost_sections s
+            LEFT JOIN cost_section_templates cst ON cst.id = s.template_id
+            LEFT JOIN cost_section_groups csg ON csg.id = cst.group_id
             WHERE s.project_id = @pid AND s.is_enabled = 1
             ORDER BY s.sort_order", new { pid = projectId }).ToList();
 
@@ -83,14 +87,8 @@ public class BudgetVsActualController : ControllerBase
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // ── BUILD RESULT ───────────────────────────────────────────
-        var colorMap = new Dictionary<string, int>
-        {
-            { "GESTIONE", 1 }, { "PRESCHIERAMENTO", 2 },
-            { "INSTALLAZIONE", 3 }, { "OPZIONE", 4 }
-        };
-
         var grouped = sections.GroupBy(s => (string)s.group_name)
-            .OrderBy(g => colorMap.TryGetValue(g.Key, out int o) ? o : 99);
+            .OrderBy(g => g.Min(s => (int)s.group_sort));
 
         var result = new BudgetVsActualData { ProjectId = projectId };
 
@@ -99,7 +97,8 @@ public class BudgetVsActualController : ControllerBase
             var groupDto = new BvaGroupDto
             {
                 GroupName = grp.Key,
-                SortOrder = colorMap.TryGetValue(grp.Key, out int o) ? o : 99
+                Color = (string)grp.First().group_color,
+                SortOrder = (int)grp.First().group_sort
             };
 
             foreach (var sec in grp.OrderBy(s => (int)s.sort_order))

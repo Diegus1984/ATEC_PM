@@ -52,7 +52,7 @@ public partial class PhasesDialog : Window
             string lastCategory = "";
             foreach (PhaseTemplateDto t in _templates.OrderBy(t => t.SortOrder))
             {
-                string cat = string.IsNullOrEmpty(t.DepartmentCode) ? "TRASVERSALE" : t.DepartmentCode;
+                string cat = string.IsNullOrEmpty(t.Category) ? "TRASVERSALE" : t.Category;
                 if (cat != lastCategory)
                 {
                     cmbTemplate.Items.Add(new ComboBoxItem
@@ -144,7 +144,7 @@ public partial class PhasesDialog : Window
         txtSortOrder.Text    = _existing.SortOrder.ToString();
 
         SelectComboByTag(cmbStatus, _existing.Status);
-        SelectComboByTag(cmbDepartment, _existing.DepartmentId ?? 0);
+        // Department selection removed — no longer used on phases
 
         _assignments.Clear();
         foreach (PhaseAssignmentDto a in _existing.Assignments)
@@ -153,11 +153,9 @@ public partial class PhasesDialog : Window
 
     private async void CmbTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (cmbTemplate.SelectedItem is ComboBoxItem ci && ci.Tag is PhaseTemplateDto t)
+        if (cmbTemplate.SelectedItem is ComboBoxItem ci && ci.Tag is PhaseTemplateDto)
         {
-            // Auto-seleziona reparto dal template
-            SelectComboByTag(cmbDepartment, t.DepartmentId ?? 0);
-            // Ricarica tecnici per il nuovo reparto
+            // Ricarica tecnici per il reparto selezionato
             await LoadEmployeesForCurrentDepartment();
         }
     }
@@ -213,15 +211,12 @@ public partial class PhasesDialog : Window
             int.TryParse(txtProgress.Text,  out int progress);
             int.TryParse(txtSortOrder.Text, out int sortOrder);
 
-            int? deptId = (cmbDepartment.SelectedItem as ComboBoxItem)?.Tag is int d && d > 0 ? d : null;
-
             PhaseSaveRequest req = new()
             {
                 Id              = _existing?.Id ?? 0,
                 ProjectId       = _projectId,
                 PhaseTemplateId = tmpl.Id,
                 CustomName      = txtCustomName.Text.Trim(),
-                DepartmentId    = deptId,
                 BudgetHours     = budgetHours,
                 BudgetCost      = budgetCost,
                 Status          = (cmbStatus.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "NOT_STARTED",

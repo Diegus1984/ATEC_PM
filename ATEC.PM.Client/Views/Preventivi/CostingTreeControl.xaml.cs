@@ -551,6 +551,32 @@ public partial class CostingTreeControl : UserControl
             RecalcGroup(grp);
     }
 
+    /// <summary>Trova la sezione padre di una risorsa nell'albero.</summary>
+    private CostingTreeRow? FindParentSection(CostingTreeRow resourceRow)
+    {
+        foreach (CostingTreeRow grp in _resourceRows)
+        {
+            foreach (CostingTreeRow sec in grp.Children)
+            {
+                if (sec.Children.Contains(resourceRow))
+                    return sec;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Genera acronimo anonimo: codice reparto + contatore progressivo per sezione.</summary>
+    private static string GenerateAcronym(string deptCode, CostingTreeRow? sectionRow)
+    {
+        if (string.IsNullOrEmpty(deptCode)) deptCode = "RIS";
+        if (sectionRow == null) return $"{deptCode}1";
+        // Conta risorse esistenti nella sezione con lo stesso prefisso reparto
+        int count = sectionRow.Children
+            .Count(c => c.IsResource &&
+                        (c.DisplayName ?? "").StartsWith(deptCode, StringComparison.OrdinalIgnoreCase));
+        return $"{deptCode}{count + 1}";
+    }
+
     /// <summary>Ricalcola solo la sezione e il suo gruppo padre (usato dopo edit singolo)</summary>
     private void RecalcParentTotalsFor(CostingTreeRow row)
     {
@@ -670,10 +696,14 @@ public partial class CostingTreeControl : UserControl
         if (cmb.SelectedItem is not EmployeeCostLookup emp) return;
 
         row.EmployeeId = emp.Id;
-        row.DisplayName = emp.FullName;
         row.HourlyCost = emp.HourlyCost;
         row.MarkupValue = emp.DefaultMarkup > 0 ? emp.DefaultMarkup : 1.450m;
         row.DepartmentCode = emp.DepartmentCode;
+
+        // Genera acronimo anonimo basato su codice reparto + contatore per sezione
+        CostingTreeRow? parentSection = FindParentSection(row);
+        row.DisplayName = GenerateAcronym(emp.DepartmentCode, parentSection);
+
         row.TotalCost = row.TotalHours * row.HourlyCost;
         row.TotalSale = row.TotalCost * row.MarkupValue;
 
@@ -1089,11 +1119,105 @@ public partial class CostingTreeControl : UserControl
         if (sender is not Button btn) return;
         if (btn.Tag is not CostingTreeRow row || !row.IsSection) return;
 
+        int sectionId = row.DbId;
+
         try
         {
-            var body = new { sectionId = row.DbId };
+            // Carica dipendenti della sezione per estrarre i reparti disponibili
+            if (!_employeeCache.ContainsKey(sectionId))
+            {
+                string json = await ApiClient.GetAsync($"{_apiBasePath}/sections/{sectionId}/employees");
+                JsonDocument doc = JsonDocument.Parse(json);
+                string dataJson = doc.RootElement.TryGetProperty("data", out JsonElement dEl) ? dEl.GetRawText() : json;
+                _employeeCache[sectionId] = JsonSerializer.Deserialize<List<EmployeeCostLookup>>(dataJson, _jopt) ?? new();
+            }
+
+            // Estrai reparti unici con costo orario e markup
+            List<EmployeeCostLookup> employees = _employeeCache[sectionId];
+            var departments = employees
+                .Where(emp => !string.IsNullOrEmpty(emp.DepartmentCode))
+                .GroupBy(emp => emp.DepartmentCode)
+                .Select(g => new { Code = g.Key, HourlyCost = g.First().HourlyCost, Markup = g.First().DefaultMarkup })
+                .OrderBy(d => d.Code)
+                .ToList();
+
+            if (!departments.Any())
+            {
+                MessageBox.Show("Nessun reparto configurato per questa sezione.", "Info");
+                return;
+            }
+
+            // Dialog per scegliere il reparto
+            string selectedDeptCode;
+            decimal hourlyCost;
+            decimal markup;
+
+            if (departments.Count == 1)
+            {
+                // Solo un reparto: selezione automatica
+                selectedDeptCode = departments[0].Code;
+                hourlyCost = departments[0].HourlyCost;
+                markup = departments[0].Markup;
+            }
+            else
+            {
+                // Dialog per scegliere il reparto
+                Window dlg = new()
+                {
+                    Title = "Seleziona Reparto",
+                    Width = 300, Height = 150,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = Window.GetWindow(this),
+                    ResizeMode = ResizeMode.NoResize,
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F7F8FA"))
+                };
+                StackPanel sp = new() { Margin = new Thickness(16) };
+                sp.Children.Add(new TextBlock
+                {
+                    Text = "REPARTO", FontSize = 11, FontWeight = FontWeights.SemiBold,
+                    Foreground = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#6B7280"))
+                });
+                ComboBox cmbDept = new() { Height = 28, Margin = new Thickness(0, 4, 0, 12), FontSize = 12 };
+                foreach (var d in departments) cmbDept.Items.Add(d.Code);
+                cmbDept.SelectedIndex = 0;
+                sp.Children.Add(cmbDept);
+                Button btnOk = new()
+                {
+                    Content = "Aggiungi", Height = 30, Width = 90,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4F6EF7")),
+                    Foreground = System.Windows.Media.Brushes.White, BorderThickness = new Thickness(0),
+                    FontWeight = FontWeights.SemiBold, Cursor = System.Windows.Input.Cursors.Hand
+                };
+                btnOk.Click += (_, _) => { dlg.DialogResult = true; };
+                sp.Children.Add(btnOk);
+                dlg.Content = sp;
+                if (dlg.ShowDialog() != true) return;
+
+                string chosenCode = cmbDept.SelectedItem?.ToString() ?? "";
+                var dept = departments.First(d => d.Code == chosenCode);
+                selectedDeptCode = dept.Code;
+                hourlyCost = dept.HourlyCost;
+                markup = dept.Markup;
+            }
+
+            // Genera acronimo progressivo per la sezione
+            string acronym = GenerateAcronym(selectedDeptCode, row);
+
+            // Crea risorsa con acronimo e costo reparto
+            var body = new
+            {
+                sectionId = sectionId,
+                resourceName = acronym,
+                hourlyCost = hourlyCost,
+                markupValue = markup > 0 ? markup : 1.450m,
+                hoursPerDay = 8
+            };
             await ApiClient.PostAsync($"{_apiBasePath}/resources",
-                JsonSerializer.Serialize(body));
+                JsonSerializer.Serialize(body, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             await LoadDataAsync();
         }
         catch (Exception ex)

@@ -12,6 +12,7 @@ public class ProjectCostSectionDto
     public string Name { get; set; } = "";
     public string SectionType { get; set; } = "IN_SEDE";
     public string GroupName { get; set; } = "";
+    public string GroupColor { get; set; } = "#6B7280";
     public int SortOrder { get; set; }
     public bool IsEnabled { get; set; } = true;
     // NO MarkupValue — il K è sulla singola risorsa

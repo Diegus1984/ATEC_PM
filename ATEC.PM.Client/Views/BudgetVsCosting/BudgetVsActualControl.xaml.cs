@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,7 +19,6 @@ public partial class BudgetVsActualControl : UserControl
     {
         try
         {
-            // Carica BvA e fasi in parallelo
             Task<string> bvaTask = ApiClient.GetAsync($"/api/projects/{projectId}/budget-vs-actual");
             Task<string> phasesTask = ApiClient.GetAsync($"/api/phases/project/{projectId}");
             await Task.WhenAll(bvaTask, phasesTask);
@@ -32,7 +30,6 @@ public partial class BudgetVsActualControl : UserControl
                 bvaDoc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Fasi di progetto per la colonna centrale
             List<PhaseListItem> phases = new();
             try
             {
@@ -42,7 +39,7 @@ public partial class BudgetVsActualControl : UserControl
                         phasesDoc.RootElement.GetProperty("data").GetRawText(),
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             }
-            catch { /* fasi non bloccanti */ }
+            catch { }
 
             DataContext = BvaViewModel.FromData(data, phases, projectId);
             txtLoading.Visibility = Visibility.Collapsed;
@@ -59,12 +56,6 @@ public partial class BudgetVsActualControl : UserControl
             section.IsDetailExpanded = !section.IsDetailExpanded;
     }
 
-    private void EmployeeRow_Click(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is FrameworkElement fe && fe.DataContext is BvaActualEmployeeVM emp)
-            emp.IsExpanded = !emp.IsExpanded;
-    }
-
     private async void BtnRemoveBvaAssignment_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not BvaAssignmentRow row) return;
@@ -75,15 +66,12 @@ public partial class BudgetVsActualControl : UserControl
             JsonDocument doc = JsonDocument.Parse(result);
             if (doc.RootElement.GetProperty("success").GetBoolean())
             {
-                // Trova il PhaseGroup genitore e rimuovi la riga
                 if (DataContext is BvaViewModel vm)
-                {
                     foreach (BvaGroupVM grp in vm.Groups)
                         foreach (BvaSectionVM sec in grp.Sections)
                             foreach (BvaPhaseGroupVM pg in sec.PhaseGroups)
                                 if (pg.Assignments.Contains(row))
                                 { pg.Assignments.Remove(row); return; }
-                }
             }
         }
         catch (Exception ex)
@@ -98,7 +86,6 @@ public partial class BudgetVsActualControl : UserControl
 
         try
         {
-            // Carica dipendenti dai reparti interessati alla sezione costo della fase
             string json = await ApiClient.GetAsync($"/api/employees/by-phase/{phase.PhaseId}");
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
@@ -107,7 +94,6 @@ public partial class BudgetVsActualControl : UserControl
                 doc.RootElement.GetProperty("data").GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
-            // Filtra tecnici già assegnati
             HashSet<string> assignedNames = phase.Assignments.Select(a => a.EmployeeName).ToHashSet();
             List<LookupItem> available = employees.Where(emp => !assignedNames.Contains(emp.Name)).ToList();
 
@@ -131,7 +117,6 @@ public partial class BudgetVsActualControl : UserControl
             JsonDocument resultDoc = JsonDocument.Parse(result);
             if (resultDoc.RootElement.GetProperty("success").GetBoolean())
             {
-                // Aggiorna in-place la riga nella DataGrid
                 int newId = resultDoc.RootElement.GetProperty("data").GetInt32();
                 phase.Assignments.Add(new BvaAssignmentRow
                 {

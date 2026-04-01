@@ -156,13 +156,17 @@ public class ProjectCostingController : ControllerBase
             return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData { ProjectId = projectId, IsInitialized = false }));
 
         var sections = c.Query<ProjectCostSectionDto>(@"
-            SELECT id, project_id AS ProjectId, template_id AS TemplateId, name,
-                   section_type AS SectionType, group_name AS GroupName,
-                   sort_order AS SortOrder, is_enabled AS IsEnabled,
-                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
-                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned,
-                   COALESCE(is_shadowed,0) AS IsShadowed
-            FROM project_cost_sections WHERE project_id=@projectId ORDER BY sort_order",
+            SELECT pcs.id, pcs.project_id AS ProjectId, pcs.template_id AS TemplateId, pcs.name,
+                   pcs.section_type AS SectionType, pcs.group_name AS GroupName,
+                   COALESCE(csg.bg_color, '#6B7280') AS GroupColor,
+                   pcs.sort_order AS SortOrder, pcs.is_enabled AS IsEnabled,
+                   pcs.contingency_pct AS ContingencyPct, pcs.margin_pct AS MarginPct,
+                   pcs.contingency_pinned AS ContingencyPinned, pcs.margin_pinned AS MarginPinned,
+                   COALESCE(pcs.is_shadowed,0) AS IsShadowed
+            FROM project_cost_sections pcs
+            LEFT JOIN cost_section_templates cst ON cst.id = pcs.template_id
+            LEFT JOIN cost_section_groups csg ON csg.id = cst.group_id
+            WHERE pcs.project_id=@projectId ORDER BY pcs.sort_order",
             new { projectId }).ToList();
 
         var sectionDepts = c.Query<(int SectionId, int DepartmentId)>(@"
