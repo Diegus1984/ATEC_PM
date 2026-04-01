@@ -19,6 +19,10 @@
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
+        <Style x:Key="BvaCellClickable" TargetType="DataGridCell">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
         <!--  ═══ DataGrid PREVENTIVO ═══  -->
         <DataTemplate x:Key="BudgetGridTemplate">
             <DataGrid
@@ -179,6 +183,146 @@
             </ItemsControl>
         </DataTemplate>
 
+        <!--  ═══ FASI ASSEGNATE: raggruppate per fase con tecnici ═══  -->
+        <DataTemplate x:Key="PhasesGroupedTemplate">
+            <ItemsControl ItemsSource="{Binding PhaseGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:BvaPhaseGroupVM}">
+                        <StackPanel Margin="0,0,0,6">
+
+                            <!--  Header fase  -->
+                            <Border
+                                Padding="6,4"
+                                Background="#F0F4FF"
+                                BorderBrush="#E4E7EC"
+                                BorderThickness="0,0,0,1">
+                                <DockPanel>
+                                    <TextBlock
+                                        DockPanel.Dock="Right"
+                                        FontSize="10"
+                                        Foreground="#6B7280">
+                                        <Run Text="{Binding BudgetHours, StringFormat=F1, Mode=OneWay}" /><Run Text=" h prev.  |  " />
+                                        <Run Text="{Binding HoursWorked, StringFormat=F1, Mode=OneWay}" /><Run Text=" h lav.  |  " />
+                                        <Run Text="{Binding ProgressPct, Mode=OneWay}" /><Run Text="%" /></TextBlock>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock
+                                            FontSize="10"
+                                            FontWeight="SemiBold"
+                                            Foreground="#6B7280"
+                                            Text="FASE — " />
+                                        <TextBlock
+                                            FontSize="10"
+                                            FontWeight="SemiBold"
+                                            Foreground="#1A1D26"
+                                            Text="{Binding PhaseName}" />
+                                        <TextBlock
+                                            Margin="8,0,0,0"
+                                            FontSize="9"
+                                            Foreground="#9CA3AF"
+                                            Text="{Binding DeptCode}" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <!--  DataGrid tecnici assegnati  -->
+                            <DataGrid
+                                AutoGenerateColumns="False"
+                                BorderThickness="0"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserReorderColumns="False"
+                                CanUserResizeRows="False"
+                                CellStyle="{StaticResource BvaCell}"
+                                ColumnHeaderHeight="22"
+                                ColumnHeaderStyle="{StaticResource BvaColumnHeader}"
+                                FontSize="11"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="Column"
+                                HorizontalGridLinesBrush="#F3F4F6"
+                                IsReadOnly="True"
+                                ItemsSource="{Binding Assignments}"
+                                RowHeight="26"
+                                SelectionMode="Single"
+                                Visibility="{Binding HasAssignments, Converter={StaticResource BoolToVis}}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn
+                                        Width="*"
+                                        Binding="{Binding EmployeeName}"
+                                        Header="TECNICO" />
+                                    <DataGridTextColumn
+                                        Width="60"
+                                        Binding="{Binding PlannedHours, StringFormat=F1}"
+                                        Header="ORE PR." />
+                                    <DataGridTextColumn
+                                        Width="60"
+                                        Binding="{Binding HoursWorked, StringFormat=F1}"
+                                        Header="ORE LAV." />
+                                    <DataGridTextColumn
+                                        Width="40"
+                                        Binding="{Binding Pct}"
+                                        Header="%" />
+                                    <DataGridTemplateColumn Width="30" Header="" CellStyle="{StaticResource BvaCellClickable}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button
+                                                    Width="20"
+                                                    Height="20"
+                                                    Background="#EF44441A"
+                                                    BorderThickness="0"
+                                                    Click="BtnRemoveBvaAssignment_Click"
+                                                    Content="✕"
+                                                    Cursor="Hand"
+                                                    FontSize="9"
+                                                    Foreground="#EF4444"
+                                                    Tag="{Binding}"
+                                                    ToolTip="Rimuovi tecnico"
+                                                    Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!--  Nessun tecnico  -->
+                            <TextBlock
+                                Margin="6,2,0,0"
+                                FontSize="10"
+                                FontStyle="Italic"
+                                Foreground="#9CA3AF"
+                                Text="Nessun tecnico assegnato">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasAssignments}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <!--  Pulsante aggiungi tecnico per questa fase  -->
+                            <Button
+                                Margin="0,3,0,0"
+                                Padding="8,0"
+                                Height="22"
+                                HorizontalAlignment="Left"
+                                Background="#4F6EF7"
+                                BorderThickness="0"
+                                Click="BtnAssignTecnicoToPhase_Click"
+                                Content="+ Aggiungi Tecnico"
+                                Cursor="Hand"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                Tag="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DataTemplate>
+
         <!--  ═══ SEZIONE: card collassabile ▶ ═══  -->
         <DataTemplate x:Key="SectionTemplate" DataType="{x:Type local:BvaSectionVM}">
             <Border
@@ -272,12 +416,12 @@
                         <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="0.8*" />
                                     <ColumnDefinition Width="1" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.2*" />
                                 </Grid.ColumnDefinitions>
 
-                                <!--  SX: Preventivo  -->
+                                <!--  COL 0: Preventivo  -->
                                 <StackPanel Grid.Column="0">
                                     <TextBlock
                                         Margin="4,0,0,4"
@@ -308,34 +452,31 @@
                                     </TextBlock>
                                 </StackPanel>
 
-                                <Border
-                                    Grid.Column="1"
-                                    VerticalAlignment="Stretch"
-                                    Background="#E4E7EC" />
+                                <Border Grid.Column="1" VerticalAlignment="Stretch" Background="#E4E7EC" />
 
-                                <!--  DX: Consuntivo  -->
+                                <!--  COL 2: Fasi assegnate (DataGrid)  -->
                                 <StackPanel Grid.Column="2">
                                     <TextBlock
                                         Margin="4,0,0,4"
                                         FontSize="10"
                                         FontWeight="SemiBold"
                                         Foreground="#6B7280"
-                                        Text="ORE VERSATE PER CAUSALE" />
+                                        Text="FASI ASSEGNATE" />
                                     <ContentControl
                                         Content="{Binding}"
-                                        ContentTemplate="{StaticResource ActualGridTemplate}"
-                                        Visibility="{Binding HasActual, Converter={StaticResource BoolToVis}}" />
+                                        ContentTemplate="{StaticResource PhasesGroupedTemplate}"
+                                        Visibility="{Binding HasPhases, Converter={StaticResource BoolToVis}}" />
                                     <TextBlock
                                         Margin="4,4,0,0"
                                         FontSize="11"
                                         FontStyle="Italic"
                                         Foreground="#9CA3AF"
-                                        Text="Nessuna ora versata">
+                                        Text="Nessuna fase collegata a questa sezione">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasActual}" Value="True">
+                                                    <DataTrigger Binding="{Binding HasPhases}" Value="True">
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -343,6 +484,7 @@
                                         </TextBlock.Style>
                                     </TextBlock>
                                 </StackPanel>
+
                             </Grid>
 
                             <!--  Subtotale sezione — barra unica allineata  -->

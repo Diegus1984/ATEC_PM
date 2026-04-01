@@ -478,6 +478,78 @@ public partial class CostSectionsTreePage : Page
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
+    private async void BtnAddPhaseGlobal_Click(object sender, RoutedEventArgs e)
+    {
+        // Dialog con Nome + Categoria + Reparto
+        Window dlg = new()
+        {
+            Title = "Nuova Fase Template", Width = 400, Height = 260,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize,
+            Background = Brush("#F7F8FA")
+        };
+
+        StackPanel sp = new() { Margin = new Thickness(20, 16, 20, 16) };
+
+        // Nome
+        sp.Children.Add(new TextBlock { Text = "Nome fase", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
+        TextBox txtName = new() { Height = 32, Padding = new Thickness(8, 5, 8, 5), FontSize = 13, BorderBrush = Brush("#E4E7EC"), Margin = new Thickness(0, 0, 0, 10) };
+        sp.Children.Add(txtName);
+
+        // Reparto
+        sp.Children.Add(new TextBlock { Text = "Reparto", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
+        ComboBox cmbDept = new() { Height = 32, FontSize = 12, Margin = new Thickness(0, 0, 0, 14), Cursor = Cursors.Hand };
+        cmbDept.Items.Add(new ComboBoxItem { Content = "— Nessun reparto —", Tag = (int?)null });
+        foreach (DepartmentDto d in _departments.OrderBy(x => x.Name))
+            cmbDept.Items.Add(new ComboBoxItem { Content = d.Name, Tag = (int?)d.Id });
+        cmbDept.SelectedIndex = 0;
+        sp.Children.Add(cmbDept);
+
+        // Bottoni
+        StackPanel btns = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        Button btnOk = new() { Content = "Crea", Width = 80, Height = 30, Background = Brush("#D97706"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold, Cursor = Cursors.Hand };
+        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand };
+        btnOk.Click += (s, ev) => { dlg.DialogResult = true; dlg.Close(); };
+        btnCancel.Click += (s, ev) => { dlg.DialogResult = false; dlg.Close(); };
+        btns.Children.Add(btnCancel);
+        btns.Children.Add(btnOk);
+        sp.Children.Add(btns);
+
+        dlg.Content = sp;
+        txtName.Focus();
+
+        if (dlg.ShowDialog() != true) return;
+
+        string name = txtName.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        int? deptId = (cmbDept.SelectedItem as ComboBoxItem)?.Tag as int?;
+        DepartmentDto? dept = deptId.HasValue ? _departments.FirstOrDefault(d => d.Id == deptId.Value) : null;
+        string category = dept?.Code ?? "TRASVERSALE";
+        int maxSort = _phases.Any() ? _phases.Max(p => p.SortOrder) + 1 : 1;
+
+        try
+        {
+            string json = JsonSerializer.Serialize(new
+            {
+                name,
+                category,
+                departmentId = deptId,
+                costSectionTemplateId = (int?)null,
+                sortOrder = maxSort,
+                isDefault = false
+            }, _jsonWriteOpt);
+
+            string result = await ApiClient.PostAsync("/api/phases/templates", json);
+            var doc = JsonDocument.Parse(result);
+            if (doc.RootElement.GetProperty("success").GetBoolean())
+                await LoadData();
+            else
+                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+        }
+        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+    }
+
     private async void BtnAddPhaseTemplate_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn) return;

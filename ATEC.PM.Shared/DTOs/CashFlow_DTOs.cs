@@ -23,6 +23,9 @@ public class CashFlowCategoryDto
     public decimal TotalAmount { get; set; }
     public string Notes { get; set; } = "";
     public int SortOrder { get; set; }
+    /// <summary>NULL = manuale | MAT_PRODUCT:{id} = collegata al robot con quell'id</summary>
+    public string? LinkedSource { get; set; }
+    public bool IsLinked => !string.IsNullOrEmpty(LinkedSource);
 }
 
 public class CashFlowDataItemDto
@@ -38,6 +41,7 @@ public class CashFlowInitRequest
 {
     public decimal PaymentAmount { get; set; }
     public int MonthCount { get; set; } = 13;
+    public DateTime? StartDate { get; set; }
 }
 
 public class CashFlowCategorySaveRequest

@@ -38,7 +38,7 @@
 |---|---|---|
 | Autenticazione JWT | ✅ | Login, token, refresh |
 | Gestione Dipendenti | ✅ | CRUD, reparti, competenze, credenziali |
-| Gestione Clienti | ✅ | CRUD completo |
+| Gestione Clienti | ✅ | CRUD completo + layout master-detail stile Danea (lista sinistra, dettaglio destra con 3 tab: Anagrafica/Contatti/Altro), edit inline toggle read-only↔edit, GridSplitter con persistenza in user_prefs.json |
 | Gestione Fornitori | ✅ | CRUD + import da Easyfatt (.eft Firebird) |
 | Gestione Reparti | ✅ | Costo orario + K ricarico diretto (default_markup) |
 | Configurazione App | ✅ | app_config DB table, DPAPI per secrets |
@@ -144,6 +144,11 @@ Architettura MVVM in `Views/Costing/` con ViewModel a cascata: `CostResourceVM �
 | Righe entrate/uscite/totali | ✅ | Differenza cumulativa progressiva |
 | Grafico OxyPlot | ✅ | Barre + linea saldo + TextAnnotation |
 | DB: 3 tabelle compatte | ✅ | project_cashflow, project_cashflow_categories, project_cashflow_data |
+| Sincronizzazione robot da materiali | ✅ | `SyncRobotCategories()` server-side: crea/aggiorna/elimina categorie `[M]` collegate ai PRODUCT della commessa. `linked_source = MAT_PRODUCT:{id}`. Totale = somma netta figli (quantity×unit_cost, no markup) |
+| parent_item_id su project_material_items | ✅ | Colonna che lega varianti/componenti al PRODUCT padre. Fix in `ConvertToProject`: inserimento item-by-item con `Dictionary<int,int>` old→new ID mapping per preservare gerarchia |
+| Cancellazione categoria per riga (×) | ✅ | Bottone × rosso inline nella prima colonna per ogni riga CategoryAmount. Elimina categoria + dati CAT_PCT associati |
+| Label categorie editabili | ✅ | TextBox inline nella prima colonna, editabile solo per categorie manuali (non [M] robot). Salva via PUT su LostFocus/Enter |
+| Data inizio + calcolo date colonne | ✅ | DatePicker nella toolbar. Salva in `project_cashflow.start_date`. Intestazioni colonne calcolate come start_date+N mesi. Fallback su project.start_date |
 
 ### 5c. Esplorazione DB Danea (Firebird) ✅
 
@@ -358,7 +363,7 @@ Nuova pagina con TreeView cliente/anno che sostituirà Offerte + CMS Preventivi.
 | ConvertPreventivoDialog | ✅ | Selezione PM per conversione IMPIANTO → Commessa |
 | DB: quote_type su quotes | ✅ | ENUM SERVICE/IMPIANTO |
 | DB: tabelle costing quote_cost_* | ✅ | Mirror di offer_cost_* per preventivi IMPIANTO |
-| PreventiviController (API) | ✅ | List, Create (con init costing), Convert |
+| PreventiviController (API) | ✅ | List, Create (con init costing), Convert. Fix ConvertToProject: inserimento item-by-item con ID mapping per preservare parent_item_id (gerarchia robot→varianti) |
 | PreventiviCostingController (API) | ✅ | Clone OfferCosting su tabelle quote_cost_* |
 | CostingTreeControl.LoadForPreventivo | ✅ | Terzo mode: /api/preventivi/{id}/costing |
 | Layout IMPIANTO (stile QuoteDetailPage) | ✅ | Info header + CostingTree + Contenuti Auto + Riepilogo + Note (card separate) |
@@ -551,9 +556,10 @@ QuotesHomePage (DataGrid CMS) diventa la pagina principale "Preventivi". Prevent
 | Funzionalità | Stato | Note |
 |---|---|---|
 | `UserPreferences.cs` (Services/) | ✅ | File JSON locale `%AppData%/ATEC_PM/user_prefs.json` |
-| API: `GetString/GetBool/GetInt` + `Set(key, value)` | ✅ | Thread-safe, lazy-loaded, auto-save |
+| API: `GetString/GetBool/GetInt/GetDouble` + `Set(key, value)` | ✅ | Thread-safe, lazy-loaded, auto-save |
 | Chiave `QuotesHomePage.ViewMode` | ✅ | `"grid"` o `"grouped"`, caricata al costruttore della pagina |
-| Riutilizzabile per qualsiasi preferenza UI | ✅ | Colonne, filtri, dimensioni finestre, ecc. |
+| Chiave `customers.splitter_ratio` | ✅ | Posizione GridSplitter pagina Clienti (double 0..1), salvata su DragCompleted |
+| Riutilizzabile per qualsiasi preferenza UI | ✅ | Colonne, filtri, dimensioni finestre, splitter, ecc. |
 
 ### 9r. Pulizia Modulo Offerte (Blocco 7) ✅
 
@@ -743,4 +749,7 @@ Shared/DTOs/
 - **Sidebar collassabile**: Expander con freccia ▼/▶, sezioni Principale/Gestione/Admin/Avanzata/Sessione
 - **TinyMCE 5 self-hosted**: no API key, no CDN — npm install tinymce@5, copiato in Assets/tinymce/tinymce/
 - **Permessi a livelli (VisiWin-style)**: attached property `auth:Auth.Feature="nav.xxx"` direttamente sul bottone XAML — zero code-behind. Tabelle auth_levels + auth_features, PermissionEngine.CanAccess("feature.key"), ereditarietà gerarchica automatica (livello N vede tutto ciò che è ≤ N), behavior HIDDEN/DISABLED. Per aggiungere un nuovo bottone con permessi: `<Button auth:Auth.Feature="nav.mia_pagina" .../>` + riga in auth_features dalla pagina admin
+- **parent_item_id su project_material_items**: lega varianti/componenti al PRODUCT (robot) padre. `ConvertToProject` usa inserimento item-by-item + `Dictionary<int,int>` per ricostruire la gerarchia nei nuovi ID progetto
+- **Flusso di cassa — categorie robot**: `linked_source = "MAT_PRODUCT:{robotId}"` su `project_cashflow_categories`. `SyncRobotCategories()` chiamato ad ogni GET prima di restituire i dati. Totale = `SUM(figli.quantity × figli.unit_cost)`. Categorie `[M]` non editabili nel client (label e importo read-only)
+- **project_cashflow.start_date**: data inizio flusso di cassa (override di project.start_date). Salvata con PUT header. Calcola intestazioni colonne M1..M13 come `start_date + N mesi`
 - **L'utente comunica in italiano**

@@ -352,7 +352,7 @@ public partial class ProjectsPage : Page
         ctrl.Load(projectId);
     }
 
-    // === CHAT === 
+    // === CHAT ===
     private void ShowChat(int projectId)
     {
         txtSectionTitle.Text = "Chat";

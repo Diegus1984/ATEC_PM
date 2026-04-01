@@ -95,14 +95,14 @@ public partial class CashFlowControl : UserControl
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
     }
 
-    private async void BtnRemoveCategory_Click(object sender, RoutedEventArgs e)
+    private async void BtnDeleteCategory_Click(object sender, RoutedEventArgs e)
     {
-        if (_vm.CategoryDtos.Count == 0) return;
-        var last = _vm.CategoryDtos.Last();
-        if (MessageBox.Show($"Eliminare '{last.Name}'?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (sender is not Button btn || btn.DataContext is not CfGridRow row) return;
+        string displayName = row.Label.StartsWith("[M] ") ? row.Label[4..] : row.Label;
+        if (MessageBox.Show($"Eliminare '{displayName}'?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         try
         {
-            await ApiClient.DeleteAsync($"/api/projects/{_projectId}/cashflow/categories/{last.Id}");
+            await ApiClient.DeleteAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}");
             Load(_projectId);
         }
         catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
@@ -237,7 +237,27 @@ public partial class CashFlowControl : UserControl
             tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         await SavePaymentAndRefresh();
     }
-    private void SaveCategoryAmount(CfGridRow row)
+    private void LabelTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsLabelEditable)
+        {
+            e.Handled = true;
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveCategoryLabel(row);
+            tb.MoveFocus(new TraversalRequest(FocusNavigationDirection.Down));
+        }
+    }
+
+    private void LabelTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsLabelEditable)
+        {
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            SaveCategoryLabel(row);
+        }
+    }
+
+    private void SaveCategoryLabel(CfGridRow row)
     {
         if (row.RefId <= 0) return;
         _ = Task.Run(async () =>
@@ -250,8 +270,23 @@ public partial class CashFlowControl : UserControl
             }
             catch { }
         });
-        _vm.Recalculate();
+    }
 
+    private void SaveCategoryAmount(CfGridRow row)
+    {
+        // Le categorie linkate a robot hanno totale calcolato automaticamente lato server
+        if (row.RefId <= 0 || row.IsLinked) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var req = new { name = row.Label, totalAmount = row.TotalAmount, notes = "" };
+                await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}",
+                    JsonSerializer.Serialize(req));
+            }
+            catch { }
+        });
+        _vm.Recalculate();
     }
 
     private async Task SaveData(string dataType, int refId, int monthNumber, decimal numValue)
@@ -265,15 +300,36 @@ public partial class CashFlowControl : UserControl
         catch { }
     }
 
+    private bool _startDateSaving;
+
+    private void DpStartDate_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_startDateSaving) return;
+        _startDateSaving = true;
+        _ = SaveHeaderAndReload();
+    }
+
+    private async Task SaveHeaderAndReload()
+    {
+        try
+        {
+            await SavePaymentAndRefresh();
+            Load(_projectId);
+        }
+        finally
+        {
+            _startDateSaving = false;
+        }
+    }
+
     private async Task SavePaymentAndRefresh()
     {
         try
         {
-            var req = new { paymentAmount = _vm.PaymentAmount, monthCount = _vm.MonthCount };
+            var req = new { paymentAmount = _vm.PaymentAmount, monthCount = _vm.MonthCount, startDate = _vm.StartDate };
             await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/header",
                 JsonSerializer.Serialize(req));
             _vm.Recalculate();
-
         }
         catch { }
     }

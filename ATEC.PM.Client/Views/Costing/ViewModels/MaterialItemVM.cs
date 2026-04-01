@@ -7,6 +7,8 @@ public class MaterialItemVM : INotifyPropertyChanged
 {
     public int Id { get; set; }
     public int SectionId { get; set; }
+    public int? ParentItemId { get; set; }
+    public bool IsProduct => ItemType == "PRODUCT";
 
     private string _description = "";
     public string Description { get => _description; set { _description = value; Notify(); } }

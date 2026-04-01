@@ -24,36 +24,113 @@ public class CashFlowController : ControllerBase
         if (proj == null) return NotFound();
 
         var header = c.QueryFirstOrDefault<dynamic>(
-            "SELECT payment_amount, month_count FROM project_cashflow WHERE project_id=@pid",
+            "SELECT payment_amount, month_count, start_date FROM project_cashflow WHERE project_id=@pid",
             new { pid = projectId });
 
+        // Sync automatica categorie robot se il flusso è inizializzato
+        if (header != null)
+            SyncRobotCategories(c, projectId);
+
         var categories = c.Query<CashFlowCategoryDto>(@"
-            SELECT id AS Id, name AS Name, total_amount AS TotalAmount, 
-                   notes AS Notes, sort_order AS SortOrder
-            FROM project_cashflow_categories 
+            SELECT id AS Id, name AS Name, total_amount AS TotalAmount,
+                   notes AS Notes, sort_order AS SortOrder, linked_source AS LinkedSource
+            FROM project_cashflow_categories
             WHERE project_id=@pid ORDER BY sort_order",
             new { pid = projectId }).ToList();
 
         var dataItems = c.Query<CashFlowDataItemDto>(@"
             SELECT data_type AS DataType, ref_id AS RefId, month_number AS MonthNumber,
                    num_value AS NumValue, date_value AS DateValue
-            FROM project_cashflow_data 
+            FROM project_cashflow_data
             WHERE project_id=@pid
             ORDER BY data_type, ref_id, month_number",
             new { pid = projectId }).ToList();
+
+        // Usa start_date del cashflow se impostata, altrimenti quella del progetto
+        DateTime? cfStartDate = header != null ? header.start_date as DateTime? : null;
+        DateTime? effectiveStartDate = cfStartDate ?? proj.start_date as DateTime?;
 
         return Ok(ApiResponse<CashFlowData>.Ok(new CashFlowData
         {
             ProjectId = projectId,
             ProjectCode = (string)(proj.code ?? ""),
             ProjectRevenue = (decimal)(proj.revenue ?? 0m),
-            StartDate = proj.start_date as DateTime?,
+            StartDate = effectiveStartDate,
             PaymentAmount = header != null ? (decimal)(header.payment_amount ?? 0m) : 0m,
             MonthCount = header != null ? (int)(header.month_count ?? 13) : 13,
             IsInitialized = header != null,
             Categories = categories,
             DataItems = dataItems
         }));
+    }
+
+    /// <summary>
+    /// Sincronizza le categorie del flusso di cassa con i PRODUCT (robot) della commessa.
+    /// - Crea categorie mancanti per nuovi robot
+    /// - Aggiorna nome e totale netto per robot esistenti
+    /// - Elimina categorie di robot che non esistono più
+    /// </summary>
+    private void SyncRobotCategories(System.Data.IDbConnection c, int projectId)
+    {
+        // Legge tutti i PRODUCT della commessa con il loro totale netto figli
+        var robots = c.Query<(int Id, string Description, decimal NetTotal)>(@"
+            SELECT p.id, p.description,
+                   COALESCE(SUM(ch.quantity * ch.unit_cost), 0) AS net_total
+            FROM project_material_items p
+            JOIN project_material_sections s ON s.id = p.section_id
+            LEFT JOIN project_material_items ch ON ch.parent_item_id = p.id
+            WHERE s.project_id = @pid AND p.item_type = 'PRODUCT'
+            GROUP BY p.id, p.description",
+            new { pid = projectId }).ToList();
+
+        // Legge le categorie linkate esistenti
+        var linked = c.Query<(int Id, string LinkedSource)>(@"
+            SELECT id, linked_source FROM project_cashflow_categories
+            WHERE project_id=@pid AND linked_source IS NOT NULL AND linked_source <> ''",
+            new { pid = projectId }).ToList();
+
+        var linkedBySource = linked.ToDictionary(x => x.LinkedSource, x => x.Id);
+        var robotSources = new HashSet<string>();
+
+        int maxSort = c.ExecuteScalar<int>(
+            "SELECT COALESCE(MAX(sort_order),0) FROM project_cashflow_categories WHERE project_id=@pid",
+            new { pid = projectId });
+
+        foreach (var robot in robots)
+        {
+            string source = $"MAT_PRODUCT:{robot.Id}";
+            robotSources.Add(source);
+
+            if (linkedBySource.TryGetValue(source, out int catId))
+            {
+                // Aggiorna nome e totale
+                c.Execute(@"UPDATE project_cashflow_categories
+                            SET name=@name, total_amount=@amt
+                            WHERE id=@id",
+                    new { name = robot.Description, amt = robot.NetTotal, id = catId });
+            }
+            else
+            {
+                // Crea nuova categoria linkata
+                maxSort++;
+                c.Execute(@"INSERT INTO project_cashflow_categories
+                                (project_id, name, total_amount, notes, sort_order, linked_source)
+                            VALUES (@pid, @name, @amt, '', @sort, @src)",
+                    new { pid = projectId, name = robot.Description, amt = robot.NetTotal, sort = maxSort, src = source });
+            }
+        }
+
+        // Elimina categorie di robot che non esistono più
+        foreach (var (catId, source) in linked.Select(x => (x.Id, x.LinkedSource)))
+        {
+            if (!robotSources.Contains(source))
+            {
+                c.Execute("DELETE FROM project_cashflow_data WHERE project_id=@pid AND data_type='CAT_PCT' AND ref_id=@cid",
+                    new { pid = projectId, cid = catId });
+                c.Execute("DELETE FROM project_cashflow_categories WHERE id=@id",
+                    new { id = catId });
+            }
+        }
     }
 
     [HttpPost("init")]
@@ -83,8 +160,8 @@ public class CashFlowController : ControllerBase
     public IActionResult UpdateHeader(int projectId, [FromBody] CashFlowInitRequest req)
     {
         using var c = _db.Open();
-        c.Execute("UPDATE project_cashflow SET payment_amount=@amt, month_count=@mc WHERE project_id=@pid",
-            new { amt = req.PaymentAmount, mc = req.MonthCount, pid = projectId });
+        c.Execute("UPDATE project_cashflow SET payment_amount=@amt, month_count=@mc, start_date=@sd WHERE project_id=@pid",
+            new { amt = req.PaymentAmount, mc = req.MonthCount, sd = req.StartDate, pid = projectId });
         return Ok(ApiResponse<bool>.Ok(true));
     }
 

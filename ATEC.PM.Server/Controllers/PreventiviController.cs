@@ -205,10 +205,13 @@ public class PreventiviController : ControllerBase
                     new { newSecId, oldSecId = (int)sec.id }, tx);
             }
 
-            // 5. Copia materiali quote → project
+            // 5. Copia materiali quote → project (preservando parent_item_id)
             var quoteMatSections = c.Query<dynamic>(
                 "SELECT * FROM quote_material_sections WHERE quote_id=@Id ORDER BY sort_order",
                 new { Id = id }, tx).ToList();
+
+            // Mappa quote_item.id → project_item.id per ricostruire parent_item_id
+            var itemIdMap = new Dictionary<int, int>();
 
             foreach (var ms in quoteMatSections)
             {
@@ -227,11 +230,47 @@ public class PreventiviController : ControllerBase
                         enabled = (bool)ms.is_enabled
                     }, tx);
 
-                c.Execute(@"
-                    INSERT INTO project_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
-                    SELECT @newMsId, description, quantity, unit_cost, markup_value, item_type, sort_order
-                    FROM quote_material_items WHERE section_id=@oldMsId",
-                    new { newMsId, oldMsId = (int)ms.id }, tx);
+                // Inserisce item uno per uno per tracciare il mapping degli ID
+                var quoteItems = c.Query<dynamic>(
+                    "SELECT id, description, quantity, unit_cost, markup_value, item_type, sort_order FROM quote_material_items WHERE section_id=@sid ORDER BY sort_order, id",
+                    new { sid = (int)ms.id }, tx).ToList();
+
+                foreach (var item in quoteItems)
+                {
+                    int newItemId = (int)c.ExecuteScalar<long>(@"
+                        INSERT INTO project_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
+                        VALUES (@sid, @desc, @qty, @cost, @markup, @type, @sort);
+                        SELECT LAST_INSERT_ID()",
+                        new
+                        {
+                            sid = newMsId,
+                            desc = (string)item.description,
+                            qty = (decimal)item.quantity,
+                            cost = (decimal)item.unit_cost,
+                            markup = (decimal)item.markup_value,
+                            type = (string)item.item_type,
+                            sort = (int)item.sort_order
+                        }, tx);
+                    itemIdMap[(int)item.id] = newItemId;
+                }
+            }
+
+            // Aggiorna parent_item_id usando il mapping quote→project
+            var itemsWithParent = c.Query<(int QuoteItemId, int QuoteParentId)>(@"
+                SELECT qmi.id, qmi.parent_item_id
+                FROM quote_material_items qmi
+                JOIN quote_material_sections qms ON qms.id = qmi.section_id
+                WHERE qms.quote_id = @qid AND qmi.parent_item_id IS NOT NULL",
+                new { qid = id }, tx).ToList();
+
+            foreach (var (quoteItemId, quoteParentId) in itemsWithParent)
+            {
+                if (itemIdMap.TryGetValue(quoteItemId, out int projItemId) &&
+                    itemIdMap.TryGetValue(quoteParentId, out int projParentId))
+                {
+                    c.Execute("UPDATE project_material_items SET parent_item_id=@parentId WHERE id=@itemId",
+                        new { parentId = projParentId, itemId = projItemId }, tx);
+                }
             }
 
             // 6. Copia pricing

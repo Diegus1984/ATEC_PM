@@ -52,10 +52,12 @@ public class PhasesController : ControllerBase
                    COALESCE(d.name,'') AS DepartmentName,
                    COALESCE((SELECT SUM(pa.planned_hours) FROM phase_assignments pa WHERE pa.project_phase_id = pp.id), 0) AS BudgetHours, pp.budget_cost AS BudgetCost,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
-                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
+                   COALESCE(cst.name, '') AS CostSectionName
             FROM project_phases pp
             JOIN phase_templates pt ON pt.id = pp.phase_template_id
             LEFT JOIN departments d ON d.id = pp.department_id
+            LEFT JOIN cost_section_templates cst ON cst.id = pt.cost_section_template_id
             WHERE pp.project_id = @ProjectId
             ORDER BY pp.sort_order", new { ProjectId = projectId }).ToList();
 

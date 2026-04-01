@@ -78,12 +78,22 @@
                     <Border Padding="12,8" Background="#FFF8F0"
                             BorderBrush="#E4E7EC" BorderThickness="0,0,0,1"
                             DockPanel.Dock="Top">
-                        <StackPanel>
-                            <TextBlock FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#D97706" Text="FASI TEMPLATE — trascina su una sezione" />
-                            <TextBlock x:Name="txtPhaseCount" Margin="0,2,0,0"
-                                       FontSize="11" Foreground="#9CA3AF" />
-                        </StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right"
+                                    Click="BtnAddPhaseGlobal_Click"
+                                    Content="+ Fase"
+                                    Height="24" Padding="8,0"
+                                    Background="#D9770620" BorderThickness="0"
+                                    Foreground="#D97706" FontSize="11" FontWeight="SemiBold"
+                                    Cursor="Hand" VerticalAlignment="Center"
+                                    ToolTip="Crea nuova fase template" />
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="SemiBold"
+                                           Foreground="#D97706" Text="FASI TEMPLATE — trascina su una sezione" />
+                                <TextBlock x:Name="txtPhaseCount" Margin="0,2,0,0"
+                                           FontSize="11" Foreground="#9CA3AF" />
+                            </StackPanel>
+                        </DockPanel>
                     </Border>
                     <TextBox x:Name="txtSearchPhase" DockPanel.Dock="Top"
                              Height="28" Margin="8,6,8,4"

@@ -5,6 +5,52 @@ using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.BudgetVsCosting;
 
+// Gruppo fase con lista tecnici per colonna FASI ASSEGNATE
+public class BvaPhaseGroupVM : INotifyPropertyChanged
+{
+    public int PhaseId { get; set; }
+    public string PhaseName { get; set; } = "";
+    public string DeptCode { get; set; } = "";
+    public decimal BudgetHours { get; set; }
+    public decimal HoursWorked { get; set; }
+    public int ProgressPct { get; set; }
+    public int? DepartmentId { get; set; }
+
+    private ObservableCollection<BvaAssignmentRow> _assignments = new();
+    public ObservableCollection<BvaAssignmentRow> Assignments
+    {
+        get => _assignments;
+        set
+        {
+            _assignments = value;
+            _assignments.CollectionChanged += (_, _) => Notify(nameof(HasAssignments));
+            Notify();
+            Notify(nameof(HasAssignments));
+        }
+    }
+
+    public bool HasAssignments => Assignments.Count > 0;
+
+    public BvaPhaseGroupVM()
+    {
+        _assignments.CollectionChanged += (_, _) => Notify(nameof(HasAssignments));
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Notify([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+}
+
+// Riga tecnico dentro un gruppo fase
+public class BvaAssignmentRow
+{
+    public int AssignmentId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public decimal PlannedHours { get; set; }
+    public decimal HoursWorked { get; set; }
+    public string Pct => PlannedHours > 0 ? $"{Math.Round(HoursWorked / PlannedHours * 100, 0)}%" : "0%";
+    public bool CanDelete => HoursWorked == 0;
+}
+
 public class BvaViewModel : INotifyPropertyChanged
 {
     private bool _isLoaded;
@@ -30,7 +76,7 @@ public class BvaViewModel : INotifyPropertyChanged
     private string _statusText = "";
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
 
-    public static BvaViewModel FromData(BudgetVsActualData data)
+    public static BvaViewModel FromData(BudgetVsActualData data, List<PhaseListItem>? phases = null, int projectId = 0)
     {
         var vm = new BvaViewModel
         {
@@ -47,8 +93,13 @@ public class BvaViewModel : INotifyPropertyChanged
             return vm;
         }
 
+        // Indice fasi per nome sezione per distribuzione rapida
+        var phasesBySectionName = (phases ?? new())
+            .GroupBy(p => p.CostSectionName ?? "", StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
         foreach (BvaGroupDto g in data.Groups)
-            vm.Groups.Add(BvaGroupVM.FromDto(g));
+            vm.Groups.Add(BvaGroupVM.FromDto(g, phasesBySectionName, projectId));
 
         int secCount = data.Groups.Sum(g => g.Sections.Count);
         int entryCount = data.Groups.Sum(g => g.Sections.Sum(s => s.ActualEmployees.Sum(e => e.Details.Count)));
@@ -90,7 +141,7 @@ public class BvaGroupVM : INotifyPropertyChanged
     public string DeltaColor => DeltaHours > 0 ? "#DC2626" : "#059669";
     public bool HasDelta => DeltaHours != 0;
 
-    public static BvaGroupVM FromDto(BvaGroupDto dto)
+    public static BvaGroupVM FromDto(BvaGroupDto dto, Dictionary<string, List<PhaseListItem>>? phasesBySectionName = null, int projectId = 0)
     {
         string color = ColorMap.TryGetValue(dto.GroupName, out string? c) ? c : "#6B7280";
         var vm = new BvaGroupVM
@@ -103,7 +154,7 @@ public class BvaGroupVM : INotifyPropertyChanged
             ActualCost = dto.ActualCost
         };
         foreach (BvaSectionDto s in dto.Sections)
-            vm.Sections.Add(BvaSectionVM.FromDto(s));
+            vm.Sections.Add(BvaSectionVM.FromDto(s, phasesBySectionName, projectId));
         return vm;
     }
 
@@ -134,13 +185,19 @@ public class BvaSectionVM : INotifyPropertyChanged
     public ObservableCollection<BvaActualEmployeeVM> ActualEmployees { get; set; } = new();
     public bool HasActual => ActualEmployees.Count > 0;
 
+    // Fasi assegnate (colonna centrale) — raggruppate per fase con tecnici
+    public ObservableCollection<BvaPhaseGroupVM> PhaseGroups { get; set; } = new();
+    public List<PhaseListItem> RawPhases { get; set; } = new();
+    public int ProjectId { get; set; }
+    public bool HasPhases => PhaseGroups.Count > 0;
+
     // Delta
     public decimal DeltaHours => ActualHours - BudgetHours;
     public string DeltaText => DeltaHours == 0 ? "" : $"Δ {(DeltaHours > 0 ? "+" : "")}{DeltaHours:F1} h";
     public string DeltaColor => DeltaHours > 0 ? "#DC2626" : "#059669";
     public bool HasDelta => DeltaHours != 0;
 
-    public static BvaSectionVM FromDto(BvaSectionDto dto)
+    public static BvaSectionVM FromDto(BvaSectionDto dto, Dictionary<string, List<PhaseListItem>>? phasesBySectionName = null, int projectId = 0)
     {
         var vm = new BvaSectionVM
         {
@@ -150,7 +207,8 @@ public class BvaSectionVM : INotifyPropertyChanged
             BudgetCost = dto.BudgetCost,
             BudgetSale = dto.BudgetSale,
             ActualHours = dto.ActualHours,
-            ActualCost = dto.ActualCost
+            ActualCost = dto.ActualCost,
+            ProjectId = projectId
         };
         foreach (var r in dto.BudgetResources) vm.BudgetResources.Add(r);
         foreach (var e in dto.ActualEmployees)
@@ -164,6 +222,38 @@ public class BvaSectionVM : INotifyPropertyChanged
             foreach (var d in e.Details) empVm.Details.Add(d);
             vm.ActualEmployees.Add(empVm);
         }
+
+        // Fasi assegnate a questa sezione (match per nome sezione)
+        if (phasesBySectionName != null &&
+            phasesBySectionName.TryGetValue(dto.SectionName, out List<PhaseListItem>? sectionPhases))
+        {
+            vm.RawPhases = sectionPhases.OrderBy(p => p.SortOrder).ToList();
+            foreach (PhaseListItem p in vm.RawPhases)
+            {
+                BvaPhaseGroupVM grp = new()
+                {
+                    PhaseId = p.Id,
+                    PhaseName = string.IsNullOrEmpty(p.CustomName) ? p.Name : p.CustomName,
+                    DeptCode = p.DepartmentCode ?? "",
+                    DepartmentId = p.DepartmentId,
+                    BudgetHours = p.BudgetHours,
+                    HoursWorked = p.HoursWorked,
+                    ProgressPct = p.ProgressPct
+                };
+                foreach (PhaseAssignmentDto a in p.Assignments)
+                {
+                    grp.Assignments.Add(new BvaAssignmentRow
+                    {
+                        AssignmentId = a.Id,
+                        EmployeeName = a.EmployeeName,
+                        PlannedHours = a.PlannedHours,
+                        HoursWorked = a.HoursWorked
+                    });
+                }
+                vm.PhaseGroups.Add(grp);
+            }
+        }
+
         return vm;
     }
 

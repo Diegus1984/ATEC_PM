@@ -14,6 +14,7 @@ public partial class PhaseRowControl : UserControl
     private PhaseListItem _phase = null!;
     private bool _employeesLoaded;
     private bool _initializing = true;
+    private List<LookupItem> _employees = new();
     public event Action? SummaryChanged;
 
     /// <summary>Evento lanciato quando serve ricaricare la lista fasi dal server.</summary>
@@ -30,6 +31,9 @@ public partial class PhaseRowControl : UserControl
     // ═══════════════════════════════════════════════════════════════
     // INIT
     // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Nasconde il campo Costo Budget quando il controllo è usato in contesti che non lo richiedono (es. BvA).</summary>
+    public void HideBudgetCost() => pnlBudgetCost.Visibility = Visibility.Collapsed;
 
     public void Bind(PhaseListItem phase, string accentColor)
     {
@@ -73,8 +77,8 @@ public partial class PhaseRowControl : UserControl
         txtBudgetCost.Text = phase.BudgetCost.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         txtBudgetCost.IsEnabled = App.CurrentUser.IsPm;
 
-        // Riga aggiunta tecnico: solo PM/ADMIN
-        gridAddTecnico.Visibility = App.CurrentUser.IsPm ? Visibility.Visible : Visibility.Collapsed;
+        // Pulsante aggiunta tecnico: solo PM/ADMIN
+        btnAddTecnico.Visibility = App.CurrentUser.IsPm ? Visibility.Visible : Visibility.Collapsed;
 
         // Render assegnazioni nell'expander
         RenderAssignments();
@@ -311,8 +315,8 @@ public partial class PhaseRowControl : UserControl
     {
         try
         {
-            int deptId = _phase.DepartmentId ?? 0;
-            string json = await ApiClient.GetAsync($"/api/employees/by-department?departmentId={deptId}");
+            // Carica dipendenti dai reparti interessati alla sezione costo della fase
+            string json = await ApiClient.GetAsync($"/api/employees/by-phase/{_phase.Id}");
             JsonDocument doc = JsonDocument.Parse(json);
             if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
 
@@ -322,10 +326,7 @@ public partial class PhaseRowControl : UserControl
 
             // Filtra via i tecnici già assegnati
             HashSet<int> assignedIds = _phase.Assignments?.Select(a => a.EmployeeId).ToHashSet() ?? new();
-            List<LookupItem> available = employees.Where(e => !assignedIds.Contains(e.Id)).ToList();
-
-            cmbEmployee.ItemsSource = available;
-            if (available.Count > 0) cmbEmployee.SelectedIndex = 0;
+            _employees = employees.Where(e => !assignedIds.Contains(e.Id)).ToList();
         }
         catch { }
     }
@@ -371,14 +372,25 @@ public partial class PhaseRowControl : UserControl
 
     private async void BtnAddAssignment_Click(object sender, RoutedEventArgs e)
     {
-        if (cmbEmployee.SelectedItem is not LookupItem emp) return;
-        if (_phase.Assignments.Any(a => a.EmployeeId == emp.Id)) return;
-
-        decimal.TryParse(txtPlannedHours.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hours);
-
-        if (hours <= 0)
+        // Carica dipendenti disponibili se non ancora fatto
+        if (!_employeesLoaded)
         {
-            MessageBox.Show("Le ore pianificate devono essere maggiori di 0.", "Attenzione");
+            await LoadEmployees();
+            _employeesLoaded = true;
+        }
+
+        if (!_employees.Any())
+        {
+            MessageBox.Show("Nessun tecnico disponibile per questo reparto.", "Info");
+            return;
+        }
+
+        AddAssignmentDialog dlg = new(_employees) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true) return;
+
+        if (_phase.Assignments.Any(a => a.EmployeeId == dlg.SelectedEmployeeId))
+        {
+            MessageBox.Show("Tecnico già assegnato a questa fase.", "Attenzione");
             return;
         }
 
@@ -386,9 +398,9 @@ public partial class PhaseRowControl : UserControl
         {
             string jsonBody = JsonSerializer.Serialize(new
             {
-                employeeId = emp.Id,
-                assignRole = "MEMBER",
-                plannedHours = hours
+                employeeId = dlg.SelectedEmployeeId,
+                assignRole = dlg.AssignRole,
+                plannedHours = dlg.PlannedHours
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync($"/api/phases/{_phase.Id}/assignments", jsonBody);
@@ -399,17 +411,17 @@ public partial class PhaseRowControl : UserControl
                 _phase.Assignments.Add(new PhaseAssignmentDto
                 {
                     Id = newId,
-                    EmployeeId = emp.Id,
-                    EmployeeName = emp.Name,
-                    AssignRole = "MEMBER",
-                    PlannedHours = hours,
+                    EmployeeId = dlg.SelectedEmployeeId,
+                    EmployeeName = dlg.SelectedEmployeeName,
+                    AssignRole = dlg.AssignRole,
+                    PlannedHours = dlg.PlannedHours,
                     HoursWorked = 0
                 });
                 _phase.BudgetHours = _phase.Assignments.Sum(a => a.PlannedHours);
                 txtBudgetHours.Text = $"{_phase.BudgetHours:N1} h";
                 RenderAssignments();
+                // Ricarica lista dipendenti disponibili (esclude il nuovo assegnato)
                 _employeesLoaded = false;
-                await LoadEmployees();
                 SummaryChanged?.Invoke();
             }
         }

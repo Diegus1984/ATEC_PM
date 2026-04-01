@@ -35,9 +35,9 @@ public class EmployeesController : ControllerBase
 
         if (departmentId == null || departmentId == 0)
         {
-            // Fase trasversale: tutti i dipendenti attivi
+            // Fase trasversale: tutti i dipendenti attivi (escluso ADMIN)
             rows = c.Query<LookupItem>(
-                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' ORDER BY last_name").ToList();
+                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' AND user_role<>'ADMIN' ORDER BY last_name").ToList();
         }
         else
         {
@@ -46,9 +46,40 @@ public class EmployeesController : ControllerBase
                 SELECT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name
                 FROM employees e
                 JOIN employee_departments ed ON ed.employee_id = e.id
-                WHERE e.status <> 'TERMINATED' AND ed.department_id = @DeptId
+                WHERE e.status <> 'TERMINATED' AND e.user_role <> 'ADMIN' AND ed.department_id = @DeptId
                 ORDER BY e.last_name",
                 new { DeptId = departmentId }).ToList();
+        }
+
+        return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
+    }
+
+    /// <summary>
+    /// Tecnici dai reparti interessati alla sezione costo di una fase.
+    /// Percorso: phase_template → cost_section_template → cost_section_template_departments → employee_departments → employees
+    /// </summary>
+    [HttpGet("by-phase/{phaseId}")]
+    public IActionResult GetByPhase(int phaseId)
+    {
+        using var c = _db.Open();
+        List<LookupItem> rows = c.Query<LookupItem>(@"
+            SELECT DISTINCT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name
+            FROM employees e
+            JOIN employee_departments ed ON ed.employee_id = e.id
+            JOIN cost_section_template_departments cstd ON cstd.department_id = ed.department_id
+            JOIN phase_templates pt ON pt.cost_section_template_id = cstd.section_template_id
+            JOIN project_phases pp ON pp.phase_template_id = pt.id
+            WHERE pp.id = @PhaseId
+              AND e.status <> 'TERMINATED'
+              AND e.user_role <> 'ADMIN'
+            ORDER BY e.last_name",
+            new { PhaseId = phaseId }).ToList();
+
+        // Fallback: se la fase non ha sezione costo configurata, restituisce tutti (escluso admin)
+        if (rows.Count == 0)
+        {
+            rows = c.Query<LookupItem>(
+                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' AND user_role<>'ADMIN' ORDER BY last_name").ToList();
         }
 
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));

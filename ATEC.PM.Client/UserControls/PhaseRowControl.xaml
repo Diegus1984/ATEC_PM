@@ -134,7 +134,7 @@
                 <StackPanel>
 
                     <!--  Costo budget  -->
-                    <DockPanel Margin="0,0,0,8">
+                    <DockPanel x:Name="pnlBudgetCost" Margin="0,0,0,8">
                         <TextBlock
                             Width="130"
                             VerticalAlignment="Center"
@@ -161,47 +161,21 @@
                         Foreground="#6B7280"
                         Text="TECNICI ASSEGNATI" />
 
-                    <!--  Riga aggiunta tecnico  -->
-                    <Grid x:Name="gridAddTecnico" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ComboBox
-                            x:Name="cmbEmployee"
-                            Grid.Column="0"
-                            Height="28"
-                            BorderBrush="#E4E7EC"
-                            DisplayMemberPath="Name"
-                            FontSize="12"
-                            SelectedValuePath="Id" />
-                        <TextBox
-                            x:Name="txtPlannedHours"
-                            Grid.Column="2"
-                            Width="70"
-                            Height="28"
-                            Padding="4,2"
-                            BorderBrush="#E4E7EC"
-                            BorderThickness="1"
-                            FontSize="12"
-                            Text="0"
-                            ToolTip="Ore pianificate" />
-                        <Button
-                            Grid.Column="4"
-                            Width="28"
-                            Height="28"
-                            Background="#4F6EF7"
-                            BorderThickness="0"
-                            Click="BtnAddAssignment_Click"
-                            Content="+"
-                            Cursor="Hand"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Foreground="White" />
-                    </Grid>
+                    <!--  Pulsante aggiunta tecnico tramite dialog  -->
+                    <Button
+                        x:Name="btnAddTecnico"
+                        Height="28"
+                        Margin="0,0,0,8"
+                        Padding="10,0"
+                        HorizontalAlignment="Left"
+                        Background="#4F6EF7"
+                        BorderThickness="0"
+                        Click="BtnAddAssignment_Click"
+                        Content="+ Aggiungi Tecnico"
+                        Cursor="Hand"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="White" />
 
                     <!--  Lista tecnici assegnati  -->
                     <StackPanel x:Name="pnlAssignments" />

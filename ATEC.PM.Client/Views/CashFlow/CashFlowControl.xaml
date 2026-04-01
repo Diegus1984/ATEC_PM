@@ -70,6 +70,8 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -113,6 +115,25 @@
                             FontSize="10"
                             FontWeight="SemiBold"
                             Foreground="#6B7280"
+                            Text="DATA INIZIO" />
+                        <DatePicker
+                            x:Name="dpStartDate"
+                            Width="130"
+                            HorizontalAlignment="Left"
+                            BorderBrush="#E4E7EC"
+                            BorderThickness="0,0,0,2"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Foreground="#1A1D26"
+                            SelectedDate="{Binding StartDate, Mode=TwoWay}"
+                            SelectedDateChanged="DpStartDate_SelectedDateChanged" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="6">
+                        <TextBlock
+                            FontSize="10"
+                            FontWeight="SemiBold"
+                            Foreground="#6B7280"
                             Text="MESI" />
                         <TextBlock
                             FontSize="15"
@@ -121,31 +142,18 @@
                             Text="{Binding MonthCount}" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="6" Orientation="Horizontal">
-                        <Button
-                            Height="26"
-                            Margin="0,0,8,0"
-                            Padding="10,0"
-                            Background="#DC262620"
-                            BorderThickness="0"
-                            Click="BtnAddCategory_Click"
-                            Content="+ Categoria"
-                            Cursor="Hand"
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#DC2626" />
-                        <Button
-                            Height="26"
-                            Padding="10,0"
-                            Background="#05966920"
-                            BorderThickness="0"
-                            Click="BtnRemoveCategory_Click"
-                            Content="- Categoria"
-                            Cursor="Hand"
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#059669" />
-                    </StackPanel>
+                    <Button
+                        Grid.Column="8"
+                        Height="26"
+                        Padding="10,0"
+                        Background="#4F6EF720"
+                        BorderThickness="0"
+                        Click="BtnAddCategory_Click"
+                        Content="+ Categoria"
+                        Cursor="Hand"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="#4F6EF7" />
                 </Grid>
             </Border>
 
@@ -204,21 +212,58 @@
                 </DataGrid.RowStyle>
 
                 <DataGrid.Columns>
-                    <DataGridTextColumn
-                        Width="160"
-                        Binding="{Binding Label}"
-                        Header=""
-                        IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                                <Setter Property="Foreground" Value="#1A1D26" />
-                                <Setter Property="Padding" Value="6,0" />
-                                <Setter Property="VerticalAlignment" Value="Center" />
-                                <Setter Property="Background" Value="#F9FAFB" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Width="160" Header="">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Background="#F9FAFB">
+                                    <TextBox
+                                        Margin="0,0,22,0"
+                                        Padding="6,1"
+                                        VerticalAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Background="#F9FAFB"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="#1A1D26"
+                                        IsReadOnly="{Binding IsLabelEditable, Converter={StaticResource InvertBool}}"
+                                        KeyDown="LabelTextBox_KeyDown"
+                                        LostFocus="LabelTextBox_LostFocus"
+                                        Text="{Binding Label, UpdateSourceTrigger=LostFocus}">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox">
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Setter Property="BorderBrush" Value="Transparent" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLabelEditable}" Value="True">
+                                                        <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                                        <Setter Property="BorderBrush" Value="#D1D5DB" />
+                                                        <Setter Property="Background" Value="White" />
+                                                        <Setter Property="Cursor" Value="IBeam" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <Button
+                                        Width="18"
+                                        Height="18"
+                                        Margin="0,0,2,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="BtnDeleteCategory_Click"
+                                        Content="×"
+                                        Cursor="Hand"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="#DC2626"
+                                        Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn Width="100" Header="IMPORTO">
                         <DataGridTemplateColumn.CellTemplate>

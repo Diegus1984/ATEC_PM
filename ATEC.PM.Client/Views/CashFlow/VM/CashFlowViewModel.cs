@@ -59,7 +59,13 @@ public class CashFlowViewModel : INotifyPropertyChanged
     public ObservableCollection<CfGridRow> Rows { get; set; } = new();
     public bool ShowContent => IsInitialized;
     public bool ShowInit => !IsInitialized;
-    public DateTime? StartDate { get; set; }
+
+    private DateTime? _startDate;
+    public DateTime? StartDate
+    {
+        get => _startDate;
+        set { _startDate = value; Notify(); }
+    }
     public string StatusText { get => _statusText; set { _statusText = value; Notify(); } }
     // ═══════════════════════════════════════════════════════════════
     // FROM DATA
@@ -75,6 +81,7 @@ public class CashFlowViewModel : INotifyPropertyChanged
             _paymentAmount = data.PaymentAmount,
             _monthCount = data.MonthCount,
             _isInitialized = data.IsInitialized,
+            _startDate = data.StartDate,
             CategoryDtos = data.Categories
         };
 
@@ -107,10 +114,6 @@ public class CashFlowViewModel : INotifyPropertyChanged
 
         // ── Costruisci righe Excel ──
 
-        // Riga DATE (header mese)
-        var rowDate = new CfGridRow(mc) { Label = "Data", RowType = CfRowType.Date, IsEditable = true };
-        vm.Rows.Add(rowDate);
-
         // Riga PAGAMENTO (calcolata)
         var rowPayment = new CfGridRow(mc) { Label = "PAGAMENTO", RowType = CfRowType.Payment, TotalAmount = data.PaymentAmount, CellColor = "#FFE699" };
         vm.Rows.Add(rowPayment);
@@ -137,7 +140,16 @@ public class CashFlowViewModel : INotifyPropertyChanged
         // Per ogni categoria: riga importo (calcolata) + riga % (editabile)
         foreach (var cat in data.Categories)
         {
-            var rowCatAmt = new CfGridRow(mc) { Label = cat.Name, RowType = CfRowType.CategoryAmount, TotalAmount = cat.TotalAmount, RefId = cat.Id, CellColor = "#FFE699" };
+            string label = cat.IsLinked ? $"[M] {cat.Name}" : cat.Name;
+            var rowCatAmt = new CfGridRow(mc)
+            {
+                Label = label,
+                RowType = CfRowType.CategoryAmount,
+                TotalAmount = cat.TotalAmount,
+                RefId = cat.Id,
+                IsLinked = cat.IsLinked,
+                CellColor = "#FFE699"
+            };
             vm.Rows.Add(rowCatAmt);
 
             var rowCatPct = new CfGridRow(mc) { Label = "%", RowType = CfRowType.CategoryPct, RefId = cat.Id, IsEditable = true, CellColor = "#92D050" };
@@ -431,11 +443,16 @@ public class CfGridRow : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    private string _label = "";
     public string CellColor { get; set; } = "";
-    public bool IsAmountEditable => RowType is CfRowType.CategoryAmount;
+    /// <summary>True se la categoria è collegata automaticamente a un robot (read-only)</summary>
+    public bool IsLinked { get; set; }
+    public bool IsAmountEditable => RowType is CfRowType.CategoryAmount && !IsLinked;
+    public bool IsDeletable => RowType == CfRowType.CategoryAmount;
+    public bool IsLabelEditable => RowType == CfRowType.CategoryAmount && !IsLinked;
     public bool IsEditable { get; set; }
     public bool IsSeparator => RowType == CfRowType.Separator;
-    public string Label { get; set; } = "";
+    public string Label { get => _label; set { _label = value; Notify(); } }
     public int RefId { get; set; }
     public CfRowType RowType { get; set; }
     public decimal TotalAmount

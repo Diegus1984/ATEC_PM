@@ -199,7 +199,8 @@ public class ProjectCostingController : ControllerBase
             new { projectId }).ToList();
 
         var allItems = c.Query<ProjectMaterialItemDto>(@"
-            SELECT i.id, i.section_id AS SectionId, i.description AS Description,
+            SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId,
+                   i.description AS Description,
                    i.quantity AS Quantity, i.unit_cost AS UnitCost,
                    i.markup_value AS MarkupValue, i.item_type AS ItemType,
                    i.sort_order AS SortOrder,
@@ -208,7 +209,7 @@ public class ProjectCostingController : ControllerBase
                    COALESCE(i.is_shadowed,0) AS IsShadowed
             FROM project_material_items i
             JOIN project_material_sections s ON s.id = i.section_id
-            WHERE s.project_id=@projectId ORDER BY i.sort_order",
+            WHERE s.project_id=@projectId ORDER BY i.sort_order, i.id",
             new { projectId }).ToList();
 
         foreach (var ms in matSections)
@@ -369,8 +370,8 @@ public class ProjectCostingController : ControllerBase
     {
         using var c = _db.Open();
         int id = (int)c.ExecuteScalar<long>(@"
-            INSERT INTO project_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
-            VALUES (@SectionId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder);
+            INSERT INTO project_material_items (section_id, parent_item_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
+            VALUES (@SectionId, @ParentItemId, @Description, @Quantity, @UnitCost, @MarkupValue, @ItemType, @SortOrder);
             SELECT LAST_INSERT_ID();", req);
         return Ok(ApiResponse<int>.Ok(id, "Materiale aggiunto"));
     }
@@ -381,8 +382,9 @@ public class ProjectCostingController : ControllerBase
         using var c = _db.Open();
         req.Id = id;
         c.Execute(@"
-            UPDATE project_material_items SET description=@Description, quantity=@Quantity,
-                unit_cost=@UnitCost, markup_value=@MarkupValue, item_type=@ItemType, sort_order=@SortOrder
+            UPDATE project_material_items SET parent_item_id=@ParentItemId, description=@Description,
+                quantity=@Quantity, unit_cost=@UnitCost, markup_value=@MarkupValue,
+                item_type=@ItemType, sort_order=@SortOrder
             WHERE id=@Id", req);
         return Ok(ApiResponse<string>.Ok("", "Materiale aggiornato"));
     }
