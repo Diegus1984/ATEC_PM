@@ -205,6 +205,40 @@ public class PreventiviController : ControllerBase
                     new { newSecId, oldSecId = (int)sec.id }, tx);
             }
 
+            // 4b. Aggiungi sezioni template is_default_project=1 non presenti nel preventivo
+            var copiedTemplateIds = quoteSections
+                .Where(s => s.template_id != null)
+                .Select(s => (int)s.template_id)
+                .ToHashSet();
+
+            int maxSort = quoteSections.Any() ? quoteSections.Max(s => (int)s.sort_order) : 0;
+
+            var missingTemplates = c.Query<dynamic>(@"
+                SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
+                FROM cost_section_templates t
+                JOIN cost_section_groups g ON g.id = t.group_id
+                WHERE t.is_default_project=1 AND t.is_active=1
+                  AND t.id NOT IN @copiedIds
+                ORDER BY t.sort_order",
+                new { copiedIds = copiedTemplateIds.Count > 0 ? copiedTemplateIds.ToArray() : new[] { -1 } }, tx).ToList();
+
+            foreach (var tmpl in missingTemplates)
+            {
+                maxSort++;
+                int newSecId2 = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
+                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1);
+                    SELECT LAST_INSERT_ID();",
+                    new { projectId, tmpl.id, tmpl.name, tmpl.section_type, tmpl.group_name, sort_order = maxSort }, tx);
+
+                c.Execute(@"
+                    INSERT INTO project_cost_section_departments (project_cost_section_id, department_id)
+                    SELECT @newSecId, department_id
+                    FROM cost_section_template_departments
+                    WHERE section_template_id = @templateId",
+                    new { newSecId = newSecId2, templateId = (int)tmpl.id }, tx);
+            }
+
             // 5. Copia materiali quote → project (preservando parent_item_id)
             var quoteMatSections = c.Query<dynamic>(
                 "SELECT * FROM quote_material_sections WHERE quote_id=@Id ORDER BY sort_order",

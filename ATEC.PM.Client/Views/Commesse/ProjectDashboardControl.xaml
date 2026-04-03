@@ -207,6 +207,10 @@
                         HorizontalAlignment="Left"
                         Background="{Binding BudgetBarBrush}" />
                     <Border
+                        Width="{Binding AssignedBarWidth}"
+                        HorizontalAlignment="Left"
+                        Background="{Binding AssignedBarBrush}" />
+                    <Border
                         Width="{Binding WorkedBarWidth}"
                         HorizontalAlignment="Left"
                         Background="{Binding DeptBrush}" />

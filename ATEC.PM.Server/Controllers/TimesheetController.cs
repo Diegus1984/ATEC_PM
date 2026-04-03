@@ -51,7 +51,7 @@ public class TimesheetController : ControllerBase
             projects = c.Query<TimesheetProjectOption>(@"
                 SELECT DISTINCT p.id AS ProjectId, CONCAT(p.code,' - ',p.title) AS Display
                 FROM projects p
-                WHERE p.status IN ('ACTIVE','DRAFT')
+                WHERE p.status = 'ACTIVE'
                 ORDER BY p.code").ToList();
         }
         else
@@ -61,7 +61,7 @@ public class TimesheetController : ControllerBase
                 FROM projects p
                 JOIN project_phases pp ON pp.project_id = p.id
                 JOIN phase_assignments pa ON pa.project_phase_id = pp.id AND pa.employee_id = @EmpId
-                WHERE p.status IN ('ACTIVE','DRAFT')
+                WHERE p.status = 'ACTIVE'
                 ORDER BY p.code", new { EmpId = employeeId }).ToList();
         }
 

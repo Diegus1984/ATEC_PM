@@ -64,8 +64,10 @@ public class DeptSummary
 {
     public string DepartmentCode { get; set; } = "";
     public string DepartmentName { get; set; } = "";
-    public decimal BudgetHours { get; set; }
-    public decimal HoursWorked { get; set; }
+    public decimal CostingHours { get; set; }    // Ore preventivate (dal costing)
+    public decimal AssignedHours { get; set; }   // Ore assegnate (dalle phase_assignments)
+    public decimal HoursWorked { get; set; }     // Ore lavorate (dal timesheet)
+    public decimal BudgetHours { get; set; }     // Legacy: max tra CostingHours e AssignedHours
     public int TotalPhases { get; set; }
     public int CompletedPhases { get; set; }
     public decimal MaterialCost { get; set; }

@@ -171,21 +171,23 @@ public partial class ProjectDashboardControl : UserControl
         if (d.DepartmentSummaries.Any())
         {
             pnlContent.Children.Add(Title("Ore per Reparto"));
-            decimal maxH = Math.Max(d.DepartmentSummaries.Max(s => Math.Max(s.BudgetHours, s.HoursWorked)), 1);
+            decimal maxH = Math.Max(d.DepartmentSummaries.Max(s => Math.Max(s.CostingHours, Math.Max(s.AssignedHours, s.HoursWorked))), 1);
             pnlContent.Children.Add(Card(new ItemsControl
             {
                 ItemTemplate = (DataTemplate)Resources["DeptBarTemplate"],
                 ItemsSource = d.DepartmentSummaries.Select(ds =>
                 {
                     string c = DeptColors.GetValueOrDefault(ds.DepartmentCode, DeptColors["DEFAULT"]);
-                    decimal pct = ds.BudgetHours > 0 ? Math.Round(ds.HoursWorked / ds.BudgetHours * 100, 0) : 0;
+                    decimal pctPrev = ds.CostingHours > 0 ? Math.Round(ds.HoursWorked / ds.CostingHours * 100, 0) : 0;
                     return new
                     {
                         ds.DepartmentCode,
                         DeptBrush = B(c),
-                        BudgetBarBrush = B(c + "40"),
-                        Summary = $"{ds.HoursWorked:N1} / {ds.BudgetHours:N0} h  ({pct}%)  —  {ds.CompletedPhases}/{ds.TotalPhases} fasi",
-                        BudgetBarWidth = Math.Max(0, (double)(ds.BudgetHours / maxH) * 500),
+                        BudgetBarBrush = B(c + "20"),
+                        AssignedBarBrush = B(c + "50"),
+                        Summary = $"Prev: {ds.CostingHours:N0} h  |  Assegn: {ds.AssignedHours:N0} h  |  Lav: {ds.HoursWorked:N1} h  ({pctPrev}%)  —  {ds.CompletedPhases}/{ds.TotalPhases} fasi",
+                        BudgetBarWidth = Math.Max(0, (double)(ds.CostingHours / maxH) * 500),
+                        AssignedBarWidth = Math.Max(0, (double)(ds.AssignedHours / maxH) * 500),
                         WorkedBarWidth = Math.Max(0, (double)(ds.HoursWorked / maxH) * 500)
                     };
                 })
@@ -336,22 +338,25 @@ public partial class ProjectDashboardControl : UserControl
 
     private PlotView CreateBar(ProjectDashboardData d)
     {
-        var model = new PlotModel { Title = "Budget vs Consuntivo", TitleFontSize = 12, TitleFontWeight = OxyPlot.FontWeights.Bold };
-        var b1 = new OxyPlot.Series.BarSeries { Title = "Budget", FillColor = OxyColor.FromRgb(0x4F, 0x6E, 0xF7), StrokeThickness = 0 };
-        var b2 = new OxyPlot.Series.BarSeries { Title = "Consuntivo", FillColor = OxyColor.FromRgb(0x05, 0x96, 0x69), StrokeThickness = 0 };
+        var model = new PlotModel { Title = "Preventivato vs Assegnato vs Consuntivo", TitleFontSize = 12, TitleFontWeight = OxyPlot.FontWeights.Bold };
+        var b1 = new OxyPlot.Series.BarSeries { Title = "Preventivato", FillColor = OxyColor.FromArgb(0x60, 0x4F, 0x6E, 0xF7), StrokeThickness = 0 };
+        var b2 = new OxyPlot.Series.BarSeries { Title = "Assegnato", FillColor = OxyColor.FromArgb(0xA0, 0x4F, 0x6E, 0xF7), StrokeThickness = 0 };
+        var b3 = new OxyPlot.Series.BarSeries { Title = "Lavorato", FillColor = OxyColor.FromRgb(0x05, 0x96, 0x69), StrokeThickness = 0 };
         var ax = new OxyPlot.Axes.CategoryAxis { Position = OxyPlot.Axes.AxisPosition.Left, FontSize = 10 };
         var valAx = new OxyPlot.Axes.LinearAxis { Position = OxyPlot.Axes.AxisPosition.Bottom, MinimumPadding = 0, AbsoluteMinimum = 0, FontSize = 9, Title = "Ore" };
 
-        foreach (var s in d.DepartmentSummaries)
+        foreach (DeptSummary s in d.DepartmentSummaries)
         {
             ax.Labels.Add(s.DepartmentCode);
-            b1.Items.Add(new OxyPlot.Series.BarItem((double)s.BudgetHours));
-            b2.Items.Add(new OxyPlot.Series.BarItem((double)s.HoursWorked));
+            b1.Items.Add(new OxyPlot.Series.BarItem((double)s.CostingHours));
+            b2.Items.Add(new OxyPlot.Series.BarItem((double)s.AssignedHours));
+            b3.Items.Add(new OxyPlot.Series.BarItem((double)s.HoursWorked));
         }
         model.Axes.Add(ax);
         model.Axes.Add(valAx);
         model.Series.Add(b1);
         model.Series.Add(b2);
+        model.Series.Add(b3);
         model.Legends.Add(new OxyPlot.Legends.Legend { LegendPosition = OxyPlot.Legends.LegendPosition.TopRight, FontSize = 9 });
         return new PlotView { Model = model };
     }

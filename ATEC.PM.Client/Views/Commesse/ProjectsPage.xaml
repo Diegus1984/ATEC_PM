@@ -6,7 +6,8 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250" />
+            <ColumnDefinition x:Name="colTree" Width="250" MinWidth="180" MaxWidth="500" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -92,8 +93,18 @@
             </DockPanel>
         </Border>
 
+        <!--  SPLITTER  -->
+        <GridSplitter
+            Grid.Column="1"
+            Width="4"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Stretch"
+            Background="#E4E7EC"
+            Cursor="SizeWE"
+            DragCompleted="TreeSplitter_DragCompleted" />
+
         <!--  RIGHT: Content  -->
-        <Border Grid.Column="1">
+        <Border Grid.Column="2">
             <DockPanel>
                 <Border
                     Padding="24,12"

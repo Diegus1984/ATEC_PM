@@ -48,7 +48,8 @@ public class PhasesController : ControllerBase
                    COALESCE((SELECT SUM(pa.planned_hours) FROM phase_assignments pa WHERE pa.project_phase_id = pp.id), 0) AS BudgetHours, pp.budget_cost AS BudgetCost,
                    pp.status, pp.progress_pct AS ProgressPct, pp.sort_order AS SortOrder,
                    COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
-                   COALESCE(cst.name, '') AS CostSectionName
+                   COALESCE(cst.name, '') AS CostSectionName,
+                   pt.cost_section_template_id AS CostSectionTemplateId
             FROM project_phases pp
             JOIN phase_templates pt ON pt.id = pp.phase_template_id
             LEFT JOIN cost_section_templates cst ON cst.id = pt.cost_section_template_id
@@ -212,18 +213,18 @@ public class PhasesController : ControllerBase
             SELECT LAST_INSERT_ID()",
             new { PhaseId = phaseId, req.EmployeeId, req.AssignRole, req.PlannedHours });
 
-        // Notifica al tecnico assegnato
+        // Notifica al tecnico assegnato (solo se commessa ACTIVE)
         try
         {
             var info = c.QueryFirstOrDefault<dynamic>(@"
-                SELECT pp.project_id, p.code AS project_code,
+                SELECT pp.project_id, p.code AS project_code, p.status AS project_status,
                        COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name
                 FROM project_phases pp
                 JOIN projects p ON p.id = pp.project_id
                 JOIN phase_templates pt ON pt.id = pp.phase_template_id
                 WHERE pp.id = @PhaseId", new { PhaseId = phaseId });
 
-            if (info != null)
+            if (info != null && (string)info.project_status == "ACTIVE")
             {
                 int currentEmpId = GetCurrentEmployeeId();
                 if (req.EmployeeId != currentEmpId)
@@ -260,7 +261,7 @@ public class PhasesController : ControllerBase
     {
         // Recupera info fase per le notifiche
         var info = c.QueryFirstOrDefault<dynamic>(@"
-            SELECT p.code AS project_code,
+            SELECT p.code AS project_code, p.status AS project_status,
                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name
             FROM project_phases pp
             JOIN projects p ON p.id = pp.project_id
@@ -268,6 +269,7 @@ public class PhasesController : ControllerBase
             WHERE pp.id = @PhaseId", new { PhaseId = phaseId }, tx);
 
         int currentEmpId = GetCurrentEmployeeId();
+        bool isActive = info != null && (string)info.project_status == "ACTIVE";
 
         foreach (PhaseAssignmentDto a in assignments)
         {
@@ -276,13 +278,13 @@ public class PhasesController : ControllerBase
                 VALUES (@PhaseId, @EmployeeId, @AssignRole, @PlannedHours)",
                 new { PhaseId = phaseId, a.EmployeeId, a.AssignRole, a.PlannedHours }, tx);
 
-            // Notifica al tecnico assegnato
-            if (info != null && a.EmployeeId != currentEmpId)
+            // Notifica al tecnico assegnato (solo se commessa ACTIVE)
+            if (isActive && a.EmployeeId != currentEmpId)
             {
                 try
                 {
                     _notif.Create("PHASE_ASSIGNED", "INFO",
-                        $"Nuova assegnazione — {(string)info.project_code}",
+                        $"Nuova assegnazione — {(string)info!.project_code}",
                         $"Sei stato assegnato alla fase: {(string)info.phase_name}",
                         "PHASE", phaseId, projectId, currentEmpId,
                         new[] { a.EmployeeId });

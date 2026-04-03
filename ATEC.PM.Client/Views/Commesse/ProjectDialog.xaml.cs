@@ -88,7 +88,9 @@ public partial class ProjectDialog : Window
             cmbCustomer.SelectedValue = d.GetProperty("customerId").GetInt32();
             cmbPm.SelectedValue = d.GetProperty("pmId").GetInt32();
 
-            SelectComboItem(cmbStatus, d.GetProperty("status").GetString() ?? "DRAFT");
+            string currentStatus = d.GetProperty("status").GetString() ?? "DRAFT";
+            SelectComboItem(cmbStatus, currentStatus);
+            ApplyStatusTransitions(currentStatus);
             SelectComboItem(cmbPriority, d.GetProperty("priority").GetString() ?? "MEDIUM");
 
             if (d.TryGetProperty("startDate", out var sd) && sd.ValueKind != JsonValueKind.Null)
@@ -102,6 +104,33 @@ public partial class ProjectDialog : Window
     {
         foreach (ComboBoxItem item in cmb.Items)
             if (item.Content?.ToString() == value) { item.IsSelected = true; break; }
+    }
+
+    /// <summary>
+    /// Disabilita le transizioni di stato non valide.
+    /// DRAFT → ACTIVE, CANCELLED
+    /// ACTIVE → ON_HOLD, COMPLETED, CANCELLED
+    /// ON_HOLD → ACTIVE, CANCELLED
+    /// COMPLETED / CANCELLED → bloccato
+    /// </summary>
+    private void ApplyStatusTransitions(string currentStatus)
+    {
+        Dictionary<string, HashSet<string>> allowed = new()
+        {
+            ["DRAFT"] = new() { "DRAFT", "ACTIVE", "CANCELLED" },
+            ["ACTIVE"] = new() { "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED" },
+            ["ON_HOLD"] = new() { "ON_HOLD", "ACTIVE", "CANCELLED" },
+            ["COMPLETED"] = new() { "COMPLETED" },
+            ["CANCELLED"] = new() { "CANCELLED" }
+        };
+
+        HashSet<string> valid = allowed.GetValueOrDefault(currentStatus, new() { currentStatus });
+
+        foreach (ComboBoxItem item in cmbStatus.Items)
+        {
+            string val = item.Content?.ToString() ?? "";
+            item.IsEnabled = valid.Contains(val);
+        }
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)

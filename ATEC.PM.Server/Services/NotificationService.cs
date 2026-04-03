@@ -59,6 +59,25 @@ public class NotificationService
     }
 
     /// <summary>
+    /// Tutti i dipendenti assegnati a fasi della commessa + PM.
+    /// </summary>
+    public List<int> GetProjectEmployeeIds(int projectId)
+    {
+        using var c = _db.Open();
+        return c.Query<int>(@"
+            SELECT DISTINCT emp_id FROM (
+                SELECT pa.employee_id AS emp_id
+                FROM phase_assignments pa
+                JOIN project_phases pp ON pp.id = pa.project_phase_id
+                WHERE pp.project_id = @Pid
+                UNION
+                SELECT pm_id AS emp_id FROM projects WHERE id = @Pid AND pm_id IS NOT NULL
+            ) sub
+            JOIN employees e ON e.id = sub.emp_id
+            WHERE e.status = 'ACTIVE'", new { Pid = projectId }).ToList();
+    }
+
+    /// <summary>
     /// Trova dipendenti del reparto ACQ (acquisti).
     /// </summary>
     public List<int> GetAcqEmployeeIds()
@@ -177,7 +196,10 @@ public class NotificationBackgroundService : BackgroundService
                    CONCAT(e.first_name, ' ', e.last_name) AS employee_name
             FROM timesheet_entries te
             JOIN employees e ON e.id = te.employee_id
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            JOIN projects p ON p.id = pp.project_id
             WHERE te.work_date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+              AND p.status = 'ACTIVE'
             GROUP BY te.employee_id, te.work_date
             HAVING SUM(te.hours) > 10
             AND NOT EXISTS (

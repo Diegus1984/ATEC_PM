@@ -219,7 +219,7 @@ public partial class MainWindow : Window
         string section = referenceType switch
         {
             "BOM" => "ddp_commercial",
-            "PHASE" => "phases",
+            "PHASE" => "budget_vs_actual",
             "TIMESHEET" => "details",
             _ => "details"
         };

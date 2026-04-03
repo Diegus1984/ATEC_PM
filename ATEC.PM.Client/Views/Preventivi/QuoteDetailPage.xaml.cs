@@ -97,6 +97,8 @@ public partial class QuoteDetailPage : Page
                 catch { }
             }
 
+            if (quote == null) return;
+
             _selectedQuoteId = quote.Id;
             _selectedQuote = quote;
 

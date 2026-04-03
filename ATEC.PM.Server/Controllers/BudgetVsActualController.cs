@@ -39,7 +39,14 @@ public class BudgetVsActualController : ControllerBase
                    r.hourly_cost AS HourlyCost,
                    (r.work_days * r.hours_per_day * r.hourly_cost) AS TotalCost,
                    r.markup_value AS MarkupValue,
-                   (r.work_days * r.hours_per_day * r.hourly_cost * r.markup_value) AS TotalSale
+                   (r.work_days * r.hours_per_day * r.hourly_cost * r.markup_value) AS TotalSale,
+                   r.num_trips AS NumTrips,
+                   r.km_per_trip AS KmPerTrip,
+                   r.cost_per_km AS CostPerKm,
+                   r.daily_food AS DailyFood,
+                   r.daily_hotel AS DailyHotel,
+                   r.allowance_days AS AllowanceDays,
+                   r.daily_allowance AS DailyAllowance
             FROM project_cost_resources r
             JOIN project_cost_sections s ON s.id = r.section_id
             WHERE s.project_id = @pid AND s.is_enabled = 1
@@ -47,6 +54,20 @@ public class BudgetVsActualController : ControllerBase
 
         var resourcesBySection = resources.GroupBy(r => (int)r.SectionId)
             .ToDictionary(g => g.Key, g => g.ToList());
+
+        // ── ASSEGNATE: ore da phase_assignments aggregate per cost_section ──
+        var assigned = c.Query<dynamic>(@"
+            SELECT pcs.id AS CostSectionId,
+                   SUM(pa.planned_hours) AS Hours
+            FROM phase_assignments pa
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN project_cost_sections pcs ON pcs.template_id = pt.cost_section_template_id
+                                          AND pcs.project_id = pp.project_id
+            WHERE pp.project_id = @pid AND pcs.is_enabled = 1
+            GROUP BY pcs.id", new { pid = projectId }).ToList();
+
+        var assignedBySection = assigned.ToDictionary(a => (int)a.CostSectionId);
 
         // ── CONSUNTIVO: usa view v_timesheet_with_section ────────────
         var actuals = c.Query<dynamic>(@"
@@ -107,7 +128,8 @@ public class BudgetVsActualController : ControllerBase
                 var sectionDto = new BvaSectionDto
                 {
                     SectionName = (string)sec.name,
-                    SectionType = (string)sec.section_type
+                    SectionType = (string)sec.section_type,
+                    TemplateId = (int?)sec.template_id
                 };
 
                 // Preventivo
@@ -124,12 +146,32 @@ public class BudgetVsActualController : ControllerBase
                             HourlyCost = (decimal)r.HourlyCost,
                             TotalCost = (decimal)r.TotalCost,
                             MarkupValue = (decimal)r.MarkupValue,
-                            TotalSale = (decimal)r.TotalSale
+                            TotalSale = (decimal)r.TotalSale,
+                            NumTrips = (int)r.NumTrips,
+                            KmPerTrip = (decimal)r.KmPerTrip,
+                            CostPerKm = (decimal)r.CostPerKm,
+                            DailyFood = (decimal)r.DailyFood,
+                            DailyHotel = (decimal)r.DailyHotel,
+                            AllowanceDays = (int)r.AllowanceDays,
+                            DailyAllowance = (decimal)r.DailyAllowance
                         });
                     }
                     sectionDto.BudgetHours = sectionDto.BudgetResources.Sum(r => r.TotalHours);
                     sectionDto.BudgetCost = sectionDto.BudgetResources.Sum(r => r.TotalCost);
                     sectionDto.BudgetSale = sectionDto.BudgetResources.Sum(r => r.TotalSale);
+                    sectionDto.BudgetTravelCost = sectionDto.BudgetResources.Sum(r => r.TravelCost);
+                    sectionDto.BudgetAccommodationCost = sectionDto.BudgetResources.Sum(r => r.AccommodationCost);
+                    sectionDto.BudgetAllowanceCost = sectionDto.BudgetResources.Sum(r => r.AllowanceCost);
+                }
+
+                // Assegnate
+                if (assignedBySection.TryGetValue(secId, out var asg))
+                {
+                    sectionDto.AssignedHours = (decimal)asg.Hours;
+                    // Costo assegnato = ore assegnate × costo orario medio della sezione
+                    decimal avgCost = sectionDto.BudgetHours > 0
+                        ? sectionDto.BudgetCost / sectionDto.BudgetHours : 0;
+                    sectionDto.AssignedCost = sectionDto.AssignedHours * avgCost;
                 }
 
                 // Consuntivo
@@ -141,6 +183,8 @@ public class BudgetVsActualController : ControllerBase
 
             groupDto.BudgetHours = groupDto.Sections.Sum(s => s.BudgetHours);
             groupDto.BudgetCost = groupDto.Sections.Sum(s => s.BudgetCost);
+            groupDto.AssignedHours = groupDto.Sections.Sum(s => s.AssignedHours);
+            groupDto.AssignedCost = groupDto.Sections.Sum(s => s.AssignedCost);
             groupDto.ActualHours = groupDto.Sections.Sum(s => s.ActualHours);
             groupDto.ActualCost = groupDto.Sections.Sum(s => s.ActualCost);
             result.Groups.Add(groupDto);
@@ -160,8 +204,94 @@ public class BudgetVsActualController : ControllerBase
 
         result.TotalBudgetHours = result.Groups.Sum(g => g.BudgetHours);
         result.TotalBudgetCost = result.Groups.Sum(g => g.BudgetCost);
+        result.TotalAssignedHours = result.Groups.Sum(g => g.AssignedHours);
+        result.TotalAssignedCost = result.Groups.Sum(g => g.AssignedCost);
         result.TotalActualHours = result.Groups.Sum(g => g.ActualHours);
         result.TotalActualCost = result.Groups.Sum(g => g.ActualCost);
+
+        // ── MATERIALI ─────────────────────────────────────────────
+        var matSections = c.Query<dynamic>(@"
+            SELECT id, name, markup_value, commission_markup
+            FROM project_material_sections
+            WHERE project_id = @pid AND is_enabled = 1
+            ORDER BY sort_order", new { pid = projectId }).ToList();
+
+        var matItemsRaw = c.Query<dynamic>(@"
+            SELECT pmi.section_id AS SectionId, pmi.id AS Id, pmi.parent_item_id AS ParentItemId,
+                   pmi.description AS Description, pmi.quantity AS Quantity,
+                   pmi.unit_cost AS UnitCost, pmi.markup_value AS MarkupValue,
+                   pmi.item_type AS ItemType
+            FROM project_material_items pmi
+            JOIN project_material_sections pms ON pms.id = pmi.section_id
+            WHERE pms.project_id = @pid AND pms.is_enabled = 1
+              AND (pmi.quantity > 0 OR pmi.unit_cost > 0)
+            ORDER BY pmi.sort_order", new { pid = projectId }).ToList();
+
+        var matItemsBySection = matItemsRaw.GroupBy(i => (int)i.SectionId)
+            .ToDictionary(g => g.Key, g => g.Select(i => new BvaMaterialItemDto
+            {
+                Id = (int)i.Id,
+                ParentItemId = (int?)i.ParentItemId,
+                Description = (string)i.Description,
+                Quantity = (decimal)i.Quantity,
+                UnitCost = (decimal)i.UnitCost,
+                MarkupValue = (decimal)i.MarkupValue,
+                ItemType = (string)i.ItemType
+            }).ToList());
+
+        foreach (var ms in matSections)
+        {
+            int msId = (int)ms.id;
+            var secDto = new BvaMaterialSectionDto
+            {
+                SectionName = (string)ms.name,
+                MarkupValue = (decimal)ms.markup_value,
+                CommissionMarkup = (decimal)ms.commission_markup
+            };
+            if (matItemsBySection.TryGetValue(msId, out var items))
+            {
+                secDto.Items = items;
+                secDto.TotalNetCost = items.Sum(i => i.NetCost);
+                secDto.TotalSaleCost = items.Sum(i => i.SaleCost);
+            }
+            result.MaterialSections.Add(secDto);
+        }
+
+        result.TotalMaterialNetCost = result.MaterialSections.Sum(s => s.TotalNetCost);
+        result.TotalMaterialSaleCost = result.MaterialSections.Sum(s => s.TotalSaleCost);
+
+        // ── SCHEDA PREZZI ─────────────────────────────────────────
+        var pricing = c.QueryFirstOrDefault<dynamic>(
+            "SELECT contingency_pct, negotiation_margin_pct FROM project_pricing WHERE project_id=@pid",
+            new { pid = projectId });
+
+        if (pricing != null)
+        {
+            // Costo vendita totale risorse (sale = cost * markup)
+            decimal resourceSale = result.Groups.Sum(g => g.Sections.Sum(s => s.BudgetSale));
+            // Costo trasferte totale
+            decimal travelTotal = result.Groups.Sum(g => g.Sections.Sum(s => s.BudgetTotalTravelCost));
+            decimal netCost = resourceSale + result.TotalMaterialSaleCost + travelTotal;
+
+            decimal contPct = (decimal)pricing.contingency_pct;
+            decimal contAmount = netCost * contPct;
+            decimal offerPrice = netCost + contAmount;
+
+            decimal negPct = (decimal)pricing.negotiation_margin_pct;
+            decimal negAmount = offerPrice * negPct;
+            decimal finalPrice = offerPrice + negAmount;
+
+            result.Pricing = new BvaPricingDto
+            {
+                NetCost = netCost,
+                ContingencyPct = contPct,
+                ContingencyAmount = contAmount,
+                OfferPrice = offerPrice,
+                NegotiationPct = negPct,
+                NegotiationAmount = negAmount,
+                FinalPrice = finalPrice
+            };
+        }
 
         return Ok(ApiResponse<BudgetVsActualData>.Ok(result));
     }

@@ -10,6 +10,9 @@ namespace ATEC.PM.Client.Views.BudgetVsCosting;
 
 public partial class BudgetVsActualControl : UserControl
 {
+    private int _projectId;
+    private bool _suppressExpanderSave;
+
     public BudgetVsActualControl()
     {
         InitializeComponent();
@@ -17,6 +20,7 @@ public partial class BudgetVsActualControl : UserControl
 
     public async void Load(int projectId)
     {
+        _projectId = projectId;
         try
         {
             Task<string> bvaTask = ApiClient.GetAsync($"/api/projects/{projectId}/budget-vs-actual");
@@ -42,12 +46,36 @@ public partial class BudgetVsActualControl : UserControl
             catch { }
 
             DataContext = BvaViewModel.FromData(data, phases, projectId);
+
+            // Ripristina stato expander principali
+            _suppressExpanderSave = true;
+            expResources.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.resources", true);
+            expMaterials.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.materials", true);
+            expPricing.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.pricing", true);
+            _suppressExpanderSave = false;
+
             txtLoading.Visibility = Visibility.Collapsed;
         }
         catch (Exception ex)
         {
             txtLoading.Text = $"Errore: {ex.Message}";
         }
+    }
+
+    private void MainExpander_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressExpanderSave || _projectId <= 0) return;
+        if (sender is not Expander exp) return;
+
+        string key = exp.Name switch
+        {
+            "expResources" => "resources",
+            "expMaterials" => "materials",
+            "expPricing" => "pricing",
+            _ => ""
+        };
+        if (key != "")
+            Services.UserPreferences.Set($"bva.{_projectId}.exp.{key}", exp.IsExpanded);
     }
 
     private void SectionRow_Click(object sender, MouseButtonEventArgs e)
@@ -78,6 +106,19 @@ public partial class BudgetVsActualControl : UserControl
         {
             MessageBox.Show($"Errore: {ex.Message}");
         }
+    }
+
+    private async void PlannedHours_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox tb || tb.Tag is not BvaAssignmentRow row) return;
+
+        try
+        {
+            string jsonBody = JsonSerializer.Serialize(new { plannedHours = row.PlannedHours },
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            await ApiClient.PatchAsync($"/api/phases/assignments/{row.AssignmentId}/hours", jsonBody);
+        }
+        catch { }
     }
 
     private async void BtnAssignTecnicoToPhase_Click(object sender, RoutedEventArgs e)

@@ -3,14 +3,11 @@ namespace ATEC.PM.Client.Views;
 
 using System.Windows.Forms.Integration;
 using ATEC.PM.Client.Controls;
-using ATEC.PM.Client.Views.Costing;
+
 
 public partial class ProjectsPage : Page
 {
     private List<ProjectListItem> _allProjects = new();
-    private Costing.ProjectCostingControl? _costingControl;
-
-    private int _costingProjectId;
     private int _selectedProjectId;
     private string _selectedProjectCode = "";
 
@@ -21,6 +18,11 @@ public partial class ProjectsPage : Page
     public ProjectsPage()
     {
         InitializeComponent();
+
+        // Ripristina larghezza pannello tree
+        double savedWidth = Services.UserPreferences.GetDouble("projects.tree_width", 250);
+        colTree.Width = new GridLength(Math.Clamp(savedWidth, 180, 500));
+
         Loaded += async (_, _) =>
         {
             await LoadTree();
@@ -152,11 +154,6 @@ public partial class ProjectsPage : Page
             var dlg = new ProjectDialog(editId) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) await LoadTree();
         }
-        else if (parts[0] == "addphase" && parts.Length > 1 && int.TryParse(parts[1], out var apId))
-        {
-            var dlg = new PhasesDialog(apId) { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) ShowPhases(apId);
-        }
         else if (parts[0] == "createfolder" && parts.Length > 1 && int.TryParse(parts[1], out var cfId))
         {
             try
@@ -226,8 +223,6 @@ public partial class ProjectsPage : Page
 
             projNode.Items.Add(new TreeViewItem { Header = "Dettagli", Tag = $"details|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💰 Flusso di Cassa", Tag = $"cashflow|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "⚙ Configura Commessa", Tag = $"costing|{p.Id}" });
-            projNode.Items.Add(new TreeViewItem { Header = "Fasi e Avanzamento", Tag = $"phases|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "📊 Preventivo vs Consuntivo", Tag = $"budget_vs_actual|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "💬 Chat", Tag = $"chat|{p.Id}" });
             projNode.Items.Add(new TreeViewItem { Header = "📋 DDP Commerciali", Tag = $"ddp_commercial|{p.Id}" });
@@ -360,26 +355,6 @@ public partial class ProjectsPage : Page
         var ctrl = new ProjectChatControl();
         SectionContent.Content = ctrl;
         ctrl.Load(projectId);
-    }
-
-    private void ShowCosting(int projectId, string tab = "risorse")
-    {
-        txtSectionTitle.Text = tab switch
-        {
-            "materiali" => "Configura Commessa — Materiali",
-            "riepilogo" => "Configura Commessa — Riepilogo e Prezzi",
-            _ => "Configura Commessa — Impegno Risorse"
-        };
-        btnAction.Visibility = Visibility.Collapsed;
-
-        if (_costingControl == null || _costingProjectId != projectId)
-        {
-            _costingControl = new Costing.ProjectCostingControl();
-            _costingProjectId = projectId;
-        }
-
-        SectionContent.Content = _costingControl;
-        _costingControl.Load(projectId, tab);
     }
 
     private void ShowDdpCommercial(int projectId)
@@ -1037,15 +1012,6 @@ public partial class ProjectsPage : Page
         }
     }
 
-    // === PHASES ===
-    private void ShowPhases(int projectId)
-    {
-        txtSectionTitle.Text = "Fasi e Avanzamento";
-        btnAction.Visibility = Visibility.Collapsed;
-        var ctrl = new PhasesManagementControl();
-        SectionContent.Content = ctrl;
-        ctrl.Load(projectId);
-    }
     // === TIMESHEET ===
 
     // === TREE SELECTION ===
@@ -1076,14 +1042,8 @@ public partial class ProjectsPage : Page
                 case "details":
                     ShowDetails(id);
                     break;
-                case "costing":
-                    ShowCosting(id, "risorse");
-                    break;
                 case "cashflow":
                     ShowCashFlow(id);
-                    break;
-                case "phases":
-                    ShowPhases(id);
                     break;
                 case "budget_vs_actual":
                     ShowBudgetVsActual(id);
@@ -1109,6 +1069,12 @@ public partial class ProjectsPage : Page
         }
     }
 
+
+    // === SPLITTER ===
+    private void TreeSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        Services.UserPreferences.Set("projects.tree_width", colTree.ActualWidth);
+    }
 
     // === SEARCH ===
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)

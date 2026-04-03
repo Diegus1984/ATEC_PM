@@ -117,10 +117,22 @@ public class ProjectsController : ControllerBase
     {
         using var c = _db.Open();
         req.Id = id;
+
+        // Leggi stato precedente per confronto
+        string oldStatus = c.ExecuteScalar<string?>(
+            "SELECT status FROM projects WHERE id=@Id", new { Id = id }) ?? "";
+
         c.Execute(@"UPDATE projects SET code=@Code,title=@Title,customer_id=@CustomerId,pm_id=@PmId,
             description=@Description,start_date=@StartDate,end_date_planned=@EndDatePlanned,
             budget_total=@BudgetTotal,budget_hours_total=@BudgetHoursTotal,revenue=@Revenue,
             status=@Status,priority=@Priority,server_path=@ServerPath,notes=@Notes WHERE id=@Id", req);
+
+        // Notifica a tutti i dipendenti se la commessa va in ON_HOLD o CANCELLED
+        if (oldStatus != req.Status && req.Status is "ON_HOLD" or "CANCELLED")
+        {
+            NotifyProjectStatusChange(id, req.Code, req.Status);
+        }
+
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
@@ -128,8 +140,30 @@ public class ProjectsController : ControllerBase
     public IActionResult Delete(int id)
     {
         using var c = _db.Open();
+        string projCode = c.ExecuteScalar<string?>(
+            "SELECT code FROM projects WHERE id=@Id", new { Id = id }) ?? "";
         c.Execute("UPDATE projects SET status='CANCELLED' WHERE id=@Id", new { Id = id });
+        NotifyProjectStatusChange(id, projCode, "CANCELLED");
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    private void NotifyProjectStatusChange(int projectId, string projectCode, string newStatus)
+    {
+        try
+        {
+            string label = newStatus == "ON_HOLD" ? "SOSPESA" : "ANNULLATA";
+            int currentEmpId = GetCurrentEmployeeId();
+            List<int> recipients = _notif.GetProjectEmployeeIds(projectId);
+            recipients.Remove(currentEmpId);
+            if (recipients.Count == 0) return;
+
+            _notif.Create("PROJECT_STATUS", "WARNING",
+                $"Commessa {projectCode} — {label}",
+                $"La commessa {projectCode} è stata messa in stato {label}. Tutte le attività sono sospese.",
+                "PROJECT", projectId, projectId, currentEmpId,
+                recipients);
+        }
+        catch { }
     }
 
     /// <summary>
@@ -808,8 +842,10 @@ public class ProjectsController : ControllerBase
                 destination = @Destination, notes = @Notes
             WHERE id = @Id AND project_id = @ProjectId", req);
 
-            // Trigger notifica se lo stato è cambiato
-            if (!string.IsNullOrEmpty(oldStatus) && oldStatus != req.ItemStatus)
+            // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
+            string projStatus = c.ExecuteScalar<string?>(
+                "SELECT status FROM projects WHERE id = @Id", new { Id = id }) ?? "";
+            if (!string.IsNullOrEmpty(oldStatus) && oldStatus != req.ItemStatus && projStatus == "ACTIVE")
             {
                 try
                 {
@@ -918,20 +954,102 @@ public class ProjectsController : ControllerBase
         data.TotalPhases = (int)(phaseCounts?.Total ?? 0);
         data.CompletedPhases = (int)(phaseCounts?.Completed ?? 0);
 
-        // Riepilogo per reparto
-        data.DepartmentSummaries = c.Query<DeptSummary>(@"
-            SELECT COALESCE(d.code, 'TRASV') AS DepartmentCode,
-                    COALESCE(d.name, 'Trasversale') AS DepartmentName,
-                    SUM(pp.budget_hours) AS BudgetHours,
-                    COALESCE(SUM((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id)), 0) AS HoursWorked,
-                    COUNT(*) AS TotalPhases,
-                    SUM(CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END) AS CompletedPhases,
-                    COALESCE(SUM((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED')), 0) AS MaterialCost
-            FROM project_phases pp
+        // Riepilogo per reparto — 3 livelli: Preventivate / Assegnate / Lavorate
+        // Ore preventivate dal costing (per reparto della sezione costo → template → reparti)
+        var costingByDept = c.Query<(string Code, string Name, decimal Hours)>(@"
+            SELECT d.code, d.name, SUM(r.work_days * r.hours_per_day) AS Hours
+            FROM project_cost_resources r
+            JOIN project_cost_sections pcs ON pcs.id = r.section_id
+            JOIN cost_section_templates cst ON cst.id = pcs.template_id
+            JOIN cost_section_template_departments cstd ON cstd.section_template_id = cst.id
+            JOIN departments d ON d.id = cstd.department_id
+            WHERE pcs.project_id = @Id AND pcs.is_enabled = 1
+            GROUP BY d.code, d.name", new { Id = id }).ToList();
+
+        // Ore assegnate (dalle phase_assignments, raggruppate per reparto fase o reparto dipendente)
+        var assignedByDept = c.Query<(string Code, string Name, decimal Hours)>(@"
+            SELECT COALESCE(d.code, ed.code, 'TRASV') AS code,
+                   COALESCE(d.name, ed.name, 'Trasversale') AS name,
+                   SUM(pa.planned_hours) AS Hours
+            FROM phase_assignments pa
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
             LEFT JOIN departments d ON d.id = pp.department_id
+            LEFT JOIN employee_departments empd ON empd.employee_id = pa.employee_id AND empd.is_primary = 1
+            LEFT JOIN departments ed ON ed.id = empd.department_id
             WHERE pp.project_id = @Id
-            GROUP BY d.code, d.name
-            ORDER BY d.code", new { Id = id }).ToList();
+            GROUP BY COALESCE(d.code, ed.code, 'TRASV'), COALESCE(d.name, ed.name, 'Trasversale')", new { Id = id }).ToList();
+
+        // Fasi, completamento, ore lavorate, materiali
+        var phasesByDept = c.Query<DeptSummary>(@"
+            SELECT dept_code AS DepartmentCode, dept_name AS DepartmentName,
+                   SUM(HoursWorked) AS HoursWorked,
+                   SUM(TotalPhases) AS TotalPhases, SUM(CompletedPhases) AS CompletedPhases,
+                   SUM(MaterialCost) AS MaterialCost
+            FROM (
+                -- Fasi con reparto
+                SELECT COALESCE(d.code, 'TRASV') AS dept_code,
+                       COALESCE(d.name, 'Trasversale') AS dept_name,
+                       COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
+                       1 AS TotalPhases,
+                       CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED'), 0) AS MaterialCost
+                FROM project_phases pp
+                LEFT JOIN departments d ON d.id = pp.department_id
+                WHERE pp.project_id = @Id AND pp.department_id IS NOT NULL
+
+                UNION ALL
+
+                -- Fasi trasversali: ore attribuite al reparto primario del dipendente
+                SELECT COALESCE(ed.code, 'TRASV') AS dept_code,
+                       COALESCE(ed.name, 'Trasversale') AS dept_name,
+                       SUM(te.hours) AS HoursWorked,
+                       0 AS TotalPhases, 0 AS CompletedPhases, 0 AS MaterialCost
+                FROM timesheet_entries te
+                JOIN project_phases pp ON pp.id = te.project_phase_id
+                LEFT JOIN employee_departments empd ON empd.employee_id = te.employee_id AND empd.is_primary = 1
+                LEFT JOIN departments ed ON ed.id = empd.department_id
+                WHERE pp.project_id = @Id AND pp.department_id IS NULL
+                GROUP BY ed.code, ed.name
+
+                UNION ALL
+
+                -- Fasi trasversali: conteggio fasi (come Trasversale)
+                SELECT 'TRASV' AS dept_code, 'Trasversale' AS dept_name,
+                       0 AS HoursWorked,
+                       1 AS TotalPhases,
+                       CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED'), 0) AS MaterialCost
+                FROM project_phases pp
+                WHERE pp.project_id = @Id AND pp.department_id IS NULL
+            ) sub
+            GROUP BY dept_code, dept_name", new { Id = id }).ToList();
+
+        // Merge: unisci costing + assigned + fasi in un unico elenco per reparto
+        HashSet<string> allDepts = phasesByDept.Select(p => p.DepartmentCode)
+            .Union(costingByDept.Select(c2 => c2.Code))
+            .Union(assignedByDept.Select(a => a.Code))
+            .ToHashSet();
+
+        Dictionary<string, DeptSummary> deptMap = phasesByDept.ToDictionary(p => p.DepartmentCode);
+        foreach (string code in allDepts)
+        {
+            if (!deptMap.ContainsKey(code))
+            {
+                string name = costingByDept.FirstOrDefault(x => x.Code == code).Name
+                    ?? assignedByDept.FirstOrDefault(x => x.Code == code).Name ?? code;
+                deptMap[code] = new DeptSummary { DepartmentCode = code, DepartmentName = name };
+            }
+        }
+        foreach (var (code, _, hours) in costingByDept)
+            if (deptMap.TryGetValue(code, out DeptSummary? ds)) ds.CostingHours += hours;
+        foreach (var (code, _, hours) in assignedByDept)
+            if (deptMap.TryGetValue(code, out DeptSummary? ds)) ds.AssignedHours += hours;
+
+        // BudgetHours = costing come riferimento principale
+        foreach (DeptSummary ds in deptMap.Values)
+            ds.BudgetHours = ds.CostingHours;
+
+        data.DepartmentSummaries = deptMap.Values.OrderBy(d2 => d2.DepartmentCode).ToList();
 
         // Ultimi 10 inserimenti timesheet
         data.RecentEntries = c.Query<RecentTimesheetEntry>(@"

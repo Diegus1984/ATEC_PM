@@ -29,6 +29,7 @@ public class PhaseListItem
     public string CustomName { get; set; } = "";
     // Sezione costo di appartenenza (dalla fase template)
     public string CostSectionName { get; set; } = "";
+    public int? CostSectionTemplateId { get; set; }
 }
 
 public class PhaseAssignmentDto
