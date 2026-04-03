@@ -16,7 +16,7 @@ Questa skill genera pagine WPF complete e coerenti con il design system del gest
 Produce tre file: XAML (vista), ViewModel (logica), code-behind (cablaggio eventi e caricamento dati).
 
 ## Quando usarla
-
+ 
 Ogni volta che serve creare una nuova pagina, dialog o controllo per il client WPF del gestionale ATEC PM. I layout supportati sono:
 
 1. **DataGrid** — griglia dati con filtri in-header, toolbar azioni, status bar (es. Clienti, Dipendenti, Fornitori)
