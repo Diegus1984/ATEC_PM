@@ -24,6 +24,9 @@ public class BudgetVsActualData
 
     // Scheda prezzi
     public BvaPricingDto? Pricing { get; set; }
+
+    // Riepilogo economico
+    public BvaEconomicSummary? Economic { get; set; }
 }
 
 public class BvaGroupDto
@@ -166,5 +169,77 @@ public class BvaPricingDto
     public decimal NegotiationPct { get; set; }
     public decimal NegotiationAmount { get; set; }
     public decimal FinalPrice { get; set; }        // OfferPrice + Negotiation
+}
+
+/// <summary>Riepilogo conto economico commessa</summary>
+public class BvaEconomicSummary : System.ComponentModel.INotifyPropertyChanged
+{
+    // Prezzi
+    public decimal FinalOfferPrice { get; set; }
+
+    private decimal _orderPrice;
+    public decimal OrderPrice
+    {
+        get => _orderPrice;
+        set { _orderPrice = value; Notify(); RecalcProfitability(); }
+    }
+
+    // Totali preventivo
+    public decimal TotalNetCost { get; set; }
+    public decimal ContingencyAmount { get; set; }
+    public decimal BudgetCost { get; set; }
+
+    // Budget dettaglio
+    public decimal BudgetResourceHours { get; set; }
+    public decimal BudgetResourceCost { get; set; }
+    public decimal BudgetMaterialCost { get; set; }
+    public decimal BudgetTravelCost { get; set; }
+
+    // Consuntivo dettaglio
+    public decimal ActualResourceHours { get; set; }
+    public decimal ActualResourceCost { get; set; }
+    public decimal ActualMaterialCost { get; set; }
+
+    private decimal _actualTravelCost;
+    public decimal ActualTravelCost
+    {
+        get => _actualTravelCost;
+        set { _actualTravelCost = value; Notify(); RecalcTotals(); }
+    }
+
+    private decimal _actualTotalCost;
+    public decimal ActualTotalCost
+    {
+        get => _actualTotalCost;
+        set { _actualTotalCost = value; Notify(); RecalcProfitability(); }
+    }
+
+    // Reddittività
+    private decimal _profitabilityPct;
+    public decimal ProfitabilityPct
+    {
+        get => _profitabilityPct;
+        set { _profitabilityPct = value; Notify(); }
+    }
+
+    // Avanzamento
+    public int ActiveTechnicians { get; set; }
+    public int TotalPhases { get; set; }
+    public int CompletedPhases { get; set; }
+    public int ProgressPct { get; set; }
+
+    private void RecalcTotals()
+    {
+        ActualTotalCost = ActualResourceCost + ActualMaterialCost + ActualTravelCost;
+    }
+
+    private void RecalcProfitability()
+    {
+        ProfitabilityPct = OrderPrice > 0 ? Math.Round((OrderPrice - ActualTotalCost) / OrderPrice * 100, 2) : 0;
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    private void Notify([System.Runtime.CompilerServices.CallerMemberName] string? n = null)
+        => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
 }
 

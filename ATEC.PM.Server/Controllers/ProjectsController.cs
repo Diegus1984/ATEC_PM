@@ -127,13 +127,21 @@ public class ProjectsController : ControllerBase
             budget_total=@BudgetTotal,budget_hours_total=@BudgetHoursTotal,revenue=@Revenue,
             status=@Status,priority=@Priority,server_path=@ServerPath,notes=@Notes WHERE id=@Id", req);
 
-        // Notifica a tutti i dipendenti se la commessa va in ON_HOLD o CANCELLED
-        if (oldStatus != req.Status && req.Status is "ON_HOLD" or "CANCELLED")
+        // Notifica a tutti i dipendenti se la commessa cambia stato operativo
+        if (oldStatus != req.Status && req.Status is "ACTIVE" or "ON_HOLD" or "CANCELLED")
         {
             NotifyProjectStatusChange(id, req.Code, req.Status);
         }
 
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
+    }
+
+    [HttpPatch("{id}/revenue")]
+    public IActionResult UpdateRevenue(int id, [FromBody] decimal value)
+    {
+        using var c = _db.Open();
+        c.Execute("UPDATE projects SET revenue=@Val WHERE id=@Id", new { Val = value, Id = id });
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 
     [HttpDelete("{id}")]
@@ -151,15 +159,26 @@ public class ProjectsController : ControllerBase
     {
         try
         {
-            string label = newStatus == "ON_HOLD" ? "SOSPESA" : "ANNULLATA";
+            string label = newStatus switch
+            {
+                "ACTIVE" => "ATTIVA",
+                "ON_HOLD" => "SOSPESA",
+                "CANCELLED" => "ANNULLATA",
+                _ => newStatus
+            };
+            string severity = newStatus == "ACTIVE" ? "INFO" : "WARNING";
+            string message = newStatus == "ACTIVE"
+                ? $"La commessa {projectCode} e' ora attiva. Le attivita' assegnate sono operative."
+                : $"La commessa {projectCode} e' in stato {label}. Tutte le attivita' sono sospese.";
+
             int currentEmpId = GetCurrentEmployeeId();
             List<int> recipients = _notif.GetProjectEmployeeIds(projectId);
             recipients.Remove(currentEmpId);
             if (recipients.Count == 0) return;
 
-            _notif.Create("PROJECT_STATUS", "WARNING",
-                $"Commessa {projectCode} — {label}",
-                $"La commessa {projectCode} è stata messa in stato {label}. Tutte le attività sono sospese.",
+            _notif.Create("PROJECT_STATUS", severity,
+                $"Commessa {projectCode} - {label}",
+                message,
                 "PROJECT", projectId, projectId, currentEmpId,
                 recipients);
         }
@@ -911,7 +930,8 @@ public class ProjectsController : ControllerBase
         var data = c.QueryFirstOrDefault<ProjectDashboardData>(@"
             SELECT p.code AS Code, p.title AS Title, p.status, p.priority,
                    p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
-                   p.budget_total AS BudgetTotal, p.budget_hours_total AS BudgetHoursTotal,
+                   p.budget_total AS BudgetTotal,
+                   COALESCE((SELECT SUM(pa.planned_hours) FROM phase_assignments pa JOIN project_phases pp2 ON pp2.id = pa.project_phase_id WHERE pp2.project_id = p.id), 0) AS BudgetHoursTotal,
                    p.revenue AS Revenue, p.description AS Description,
                    p.server_path AS ServerPath, p.notes AS Notes,
                    COALESCE(cust.company_name, '') AS CustomerName,

@@ -293,7 +293,71 @@ public class BudgetVsActualController : ControllerBase
             };
         }
 
+        // ── RIEPILOGO ECONOMICO ──────────────────────────────────
+        var proj = c.QueryFirstOrDefault<dynamic>(
+            "SELECT revenue, actual_travel_cost FROM projects WHERE id=@pid",
+            new { pid = projectId });
+
+        decimal budgetTravelTotal = result.Groups.Sum(g => g.Sections.Sum(s => s.BudgetTotalTravelCost));
+
+        // Consuntivo acquisti: bom_items attivi (tutti tranne CANCELLED) — stessa query della dashboard commessa
+        decimal actualMaterialCost = c.ExecuteScalar<decimal?>(@"
+            SELECT SUM(quantity * unit_cost)
+            FROM bom_items WHERE project_id = @pid AND item_status <> 'CANCELLED'",
+            new { pid = projectId }) ?? 0;
+
+        // Tecnici attivi e fasi
+        int activeTechs = c.ExecuteScalar<int>(@"
+            SELECT COUNT(DISTINCT pa.employee_id)
+            FROM phase_assignments pa
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
+            WHERE pp.project_id = @pid", new { pid = projectId });
+
+        var phaseCounts = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT COUNT(*) AS Total,
+                   SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END) AS Completed
+            FROM project_phases WHERE project_id = @pid", new { pid = projectId });
+
+        decimal orderPrice = (decimal)(proj?.revenue ?? 0m);
+        decimal actualTravelCost = (decimal)(proj?.actual_travel_cost ?? 0m);
+        decimal budgetCost = result.TotalBudgetCost + result.TotalMaterialNetCost + budgetTravelTotal;
+        decimal actualTotalCost = result.TotalActualCost + actualMaterialCost + actualTravelCost;
+        int totalPhases = (int)(phaseCounts?.Total ?? 0);
+        int completedPhases = (int)(phaseCounts?.Completed ?? 0);
+
+        result.Economic = new BvaEconomicSummary
+        {
+            FinalOfferPrice = result.Pricing?.FinalPrice ?? 0,
+            OrderPrice = orderPrice,
+            TotalNetCost = result.Pricing?.NetCost ?? 0,
+            ContingencyAmount = result.Pricing?.ContingencyAmount ?? 0,
+            BudgetCost = budgetCost,
+            BudgetResourceHours = result.TotalBudgetHours,
+            BudgetResourceCost = result.TotalBudgetCost,
+            BudgetMaterialCost = result.TotalMaterialNetCost,
+            BudgetTravelCost = budgetTravelTotal,
+            ActualResourceHours = result.TotalActualHours,
+            ActualResourceCost = result.TotalActualCost,
+            ActualMaterialCost = actualMaterialCost,
+            ActualTravelCost = actualTravelCost,
+            ActualTotalCost = actualTotalCost,
+            ProfitabilityPct = orderPrice > 0 ? Math.Round((orderPrice - actualTotalCost) / orderPrice * 100, 2) : 0,
+            ActiveTechnicians = activeTechs,
+            TotalPhases = totalPhases,
+            CompletedPhases = completedPhases,
+            ProgressPct = totalPhases > 0 ? (int)Math.Round((decimal)completedPhases / totalPhases * 100) : 0
+        };
+
         return Ok(ApiResponse<BudgetVsActualData>.Ok(result));
+    }
+
+    [HttpPatch("actual-travel-cost")]
+    public IActionResult UpdateActualTravelCost(int projectId, [FromBody] decimal value)
+    {
+        using var c = _db.Open();
+        c.Execute("UPDATE projects SET actual_travel_cost=@Val WHERE id=@Id",
+            new { Val = value, Id = projectId });
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 
     /// <summary>

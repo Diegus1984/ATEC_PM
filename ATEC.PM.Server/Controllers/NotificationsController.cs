@@ -13,7 +13,8 @@ namespace ATEC.PM.Server.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly DbService _db;
-    public NotificationsController(DbService db) => _db = db;
+    private readonly NotificationService _notif;
+    public NotificationsController(DbService db, NotificationService notif) { _db = db; _notif = notif; }
 
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
@@ -87,6 +88,74 @@ public class NotificationsController : ControllerBase
             "UPDATE notification_recipients SET is_read = TRUE, read_at = NOW() WHERE employee_id = @EmpId AND is_read = FALSE",
             new { EmpId = empId });
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>POST /api/notifications/check-pending — Genera notifiche mancanti al login</summary>
+    [HttpPost("check-pending")]
+    public IActionResult CheckPending()
+    {
+        int empId = GetCurrentEmployeeId();
+        if (empId == 0) return Unauthorized();
+
+        using var c = _db.Open();
+        int count = 0;
+
+        // Commesse ACTIVE dove il dipendente è assegnato ma non ha ricevuto notifica PROJECT_STATUS
+        var missingActiveProjects = c.Query<dynamic>(@"
+            SELECT DISTINCT p.id AS ProjectId, p.code AS ProjectCode
+            FROM projects p
+            JOIN project_phases pp ON pp.project_id = p.id
+            JOIN phase_assignments pa ON pa.project_phase_id = pp.id
+            WHERE p.status = 'ACTIVE'
+              AND pa.employee_id = @EmpId
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  JOIN notification_recipients nr ON nr.notification_id = n.id
+                  WHERE n.notification_type = 'PROJECT_STATUS'
+                    AND n.project_id = p.id
+                    AND nr.employee_id = @EmpId
+              )", new { EmpId = empId }).ToList();
+
+        foreach (var proj in missingActiveProjects)
+        {
+            _notif.Create("PROJECT_STATUS", "INFO",
+                $"Commessa {(string)proj.ProjectCode} - ATTIVA",
+                $"La commessa {(string)proj.ProjectCode} e' ora attiva. Le attivita' assegnate sono operative.",
+                "PROJECT", (int)proj.ProjectId, (int)proj.ProjectId, null,
+                new[] { empId });
+            count++;
+        }
+
+        // Assegnazioni a fasi su commesse ACTIVE senza notifica PHASE_ASSIGNED
+        var missingAssignments = c.Query<dynamic>(@"
+            SELECT pa.id AS AssignmentId, pp.id AS PhaseId, p.id AS ProjectId, p.code AS ProjectCode,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName
+            FROM phase_assignments pa
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN projects p ON p.id = pp.project_id
+            WHERE pa.employee_id = @EmpId
+              AND p.status = 'ACTIVE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  JOIN notification_recipients nr ON nr.notification_id = n.id
+                  WHERE n.notification_type = 'PHASE_ASSIGNED'
+                    AND n.reference_type = 'PHASE'
+                    AND n.reference_id = pp.id
+                    AND nr.employee_id = @EmpId
+              )", new { EmpId = empId }).ToList();
+
+        foreach (var a in missingAssignments)
+        {
+            _notif.Create("PHASE_ASSIGNED", "INFO",
+                $"Nuova assegnazione - {(string)a.ProjectCode}",
+                $"Sei stato assegnato alla fase: {(string)a.PhaseName}",
+                "PHASE", (int)a.PhaseId, (int)a.ProjectId, null,
+                new[] { empId });
+            count++;
+        }
+
+        return Ok(ApiResponse<int>.Ok(count, $"{count} notifiche pendenti generate"));
     }
 
     /// <summary>DELETE /api/notifications/{id}</summary>

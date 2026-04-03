@@ -65,6 +65,9 @@ public partial class LoginWindow : Window
                 // Carica feature e livelli per il sistema permessi a livelli
                 await LoadAuthFeaturesAsync();
 
+                // Check notifiche pendenti (fire-and-forget)
+                _ = ApiClient.PostAsync("/api/notifications/check-pending", "{}");
+
                 new MainWindow().Show();
                 Close();
             }

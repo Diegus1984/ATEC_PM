@@ -230,7 +230,7 @@ public class PhasesController : ControllerBase
                 if (req.EmployeeId != currentEmpId)
                 {
                     _notif.Create("PHASE_ASSIGNED", "INFO",
-                        $"Nuova assegnazione — {(string)info.project_code}",
+                        $"Nuova assegnazione - {(string)info.project_code}",
                         $"Sei stato assegnato alla fase: {(string)info.phase_name}",
                         "PHASE", phaseId, (int)info.project_id, currentEmpId,
                         new[] { req.EmployeeId });
@@ -284,7 +284,7 @@ public class PhasesController : ControllerBase
                 try
                 {
                     _notif.Create("PHASE_ASSIGNED", "INFO",
-                        $"Nuova assegnazione — {(string)info!.project_code}",
+                        $"Nuova assegnazione - {(string)info!.project_code}",
                         $"Sei stato assegnato alla fase: {(string)info.phase_name}",
                         "PHASE", phaseId, projectId, currentEmpId,
                         new[] { a.EmployeeId });
@@ -298,8 +298,43 @@ public class PhasesController : ControllerBase
     public IActionResult UpdateAssignmentHours(int id, [FromBody] PlannedHoursUpdate req)
     {
         using var c = _db.Open();
+
+        // Leggi dati prima dell'update per la notifica
+        var info = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT pa.employee_id, pa.planned_hours AS OldHours,
+                   p.id AS project_id, p.code AS project_code, p.status AS project_status,
+                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name
+            FROM phase_assignments pa
+            JOIN project_phases pp ON pp.id = pa.project_phase_id
+            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN projects p ON p.id = pp.project_id
+            WHERE pa.id = @Id", new { Id = id });
+
         c.Execute("UPDATE phase_assignments SET planned_hours=@Hours WHERE id=@Id",
             new { Hours = req.PlannedHours, Id = id });
+
+        // Notifica al tecnico se commessa ACTIVE e le ore sono cambiate
+        if (info != null && (string)info.project_status == "ACTIVE")
+        {
+            int empId = (int)info.employee_id;
+            int currentEmpId = GetCurrentEmployeeId();
+            decimal oldHours = (decimal)info.OldHours;
+
+            if (empId != currentEmpId && oldHours != req.PlannedHours)
+            {
+                try
+                {
+                    string direction = req.PlannedHours > oldHours ? "aumentate" : "ridotte";
+                    _notif.Create("PHASE_HOURS_CHANGED", "INFO",
+                        $"Ore aggiornate - {(string)info.project_code}",
+                        $"Le ore per la fase {(string)info.phase_name} sono state {direction}: {oldHours:F0}h -> {req.PlannedHours:F0}h",
+                        "PHASE", id, (int)info.project_id, currentEmpId,
+                        new[] { empId });
+                }
+                catch { }
+            }
+        }
+
         return Ok(ApiResponse<bool>.Ok(true));
     }
 

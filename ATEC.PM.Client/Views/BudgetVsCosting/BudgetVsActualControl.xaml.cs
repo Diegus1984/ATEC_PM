@@ -49,6 +49,7 @@ public partial class BudgetVsActualControl : UserControl
 
             // Ripristina stato expander principali
             _suppressExpanderSave = true;
+            expEconomic.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.economic", true);
             expResources.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.resources", true);
             expMaterials.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.materials", true);
             expPricing.IsExpanded = Services.UserPreferences.GetBool($"bva.{projectId}.exp.pricing", true);
@@ -62,6 +63,38 @@ public partial class BudgetVsActualControl : UserControl
         }
     }
 
+    private async void OrderPrice_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_projectId <= 0 || sender is not System.Windows.Controls.TextBox tb) return;
+        if (decimal.TryParse(tb.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(val);
+                await ApiClient.PatchAsync($"/api/projects/{_projectId}/revenue", json);
+                if (DataContext is BvaViewModel vm && vm.Economic != null)
+                    vm.Economic.OrderPrice = val;
+            }
+            catch { }
+        }
+    }
+
+    private async void ActualTravelCost_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_projectId <= 0 || sender is not System.Windows.Controls.TextBox tb) return;
+        if (decimal.TryParse(tb.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(val);
+                await ApiClient.PatchAsync($"/api/projects/{_projectId}/budget-vs-actual/actual-travel-cost", json);
+                if (DataContext is BvaViewModel vm && vm.Economic != null)
+                    vm.Economic.ActualTravelCost = val;
+            }
+            catch { }
+        }
+    }
+
     private void MainExpander_Changed(object sender, RoutedEventArgs e)
     {
         if (_suppressExpanderSave || _projectId <= 0) return;
@@ -69,6 +102,7 @@ public partial class BudgetVsActualControl : UserControl
 
         string key = exp.Name switch
         {
+            "expEconomic" => "economic",
             "expResources" => "resources",
             "expMaterials" => "materials",
             "expPricing" => "pricing",

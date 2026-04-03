@@ -339,7 +339,7 @@ public class PreventiviController : ControllerBase
                 string qn = (string)quote.quote_number;
                 _notif.Create("QUOTE_CONVERTED", "INFO",
                     $"Nuova commessa {projectCode} da preventivo {qn}",
-                    $"Il preventivo {qn} — {(string)quote.title} — è stato convertito in commessa {projectCode}.",
+                    $"Il preventivo {qn} - {(string)quote.title} - e' stato convertito in commessa {projectCode}.",
                     "PROJECT", projectId, projectId, GetCurrentEmployeeId(),
                     new[] { req.PmId });
             }

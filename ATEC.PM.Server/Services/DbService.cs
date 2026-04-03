@@ -325,6 +325,7 @@ public class DbService
             budget_total DECIMAL(12,2) DEFAULT 0,
             budget_hours_total DECIMAL(8,1) DEFAULT 0,
             revenue DECIMAL(12,2) DEFAULT 0,
+            actual_travel_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             status VARCHAR(20) DEFAULT 'DRAFT',
             priority VARCHAR(20) DEFAULT 'MEDIUM',
             server_path VARCHAR(500) DEFAULT '',

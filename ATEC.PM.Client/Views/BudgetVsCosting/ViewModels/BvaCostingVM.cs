@@ -90,6 +90,10 @@ public class BvaViewModel : INotifyPropertyChanged
     public BvaPricingDto? Pricing { get; set; }
     public bool HasPricing => Pricing != null;
 
+    // Riepilogo economico
+    public BvaEconomicSummary? Economic { get; set; }
+    public bool HasEconomic => Economic != null;
+
     public decimal TotalDeltaHours => TotalActualHours - TotalBudgetHours;
     public string TotalDeltaText => $"Δ {(TotalDeltaHours > 0 ? "+" : "")}{TotalDeltaHours:F1} h";
     public string TotalDeltaColor => TotalDeltaHours > 0 ? "#F87171" : "#34D399";
@@ -131,6 +135,7 @@ public class BvaViewModel : INotifyPropertyChanged
         vm.TotalMaterialNetCost = data.TotalMaterialNetCost;
         vm.TotalMaterialSaleCost = data.TotalMaterialSaleCost;
         vm.Pricing = data.Pricing;
+        vm.Economic = data.Economic;
 
         int secCount = data.Groups.Sum(g => g.Sections.Count);
         int entryCount = data.Groups.Sum(g => g.Sections.Sum(s => s.ActualEmployees.Sum(e => e.Details.Count)));

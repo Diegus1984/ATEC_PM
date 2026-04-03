@@ -581,6 +581,200 @@
             <ScrollViewer Padding="0" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
 
+            <!--  ═══ RIEPILOGO CONTO ECONOMICO ═══  -->
+            <Expander x:Name="expEconomic" Expanded="MainExpander_Changed" Collapsed="MainExpander_Changed"
+                      IsExpanded="True" Visibility="{Binding HasEconomic, Converter={StaticResource BoolToVis}}">
+                <Expander.Style>
+                    <Style BasedOn="{StaticResource SmoothExpander}" TargetType="Expander" />
+                </Expander.Style>
+                <Expander.Header>
+                    <Border Padding="16,10" Background="#1B3A5C">
+                        <DockPanel>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                DockPanel.Dock="Right"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="#34D399">
+                                <Run Text="Redditività: " />
+                                <Run Text="{Binding Economic.ProfitabilityPct, StringFormat=F1, Mode=OneWay}" />
+                                <Run Text="%" /></TextBlock>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                Text="RIEPILOGO CONTO ECONOMICO" />
+                        </DockPanel>
+                    </Border>
+                </Expander.Header>
+
+                <Border Padding="16,12" Background="White" BorderBrush="#E4E7EC" BorderThickness="0,0,0,1">
+                    <StackPanel>
+                        <!--  Riga 1: Prezzi  -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="FINAL OFFER PRICE" />
+                                <TextBlock FontSize="14" FontWeight="Bold" Foreground="#1A1D26">
+                                    <Run Text="{Binding Economic.FinalOfferPrice, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="ORDER PRICE" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox
+                                        x:Name="txtOrderPrice"
+                                        Width="120"
+                                        Padding="4,2"
+                                        BorderBrush="#D1D5DB"
+                                        BorderThickness="0,0,0,1"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="#DC2626"
+                                        Background="Transparent"
+                                        LostFocus="OrderPrice_LostFocus"
+                                        Text="{Binding Economic.OrderPrice, StringFormat=N2, Mode=OneWay}" />
+                                    <TextBlock VerticalAlignment="Bottom" FontSize="14" FontWeight="Bold" Foreground="#DC2626" Text=" €" />
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="BUDGET COSTI" />
+                                <TextBlock FontSize="14" FontWeight="Bold" Foreground="#1A1D26">
+                                    <Run Text="{Binding Economic.BudgetCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="CONSUNTIVO COSTI" />
+                                <TextBlock FontSize="14" FontWeight="Bold" Foreground="#4F6EF7">
+                                    <Run Text="{Binding Economic.ActualTotalCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Height="1" Background="#E5E7EB" Margin="0,4" />
+
+                        <!--  Riga 2: Budget dettaglio  -->
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="8,6" Background="#F9FAFB" Margin="0,0,4,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="BUDGET RISORSE" />
+                                    <TextBlock FontSize="12" Foreground="#374151" Margin="0,2,0,0">
+                                        <Run Text="Ore: " /><Run FontWeight="SemiBold" Text="{Binding Economic.BudgetResourceHours, StringFormat=F0, Mode=OneWay}" /></TextBlock>
+                                    <TextBlock FontSize="12" Foreground="#374151">
+                                        <Run Text="Costo: " /><Run FontWeight="SemiBold" Text="{Binding Economic.BudgetResourceCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Padding="8,6" Background="#F9FAFB" Margin="2,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="BUDGET ACQUISTI" />
+                                    <TextBlock FontSize="12" Foreground="#374151" Margin="0,4,0,0">
+                                        <Run Text="Costo: " /><Run FontWeight="SemiBold" Text="{Binding Economic.BudgetMaterialCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Padding="8,6" Background="#F9FAFB" Margin="4,0,0,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" Text="BUDGET TRASFERTA" />
+                                    <TextBlock FontSize="12" Foreground="#374151" Margin="0,4,0,0">
+                                        <Run Text="Costo: " /><Run FontWeight="SemiBold" Text="{Binding Economic.BudgetTravelCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!--  Riga 3: Consuntivo dettaglio  -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Padding="8,6" Background="#EFF6FF" Margin="0,0,4,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#4F6EF7" Text="CONSUNTIVO RISORSE" />
+                                    <TextBlock FontSize="12" Foreground="#374151" Margin="0,2,0,0">
+                                        <Run Text="Ore: " /><Run FontWeight="SemiBold" Text="{Binding Economic.ActualResourceHours, StringFormat=F1, Mode=OneWay}" /></TextBlock>
+                                    <TextBlock FontSize="12" Foreground="#374151">
+                                        <Run Text="Costo: " /><Run FontWeight="SemiBold" Text="{Binding Economic.ActualResourceCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Padding="8,6" Background="#EFF6FF" Margin="2,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#4F6EF7" Text="CONSUNTIVO ACQUISTI" />
+                                    <TextBlock FontSize="12" Foreground="#374151" Margin="0,4,0,0">
+                                        <Run Text="Costo: " /><Run FontWeight="SemiBold" Text="{Binding Economic.ActualMaterialCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Padding="8,6" Background="#EFF6FF" Margin="4,0,0,0">
+                                <StackPanel>
+                                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#4F6EF7" Text="CONSUNTIVO TRASFERTA" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <TextBlock FontSize="12" Foreground="#374151" VerticalAlignment="Center" Text="Costo: " />
+                                        <TextBox
+                                            x:Name="txtActualTravel"
+                                            Width="90"
+                                            Padding="4,1"
+                                            BorderBrush="#D1D5DB"
+                                            BorderThickness="0,0,0,1"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Foreground="#374151"
+                                            Background="Transparent"
+                                            LostFocus="ActualTravelCost_LostFocus"
+                                            Text="{Binding Economic.ActualTravelCost, StringFormat=N2, Mode=OneWay}" />
+                                        <TextBlock FontSize="12" Foreground="#374151" VerticalAlignment="Center" Text=" €" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Height="1" Background="#E5E7EB" Margin="0,8,0,4" />
+
+                        <!--  Riga 4: KPI  -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" Text="REDDITIVITÀ" />
+                                <TextBlock FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"
+                                           Foreground="#16A34A">
+                                    <Run Text="{Binding Economic.ProfitabilityPct, StringFormat=F1, Mode=OneWay}" /><Run Text="%" /></TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" Text="AVANZAMENTO" />
+                                <TextBlock FontSize="16" FontWeight="Bold" Foreground="#2563EB" HorizontalAlignment="Center">
+                                    <Run Text="{Binding Economic.ProgressPct, Mode=OneWay}" /><Run Text="%" /></TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" Text="TECNICI ATTIVI" />
+                                <TextBlock FontSize="16" FontWeight="Bold" Foreground="#374151" HorizontalAlignment="Center"
+                                           Text="{Binding Economic.ActiveTechnicians}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                                <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#6B7280" HorizontalAlignment="Center" Text="FASI COMPLETATE" />
+                                <TextBlock FontSize="16" FontWeight="Bold" Foreground="#374151" HorizontalAlignment="Center">
+                                    <Run Text="{Binding Economic.CompletedPhases, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding Economic.TotalPhases, Mode=OneWay}" /></TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Expander>
+            <!--  ═══ FINE RIEPILOGO ECONOMICO ═══  -->
+
             <!--  ═══ SEZIONE RISORSE (collassabile) ═══  -->
             <Expander x:Name="expResources" Expanded="MainExpander_Changed" Collapsed="MainExpander_Changed" IsExpanded="True">
                 <Expander.Style>
