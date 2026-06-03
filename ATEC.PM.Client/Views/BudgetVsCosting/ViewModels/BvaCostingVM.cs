@@ -14,6 +14,8 @@ public class BvaPhaseGroupVM : INotifyPropertyChanged
 {
     public int PhaseId { get; set; }
     public string PhaseName { get; set; } = "";
+    public bool IsLocal { get; set; }
+    public bool CanDeletePhase => HoursWorked == 0;
     public decimal BudgetHours { get; set; }
     public decimal HoursWorked { get; set; }
     public int ProgressPct { get; set; }
@@ -113,12 +115,7 @@ public class BvaViewModel : INotifyPropertyChanged
             TotalActualCost = data.TotalActualCost
         };
 
-        if (data.Groups.Count == 0)
-        {
-            vm.IsEmpty = true;
-            vm.IsLoaded = true;
-            return vm;
-        }
+
 
         // Indice fasi per cost_section_template_id (evita duplicati con nomi uguali)
         Dictionary<int, List<PhaseListItem>> phasesByTemplateId = (phases ?? new())
@@ -263,7 +260,15 @@ public class BvaSectionVM : INotifyPropertyChanged
     // Fasi assegnate (colonna centrale)
     public ObservableCollection<BvaPhaseGroupVM> PhaseGroups { get; set; } = new();
     public int ProjectId { get; set; }
+    public int? CostSectionTemplateId { get; set; }
     public bool HasPhases => PhaseGroups.Count > 0;
+
+    private bool _hasAvailableTemplates = true;
+    public bool HasAvailableTemplates
+    {
+        get => _hasAvailableTemplates;
+        set { _hasAvailableTemplates = value; Notify(); }
+    }
 
     // Delta
     public decimal DeltaHours => ActualHours - BudgetHours;
@@ -286,6 +291,7 @@ public class BvaSectionVM : INotifyPropertyChanged
             ActualHours = dto.ActualHours,
             ActualCost = dto.ActualCost,
             ProjectId = projectId,
+            CostSectionTemplateId = dto.TemplateId,
             BudgetTravelCost = dto.BudgetTravelCost,
             BudgetAccommodationCost = dto.BudgetAccommodationCost,
             BudgetAllowanceCost = dto.BudgetAllowanceCost,
@@ -304,6 +310,7 @@ public class BvaSectionVM : INotifyPropertyChanged
                 {
                     PhaseId = p.Id,
                     PhaseName = string.IsNullOrEmpty(p.CustomName) ? p.Name : p.CustomName,
+                    IsLocal = p.IsLocal,
                     BudgetHours = p.BudgetHours,
                     HoursWorked = p.HoursWorked,
                     ProgressPct = p.ProgressPct

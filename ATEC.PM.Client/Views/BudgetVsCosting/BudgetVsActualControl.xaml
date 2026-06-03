@@ -143,24 +143,84 @@
                                 BorderBrush="#E4E7EC"
                                 BorderThickness="0,0,0,1">
                                 <DockPanel>
-                                    <TextBlock
-                                        DockPanel.Dock="Right"
-                                        FontSize="10"
-                                        Foreground="#6B7280">
-                                        <Run Text="{Binding BudgetHours, StringFormat=F1, Mode=OneWay}" /><Run Text=" h prev.  |  " />
-                                        <Run Text="{Binding HoursWorked, StringFormat=F1, Mode=OneWay}" /><Run Text=" h lav.  |  " />
-                                        <Run Text="{Binding ProgressPct, Mode=OneWay}" /><Run Text="%" /></TextBlock>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontSize="10"
+                                            Foreground="#6B7280"
+                                            VerticalAlignment="Center">
+                                            <Run Text="{Binding BudgetHours, StringFormat=F1, Mode=OneWay}" /><Run Text=" h prev.  |  " />
+                                            <Run Text="{Binding HoursWorked, StringFormat=F1, Mode=OneWay}" /><Run Text=" h lav.  |  " />
+                                            <Run Text="{Binding ProgressPct, Mode=OneWay}" /><Run Text="%" /></TextBlock>
+                                        <Button
+                                            Margin="8,0,0,0"
+                                            Width="20"
+                                            Height="20"
+                                            Background="#EF44441A"
+                                            BorderThickness="0"
+                                            Click="BtnDeletePhase_Click"
+                                            Content="✕"
+                                            Cursor="Hand"
+                                            FontSize="9"
+                                            Foreground="#EF4444"
+                                            Tag="{Binding}"
+                                            ToolTip="Rimuovi questa fase dalla commessa"
+                                            Visibility="{Binding CanDeletePhase, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
                                     <StackPanel Orientation="Horizontal">
+                                        <Border Padding="4,1" Margin="0,0,4,0">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsLocal}" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource WarningBgBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="#6B7280">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="FASE" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsLocal}" Value="True">
+                                                                <Setter Property="Text" Value="LOCALE" />
+                                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
                                         <TextBlock
                                             FontSize="10"
                                             FontWeight="SemiBold"
                                             Foreground="#6B7280"
-                                            Text="FASE — " />
+                                            Text="— " />
                                         <TextBlock
                                             FontSize="10"
                                             FontWeight="SemiBold"
                                             Foreground="#1A1D26"
                                             Text="{Binding PhaseName}" />
+                                        <!-- Pulsante "Salva come template" — visibile solo per fasi locali -->
+                                        <Button
+                                            Margin="8,0,0,0"
+                                            Padding="6,0"
+                                            Height="18"
+                                            Background="#D9770620"
+                                            BorderThickness="0"
+                                            Click="BtnPromoteToTemplate_Click"
+                                            Content="↑ Salva come template"
+                                            Cursor="Hand"
+                                            FontSize="9"
+                                            FontWeight="SemiBold"
+                                            Foreground="#D97706"
+                                            Tag="{Binding}"
+                                            ToolTip="Promuovi questa fase locale a template globale (riusabile in altre commesse)"
+                                            Visibility="{Binding IsLocal, Converter={StaticResource BoolToVis}}" />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>
@@ -200,6 +260,7 @@
                                                     BorderThickness="0,0,0,1"
                                                     BorderBrush="#D1D5DB"
                                                     FontSize="11"
+                                                    KeyDown="PlannedHours_KeyDown"
                                                     LostFocus="PlannedHours_LostFocus"
                                                     Tag="{Binding}"
                                                     Text="{Binding PlannedHours, StringFormat=F1, UpdateSourceTrigger=LostFocus}" />
@@ -375,8 +436,7 @@
                     </Grid>
 
                     <!--  Dettaglio split (collassabile)  -->
-                    <Border Padding="8,4,8,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
-                        <StackPanel>
+                    <StackPanel Margin="8,4,8,8" Visibility="{Binding IsDetailExpanded, Converter={StaticResource BoolToVis}}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -464,12 +524,44 @@
 
                                 <!--  COL 2: Fasi assegnate (DataGrid)  -->
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock
-                                        Margin="4,0,0,4"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="#6B7280"
-                                        Text="FASI ASSEGNATE" />
+                                    <DockPanel Margin="4,0,0,4">
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button
+                                                Height="20"
+                                                Margin="0,0,6,0"
+                                                Padding="8,0"
+                                                Background="#2563EB20"
+                                                BorderThickness="0"
+                                                Click="BtnImportPhase_Click"
+                                                Content="+ Importa fase"
+                                                Cursor="Hand"
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="{StaticResource PrimaryBrush}"
+                                                Tag="{Binding}"
+                                                ToolTip="Aggiungi una fase da template globale"
+                                                Visibility="{Binding HasAvailableTemplates, Converter={StaticResource BoolToVis}}" />
+                                            <Button
+                                                Height="20"
+                                                Padding="8,0"
+                                                Background="#D9770620"
+                                                BorderThickness="0"
+                                                Click="BtnAddLocalPhase_Click"
+                                                Content="+ Fase locale"
+                                                Cursor="Hand"
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="#D97706"
+                                                Tag="{Binding}"
+                                                ToolTip="Aggiungi una fase visibile solo a questa commessa" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            FontSize="10"
+                                            FontWeight="SemiBold"
+                                            Foreground="#6B7280"
+                                            Text="FASI ASSEGNATE"
+                                            VerticalAlignment="Center" />
+                                    </DockPanel>
                                     <ContentControl
                                         Content="{Binding}"
                                         ContentTemplate="{StaticResource PhasesGroupedTemplate}"
@@ -539,8 +631,7 @@
                                         <Run Text=" h  —  " /><Run Text="{Binding ActualCost, StringFormat=N2, Mode=OneWay}" /><Run Text=" €" /></TextBlock>
                                 </Grid>
                             </Border>
-                        </StackPanel>
-                    </Border>
+                    </StackPanel>
 
                 </StackPanel>
             </Border>
