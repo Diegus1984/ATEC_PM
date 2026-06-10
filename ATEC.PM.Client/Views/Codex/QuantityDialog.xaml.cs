@@ -33,7 +33,7 @@ public partial class QuantityDialog : Window
         }
         else
         {
-            MessageBox.Show("Inserire un numero intero >= 1", "Errore",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Inserire un numero intero >= 1", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }

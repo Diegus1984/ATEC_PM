@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -14,9 +15,13 @@ namespace ATEC.PM.Client.Views;
 
 public partial class CatalogPickerWindow : Window
 {
-    private List<CatalogItemListItem> _allItems = new();
+    private ObservableCollection<CatalogItemListItem> _allItems = new();
     private Dictionary<string, TextBox> _filterBoxes = new();
     private CancellationTokenSource? _filterCts;
+    private bool _hasMore;
+    private bool _loading;
+    private int _loadedPage;
+    private InfiniteScrollHelper? _infiniteScroll;
 
     private readonly int _projectId;
     private readonly string _ddpType;
@@ -30,25 +35,54 @@ public partial class CatalogPickerWindow : Window
         _projectId = projectId;
         _ddpType = ddpType;
         _requestedBy = requestedBy;
-        Loaded += async (_, _) => await Load();
+        _infiniteScroll = new InfiniteScrollHelper(
+            () => _hasMore && !_loading,
+            () => Load(append: true));
+        _infiniteScroll.Attach(dgCatalog);
+        Loaded += async (_, _) => await Load(append: false);
     }
 
-    private async Task Load()
+    private async Task Load(bool append = false)
     {
+        if (_loading) return;
+        _loading = true;
+        if (!append)
+        {
+            _loadedPage = 0;
+            _allItems.Clear();
+        }
+
+        int page = append ? _loadedPage + 1 : 1;
+        Dictionary<string, string?> query = new();
+        string fCode = _filterBoxes.GetValueOrDefault("Code")?.Text.Trim() ?? "";
+        string fDesc = _filterBoxes.GetValueOrDefault("Desc")?.Text.Trim() ?? "";
+        if (!string.IsNullOrEmpty(fCode)) query["code"] = fCode;
+        if (!string.IsNullOrEmpty(fDesc)) query["description"] = fDesc;
+
         txtStatus.Text = "Caricamento catalogo...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/catalog");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            string url = PagedApiHelper.BuildUrl("/api/catalog", page, 50, query);
+            PagedResult<CatalogItemListItem>? pageData = await PagedApiHelper.GetPageAsync<CatalogItemListItem>(url);
+            if (pageData != null)
             {
-                _allItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                ApplyFilter();
+                _loadedPage = pageData.Page;
+                _hasMore = pageData.HasMore;
+                foreach (CatalogItemListItem item in pageData.Items)
+                    _allItems.Add(item);
+                if (dgCatalog.ItemsSource != _allItems)
+                    dgCatalog.ItemsSource = _allItems;
+                txtStatus.Text = pageData.HasMore
+                    ? $"{_allItems.Count} di {pageData.TotalCount} articoli"
+                    : $"{_allItems.Count} articoli";
+                _infiniteScroll?.NotifyContentUpdated(dgCatalog);
             }
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private void Filter_Loaded(object sender, RoutedEventArgs e)
@@ -64,33 +98,15 @@ public partial class CatalogPickerWindow : Window
         try
         {
             await Task.Delay(300, _filterCts.Token);
-            ApplyFilter();
+            await Load(append: false);
         }
         catch (TaskCanceledException) { }
     }
 
-    private void ApplyFilter()
-    {
-        string fCode = _filterBoxes.GetValueOrDefault("Code")?.Text.Trim().ToLower() ?? "";
-        string fDesc = _filterBoxes.GetValueOrDefault("Desc")?.Text.Trim().ToLower() ?? "";
-        string fSupp = _filterBoxes.GetValueOrDefault("Supp")?.Text.Trim().ToLower() ?? "";
-        string fMan = _filterBoxes.GetValueOrDefault("Man")?.Text.Trim().ToLower() ?? "";
-
-        var filtered = _allItems.Where(i =>
-            (string.IsNullOrEmpty(fCode) || (i.Code?.ToLower().Contains(fCode) ?? false)) &&
-            (string.IsNullOrEmpty(fDesc) || (i.Description?.ToLower().Contains(fDesc) ?? false)) &&
-            (string.IsNullOrEmpty(fSupp) || (i.SupplierName?.ToLower().Contains(fSupp) ?? false)) &&
-            (string.IsNullOrEmpty(fMan) || (i.Manufacturer?.ToLower().Contains(fMan) ?? false))
-        ).ToList();
-
-        dgCatalog.ItemsSource = filtered;
-        txtStatus.Text = $"{filtered.Count} articoli su {_allItems.Count}";
-    }
-
     private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var tb in _filterBoxes.Values) tb.Clear();
-        ApplyFilter();
+        foreach (TextBox tb in _filterBoxes.Values) tb.Clear();
+        _ = Load(append: false);
     }
 
     private async void Dg_DoubleClick(object sender, MouseButtonEventArgs e)
@@ -100,18 +116,12 @@ public partial class CatalogPickerWindow : Window
         try
         {
             // Controlla se esiste già nella DDP
-            string checkJson = await ApiClient.GetAsync($"/api/projects/{_projectId}/ddp?type={_ddpType}");
-            var checkDoc = JsonDocument.Parse(checkJson);
-            if (checkDoc.RootElement.GetProperty("success").GetBoolean())
+            List<BomItemListItem> existing = await ApiClient.GetListAsync<BomItemListItem>(
+                $"/api/projects/{_projectId}/ddp?type={_ddpType}");
+            BomItemListItem? duplicate = existing.FirstOrDefault(x => x.CatalogItemId == item.Id);
+            if (duplicate != null)
             {
-                var existing = JsonSerializer.Deserialize<List<BomItemListItem>>(
-                    checkDoc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
-                var duplicate = existing.FirstOrDefault(x => x.CatalogItemId == item.Id);
-                if (duplicate != null)
-                {
-                    var result = MessageBox.Show(
+                    var result = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
                         $"L'articolo {item.Code} è già presente nella DDP (Qtà attuale: {duplicate.Quantity}).\n\nVuoi aggiungere +1 alla quantità?",
                         "Articolo già presente",
                         MessageBoxButton.YesNo,
@@ -136,8 +146,7 @@ public partial class CatalogPickerWindow : Window
                         txtAdded.Text = $"✓ Qtà aggiornata per {item.Code}";
                         ItemAdded?.Invoke();
                     }
-                    return;
-                }
+                return;
             }
 
             // Inserimento nuovo
@@ -152,16 +161,14 @@ public partial class CatalogPickerWindow : Window
                 UnitCost = item.UnitCost,
                 SupplierId = item.SupplierId,
                 Manufacturer = item.Manufacturer,
-                ItemStatus = "TO_ORDER",
+                ItemStatus = "DO",   // DA ORDINARE (causale DDP di default)
                 RequestedBy = _requestedBy,
                 DdpType = _ddpType
             };
 
             string body = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string json = await ApiClient.PostAsync($"/api/projects/{_projectId}/ddp", body);
-            var doc = JsonDocument.Parse(json);
-
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(json, out string msg))
             {
                 _addedCount++;
                 txtAdded.Text = $"✓ {_addedCount} articol{(_addedCount == 1 ? "o" : "i")} aggiunti";
@@ -169,10 +176,10 @@ public partial class CatalogPickerWindow : Window
             }
             else
             {
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString() ?? "Errore", "Errore");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg ?? "Errore", "Errore");
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     public bool HasAdded => _addedCount > 0;

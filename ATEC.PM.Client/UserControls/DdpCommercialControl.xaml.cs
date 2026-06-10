@@ -1,4 +1,6 @@
+using ATEC.PM.Client.Services;
 using ATEC.PM.Client.Views;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.UserControls;
 
@@ -9,54 +11,103 @@ public partial class DdpCommercialControl : UserControl
     private List<BomItemListItem> _filteredItems = new();
     private Dictionary<string, ComboBox> _filterCombos = new();
     private List<string> _destinations = new();
+    private List<DdpStatusItem> _statuses = new();   // stati editabili da Conf. DDP (etichetta + colori)
 
-    private static readonly List<KeyValuePair<string, string>> StatusList = new()
+    // Default CABLATI (causali DDP reali): fallback finché /api/ddp-statuses non risponde. Rimpiazzati da LoadStatuses().
+    private static List<KeyValuePair<string, string>> StatusList = new()
     {
-        new("TO_ORDER", "Da Ordinare"),
-        new("ORDERED", "In Ordine"),
-        new("DELIVERED", "Consegnato"),
-        new("PARTIAL", "Parziale"),
-        new("TO_BUILD", "Da Costruire"),
-        new("RFQ", "Rich.Offerta"),
-        new("TO_CHECK", "Verificare"),
-        new("CANCELLED", "Annullato"),
-        new("ASSIGNED", "Assegnato"),
-        new("SHIPPED", "Spedito"),
-        new("TECH_CHECK", "Controllo"),
-        new("TO_MODULA", "A Modula")
+        new("ANN", "ANNULLATO"),
+        new("SOSP", "SOSPESO"),
+        new("RAM", "RIMESSO A MAGAZZINO"),
+        new("SOST", "SOSTITUITO"),
+        new("CON", "CONSEGNATO"),
+        new("COS", "COSTRUITO"),
+        new("DISP", "DISPONIBILE"),
+        new("DC", "DA COSTRUIRE"),
+        new("DO", "DA ORDINARE"),
+        new("ASS", "ASSEGNATO AL MONTATORE"),
+        new("CHEK", "MAT. CHE NECESSITA CONTROLLO TECNICO/COMMERCIALE"),
+        new("IO", "IN ORDINE"),
+        new("PAR", "PARZIALMENTE CONSEGNATO o COSTRUITO"),
+        new("RO", "RICHIESTA OFFERTA"),
+        new("VER", "VERIFICARE SE DISPONIBILE A MAG"),
+        new("SPED", "SPEDITO AL CLIENTE O AL FORNITORE DI SERVIZI"),
+        new("MOD", "INVIATO A MODULA - MAG")
     };
 
-    private static readonly Dictionary<string, string> StatusKeyToDisplay =
+    private static Dictionary<string, string> StatusKeyToDisplay =
         StatusList.ToDictionary(kv => kv.Key, kv => kv.Value);
 
     public DdpCommercialControl()
     {
         InitializeComponent();
         ApplyRowStyle();
+
+        // Flag "sto editando una cella" per il busy-guard del real-time (non ricaricare mentre scrivo).
+        dgDdp.BeginningEdit += (_, _) => _isEditingCell = true;
+        dgDdp.RowEditEnding += (_, _) => _isEditingCell = false;
+
+        // La sezione è cachata: alla riapertura riconnetto l'hub e risincronizzo.
+        Loaded += (_, _) =>
+        {
+            if (_projectId > 0 && _realtimeHub == null) { _ = StartRealtimeAsync(); OnRealtimeChange(); }
+        };
+        Unloaded += (_, _) => StopRealtime();
     }
 
     public void Load(int projectId)
     {
         _projectId = projectId;
+        _ = InitAsync();
+    }
+
+    private async Task InitAsync()
+    {
+        await LoadStatuses();   // prima gli stati: alimentano combo, converter e colori riga
+        ApplyRowStyle();        // ricostruisce i colori riga dai dati appena caricati
         _ = LoadDestinations();
-        _ = LoadData();
+        await LoadData();
+        _ = StartRealtimeAsync();
+    }
+
+    // Carica gli stati (etichetta + colori) da Conf. DDP; in caso di errore resta sui default cablati.
+    private async Task LoadStatuses()
+    {
+        try
+        {
+            // TUTTE le causali: servono per risolvere etichetta/colore di QUALSIASI valore già salvato sulle righe
+            // (anche di una causale disattivata). La combo per la scelta, invece, offre solo le ATTIVE.
+            List<DdpStatusItem> statuses = await ApiClient.GetListAsync<DdpStatusItem>("/api/ddp-statuses");
+            if (statuses.Count > 0)
+            {
+                _statuses = statuses;
+                StatusKeyToDisplay = statuses
+                    .GroupBy(s => s.StatusKey).Select(g => g.First())
+                    .ToDictionary(s => s.StatusKey, s => s.Label);
+                StatusList = statuses
+                    .Where(s => s.IsActive)
+                    .Select(s => new KeyValuePair<string, string>(s.StatusKey, s.Label))
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[DdpCommercialControl] Errore caricamento stati: {ex.Message}");
+        }
     }
 
     private async Task LoadDestinations()
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/ddp-destinations/active");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var items = JsonSerializer.Deserialize<List<DdpDestinationItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                _destinations = items.Select(d => d.Name).ToList();
-            }
+            List<DdpDestinationItem> items = await ApiClient.GetListAsync<DdpDestinationItem>(
+                "/api/ddp-destinations/active");
+            _destinations = items.Select(d => d.Name).ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[DdpCommercialControl] Errore caricamento destinazioni: {ex.Message}");
+        }
     }
 
     private async Task LoadData()
@@ -64,17 +115,8 @@ public partial class DdpCommercialControl : UserControl
         txtStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/ddp?type=COMMERCIAL");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                txtStatus.Text = "Errore caricamento";
-                return;
-            }
-
-            _allItems = JsonSerializer.Deserialize<List<BomItemListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            _allItems = await ApiClient.GetListAsync<BomItemListItem>(
+                $"/api/projects/{_projectId}/ddp?type=COMMERCIAL");
 
             for (int i = 0; i < _allItems.Count; i++)
                 _allItems[i].RowNumber = i + 1;
@@ -119,18 +161,8 @@ public partial class DdpCommercialControl : UserControl
         rowStyle.Setters.Add(new Setter(DataGridRow.MinHeightProperty, 30.0));
         rowStyle.Setters.Add(new Setter(DataGridRow.VerticalContentAlignmentProperty, VerticalAlignment.Center));
 
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_ORDER", System.Windows.Media.Color.FromRgb(255, 0, 0), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("ORDERED", System.Windows.Media.Color.FromRgb(255, 255, 0), System.Windows.Media.Colors.Black));
-        rowStyle.Triggers.Add(CreateStatusTrigger("DELIVERED", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("PARTIAL", System.Windows.Media.Color.FromRgb(112, 48, 160), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_BUILD", System.Windows.Media.Color.FromRgb(0, 100, 0), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("RFQ", System.Windows.Media.Color.FromRgb(255, 192, 0), System.Windows.Media.Colors.Black));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_CHECK", System.Windows.Media.Color.FromRgb(0, 176, 240), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("CANCELLED", System.Windows.Media.Color.FromRgb(0, 0, 0), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("ASSIGNED", System.Windows.Media.Color.FromRgb(180, 180, 180), System.Windows.Media.Colors.Black));
-        rowStyle.Triggers.Add(CreateStatusTrigger("SHIPPED", System.Windows.Media.Color.FromRgb(255, 182, 193), System.Windows.Media.Colors.Black));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TECH_CHECK", System.Windows.Media.Color.FromRgb(139, 0, 139), System.Windows.Media.Colors.White));
-        rowStyle.Triggers.Add(CreateStatusTrigger("TO_MODULA", System.Windows.Media.Color.FromRgb(173, 216, 230), System.Windows.Media.Colors.Black));
+        foreach ((string key, System.Windows.Media.Color bg, System.Windows.Media.Color fg) in GetStatusColors())
+            rowStyle.Triggers.Add(CreateStatusTrigger(key, bg, fg));
 
         rowStyle.Triggers.Add(new Trigger
         {
@@ -177,6 +209,44 @@ public partial class DdpCommercialControl : UserControl
         trigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, bgBrush));
         trigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, fgBrush));
         return trigger;
+    }
+
+    // Colori riga per stato: dai dati (Conf. DDP) se caricati, altrimenti i default cablati di fallback.
+    private IEnumerable<(string Key, System.Windows.Media.Color Bg, System.Windows.Media.Color Fg)> GetStatusColors()
+    {
+        if (_statuses.Count > 0)
+        {
+            foreach (DdpStatusItem s in _statuses)
+                yield return (s.StatusKey,
+                              ParseColor(s.ColorBg, System.Windows.Media.Colors.LightGray),
+                              ParseColor(s.ColorFg, System.Windows.Media.Colors.Black));
+            yield break;
+        }
+
+        yield return ("ANN", System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White);
+        yield return ("SOSP", System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White);
+        yield return ("RAM", System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White);
+        yield return ("SOST", System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White);
+        yield return ("CON", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White);
+        yield return ("COS", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White);
+        yield return ("DISP", System.Windows.Media.Color.FromRgb(0, 176, 80), System.Windows.Media.Colors.White);
+        yield return ("DC", System.Windows.Media.Color.FromRgb(0, 100, 0), System.Windows.Media.Colors.White);
+        yield return ("DO", System.Windows.Media.Color.FromRgb(255, 0, 0), System.Windows.Media.Colors.White);
+        yield return ("ASS", System.Windows.Media.Color.FromRgb(180, 180, 180), System.Windows.Media.Colors.Black);
+        yield return ("CHEK", System.Windows.Media.Color.FromRgb(139, 0, 139), System.Windows.Media.Colors.White);
+        yield return ("IO", System.Windows.Media.Color.FromRgb(255, 255, 0), System.Windows.Media.Colors.Black);
+        yield return ("PAR", System.Windows.Media.Color.FromRgb(112, 48, 160), System.Windows.Media.Colors.White);
+        yield return ("RO", System.Windows.Media.Color.FromRgb(255, 192, 0), System.Windows.Media.Colors.Black);
+        yield return ("VER", System.Windows.Media.Color.FromRgb(0, 176, 240), System.Windows.Media.Colors.White);
+        yield return ("SPED", System.Windows.Media.Color.FromRgb(217, 217, 217), System.Windows.Media.Colors.Black);
+        yield return ("MOD", System.Windows.Media.Color.FromRgb(173, 216, 230), System.Windows.Media.Colors.Black);
+    }
+
+    private static System.Windows.Media.Color ParseColor(string? hex, System.Windows.Media.Color fallback)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return fallback;
+        try { return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex); }
+        catch { return fallback; }
     }
 
     // === FILTRI ===
@@ -276,18 +346,23 @@ public partial class DdpCommercialControl : UserControl
     {
         if (dgDdp.SelectedItem is not BomItemListItem item) return;
 
-        if (MessageBox.Show($"Eliminare riga {item.PartNumber} - {item.Description}?",
+        if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Eliminare riga {item.PartNumber} - {item.Description}?",
             "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
         {
-            await ApiClient.DeleteAsync($"/api/projects/{_projectId}/ddp/{item.Id}");
+            await ApiClient.DeleteAsync(WithConn($"/api/projects/{_projectId}/ddp/{item.Id}"));
             await LoadData();
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
-    private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await LoadData();
+    private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadStatuses();
+        ApplyRowStyle();
+        await LoadData();
+    }
 
     private void DgDdp_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -297,6 +372,7 @@ public partial class DdpCommercialControl : UserControl
     // === CELL EDIT ===
     private async void DgDdp_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
     {
+        _isEditingCell = false;
         if (e.EditAction == DataGridEditAction.Cancel) return;
         if (e.Row.Item is not BomItemListItem item) return;
 
@@ -305,13 +381,13 @@ public partial class DdpCommercialControl : UserControl
         if (item.Quantity <= 0)
         {
             item.Quantity = 1;
-            MessageBox.Show("La quantità deve essere maggiore di zero.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("La quantità deve essere maggiore di zero.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         if (item.DateNeeded.HasValue && item.DateNeeded.Value.Date < DateTime.Today)
         {
             item.DateNeeded = DateTime.Today;
-            MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         try
@@ -325,14 +401,30 @@ public partial class DdpCommercialControl : UserControl
                 DaneaRef = item.DaneaRef,
                 DateNeeded = item.DateNeeded,
                 Destination = item.Destination,
-                Notes = item.Notes
+                Notes = item.Notes,
+                ExpectedUpdatedAt = item.UpdatedAt   // concorrenza ottimistica
             };
 
             string body = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await ApiClient.PutAsync($"/api/projects/{_projectId}/ddp/{item.Id}", body);
-            UpdateSummary();
+            string resp = await ApiClient.PutAsync(WithConn($"/api/projects/{_projectId}/ddp/{item.Id}"), body);
+            if (ApiClient.TryGetApiData<DateTime?>(resp, out DateTime? newTs, out string msg))
+            {
+                if (newTs.HasValue) item.UpdatedAt = newTs;   // riallinea il token per il prossimo salvataggio
+                UpdateSummary();
+            }
+            else
+            {
+                // Conflitto (409) o errore: avviso e ricarico per riallinearmi al server.
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
+                    string.IsNullOrWhiteSpace(msg) ? "Salvataggio non riuscito." : msg,
+                    "Distinta", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await LoadData();
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"[DdpCommercialControl] Errore salvataggio cella per riga {item.Id}: {ex.Message}");
+        }
     }
 
     private void StatusCombo_Loaded(object sender, RoutedEventArgs e)
@@ -343,11 +435,17 @@ public partial class DdpCommercialControl : UserControl
 
     private void DestinationCombo_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is ComboBox cb)
-        {
-            cb.ItemsSource = _destinations;
-            cb.SelectedItem = (cb.DataContext as BomItemListItem)?.Destination;
-        }
+        if (sender is not ComboBox cb) return;
+
+        string? current = (cb.DataContext as BomItemListItem)?.Destination;
+        List<string> options = new(_destinations);
+        // Mantieni la destinazione corrente anche se non è più tra le attive (rinominata/disattivata):
+        // così in modifica non sparisce e non rischi di azzerarla per sbaglio.
+        if (!string.IsNullOrWhiteSpace(current) && !options.Contains(current))
+            options.Insert(0, current);
+
+        cb.ItemsSource = options;
+        cb.SelectedItem = current;
     }
 
     // === DATE PICKER VALIDATION ===
@@ -356,7 +454,7 @@ public partial class DdpCommercialControl : UserControl
         if (sender is DatePicker dp && dp.SelectedDate.HasValue && dp.SelectedDate.Value.Date < DateTime.Today)
         {
             dp.SelectedDate = DateTime.Today;
-            MessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("La data prevista non può essere nel passato. Impostata a oggi.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

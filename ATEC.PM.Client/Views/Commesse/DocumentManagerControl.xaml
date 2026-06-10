@@ -7,6 +7,16 @@
     DragOver="OnDragOver"
     Drop="OnDrop">
 
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- ShadcnColors fornisce ShadcnFontFamily; ShadcnContextMenuDark gli stili menu (entrambi solo risorse keyed, nessuno stile implicito). -->
+                <ResourceDictionary Source="/Styles/Shadcn/ShadcnColors.xaml" />
+                <ResourceDictionary Source="/Styles/Shadcn/ShadcnContextMenuDark.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
     <DockPanel>
         <!--  TOOLBAR  -->
         <Border
@@ -135,15 +145,35 @@
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Click="CtxDownload_Click" Header="Scarica" />
-                    <MenuItem Click="CtxRename_Click" Header="Rinomina" />
-                    <MenuItem Click="CtxMove_Click" Header="Sposta..." />
+                <ContextMenu Style="{StaticResource ShadcnContextMenuDark}">
+                    <ContextMenu.Resources>
+                        <Style BasedOn="{StaticResource ShadcnMenuItemDark}" TargetType="MenuItem" />
+                        <Style BasedOn="{StaticResource ShadcnMenuSeparatorDark}" TargetType="Separator" />
+                    </ContextMenu.Resources>
+                    <MenuItem Click="CtxDownload_Click" Header="Scarica">
+                        <MenuItem.Icon>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="14" Text="&#xE896;" VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Click="CtxRename_Click" Header="Rinomina">
+                        <MenuItem.Icon>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="14" Text="&#xE8AC;" VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Click="CtxMove_Click" Header="Sposta...">
+                        <MenuItem.Icon>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="14" Text="&#xE8DE;" VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                     <Separator />
                     <MenuItem
                         Click="CtxDelete_Click"
                         Foreground="#EF4444"
-                        Header="Elimina" />
+                        Header="Elimina">
+                        <MenuItem.Icon>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="14" Text="&#xE74D;" VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>

@@ -27,24 +27,11 @@ public partial class ProjectDialog : Window
     {
         try
         {
-            var custJson = await ApiClient.GetAsync("/api/lookup/customers");
-            var empJson = await ApiClient.GetAsync("/api/lookup/employees");
+            _customers = await ApiClient.GetDataAsync<List<LookupItem>>("/api/lookup/customers") ?? new();
+            cmbCustomer.ItemsSource = _customers;
 
-            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-            var custDoc = JsonDocument.Parse(custJson);
-            if (custDoc.RootElement.GetProperty("success").GetBoolean())
-            {
-                _customers = JsonSerializer.Deserialize<List<LookupItem>>(custDoc.RootElement.GetProperty("data").GetRawText(), opts) ?? new();
-                cmbCustomer.ItemsSource = _customers;
-            }
-
-            var empDoc = JsonDocument.Parse(empJson);
-            if (empDoc.RootElement.GetProperty("success").GetBoolean())
-            {
-                _employees = JsonSerializer.Deserialize<List<LookupItem>>(empDoc.RootElement.GetProperty("data").GetRawText(), opts) ?? new();
-                cmbPm.ItemsSource = _employees;
-            }
+            _employees = await ApiClient.GetDataAsync<List<LookupItem>>("/api/lookup/employees?role=PM") ?? new();
+            cmbPm.ItemsSource = _employees;
 
             if (_id > 0) await LoadProject();
             else await LoadNextCode();
@@ -61,43 +48,52 @@ public partial class ProjectDialog : Window
     {
         try
         {
-            var json = await ApiClient.GetAsync("/api/projects/next-code");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                txtCode.Text = doc.RootElement.GetProperty("data").GetString() ?? "";
+            txtCode.Text = await ApiClient.GetDataAsync<string>("/api/projects/next-code") ?? "";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading next project code: {ex.Message}");
+        }
     }
 
     private async Task LoadProjectData()
     {
-        var json = await ApiClient.GetAsync($"/api/projects/{_id}");
-        var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.GetProperty("success").GetBoolean())
+        ProjectSaveRequest? d = await ApiClient.GetDataAsync<ProjectSaveRequest>($"/api/projects/{_id}");
+        if (d == null)
+            return;
+
+        txtCode.Text = d.Code;
+        txtTitle.Text = d.Title;
+        txtRevenue.Text = d.Revenue.ToString("F0");
+        txtBudget.Text = d.BudgetTotal.ToString("F0");
+        txtHours.Text = d.BudgetHoursTotal.ToString("F0");
+        txtDescription.Text = d.Description;
+        txtServerPath.Text = d.ServerPath;
+        txtNotes.Text = d.Notes;
+
+        if (d.LinkedQuoteId > 0)
         {
-            var d = doc.RootElement.GetProperty("data");
-            txtCode.Text = d.GetProperty("code").GetString() ?? "";
-            txtTitle.Text = d.GetProperty("title").GetString() ?? "";
-            txtRevenue.Text = d.GetProperty("revenue").GetDecimal().ToString("F0");
-            txtBudget.Text = d.GetProperty("budgetTotal").GetDecimal().ToString("F0");
-            txtHours.Text = d.GetProperty("budgetHoursTotal").GetDecimal().ToString("F0");
-            txtDescription.Text = d.GetProperty("description").GetString() ?? "";
-            txtServerPath.Text = d.GetProperty("serverPath").GetString() ?? "";
-            txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
-
-            cmbCustomer.SelectedValue = d.GetProperty("customerId").GetInt32();
-            cmbPm.SelectedValue = d.GetProperty("pmId").GetInt32();
-
-            string currentStatus = d.GetProperty("status").GetString() ?? "DRAFT";
-            SelectComboItem(cmbStatus, currentStatus);
-            ApplyStatusTransitions(currentStatus);
-            SelectComboItem(cmbPriority, d.GetProperty("priority").GetString() ?? "MEDIUM");
-
-            if (d.TryGetProperty("startDate", out var sd) && sd.ValueKind != JsonValueKind.Null)
-                dpStart.SelectedDate = sd.GetDateTime();
-            if (d.TryGetProperty("endDatePlanned", out var ed) && ed.ValueKind != JsonValueKind.Null)
-                dpEnd.SelectedDate = ed.GetDateTime();
+            System.Windows.Media.SolidColorBrush grayBrush = (System.Windows.Media.SolidColorBrush)new System.Windows.Media.BrushConverter().ConvertFrom("#F3F4F6")!;
+            txtRevenue.IsReadOnly = true;
+            txtRevenue.Background = grayBrush;
+            txtBudget.IsReadOnly = true;
+            txtBudget.Background = grayBrush;
+            txtHours.IsReadOnly = true;
+            txtHours.Background = grayBrush;
+            txtQuoteLocked.Visibility = Visibility.Visible;
         }
+        cmbCustomer.SelectedValue = d.CustomerId;
+        cmbPm.SelectedValue = d.PmId;
+
+        string currentStatus = d.Status;
+        SelectComboItem(cmbStatus, currentStatus);
+        ApplyStatusTransitions(currentStatus);
+        SelectComboItem(cmbPriority, d.Priority);
+
+        if (d.StartDate.HasValue)
+            dpStart.SelectedDate = d.StartDate;
+        if (d.EndDatePlanned.HasValue)
+            dpEnd.SelectedDate = d.EndDatePlanned;
     }
 
     private void SelectComboItem(ComboBox cmb, string value)
@@ -171,11 +167,10 @@ public partial class ProjectDialog : Window
                 ? await ApiClient.PostAsync("/api/projects", jsonBody)
                 : await ApiClient.PutAsync($"/api/projects/{_id}", jsonBody);
 
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             { DialogResult = true; Close(); }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
         finally { btnSave.IsEnabled = true; }

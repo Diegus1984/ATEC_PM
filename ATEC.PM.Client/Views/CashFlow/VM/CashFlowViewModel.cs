@@ -34,8 +34,9 @@ public class CashFlowViewModel : INotifyPropertyChanged
     private bool _isInitialized;
     private int _monthCount = 13;
     private decimal _paymentAmount;
-    // Grafico
+    // Grafico (PlotModel costruito solo quando il PlotView è montato)
     private PlotModel _plotModel = new();
+    private bool _chartStale = true;
 
     private decimal _projectRevenue;
     // Totali
@@ -277,10 +278,20 @@ public class CashFlowViewModel : INotifyPropertyChanged
 
         StatusText = $"Entrate {totEntrate:N0} €  —  Uscite {totUscite:N0} €  —  Saldo {totEntrate - totUscite:N0} €";
 
-        BuildChart(totEntrate, totUscite);
+        _chartStale = true;
     }
 
-    private void BuildChart(decimal totEntrate, decimal totUscite)
+    /// <summary>Costruisce/aggiorna il PlotModel — chiamare dopo aver creato il PlotView.</summary>
+    public void ApplyChart()
+    {
+        if (!_chartStale)
+            return;
+
+        BuildChart();
+        _chartStale = false;
+    }
+
+    private void BuildChart()
     {
         CfGridRow? rowEntrate = Rows.FirstOrDefault(r => r.RowType == CfRowType.IncomeTotal);
         CfGridRow? rowUscite = Rows.FirstOrDefault(r => r.RowType == CfRowType.ExpenseTotal);

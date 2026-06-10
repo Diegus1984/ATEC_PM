@@ -84,18 +84,12 @@ public partial class AddCostGroupDialog : Window
                     string result = await ApiClient.PostAsync($"{_apiBasePath}/sections", json);
 
                     // Copia reparti associati
-                    JsonDocument doc = JsonDocument.Parse(result);
-                    if (doc.RootElement.GetProperty("success").GetBoolean())
+                    if (ApiClient.TryGetApiData<int>(result, out int newSectionId, out _))
                     {
-                        int newSectionId = doc.RootElement.GetProperty("data").GetInt32();
-                        // Prendi i dept dal template
-                        string tmplJson = await ApiClient.GetAsync("/api/cost-sections/templates");
-                        JsonDocument tmplDoc = JsonDocument.Parse(tmplJson);
-                        if (tmplDoc.RootElement.GetProperty("success").GetBoolean())
+                        List<CostSectionTemplateDto> allTemplates =
+                            await ApiClient.GetListAsync<CostSectionTemplateDto>("/api/cost-sections/templates");
+                        if (allTemplates.Count > 0)
                         {
-                            var allTemplates = JsonSerializer.Deserialize<List<CostSectionTemplateDto>>(
-                                tmplDoc.RootElement.GetProperty("data").GetRawText(),
-                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
                             var fullTmpl = allTemplates.FirstOrDefault(t => t.Id == tmpl.Id);
                             if (fullTmpl != null)
                             {

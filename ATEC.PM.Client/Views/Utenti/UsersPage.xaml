@@ -2,155 +2,243 @@
     x:Class="ATEC.PM.Client.Views.UsersPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="#F7F8FA">
+    Background="{DynamicResource ShadcnBackgroundBrush}"
+    FontFamily="{DynamicResource ShadcnFontFamily}">
+
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Sovrascrittura locale dei pennelli per forzare il tema Dark di Shadcn UI su questa pagina -->
+            <SolidColorBrush x:Key="ShadcnBackgroundBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="ShadcnForegroundBrush" Color="#FAFAFA" />
+            
+            <SolidColorBrush x:Key="ShadcnCardBrush" Color="#0C0C0E" />
+            <SolidColorBrush x:Key="ShadcnCardForegroundBrush" Color="#FAFAFA" />
+            
+            <SolidColorBrush x:Key="ShadcnPrimaryBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnPrimaryForegroundBrush" Color="#09090B" />
+            
+            <SolidColorBrush x:Key="ShadcnSecondaryBrush" Color="#18181B" />
+            <SolidColorBrush x:Key="ShadcnSecondaryForegroundBrush" Color="#FAFAFA" />
+            
+            <SolidColorBrush x:Key="ShadcnMutedForegroundBrush" Color="#71717A" />
+            <SolidColorBrush x:Key="ShadcnBorderBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnInputBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnPopoverBrush" Color="#0C0C0E" />
+
+            <!-- Style for Employee Row ContextMenu Header (User Information card inside popup) -->
+            <Style x:Key="RowMenuHeaderStyle" TargetType="MenuItem">
+                <Setter Property="IsEnabled" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="MenuItem">
+                            <Border Padding="12,10,12,8" Background="Transparent" SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Initials Avatar inside popup -->
+                                    <Border Grid.Column="0" Style="{StaticResource ShadcnAvatar}" Width="32" Height="32" CornerRadius="16" Background="White">
+                                        <TextBlock Text="{Binding Path=PlacementTarget.DataContext.Initials, RelativeSource={RelativeSource AncestorType=ContextMenu}}" FontSize="11.5" FontWeight="SemiBold" Foreground="#09090B" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <!-- Name and Role -->
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Path=PlacementTarget.DataContext.FullName, RelativeSource={RelativeSource AncestorType=ContextMenu}}" FontSize="12.5" FontWeight="SemiBold" Foreground="White" />
+                                        <TextBlock Text="{Binding Path=PlacementTarget.DataContext.UserRole, RelativeSource={RelativeSource AncestorType=ContextMenu}}" FontSize="10.5" Foreground="#71717A" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Page.Resources>
+
     <DockPanel>
-        <!--  TOOLBAR  -->
+        <!--  TOOLBAR (in stile Shadcn card header)  -->
         <Border
-            Style="{StaticResource ToolbarBorder}"
-            DockPanel.Dock="Top">
+            DockPanel.Dock="Top"
+            Background="{DynamicResource ShadcnBackgroundBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,12">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button
-                        Background="#4F6EF7"
                         Click="BtnNew_Click"
-                        Content="+ Nuovo"
-                        Foreground="White"
-                        Style="{StaticResource PrimaryBtn}" />
-                    <Button
-                        x:Name="btnEdit"
-                        Click="BtnEdit_Click"
-                        Content="Modifica"
-                        IsEnabled="False"
-                        Style="{StaticResource FlatBtn}" />
-                    <Button
-                        x:Name="btnDelete"
-                        Background="#FEF3F2"
-                        BorderBrush="#FECDCA"
-                        Click="BtnDelete_Click"
-                        Content="Elimina"
-                        Foreground="#B42318"
-                        IsEnabled="False"
-                        Style="{StaticResource FlatBtn}" />
+                        Width="130"
+                        Content="+ Nuovo Utente"
+                        Style="{StaticResource ShadcnButtonDefault}" />
                 </StackPanel>
                 <StackPanel
                     HorizontalAlignment="Right"
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
-                    <TextBox
-                        x:Name="txtSearch"
-                        Width="200"
-                        Height="34"
-                        Padding="8,6"
-                        BorderBrush="#E4E7EC"
-                        TextChanged="TxtSearch_TextChanged" />
-                    <TextBlock
-                        x:Name="txtSearchPlaceholder"
-                        Margin="-190,0,0,0"
-                        VerticalAlignment="Center"
-                        Foreground="#9CA3AF"
-                        IsHitTestVisible="False"
-                        Text="  Cerca..." />
+                    <!-- Search Input Box -->
+                    <Grid>
+                        <TextBox
+                            x:Name="txtSearch"
+                            Width="220"
+                            Style="{StaticResource ShadcnTextBox}"
+                            TextChanged="TxtSearch_TextChanged" />
+                        <TextBlock
+                            x:Name="txtSearchPlaceholder"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                            IsHitTestVisible="False"
+                            Style="{StaticResource ShadcnSmall}"
+                            Text="Cerca utente, ruolo o reparto..." />
+                    </Grid>
                     <TextBlock
                         x:Name="txtStatus"
                         Margin="16,0,0,0"
                         VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="#6B7280" />
+                        Style="{StaticResource ShadcnSmall}"
+                        Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                        Text="Caricamento..." />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!--  DATAGRID  -->
-        <DataGrid
-            x:Name="dgUsers"
-            AutoGenerateColumns="False"
-            Background="White"
-            BorderThickness="0"
-            CanUserAddRows="False"
-            CanUserDeleteRows="False"
-            GridLinesVisibility="Horizontal"
-            HeadersVisibility="Column"
-            HorizontalGridLinesBrush="#F3F4F6"
-            IsReadOnly="True"
-            MouseDoubleClick="DgUsers_DoubleClick"
-            RowHeight="40"
-            SelectionChanged="DgUsers_SelectionChanged"
-            SelectionMode="Single">
-            <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="#F9FAFB" />
-                    <Setter Property="Foreground" Value="#6B7280" />
-                    <Setter Property="FontSize" Value="12" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                    <Setter Property="Padding" Value="12,0" />
-                    <Setter Property="BorderBrush" Value="#E4E7EC" />
-                    <Setter Property="BorderThickness" Value="0,0,0,1" />
-                </Style>
-            </DataGrid.ColumnHeaderStyle>
-            <DataGrid.RowStyle>
-                <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="White" />
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#EEF2FF" />
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="#F9FAFB" />
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.RowStyle>
-            <DataGrid.CellStyle>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Padding" Value="12,0" />
-                    <Setter Property="BorderThickness" Value="0" />
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="DataGridCell">
-                                <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                    <ContentPresenter VerticalAlignment="Center" />
-                                </Border>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Foreground" Value="#1A1D26" />
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.CellStyle>
-            <DataGrid.Columns>
-                <DataGridTextColumn
-                    Width="*"
-                    Binding="{Binding FullName}"
-                    Header="Nome" />
-                <DataGridTextColumn
-                    Width="120"
-                    Binding="{Binding UserRole}"
-                    Header="Ruolo" />
-                <DataGridTextColumn
-                    Width="130"
-                    Binding="{Binding Username}"
-                    Header="Username" />
-                <DataGridTextColumn
-                    Width="80"
-                    Binding="{Binding Status}"
-                    Header="Stato" />
-                <DataGridTemplateColumn Width="200" Header="Reparti">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                Padding="12,0"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="#4F6EF7"
-                                Text="{Binding DepartmentCodesDisplay}"
-                                TextTrimming="CharacterEllipsis" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!--  DATAGRID (all'interno di una Shadcn Card)  -->
+        <Border Margin="16" Style="{StaticResource ShadcnCardDark}" Padding="8">
+            <Grid>
+                <DataGrid
+                    x:Name="dgUsers"
+                    Style="{StaticResource ShadcnDataGridDark}">
+                    <DataGrid.Columns>
+                        <!-- Column 1: Nome con Avatar Shadcn + Drag handle + Checkbox -->
+                        <DataGridTemplateColumn Width="*" Header="Dipendente">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="4,2">
+                                        <!-- Drag Handle (MDL2 Assets vertical grabber) -->
+                                        <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" Foreground="#52525B" FontSize="11" VerticalAlignment="Center" Margin="4,0,12,0" IsHitTestVisible="False" />
+                                        <!-- Circular Initials Avatar -->
+                                        <Border Style="{StaticResource ShadcnAvatar}" Width="30" Height="30" CornerRadius="15" Margin="0,0,12,0" Background="#27272A">
+                                            <TextBlock Text="{Binding Initials}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                        </Border>
+                                        <!-- Full Name -->
+                                        <TextBlock Text="{Binding FullName}" VerticalAlignment="Center" FontWeight="Medium" Foreground="White" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Column 2: Ruolo con Badge Dark -->
+                        <DataGridTemplateColumn Width="140" Header="Ruolo">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource ShadcnBadgeDark}" Margin="0,2">
+                                        <TextBlock Text="{Binding UserRole}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Column 3: Username -->
+                        <DataGridTemplateColumn Width="140" Header="Username">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Username}" Foreground="#E4E4E7" VerticalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Column 4: Stato con cerchietto colorato -->
+                        <DataGridTemplateColumn Width="120" Header="Stato">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#27272A"
+                                            BorderThickness="1"
+                                            Background="#18181B"
+                                            CornerRadius="12"
+                                            Padding="8,3"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse x:Name="statusDot" Width="6" Height="6" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#71717A" />
+                                            <TextBlock x:Name="txtStatusVal" Text="{Binding Status}" FontSize="11" FontWeight="Medium" Foreground="#FAFAFA" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="ACTIVE">
+                                            <Setter TargetName="statusDot" Property="Fill" Value="#22C55E" />
+                                            <Setter TargetName="txtStatusVal" Property="Text" Value="Attivo" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="ON_LEAVE">
+                                            <Setter TargetName="statusDot" Property="Fill" Value="#EAB308" />
+                                            <Setter TargetName="txtStatusVal" Property="Text" Value="In Ferie" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="SICK">
+                                            <Setter TargetName="statusDot" Property="Fill" Value="#EF4444" />
+                                            <Setter TargetName="txtStatusVal" Property="Text" Value="Malattia" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="TERMINATED">
+                                            <Setter TargetName="statusDot" Property="Fill" Value="#71717A" />
+                                            <Setter TargetName="txtStatusVal" Property="Text" Value="Cessato" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Column 5: Reparti -->
+                        <DataGridTemplateColumn Width="220" Header="Reparti">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="#3B82F6"
+                                        Text="{Binding DepartmentCodesDisplay}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Column 6: Menu Azioni Rapide (Tre puntini verticali) -->
+                        <DataGridTemplateColumn Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="⋮" 
+                                            Style="{StaticResource ShadcnButtonGhost}" 
+                                            Foreground="#71717A"
+                                            FontSize="14"
+                                            Padding="0"
+                                            Width="30"
+                                            Height="30"
+                                            HorizontalAlignment="Center"
+                                            Click="BtnRowOptions_Click">
+                                        <Button.ContextMenu>
+                                            <ContextMenu Style="{StaticResource ShadcnContextMenu}">
+                                                <MenuItem Style="{StaticResource RowMenuHeaderStyle}" />
+                                                <Separator Style="{StaticResource ShadcnSeparator}" Margin="0,4" />
+                                                <MenuItem Header="Modifica" Style="{StaticResource ShadcnMenuItem}" Click="MenuItemEdit_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Elimina" Style="{StaticResource ShadcnMenuItem}" Click="MenuItemDelete_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
     </DockPanel>
 </Page>

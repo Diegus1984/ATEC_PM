@@ -7,7 +7,9 @@ namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/backup")]
-[Authorize]
+// Solo ADMIN: questi endpoint creano/cancellano backup e possono RIPRISTINARE
+// l'intero database (restore svuota tutte le tabelle). Mai aprire a [Authorize] generico.
+[Authorize(Roles = "ADMIN")]
 public class BackupController : ControllerBase
 {
     private readonly DbService _db;
@@ -97,12 +99,14 @@ public class BackupController : ControllerBase
 
             c.Execute("SET FOREIGN_KEY_CHECKS=0");
 
-            var tables = c.Query<string>("SHOW TABLES").ToList();
+            var tables = c.Query<string>(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+            ).ToList();
             foreach (string table in tables)
             {
                 c.Execute($"DELETE FROM `{table}`");
                 // Reset auto_increment
-                try { c.Execute($"ALTER TABLE `{table}` AUTO_INCREMENT = 1"); } catch { }
+                try { c.Execute($"ALTER TABLE `{table}` AUTO_INCREMENT = 1"); } catch (Exception ex) { _log.LogDebug(ex, "[Restore] Impossibile azzerare AUTO_INCREMENT per la tabella {Table}", table); }
             }
 
             // 4. Esegui gli INSERT dal backup
@@ -202,7 +206,9 @@ public class BackupController : ControllerBase
         string fullPath = Path.Combine(backupDir, filename);
 
         using var c = _db.Open();
-        var tables = c.Query<string>("SHOW TABLES").ToList();
+        var tables = c.Query<string>(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+        ).ToList();
 
         using var sw = new StreamWriter(fullPath, false, System.Text.Encoding.UTF8);
         sw.WriteLine($"-- ATEC PM Backup ({prefix}) {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -233,9 +239,9 @@ public class BackupController : ControllerBase
         sw.WriteLine($"-- Totale: {totalRows} righe");
 
         // Pulizia: tiene ultimi 30 backup manuali + 30 automatici
-        CleanOldBackups(backupDir, "manual", 30);
-        CleanOldBackups(backupDir, "auto", 30);
-        CleanOldBackups(backupDir, "pre_restore", 10);
+        CleanOldBackups(backupDir, "manual", 30, _log);
+        CleanOldBackups(backupDir, "auto", 30, _log);
+        CleanOldBackups(backupDir, "pre_restore", 10, _log);
 
         _log.LogInformation("[Backup] {Prefix}: {File} — {Rows} righe, {Tables} tabelle",
             prefix, filename, totalRows, tables.Count);
@@ -263,7 +269,7 @@ public class BackupController : ControllerBase
         return $"'{s}'";
     }
 
-    private static void CleanOldBackups(string dir, string prefix, int keep)
+    private static void CleanOldBackups(string dir, string prefix, int keep, ILogger log)
     {
         try
         {
@@ -272,6 +278,9 @@ public class BackupController : ControllerBase
                 .Skip(keep);
             foreach (string f in old) System.IO.File.Delete(f);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "[Backup] Impossibile eliminare vecchi file di backup con prefisso {Prefix} in {Dir}", prefix, dir);
+        }
     }
 }

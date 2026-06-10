@@ -29,15 +29,8 @@ public partial class SuppliersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/suppliers");
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var response = JsonSerializer.Deserialize<ApiResponse<List<SupplierListItem>>>(json, options);
-
-            if (response != null && response.Success)
-            {
-                _allItems = response.Data ?? new();
-                ApplyFilter();
-            }
+            _allItems = await ApiClient.GetListAsync<SupplierListItem>("/api/suppliers");
+            ApplyFilter();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
@@ -57,7 +50,10 @@ public partial class SuppliersPage : Page
             await Task.Delay(300, _filterCts.Token);
             ApplyFilter();
         }
-        catch (TaskCanceledException) { }
+        catch (TaskCanceledException)
+        {
+            // Expected exception due to search debouncing; safe to ignore.
+        }
     }
 
     private static bool Match(string? value, string filter)
@@ -129,7 +125,7 @@ public partial class SuppliersPage : Page
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is SupplierListItem s &&
-            MessageBox.Show($"Disattivare {s.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Disattivare {s.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
         {
             await ApiClient.DeleteAsync($"/api/suppliers/{s.Id}");
             await Load();

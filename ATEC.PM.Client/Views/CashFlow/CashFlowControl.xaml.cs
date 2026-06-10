@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
@@ -15,10 +16,13 @@ public partial class CashFlowControl : UserControl
     private bool _paymentSaving;
     private int _projectId;
     private CashFlowViewModel _vm = new();
+    private OxyPlotChartHost? _chartHost;
+    private FrameworkElement? _chartMarginTarget;
 
     public CashFlowControl()
     {
         InitializeComponent();
+        Unloaded += (_, _) => TeardownChart();
     }
 
     public async void Load(int projectId)
@@ -26,13 +30,8 @@ public partial class CashFlowControl : UserControl
         _projectId = projectId;
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/cashflow");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            CashFlowData data = JsonSerializer.Deserialize<CashFlowData>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            CashFlowData data = await ApiClient.GetDataAsync<CashFlowData>(
+                $"/api/projects/{_projectId}/cashflow") ?? new();
 
             _vm = CashFlowViewModel.FromData(data);
             DataContext = _vm;
@@ -41,8 +40,39 @@ public partial class CashFlowControl : UserControl
                 BuildMonthColumns();
 
             txtLoading.Visibility = Visibility.Collapsed;
+
+            // Grafico OxyPlot dopo griglia visibile (non blocca il primo paint)
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(EnsureChart));
         }
         catch (Exception ex) { txtLoading.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void EnsureChart()
+    {
+        if (!_vm.IsInitialized || _chartHost != null)
+            return;
+
+        _chartHost = new OxyPlotChartHost(chartHost);
+        _chartMarginTarget = _chartHost.EnsurePlotView(_vm.PlotModel, height: 220);
+        _vm.ApplyChart();
+        _chartHost.UpdateModel(_vm.PlotModel);
+    }
+
+    private void TeardownChart()
+    {
+        _chartHost?.Teardown();
+        _chartHost = null;
+        _chartMarginTarget = null;
+    }
+
+    private void RefreshChartIfReady()
+    {
+        _vm.Recalculate();
+        if (_chartHost == null)
+            return;
+
+        _vm.ApplyChart();
+        _chartHost.UpdateModel(_vm.PlotModel);
     }
 
     private void AmountTextBox_KeyDown(object sender, KeyEventArgs e)
@@ -77,7 +107,7 @@ public partial class CashFlowControl : UserControl
                 JsonSerializer.Serialize(req));
             Load(_projectId);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -90,35 +120,36 @@ public partial class CashFlowControl : UserControl
             decimal defaultAmt = _vm.ProjectRevenue;
             string json = JsonSerializer.Serialize(new { paymentAmount = defaultAmt, monthCount = 13 });
             await ApiClient.PostAsync($"/api/projects/{_projectId}/cashflow/init", json);
+            TeardownChart();
             Load(_projectId);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void BtnDeleteCategory_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.DataContext is not CfGridRow row) return;
         string displayName = row.Label.StartsWith("[M] ") ? row.Label[4..] : row.Label;
-        if (MessageBox.Show($"Eliminare '{displayName}'?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Eliminare '{displayName}'?", "Conferma", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         try
         {
             await ApiClient.DeleteAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}");
             Load(_projectId);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private DataTemplate BuildCellTemplate(string bindingPath)
     {
-        var template = new DataTemplate();
+        DataTemplate template = new DataTemplate();
 
-        var borderFactory = new FrameworkElementFactory(typeof(Border));
+        FrameworkElementFactory borderFactory = new FrameworkElementFactory(typeof(Border));
         borderFactory.SetBinding(Border.BackgroundProperty, new Binding("CellColor")
         {
             Converter = (IValueConverter)Resources["RowTypeToBg"]
         });
 
-        var tbFactory = new FrameworkElementFactory(typeof(TextBox));
+        FrameworkElementFactory tbFactory = new FrameworkElementFactory(typeof(TextBox));
         tbFactory.SetBinding(TextBox.TextProperty, new Binding(bindingPath)
         {
             StringFormat = "N0",
@@ -161,7 +192,7 @@ public partial class CashFlowControl : UserControl
         {
             string header = $"{m + 1}\n{_vm.MonthLabels[m]}";
 
-            var col = new DataGridTemplateColumn
+            DataGridTemplateColumn col = new DataGridTemplateColumn
             {
                 Header = header,
                 Width = 80,
@@ -178,7 +209,7 @@ public partial class CashFlowControl : UserControl
     {
         try
         {
-            if (dgMain.Columns.Count < 3) return;
+            if (_chartMarginTarget == null || dgMain.Columns.Count < 3) return;
 
             double colA = dgMain.Columns[0].ActualWidth;
 
@@ -190,10 +221,14 @@ public partial class CashFlowControl : UserControl
             double dgVisible = dgMain.ActualWidth;
             double rightMargin = Math.Max(0, dgVisible - colA - colB - monthsWidth);
 
-            chartContainer.Margin = new Thickness(colA, 8, rightMargin, 0);
+            _chartMarginTarget.Margin = new Thickness(colA, 8, rightMargin, 0);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error in DgMain_LayoutUpdated: {ex}");
+        }
     }
+
     private void CellTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsEditable)
@@ -216,6 +251,7 @@ public partial class CashFlowControl : UserControl
             SaveRowData(row, tb);
         }
     }
+
     // ═══════════════════════════════════════════════════════════════
     // PAGAMENTO CLIENTE
     // ═══════════════════════════════════════════════════════════════
@@ -237,6 +273,7 @@ public partial class CashFlowControl : UserControl
             tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         await SavePaymentAndRefresh();
     }
+
     private void LabelTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && sender is TextBox tb && tb.DataContext is CfGridRow row && row.IsLabelEditable)
@@ -268,13 +305,19 @@ public partial class CashFlowControl : UserControl
                 await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}",
                     JsonSerializer.Serialize(req));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Error saving category label: {ex}");
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio dell'etichetta della categoria: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
         });
     }
 
     private void SaveCategoryAmount(CfGridRow row)
     {
-        // Le categorie linkate a robot hanno totale calcolato automaticamente lato server
         if (row.RefId <= 0 || row.IsLinked) return;
         _ = Task.Run(async () =>
         {
@@ -284,9 +327,16 @@ public partial class CashFlowControl : UserControl
                 await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/categories/{row.RefId}",
                     JsonSerializer.Serialize(req));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Error saving category amount: {ex}");
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio dell'importo della categoria: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
         });
-        _vm.Recalculate();
+        RefreshChartIfReady();
     }
 
     private async Task SaveData(string dataType, int refId, int monthNumber, decimal numValue)
@@ -297,7 +347,14 @@ public partial class CashFlowControl : UserControl
             await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/data",
                 JsonSerializer.Serialize(req));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error in SaveData: {ex}");
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio dei dati del flusso di cassa: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            });
+        }
     }
 
     private bool _startDateSaving;
@@ -314,6 +371,7 @@ public partial class CashFlowControl : UserControl
         try
         {
             await SavePaymentAndRefresh();
+            TeardownChart();
             Load(_projectId);
         }
         finally
@@ -329,16 +387,20 @@ public partial class CashFlowControl : UserControl
             var req = new { paymentAmount = _vm.PaymentAmount, monthCount = _vm.MonthCount, startDate = _vm.StartDate };
             await ApiClient.PutAsync($"/api/projects/{_projectId}/cashflow/header",
                 JsonSerializer.Serialize(req));
-            _vm.Recalculate();
+            RefreshChartIfReady();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error saving payment/header: {ex}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio dell'importo o dell'intestazione: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void SaveRowData(CfGridRow row, TextBox tb)
     {
-        var be = tb.GetBindingExpression(TextBox.TextProperty);
+        BindingExpression? be = tb.GetBindingExpression(TextBox.TextProperty);
         string path = be?.ParentBinding?.Path?.Path ?? "";
-        var match = Regex.Match(path, @"Values\[(\d+)\]");
+        Match match = Regex.Match(path, @"Values\[(\d+)\]");
         if (!match.Success) return;
 
         int monthIndex = int.Parse(match.Groups[1].Value);
@@ -356,7 +418,6 @@ public partial class CashFlowControl : UserControl
 
         int refId = row.RowType == CfRowType.CategoryPct ? row.RefId : 0;
         _ = SaveData(dataType, refId, monthNumber, row.Values[monthIndex]);
-        _vm.Recalculate();
-
+        RefreshChartIfReady();
     }
 }

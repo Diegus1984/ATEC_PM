@@ -88,7 +88,7 @@ public partial class BudgetVsActualControl : UserControl
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine($"Error updating order price: {ex}");
-                MessageBox.Show($"Errore durante l'aggiornamento del prezzo dell'ordine: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante l'aggiornamento del prezzo dell'ordine: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -108,7 +108,7 @@ public partial class BudgetVsActualControl : UserControl
             catch (Exception ex)
             {
                 System.Diagnostics.Trace.WriteLine($"Error updating actual travel cost: {ex}");
-                MessageBox.Show($"Errore durante l'aggiornamento dei costi di viaggio effettivi: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante l'aggiornamento dei costi di viaggio effettivi: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -150,7 +150,7 @@ public partial class BudgetVsActualControl : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 
@@ -183,7 +183,7 @@ public partial class BudgetVsActualControl : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore durante il salvataggio delle ore pianificate: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio delle ore pianificate: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -199,11 +199,15 @@ public partial class BudgetVsActualControl : UserControl
                 return;
 
             HashSet<string> assignedNames = phase.Assignments.Select(a => a.EmployeeName).ToHashSet();
-            List<LookupItem> available = employees.Where(emp => !assignedNames.Contains(emp.Name)).ToList();
+            // Esclude i già assegnati e le risorse GENERICHE/wildcard (nome tipo "[UTM] Generico"):
+            // in assegnazione devono comparire solo i tecnici reali.
+            List<LookupItem> available = employees
+                .Where(emp => !assignedNames.Contains(emp.Name) && !emp.Name.StartsWith("["))
+                .ToList();
 
             if (!available.Any())
             {
-                MessageBox.Show("Nessun tecnico disponibile per questo reparto.", "Info");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun tecnico disponibile per questo reparto.", "Info");
                 return;
             }
 
@@ -226,7 +230,7 @@ public partial class BudgetVsActualControl : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 
@@ -236,7 +240,7 @@ public partial class BudgetVsActualControl : UserControl
         if (sender is not Button btn || btn.Tag is not BvaPhaseGroupVM phase) return;
         if (!phase.IsLocal) return;
 
-        MessageBoxResult ok = MessageBox.Show(
+        MessageBoxResult ok = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Promuovere la fase \"{phase.PhaseName}\" a template globale?\n\n" +
             "Da questo momento sarà riusabile in altre commesse e visibile in Configurazione Sezioni.",
             "Conferma promozione", MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -248,12 +252,12 @@ public partial class BudgetVsActualControl : UserControl
             if (ApiClient.IsApiSuccess(result, out string msg))
                 Load(_projectId);
             else
-                MessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella promozione." : msg,
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella promozione." : msg,
                     "Operazione non riuscita", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 
@@ -262,7 +266,7 @@ public partial class BudgetVsActualControl : UserControl
     {
         if (sender is not Button btn || btn.Tag is not BvaPhaseGroupVM phase) return;
 
-        MessageBoxResult ok = MessageBox.Show(
+        MessageBoxResult ok = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Rimuovere la fase \"{phase.PhaseName}\" da questa commessa?\n\nLe assegnazioni verranno eliminate.",
             "Conferma rimozione", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (ok != MessageBoxResult.Yes) return;
@@ -273,12 +277,12 @@ public partial class BudgetVsActualControl : UserControl
             if (ApiClient.IsApiSuccess(result, out string msg))
                 Load(_projectId);
             else
-                MessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella rimozione." : msg,
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella rimozione." : msg,
                     "Operazione non riuscita", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 
@@ -293,7 +297,7 @@ public partial class BudgetVsActualControl : UserControl
                 "/api/phases/templates");
             if (allTemplates == null || allTemplates.Count == 0)
             {
-                MessageBox.Show("Nessun template fase disponibile.", "Info");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun template fase disponibile.", "Info");
                 return;
             }
 
@@ -304,7 +308,7 @@ public partial class BudgetVsActualControl : UserControl
 
             if (sectionTemplates.Count == 0)
             {
-                MessageBox.Show("Nessun template disponibile per questa sezione.", "Info");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun template disponibile per questa sezione.", "Info");
                 return;
             }
 
@@ -329,7 +333,7 @@ public partial class BudgetVsActualControl : UserControl
 
             if (available.Count == 0)
             {
-                MessageBox.Show("Tutte le fasi template di questa sezione sono già presenti nella commessa.", "Info");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Tutte le fasi template di questa sezione sono già presenti nella commessa.", "Info");
                 return;
             }
 
@@ -347,11 +351,11 @@ public partial class BudgetVsActualControl : UserControl
             if (ApiClient.IsApiSuccess(result, out _))
                 Load(section.ProjectId);
             else
-                MessageBox.Show("Errore nell'importazione delle fasi.");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Errore nell'importazione delle fasi.");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 
@@ -380,12 +384,12 @@ public partial class BudgetVsActualControl : UserControl
                 Load(section.ProjectId);   // ricarica BVA per vedere la nuova fase
             }
             else
-                MessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella creazione della fase locale." : msg,
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(string.IsNullOrWhiteSpace(msg) ? "Errore nella creazione della fase locale." : msg,
                     "Fase non creata", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}");
         }
     }
 }

@@ -44,13 +44,8 @@ public partial class EmployeeDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/departments");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            _departments = JsonSerializer.Deserialize<List<DepartmentDto>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            _departments = await ApiClient.GetListAsync<DepartmentDto>("/api/departments");
+            if (_departments.Count == 0) return;
 
             _deptRows.Clear();
             _compRows.Clear();
@@ -68,44 +63,38 @@ public partial class EmployeeDialog : Window
                 });
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading departments: {ex.Message}");
+        }
     }
 
     private async Task LoadEmployee()
     {
         try
         {
-            // Anagrafica
-            string jsonEmp = await ApiClient.GetAsync($"/api/employees/{_employeeId}");
-            JsonDocument docEmp = JsonDocument.Parse(jsonEmp);
-            if (docEmp.RootElement.GetProperty("success").GetBoolean())
+            EmployeeSaveRequest? emp = await ApiClient.GetDataAsync<EmployeeSaveRequest>($"/api/employees/{_employeeId}");
+            if (emp != null)
             {
-                JsonElement d = docEmp.RootElement.GetProperty("data");
-                txtFirstName.Text = d.GetProperty("firstName").GetString() ?? "";
-                txtLastName.Text = d.GetProperty("lastName").GetString() ?? "";
-                txtEmail.Text = d.GetProperty("email").GetString() ?? "";
-                SelectComboItem(cmbType, d.GetProperty("empType").GetString() ?? "INTERNAL");
-                SelectComboItem(cmbStatus, d.GetProperty("status").GetString() ?? "ACTIVE");
+                txtFirstName.Text = emp.FirstName;
+                txtLastName.Text = emp.LastName;
+                txtEmail.Text = emp.Email;
+                SelectComboItem(cmbType, emp.EmpType);
+                SelectComboItem(cmbStatus, emp.Status);
             }
 
-            // Ruolo + reparti + competenze
-            string jsonUser = await ApiClient.GetAsync($"/api/users/{_employeeId}");
-            JsonDocument docUser = JsonDocument.Parse(jsonUser);
-            if (!docUser.RootElement.GetProperty("success").GetBoolean()) return;
+            UserDetailDto? user = await ApiClient.GetDataAsync<UserDetailDto>($"/api/users/{_employeeId}");
+            if (user == null) return;
 
-            JsonElement u = docUser.RootElement.GetProperty("data");
-
-            string role = u.GetProperty("userRole").GetString() ?? "TECH";
+            string role = user.UserRole;
             rbAdmin.IsChecked = role == "ADMIN";
             rbPm.IsChecked = role == "PM";
             rbResp.IsChecked = role == "RESP_REPARTO";
             rbTech.IsChecked = !new[] { "ADMIN", "PM", "RESP_REPARTO" }.Contains(role);
 
-            txtUsername.Text = u.GetProperty("username").GetString() ?? "";
+            txtUsername.Text = user.Username;
 
-            List<EmployeeDepartmentDto> depts = JsonSerializer.Deserialize<List<EmployeeDepartmentDto>>(
-                u.GetProperty("departments").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<EmployeeDepartmentDto> depts = user.Departments;
 
             foreach (DeptMembershipRow row in _deptRows)
             {
@@ -118,9 +107,7 @@ public partial class EmployeeDialog : Window
                 }
             }
 
-            List<EmployeeCompetenceDto> comps = JsonSerializer.Deserialize<List<EmployeeCompetenceDto>>(
-                u.GetProperty("competences").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<EmployeeCompetenceDto> comps = user.Competences;
 
             foreach (CompetenceRow row in _compRows)
             {
@@ -197,13 +184,12 @@ public partial class EmployeeDialog : Window
             if (_employeeId == 0)
             {
                 string res = await ApiClient.PostAsync("/api/employees", empJson);
-                JsonDocument doc = JsonDocument.Parse(res);
-                if (!doc.RootElement.GetProperty("success").GetBoolean())
+                if (!ApiClient.TryGetApiData<int>(res, out int newEmpId, out string errMsg))
                 {
-                    txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                    txtError.Text = errMsg;
                     return;
                 }
-                employeeId = doc.RootElement.GetProperty("data").GetInt32();
+                employeeId = newEmpId;
             }
             else
             {

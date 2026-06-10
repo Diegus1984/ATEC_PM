@@ -30,7 +30,14 @@ ATEC PM is a WPF/.NET 8 project management application built by ATEC - Automatio
 - ResourceDictionaries in `/Styles/` folder, merged in App.xaml
 
 ## Current Modules
-ProjectCostingControl, PhaseRowControl, DocumentManagerControl, Chat, Timesheet, Dashboard, CodexViewer
+ProjectCostingControl, PhaseRowControl, DocumentManagerControl, Chat, Timesheet, Dashboard, CodexViewer, **ResourcePlanner** (Gestione Risorse)
+
+### Gestione Risorse (`Views/Risorse/`)
+- **`Pages/`** — XAML + code-behind: `ResourcePlannerPage`, `AssignmentDialog`, `FerieDashboardWindow`, `FerieEditDialog`
+- **`Classes/`** — partial class + helper: `ResourcePlannerPage.{Data,Render,Drag}.cs`, `ResourcePlannerHelpers.cs`, `FerieDashboardWindow.Drag.cs`
+- Namespace unico: `ATEC.PM.Client.Views.Risorse` (MainWindow: `new Risorse.ResourcePlannerPage()`)
+- Gantt: drag orizzontale fluido, auto-pan ai bordi, `_busy` durante API, glow hover sulle barre
+- Ferie: conteggio giorni lavorativi (`WorkingDayCount` / `DisplayDayCount`); dashboard dedicata da toolbar «Piano ferie»
 
 ## Commands
 - `dotnet build` — Build solution

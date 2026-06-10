@@ -44,14 +44,13 @@ public partial class MaterialCategoryDialog : Window
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync("/api/material-categories", json);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }

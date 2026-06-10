@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
@@ -60,15 +61,8 @@ public partial class CustomersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/customers");
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CustomerListItem>>>(json, options);
-
-            if (response != null && response.Success)
-            {
-                _allItems = response.Data ?? new();
-                ApplyFilter();
-            }
+            _allItems = await ApiClient.GetListAsync<CustomerListItem>("/api/customers");
+            ApplyFilter();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
@@ -90,7 +84,10 @@ public partial class CustomersPage : Page
             await Task.Delay(300, _filterCts.Token);
             ApplyFilter();
         }
-        catch (TaskCanceledException) { }
+        catch (TaskCanceledException)
+        {
+            // Expected exception due to search debouncing; safe to ignore.
+        }
     }
 
     private static bool Match(string? value, string filter)
@@ -270,8 +267,7 @@ public partial class CustomersPage : Page
             string jsonBody = JsonSerializer.Serialize(obj);
             string result = await ApiClient.PutAsync($"/api/customers/{_selectedCustomer.Id}", jsonBody);
 
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 int savedId = _selectedCustomer.Id;
                 await Load();
@@ -280,7 +276,7 @@ public partial class CustomersPage : Page
             }
             else
             {
-                ShowError(doc.RootElement.GetProperty("message").GetString() ?? "Errore");
+                ShowError(msg ?? "Errore");
             }
         }
         catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
@@ -338,12 +334,54 @@ public partial class CustomersPage : Page
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement fe && fe.DataContext is CustomerListItem c &&
-            MessageBox.Show($"Disattivare {c.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        if (sender is FrameworkElement fe && fe.DataContext is CustomerListItem c)
         {
-            await ApiClient.DeleteAsync($"/api/customers/{c.Id}");
-            ClearDetail();
-            await Load();
+            await ExecuteDelete(c);
+        }
+    }
+
+    private async Task ExecuteDelete(CustomerListItem c)
+    {
+        if (ShadcnMessageBox.Show($"Disattivare {c.CompanyName}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        {
+            try
+            {
+                await ApiClient.DeleteAsync($"/api/customers/{c.Id}");
+                ClearDetail();
+                await Load();
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Errore durante l'eliminazione: {ex.Message}");
+            }
+        }
+    }
+
+    private void BtnRowOptions_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu != null)
+        {
+            btn.ContextMenu.PlacementTarget = btn;
+            btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private void MenuItemEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is CustomerListItem c)
+        {
+            dgCustomers.SelectedItem = c;
+            ShowDetail(c);
+            PopulateEditFields(c);
+            SetEditMode(true);
+        }
+    }
+
+    private async void MenuItemDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is CustomerListItem c)
+        {
+            await ExecuteDelete(c);
         }
     }
 

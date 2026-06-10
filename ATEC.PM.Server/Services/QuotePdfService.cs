@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -24,10 +25,13 @@ public class QuotePdfService
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
-    public QuotePdfService(IConfiguration config)
+    private readonly ILogger<QuotePdfService> _logger;
+
+    public QuotePdfService(IConfiguration config, ILogger<QuotePdfService> logger)
     {
         _cmsBasePath = config["Uploads:CmsPath"]
             ?? Path.Combine(AppContext.BaseDirectory, "uploads", "cms");
+        _logger = logger;
     }
 
     public byte[] Generate(QuoteDto quote)
@@ -969,10 +973,13 @@ public class QuotePdfService
                     byte[] imgBytes = File.ReadAllBytes(localPath);
                     col.Item().Height(4);
                     // Limita altezza immagine per evitare che occupi tutta la pagina
-                    col.Item().MaxHeight(250).Image(imgBytes, ImageScaling.FitArea);
+                    col.Item().MaxHeight(250).Image(imgBytes).FitArea();
                     col.Item().Height(4);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Impossibile caricare o disegnare l'immagine PDF dal percorso {LocalPath}", localPath);
+                }
             }
         }
 

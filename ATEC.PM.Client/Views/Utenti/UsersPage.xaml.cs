@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Client.ViewModels;
 
@@ -22,16 +23,9 @@ public partial class UsersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/users");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                _allUsers = JsonSerializer.Deserialize<List<UserRow>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                ApplyFilter();
-                txtStatus.Text = $"{_allUsers.Count} utenti";
-            }
+            _allUsers = await ApiClient.GetListAsync<UserRow>("/api/users");
+            ApplyFilter();
+            txtStatus.Text = $"{_allUsers.Count} utenti";
         }
         catch (Exception ex)
         {
@@ -52,26 +46,12 @@ public partial class UsersPage : Page
         dgUsers.ItemsSource = filtered;
     }
 
-    private void DgUsers_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        bool hasSelection = dgUsers.SelectedItem != null;
-        btnEdit.IsEnabled   = hasSelection;
-        btnDelete.IsEnabled = hasSelection;
-    }
-
-    private void DgUsers_DoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (dgUsers.SelectedItem is UserRow) OpenEdit();
-    }
-
     private void BtnNew_Click(object sender, RoutedEventArgs e)
     {
         EmployeeDialog dlg = new(0) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true)
             _ = LoadUsers();
     }
-
-    private void BtnEdit_Click(object sender, RoutedEventArgs e) => OpenEdit();
 
     private void OpenEdit()
     {
@@ -81,17 +61,15 @@ public partial class UsersPage : Page
             _ = LoadUsers();
     }
 
-    private async void BtnDelete_Click(object sender, RoutedEventArgs e)
+    private async Task ExecuteDelete(UserRow row)
     {
-        if (dgUsers.SelectedItem is not UserRow row) return;
-
         if (row.Id == App.UserId)
         {
-            MessageBox.Show("Non puoi eliminare il tuo stesso account.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShadcnMessageBox.Show("Non puoi eliminare il tuo stesso account.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        if (MessageBox.Show($"Eliminare {row.FullName}?\nL'utente verrà disattivato.", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        if (ShadcnMessageBox.Show($"Eliminare {row.FullName}?\nL'utente verrà disattivato.", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
         try
@@ -101,7 +79,45 @@ public partial class UsersPage : Page
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void BtnRowOptions_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn)
+        {
+            if (btn.ContextMenu != null)
+            {
+                btn.ContextMenu.PlacementTarget = btn;
+                btn.ContextMenu.IsOpen = true;
+            }
+        }
+    }
+
+    private void MenuItemEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+        {
+            var rowItem = menuItem.DataContext as UserRow;
+            if (rowItem != null)
+            {
+                dgUsers.SelectedItem = rowItem;
+                OpenEdit();
+            }
+        }
+    }
+
+    private async void MenuItemDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+        {
+            var rowItem = menuItem.DataContext as UserRow;
+            if (rowItem != null)
+            {
+                dgUsers.SelectedItem = rowItem;
+                await ExecuteDelete(rowItem);
+            }
         }
     }
 

@@ -1,5 +1,7 @@
 using System.Windows.Media;
 using System.Windows.Threading;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.UserControls;
 
@@ -46,17 +48,15 @@ public partial class ProjectChatControl : UserControl
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/chat/project/{_projectId}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var chats = JsonSerializer.Deserialize<List<ChatListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<ChatListItem> chats = await ApiClient.GetDataAsync<List<ChatListItem>>(
+                $"/api/chat/project/{_projectId}") ?? new();
 
             RenderChatList(chats);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading chat list: {ex.Message}");
+        }
     }
 
     private void RenderChatList(List<ChatListItem> chats)
@@ -185,32 +185,31 @@ public partial class ProjectChatControl : UserControl
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/chat/{chatId}/messages");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var messages = JsonSerializer.Deserialize<List<ChatMessageDto>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<ChatMessageDto> messages = await ApiClient.GetDataAsync<List<ChatMessageDto>>(
+                $"/api/chat/{chatId}/messages") ?? new();
 
             RenderMessages(messages);
             if (scroll) scrollMessages.ScrollToEnd();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading messages: {ex.Message}");
+        }
     }
 
     private async Task LoadCurrentParticipants(int chatId)
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/chat/{chatId}/participants");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                _currentParticipants = JsonSerializer.Deserialize<List<ChatParticipantDto>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.Where(p => p.EmployeeId != App.UserId).ToList() ?? new();
+            List<ChatParticipantDto> participants = await ApiClient.GetDataAsync<List<ChatParticipantDto>>(
+                $"/api/chat/{chatId}/participants") ?? new();
+            _currentParticipants = participants.Where(p => p.EmployeeId != App.UserId).ToList();
         }
-        catch { _currentParticipants = new(); }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading current participants: {ex.Message}");
+            _currentParticipants = new();
+        }
     }
 
     private void RenderMessages(List<ChatMessageDto> messages)
@@ -340,7 +339,10 @@ public partial class ProjectChatControl : UserControl
                             msgContent.Children.Add(img);
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.WriteLine($"Error loading attachment image: {ex.Message}");
+                    }
                 }
                 else
                 {
@@ -360,9 +362,12 @@ public partial class ProjectChatControl : UserControl
                             if (System.IO.File.Exists(attachPath))
                                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(attachPath) { UseShellExecute = true });
                             else
-                                MessageBox.Show("File non trovato.");
+                                ATEC.PM.Client.Controls.ShadcnMessageBox.Show("File non trovato.");
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Impossibile aprire l'allegato: {ex.Message}");
+                        }
                     };
                     msgContent.Children.Add(linkText);
                 }
@@ -390,13 +395,16 @@ public partial class ProjectChatControl : UserControl
                     try
                     {
                         string result = await ApiClient.DeleteAsync($"/api/chat/messages/{msgId}");
-                        JsonDocument doc = JsonDocument.Parse(result);
-                        if (doc.RootElement.GetProperty("success").GetBoolean())
+                        if (ApiClient.IsApiSuccess(result, out _))
                             await LoadMessages(_selectedChatId);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante l'eliminazione del messaggio: {ex.Message}");
+                    }
                 };
                 ctx.Items.Add(delItem);
+                ATEC.PM.Client.Helpers.ShadcnMenuHelper.ApplyDark(ctx);
                 msgBorder.ContextMenu = ctx;
             }
 
@@ -553,14 +561,16 @@ public partial class ProjectChatControl : UserControl
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync($"/api/chat/{_selectedChatId}/messages", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out _))
             {
                 await LoadMessages(_selectedChatId);
                 await LoadChatList();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante l'invio del messaggio: {ex.Message}");
+        }
     }
 
     // ═══ NEW CHAT ═══
@@ -636,14 +646,13 @@ public partial class ProjectChatControl : UserControl
     {
         if (_selectedChatId == 0) return;
 
-        if (MessageBox.Show("Eliminare questa chat e tutti i messaggi?", "Conferma",
+        if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Eliminare questa chat e tutti i messaggi?", "Conferma",
             MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
         {
             string result = await ApiClient.DeleteAsync($"/api/chat/{_selectedChatId}");
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out _))
             {
                 _selectedChatId = 0;
                 txtChatTitle.Text = "Seleziona una chat";
@@ -656,7 +665,7 @@ public partial class ProjectChatControl : UserControl
                 await LoadChatList();
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void BtnAttach_Click(object sender, RoutedEventArgs e)
@@ -689,13 +698,12 @@ public partial class ProjectChatControl : UserControl
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync($"/api/chat/{_selectedChatId}/messages/with-attachment", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out _))
             {
                 await LoadMessages(_selectedChatId);
                 await LoadChatList();
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore upload: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore upload: {ex.Message}"); }
     }
 }

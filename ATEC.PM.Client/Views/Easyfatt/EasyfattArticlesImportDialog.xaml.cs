@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -32,70 +33,48 @@ public partial class EasyfattArticlesImportDialog : Window
         try
         {
             string encoded = Uri.EscapeDataString(filePath);
-            string json = await ApiClient.GetAsync($"/api/import/easyfatt/articles?filePath={encoded}");
+            ApiResponse<EasyfattArticlesPreviewDto>? previewResp = await ApiClient.GetApiAsync<EasyfattArticlesPreviewDto>(
+                $"/api/import/easyfatt/articles?filePath={encoded}");
 
-            if (string.IsNullOrWhiteSpace(json))
+            if (previewResp == null || !previewResp.Success || previewResp.Data == null)
             {
-                txtStatus.Text = "Risposta vuota dal server.";
+                txtStatus.Text = previewResp?.Message ?? "Errore server";
                 return;
             }
 
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+            EasyfattArticlesPreviewDto preview = previewResp.Data;
+            txtSummary.Text = $"Totale: {preview.TotalFound} | Nuovi: {preview.NewCount} | Esistenti: {preview.DuplicateCount} | Con fornitore: {preview.WithSupplier}";
 
-            // Controllo successo risposta
-            if (!root.TryGetProperty("success", out var successProp) || !successProp.GetBoolean())
+            foreach (EasyfattArticleDto a in preview.Articles)
             {
-                txtStatus.Text = root.TryGetProperty("message", out var msg) ? msg.GetString() : "Errore server";
-                return;
-            }
-
-            // Accesso ai dati (Summary)
-            if (!root.TryGetProperty("data", out var data)) return;
-
-            // Estrazione conteggi con valori di default se mancano (evita l'errore "key not present")
-            int totalFound = data.TryGetProperty("totalFound", out var tf) ? tf.GetInt32() : 0;
-            int newCount = data.TryGetProperty("newCount", out var nc) ? nc.GetInt32() : 0;
-            int dupCount = data.TryGetProperty("duplicateCount", out var dc) ? dc.GetInt32() : 0;
-            int withSupplier = data.TryGetProperty("withSupplier", out var ws) ? ws.GetInt32() : 0;
-
-            txtSummary.Text = $"Totale: {totalFound} | Nuovi: {newCount} | Esistenti: {dupCount} | Con fornitore: {withSupplier}";
-
-            if (data.TryGetProperty("articles", out var articles) && articles.ValueKind == JsonValueKind.Array)
-            {
-                foreach (JsonElement a in articles.EnumerateArray())
+                string status = a.Status ?? "NUOVO";
+                bool isNew = status == "NUOVO";
+                _allRows.Add(new ArticleImportRow
                 {
-                    // Determiniamo lo stato e l'azione predefinita
-                    string status = a.TryGetProperty("status", out var st) ? (st.GetString() ?? "NUOVO") : "NUOVO";
-                    bool isNew = status == "NUOVO";
-
-                    _allRows.Add(new ArticleImportRow
-                    {
-                        IsSelected = isNew, // Seleziona automaticamente solo i nuovi
-                        EasyfattId = a.GetProperty("easyfattId").GetInt32(),
-                        Code = a.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "",
-                        Description = a.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
-                        Category = a.TryGetProperty("category", out var cat) ? cat.GetString() ?? "" : "",
-                        Subcategory = a.TryGetProperty("subcategory", out var sub) ? sub.GetString() ?? "" : "",
-                        Unit = a.TryGetProperty("unit", out var u) ? u.GetString() ?? "" : "",
-                        UnitCost = a.TryGetProperty("unitCost", out var uc) ? uc.GetDecimal() : 0,
-                        ListPrice = a.TryGetProperty("listPrice", out var lp) ? lp.GetDecimal() : 0,
-                        SupplierCode = a.TryGetProperty("supplierCode", out var sc) ? sc.GetString() ?? "" : "",
-                        Manufacturer = a.TryGetProperty("manufacturer", out var m) ? m.GetString() ?? "" : "",
-                        Barcode = a.TryGetProperty("barcode", out var b) ? b.GetString() ?? "" : "",
-                        Notes = a.TryGetProperty("notes", out var n) ? n.GetString() ?? "" : "",
-                        Status = status,
-                        ExistingId = a.TryGetProperty("existingId", out var exId) ? exId.GetInt32() : 0,
-                        ResolvedSupplierId = a.TryGetProperty("resolvedSupplierId", out var rsId) && rsId.ValueKind != JsonValueKind.Null ? rsId.GetInt32() : null,
-                        ResolvedSupplierName = a.TryGetProperty("resolvedSupplierName", out var rsName) ? rsName.GetString() ?? "" : "",
-                        Action = isNew ? "INSERT" : "SKIP"
-                    });
-                }
+                    IsSelected = isNew,
+                    EasyfattId = a.EasyfattId,
+                    Code = a.Code,
+                    Description = a.Description,
+                    Category = a.Category,
+                    Subcategory = a.Subcategory,
+                    Unit = a.Unit,
+                    UnitCost = a.UnitCost,
+                    ListPrice = a.ListPrice,
+                    SupplierCode = a.SupplierCode,
+                    Manufacturer = a.Manufacturer,
+                    Barcode = a.Barcode,
+                    Notes = a.Notes,
+                    Status = status,
+                    ExistingId = a.ExistingId,
+                    ResolvedSupplierId = a.ResolvedSupplierId,
+                    ResolvedSupplierName = a.ResolvedSupplierName,
+                    Action = string.IsNullOrEmpty(a.Action) ? (isNew ? "INSERT" : "SKIP") : a.Action
+                });
             }
 
             ApplyFilter();
             btnImport.IsEnabled = true;
-            txtStatus.Text = $"Caricati {totalFound} articoli. Scegliere le azioni e cliccare Importa.";
+            txtStatus.Text = $"Caricati {preview.TotalFound} articoli. Scegliere le azioni e cliccare Importa.";
         }
         catch (Exception ex)
         {
@@ -159,11 +138,11 @@ public partial class EasyfattArticlesImportDialog : Window
         List<ArticleImportRow> toImport = _allRows.Where(r => r.IsSelected && r.Action != "SKIP").ToList();
         if (toImport.Count == 0)
         {
-            MessageBox.Show("Nessun articolo selezionato per l'importazione.", "Avviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun articolo selezionato per l'importazione.", "Avviso", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        var confirm = MessageBox.Show(
+        var confirm = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Confermi l'importazione di {toImport.Count} articoli?\n\n" +
             $"Nuovi (INSERT): {toImport.Count(r => r.Action == "INSERT")}\n" +
             $"Esistenti (UPDATE): {toImport.Count(r => r.Action == "UPDATE")}",
@@ -180,25 +159,18 @@ public partial class EasyfattArticlesImportDialog : Window
             string jsonBody = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync("/api/import/easyfatt/articles", jsonBody);
-            using var doc = JsonDocument.Parse(result);
-            var root = doc.RootElement;
 
-            if (root.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<EasyfattImportResultDto>(result, out EasyfattImportResultDto? importResult, out string errMsg)
+                && importResult != null)
             {
-                var d = root.GetProperty("data");
-                int imp = d.GetProperty("imported").GetInt32();
-                int upd = d.GetProperty("updated").GetInt32();
-
-                MessageBox.Show($"Operazione completata!\n\nArticoli creati: {imp}\nArticoli aggiornati: {upd}",
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Operazione completata!\n\nArticoli creati: {importResult.Imported}\nArticoli aggiornati: {importResult.Updated}",
                     "Successo", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                this.DialogResult = true;
-                this.Close();
+                DialogResult = true;
+                Close();
             }
             else
-            {
-                txtStatus.Text = "Errore: " + root.GetProperty("message").GetString();
-            }
+                txtStatus.Text = "Errore: " + (errMsg ?? "import");
         }
         catch (Exception ex)
         {

@@ -2,44 +2,81 @@
     x:Class="ATEC.PM.Client.Views.Admin.AddFeatureDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Nuova Feature"
-    Width="420"
+    Title="Nuova funzione"
+    Width="460"
     SizeToContent="Height"
+    Background="{DynamicResource ShadcnBackgroundBrush}"
+    FontFamily="{DynamicResource ShadcnFontFamily}"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner">
 
-    <StackPanel Margin="20">
-        <TextBlock FontWeight="SemiBold" Text="Chiave (es. nav.mia_pagina)" />
-        <TextBox x:Name="txtKey" Margin="0,4,0,12" Padding="6,6" />
+    <Window.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="ShadcnBackgroundBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="ShadcnForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnCardBrush" Color="#0C0C0E" />
+            <SolidColorBrush x:Key="ShadcnCardForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnPrimaryBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnPrimaryForegroundBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="ShadcnSecondaryBrush" Color="#18181B" />
+            <SolidColorBrush x:Key="ShadcnSecondaryForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnMutedForegroundBrush" Color="#71717A" />
+            <SolidColorBrush x:Key="ShadcnBorderBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnInputBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnPopoverBrush" Color="#0C0C0E" />
 
-        <TextBlock FontWeight="SemiBold" Text="Nome visualizzato" />
-        <TextBox x:Name="txtName" Margin="0,4,0,12" Padding="6,6" />
+            <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource ShadcnMutedForegroundBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        </ResourceDictionary>
+    </Window.Resources>
 
-        <TextBlock FontWeight="SemiBold" Text="Categoria" />
-        <ComboBox x:Name="cboCategory" Margin="0,4,0,12" Padding="6,6" SelectedIndex="0">
-            <ComboBoxItem Content="navigation" />
-            <ComboBoxItem Content="action" />
-            <ComboBoxItem Content="data" />
-        </ComboBox>
+    <Border Style="{StaticResource ShadcnCardDark}" Margin="16" Padding="20">
+        <StackPanel>
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Nome funzione" />
+            <TextBox x:Name="txtName" Margin="0,0,0,12" Style="{StaticResource ShadcnTextBox}" />
 
-        <TextBlock FontWeight="SemiBold" Text="Livello minimo" />
-        <ComboBox x:Name="cboLevel" Margin="0,4,0,16" Padding="6,6"
-                  DisplayMemberPath="Name"
-                  SelectedValuePath="Value"
-                  SelectedIndex="0" />
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Codice interno" />
+            <TextBlock
+                Margin="0,0,0,6"
+                Style="{StaticResource ShadcnSmall}"
+                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                TextWrapping="Wrap"
+                Text="Es. nav.mia_pagina, action.crea_ordine — formato: area.nome_funzione" />
+            <TextBox x:Name="txtKey" Margin="0,0,0,12" Style="{StaticResource ShadcnTextBox}" FontFamily="Consolas" />
 
-        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-            <Button
-                Content="Annulla"
-                Margin="0,0,8,0"
-                Padding="16,8"
-                IsCancel="True"
-                Style="{StaticResource FlatBtn}" />
-            <Button
-                Content="Crea"
-                Padding="16,8"
-                Style="{StaticResource PrimaryBtn}"
-                Click="BtnOk_Click" />
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Categoria" />
+            <ComboBox
+                x:Name="cboCategory"
+                Margin="0,0,0,12"
+                Style="{StaticResource ShadcnComboBox}"
+                DisplayMemberPath="Label"
+                SelectedValuePath="Value"
+                SelectedIndex="0" />
+
+            <TextBlock Style="{StaticResource FieldLabel}" Text="Livello minimo richiesto" />
+            <ComboBox
+                x:Name="cboLevel"
+                Margin="0,0,0,20"
+                Style="{StaticResource ShadcnComboBox}"
+                DisplayMemberPath="Name"
+                SelectedValuePath="Value"
+                SelectedIndex="0" />
+
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                <Button
+                    Content="Annulla"
+                    Margin="0,0,8,0"
+                    IsCancel="True"
+                    Style="{StaticResource ShadcnButtonOutline}" />
+                <Button
+                    Content="Crea"
+                    Style="{StaticResource ShadcnButtonDefault}"
+                    Click="BtnOk_Click" />
+            </StackPanel>
         </StackPanel>
-    </StackPanel>
+    </Border>
 </Window>

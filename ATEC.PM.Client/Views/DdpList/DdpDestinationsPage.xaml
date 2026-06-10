@@ -16,7 +16,7 @@
                         FontSize="16"
                         FontWeight="Bold"
                         Foreground="#1A1D26"
-                        Text="Destinazioni DDP" />
+                        Text="Conf. DDP" />
                     <TextBlock
                         x:Name="txtCount"
                         Margin="16,0,0,0"
@@ -28,10 +28,6 @@
                     HorizontalAlignment="Right"
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
-                    <Button
-                        Click="BtnAdd_Click"
-                        Content="+ Nuova Destinazione"
-                        Style="{StaticResource PrimaryBtn}" />
                     <Button
                         Click="BtnRefresh_Click"
                         Content="Aggiorna"
@@ -54,55 +50,155 @@
                 Text="Pronto" />
         </Border>
 
-        <!--  DATAGRID  -->
-        <DataGrid
-            x:Name="dgDestinations"
-            Margin="16"
-            AutoGenerateColumns="False"
-            CanUserAddRows="False"
-            IsReadOnly="True"
-            MouseDoubleClick="Dg_DoubleClick"
-            SelectionChanged="Dg_SelectionChanged"
-            Style="{StaticResource ModernDataGrid}">
+        <!--  CONTENUTO: due sezioni (Destinazioni + Stati)  -->
+        <Grid Margin="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-            <DataGrid.Columns>
-                <DataGridTextColumn
-                    Width="60"
-                    Binding="{Binding Id}"
-                    Header="ID" />
-                <DataGridTextColumn
-                    Width="*"
-                    MinWidth="200"
-                    Binding="{Binding Name}"
-                    Header="Destinazione" />
-                <DataGridTextColumn
-                    Width="80"
-                    Binding="{Binding SortOrder}"
-                    Header="Ordine" />
-                <DataGridTemplateColumn Width="80" Header="Attiva">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#12B76A">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="✓" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsActive}" Value="False">
-                                                <Setter Property="Text" Value="✗" />
-                                                <Setter Property="Foreground" Value="#DC2626" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+            <!--  ── Sezione DESTINAZIONI ──  -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="Bold"
+                        Foreground="#1A1D26"
+                        Text="Destinazioni" />
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="BtnAdd_Click"
+                        Content="+ Nuova Destinazione"
+                        DockPanel.Dock="Right"
+                        Style="{StaticResource PrimaryBtn}" />
+                </DockPanel>
+                <DataGrid
+                    x:Name="dgDestinations"
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    IsReadOnly="True"
+                    MouseDoubleClick="DgDest_DoubleClick"
+                    Style="{StaticResource ModernDataGrid}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="60"
+                            Binding="{Binding Id}"
+                            Header="ID" />
+                        <DataGridTextColumn
+                            Width="*"
+                            MinWidth="200"
+                            Binding="{Binding Name}"
+                            Header="Destinazione" />
+                        <DataGridTextColumn
+                            Width="80"
+                            Binding="{Binding SortOrder}"
+                            Header="Ordine" />
+                        <DataGridTemplateColumn Width="80" Header="Attiva">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="#12B76A">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="✓" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                        <Setter Property="Text" Value="✗" />
+                                                        <Setter Property="Foreground" Value="#DC2626" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <!--  ── Sezione STATI / CAUSALI (etichetta + colore, editabili) ──  -->
+            <DockPanel Grid.Row="1">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="Bold"
+                        Foreground="#1A1D26"
+                        Text="Stati / Causali (etichetta e colore) — doppio clic per modificare" />
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="BtnAddStatus_Click"
+                        Content="+ Nuova Causale"
+                        DockPanel.Dock="Right"
+                        Style="{StaticResource PrimaryBtn}" />
+                </DockPanel>
+                <DataGrid
+                    x:Name="dgStatuses"
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    IsReadOnly="True"
+                    MouseDoubleClick="DgStatus_DoubleClick"
+                    Style="{StaticResource ModernDataGrid}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="120"
+                            Binding="{Binding StatusKey}"
+                            Header="Chiave" />
+                        <DataGridTextColumn
+                            Width="*"
+                            MinWidth="160"
+                            Binding="{Binding Label}"
+                            Header="Etichetta" />
+                        <DataGridTemplateColumn Width="200" Header="Anteprima">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Padding="10,3"
+                                        HorizontalAlignment="Left"
+                                        Background="{Binding ColorBg}">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Foreground="{Binding ColorFg}"
+                                            Text="{Binding Label}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn
+                            Width="80"
+                            Binding="{Binding SortOrder}"
+                            Header="Ordine" />
+                        <DataGridTemplateColumn Width="80" Header="Attiva">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="#12B76A">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="✓" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                        <Setter Property="Text" Value="✗" />
+                                                        <Setter Property="Foreground" Value="#DC2626" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
     </DockPanel>
 </Page>

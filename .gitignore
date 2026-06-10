@@ -1,5 +1,59 @@
-bin/
-obj/
+# ── Build .NET ──────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+artifacts/
+TestResults/
+
+# ── Visual Studio / Rider / VS Code ─────────────────────────
 .vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
 *.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+.idea/
+*.DotSettings.user
+
+# ── Config locale / segreti ─────────────────────────────────
 appsettings.json
+appsettings.*.json
+!appsettings.Development.json.example
+appsettings.Secrets.json
+*.pfx
+*.snk
+
+# ── Tooling AI locale (non parte del prodotto) ──────────────
+.claude/
+.cursor/
+
+# ── Documenti operativi sensibili (usare secret store) ──────
+ROADMAP.md
+roadmap.md
+roadmap_danea.md
+**/ROADMAP.md
+**/roadmap*.md
+
+# ── Backup / temporanei editor ──────────────────────────────
+*.bak
+*.tmp
+*.swp
+*~
+*.Backup*
+*.csproj.Backup*
+*_wpftmp.csproj
+
+# ── Log e dump ──────────────────────────────────────────────
+*.log
+*.dmp
+
+# ── OS ──────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

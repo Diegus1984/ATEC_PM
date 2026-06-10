@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:ATEC.PM.Client.Views"
+    xmlns:controls="clr-namespace:ATEC.PM.Client.Controls"
     Background="#F7F8FA">
 
     <Page.Resources>
@@ -15,89 +16,42 @@
         <StackPanel>
             <!--  STAT CARDS  -->
             <UniformGrid Margin="0,0,0,24" Columns="4">
-                <Border
+                <controls:KpiCard
                     Margin="0,0,12,0"
-                    Padding="20"
-                    Background="White"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#9CA3AF"
-                            Text="COMMESSE ATTIVE" />
-                        <TextBlock
-                            x:Name="txtActiveProjects"
-                            Margin="0,4,0,0"
-                            FontSize="28"
-                            FontWeight="Bold"
-                            Foreground="#1A1D26"
-                            Text="-" />
-                    </StackPanel>
-                </Border>
-                <Border
+                    Title="COMMESSE ATTIVE"
+                    Value="{Binding ActiveProjects}"
+                    Trend="Up"
+                    BadgeText="+2"
+                    TrendText="Nuovi contratti firmati"
+                    Subtitle="Progetti attualmente in corso"
+                    Theme="Light" />
+                <controls:KpiCard
                     Margin="0,0,12,0"
-                    Padding="20"
-                    Background="White"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#9CA3AF"
-                            Text="ORE QUESTA SETTIMANA" />
-                        <TextBlock
-                            x:Name="txtHoursWeek"
-                            Margin="0,4,0,0"
-                            FontSize="28"
-                            FontWeight="Bold"
-                            Foreground="#4F6EF7"
-                            Text="-" />
-                    </StackPanel>
-                </Border>
-                <Border
+                    Title="ORE QUESTA SETTIMANA"
+                    Value="{Binding HoursWeek}"
+                    Trend="Up"
+                    BadgeText="+4.2%"
+                    TrendText="In crescita vs scorsa settimana"
+                    Subtitle="Totale ore registrate dai dipendenti"
+                    Theme="Light" />
+                <controls:KpiCard
                     Margin="0,0,12,0"
-                    Padding="20"
-                    Background="White"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#9CA3AF"
-                            Text="ORE QUESTO MESE" />
-                        <TextBlock
-                            x:Name="txtHoursMonth"
-                            Margin="0,4,0,0"
-                            FontSize="28"
-                            FontWeight="Bold"
-                            Foreground="#1A1D26"
-                            Text="-" />
-                    </StackPanel>
-                </Border>
-                <Border
-                    Padding="20"
-                    Background="White"
-                    BorderBrush="#E4E7EC"
-                    BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#9CA3AF"
-                            Text="RICAVO TOTALE" />
-                        <TextBlock
-                            x:Name="txtRevenue"
-                            Margin="0,4,0,0"
-                            FontSize="28"
-                            FontWeight="Bold"
-                            Foreground="#10B981"
-                            Text="-" />
-                    </StackPanel>
-                </Border>
+                    Title="ORE QUESTO MESE"
+                    Value="{Binding HoursMonth}"
+                    Trend="Flat"
+                    BadgeText="-0.8%"
+                    TrendText="Stabile rispetto a mese scorso"
+                    Subtitle="Registrazione ore mensili"
+                    Theme="Light" />
+                <controls:KpiCard
+                    Margin="0"
+                    Title="RICAVO TOTALE"
+                    Value="{Binding Revenue}"
+                    Trend="Up"
+                    BadgeText="+12.5%"
+                    TrendText="In crescita questo mese"
+                    Subtitle="Basato sulle commesse degli ultimi 6 mesi"
+                    Theme="Dark" />
             </UniformGrid>
 
             <!--  NOTIFICATIONS HEADER  -->
@@ -114,22 +68,19 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal">
                     <Button
-                        x:Name="btnMarkAllRead"
                         Background="Transparent"
                         BorderThickness="0"
-                        Click="BtnMarkAllRead_Click"
+                        Command="{Binding MarkAllReadCommand}"
                         Content="Segna tutte lette"
                         Foreground="#667085"
                         Style="{StaticResource FlatBtn}" />
                     <CheckBox
-                        x:Name="chkUnreadOnly"
                         Margin="12,0,0,0"
                         VerticalAlignment="Center"
-                        Checked="ChkUnreadOnly_Changed"
                         Content="Solo non lette"
                         FontSize="12"
                         Foreground="#667085"
-                        Unchecked="ChkUnreadOnly_Changed" />
+                        IsChecked="{Binding UnreadOnly}" />
                 </StackPanel>
             </DockPanel>
 
@@ -147,6 +98,7 @@
                 GridLinesVisibility="Horizontal"
                 HorizontalGridLinesBrush="#F3F4F6"
                 IsReadOnly="True"
+                ItemsSource="{Binding Notifications}"
                 MouseDoubleClick="DgNotifications_DoubleClick"
                 RowHeight="36"
                 SelectionMode="Single">
@@ -334,8 +286,8 @@
                 Foreground="#1A1D26"
                 Text="Commesse Recenti" />
             <DataGrid
-                x:Name="dgRecent"
                 AutoGenerateColumns="False"
+                ItemsSource="{Binding RecentProjects}"
                 Background="White"
                 BorderBrush="#E4E7EC"
                 BorderThickness="1"

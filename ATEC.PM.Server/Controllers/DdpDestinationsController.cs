@@ -52,8 +52,19 @@ public class DdpDestinationsController : ControllerBase
     public IActionResult Update(int id, [FromBody] DdpDestinationSaveRequest req)
     {
         using var c = _db.Open();
+
+        // Nome precedente: serve a propagare la rinomina alle righe distinta (destinazione salvata per NOME).
+        string? oldName = c.ExecuteScalar<string?>(
+            "SELECT name FROM ddp_destinations WHERE id=@Id", new { Id = id });
+
         req.Id = id;
         c.Execute(@"UPDATE ddp_destinations SET name=@Name, sort_order=@SortOrder, is_active=@IsActive WHERE id=@Id", req);
+
+        // Se il nome è cambiato, riallinea le righe della distinta che usavano il vecchio nome.
+        if (!string.IsNullOrEmpty(oldName) && oldName != req.Name)
+            c.Execute("UPDATE bom_items SET destination=@New WHERE destination=@Old",
+                new { New = req.Name, Old = oldName });
+
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 

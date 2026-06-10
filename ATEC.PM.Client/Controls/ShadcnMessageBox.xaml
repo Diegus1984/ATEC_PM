@@ -1,0 +1,228 @@
+<Window x:Class="ATEC.PM.Client.Controls.ShadcnMessageBox"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Messaggio" 
+        Width="420" 
+        Height="Auto" 
+        SizeToContent="Height"
+        WindowStyle="None" 
+        AllowsTransparency="True" 
+        Background="Transparent" 
+        ResizeMode="NoResize" 
+        WindowStartupLocation="CenterOwner" 
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Custom button style for primary actions (Zinc 900) -->
+            <Style x:Key="MsgBoxPrimaryBtn" TargetType="Button">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="Background" Value="#09090B" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="FontFamily" Value="{StaticResource ShadcnFontFamily}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#27272A" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#18181B" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Custom button style for outline/secondary actions -->
+            <Style x:Key="MsgBoxOutlineBtn" TargetType="Button">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="Background" Value="White" />
+                <Setter Property="Foreground" Value="#09090B" />
+                <Setter Property="BorderBrush" Value="#E4E7EC" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontFamily" Value="{StaticResource ShadcnFontFamily}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    BorderThickness="{TemplateBinding BorderThickness}" 
+                                    CornerRadius="6" 
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#F4F4F5" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#E4E7EC" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Outer card container with rounded corners and drop shadow -->
+    <Border Background="White" 
+            BorderBrush="#E4E7EC" 
+            BorderThickness="1" 
+            CornerRadius="8" 
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="12" Direction="270" Opacity="0.08" ShadowDepth="4" Color="Black" />
+        </Border.Effect>
+        
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header / Title Bar (Dragable) -->
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="txtTitle" 
+                           Text="Messaggio" 
+                           FontFamily="{StaticResource ShadcnFontFamily}" 
+                           FontSize="14" 
+                           FontWeight="SemiBold" 
+                           Foreground="#09090B" 
+                           Margin="20,18,20,8" 
+                           VerticalAlignment="Center" />
+
+                <!-- Close X button in top right -->
+                <Button Grid.Column="1" 
+                        Click="BtnClose_Click" 
+                        Width="28" 
+                        Height="28" 
+                        Margin="0,14,14,0" 
+                        VerticalAlignment="Top" 
+                        Background="Transparent" 
+                        BorderThickness="0" 
+                        Cursor="Hand"
+                        ToolTip="Chiudi">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="Transparent" CornerRadius="4">
+                                <TextBlock Text="&#xE711;" 
+                                           FontFamily="Segoe MDL2 Assets" 
+                                           FontSize="11" 
+                                           Foreground="#71717A" 
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#F4F4F5" />
+                                    <Setter Property="Foreground" Value="#09090B" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
+            <!-- Message Body Area -->
+            <Grid Grid.Row="1" Margin="20,12,20,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Icon display -->
+                <TextBlock x:Name="txtIcon" 
+                           Grid.Column="0" 
+                           FontFamily="Segoe MDL2 Assets" 
+                           FontSize="24" 
+                           Margin="0,0,16,0" 
+                           VerticalAlignment="Top" 
+                           HorizontalAlignment="Center" />
+
+                <!-- Message text -->
+                <TextBlock x:Name="txtMessage" 
+                           Grid.Column="1" 
+                           Text="Messaggio di testo della finestra di dialogo." 
+                           FontFamily="{StaticResource ShadcnFontFamily}" 
+                           FontSize="13.5" 
+                           Foreground="#3F3F46" 
+                           TextWrapping="Wrap" 
+                           VerticalAlignment="Top" 
+                           LineHeight="18" />
+            </Grid>
+
+            <!-- Footer / Buttons Area -->
+            <StackPanel Grid.Row="2" 
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Right" 
+                        Margin="20,0,20,20">
+                
+                <!-- Yes Button -->
+                <Button x:Name="btnYes" 
+                        Content="Sì" 
+                        Style="{StaticResource MsgBoxPrimaryBtn}" 
+                        Click="BtnYes_Click" 
+                        MinWidth="80" 
+                        Margin="8,0,0,0" 
+                        Visibility="Collapsed" />
+
+                <!-- OK Button -->
+                <Button x:Name="btnOk" 
+                        Content="OK" 
+                        Style="{StaticResource MsgBoxPrimaryBtn}" 
+                        Click="BtnOk_Click" 
+                        MinWidth="80" 
+                        Margin="8,0,0,0" 
+                        Visibility="Collapsed" />
+
+                <!-- No Button -->
+                <Button x:Name="btnNo" 
+                        Content="No" 
+                        Style="{StaticResource MsgBoxOutlineBtn}" 
+                        Click="BtnNo_Click" 
+                        MinWidth="80" 
+                        Margin="8,0,0,0" 
+                        Visibility="Collapsed" />
+
+                <!-- Cancel Button -->
+                <Button x:Name="btnCancel" 
+                        Content="Annulla" 
+                        Style="{StaticResource MsgBoxOutlineBtn}" 
+                        Click="BtnCancel_Click" 
+                        MinWidth="80" 
+                        Margin="8,0,0,0" 
+                        Visibility="Collapsed" />
+                
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

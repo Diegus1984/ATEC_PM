@@ -28,6 +28,7 @@ public class UsersController : ControllerBase
                      (username IS NOT NULL AND username <> '') AS HasCredentials
               FROM employees
               WHERE status <> 'TERMINATED'
+                AND first_name NOT LIKE '[%'   -- esclude le wildcard reparto ([XXX] Generico, usate solo dalla MoM)
               ORDER BY last_name").ToList();
 
         // Carica reparti e competenze per ogni dipendente

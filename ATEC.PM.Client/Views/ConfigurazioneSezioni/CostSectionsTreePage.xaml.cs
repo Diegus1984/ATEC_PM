@@ -5,7 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Client.Views.Templates;
 using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
@@ -100,7 +102,6 @@ public partial class CostSectionsTreePage : Page
         { "OPZIONI", "#7C3AED" }
     };
 
-    private string? _lastExpandedGroup;
     private string? _lastExpandedTreeGroup;
     private bool _isRenderingTree;
 
@@ -172,36 +173,25 @@ public partial class CostSectionsTreePage : Page
     {
         try
         {
-            // Fetch parallelo di tutte le risorse
-            var dTask = ApiClient.GetAsync("/api/departments");
-            var gTask = ApiClient.GetAsync("/api/cost-sections/groups");
-            var tTask = ApiClient.GetAsync("/api/cost-sections/templates");
-            var pTask = ApiClient.GetAsync("/api/phases/templates");
+            Task<List<DepartmentDto>?> dTask = ApiClient.GetDataAsync<List<DepartmentDto>>("/api/departments");
+            Task<List<CostSectionGroupDto>?> gTask = ApiClient.GetDataAsync<List<CostSectionGroupDto>>("/api/cost-sections/groups");
+            Task<List<CostSectionTemplateDto>?> tTask = ApiClient.GetDataAsync<List<CostSectionTemplateDto>>("/api/cost-sections/templates");
+            Task<List<PhaseTemplateDto>?> pTask = ApiClient.GetDataAsync<List<PhaseTemplateDto>>("/api/phases/templates");
             await Task.WhenAll(dTask, gTask, tTask, pTask);
 
-            _departments = DeserializeList<DepartmentDto>(dTask.Result);
-            _groups = DeserializeList<CostSectionGroupDto>(gTask.Result);
-            _templates = DeserializeList<CostSectionTemplateDto>(tTask.Result);
-            _phases = DeserializeList<PhaseTemplateDto>(pTask.Result);
+            _departments = dTask.Result ?? new();
+            _groups = gTask.Result ?? new();
+            _templates = tTask.Result ?? new();
+            _phases = pTask.Result ?? new();
 
             RenderAll();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
 
-    private static List<T> DeserializeList<T>(string json)
-    {
-        var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.GetProperty("success").GetBoolean())
-            return JsonSerializer.Deserialize<List<T>>(
-                doc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
-        return new();
-    }
-
     private void RenderAll()
     {
         RenderDepartments();
-        RenderPhases();
         RenderTree();
         UpdateCounts();
     }
@@ -209,11 +199,8 @@ public partial class CostSectionsTreePage : Page
     private void UpdateCounts()
     {
         int linked = _phases.Count(p => p.CostSectionTemplateId != null);
-        int free = _phases.Count - linked;
-        txtCount.Text = $"{_groups.Count} gruppi — {_templates.Count} sezioni — {linked} fasi collegate";
-        txtStatus.Text = free > 0
-            ? $"{free} fasi ancora da collegare"
-            : "Tutte le fasi sono collegate a una sezione costo";
+        txtCount.Text = $"{_groups.Count} gruppi — {_templates.Count} sezioni — {linked} fasi";
+        txtStatus.Text = "";
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -227,8 +214,8 @@ public partial class CostSectionsTreePage : Page
         {
             var badge = new Border
             {
-                Background = Brush("#EEF2FF"),
-                CornerRadius = new CornerRadius(4),
+                Background = Brush("#27272A"),
+                CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8, 4, 8, 4),
                 Margin = new Thickness(0, 1, 0, 1),
                 Cursor = Cursors.Hand,
@@ -240,21 +227,21 @@ public partial class CostSectionsTreePage : Page
                 Text = dept.Code,
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = Brush("#4F6EF7"),
+                Foreground = Brush("#FAFAFA"),
                 VerticalAlignment = VerticalAlignment.Center
             });
             sp.Children.Add(new TextBlock
             {
                 Text = $" — {dept.Name}",
                 FontSize = 11,
-                Foreground = Brush("#6B7280"),
+                Foreground = Brush("#A1A1AA"),
                 VerticalAlignment = VerticalAlignment.Center
             });
             sp.Children.Add(new TextBlock
             {
                 Text = $" — K:{dept.DefaultMarkup:F2} — €{dept.HourlyCost:F2}/h",
                 FontSize = 10,
-                Foreground = Brush("#9CA3AF"),
+                Foreground = Brush("#71717A"),
                 VerticalAlignment = VerticalAlignment.Center
             });
             badge.Child = sp;
@@ -311,131 +298,18 @@ public partial class CostSectionsTreePage : Page
     }
 
     // ══════════════════════════════════════════════════════════════
-    // LEFT PANEL: PHASE TEMPLATES (unlinked, draggable)
+    // PHASE TEMPLATES — dialog di modifica usato dai badge nell'albero destro.
+    // Il pannello sx delle fasi libere è stato rimosso: nuove fasi si creano
+    // dal pulsante "+" sulla sezione (BtnAddPhaseToSection_Click).
     // ══════════════════════════════════════════════════════════════
-
-    private void RenderPhases(string? filter = null)
-    {
-        pnlPhases.Children.Clear();
-        var unlinked = _phases
-            .Where(p => p.CostSectionTemplateId == null)
-            .Where(p => string.IsNullOrEmpty(filter) || p.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                        || p.Category.Contains(filter, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.Category).ThenBy(p => p.SortOrder)
-            .ToList();
-
-        txtPhaseCount.Text = $"{unlinked.Count} fasi non collegate";
-
-        // Group by category
-        var grouped = unlinked
-            .GroupBy(p => string.IsNullOrEmpty(p.Category) ? "— Senza categoria" : p.Category)
-            .OrderBy(g => g.Key);
-
-        bool anyExpanded = false;
-        foreach (var group in grouped)
-        {
-            bool shouldExpand = _lastExpandedGroup != null
-                ? group.Key == _lastExpandedGroup
-                : !anyExpanded; // first group if no memory
-
-            var expander = new Expander
-            {
-                IsExpanded = shouldExpand,
-                Margin = new Thickness(0, 4, 0, 0),
-                Tag = group.Key
-            };
-            expander.Expanded += PhaseExpander_Expanded;
-            if (shouldExpand) anyExpanded = true;
-
-            // Custom header
-            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
-            headerPanel.Children.Add(new TextBlock
-            {
-                Text = group.Key,
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brush("#4F6EF7"),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            headerPanel.Children.Add(new TextBlock
-            {
-                Text = $"  ({group.Count()})",
-                FontSize = 10,
-                Foreground = Brush("#9CA3AF"),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-
-            // + button to add new phase template
-            var btnAdd = new Button
-            {
-                Content = "+", Width = 18, Height = 18, FontSize = 11,
-                Background = Brush("#E0E7FF"), Foreground = Brush("#4F6EF7"),
-                BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
-                Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
-                FontWeight = FontWeights.Bold,
-                ToolTip = "Aggiungi fase template"
-            };
-            btnAdd.Click += BtnAddPhaseTemplate_Click;
-            headerPanel.Children.Add(btnAdd);
-
-            expander.Header = headerPanel;
-
-            var content = new StackPanel { Margin = new Thickness(4, 0, 0, 0) };
-            foreach (var phase in group.OrderBy(p => p.SortOrder))
-            {
-                content.Children.Add(BuildPhaseBadgeLeft(phase));
-            }
-            expander.Content = content;
-            pnlPhases.Children.Add(expander);
-        }
-    }
 
     private async Task OpenPhaseTemplateDialog(PhaseTemplateDto phase)
     {
-        Window dlg = new()
-        {
-            Title = $"Modifica Fase — {phase.Name}",
-            Width = 400, Height = 220,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize,
-            Background = Brush("#F7F8FA")
-        };
-
-        var sp = new StackPanel { Margin = new Thickness(20, 16, 20, 16) };
-
-        sp.Children.Add(new TextBlock { Text = "Nome:", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280") });
-        var txtName = new TextBox
-        {
-            Text = phase.Name, Height = 32, Padding = new Thickness(8, 5, 8, 5),
-            FontSize = 13, BorderBrush = Brush("#E4E7EC"), Margin = new Thickness(0, 4, 0, 10)
-        };
-        sp.Children.Add(txtName);
-
-        sp.Children.Add(new TextBlock { Text = "Categoria:", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280") });
-        var txtCat = new TextBox
-        {
-            Text = phase.Category, Height = 32, Padding = new Thickness(8, 5, 8, 5),
-            FontSize = 13, BorderBrush = Brush("#E4E7EC"), Margin = new Thickness(0, 4, 0, 14)
-        };
-        sp.Children.Add(txtCat);
-
-        var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var btnCancel = new Button { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand };
-        var btnOk = new Button { Content = "Salva", Width = 80, Height = 30, Background = Brush("#4F6EF7"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold, Cursor = Cursors.Hand };
-        btnOk.Click += (s, ev) => { dlg.DialogResult = true; dlg.Close(); };
-        btnCancel.Click += (s, ev) => { dlg.DialogResult = false; dlg.Close(); };
-        btns.Children.Add(btnCancel);
-        btns.Children.Add(btnOk);
-        sp.Children.Add(btns);
-
-        dlg.Content = sp;
-        txtName.Focus();
-        txtName.SelectAll();
-
+        EditPhaseTemplateDialog dlg = new(phase) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true) return;
 
-        string newName = txtName.Text.Trim();
-        string newCat = txtCat.Text.Trim();
+        string newName = dlg.PhaseName;
+        string newCat = dlg.Category;
 
         try
         {
@@ -451,223 +325,71 @@ public partial class CostSectionsTreePage : Page
                 await ApiClient.PatchAsync($"/api/phases/templates/{phase.Id}/field", json);
                 phase.Category = newCat;
             }
-            RenderPhases(txtSearchPhase.Text.Trim());
             RenderTree();
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async void BtnDeletePhaseTemplate_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not PhaseTemplateDto phase) return;
 
-        if (MessageBox.Show($"Eliminare la fase \"{phase.Name}\"?",
-            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (!Confirm($"Eliminare la fase \"{phase.Name}\"?")) return;
 
         try
         {
             string result = await ApiClient.DeleteAsync($"/api/phases/templates/{phase.Id}");
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
                 await LoadData();
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShowError(msg);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
-    private async void BtnAddPhaseGlobal_Click(object sender, RoutedEventArgs e)
+    // ══════════════════════════════════════════════════════════════
+    // NUOVA FASE da sezione: pulsante "+" accanto a matita/x sulla sezione.
+    // Vincolo: la sezione deve avere almeno un reparto collegato.
+    // ══════════════════════════════════════════════════════════════
+
+    private async void BtnAddPhaseToSection_Click(object sender, RoutedEventArgs e)
     {
-        // Dialog con Nome
-        string? name = PromptInput("Nuova Fase Template", "Nome fase:", "");
-        if (string.IsNullOrWhiteSpace(name)) return;
+        if (sender is not Button btn || btn.Tag is not CostSectionTemplateDto section) return;
 
-        int maxSort = _phases.Any() ? _phases.Max(p => p.SortOrder) + 1 : 1;
-
-        try
+        if (section.DepartmentIds == null || section.DepartmentIds.Count == 0)
         {
-            string json = JsonSerializer.Serialize(new
-            {
-                name,
-                category = "TRASVERSALE",
-                costSectionTemplateId = (int?)null,
-                sortOrder = maxSort,
-                isDefault = false
-            }, _jsonWriteOpt);
-
-            string result = await ApiClient.PostAsync("/api/phases/templates", json);
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                await LoadData();
-            else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
-
-    private async void BtnAddPhaseTemplate_Click(object sender, RoutedEventArgs e)
-    {
-        string? name = PromptInput("Nuova Fase Template", "Nome fase:", "");
-        if (string.IsNullOrWhiteSpace(name)) return;
-
-        int maxSort = _phases.Any() ? _phases.Max(p => p.SortOrder) + 1 : 1;
-
-        try
-        {
-            string json = JsonSerializer.Serialize(new
-            {
-                name,
-                category = "TRASVERSALE",
-                costSectionTemplateId = (int?)null,
-                sortOrder = maxSort,
-                isDefault = false
-            }, _jsonWriteOpt);
-
-            string result = await ApiClient.PostAsync("/api/phases/templates", json);
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                await LoadData();
-            else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
-        }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
-    }
-
-    private void PhaseExpander_Expanded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Expander opened) return;
-        _lastExpandedGroup = opened.Tag as string;
-        foreach (var child in pnlPhases.Children)
-        {
-            if (child is Expander exp && exp != opened)
-                exp.IsExpanded = false;
-        }
-    }
-
-    private Border BuildPhaseBadgeLeft(PhaseTemplateDto phase)
-    {
-        var badge = new Border
-        {
-            Background = Brush("#FFF8F0"),
-            BorderBrush = Brush("#FDE68A"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(8, 4, 8, 4),
-            Margin = new Thickness(0, 1, 0, 1),
-            Cursor = Cursors.Hand,
-            Tag = phase
-        };
-
-        var dp = new DockPanel();
-
-        // Delete button — docked right
-        var btnDel = new Button
-        {
-            Content = "✕", Width = 16, Height = 16, FontSize = 8,
-            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xEF, 0x44, 0x44)),
-            Foreground = Brush("#EF4444"),
-            BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
-            Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "Elimina fase template", Tag = phase
-        };
-        btnDel.Click += BtnDeletePhaseTemplate_Click;
-        DockPanel.SetDock(btnDel, Dock.Right);
-        dp.Children.Add(btnDel);
-
-        // Category badge — docked right
-        var catBadge = new Border
-        {
-            Background = Brush("#F3F4F6"),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(4, 1, 4, 1),
-            Margin = new Thickness(4, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = phase.Category,
-                FontSize = 9,
-                Foreground = Brush("#6B7280")
-            }
-        };
-        DockPanel.SetDock(catBadge, Dock.Right);
-        dp.Children.Add(catBadge);
-
-        // Name — fills remaining space, truncated
-        dp.Children.Add(new TextBlock
-        {
-            Text = phase.Name,
-            FontSize = 12,
-            Foreground = Brush("#92400E"),
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-
-        badge.Child = dp;
-        badge.AllowDrop = true;
-        badge.PreviewMouseLeftButtonDown += PhaseBadge_PreviewMouseLeftButtonDown;
-        badge.PreviewMouseMove += PhaseBadge_PreviewMouseMove;
-        badge.DragOver += PhaseBadgeLeft_DragOver;
-        badge.Drop += PhaseBadgeLeft_Drop;
-        return badge;
-    }
-
-    private CancellationTokenSource? _phaseSearchCts;
-
-    private async void TxtSearchPhase_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        _phaseSearchCts?.Cancel();
-        _phaseSearchCts = new CancellationTokenSource();
-        try
-        {
-            await Task.Delay(250, _phaseSearchCts.Token);
-        }
-        catch (TaskCanceledException) { return; }
-        RenderPhases(txtSearchPhase.Text.Trim());
-    }
-
-    private void PhaseBadgeLeft_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void PhaseBadgeLeft_Drop(object sender, DragEventArgs e)
-    {
-        e.Handled = true;
-        if (sender is not Border b) return;
-        b.Background = Brush("#FFF8F0");
-    }
-
-    private void PhaseBadge_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            if (sender is Border b && b.Tag is PhaseTemplateDto phase)
-            {
-                e.Handled = true;
-                _ = OpenPhaseTemplateDialog(phase);
-            }
+            ShowInfo(
+                $"Aggiungi prima almeno un reparto alla sezione \"{section.Name}\" trascinandolo dal pannello sinistro.\n\n" +
+                "Senza reparto non c'è nessuno che possa lavorare sulla fase.",
+                "Reparto mancante");
             return;
         }
-        _dragStartPoint = e.GetPosition(null);
-    }
 
-    private void PhaseBadge_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton != MouseButtonState.Pressed) return;
-        Point pos = e.GetPosition(null);
-        Vector diff = _dragStartPoint - pos;
-        if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
-            Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+        string? name = PromptInput($"Nuova Fase per \"{section.Name}\"", "Nome fase:", "");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        int maxSort = _phases.Any() ? _phases.Max(p => p.SortOrder) + 1 : 1;
+        try
         {
-            if (sender is Border b && b.Tag is PhaseTemplateDto phase)
+            string json = JsonSerializer.Serialize(new
             {
-                ShowDragAdorner(phase.Name, "📋", Color.FromRgb(0xD9, 0x77, 0x06));
-                var data = new DataObject("PhaseDrop", phase);
-                DragDrop.DoDragDrop(b, data, DragDropEffects.Copy);
-                HideDragAdorner();
+                name,
+                category = section.Name,
+                costSectionTemplateId = (int?)section.Id,
+                sortOrder = maxSort,
+                isDefault = false
+            }, _jsonWriteOpt);
+
+            string result = await ApiClient.PostAsync("/api/phases/templates", json);
+            if (ApiClient.IsApiSuccess(result, out string msg))
+            {
+                _lastExpandedTreeGroup = _groups.FirstOrDefault(g => g.Id == section.GroupId)?.Name;
+                await LoadData();
             }
+            else
+                ShowWarning(string.IsNullOrWhiteSpace(msg) ? "Errore nella creazione della fase." : msg, "Fase non creata");
         }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -741,7 +463,7 @@ public partial class CostSectionsTreePage : Page
         // Delete button
         var btnDel = new Button
         {
-            Content = "✕", Width = 22, Height = 22, FontSize = 10,
+            Content = "\uE74D", FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"), Width = 22, Height = 22, FontSize = 12,
             Background = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
             Foreground = Brushes.White, BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand, Margin = new Thickness(4, 0, 0, 0),
@@ -808,7 +530,7 @@ public partial class CostSectionsTreePage : Page
             Text = section.Name,
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
-            Foreground = Brush("#1A1D26"),
+            Foreground = (Brush)FindResource("ShadcnForegroundBrush"),
             VerticalAlignment = VerticalAlignment.Center
         });
 
@@ -841,10 +563,23 @@ public partial class CostSectionsTreePage : Page
         btnEdit.Click += BtnEditSection_Click;
         panel.Children.Add(btnEdit);
 
+        // Add phase button — pulsante "+" che crea una NUOVA fase legata alla sezione
+        // (bloccato se la sezione non ha reparti, vedi BtnAddPhaseToSection_Click)
+        var btnAddPhase = new Button
+        {
+            Content = "+", Width = 20, Height = 20, FontSize = 12, FontWeight = FontWeights.Bold,
+            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xD9, 0x77, 0x06)), Foreground = Brush("#D97706"),
+            BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+            Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Aggiungi nuova fase a questa sezione", Tag = section
+        };
+        btnAddPhase.Click += BtnAddPhaseToSection_Click;
+        panel.Children.Add(btnAddPhase);
+
         // Delete section button
         var btnDel = new Button
         {
-            Content = "✕", Width = 20, Height = 20, FontSize = 9,
+            Content = "\uE74D", FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"), Width = 20, Height = 20, FontSize = 11,
             Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xEF, 0x44, 0x44)), Foreground = Brush("#EF4444"),
             BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
             Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
@@ -855,10 +590,10 @@ public partial class CostSectionsTreePage : Page
 
         var border = new Border
         {
-            Background = Brushes.White,
-            BorderBrush = Brush("#E4E7EC"),
+            Background = (Brush)FindResource("ShadcnCardBrush"),
+            BorderBrush = (Brush)FindResource("ShadcnBorderBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
+            CornerRadius = new CornerRadius(6),
             Padding = new Thickness(8, 4, 8, 4),
             Margin = new Thickness(0, 1, 0, 1),
             Child = panel
@@ -1337,19 +1072,18 @@ public partial class CostSectionsTreePage : Page
         {
             string json = JsonSerializer.Serialize(new { field = "cost_section_template_id", value = section.Id.ToString() });
             string result = await ApiClient.PatchAsync($"/api/phases/templates/{phase.Id}/field", json);
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 phase.CostSectionTemplateId = section.Id;
                 phase.CostSectionName = section.Name;
-                RenderPhases(txtSearchPhase.Text.Trim());
+                // pannello fasi libere rimosso
                 RenderTree();
                 UpdateCounts();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShowError(msg);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async Task ReorderPhase(PhaseTemplateDto movedPhase, PhaseTemplateDto targetPhase, CostSectionTemplateDto section)
@@ -1383,7 +1117,7 @@ public partial class CostSectionsTreePage : Page
             }
             RenderTree();
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async Task UnlinkPhase(PhaseTemplateDto phase)
@@ -1392,17 +1126,16 @@ public partial class CostSectionsTreePage : Page
         {
             string json = JsonSerializer.Serialize(new { field = "cost_section_template_id", value = (string?)null });
             string result = await ApiClient.PatchAsync($"/api/phases/templates/{phase.Id}/field", json);
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 phase.CostSectionTemplateId = null;
                 phase.CostSectionName = "";
-                RenderPhases(txtSearchPhase.Text.Trim());
+                // pannello fasi libere rimosso
                 RenderTree();
                 UpdateCounts();
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1428,7 +1161,7 @@ public partial class CostSectionsTreePage : Page
             RenderTree();
             txtStatus.Text = $"Reparto {dept.Code} aggiunto a {section.Name}";
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async Task RemoveDepartmentFromSection(DepartmentDto dept, CostSectionTemplateDto section)
@@ -1444,7 +1177,7 @@ public partial class CostSectionsTreePage : Page
             RenderTree();
             txtStatus.Text = $"Reparto {dept.Code} rimosso da {section.Name}";
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async void BtnRemoveDept_Click(object sender, RoutedEventArgs e)
@@ -1469,235 +1202,88 @@ public partial class CostSectionsTreePage : Page
     {
         if (sender is not Button btn || btn.Tag is not CostSectionTemplateDto section) return;
 
-        // Crea finestra di modifica
-        Window dlg = new()
-        {
-            Title = "Modifica Sezione Costo",
-            Width = 420, Height = 320,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.NoResize,
-            Background = Brushes.White,
-            Owner = Window.GetWindow(this)
-        };
+        EditCostSectionDialog dlg = new(section) { Owner = OwnerWindow };
+        if (dlg.ShowDialog() != true) return;
 
-        StackPanel sp = new() { Margin = new Thickness(20) };
-
-        // Nome
-        sp.Children.Add(new TextBlock { Text = "NOME", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
-        TextBox txtName = new() { Text = section.Name, FontSize = 13, Height = 32, Padding = new Thickness(8, 5, 8, 5), BorderBrush = Brush("#E4E7EC") };
-        sp.Children.Add(txtName);
-
-        // Ordine
-        StackPanel spSortOrder = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        spSortOrder.Children.Add(new TextBlock { Text = "ORDINE", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-        TextBox txtSortOrder = new() { Text = section.SortOrder.ToString(), FontSize = 13, Width = 50, Height = 28, Padding = new Thickness(6, 3, 6, 3), BorderBrush = Brush("#E4E7EC"), HorizontalContentAlignment = HorizontalAlignment.Center };
-        spSortOrder.Children.Add(txtSortOrder);
-        sp.Children.Add(spSortOrder);
-
-        // Toggle Commessa
-        StackPanel spProject = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 6) };
-        CheckBox chkProject = new() { IsChecked = section.IsDefault, Style = (Style)FindResource("ToggleSwitchStyle") };
-        spProject.Children.Add(chkProject);
-        spProject.Children.Add(new TextBlock { Text = "Default Commessa", FontSize = 12, Foreground = Brush("#374151"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
-        sp.Children.Add(spProject);
-
-        // Toggle Preventivo
-        StackPanel spQuote = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
-        CheckBox chkQuote = new() { IsChecked = section.IsDefaultQuote, Style = (Style)FindResource("ToggleSwitchStyle") };
-        spQuote.Children.Add(chkQuote);
-        spQuote.Children.Add(new TextBlock { Text = "Default Preventivo", FontSize = 12, Foreground = Brush("#374151"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
-        sp.Children.Add(spQuote);
-
-        // Bottoni
-        StackPanel spButtons = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 8, 0) };
-        Button btnSave = new() { Content = "Salva", Width = 80, Height = 30, Background = Brush("#2563EB"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold };
-
-        bool saved = false;
-        btnCancel.Click += (s2, e2) => dlg.Close();
-        btnSave.Click += (s2, e2) => { saved = true; dlg.Close(); };
-        spButtons.Children.Add(btnCancel);
-        spButtons.Children.Add(btnSave);
-        sp.Children.Add(spButtons);
-
-        dlg.Content = sp;
-        txtName.Focus();
-        txtName.SelectAll();
-        dlg.ShowDialog();
-
-        if (!saved) return;
-
-        string newName = txtName.Text.Trim();
+        string newName = dlg.SectionName;
         if (string.IsNullOrEmpty(newName)) return;
 
         try
         {
-            // Aggiorna nome
             if (newName != section.Name)
             {
                 string json = JsonSerializer.Serialize(new { field = "name", value = newName });
                 await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
             }
 
-            // Aggiorna default commessa
-            bool newDefProject = chkProject.IsChecked == true;
-            if (newDefProject != section.IsDefault)
+            if (dlg.IsDefaultProject != section.IsDefault)
             {
-                string json = JsonSerializer.Serialize(new { field = "is_default_project", value = newDefProject ? "1" : "0" });
+                string json = JsonSerializer.Serialize(new { field = "is_default_project", value = dlg.IsDefaultProject ? "1" : "0" });
                 await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
             }
 
-            // Aggiorna default preventivo
-            bool newDefQuote = chkQuote.IsChecked == true;
-            if (newDefQuote != section.IsDefaultQuote)
+            if (dlg.IsDefaultQuote != section.IsDefaultQuote)
             {
-                string json = JsonSerializer.Serialize(new { field = "is_default_quote", value = newDefQuote ? "1" : "0" });
+                string json = JsonSerializer.Serialize(new { field = "is_default_quote", value = dlg.IsDefaultQuote ? "1" : "0" });
                 await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
             }
 
-            // Aggiorna ordine
-            if (int.TryParse(txtSortOrder.Text, out int newSort) && newSort != section.SortOrder)
+            if (dlg.SortOrder != section.SortOrder)
             {
-                string json = JsonSerializer.Serialize(new { field = "sort_order", value = newSort.ToString() });
+                string json = JsonSerializer.Serialize(new { field = "sort_order", value = dlg.SortOrder.ToString() });
                 await ApiClient.PatchAsync($"/api/cost-sections/templates/{section.Id}/field", json);
             }
 
             await LoadData();
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message); }
+        catch (Exception ex) { ShowError(ex.Message); }
     }
 
     private async void BtnDeleteSection_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not CostSectionTemplateDto section) return;
 
-        if (MessageBox.Show($"Eliminare la sezione \"{section.Name}\"?",
-            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (!Confirm($"Eliminare la sezione \"{section.Name}\"?")) return;
 
         try
         {
             string result = await ApiClient.DeleteAsync($"/api/cost-sections/templates/{section.Id}");
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
                 await LoadData();
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShowError(msg);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
-
-    // Palette colori disponibili per i gruppi
-    private static readonly string[] GroupColorPalette = new[]
-    {
-        "#2563EB", "#3B82F6", "#1D4ED8",  // Blu
-        "#059669", "#10B981", "#047857",  // Verde
-        "#D97706", "#F59E0B", "#B45309",  // Arancione
-        "#DC2626", "#EF4444", "#B91C1C",  // Rosso
-        "#7C3AED", "#8B5CF6", "#6D28D9",  // Viola
-        "#0891B2", "#06B6D4", "#0E7490",  // Ciano
-        "#BE185D", "#EC4899", "#9D174D",  // Rosa
-        "#374151", "#6B7280", "#1F2937",  // Grigio
-    };
 
     private async void BtnEditGroup_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not CostSectionGroupDto group) return;
 
-        Window dlg = new()
-        {
-            Title = "Modifica Gruppo",
-            Width = 420, Height = 350,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.NoResize,
-            Background = Brushes.White,
-            Owner = Window.GetWindow(this)
-        };
-
-        StackPanel sp = new() { Margin = new Thickness(20) };
-
-        // Nome
-        sp.Children.Add(new TextBlock { Text = "NOME", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 0, 0, 4) });
-        TextBox txtName = new() { Text = group.Name, FontSize = 13, Height = 32, Padding = new Thickness(8, 5, 8, 5), BorderBrush = Brush("#E4E7EC") };
-        sp.Children.Add(txtName);
-
-        // Ordine
-        StackPanel spOrder = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        spOrder.Children.Add(new TextBlock { Text = "ORDINE", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-        TextBox txtOrder = new() { Text = group.SortOrder.ToString(), FontSize = 13, Width = 50, Height = 28, Padding = new Thickness(6, 3, 6, 3), BorderBrush = Brush("#E4E7EC"), HorizontalContentAlignment = HorizontalAlignment.Center };
-        spOrder.Children.Add(txtOrder);
-        sp.Children.Add(spOrder);
-
-        // Colore sfondo
-        sp.Children.Add(new TextBlock { Text = "COLORE SFONDO", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280"), Margin = new Thickness(0, 12, 0, 4) });
-        WrapPanel wpColors = new();
-        string selectedColor = group.BgColor ?? "#3B82F6";
-        Button? selectedBtn = null;
-
-        foreach (string hex in GroupColorPalette)
-        {
-            string capturedHex = hex;
-            Button btnColor = new()
-            {
-                Width = 28, Height = 28, Margin = new Thickness(0, 0, 4, 4),
-                Background = Brush(hex), BorderThickness = new Thickness(2),
-                BorderBrush = hex == selectedColor ? Brush("#1A1D26") : Brushes.Transparent,
-                Cursor = Cursors.Hand
-            };
-            if (hex == selectedColor) selectedBtn = btnColor;
-
-            btnColor.Click += (s2, e2) =>
-            {
-                // Deseleziona precedente
-                if (selectedBtn != null) selectedBtn.BorderBrush = Brushes.Transparent;
-                // Seleziona nuovo
-                btnColor.BorderBrush = Brush("#1A1D26");
-                selectedBtn = btnColor;
-                selectedColor = capturedHex;
-            };
-            wpColors.Children.Add(btnColor);
-        }
-        sp.Children.Add(wpColors);
-
-        // Bottoni
-        StackPanel spButtons = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0) };
-        Button btnSave = new() { Content = "Salva", Width = 80, Height = 30, Margin = new Thickness(8, 0, 0, 0), Background = Brush("#2563EB"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold };
-
-        bool saved = false;
-        btnCancel.Click += (s2, e2) => dlg.Close();
-        btnSave.Click += (s2, e2) => { saved = true; dlg.Close(); };
-        spButtons.Children.Add(btnCancel);
-        spButtons.Children.Add(btnSave);
-        sp.Children.Add(spButtons);
-
-        dlg.Content = sp;
-        txtName.Focus();
-        txtName.SelectAll();
-        dlg.ShowDialog();
-
-        if (!saved) return;
+        EditCostGroupDialog dlg = new(group) { Owner = OwnerWindow };
+        if (dlg.ShowDialog() != true) return;
 
         try
         {
-            string newName = txtName.Text.Trim();
+            string newName = dlg.GroupName;
             if (!string.IsNullOrEmpty(newName) && newName != group.Name)
             {
                 string json = JsonSerializer.Serialize(new { field = "name", value = newName });
                 await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
             }
-            if (selectedColor != group.BgColor)
+            if (dlg.BgColor != group.BgColor)
             {
-                string json = JsonSerializer.Serialize(new { field = "bg_color", value = selectedColor });
+                string json = JsonSerializer.Serialize(new { field = "bg_color", value = dlg.BgColor });
                 await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
             }
-            if (int.TryParse(txtOrder.Text, out int newOrder) && newOrder != group.SortOrder)
+            if (dlg.SortOrder != group.SortOrder)
             {
-                string json = JsonSerializer.Serialize(new { field = "sort_order", value = newOrder.ToString() });
+                string json = JsonSerializer.Serialize(new { field = "sort_order", value = dlg.SortOrder.ToString() });
                 await ApiClient.PatchAsync($"/api/cost-sections/groups/{group.Id}/field", json);
             }
             await LoadData();
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async void BtnAddSectionInGroup_Click(object sender, RoutedEventArgs e)
@@ -1707,11 +1293,9 @@ public partial class CostSectionsTreePage : Page
         string? name = PromptInput($"Nuova Sezione in {group.Name}", "Nome sezione:", "");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        // Ask for type
-        var result = MessageBox.Show(
-            "Tipo sezione:\n\nSì = DA CLIENTE\nNo = IN SEDE",
-            "Tipo", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        string sectionType = result == MessageBoxResult.Yes ? "DA_CLIENTE" : "IN_SEDE";
+        SectionTypeDialog typeDlg = new() { Owner = OwnerWindow };
+        if (typeDlg.ShowDialog() != true) return;
+        string sectionType = typeDlg.SectionType;
 
         var groupTemplates = _templates.Where(t => t.GroupId == group.Id).ToList();
         int maxSort = groupTemplates.Count > 0 ? groupTemplates.Max(t => t.SortOrder) + 1 : 1;
@@ -1731,35 +1315,32 @@ public partial class CostSectionsTreePage : Page
             }, _jsonWriteOpt);
 
             string res = await ApiClient.PostAsync("/api/cost-sections/templates", json);
-            var doc = JsonDocument.Parse(res);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(res, out string msg))
             {
                 _lastExpandedTreeGroup = group.Name;
                 await LoadData();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShowError(msg);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async void BtnDeleteGroup_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not CostSectionGroupDto group) return;
 
-        if (MessageBox.Show($"Eliminare il gruppo \"{group.Name}\"?",
-            "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (!Confirm($"Eliminare il gruppo \"{group.Name}\"?")) return;
 
         try
         {
             string result = await ApiClient.DeleteAsync($"/api/cost-sections/groups/{group.Id}");
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
                 await LoadData();
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShowError(msg);
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     private async void BtnAddGroup_Click(object sender, RoutedEventArgs e)
@@ -1775,7 +1356,7 @@ public partial class CostSectionsTreePage : Page
             await ApiClient.PostAsync("/api/cost-sections/groups", json);
             await LoadData();
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ShowError($"Errore: {ex.Message}"); }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1784,32 +1365,21 @@ public partial class CostSectionsTreePage : Page
 
     private string? PromptInput(string title, string label, string defaultValue)
     {
-        Window dlg = new()
-        {
-            Title = title, Width = 360, Height = 180,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Owner = Window.GetWindow(this), ResizeMode = ResizeMode.NoResize,
-            Background = Brush("#F7F8FA")
-        };
-
-        StackPanel sp = new() { Margin = new Thickness(20, 16, 20, 16) };
-        sp.Children.Add(new TextBlock { Text = label, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Brush("#6B7280") });
-        TextBox txt = new() { Text = defaultValue, Height = 32, Padding = new Thickness(8, 5, 8, 5), FontSize = 13, BorderBrush = Brush("#E4E7EC"), Margin = new Thickness(0, 6, 0, 12) };
-        sp.Children.Add(txt);
-
-        StackPanel btns = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        Button btnOk = new() { Content = "OK", Width = 80, Height = 30, Background = Brush("#4F6EF7"), Foreground = Brushes.White, BorderThickness = new Thickness(0), FontWeight = FontWeights.SemiBold, Cursor = Cursors.Hand };
-        Button btnCancel = new() { Content = "Annulla", Width = 80, Height = 30, Background = Brush("#F3F4F6"), BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 8, 0), Cursor = Cursors.Hand };
-        btnOk.Click += (s, ev) => { dlg.DialogResult = true; dlg.Close(); };
-        btnCancel.Click += (s, ev) => { dlg.DialogResult = false; dlg.Close(); };
-        btns.Children.Add(btnCancel);
-        btns.Children.Add(btnOk);
-        sp.Children.Add(btns);
-
-        dlg.Content = sp;
-        txt.Focus();
-        txt.SelectAll();
-
-        return dlg.ShowDialog() == true ? txt.Text.Trim() : null;
+        InputDialog dlg = new(title, label, defaultValue) { Owner = OwnerWindow };
+        return dlg.ShowDialog() == true ? dlg.InputText : null;
     }
+
+    private Window? OwnerWindow => Window.GetWindow(this);
+
+    private void ShowError(string message, string title = "Errore") =>
+        ShadcnMessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error, OwnerWindow);
+
+    private void ShowInfo(string message, string title = "Informazione") =>
+        ShadcnMessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information, OwnerWindow);
+
+    private void ShowWarning(string message, string title = "Attenzione") =>
+        ShadcnMessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning, OwnerWindow);
+
+    private bool Confirm(string message, string title = "Conferma") =>
+        ShadcnMessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question, OwnerWindow) == MessageBoxResult.Yes;
 }

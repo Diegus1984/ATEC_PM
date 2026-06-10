@@ -1,3 +1,6 @@
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
+
 namespace ATEC.PM.Client.UserControls;
 
 public partial class NewChatDialog : Window
@@ -19,13 +22,8 @@ public partial class NewChatDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/employees");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            var employees = JsonSerializer.Deserialize<List<EmployeeListItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<EmployeeListItem> employees = await ApiClient.GetDataAsync<List<EmployeeListItem>>(
+                "/api/employees") ?? new();
 
             foreach (EmployeeListItem emp in employees)
             {
@@ -70,16 +68,15 @@ public partial class NewChatDialog : Window
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync("/api/chat", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<int>(result, out int chatId, out string msg))
             {
-                CreatedChatId = doc.RootElement.GetProperty("data").GetInt32();
+                CreatedChatId = chatId;
                 ChatTitle = title;
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }

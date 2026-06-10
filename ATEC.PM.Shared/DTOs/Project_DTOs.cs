@@ -15,6 +15,16 @@ public class ProjectListItem
     public DateTime? EndDatePlanned { get; set; }
     public decimal Revenue { get; set; }
     public decimal BudgetHoursTotal { get; set; }
+    public int LinkedQuoteId { get; set; }
+}
+
+public class ProjectTreeItemDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string CustomerName { get; set; } = "";
 }
 
 public class ProjectSaveRequest
@@ -35,4 +45,5 @@ public class ProjectSaveRequest
     public string ServerPath { get; set; } = "";
     public string Notes { get; set; } = "";
     public bool CreateDefaultPhases { get; set; } = true;
+    public int LinkedQuoteId { get; set; }
 }

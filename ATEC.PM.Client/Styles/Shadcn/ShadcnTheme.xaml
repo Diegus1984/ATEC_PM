@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        ===================================================================
+        SHADCN UI FOR WPF - MASTER RESOURCE DICTIONARY
+        ===================================================================
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <!--  Colors (Foundation)  -->
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnColors.xaml" />
+
+        <!--  Typography (Foundation)  -->
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnTypography.xaml" />
+
+        <!--  Component Categories  -->
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnButton.xaml" />
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnInput.xaml" />
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnDataDisplay.xaml" />
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnNavigation.xaml" />
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnFeedback.xaml" />
+        <ResourceDictionary Source="/Styles/Shadcn/ShadcnContextMenuDark.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

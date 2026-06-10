@@ -1,14 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text.Json;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
-using System.Windows.Threading;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
@@ -47,34 +42,35 @@ public class SeverityIconConverter : IValueConverter
     };
     public object ConvertBack(object v, Type t, object p, CultureInfo c) => throw new NotSupportedException();
 }
+
 // ── PAGE ──────────────────────────────────────────────────
 
 public partial class DashboardPage : Page
 {
-    private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
-    private DispatcherTimer? _notifTimer;
+    private readonly DashboardViewModel _vm = new();
+    private NotificationPollingService? _notifPolling;
 
     public DashboardPage()
     {
         InitializeComponent();
+        DataContext = _vm;
         ApplyAlarmRowStyle();
-        chkUnreadOnly.IsChecked = true;
         Loaded += async (_, _) =>
         {
-            await LoadDashboard();
-            await LoadNotifications();
+            await _vm.LoadDashboardCommand.ExecuteAsync(null);
+            await _vm.LoadNotificationsCommand.ExecuteAsync(null);
             StartNotifPolling();
         };
-        Unloaded += (_, _) => _notifTimer?.Stop();
+        Unloaded += (_, _) => _notifPolling?.Stop();
     }
 
     private static ControlTemplate CreateCellTemplate()
     {
-        var template = new ControlTemplate(typeof(DataGridCell));
-        var border = new FrameworkElementFactory(typeof(Border));
+        ControlTemplate template = new ControlTemplate(typeof(DataGridCell));
+        FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
         border.SetValue(Border.PaddingProperty, new Thickness(10, 4, 10, 4));
         border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        FrameworkElementFactory presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
         border.AppendChild(presenter);
         template.VisualTree = border;
@@ -83,9 +79,9 @@ public partial class DashboardPage : Page
 
     private static DataTrigger MakeSeverityTrigger(string severity, string bgHex, string fgHex)
     {
-        var trigger = new DataTrigger { Binding = new Binding("Severity"), Value = severity };
-        var bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgHex)); bg.Freeze();
-        var fg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fgHex)); fg.Freeze();
+        DataTrigger trigger = new DataTrigger { Binding = new Binding("Severity"), Value = severity };
+        SolidColorBrush bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgHex)); bg.Freeze();
+        SolidColorBrush fg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fgHex)); fg.Freeze();
         trigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, bg));
         trigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, fg));
         return trigger;
@@ -93,7 +89,7 @@ public partial class DashboardPage : Page
 
     private void ApplyAlarmRowStyle()
     {
-        var rowStyle = new Style(typeof(DataGridRow));
+        Style rowStyle = new Style(typeof(DataGridRow));
         rowStyle.Setters.Add(new Setter(DataGridRow.FontSizeProperty, 12.0));
         rowStyle.Setters.Add(new Setter(DataGridRow.MinHeightProperty, 36.0));
         rowStyle.Setters.Add(new Setter(DataGridRow.VerticalContentAlignmentProperty, VerticalAlignment.Center));
@@ -104,103 +100,46 @@ public partial class DashboardPage : Page
         rowStyle.Triggers.Add(MakeSeverityTrigger("SUCCESS", "#12B76A", "#FFFFFF"));
 
         // Righe lette → sfondo più tenue
-        var readTrigger = new DataTrigger { Binding = new Binding("IsRead"), Value = true };
+        DataTrigger readTrigger = new DataTrigger { Binding = new Binding("IsRead"), Value = true };
         readTrigger.Setters.Add(new Setter(DataGridRow.OpacityProperty, 0.55));
         rowStyle.Triggers.Add(readTrigger);
 
         dgNotifications.RowStyle = rowStyle;
 
         // CellStyle senza bordi
-        var cellStyle = new Style(typeof(DataGridCell));
+        Style cellStyle = new Style(typeof(DataGridCell));
         cellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
         cellStyle.Setters.Add(new Setter(DataGridCell.FocusVisualStyleProperty, (Style?)null));
         cellStyle.Setters.Add(new Setter(DataGridCell.TemplateProperty, CreateCellTemplate()));
         dgNotifications.CellStyle = cellStyle;
     }
 
-    private async void BtnMarkAllRead_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await ApiClient.PutAsync("/api/notifications/read-all", "{}");
-            await LoadNotifications();
-        }
-        catch { }
-    }
-
-    private async void ChkUnreadOnly_Changed(object sender, RoutedEventArgs e)
-    {
-        await LoadNotifications();
-    }
-
     private async void DgNotifications_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (dgNotifications.SelectedItem is not NotificationListItem notif) return;
 
-        if (!notif.IsRead)
-        {
-            try
-            {
-                await ApiClient.PutAsync($"/api/notifications/{notif.Id}/read", "{}");
-                await LoadNotifications();
-            }
-            catch { }
-        }
+        await _vm.MarkAsReadCommand.ExecuteAsync(notif);
 
-        // Naviga alla commessa/sezione relativa
         if (notif.ProjectId.HasValue && notif.ProjectId > 0)
         {
-            var mainWindow = Window.GetWindow(this) as MainWindow;
+            MainWindow? mainWindow = Window.GetWindow(this) as MainWindow;
             mainWindow?.NavigateToProject(notif.ProjectId.Value, notif.ReferenceType);
         }
     }
 
-    private async Task LoadDashboard()
-    {
-        try
-        {
-            var json = await ApiClient.GetAsync("/api/dashboard");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var d = doc.RootElement.GetProperty("data");
-                txtActiveProjects.Text = d.GetProperty("activeProjects").GetInt32().ToString();
-                txtHoursWeek.Text = d.GetProperty("hoursThisWeek").GetDecimal().ToString("N1");
-                txtHoursMonth.Text = d.GetProperty("hoursThisMonth").GetDecimal().ToString("N1");
-                txtRevenue.Text = d.GetProperty("totalRevenue").GetDecimal().ToString("N0") + " €";
-
-                if (d.TryGetProperty("recentProjects", out var rp))
-                {
-                    var projects = JsonSerializer.Deserialize<List<DashboardProjectRow>>(rp.GetRawText(), _jsonOpt) ?? new();
-                    dgRecent.ItemsSource = projects;
-                }
-            }
-        }
-        catch { }
-    }
-
-    // ── ALARM ROW STYLE (colori per severità) ─────────────────
-    // ── LOAD DATA ─────────────────────────────────────────────
-    private async Task LoadNotifications()
-    {
-        try
-        {
-            bool unreadOnly = chkUnreadOnly.IsChecked == true;
-            string url = $"/api/notifications?unreadOnly={unreadOnly}&limit=50";
-            string json = await ApiClient.GetAsync(url);
-            var response = JsonSerializer.Deserialize<ApiResponse<List<NotificationListItem>>>(json, _jsonOpt);
-
-            if (response?.Success == true)
-                dgNotifications.ItemsSource = response.Data ?? new();
-        }
-        catch { }
-    }
-
     private void StartNotifPolling()
     {
-        _notifTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _notifTimer.Tick += async (_, _) => await LoadNotifications();
-        _notifTimer.Start();
+        _notifPolling = new NotificationPollingService(async () =>
+        {
+            await _vm.LoadNotificationsCommand.ExecuteAsync(null);
+            int unreadCount = 0;
+            foreach (NotificationListItem n in _vm.Notifications)
+            {
+                if (!n.IsRead) unreadCount++;
+            }
+            return unreadCount;
+        });
+        _notifPolling.Start();
     }
 
     private async void BtnGoToReference_Click(object sender, RoutedEventArgs e)
@@ -208,18 +147,12 @@ public partial class DashboardPage : Page
         if (sender is not Button btn) return;
         if (btn.DataContext is not NotificationListItem notif) return;
 
-        // Segna come letta
-        if (!notif.IsRead)
-        {
-            try { await ApiClient.PutAsync($"/api/notifications/{notif.Id}/read", "{}"); } catch { }
-        }
+        await _vm.MarkAsReadCommand.ExecuteAsync(notif);
 
-        // Naviga alla commessa
         if (notif.ProjectId.HasValue && notif.ProjectId > 0)
         {
-            var mainWindow = Window.GetWindow(this) as MainWindow;
+            MainWindow? mainWindow = Window.GetWindow(this) as MainWindow;
             mainWindow?.NavigateToProject(notif.ProjectId.Value, notif.ReferenceType);
         }
     }
-    // ── AZIONI NOTIFICHE ──────────────────────────────────────
 }

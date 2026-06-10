@@ -27,11 +27,9 @@ public partial class DdpDestinationDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/ddp-destinations");
-            var response = JsonSerializer.Deserialize<ApiResponse<System.Collections.Generic.List<DdpDestinationItem>>>(json, _jsonOpt);
-            if (response?.Success == true && response.Data != null)
+            List<DdpDestinationItem> items = await ApiClient.GetListAsync<DdpDestinationItem>("/api/ddp-destinations");
             {
-                var item = response.Data.Find(d => d.Id == _editId);
+                DdpDestinationItem? item = items.Find(d => d.Id == _editId);
                 if (item != null)
                 {
                     txtName.Text = item.Name;
@@ -40,7 +38,7 @@ public partial class DdpDestinationDialog : Window
                 }
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -48,7 +46,7 @@ public partial class DdpDestinationDialog : Window
         string name = txtName.Text.Trim();
         if (string.IsNullOrEmpty(name))
         {
-            MessageBox.Show("Inserisci un nome.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Inserisci un nome.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -72,13 +70,13 @@ public partial class DdpDestinationDialog : Window
 
             DialogResult = true;
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
         if (_editId == null) return;
-        if (MessageBox.Show($"Eliminare la destinazione '{txtName.Text}'?", "Conferma",
+        if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Eliminare la destinazione '{txtName.Text}'?", "Conferma",
             MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
@@ -86,7 +84,7 @@ public partial class DdpDestinationDialog : Window
             await ApiClient.DeleteAsync($"/api/ddp-destinations/{_editId.Value}");
             DialogResult = true;
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private void BtnCancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;

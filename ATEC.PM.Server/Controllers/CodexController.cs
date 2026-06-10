@@ -24,10 +24,84 @@ public class CodexController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult GetAll()
+    public IActionResult GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
+        [FromQuery] string? search = null,
+        [FromQuery] string? codice = null,
+        [FromQuery] string? descr = null,
+        [FromQuery] string? codeForn = null,
+        [FromQuery] string? fornitore = null,
+        [FromQuery] string? produttore = null,
+        [FromQuery] string? categoria = null,
+        [FromQuery] string? barcode = null,
+        [FromQuery] string? tipologia = null,
+        [FromQuery] string? codeProd = null,
+        [FromQuery] string? note = null,
+        [FromQuery] string? prezzoForn = null,
+        [FromQuery] string? iva = null,
+        [FromQuery] string? data = null,
+        [FromQuery] string? extra1 = null,
+        [FromQuery] string? extra2 = null,
+        [FromQuery] string? extra3 = null,
+        [FromQuery] string? spec = null,
+        [FromQuery] string? oper = null,
+        [FromQuery] string? um = null,
+        [FromQuery] string? ubicazione = null,
+        [FromQuery] string? codexforn = null)
     {
-        using var c = _db.Open();
-        var rows = c.Query<CodexListItem>(@"
+        try
+        {
+            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
+            var clauses = new List<string>();
+            var dp = new Dapper.DynamicParameters();
+
+            void AddLike(string column, string? filter, string param)
+            {
+                string? pat = PagedQueryHelper.ToLikePattern(filter);
+                if (pat == null) return;
+                clauses.Add($"{column} LIKE @{param}");
+                dp.Add(param, pat);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = $"%{search.Trim()}%";
+                clauses.Add(@"(codice LIKE @Search OR descr LIKE @Search OR code_forn LIKE @Search
+                    OR fornitore LIKE @Search OR produttore LIKE @Search OR categoria LIKE @Search
+                    OR barcode LIKE @Search OR note LIKE @Search OR code_prod LIKE @Search)");
+                dp.Add("Search", term);
+            }
+
+            AddLike("codice", codice, "Codice");
+            AddLike("descr", descr, "Descr");
+            AddLike("code_forn", codeForn, "CodeForn");
+            AddLike("fornitore", fornitore, "Fornitore");
+            AddLike("produttore", produttore, "Produttore");
+            AddLike("categoria", categoria, "Categoria");
+            AddLike("barcode", barcode, "Barcode");
+            AddLike("tipologia", tipologia, "Tipologia");
+            AddLike("code_prod", codeProd, "CodeProd");
+            AddLike("note", note, "Note");
+            AddLike("CAST(prezzo_forn AS CHAR)", prezzoForn, "PrezzoForn");
+            AddLike("iva", iva, "Iva");
+            AddLike("CAST(data AS CHAR)", data, "Data");
+            AddLike("extra1", extra1, "Extra1");
+            AddLike("extra2", extra2, "Extra2");
+            AddLike("extra3", extra3, "Extra3");
+            AddLike("spec", spec, "Spec");
+            AddLike("oper", oper, "Oper");
+            AddLike("um", um, "Um");
+            AddLike("ubicazione", ubicazione, "Ubicazione");
+            AddLike("codexforn", codexforn, "Codexforn");
+
+            string where = clauses.Count > 0 ? "WHERE " + string.Join(" AND ", clauses) : "";
+            using var c = _db.Open();
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*) FROM codex_items {where}", dp);
+            dp.Add("Limit", pageSize);
+            dp.Add("Offset", offset);
+
+            var rows = c.Query<CodexListItem>($@"
             SELECT id, codice AS Codice, code_forn AS CodeForn, fornitore AS Fornitore,
                    prezzo_forn AS PrezzoForn, iva AS Iva, produttore AS Produttore,
                    data AS Data, descr AS Descr, note AS Note, categoria AS Categoria,
@@ -35,8 +109,24 @@ public class CodexController : ControllerBase
                    extra1 AS Extra1, extra2 AS Extra2, extra3 AS Extra3,
                    code_prod AS CodeProd, spec AS Spec, oper AS Oper, um AS Um,
                    ubicazione AS Ubicazione, codexforn AS Codexforn
-            FROM codex_items ORDER BY codice").ToList();
-        return Ok(ApiResponse<List<CodexListItem>>.Ok(rows));
+            FROM codex_items {where}
+            ORDER BY codice
+            LIMIT @Limit OFFSET @Offset", dp).ToList();
+
+            int loaded = offset + rows.Count;
+            return Ok(ApiResponse<PagedResult<CodexListItem>>.Ok(new PagedResult<CodexListItem>
+            {
+                Items = rows,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize,
+                HasMore = loaded < total
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<PagedResult<CodexListItem>>.Fail(ex.Message));
+        }
     }
 
     [HttpGet("{id}")]

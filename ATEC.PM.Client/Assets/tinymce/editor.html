@@ -104,7 +104,7 @@ function initEditor(initialContent, apiBaseUrl, authToken) {
     setup: function(editor) {
       editor.on('init', function() {
         editorInstance = editor;
-        if (initialContent) editor.setContent(initialContent);
+        if (initialContent) editor.setContent(toDisplayUploads(initialContent));
       });
       editor.on('change keyup NodeChange', function() {
         if (window.chrome && window.chrome.webview) {
@@ -119,11 +119,24 @@ function initEditor(initialContent, apiBaseUrl, authToken) {
 }
 
 function getContent() {
-  return editorInstance ? editorInstance.getContent() : '';
+  return editorInstance ? toRelativeUploads(editorInstance.getContent()) : '';
 }
 
 function setContent(html) {
-  if (editorInstance) editorInstance.setContent(html || '');
+  if (editorInstance) editorInstance.setContent(toDisplayUploads(html || ''));
+}
+
+// URL immagini -> RELATIVI per il salvataggio (toglie scheme://host davanti a /uploads/cms/).
+// Normalizza anche eventuali host vecchi/diversi salvati in passato.
+function toRelativeUploads(html) {
+  return (html || '').replace(/src="https?:\/\/[^"\/]+(\/uploads\/cms\/)/gi, 'src="$1');
+}
+
+// URL immagini -> ASSOLUTI per la visualizzazione (WebView2 ha base file://, gli URL relativi non si vedrebbero).
+function toDisplayUploads(html) {
+  var rel = toRelativeUploads(html || '');
+  if (!_apiBaseUrl) return rel;
+  return rel.replace(/src="(\/uploads\/cms\/)/gi, 'src="' + _apiBaseUrl + '$1');
 }
 
 // Initialization is triggered by C# via initEditor() call

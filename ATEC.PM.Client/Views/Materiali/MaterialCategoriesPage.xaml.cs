@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Windows.Media;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -20,14 +22,7 @@ public partial class MaterialCategoriesPage : Page
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/material-categories");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            _categories = JsonSerializer.Deserialize<List<MaterialCategoryDto>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-
+            _categories = await ApiClient.GetListAsync<MaterialCategoryDto>("/api/material-categories");
             RenderList();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
@@ -151,7 +146,7 @@ public partial class MaterialCategoriesPage : Page
         // Col 4: Elimina
         Button btnDel = new()
         {
-            Content = "✕", Width = 24, Height = 24, FontSize = 11,
+            Content = "\uE74D", FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"), Width = 24, Height = 24, FontSize = 13,
             Background = Brush("#EF44441A"), Foreground = Brush("#EF4444"),
             BorderThickness = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
@@ -160,18 +155,17 @@ public partial class MaterialCategoriesPage : Page
         };
         btnDel.Click += async (s, e) =>
         {
-            if (MessageBox.Show($"Eliminare \"{cat.Name}\"?",
+            if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Eliminare \"{cat.Name}\"?",
                 "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try
             {
                 string result = await ApiClient.DeleteAsync($"/api/material-categories/{cat.Id}");
-                JsonDocument doc = JsonDocument.Parse(result);
-                if (doc.RootElement.GetProperty("success").GetBoolean())
+                if (ApiClient.IsApiSuccess(result, out string msg))
                     await LoadData();
                 else
-                    MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                    ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg, "Errore");
             }
-            catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+            catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
         };
         Grid.SetColumn(btnDel, 4);
         grid.Children.Add(btnDel);
@@ -193,6 +187,9 @@ public partial class MaterialCategoriesPage : Page
             string json = JsonSerializer.Serialize(new { field, value });
             await ApiClient.PatchAsync($"/api/material-categories/{id}/field", json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Impossibile salvare la modifica: {ex.Message}");
+        }
     }
 }

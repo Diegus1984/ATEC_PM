@@ -51,14 +51,13 @@ public partial class CostResourceDialog : Window
             }, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/resources", json);
-            var doc = System.Text.Json.JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }

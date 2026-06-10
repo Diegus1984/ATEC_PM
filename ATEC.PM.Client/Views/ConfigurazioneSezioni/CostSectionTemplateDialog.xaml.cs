@@ -1,3 +1,9 @@
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
+
 namespace ATEC.PM.Client.Views;
 
 public partial class CostSectionTemplateDialog : Window
@@ -10,7 +16,6 @@ public partial class CostSectionTemplateDialog : Window
             cmbGroup.Items.Add(new ComboBoxItem { Content = g.Name, Tag = g.Id });
         if (cmbGroup.Items.Count > 0) cmbGroup.SelectedIndex = 0;
 
-        // Checkbox reparti
         foreach (DepartmentDto dept in departments.Where(d => d.IsActive).OrderBy(d => d.SortOrder))
         {
             CheckBox chk = new()
@@ -18,7 +23,8 @@ public partial class CostSectionTemplateDialog : Window
                 Content = $"{dept.Code} — {dept.Name}",
                 FontSize = 12,
                 Margin = new Thickness(0, 3, 16, 3),
-                Tag = dept.Id
+                Tag = dept.Id,
+                Foreground = (System.Windows.Media.Brush)FindResource("ShadcnForegroundBrush")
             };
             wpDepartments.Children.Add(chk);
         }
@@ -26,6 +32,7 @@ public partial class CostSectionTemplateDialog : Window
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
+        txtError.Text = "";
         string name = txtName.Text.Trim();
         if (string.IsNullOrEmpty(name))
         {
@@ -42,9 +49,8 @@ public partial class CostSectionTemplateDialog : Window
         string sectionType = (cmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "IN_SEDE";
         int.TryParse(txtSortOrder.Text, out int sortOrder);
 
-        // Raccogli reparti selezionati
         List<int> deptIds = new();
-        foreach (var child in wpDepartments.Children)
+        foreach (object child in wpDepartments.Children)
         {
             if (child is CheckBox chk && chk.IsChecked == true && chk.Tag is int dId)
                 deptIds.Add(dId);
@@ -65,21 +71,16 @@ public partial class CostSectionTemplateDialog : Window
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync("/api/cost-sections/templates", json);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }
 
-    private void BtnCancel_Click(object sender, RoutedEventArgs e)
-    {
-        DialogResult = false;
-        Close();
-    }
+    private void BtnCancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 }

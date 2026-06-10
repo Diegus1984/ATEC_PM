@@ -1,5 +1,6 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
+using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
 
 namespace ATEC.PM.Client.Views;
@@ -54,16 +55,15 @@ public partial class CredentialsDialog : Window
             string jsonBody = JsonSerializer.Serialize(obj, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync("/api/auth/set-credentials", jsonBody);
 
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
-                MessageBox.Show($"Credenziali impostate per {_employeeName}", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShadcnMessageBox.Show($"Credenziali impostate per {_employeeName}", "OK", MessageBoxButton.OK, MessageBoxImage.Information);
                 DialogResult = true;
                 Close();
             }
             else
             {
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
             }
         }
         catch (Exception ex)

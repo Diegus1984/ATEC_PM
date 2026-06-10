@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -31,68 +32,49 @@ public partial class EasyfattCustomersImportDialog : Window
         try
         {
             string encoded = Uri.EscapeDataString(filePath);
-            string json = await ApiClient.GetAsync($"/api/import/easyfatt/customers?filePath={encoded}");
+            ApiResponse<EasyfattCustomersPreviewDto>? previewResp = await ApiClient.GetApiAsync<EasyfattCustomersPreviewDto>(
+                $"/api/import/easyfatt/customers?filePath={encoded}");
 
-            if (string.IsNullOrWhiteSpace(json))
+            if (previewResp == null || !previewResp.Success || previewResp.Data == null)
             {
-                txtStatus.Text = "Risposta vuota dal server.";
+                txtStatus.Text = previewResp?.Message ?? "Errore";
                 return;
             }
 
-            JsonDocument doc;
-            try { doc = JsonDocument.Parse(json); }
-            catch (JsonException)
-            {
-                txtStatus.Text = $"Risposta non valida: {json.Substring(0, Math.Min(json.Length, 200))}";
-                return;
-            }
-
-            if (!doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore";
-                return;
-            }
-
-            JsonElement data = doc.RootElement.GetProperty("data");
-            int totalFound = data.GetProperty("totalFound").GetInt32();
-            int newCount = data.GetProperty("newCount").GetInt32();
-            int dupCount = data.GetProperty("duplicateCount").GetInt32();
-
-            txtSummary.Text = $"Totale: {totalFound}  |  Nuovi: {newCount}  |  Duplicati: {dupCount}";
+            EasyfattCustomersPreviewDto preview = previewResp.Data;
+            txtSummary.Text = $"Totale: {preview.TotalFound}  |  Nuovi: {preview.NewCount}  |  Duplicati: {preview.DuplicateCount}";
 
             _allRows.Clear();
-            JsonElement customers = data.GetProperty("customers");
-
-            foreach (JsonElement c in customers.EnumerateArray())
+            foreach (EasyfattCustomerDto c in preview.Customers)
             {
-                string status = c.GetProperty("status").GetString() ?? "NUOVO";
+                string status = c.Status ?? "NUOVO";
                 _allRows.Add(new CustomerImportRow
                 {
                     IsSelected = status == "NUOVO",
-                    EasyfattId = c.GetProperty("easyfattId").GetInt32(),
-                    EasyfattCode = c.GetProperty("easyfattCode").GetString() ?? "",
-                    CompanyName = c.GetProperty("companyName").GetString() ?? "",
-                    ContactName = c.GetProperty("contactName").GetString() ?? "",
-                    Email = c.GetProperty("email").GetString() ?? "",
-                    Pec = c.GetProperty("pec").GetString() ?? "",
-                    Phone = c.GetProperty("phone").GetString() ?? "",
-                    Cell = c.GetProperty("cell").GetString() ?? "",
-                    Address = c.GetProperty("address").GetString() ?? "",
-                    VatNumber = c.GetProperty("vatNumber").GetString() ?? "",
-                    FiscalCode = c.GetProperty("fiscalCode").GetString() ?? "",
-                    PaymentTerms = c.GetProperty("paymentTerms").GetString() ?? "",
-                    SdiCode = c.GetProperty("sdiCode").GetString() ?? "",
-                    Notes = c.GetProperty("notes").GetString() ?? "",
+                    EasyfattId = c.EasyfattId,
+                    EasyfattCode = c.EasyfattCode,
+                    CompanyName = c.CompanyName,
+                    ContactName = c.ContactName,
+                    Email = c.Email,
+                    Pec = c.Pec,
+                    Phone = c.Phone,
+                    Cell = c.Cell,
+                    Address = c.Address,
+                    VatNumber = c.VatNumber,
+                    FiscalCode = c.FiscalCode,
+                    PaymentTerms = c.PaymentTerms,
+                    SdiCode = c.SdiCode,
+                    Notes = c.Notes,
                     Status = status,
-                    ExistingId = c.GetProperty("existingId").GetInt32(),
-                    ExistingName = c.GetProperty("existingName").GetString() ?? "",
-                    Action = c.GetProperty("action").GetString() ?? (status == "NUOVO" ? "INSERT" : "SKIP")
+                    ExistingId = c.ExistingId,
+                    ExistingName = c.ExistingName,
+                    Action = string.IsNullOrEmpty(c.Action) ? (status == "NUOVO" ? "INSERT" : "SKIP") : c.Action
                 });
             }
 
             ApplyFilter();
             btnImport.IsEnabled = true;
-            txtStatus.Text = $"Caricati {totalFound} clienti. Selezionare quelli da importare.";
+            txtStatus.Text = $"Caricati {preview.TotalFound} clienti. Selezionare quelli da importare.";
         }
         catch (Exception ex)
         {
@@ -146,11 +128,11 @@ public partial class EasyfattCustomersImportDialog : Window
         List<CustomerImportRow> toImport = _allRows.Where(r => r.IsSelected && r.Action != "SKIP").ToList();
         if (toImport.Count == 0)
         {
-            MessageBox.Show("Nessun cliente selezionato.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun cliente selezionato.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        MessageBoxResult confirm = MessageBox.Show(
+        MessageBoxResult confirm = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Importare {toImport.Count} clienti?\n\n" +
             $"INSERT: {toImport.Count(r => r.Action == "INSERT")}\n" +
             $"UPDATE: {toImport.Count(r => r.Action == "UPDATE")}",
@@ -190,25 +172,18 @@ public partial class EasyfattCustomersImportDialog : Window
 
             string jsonBody = JsonSerializer.Serialize(payload);
             string result = await ApiClient.PostAsync("/api/import/easyfatt/customers", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
 
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<EasyfattImportResultDto>(result, out EasyfattImportResultDto? importResult, out string errMsg)
+                && importResult != null)
             {
-                JsonElement d = doc.RootElement.GetProperty("data");
-                int imported = d.GetProperty("imported").GetInt32();
-                int updated = d.GetProperty("updated").GetInt32();
-                int skipped = d.GetProperty("skipped").GetInt32();
-
-                MessageBox.Show($"Import completato!\n\nInseriti: {imported}\nAggiornati: {updated}\nSaltati: {skipped}",
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Import completato!\n\nInseriti: {importResult.Imported}\nAggiornati: {importResult.Updated}\nSaltati: {importResult.Skipped}",
                     "Risultato", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 DialogResult = true;
                 Close();
             }
             else
-            {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore import";
-            }
+                txtStatus.Text = errMsg ?? "Errore import";
         }
         catch (Exception ex)
         {

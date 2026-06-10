@@ -24,7 +24,10 @@ public class RowTypeToBgConverter : IValueConverter
         if (value is string color && !string.IsNullOrEmpty(color))
         {
             try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[RowTypeToBgConverter] Formato colore non valido '{color}': {ex.Message}");
+            }
         }
         return Brushes.White;
     }

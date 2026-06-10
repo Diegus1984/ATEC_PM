@@ -1,0 +1,413 @@
+================================================================================
+ATEC PM — Lista attività
+Ultimo aggiornamento: 26/05/2026 (snapshot project_phases + fase locale + promozione a template)
+================================================================================
+
+LEGENDA
+  [x] Completata
+  [ ] Da fare
+  [!] Priorità alta
+  [~] Priorità media
+  [-] Priorità bassa / manutenzione
+
+
+================================================================================
+A. VERIFICA IMMEDIATA (dopo le ultime modifiche)
+================================================================================
+
+[x] [!] Sprint 0 verificato manualmente (maggio 2026): server, costing, paginazione/scroll, conversione commessa
+[x] [!] Riavviare ATEC.PM.Server — migrazioni quote_material_items OK
+[x] [!] GET /api/preventivi/{id}/costing — product_id OK
+[x] [!] Totale gruppo materiali dopo prezzo manuale (NotifyTotals su ParentGroup)
+[x] [!] Test costing preventivo IMPIANTO (varianti, numerici post-Syncfusion) OK
+[x] [~] Build soluzione OK (client + server)
+[x] [~] Smoke navigazione: Commesse, Preventivi, Dashboard, Timesheet OK
+[x] [~] Smoke post-ondata performance/sicurezza (22/05/2026): tutto OK lato utente
+
+
+================================================================================
+B. ALLEGGERIMENTO CLIENT — Fase 1 (Syncfusion)
+================================================================================
+
+[x] Rimozione ~69 pacchetti Syncfusion dal .csproj
+[x] Sostituzione DoubleTextBox / CurrencyTextBox con TextBox WPF + DecimalInputConverter
+[x] Rimossa registrazione licenza Syncfusion da App.xaml.cs
+[x] Versioni fisse ClosedXML e WebView2 (non più Version="*")
+[x] Risultato misurato: bin Debug ~180 MB → ~35 MB
+
+[x] [~] Regressione UI CostingTreeControl — verificata OK (22/05/2026)
+[ ] [-] Rimuovere commento residuo "Syncfusion" in CostingTreeControl.xaml se non serve
+
+
+================================================================================
+C. ALLEGGERIMENTO — Fase 2 (navigazione e memoria)
+================================================================================
+
+[x] Cache pagine in MainWindow (non ricreare ProjectsPage/DashboardPage a ogni click)
+        - Dizionario Tag → Page riusata; cache svuotata su Logout
+        - NavigateToProject riusa ProjectsPage + deep-link se pagina già caricata
+
+[x] Lazy load sezioni commessa in ProjectsPage
+        - Nodo commessa (root): solo placeholder, nessuna API dashboard
+        - Dettagli / BVA / Cash flow / Chat / DDP: Load API solo al primo click sul nodo
+        - Cache sezione per commessa; invalidata su Aggiorna albero / Modifica commessa
+        - Documenti: cache per path; invalidata su upload/delete file
+
+[x] [~] Spezzare ProjectsPage (~1320 → 669 righe) — FilePreviewControl estratto (25/05/2026)
+
+[ ] [~] Virtualizzazione liste lunghe (commesse, catalogo, codex, timesheet)
+        - VirtualizingStackPanel / DataGrid EnableRowVirtualization
+
+
+================================================================================
+D. ALLEGGERIMENTO — Fase 3 (API e dati)
+================================================================================
+
+[x] [!] Paginazione API: projects, catalog (+ filter-meta), codex, quotes + client
+
+[x] [~] ApiClient centralizzato (22/05/2026)
+        - GetApiAsync<T>, GetDataAsync<T>, GetListAsync<T>
+        - ParseApiResponse, IsApiSuccess, TryGetApiData<T>
+        - Migrazione Views: GET/POST envelope su Dashboard, CashFlow, BvA, Preventivi,
+          Commesse, Catalogo, CMS, Easyfatt, Login, Config, ecc.
+        - DTO Shared: Import preview, AuthFeaturesContext, CatalogFilterMeta, ecc.
+
+[x] [~] Compressione HTTP GZip + Brotli (22/05/2026)
+        - Server: AddResponseCompression + UseResponseCompression (Program.cs)
+        - Client: HttpClient AutomaticDecompression (ApiClient.cs)
+        - Fix ambiguità CompressionLevel vs EPPlus
+
+[x] [~] Timeout espliciti su HttpClient (25/05/2026)
+        - Default 30s per operazioni normali (GET/POST/PUT/DELETE/PATCH)
+        - LongTimeout 5min per Download/Upload (via CancellationTokenSource)
+
+[x] [-] Polling badge notifiche intelligente (25/05/2026)
+        - NotificationPollingService: 30s → 60s → 120s adattivo
+        - Pausa su window deactivated, poll immediato su activated
+        - MainWindow + DashboardPage aggiornati
+
+
+================================================================================
+E. ALLEGGERIMENTO — Fase 4 (moduli pesanti on-demand)
+================================================================================
+
+[x] [~] WebView2 + TinyMCE lazy (22/05/2026)
+        - Services/WebView2Host.cs — ambiente condiviso
+        - HtmlEditor: WebView2 creato in codice, init su Visibility, Teardown su Unloaded
+        - MaterialRtfDialog: contenuto iniziale su Loaded
+
+[x] [~] OxyPlot on-demand (22/05/2026)
+        - Services/OxyPlotChartHost.cs
+        - CashFlowControl: PlotView in codice, grafico in background
+        - ProjectDashboardControl: KPI subito, grafici in BeginInvoke
+
+[x] [~] ACadSharp (anteprima DWG): già lazy in FilePreviewControl (25/05/2026)
+        - CadViewerControl istanziato solo su click file .dwg/.dxf
+
+[x] [~] eDrawings + WindowsFormsHost: già lazy in FilePreviewControl (25/05/2026)
+        - EDrawingHost istanziato solo su click file SolidWorks/IGES
+
+[ ] [-] Moduli opzionali in deploy (CAD, CMS/HTML, Danea) come add-on
+
+
+================================================================================
+F. ALLEGGERIMENTO — Fase 5 (costing UI)
+================================================================================
+
+[x] [~] CostingTreeControl 5.1 + 5.2 — aggiornamenti incrementali (22/05/2026)
+        - Audit reload documentato in CostingTreeControl.xaml.cs
+        - Patch locale (no GET): delete/add risorsa, delete/add variante materiale,
+          edit risorse/materiali → RefreshPricingFromTree()
+        - ReloadMaterialsOnlyAsync: catalogo, refresh catalogo, clone (no rebuild risorse)
+        - LoadDataAsync completo solo: apertura, add gruppo/sezione
+        - Verificato OK in uso reale
+
+[x] [~] 5.3 CostingTreeControl: reload mirato add gruppo/sezione (25/05/2026)
+        - ReloadResourcesOnlyAsync(): GET solo ramo risorse + pricing
+        - Expand/collapse gruppi e sezioni preservato
+        - BtnAddGroup / BtnAddSection / BtnAddSectionInGroup → ReloadResourcesOnlyAsync
+
+[x] [~] Ridurre nesting XAML in BVA e costing (25/05/2026)
+        - BVA: rimosso Border wrapper ridondante (-1 livello), 0 CornerRadius residui
+        - Costing: rimosso StackPanel figlio singolo (-1 livello)
+        - Costing: rimossi 20 CornerRadius (design system flat) — 0 residui (25/05/2026)
+
+[x] [-] Endpoint API "light" per albero commesse (25/05/2026)
+        - GET /api/projects/tree — 5 campi, 1 JOIN, no subquery
+
+
+================================================================================
+G. SERVER E DATABASE
+================================================================================
+
+[x] Migrazione quote_material_items: product_id, variant_id, code, description_rtf, is_active
+        (QuoteDbService.MigrateQuoteMaterialItemsColumns)
+
+[x] [!] Verificare che InitDatabase/ApplyMigrations sia eseguito in ogni ambiente (25/05/2026)
+        - Retry connessione DB con backoff (5 tentativi, utile Docker/compose)
+        - Log ambiente (Development/Production) a startup
+        - Log conteggio tabelle dopo InitDatabase per conferma schema
+        - CREATE TABLE IF NOT EXISTS rimane idempotente: sicuro in ogni ambiente
+
+[x] [~] InitDatabase in produzione: solo check versione schema (25/05/2026)
+        - productionMode=true: skip CREATE TABLE, esegui solo ApplyVersionedMigrations
+        - schema_migrations table con version + applied_at
+        - v1: project_material_items.is_active
+
+[x] [~] Script migrazione SQL versionati separati da codice startup (25/05/2026)
+        - ApplyVersionedMigrations() con pattern if (currentVersion < N)
+        - LatestSchemaVersion costante, facile aggiungere nuove migrazioni
+        - In dev: CREATE IF NOT EXISTS + migrazioni; in prod: solo migrazioni
+
+[x] [~] Background service: profili Development vs Production (25/05/2026)
+        - appsettings.Development.json / Production.json creati
+        - Serilog ReadFrom.Configuration, Swagger solo Dev, HTTPS solo Prod
+        - NotificationBackgroundService intervallo configurabile
+
+[ ] [-] Allineare project_material_items con quote_material_items se serve product_id anche su commesse
+
+[x] [~] Fase LOCALE alla commessa (quick-add dal BVA, no template) — 26/05/2026
+        - Schema: project_phases con colonne snapshot (name, category,
+          cost_section_template_id, is_local, phase_template_id NULLABLE)
+        - Backfill 26 righe legacy da phase_templates
+        - View v_timesheet_with_section aggiornata (LEFT JOIN + COALESCE su snapshot)
+        - Endpoint POST /api/phases/local (check unicità nome nella commessa)
+        - UI BVA: pulsante "+ Fase locale" arancione sull'header sezione FASI ASSEGNATE
+        - Badge "LOCALE" visibile sulla fase locale, anziché "FASE"
+
+[x] [~] Promozione fase LOCALE → TEMPLATE globale (operazione inversa) — 26/05/2026
+        - Endpoint POST /api/phases/{id}/promote-to-template
+        - Crea phase_templates con name/category/cost_section_template_id snapshot
+        - UPDATE project_phases: phase_template_id = nuovo, is_local = 0
+        - Check: sezione esiste, attiva, ha gruppo valido e attivo
+        - Check unicità nome nella stessa sezione del template
+        - UI BVA: pulsante "↑ Salva come template" accanto al nome fase, visibile
+          solo se IsLocal=true
+
+[x] [~] Filosofia archivio storico: commessa autosufficiente — 26/05/2026
+        - Snapshot in project_phases: la commessa funziona anche se phase_templates
+          cambia o sparisce
+        - DELETE phase_templates: degrada le project_phases collegate a "locali"
+          (phase_template_id=NULL, is_local=1) invece di bloccare
+        - Tutte le query BVA / timesheet / dashboard / employees-by-phase aggiornate
+          con COALESCE(pp.snapshot, pt.template) e LEFT JOIN su phase_templates
+
+[ ] [~] Endpoint "sync fasi template" per commesse esistenti
+        - Trigger: scoperto 26/05/2026 — collegare una fase a una sezione (CostSectionsTreePage)
+          NON la propaga alle commesse già create. project_phases è uno snapshot al Create
+          della commessa, non si aggiorna retroattivamente.
+        - Workaround attuale: INSERT manuale in project_phases (vedi script
+          recalc/patch ad hoc) o ricreazione commessa.
+        - TODO: POST /api/projects/{id}/sync-phases che:
+            * Per ogni project_cost_section della commessa con template_id
+            * Trova le phase_templates con cost_section_template_id = quel template
+            * Confronta con project_phases esistenti
+            * INSERT delle mancanti (department_id, sort_order, budget_hours=0)
+            * Ritorna conteggio fasi aggiunte
+        - UI: pulsante "Sincronizza fasi da template" in ProjectDashboardControl o in BVA.
+        - Cautela: NON eliminare fasi rimosse dal template (potrebbero avere
+          assignments/timesheet già fatti) — solo additive sync.
+
+
+================================================================================
+J. SICUREZZA API (22/05/2026)
+================================================================================
+
+[x] [!] DaneaSyncController — rimossi [AllowAnonymous] su status + explore/*
+        - Whitelist tabelle Firebird (TAnagrafica, TArticoli, TDoc*, TTipiDoc)
+        - Validazione colonna search da metadati RDB$
+        - Explore solo ADMIN/PM
+
+[x] [!] ConfigController — rimosso [AllowAnonymous] su GET /api/config/{key}
+        - app_config esponeva BasePath/TemplatePath senza login
+
+[x] [!] Program.cs — FallbackPolicy RequireAuthenticatedUser
+        - Controller senza [Authorize] → 401 (difesa in profondità)
+        - AuthController.Login: [AllowAnonymous] esplicito
+
+[x] [~] Audit [AllowAnonymous]: zero occorrenze residue nel repo
+        - Unico endpoint pubblico: POST /api/auth/login
+        - Nota: /uploads/cms/* resta statico senza JWT (allegati catalogo)
+
+
+================================================================================
+H. DEPLOY E MANUTENZIONE
+================================================================================
+
+[ ] [~] Publish ottimizzato (test PublishTrimmed / ReadyToRun su WPF)
+[x] [~] .gitignore ampliato + rimossi bin/obj/.vs da disco (maggio 2026)
+[ ] [~] Installer/deploy senza DLL Syncfusion residue su PC vecchi
+[ ] [-] Documentare comandi avvio: dotnet run --project ATEC.PM.Server / Client
+
+[ ] [-] Audit endpoint server dead-code (one-shot)
+        - Trigger: bug 25/05/2026 sulla duplica preventivo era nel "Duplicate" sbagliato
+          perché il client chiamava /api/preventivi/{id}/duplicate ma esisteva anche
+          QuotesController.Duplicate (mai chiamato) → fonte di confusione.
+        - Già rimossi:
+            * QuotesController.Duplicate (dead, ~80 righe)
+            * PreventiviController.GetAll (dead, sostituito da /api/quotes paginato)
+        - TODO: grep di tutti gli [HttpGet/Post/Put/Patch/Delete] + cross-check con
+          chiamate /api/* nel client → lista endpoint server orfani da eliminare.
+        - Beneficio: meno codice da mantenere, meno rischio di modificare l'endpoint
+          sbagliato quando due funzioni omonime coesistono.
+
+
+================================================================================
+I. QUALITÀ E ARCHITETTURA (medio-lungo termine)
+================================================================================
+
+[x] [-] Refactoring App.* → AppSession singleton (25/05/2026)
+        - AppSession.cs (Services/) + App.xaml.cs facade delegation
+[x] [-] Audit permessi feature keys vs menu MainWindow (25/05/2026)
+        - Dashboard ora usa AddIfAllowed("nav.dashboard") come tutte le altre voci
+        - Rimosse feature orfane: nav.preventivi_nuovo, nav.offerte (seed + migration v2)
+        - Tutte le 14 voci menu allineate con auth_features
+[ ] [-] Test automatici su DecimalInputConverter e API costing preventivi
+[ ] [-] Review sicurezza JWT e ProtectedConfigHelper su ambienti non-Windows
+
+
+================================================================================
+ORDINE CONSIGLIATO (sprint) — aggiornato 22/05/2026
+================================================================================
+
+Sprint 0 — Verificato OK
+  [x] Server, costing, catalogo/scroll, conversione commessa, smoke navigazione
+
+Sprint 1 — Quick win UX/performance
+  [x] BUG-001: dopo «Converti in Commessa» → Commesse + albero aggiornato
+  [x] Cache navigazione pagine (C.2)
+  [x] Lazy load sezioni commessa (C.3)
+
+Sprint 2 — Scalabilità dati + API client
+  [x] Paginazione API (D.1)
+  [x] ApiClient tipizzato + migrazione Views (D.2)
+  [x] Compressione HTTP (D.3)
+
+Sprint 3 — Moduli on-demand
+  [x] WebView2 lazy (E.1)
+  [x] OxyPlot on-demand (E.2)
+
+Sprint 4 — Sicurezza
+  [x] DaneaSync, Config, fallback policy (J)
+
+Sprint 5 — Costing UI
+  [x] CostingTreeControl 5.1 + 5.2 (F) — verificato OK
+  [x] 5.3 reload mirato gruppi/sezioni (F) — 25/05/2026
+
+Sprint 6 — Manutenzione strutturale (25/05/2026 — multiagente)
+  [x] Spezzare ProjectsPage (C.4) — FilePreviewControl estratto, 1320→669 righe
+  [x] Timeout HttpClient (D.4) — 30s default, 5min upload/download
+  [~] Polling notifiche intelligente (D.5) — in corso
+  [~] Endpoint API light commesse (F.2) — in corso
+  [~] Ridurre nesting XAML BVA/costing (F.3) — in corso
+  [~] Background service profiles (G.3) — in corso
+  [~] Refactoring App.* → AppSession (I.1) — in corso
+  [ ] Virtualizzazione liste (C.5)
+  [ ] Publish / deploy (H)
+
+
+================================================================================
+NOTE — file toccati in sessione 22/05/2026
+================================================================================
+
+Client:
+  Services/ApiClient.cs, WebView2Host.cs, OxyPlotChartHost.cs
+  UserControls/HtmlEditor.xaml(.cs), DdpCommercialControl.xaml.cs
+  Views/Preventivi/CostingTreeControl.xaml.cs (5.1+5.2)
+  Views/CashFlow/, Dashboard/ProjectDashboardControl.xaml.cs
+  Views/Easyfatt/*ImportDialog, Cms/QuoteCatalogPage, Catalogo/*, ecc.
+  Views/LoginWindow.xaml.cs
+
+Server:
+  Program.cs (compressione + FallbackPolicy)
+  Controllers/DaneaSyncController.cs, ConfigController.cs
+
+Shared:
+  DTOs/Import_DTOs.cs (preview + EasyfattImportResultDto)
+  DTOs/Catalog_DTOs.cs, AuthLevel_DTOs.cs, ProjectCosting_DTOs.cs
+
+Eccezioni intenzionali (no envelope ApiResponse):
+  HtmlEditor — messaggi WebView2
+  DaneaSyncBar — GET /api/danea-sync/status (JSON piatto, ora autenticato)
+
+
+================================================================================
+NOTE — file toccati in sessione 25/05/2026
+================================================================================
+
+Client:
+  Views/Preventivi/CostingTreeControl.xaml.cs (5.3 ReloadResourcesOnlyAsync)
+  Views/Commesse/ProjectsPage.xaml.cs (split → FilePreviewControl)
+  Views/Commesse/FilePreviewControl.xaml(.cs) — NUOVO
+  Services/ApiClient.cs (timeout 30s/5min + CancellationTokenSource)
+
+
+================================================================================
+NOTE — file toccati in sessione 26/05/2026
+================================================================================
+
+DB:
+  Migrazioni manuali (script Python una tantum):
+    - migrate_project_phases_snapshot.py: project_phases + name/category/
+      cost_section_template_id/is_local, phase_template_id NULLABLE, backfill 26 righe
+    - migrate_view_timesheet.py: v_timesheet_with_section rifatta snapshot-aware
+    - fix_dup_program_manager.py: ripara duplicati sezione post-ConvertToProject
+    - Auto-assign is_primary a 18 dipendenti ACTIVE (14 single-dept + 4 manuali)
+
+Server:
+  Controllers/PhasesController.cs
+    + POST /api/phases/local                       (fase locale, check unicità)
+    + POST /api/phases/{id}/promote-to-template    (locale → globale, check sezione+gruppo attivi)
+    + DELETE templates/{id}                        (riscritto: downgrade a locale invece di block)
+    + POST templates                               (check unicità nome nella sezione)
+    + GetByProject snapshot-aware + IsLocal in PhaseListItem
+  Controllers/PreventiviController.cs
+    + ConvertToProject: copia fasi con snapshot, dedup sezioni per nome (4b)
+    + Duplicate IMPIANTO: ereditare totali da originale (no RecalcTotals)
+    + Rimosso GetAll (dead code)
+  Controllers/QuotesController.cs
+    + Rimosso Duplicate (dead code)
+  Controllers/ProjectsController.cs
+    + PhaseGantt, Deadlines, totals CostWorked, assignedByDept, ramo trasversale
+      → snapshot-aware (LEFT JOIN + COALESCE + ROW_NUMBER per is_primary fallback)
+  Controllers/EmployeesController.cs
+    + GetByPhase via project_cost_section_departments (locale alla commessa)
+  Controllers/TimesheetController.cs
+    + GetPhasesForEmployee, GetWeek, Summary: snapshot-aware
+    + LEFT JOIN phase_templates + fallback pp.name
+  Controllers/TemplateController.cs
+    + Query GetTree tipizzata su TemplateFileRow (fix Dapper case-sensitive)
+    + UpdateFile / MoveFile / CopyFile
+
+Shared:
+  DTOs/Phase_DTOs.cs       (+ LocalPhaseRequest, + PhaseListItem.IsLocal)
+  DTOs/Template_DTOs.cs    (+ UpdateTemplateFileRequest, MoveOrCopyFileRequest)
+
+Client:
+  Views/ConfigurazioneSezioni/CostSectionsTreePage.xaml(.cs)
+    - Rimosso pannello sx-basso "FASI TEMPLATE" + drag&drop + ricerca
+    - Pulsante "+" sulla sezione per nuova fase (vincolo: sezione con reparti)
+    - 200 righe code-behind rimosse (RenderPhases, BuildPhaseBadgeLeft, ecc.)
+  Views/Templates/ProjectTemplatePage.xaml(.cs)
+    - Context menu (tasto destro): nuova cart./carica/rinomina/taglia/copia/incolla/elimina
+    - Stato clipboard, shortcut tastiera (F2/Canc/Ctrl+X/C/V)
+    - Save/restore IsExpanded (via TreeViewStateHelper)
+    - Overlay caricamento/errore/vuoto + reload su IsVisibleChanged
+  Views/Commesse/ProjectsPage.xaml.cs
+    - Save/restore espansione+selezione attorno a BuildTree (helper)
+  Views/BudgetVsCosting/BudgetVsActualControl.xaml(.cs) + ViewModels/BvaCostingVM.cs
+    - Pulsante "+ Fase locale" sull'header sezione (BvaSectionVM.CostSectionTemplateId)
+    - Pulsante "↑ Salva come template" sulla fase locale (visibile se IsLocal)
+    - Pulsante "✕ Elimina fase" (visibile se HoursWorked==0)
+    - Reload automatico dopo add/edit/delete assegnazioni
+    - Badge "LOCALE" sulla fase quando IsLocal
+  Services/TreeViewStateHelper.cs — NUOVO (generico, anche per ItemCollection)
+  Services/AppSession.cs — già esistente (singleton sessione)
+
+Documenti di processo:
+  BUGS.md — BUG-002/003/004 risolti, segnalati a referenza
+  SEZIONI_COSTO_GUIDA.md/.pdf — refresh: pannello fasi rimosso, "+" sulla sezione
+
+================================================================================
+Fine documento
+================================================================================

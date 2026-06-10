@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -14,10 +15,18 @@ namespace ATEC.PM.Client.Views;
 
 public partial class CatalogPage : Page
 {
-    private List<CatalogItemListItem> _allItems = new();
+    private const int PageSize = 50;
+
+    private ObservableCollection<CatalogItemListItem> _allItems = new();
     private Dictionary<string, TextBox> _filterBoxes = new();
     private Dictionary<string, ComboBox> _comboFilterBoxes = new();
     private CancellationTokenSource? _filterCts;
+    private int _loadedPage;
+    private int _totalCount;
+    private bool _hasMore;
+    private bool _loading;
+    private bool _filterMetaLoaded;
+    private InfiniteScrollHelper? _infiniteScroll;
 
     private readonly List<(string Key, string Label, DataGridColumn Column)> _columnDefs = new();
     private Dictionary<string, bool> _columnVisibility = new();
@@ -30,11 +39,15 @@ public partial class CatalogPage : Page
     public CatalogPage()
     {
         InitializeComponent();
+        _infiniteScroll = new InfiniteScrollHelper(
+            () => _hasMore && !_loading,
+            () => Load(append: true));
+        _infiniteScroll.Attach(dgCatalog);
         InitColumnDefs();
         LoadColumnSettings();
         BuildColumnCheckboxes();
-        syncBar.SyncCompleted += async () => await Load();
-        Loaded += async (_, _) => await Load();
+        syncBar.SyncCompleted += async () => await Load(append: false);
+        Loaded += async (_, _) => await Load(append: false);
     }
 
     // ── COLUMN VISIBILITY ─────────────────────────────────────────
@@ -71,7 +84,10 @@ public partial class CatalogPage : Page
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading column settings: {ex}");
+        }
 
         ApplyColumnVisibility();
     }
@@ -85,7 +101,10 @@ public partial class CatalogPage : Page
             string json = JsonSerializer.Serialize(_columnVisibility, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error saving column settings: {ex}");
+        }
     }
 
     private void BuildColumnCheckboxes()
@@ -132,23 +151,102 @@ public partial class CatalogPage : Page
 
     // ── LOAD DATA ─────────────────────────────────────────────────
 
-    private async Task Load()
+    private async Task Load(bool append = false)
     {
-        txtStatus.Text = "Caricamento...";
+        if (_loading) return;
+        _loading = true;
+        if (!append)
+        {
+            _loadedPage = 0;
+            _allItems.Clear();
+        }
+
+        int page = append ? _loadedPage + 1 : 1;
+        Dictionary<string, string?> query = BuildCatalogQuery();
+        string url = PagedApiHelper.BuildUrl("/api/catalog", page, PageSize, query);
+
+        txtStatus.Text = append ? "Caricamento altri articoli..." : "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/catalog");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (!_filterMetaLoaded)
+                await LoadFilterMetaAsync();
+
+            PagedResult<CatalogItemListItem>? pageData = await PagedApiHelper.GetPageAsync<CatalogItemListItem>(url);
+            if (pageData != null)
             {
-                _allItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
-                RefreshComboFilters();
-                ApplyFilter();
+                _loadedPage = pageData.Page;
+                _totalCount = pageData.TotalCount;
+                _hasMore = pageData.HasMore;
+                if (!append)
+                    _allItems.Clear();
+                foreach (CatalogItemListItem item in pageData.Items)
+                    _allItems.Add(item);
+                if (dgCatalog.ItemsSource != _allItems)
+                    dgCatalog.ItemsSource = _allItems;
+                UpdateListStatus();
+                _infiniteScroll?.NotifyContentUpdated(dgCatalog);
             }
+            else
+                txtStatus.Text = "Errore caricamento";
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Dictionary<string, string?> BuildCatalogQuery()
+    {
+        string supp = CF("Supp");
+        if (supp == "tutti") supp = "";
+        string man = CF("Man");
+        if (man == "tutti") man = "";
+        string cat = CF("Cat");
+        if (cat == "tutti") cat = "";
+
+        return new Dictionary<string, string?>
+        {
+            ["code"] = F("Code"),
+            ["description"] = F("Desc"),
+            ["supplier"] = string.IsNullOrEmpty(supp) ? null : supp,
+            ["manufacturer"] = string.IsNullOrEmpty(man) ? null : man,
+            ["category"] = string.IsNullOrEmpty(cat) ? null : cat
+        };
+    }
+
+    private async Task LoadFilterMetaAsync()
+    {
+        try
+        {
+            CatalogFilterMetaDto? meta = await ApiClient.GetDataAsync<CatalogFilterMetaDto>("/api/catalog/filter-meta");
+            if (meta == null) return;
+            PopulateCombo("Supp", meta.Suppliers);
+            PopulateCombo("Man", meta.Manufacturers);
+            PopulateCombo("Cat", meta.Categories);
+            _filterMetaLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Catalog filter-meta: {ex.Message}");
+        }
+    }
+
+    private static IEnumerable<string?> ReadStringArray(JsonElement data, string prop)
+    {
+        if (!data.TryGetProperty(prop, out JsonElement arr)) yield break;
+        foreach (JsonElement el in arr.EnumerateArray())
+            yield return el.GetString();
+    }
+
+    private void UpdateListStatus()
+    {
+        if (_totalCount <= 0)
+            txtStatus.Text = "Nessun articolo";
+        else if (_allItems.Count >= _totalCount)
+            txtStatus.Text = $"{_totalCount} articoli";
+        else
+            txtStatus.Text = $"{_allItems.Count} di {_totalCount} articoli";
     }
 
     // ── FILTRI ─────────────────────────────────────────────────────
@@ -166,7 +264,7 @@ public partial class CatalogPage : Page
         try
         {
             await Task.Delay(300, _filterCts.Token);
-            ApplyFilter();
+            await Load(append: false);
         }
         catch (TaskCanceledException) { }
     }
@@ -179,15 +277,8 @@ public partial class CatalogPage : Page
 
     private void ComboFilter_Changed(object sender, SelectionChangedEventArgs e)
     {
-        // Posticipa al prossimo ciclo UI così SelectedItem/Text sono allineati
-        Dispatcher.InvokeAsync(ApplyFilter, System.Windows.Threading.DispatcherPriority.Background);
-    }
-
-    private void RefreshComboFilters()
-    {
-        PopulateCombo("Supp", _allItems.Select(i => i.SupplierName));
-        PopulateCombo("Man", _allItems.Select(i => i.Manufacturer));
-        PopulateCombo("Cat", _allItems.Select(i => i.Category));
+        Dispatcher.InvokeAsync(() => _ = Load(append: false),
+            System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void PopulateCombo(string tag, IEnumerable<string?> values)
@@ -224,53 +315,13 @@ public partial class CatalogPage : Page
     private string F(string tag) =>
         _filterBoxes.GetValueOrDefault(tag)?.Text.Trim().ToLower() ?? "";
 
-    private static bool Match(string? value, string filter)
-    {
-        if (string.IsNullOrEmpty(filter)) return true;
-        var v = value?.ToLower() ?? "";
-
-        bool startsWild = filter.StartsWith('*');
-        bool endsWild = filter.EndsWith('*');
-
-        if (startsWild && endsWild)
-            return v.Contains(filter.Trim('*'));
-        if (endsWild)
-            return v.StartsWith(filter.TrimEnd('*'));
-        if (startsWild)
-            return v.EndsWith(filter.TrimStart('*'));
-
-        return v.Contains(filter);
-    }
-
-    private void ApplyFilter()
-    {
-        if (_allItems == null) return;
-
-        string fCode = F("Code");
-        string fDesc = F("Desc");
-        string fSupp = CF("Supp");
-        string fMan = CF("Man");
-        string fCat = CF("Cat");
-
-        var filtered = _allItems.Where(i =>
-            Match(i.Code, fCode) &&
-            Match(i.Description, fDesc) &&
-            Match(i.SupplierName, fSupp) &&
-            Match(i.Manufacturer, fMan) &&
-            Match(i.Category, fCat)
-        ).ToList();
-
-        dgCatalog.ItemsSource = filtered;
-        txtStatus.Text = $"{filtered.Count} articoli trovati su {_allItems.Count}";
-    }
-
     // ── AZIONI ─────────────────────────────────────────────────────
 
     private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var tb in _filterBoxes.Values) tb.Clear();
-        foreach (var cb in _comboFilterBoxes.Values) cb.SelectedIndex = 0; // "Tutti"
-        ApplyFilter();
+        foreach (TextBox tb in _filterBoxes.Values) tb.Clear();
+        foreach (ComboBox cb in _comboFilterBoxes.Values) cb.SelectedIndex = 0;
+        _ = Load(append: false);
     }
 
     private void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -300,14 +351,14 @@ public partial class CatalogPage : Page
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is CatalogItemListItem item &&
-            MessageBox.Show($"Disattivare {item.Code} - {item.Description}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Disattivare {item.Code} - {item.Description}?", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
         {
             await ApiClient.DeleteAsync($"/api/catalog/{item.Id}");
             await Load();
         }
     }
 
-    private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await Load();
+    private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await Load(append: false);
 
     private void BtnImportEasyfatt_Click(object sender, RoutedEventArgs e)
     {

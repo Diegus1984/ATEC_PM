@@ -2,199 +2,294 @@
     x:Class="ATEC.PM.Client.Views.Admin.AuthLevelsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Gestione Permessi">
+    Title="Gestione Permessi"
+    Background="{DynamicResource ShadcnBackgroundBrush}"
+    FontFamily="{DynamicResource ShadcnFontFamily}">
 
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Page.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="ShadcnBackgroundBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="ShadcnForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnCardBrush" Color="#0C0C0E" />
+            <SolidColorBrush x:Key="ShadcnCardForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnPrimaryBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnPrimaryForegroundBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="ShadcnSecondaryBrush" Color="#18181B" />
+            <SolidColorBrush x:Key="ShadcnSecondaryForegroundBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="ShadcnMutedForegroundBrush" Color="#71717A" />
+            <SolidColorBrush x:Key="ShadcnBorderBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnInputBrush" Color="#1F1F23" />
+            <SolidColorBrush x:Key="ShadcnPopoverBrush" Color="#0C0C0E" />
 
-        <!-- HEADER -->
-        <DockPanel Grid.Row="0" Margin="0,0,0,16">
-            <Button
-                Content="+ Nuova Feature"
-                DockPanel.Dock="Right"
-                Padding="16,8"
-                Style="{StaticResource PrimaryBtn}"
-                Click="BtnAddFeature_Click" />
-            <StackPanel>
-                <TextBlock
-                    FontSize="22"
-                    FontWeight="Bold"
-                    Foreground="#1A1D26"
-                    Text="Gestione Permessi" />
-                <TextBlock
-                    Margin="0,4,0,0"
-                    FontSize="13"
-                    Foreground="#6B7280"
-                    Text="Configura i livelli di accesso per ogni funzione (stile VisiWin). Il livello superiore eredita tutti i permessi dei livelli inferiori." />
-            </StackPanel>
-        </DockPanel>
+            <Style x:Key="RoleCheckStyle" TargetType="TextBlock">
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="#22C55E" />
+            </Style>
 
-        <!-- LEGENDA LIVELLI -->
-        <Border Grid.Row="1" Margin="0,0,0,12" Padding="12,8" Background="#F3F4F6" CornerRadius="6">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#374151" Text="Livelli:  " />
-                <Border Margin="4,0" Padding="8,4" Background="#E0F2FE" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#0369A1" Text="0 - Tecnico" />
-                </Border>
-                <Border Margin="4,0" Padding="8,4" Background="#FEF3C7" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#92400E" Text="1 - Resp. Reparto" />
-                </Border>
-                <Border Margin="4,0" Padding="8,4" Background="#D1FAE5" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#065F46" Text="2 - Project Manager" />
-                </Border>
-                <Border Margin="4,0" Padding="8,4" Background="#FEE2E2" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#991B1B" Text="3 - Amministratore" />
-                </Border>
-                <Border Margin="4,0" Padding="8,4" Background="#E9D5FF" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#6B21A8" Text="4 - Developer" />
-                </Border>
-                <Border Margin="24,0,4,0" Padding="8,4" Background="#F3F4F6" CornerRadius="4">
-                    <TextBlock FontSize="12" Foreground="#6B7280" Text="H = Nascosto  |  D = Disabilitato" />
-                </Border>
-            </StackPanel>
+            <Style x:Key="RowMenuHeaderStyle" TargetType="MenuItem">
+                <Setter Property="IsEnabled" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="MenuItem">
+                            <Border Padding="12,10,12,8" Background="Transparent" SnapsToDevicePixels="True">
+                                <StackPanel>
+                                    <TextBlock
+                                        Text="{Binding Path=PlacementTarget.DataContext.DisplayNameReadable, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                        FontSize="12.5"
+                                        FontWeight="SemiBold"
+                                        Foreground="White" />
+                                    <TextBlock
+                                        Margin="0,2,0,0"
+                                        Text="{Binding Path=PlacementTarget.DataContext.FeatureKeyDisplay, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                        FontSize="10.5"
+                                        Foreground="#71717A" />
+                                </StackPanel>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Page.Resources>
+
+    <DockPanel>
+        <!-- TOOLBAR -->
+        <Border
+            DockPanel.Dock="Top"
+            Background="{DynamicResource ShadcnBackgroundBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,12">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button
+                        Click="BtnAddFeature_Click"
+                        Width="150"
+                        Content="+ Nuova funzione"
+                        Style="{StaticResource ShadcnButtonDefault}" />
+                </StackPanel>
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Grid>
+                        <TextBox
+                            x:Name="txtSearch"
+                            Width="240"
+                            Style="{StaticResource ShadcnTextBox}"
+                            TextChanged="TxtSearch_TextChanged" />
+                        <TextBlock
+                            x:Name="txtSearchPlaceholder"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                            IsHitTestVisible="False"
+                            Style="{StaticResource ShadcnSmall}"
+                            Text="Cerca funzione, categoria o codice..." />
+                    </Grid>
+                    <TextBlock
+                        x:Name="txtStatus"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource ShadcnSmall}"
+                        Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                        Text="Caricamento..." />
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <!-- DATAGRID FEATURE -->
-        <DataGrid
-            x:Name="dgFeatures"
-            Grid.Row="2"
-            AutoGenerateColumns="False"
-            CanUserAddRows="False"
-            CanUserDeleteRows="False"
-            CanUserReorderColumns="False"
-            HeadersVisibility="Column"
-            IsReadOnly="True"
-            SelectionMode="Single"
-            Style="{StaticResource ModernDataGrid}"
-            CellStyle="{StaticResource ModernCell}"
-            ColumnHeaderStyle="{StaticResource ModernColumnHeader}"
-            RowStyle="{StaticResource ModernRow}">
-            <DataGrid.Columns>
-                <!-- CATEGORIA -->
-                <DataGridTextColumn
-                    Width="120"
-                    Binding="{Binding Category}"
-                    Header="Categoria" />
+        <!-- LEGENDA -->
+        <Border
+            DockPanel.Dock="Top"
+            Background="{DynamicResource ShadcnBackgroundBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,8">
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{StaticResource ShadcnSmall}"
+                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                    Text="Gerarchia ruoli:" />
+                <Border Margin="8,2,4,2" Style="{StaticResource ShadcnBadgeDark}">
+                    <TextBlock Text="0 · Tecnico" />
+                </Border>
+                <Border Margin="4,2" Style="{StaticResource ShadcnBadgeDark}">
+                    <TextBlock Text="1 · Resp. reparto" />
+                </Border>
+                <Border Margin="4,2" Style="{StaticResource ShadcnBadgeDark}">
+                    <TextBlock Text="2 · PM" />
+                </Border>
+                <Border Margin="4,2" Style="{StaticResource ShadcnBadgeDark}">
+                    <TextBlock Text="3 · Admin" />
+                </Border>
+                <Border Margin="4,2" Style="{StaticResource ShadcnBadgeDark}">
+                    <TextBlock Text="4 · Developer" />
+                </Border>
+                <TextBlock
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource ShadcnSmall}"
+                    Foreground="#71717A"
+                    Text="✓ = accesso consentito per quel ruolo" />
+            </WrapPanel>
+        </Border>
 
-                <!-- FEATURE KEY -->
-                <DataGridTextColumn
-                    Width="180"
-                    Binding="{Binding FeatureKey}"
-                    Header="Chiave" />
+        <!-- DATAGRID -->
+        <Border Margin="16" Style="{StaticResource ShadcnCardDark}" Padding="8">
+            <Grid>
+                <DataGrid
+                    x:Name="dgFeatures"
+                    IsReadOnly="True"
+                    Style="{StaticResource ShadcnDataGridDark}">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Width="140" Header="Categoria">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource ShadcnBadgeDark}" Margin="0,2" HorizontalAlignment="Left">
+                                        <TextBlock Text="{Binding CategoryDisplay}" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                <!-- NOME -->
-                <DataGridTextColumn
-                    Width="200"
-                    Binding="{Binding DisplayName}"
-                    Header="Nome" />
+                        <DataGridTemplateColumn Width="*" MinWidth="180" Header="Funzione">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        Margin="4,0"
+                                        VerticalAlignment="Center"
+                                        FontWeight="Medium"
+                                        Foreground="White"
+                                        Text="{Binding DisplayNameReadable}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                <!-- LIVELLO MINIMO (ComboBox) -->
-                <DataGridTemplateColumn Width="160" Header="Min. Livello">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <ComboBox
-                                Width="145"
-                                HorizontalAlignment="Center"
-                                ItemsSource="{Binding LevelOptions}"
-                                DisplayMemberPath="Name"
-                                SelectedValuePath="Value"
-                                SelectedValue="{Binding MinLevel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                SelectionChanged="CboLevel_Changed" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="220" Header="Codice">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="#71717A"
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        Text="{Binding FeatureKeyDisplay}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                <!-- CHECKMARK COLUMNS: T, R, PM, A, D -->
-                <DataGridTemplateColumn Width="40" Header="T">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#10B981"
-                                Text="{Binding CheckTech}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Width="40" Header="R">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#10B981"
-                                Text="{Binding CheckResp}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Width="40" Header="PM">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#10B981"
-                                Text="{Binding CheckPm}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Width="40" Header="A">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#10B981"
-                                Text="{Binding CheckAdmin}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Width="40" Header="D">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="14"
-                                Foreground="#10B981"
-                                Text="{Binding CheckDev}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="190" Header="Livello minimo">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox
+                                        Width="175"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource ShadcnComboBox}"
+                                        ItemsSource="{Binding LevelOptions}"
+                                        DisplayMemberPath="Name"
+                                        SelectedValuePath="Value"
+                                        SelectedValue="{Binding MinLevel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        SelectionChanged="CboLevel_Changed" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                <!-- BEHAVIOR TOGGLE -->
-                <DataGridTemplateColumn Width="80" Header="Modo">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <ComboBox
-                                Width="60"
-                                HorizontalAlignment="Center"
-                                SelectedValue="{Binding Behavior, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                SelectedValuePath="Tag"
-                                SelectionChanged="CboBehavior_Changed">
-                                <ComboBoxItem Content="H" Tag="HIDDEN" />
-                                <ComboBoxItem Content="D" Tag="DISABLED" />
-                            </ComboBox>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="72" Header="Tecnico">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource RoleCheckStyle}" Text="{Binding CheckTech}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="88" Header="Resp. reparto">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource RoleCheckStyle}" Text="{Binding CheckResp}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="72" Header="PM">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource RoleCheckStyle}" Text="{Binding CheckPm}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="88" Header="Admin">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource RoleCheckStyle}" Text="{Binding CheckAdmin}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Width="72" Header="Developer">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource RoleCheckStyle}" Text="{Binding CheckDev}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                <!-- DELETE -->
-                <DataGridTemplateColumn Width="50" Header="">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button
-                                Content="X"
-                                Padding="4,2"
-                                Style="{StaticResource RowDeleteBtn}"
-                                Click="BtnDeleteFeature_Click" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
-    </Grid>
+                        <DataGridTemplateColumn Width="140" Header="Se non autorizzato">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox
+                                        Width="130"
+                                        HorizontalAlignment="Center"
+                                        Style="{StaticResource ShadcnComboBox}"
+                                        ItemsSource="{Binding BehaviorOptions}"
+                                        DisplayMemberPath="Label"
+                                        SelectedValuePath="Value"
+                                        SelectedValue="{Binding Behavior, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        SelectionChanged="CboBehavior_Changed" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button
+                                        Content="⋮"
+                                        Style="{StaticResource ShadcnButtonGhost}"
+                                        Foreground="#71717A"
+                                        FontSize="14"
+                                        Padding="0"
+                                        Width="30"
+                                        Height="30"
+                                        HorizontalAlignment="Center"
+                                        Click="BtnRowOptions_Click">
+                                        <Button.ContextMenu>
+                                            <ContextMenu Style="{StaticResource ShadcnContextMenu}">
+                                                <MenuItem Style="{StaticResource RowMenuHeaderStyle}" />
+                                                <Separator Style="{StaticResource ShadcnSeparator}" Margin="0,4" />
+                                                <MenuItem
+                                                    Header="Elimina"
+                                                    Style="{StaticResource ShadcnMenuItem}"
+                                                    Click="MenuItemDelete_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock
+                                                            Text="&#xE74D;"
+                                                            FontFamily="Segoe MDL2 Assets"
+                                                            FontSize="13"
+                                                            Foreground="#A1A1AA"
+                                                            VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+    </DockPanel>
 </Page>

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -23,19 +24,17 @@ public partial class CustomerDialog : Window
     {
         try
         {
-            var json = await ApiClient.GetAsync($"/api/customers/{_id}");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var d = doc.RootElement.GetProperty("data");
-                txtCompanyName.Text = d.GetProperty("companyName").GetString() ?? "";
-                txtContactName.Text = d.GetProperty("contactName").GetString() ?? "";
-                txtEmail.Text = d.GetProperty("email").GetString() ?? "";
-                txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
-                txtAddress.Text = d.GetProperty("address").GetString() ?? "";
-                txtVatNumber.Text = d.GetProperty("vatNumber").GetString() ?? "";
-                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
-            }
+            CustomerSaveRequest? d = await ApiClient.GetDataAsync<CustomerSaveRequest>($"/api/customers/{_id}");
+            if (d == null)
+                return;
+
+            txtCompanyName.Text = d.CompanyName;
+            txtContactName.Text = d.ContactName;
+            txtEmail.Text = d.Email;
+            txtPhone.Text = d.Phone;
+            txtAddress.Text = d.Address;
+            txtVatNumber.Text = d.VatNumber;
+            txtNotes.Text = d.Notes;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }
@@ -67,18 +66,17 @@ public partial class CustomerDialog : Window
                 ? await ApiClient.PostAsync("/api/customers", jsonBody)
                 : await ApiClient.PutAsync($"/api/customers/{_id}", jsonBody);
 
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
-                if (_id == 0 && doc.RootElement.TryGetProperty("data", out var dataEl))
-                    CreatedCustomerId = dataEl.GetInt32();
+                if (_id == 0 && ApiClient.TryGetApiData<int>(result, out int newId, out _))
+                    CreatedCustomerId = newId;
                 else
                     CreatedCustomerId = _id;
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
         finally { btnSave.IsEnabled = true; }

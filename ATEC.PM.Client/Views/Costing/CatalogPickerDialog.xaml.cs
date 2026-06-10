@@ -85,18 +85,12 @@ public partial class CatalogPickerDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/quote-catalog/price-lists");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var priceLists = JsonSerializer.Deserialize<List<QuotePriceListDto>>(
-                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
-
-                var items = new List<QuotePriceListDto> { new() { Id = 0, Name = "Tutti i listini" } };
-                items.AddRange(priceLists);
-                cmbPriceList.ItemsSource = items;
-                cmbPriceList.SelectedIndex = 0;
-            }
+            List<QuotePriceListDto> priceLists = await ApiClient.GetListAsync<QuotePriceListDto>(
+                "/api/quote-catalog/price-lists");
+            var items = new List<QuotePriceListDto> { new() { Id = 0, Name = "Tutti i listini" } };
+            items.AddRange(priceLists);
+            cmbPriceList.ItemsSource = items;
+            cmbPriceList.SelectedIndex = 0;
         }
         catch (Exception ex) { txtTreeStatus.Text = $"Errore listini: {ex.Message}"; }
     }
@@ -122,13 +116,9 @@ public partial class CatalogPickerDialog : Window
             if (SelectedPriceListId.HasValue)
                 url += $"?priceListId={SelectedPriceListId.Value}";
 
-            string json = await ApiClient.GetAsync(url);
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var data = doc.RootElement.GetProperty("data");
-                BuildTree(data);
-            }
+            ApiResponse<JsonElement>? treeResp = await ApiClient.GetApiAsync<JsonElement>(url);
+            if (treeResp?.Success == true)
+                BuildTree(treeResp.Data);
         }
         catch (Exception ex) { txtTreeStatus.Text = $"Errore: {ex.Message}"; }
     }
@@ -296,17 +286,10 @@ public partial class CatalogPickerDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/quote-catalog/products/{productId}");
-            var doc = JsonDocument.Parse(json);
-
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var product = JsonSerializer.Deserialize<QuoteProductDto>(
-                    doc.RootElement.GetProperty("data").GetRawText(), _jopt);
-
-                if (product != null)
-                    PopulateVariants(new List<QuoteProductDto> { product });
-            }
+            QuoteProductDto? product = await ApiClient.GetDataAsync<QuoteProductDto>(
+                $"/api/quote-catalog/products/{productId}");
+            if (product != null)
+                PopulateVariants(new List<QuoteProductDto> { product });
         }
         catch (Exception ex) { txtProductName.Text = $"Errore: {ex.Message}"; }
     }
@@ -316,16 +299,8 @@ public partial class CatalogPickerDialog : Window
         try
         {
             string url = $"/api/quote-catalog/products?categoryId={categoryId}";
-            string json = await ApiClient.GetAsync(url);
-            var doc = JsonDocument.Parse(json);
-
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var products = JsonSerializer.Deserialize<List<QuoteProductDto>>(
-                    doc.RootElement.GetProperty("data").GetRawText(), _jopt) ?? new();
-
-                PopulateVariants(products);
-            }
+            List<QuoteProductDto> products = await ApiClient.GetListAsync<QuoteProductDto>(url);
+            PopulateVariants(products);
         }
         catch (Exception ex) { txtProductName.Text = $"Errore: {ex.Message}"; }
     }
@@ -406,7 +381,7 @@ public partial class CatalogPickerDialog : Window
     {
         if (_cart.Count == 0)
         {
-            MessageBox.Show("Il carrello è vuoto. Aggiungi almeno una variante.", "Attenzione",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Il carrello è vuoto. Aggiungi almeno una variante.", "Attenzione",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }

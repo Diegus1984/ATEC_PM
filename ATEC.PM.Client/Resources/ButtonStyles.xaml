@@ -117,8 +117,10 @@
         <Setter Property="Foreground" Value="#EF4444" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="Content" Value="✕" />
+        <!--  Icona cestino (Segoe MDL2 Assets E74D) invece della X  -->
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Content" Value="&#xE74D;" />
         <Setter Property="ToolTip" Value="Elimina" />
         <Setter Property="Template">
             <Setter.Value>
@@ -357,6 +359,53 @@
 
     <!--
         ═══════════════════════════════════════════════════════════════
+        SECONDARY BUTTON — Azione secondaria neutra (Carica, Rinomina, …)
+        Pulsante bianco con bordo grigio — meno enfatico di Primary,
+        più visibile di Ghost.
+        ═══════════════════════════════════════════════════════════════
+    -->
+    <Style
+        x:Key="SecondaryBtn"
+        BasedOn="{StaticResource FlatBtn}"
+        TargetType="Button">
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="{StaticResource Gray300Brush}" />
+        <Setter Property="Foreground" Value="{StaticResource Gray700Brush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border
+                        x:Name="bd"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="0"
+                        SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Gray100Brush}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Gray400Brush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Gray200Brush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource Gray50Brush}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Gray200Brush}" />
+                            <Setter Property="Foreground" Value="{StaticResource Gray400Brush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+    <!--
+        ═══════════════════════════════════════════════════════════════
         GHOST BUTTON — Azione secondaria minima (Annulla, Chiudi)
         ═══════════════════════════════════════════════════════════════
     -->
@@ -399,49 +448,22 @@
 
     <!--
         ═══════════════════════════════════════════════════════════════
-        NAVIGATION BUTTON — Pulsante navigazione laterale (Dashboard, Progetti, Impostazioni)
+        NAVIGATION BUTTON — Pulsante navigazione laterale (Sidebar)
+        Stato attivo segnalato da IsEnabled=False (accent bar + bg + grassetto)
         ═══════════════════════════════════════════════════════════════
     -->
-    <!--<Style x:Key="NavBtn" TargetType="Button">
-        <Setter Property="Height" Value="36" />
-        <Setter Property="HorizontalContentAlignment" Value="Left" />
-        <Setter Property="Padding" Value="12,0" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="Foreground" Value="#9CA3AF" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Margin" Value="0,1" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border
-                        x:Name="bd"
-                        Padding="{TemplateBinding Padding}"
-                        Background="{TemplateBinding Background}">
-                        <ContentPresenter VerticalAlignment="Center" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="#2A2D36" />
-                            <Setter Property="Foreground" Value="#E5E7EB" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>-->
     <Style x:Key="NavBtn" TargetType="Button">
         <Setter Property="Height" Value="32" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
-        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Padding" Value="16,0" />
         <Setter Property="FontFamily" Value="Segoe UI" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="#B0BEC5" />
+        <Setter Property="Foreground" Value="{StaticResource SidebarTextBrush}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Margin" Value="0,1" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -461,14 +483,15 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
-                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="Foreground" Value="{StaticResource SidebarTextActiveBrush}" />
                         </Trigger>
                         <!--  IsEnabled=False = voce attiva (selezionata)  -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="accent" Property="Background" Value="{StaticResource PrimaryBrush}" />
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
-                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="Foreground" Value="{StaticResource SidebarTextActiveBrush}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

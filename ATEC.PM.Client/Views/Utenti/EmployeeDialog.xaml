@@ -5,35 +5,42 @@
     Title="Utente"
     Width="560"
     Height="720"
-    Background="#F7F8FA"
+    Background="{DynamicResource ShadcnBackgroundBrush}"
+    FontFamily="{DynamicResource ShadcnFontFamily}"
     ResizeMode="CanResize"
     WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
-        <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="Margin" Value="0,10,0,3" />
-        </Style>
-        <Style x:Key="FieldInput" TargetType="TextBox">
-            <Setter Property="Height" Value="32" />
-            <Setter Property="Padding" Value="8,5" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="BorderBrush" Value="#E4E7EC" />
-            <Setter Property="BorderThickness" Value="1" />
-        </Style>
-        <Style x:Key="ExpHeader" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#374151" />
-        </Style>
-        <Style x:Key="ExpBorder" TargetType="Border">
-            <Setter Property="Background" Value="White" />
-            <Setter Property="BorderBrush" Value="#E4E7EC" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <Style x:Key="FieldLabel" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource ShadcnMutedForegroundBrush}" />
+                <Setter Property="Margin" Value="0,10,0,4" />
+            </Style>
+            
+            <Style x:Key="FieldInput" TargetType="TextBox" BasedOn="{StaticResource ShadcnTextBox}">
+                <Setter Property="Height" Value="32" />
+            </Style>
+
+            <Style x:Key="FieldPassword" TargetType="PasswordBox" BasedOn="{StaticResource ShadcnPasswordBox}">
+                <Setter Property="Height" Value="32" />
+            </Style>
+            
+            <Style x:Key="ExpHeader" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource ShadcnForegroundBrush}" />
+            </Style>
+            
+            <Style x:Key="ExpBorder" TargetType="Border" BasedOn="{StaticResource ShadcnCard}">
+                <Setter Property="Padding" Value="16,12" />
+                <Setter Property="Margin" Value="0,0,0,8" />
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
@@ -41,7 +48,7 @@
         <Border
             Padding="16,12"
             Background="White"
-            BorderBrush="#E4E7EC"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
             BorderThickness="0,1,0,0"
             DockPanel.Dock="Bottom">
             <DockPanel>
@@ -51,7 +58,7 @@
                     VerticalAlignment="Center"
                     DockPanel.Dock="Left"
                     FontSize="12"
-                    Foreground="#EF4444"
+                    Foreground="{DynamicResource ShadcnDestructiveBrush}"
                     TextWrapping="Wrap" />
                 <StackPanel
                     HorizontalAlignment="Right"
@@ -60,24 +67,19 @@
                     <Button
                         Width="90"
                         Height="34"
-                        Background="#F3F4F6"
-                        BorderThickness="0"
                         Click="BtnCancel_Click"
                         Content="Annulla"
-                        Cursor="Hand"
-                        Foreground="#374151" />
+                        Style="{StaticResource ShadcnButtonOutline}"
+                        IsCancel="True" />
                     <Button
                         x:Name="btnSave"
                         Width="110"
                         Height="34"
                         Margin="8,0,0,0"
-                        Background="#4F6EF7"
-                        BorderThickness="0"
                         Click="BtnSave_Click"
                         Content="Salva"
-                        Cursor="Hand"
-                        FontWeight="SemiBold"
-                        Foreground="White" />
+                        Style="{StaticResource ShadcnButtonDefault}"
+                        IsDefault="True" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -96,7 +98,7 @@
                             <TextBlock Style="{StaticResource ExpHeader}" Text="👤  ANAGRAFICA" />
                         </Border>
                     </Expander.Header>
-                    <Border Padding="16,4,16,12" Style="{StaticResource ExpBorder}">
+                    <Border Style="{StaticResource ExpBorder}">
                         <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -127,10 +129,8 @@
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="TIPO" />
                                     <ComboBox
                                         x:Name="cmbType"
-                                        Height="32"
-                                        Padding="8,5"
-                                        BorderBrush="#E4E7EC"
-                                        FontSize="13">
+                                        Style="{StaticResource ShadcnComboBox}"
+                                        Height="32">
                                         <ComboBoxItem Content="INTERNAL" IsSelected="True" />
                                         <ComboBoxItem Content="EXTERNAL" />
                                     </ComboBox>
@@ -150,38 +150,40 @@
                             <TextBlock Style="{StaticResource ExpHeader}" Text="🔐  ACCESSO E RUOLO" />
                         </Border>
                     </Expander.Header>
-                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
+                    <Border Style="{StaticResource ExpBorder}">
                         <StackPanel>
                             <!--  Ruolo  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="RUOLO SISTEMA" />
                             <Border
                                 Padding="12,8"
-                                Background="#F9FAFB"
-                                BorderBrush="#E4E7EC"
-                                BorderThickness="1">
+                                Background="{DynamicResource ShadcnSecondaryBrush}"
+                                BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Margin="0,0,0,8">
                                 <UniformGrid Columns="2" Rows="2">
                                     <RadioButton
                                         x:Name="rbTech"
-                                        Margin="0,3"
+                                        Margin="0,4"
                                         Content="TECH — Tecnico operativo"
                                         FontSize="12"
                                         GroupName="Role"
                                         IsChecked="True" />
                                     <RadioButton
                                         x:Name="rbResp"
-                                        Margin="0,3"
+                                        Margin="0,4"
                                         Content="RESP — Responsabile reparto"
                                         FontSize="12"
                                         GroupName="Role" />
                                     <RadioButton
                                         x:Name="rbPm"
-                                        Margin="0,3"
+                                        Margin="0,4"
                                         Content="PM — Project Manager"
                                         FontSize="12"
                                         GroupName="Role" />
                                     <RadioButton
                                         x:Name="rbAdmin"
-                                        Margin="0,3"
+                                        Margin="0,4"
                                         Content="ADMIN — Accesso totale"
                                         FontSize="12"
                                         GroupName="Role" />
@@ -190,7 +192,7 @@
                             <!--  Credenziali  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="USERNAME" />
                             <TextBox x:Name="txtUsername" Style="{StaticResource FieldInput}" />
-                            <Grid Margin="0,0,0,0">
+                            <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="12" />
@@ -200,37 +202,27 @@
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="PASSWORD" />
                                     <PasswordBox
                                         x:Name="txtPassword"
-                                        Height="32"
-                                        Padding="8,5"
-                                        BorderBrush="#E4E7EC"
-                                        BorderThickness="1"
-                                        FontSize="13" />
+                                        Style="{StaticResource FieldPassword}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="CONFERMA PASSWORD" />
                                     <PasswordBox
                                         x:Name="txtPasswordConfirm"
-                                        Height="32"
-                                        Padding="8,5"
-                                        BorderBrush="#E4E7EC"
-                                        BorderThickness="1"
-                                        FontSize="13" />
+                                        Style="{StaticResource FieldPassword}" />
                                 </StackPanel>
                             </Grid>
                             <TextBlock
                                 x:Name="txtPasswordHint"
-                                Margin="0,4,0,0"
+                                Margin="0,4,0,10"
                                 FontSize="11"
-                                Foreground="#9CA3AF"
+                                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                                 Text="Lascia vuoto per non modificare la password" />
                             <!--  Stato  -->
                             <TextBlock Style="{StaticResource FieldLabel}" Text="STATO" />
                             <ComboBox
                                 x:Name="cmbStatus"
-                                Height="32"
-                                Padding="8,5"
-                                BorderBrush="#E4E7EC"
-                                FontSize="13">
+                                Style="{StaticResource ShadcnComboBox}"
+                                Height="32">
                                 <ComboBoxItem Content="ACTIVE" IsSelected="True" />
                                 <ComboBoxItem Content="ON_LEAVE" />
                                 <ComboBoxItem Content="SICK" />
@@ -250,9 +242,9 @@
                             <TextBlock Style="{StaticResource ExpHeader}" Text="🏭  REPARTI DI APPARTENENZA" />
                         </Border>
                     </Expander.Header>
-                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
+                    <Border Style="{StaticResource ExpBorder}">
                         <StackPanel>
-                            <Grid Margin="0,0,0,4">
+                            <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="24" />
                                     <ColumnDefinition Width="*" />
@@ -261,23 +253,23 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock
                                     Grid.Column="1"
-                                    FontSize="11"
+                                    FontSize="11.5"
                                     FontWeight="SemiBold"
-                                    Foreground="#9CA3AF"
+                                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                                     Text="REPARTO" />
                                 <TextBlock
                                     Grid.Column="2"
                                     HorizontalAlignment="Center"
-                                    FontSize="11"
+                                    FontSize="11.5"
                                     FontWeight="SemiBold"
-                                    Foreground="#9CA3AF"
+                                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                                     Text="★ RESP." />
                                 <TextBlock
                                     Grid.Column="3"
                                     HorizontalAlignment="Center"
-                                    FontSize="11"
+                                    FontSize="11.5"
                                     FontWeight="SemiBold"
-                                    Foreground="#9CA3AF"
+                                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                                     Text="◆ PRIM." />
                             </Grid>
                             <ItemsControl x:Name="lstDeptMembership">
@@ -329,27 +321,25 @@
                             <TextBlock Style="{StaticResource ExpHeader}" Text="⚙️  COMPETENZE TECNICHE" />
                         </Border>
                     </Expander.Header>
-                    <Border Padding="16,8,16,12" Style="{StaticResource ExpBorder}">
+                    <Border Style="{StaticResource ExpBorder}">
                         <StackPanel>
                             <TextBlock
-                                Margin="0,0,0,8"
-                                FontSize="11"
-                                Foreground="#9CA3AF"
+                                Margin="0,0,0,10"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                                 Text="Reparti su cui è tecnicamente abilitato (anche senza appartenenza formale)" />
                             <ItemsControl x:Name="lstCompetences">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="0,3">
+                                        <StackPanel Margin="0,4">
                                             <CheckBox
                                                 Content="{Binding DepartmentName}"
                                                 FontSize="13"
                                                 IsChecked="{Binding IsEnabled}" />
                                             <TextBox
                                                 Height="28"
-                                                Margin="22,2,0,0"
-                                                Padding="6,4"
-                                                BorderBrush="#E4E7EC"
-                                                FontSize="11"
+                                                Margin="22,4,0,0"
+                                                Style="{StaticResource ShadcnTextBox}"
                                                 IsEnabled="{Binding IsEnabled}"
                                                 Opacity="{Binding IsEnabled, Converter={StaticResource BoolToOpacity}}"
                                                 Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"

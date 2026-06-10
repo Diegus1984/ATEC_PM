@@ -13,7 +13,12 @@ namespace ATEC.PM.Server.Controllers;
 public class AuthLevelController : ControllerBase
 {
     private readonly DbService _db;
-    public AuthLevelController(DbService db) => _db = db;
+    private readonly FeatureAccessService _access;
+    public AuthLevelController(DbService db, FeatureAccessService access)
+    {
+        _db = db;
+        _access = access;
+    }
 
     /// <summary>Lista livelli autorizzazione</summary>
     [HttpGet]
@@ -67,6 +72,7 @@ public class AuthLevelController : ControllerBase
             "UPDATE auth_features SET min_level=@MinLevel, behavior=@Behavior WHERE id=@Id",
             new { req.MinLevel, req.Behavior, Id = id });
         if (affected == 0) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
+        _access.Reload(); // invalida la cache dell'enforcement server-side
         return Ok(ApiResponse<string>.Ok("Feature aggiornata"));
     }
 
@@ -84,6 +90,7 @@ public class AuthLevelController : ControllerBase
             c.Execute(
                 @"INSERT INTO auth_features (feature_key, display_name, category, min_level, behavior)
                   VALUES (@FeatureKey, @DisplayName, @Category, @MinLevel, @Behavior)", req);
+            _access.Reload(); // invalida la cache dell'enforcement server-side
             return Ok(ApiResponse<string>.Ok("Feature creata"));
         }
         catch (MySqlConnector.MySqlException ex) when (ex.Number == 1062)
@@ -100,6 +107,7 @@ public class AuthLevelController : ControllerBase
         using var c = _db.Open();
         int affected = c.Execute("DELETE FROM auth_features WHERE id=@Id", new { Id = id });
         if (affected == 0) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
+        _access.Reload(); // invalida la cache dell'enforcement server-side
         return Ok(ApiResponse<string>.Ok("Feature eliminata"));
     }
 }

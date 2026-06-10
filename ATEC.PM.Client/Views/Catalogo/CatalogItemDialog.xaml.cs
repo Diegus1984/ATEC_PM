@@ -32,18 +32,12 @@ public partial class CatalogItemDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/suppliers");
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-            // 1. Leggiamo usando il tipo che il controller invia effettivamente
-            var response = JsonSerializer.Deserialize<ApiResponse<List<SupplierListItem>>>(json, options);
-
-            if (response != null && response.Success && response.Data != null)
+            List<SupplierListItem> suppliers = await ApiClient.GetListAsync<SupplierListItem>("/api/suppliers");
+            if (suppliers.Count > 0)
             {
-                // 2. Trasformiamo i SupplierListItem in LookupItem per la ComboBox
-                var items = new List<LookupItem> { new() { Id = 0, Name = "(nessuno)" } };
+                List<LookupItem> items = new List<LookupItem> { new() { Id = 0, Name = "(nessuno)" } };
 
-                items.AddRange(response.Data.Select(s => new LookupItem
+                items.AddRange(suppliers.Select(s => new LookupItem
                 {
                     Id = s.Id,
                     Name = s.CompanyName // Qui CompanyName viene mappato su Name
@@ -63,23 +57,10 @@ public partial class CatalogItemDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/catalog/{_id}");
+            CatalogItem? item = await ApiClient.GetDataAsync<CatalogItem>($"/api/catalog/{_id}");
 
-            // CONTROLLO FONDAMENTALE: Se la stringa è vuota, il server ha fallito
-            if (string.IsNullOrWhiteSpace(json))
+            if (item != null)
             {
-                txtError.Text = $"Errore: Il server ha restituito una risposta vuota per l'ID {_id}.";
-                return;
-            }
-
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-            // Proviamo a deserializzare solo se abbiamo del contenuto
-            var response = JsonSerializer.Deserialize<ApiResponse<CatalogItem>>(json, options);
-
-            if (response != null && response.Success && response.Data != null)
-            {
-                var item = response.Data;
 
                 txtCode.Text = item.Code ?? "";
                 txtDescription.Text = item.Description ?? "";
@@ -103,9 +84,7 @@ public partial class CatalogItemDialog : Window
                 }
             }
             else
-            {
-                txtError.Text = response?.Message ?? "Articolo non trovato nel database.";
-            }
+                txtError.Text = "Articolo non trovato nel database.";
         }
         catch (JsonException jex)
         {

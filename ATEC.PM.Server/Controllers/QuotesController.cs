@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
-using Serilog;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
@@ -15,25 +14,90 @@ public class QuotesController : ControllerBase
 {
     private readonly QuoteDbService _qdb;
     private readonly QuotePdfService _pdf;
-    public QuotesController(QuoteDbService qdb, QuotePdfService pdf) { _qdb = qdb; _pdf = pdf; }
+    private readonly DbService _db;
+    private readonly NotificationService _notif;
+    private readonly ProjectTemplateCopyService _templateCopy;
+    private readonly ILogger<QuotesController> _logger;
+
+    public QuotesController(
+        QuoteDbService qdb,
+        QuotePdfService pdf,
+        DbService db,
+        NotificationService notif,
+        ProjectTemplateCopyService templateCopy,
+        ILogger<QuotesController> logger)
+    {
+        _qdb = qdb;
+        _pdf = pdf;
+        _db = db;
+        _notif = notif;
+        _templateCopy = templateCopy;
+        _logger = logger;
+    }
 
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // LIST
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpGet]
-    public IActionResult GetAll([FromQuery] string? status = null, [FromQuery] int? customerId = null)
+    public IActionResult GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
+        [FromQuery] string? search = null,
+        [FromQuery] string? status = null,
+        [FromQuery] int? customerId = null,
+        [FromQuery] string? quoteType = null,
+        [FromQuery] string? quoteNumber = null,
+        [FromQuery] string? customerName = null,
+        [FromQuery] string? title = null)
     {
         try
         {
+            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
             using var c = _qdb.Open();
             var conditions = new List<string>();
-            if (!string.IsNullOrEmpty(status)) conditions.Add("q.status = @Status");
-            if (customerId.HasValue) conditions.Add("q.customer_id = @CustomerId");
+            var dp = new Dapper.DynamicParameters();
+
+            if (!string.IsNullOrEmpty(status)) { conditions.Add("q.status = @Status"); dp.Add("Status", status); }
+            else
+                // Lista principale: le revisioni superseded compaiono solo come sotto-righe in UI
+                conditions.Add("q.status <> 'superseded'");
+            if (customerId.HasValue) { conditions.Add("q.customer_id = @CustomerId"); dp.Add("CustomerId", customerId); }
+            if (!string.IsNullOrEmpty(quoteType)) { conditions.Add("COALESCE(q.quote_type,'SERVICE') = @QuoteType"); dp.Add("QuoteType", quoteType); }
+
+            void AddLike(string column, string? filter, string param)
+            {
+                string? pat = PagedQueryHelper.ToLikePattern(filter);
+                if (pat == null) return;
+                conditions.Add($"{column} LIKE @{param}");
+                dp.Add(param, pat);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = $"%{search.Trim()}%";
+                conditions.Add(@"(q.quote_number LIKE @Search OR q.title LIKE @Search OR cu.company_name LIKE @Search
+                    OR CONCAT(ec.first_name,' ',ec.last_name) LIKE @Search)");
+                dp.Add("Search", term);
+            }
+
+            AddLike("q.quote_number", quoteNumber, "QuoteNumber");
+            AddLike("cu.company_name", customerName, "CustomerName");
+            AddLike("q.title", title, "Title");
+
             string where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+            string from = @"FROM quotes q
+                LEFT JOIN customers cu ON cu.id = q.customer_id
+                LEFT JOIN quote_groups g ON g.id = q.group_id
+                LEFT JOIN employees ea ON ea.id = q.assigned_to
+                LEFT JOIN employees ec ON ec.id = q.created_by";
+
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*) {from} {where}", dp);
+            dp.Add("Limit", pageSize);
+            dp.Add("Offset", offset);
 
             var rows = c.Query<QuoteDto>($@"
                 SELECT q.id AS Id, q.quote_number AS QuoteNumber, q.title AS Title,
@@ -54,23 +118,79 @@ public class QuotesController : ControllerBase
                        q.sent_at AS SentAt, q.accepted_at AS AcceptedAt,
                        q.converted_at AS ConvertedAt,
                        q.project_id AS ProjectId
-                FROM quotes q
+                {from} {where}
+                ORDER BY q.created_at DESC
+                LIMIT @Limit OFFSET @Offset", dp).ToList();
+
+            int loaded = offset + rows.Count;
+            return Ok(ApiResponse<PagedResult<QuoteDto>>.Ok(new PagedResult<QuoteDto>
+            {
+                Items = rows,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize,
+                HasMore = loaded < total
+            }));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<PagedResult<QuoteDto>>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    /// <summary>Tutte le versioni di una o piÃ¹ famiglie di revisione (incluso originale e superseded).</summary>
+    [HttpGet("chains")]
+    public IActionResult GetRevisionChains([FromQuery] string? masterIds)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(masterIds))
+                return Ok(ApiResponse<List<QuoteDto>>.Ok(new List<QuoteDto>()));
+
+            List<int> ids = masterIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out int n) ? n : 0)
+                .Where(n => n > 0)
+                .Distinct()
+                .ToList();
+            if (ids.Count == 0)
+                return Ok(ApiResponse<List<QuoteDto>>.Ok(new List<QuoteDto>()));
+
+            using var c = _qdb.Open();
+            string from = @"FROM quotes q
                 LEFT JOIN customers cu ON cu.id = q.customer_id
                 LEFT JOIN quote_groups g ON g.id = q.group_id
                 LEFT JOIN employees ea ON ea.id = q.assigned_to
-                LEFT JOIN employees ec ON ec.id = q.created_by
-                {where}
-                ORDER BY q.created_at DESC",
-                new { Status = status, CustomerId = customerId }).ToList();
+                LEFT JOIN employees ec ON ec.id = q.created_by";
+
+            List<QuoteDto> rows = c.Query<QuoteDto>($@"
+                SELECT q.id AS Id, q.quote_number AS QuoteNumber, q.title AS Title,
+                       q.customer_id AS CustomerId, cu.company_name AS CustomerName,
+                       q.status AS Status, COALESCE(q.quote_type,'SERVICE') AS QuoteType,
+                       q.revision AS Revision, q.parent_quote_id AS ParentQuoteId,
+                       q.group_id AS GroupId, g.name AS GroupName,
+                       q.subtotal AS Subtotal, q.total AS Total, q.total_with_vat AS TotalWithVat,
+                       q.cost_total AS CostTotal, q.profit AS Profit,
+                       q.discount_pct AS DiscountPct, q.discount_abs AS DiscountAbs,
+                       q.delivery_days AS DeliveryDays, q.validity_days AS ValidityDays,
+                       q.payment_type AS PaymentType,
+                       q.assigned_to AS AssignedTo,
+                       CONCAT(ea.first_name,' ',ea.last_name) AS AssignedToName,
+                       q.created_by AS CreatedBy,
+                       CONCAT(ec.first_name,' ',ec.last_name) AS CreatedByName,
+                       q.created_at AS CreatedAt, q.updated_at AS UpdatedAt,
+                       q.sent_at AS SentAt, q.accepted_at AS AcceptedAt,
+                       q.converted_at AS ConvertedAt,
+                       q.project_id AS ProjectId
+                {from}
+                WHERE q.id IN @Ids OR q.parent_quote_id IN @Ids
+                ORDER BY COALESCE(q.parent_quote_id, q.id), q.revision, q.created_at",
+                new { Ids = ids }).ToList();
 
             return Ok(ApiResponse<List<QuoteDto>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<QuoteDto>>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // GET BY ID (con items)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpGet("{id}")]
     public IActionResult GetById(int id)
@@ -135,9 +255,9 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<QuoteDto>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
-    // CREATE — con auto-populate dal template (group_id)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // CREATE â€” con init costing IMPIANTO e auto-populate opzionale
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpPost]
     public IActionResult Create([FromBody] QuoteSaveDto dto)
@@ -147,7 +267,6 @@ public class QuotesController : ControllerBase
             using var c = _qdb.Open();
             using var tx = c.BeginTransaction();
 
-            // Genera codice PRV-{anno}-{progressivo 4 cifre}
             int year = DateTime.Now.Year;
             string prefix = $"PRV-{year}-";
             int maxNum = c.ExecuteScalar<int>(
@@ -155,118 +274,39 @@ public class QuotesController : ControllerBase
                 new { len = prefix.Length, pref = prefix + "%" }, tx);
             string quoteNumber = $"{prefix}{(maxNum + 1):D4}";
 
+            string quoteType = dto.QuoteType ?? "SERVICE";
+
             int quoteId = (int)c.ExecuteScalar<long>(@"
                 INSERT INTO quotes (quote_number, title, customer_id, contact_name1, contact_name2, contact_name3,
                     delivery_days, validity_days, payment_type, language, price_list_id, group_id,
                     discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices,
-                    notes_internal, notes_quote, assigned_to, created_by, status)
+                    notes_internal, notes_quote, assigned_to, created_by, status, quote_type)
                 VALUES (@QuoteNumber, @Title, @CustomerId, @ContactName1, @ContactName2, @ContactName3,
                     @DeliveryDays, @ValidityDays, @PaymentType, @Language, @PriceListId, @GroupId,
                     @DiscountPct, @DiscountAbs, @ShowItemPrices, @ShowSummary, @ShowSummaryPrices,
-                    @NotesInternal, @NotesQuote, @AssignedTo, @CreatedBy, 'draft');
+                    @NotesInternal, @NotesQuote, @AssignedTo, @CreatedBy, 'draft', @QuoteType);
                 SELECT LAST_INSERT_ID()",
-                new {
+                new
+                {
                     QuoteNumber = quoteNumber, dto.PriceListId, dto.Title, dto.CustomerId,
                     dto.ContactName1, dto.ContactName2, dto.ContactName3,
                     dto.DeliveryDays, dto.ValidityDays, dto.PaymentType, dto.Language,
                     dto.GroupId, dto.DiscountPct, dto.DiscountAbs,
                     dto.ShowItemPrices, dto.ShowSummary, dto.ShowSummaryPrices,
                     dto.NotesInternal, dto.NotesQuote, dto.AssignedTo,
-                    CreatedBy = GetCurrentEmployeeId()
+                    CreatedBy = GetCurrentEmployeeId(),
+                    QuoteType = quoteType
                 }, tx);
 
-            // Auto-populate: inserisci TUTTI i prodotti auto_include dello stesso listino
+            if (quoteType == "IMPIANTO")
+                QuoteService.InitQuoteCosting(c, tx, quoteId);
+
+            if (dto.GroupId.HasValue && dto.GroupId.Value > 0)
             {
-                // Se c'è un listino, prendi gli auto_include di quel listino.
-                // Altrimenti prendi TUTTI gli auto_include globali.
-                string autoSql = @"
-                    SELECT p.id AS ProductId, p.item_type, p.code, p.name, p.description_rtf,
-                           v.id AS VariantId, v.code AS VarCode, v.name AS VarName,
-                           v.cost_price, v.markup_value
-                    FROM quote_products p
-                    JOIN quote_categories cat ON cat.id = p.category_id
-                    JOIN quote_groups g ON g.id = cat.group_id
-                    LEFT JOIN quote_product_variants v ON v.product_id = p.id
-                    WHERE p.auto_include = 1 AND p.is_active = 1";
-                if (dto.PriceListId.HasValue && dto.PriceListId.Value > 0)
-                    autoSql += " AND g.price_list_id = @PriceListId";
-                autoSql += " ORDER BY g.sort_order, cat.sort_order, p.sort_order, v.sort_order";
-
-                var autoItems = c.Query<dynamic>(autoSql,
-                    new { dto.PriceListId }, tx).ToList();
-
-                // Raggruppa per ProductId: inserisci parent + varianti come AddProductWithAllVariants
-                int sortOrder = 0;
-                var grouped = autoItems.GroupBy(x => (int)x.ProductId);
-                foreach (var grp in grouped)
-                {
-                    var first = grp.First();
-                    string productName = (string)first.name;
-                    string productCode = (string)(first.code ?? "");
-                    string productType = (string)first.item_type;
-                    string desc = (string?)(first.description_rtf) ?? "";
-
-                    bool hasVariants = grp.Any(x => x.VariantId != null);
-
-                    if (hasVariants)
-                    {
-                        // Inserisci parent (header)
-                        int parentId = (int)c.ExecuteScalar<long>(@"
-                            INSERT INTO quote_items (quote_id, product_id, item_type,
-                                code, name, description_rtf, unit, quantity,
-                                cost_price, sell_price, discount_pct, vat_pct,
-                                line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
-                            VALUES (@QId, @PId, @Type, @Code, @Name, @Desc, '', 0, 0, 0, 0, 0, 0, 0, @Sort, 1, 0, 1);
-                            SELECT LAST_INSERT_ID()",
-                            new { QId = quoteId, PId = grp.Key, Type = productType,
-                                  Code = productCode, Name = productName, Desc = desc,
-                                  Sort = sortOrder++ }, tx);
-
-                        // Inserisci varianti
-                        foreach (var v in grp.Where(x => x.VariantId != null))
-                        {
-                            decimal qty = 1m;
-                            decimal cost = v.cost_price ?? 0m;
-                            decimal markup = v.markup_value ?? 1.3m;
-                            decimal sell = cost * markup;
-                            decimal disc = 0m;
-                            decimal vat = 22m;
-                            decimal lt = qty * sell * (1 - disc / 100m);
-                            decimal lp = lt - (qty * cost);
-
-                            c.Execute(@"
-                                INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
-                                    code, name, unit, quantity, cost_price, sell_price, discount_pct, vat_pct,
-                                    line_total, line_profit, sort_order, is_active, is_confirmed, parent_item_id, is_auto_include)
-                                VALUES (@QId, @PId, @VId, 'product', @Code, @Name, @Unit, @Qty,
-                                    @Cost, @Sell, @Disc, @Vat, @LT, @LP, @Sort, 0, 0, @ParentId, 1)",
-                                new { QId = quoteId, PId = grp.Key, VId = (int?)v.VariantId,
-                                      Code = (string)(v.VarCode ?? ""), Name = (string)(v.VarName ?? productName),
-                                      Unit = "nr.", Qty = qty,
-                                      Cost = cost, Sell = sell, Disc = disc, Vat = vat,
-                                      LT = lt, LP = lp, Sort = sortOrder++, ParentId = parentId }, tx);
-                        }
-                    }
-                    else
-                    {
-                        // Prodotto senza varianti (es. content)
-                        c.Execute(@"
-                            INSERT INTO quote_items (quote_id, product_id, item_type,
-                                code, name, description_rtf, unit, quantity,
-                                cost_price, sell_price, discount_pct, vat_pct,
-                                line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
-                            VALUES (@QId, @PId, @Type, @Code, @Name, @Desc, 'nr.', 0, 0, 0, 0, 0, 0, 0, @Sort, 1, 0, 1)",
-                            new { QId = quoteId, PId = grp.Key, Type = productType,
-                                  Code = productCode, Name = productName, Desc = desc,
-                                  Sort = sortOrder++ }, tx);
-                    }
-                }
-
-                // Ricalcola totali
-                RecalcTotals(c, quoteId, tx);
+                QuoteService.AutoPopulateItems(c, tx, quoteId, dto.PriceListId);
+                QuoteService.RecalcTotals(c, quoteId, tx);
             }
 
-            // Log stato
             c.Execute(@"INSERT INTO quote_status_log (quote_id, old_status, new_status, changed_by, notes)
                         VALUES (@Id, '', 'draft', @By, 'Preventivo creato')",
                 new { Id = quoteId, By = GetCurrentEmployeeId() }, tx);
@@ -277,9 +317,9 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // UPDATE header
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] QuoteSaveDto dto)
@@ -304,16 +344,16 @@ public class QuotesController : ControllerBase
 
             // Ricalcola totali
             using var c2 = _qdb.Open();
-            RecalcTotals(c2, id, null);
+            QuoteService.RecalcTotals(c2, id, null);
 
             return Ok(ApiResponse<string>.Ok("Preventivo aggiornato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // DELETE (solo draft)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
@@ -331,9 +371,9 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
-    // ITEMS — Aggiungi/Rimuovi/Aggiorna voci
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ITEMS â€” Aggiungi/Rimuovi/Aggiorna voci
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpPost("{id}/items")]
     public IActionResult AddItem(int id, [FromBody] QuoteItemSaveDto dto)
@@ -363,7 +403,7 @@ public class QuotesController : ControllerBase
                       LineTotal = lineTotal, LineProfit = lineProfit, SortOrder = maxSort + 1,
                       dto.IsActive, dto.IsConfirmed, dto.ParentItemId });
 
-            RecalcTotals(c, id, null);
+            QuoteService.RecalcTotals(c, id, null);
             return Ok(ApiResponse<int>.Ok(itemId, "Voce aggiunta"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -480,7 +520,7 @@ public class QuotesController : ControllerBase
 
             string descriptionRtf = c.ExecuteScalar<string>(
                 "SELECT description_rtf FROM quote_products WHERE id=@Id", new { Id = productId }) ?? "";
-            Log.Information("[AddProduct] Prodotto {Name} — description_rtf.Length={Len}",
+            _logger.LogInformation("[AddProduct] Prodotto {Name} â€” description_rtf.Length={Len}",
                 product.Name, descriptionRtf.Length);
 
             var variants = c.Query<QuoteProductVariantDto>(@"
@@ -502,7 +542,7 @@ public class QuotesController : ControllerBase
                 SELECT LAST_INSERT_ID()",
                 new { QId = id, PId = productId, Type = product.ItemType,
                       product.Code, product.Name, Desc = descriptionRtf, Sort = maxSort + 1 });
-            Log.Information("[AddProduct] Parent inserito id={ParentId}, desc salvata={Len}", parentId, descriptionRtf.Length);
+            _logger.LogInformation("[AddProduct] Parent inserito id={ParentId}, desc salvata={Len}", parentId, descriptionRtf.Length);
 
             // Inserisci tutte le varianti come figlie
             int vSort = 0;
@@ -529,7 +569,7 @@ public class QuotesController : ControllerBase
                           ParentId = parentId });
             }
 
-            RecalcTotals(c, id, null);
+            QuoteService.RecalcTotals(c, id, null);
             return Ok(ApiResponse<int>.Ok(parentId, $"Prodotto aggiunto con {variants.Count} varianti"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -558,7 +598,7 @@ public class QuotesController : ControllerBase
                       dto.SortOrder, dto.IsActive, dto.IsConfirmed, dto.ParentItemId,
                       Id = itemId, QuoteId = quoteId });
 
-            RecalcTotals(c, quoteId, null);
+            QuoteService.RecalcTotals(c, quoteId, null);
             return Ok(ApiResponse<string>.Ok("Voce aggiornata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
@@ -572,7 +612,7 @@ public class QuotesController : ControllerBase
             using var c = _qdb.Open();
             c.Execute("DELETE FROM quote_items WHERE id=@Id AND quote_id=@QuoteId",
                 new { Id = itemId, QuoteId = quoteId });
-            RecalcTotals(c, quoteId, null);
+            QuoteService.RecalcTotals(c, quoteId, null);
             return Ok(ApiResponse<string>.Ok("Voce rimossa"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
@@ -613,7 +653,7 @@ public class QuotesController : ControllerBase
                       ParentId = parentItemId,
                       AutoInc = (bool)(parent.is_auto_include ?? false) ? 1 : 0 });
 
-            RecalcTotals(c, quoteId, null);
+            QuoteService.RecalcTotals(c, quoteId, null);
             return Ok(ApiResponse<int>.Ok(itemId, "Variante locale aggiunta"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -633,9 +673,9 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
-    // STATUS — Cambio stato con validazione
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // STATUS â€” Cambio stato con validazione
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpPut("{id}/status")]
     public IActionResult ChangeStatus(int id, [FromBody] QuoteStatusChangeDto dto)
@@ -646,9 +686,11 @@ public class QuotesController : ControllerBase
             string currentStatus = c.ExecuteScalar<string>("SELECT status FROM quotes WHERE id=@Id", new { Id = id }) ?? "";
 
             // Validazione: lo stato deve essere valido
-            var validStatuses = new[] { "draft", "sent", "negotiation", "accepted", "rejected", "expired", "converted", "superseded" };
+            var validStatuses = new[] { "draft", "sent", "negotiation", "accepted", "rejected", "expired", "superseded" };
             if (!validStatuses.Contains(dto.NewStatus))
                 return Ok(ApiResponse<string>.Fail($"Stato '{dto.NewStatus}' non valido"));
+            if (currentStatus == "converted")
+                return Ok(ApiResponse<string>.Fail("Preventivo giÃ  convertito: stato non modificabile"));
             if (currentStatus == dto.NewStatus)
                 return Ok(ApiResponse<string>.Ok("Stato invariato"));
 
@@ -674,9 +716,367 @@ public class QuotesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
-    // DUPLICATE
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // CONVERT / REVISION / DUPLICATE
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    [HttpPost("{id}/convert")]
+    public IActionResult ConvertToProject(int id, [FromBody] QuoteConvertDto req)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+        try
+        {
+            var quote = c.QueryFirstOrDefault<dynamic>(
+                "SELECT * FROM quotes WHERE id=@Id", new { Id = id }, tx);
+            if (quote == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+
+            string qtype = (string)(quote.quote_type ?? "SERVICE");
+            if (qtype != "IMPIANTO")
+                return BadRequest(ApiResponse<string>.Fail("Solo preventivi IMPIANTO possono essere convertiti"));
+
+            string status = (string)quote.status;
+            if (status == "converted")
+                return BadRequest(ApiResponse<string>.Fail("Preventivo giÃ  convertito"));
+
+            int year = DateTime.Now.Year;
+            string prefix = $"AT{year}";
+            int maxNum = c.ExecuteScalar<int>(
+                "SELECT COALESCE(MAX(CAST(SUBSTRING(code, @len+1) AS UNSIGNED)),0) FROM projects WHERE code LIKE @pref",
+                new { len = prefix.Length, pref = prefix + "%" }, tx);
+            string projectCode = $"{prefix}{(maxNum + 1):D3}";
+
+            int projectId = (int)c.ExecuteScalar<long>(@"
+                INSERT INTO projects (code, title, customer_id, pm_id, description, status, priority)
+                VALUES (@Code, @Title, @CustId, @PmId, @Desc, 'DRAFT', 'MEDIUM');
+                SELECT LAST_INSERT_ID()",
+                new
+                {
+                    Code = projectCode,
+                    Title = (string)quote.title,
+                    CustId = (int)quote.customer_id,
+                    PmId = req.PmId,
+                    Desc = (string)(quote.notes_internal ?? "")
+                }, tx);
+
+            var quoteSections = c.Query<dynamic>(
+                "SELECT * FROM quote_cost_sections WHERE quote_id=@Id ORDER BY sort_order",
+                new { Id = id }, tx).ToList();
+
+            foreach (var sec in quoteSections)
+            {
+                int newSecId = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled, contingency_pct, margin_pct)
+                    VALUES (@projectId, @tmplId, @name, @stype, @gname, @sort, @enabled, @contPct, @margPct);
+                    SELECT LAST_INSERT_ID()",
+                    new
+                    {
+                        projectId,
+                        tmplId = (int?)sec.template_id,
+                        name = (string)sec.name,
+                        stype = (string)sec.section_type,
+                        gname = (string)sec.group_name,
+                        sort = (int)sec.sort_order,
+                        enabled = (bool)sec.is_enabled,
+                        contPct = (decimal)sec.contingency_pct,
+                        margPct = (decimal)sec.margin_pct
+                    }, tx);
+
+                c.Execute(@"
+                    INSERT INTO project_cost_section_departments (project_cost_section_id, department_id)
+                    SELECT @newSecId, department_id FROM quote_cost_section_departments WHERE quote_cost_section_id=@oldSecId",
+                    new { newSecId, oldSecId = (int)sec.id }, tx);
+
+                c.Execute(@"
+                    INSERT INTO project_cost_resources (section_id, employee_id, resource_name, work_days, hours_per_day,
+                        hourly_cost, markup_value, num_trips, km_per_trip, cost_per_km, daily_food, daily_hotel,
+                        allowance_days, daily_allowance, sort_order)
+                    SELECT @newSecId, employee_id, resource_name, work_days, hours_per_day,
+                        hourly_cost, markup_value, num_trips, km_per_trip, cost_per_km, daily_food, daily_hotel,
+                        allowance_days, daily_allowance, sort_order
+                    FROM quote_cost_resources WHERE section_id=@oldSecId",
+                    new { newSecId, oldSecId = (int)sec.id }, tx);
+            }
+
+            var copiedTemplateIds = quoteSections
+                .Where(s => s.template_id != null)
+                .Select(s => (int)s.template_id)
+                .ToHashSet();
+            HashSet<string> copiedNamesLower = quoteSections
+                .Select(s => ((string)s.name ?? "").Trim().ToLowerInvariant())
+                .Where(n => n.Length > 0)
+                .ToHashSet();
+
+            int maxSort = quoteSections.Any() ? quoteSections.Max(s => (int)s.sort_order) : 0;
+
+            var missingTemplates = c.Query<dynamic>(@"
+                SELECT t.id, t.name, t.section_type, g.name AS group_name, t.sort_order
+                FROM cost_section_templates t
+                JOIN cost_section_groups g ON g.id = t.group_id
+                WHERE t.is_default_project=1 AND t.is_active=1
+                  AND t.id NOT IN @copiedIds
+                ORDER BY t.sort_order",
+                new { copiedIds = copiedTemplateIds.Count > 0 ? copiedTemplateIds.ToArray() : new[] { -1 } }, tx)
+                .Where(t => !copiedNamesLower.Contains(((string)t.name ?? "").Trim().ToLowerInvariant()))
+                .ToList();
+
+            foreach (var tmpl in missingTemplates)
+            {
+                maxSort++;
+                int newSecId2 = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO project_cost_sections (project_id, template_id, name, section_type, group_name, sort_order, is_enabled)
+                    VALUES (@projectId, @id, @name, @section_type, @group_name, @sort_order, 1);
+                    SELECT LAST_INSERT_ID();",
+                    new { projectId, tmpl.id, tmpl.name, tmpl.section_type, tmpl.group_name, sort_order = maxSort }, tx);
+
+                c.Execute(@"
+                    INSERT INTO project_cost_section_departments (project_cost_section_id, department_id)
+                    SELECT @newSecId, department_id
+                    FROM cost_section_template_departments
+                    WHERE section_template_id = @templateId",
+                    new { newSecId = newSecId2, templateId = (int)tmpl.id }, tx);
+            }
+
+            List<int> sectionTemplateIds = c.Query<int>(
+                "SELECT DISTINCT template_id FROM project_cost_sections WHERE project_id=@pid AND template_id IS NOT NULL",
+                new { pid = projectId }, tx).ToList();
+
+            List<dynamic> phasesToCopy = new();
+            if (sectionTemplateIds.Count > 0)
+            {
+                phasesToCopy = c.Query<dynamic>(@"
+                    SELECT id, name, category, department_id, cost_section_template_id, sort_order
+                    FROM phase_templates
+                    WHERE cost_section_template_id IN @ids
+                    ORDER BY sort_order",
+                    new { ids = sectionTemplateIds }, tx).ToList();
+            }
+
+            List<dynamic> crossPhases = c.Query<dynamic>(@"
+                SELECT id, name, category, department_id, cost_section_template_id, sort_order
+                FROM phase_templates
+                WHERE is_default=1 AND cost_section_template_id IS NULL
+                ORDER BY sort_order", transaction: tx).ToList();
+            phasesToCopy.AddRange(crossPhases);
+
+            foreach (dynamic t in phasesToCopy)
+            {
+                c.Execute(@"INSERT INTO project_phases
+                    (project_id, phase_template_id, name, category, cost_section_template_id,
+                     department_id, sort_order, is_local)
+                    VALUES (@ProjId, @TplId, @Name, @Cat, @SecTplId, @DeptId, @Sort, 0)",
+                    new
+                    {
+                        ProjId = projectId,
+                        TplId = (int)t.id,
+                        Name = (string)t.name,
+                        Cat = (string?)t.category,
+                        SecTplId = (int?)t.cost_section_template_id,
+                        DeptId = (int?)t.department_id,
+                        Sort = (int)t.sort_order
+                    }, tx);
+            }
+
+            var quoteMatSections = c.Query<dynamic>(
+                "SELECT * FROM quote_material_sections WHERE quote_id=@Id ORDER BY sort_order",
+                new { Id = id }, tx).ToList();
+
+            var itemIdMap = new Dictionary<int, int>();
+
+            foreach (var ms in quoteMatSections)
+            {
+                int newMsId = (int)c.ExecuteScalar<long>(@"
+                    INSERT INTO project_material_sections (project_id, category_id, name, markup_value, commission_markup, sort_order, is_enabled)
+                    VALUES (@projectId, @catId, @name, @markup, @commMarkup, @sort, @enabled);
+                    SELECT LAST_INSERT_ID()",
+                    new
+                    {
+                        projectId,
+                        catId = (int?)ms.category_id,
+                        name = (string)ms.name,
+                        markup = (decimal)ms.markup_value,
+                        commMarkup = (decimal)ms.commission_markup,
+                        sort = (int)ms.sort_order,
+                        enabled = (bool)ms.is_enabled
+                    }, tx);
+
+                var quoteItems = c.Query<dynamic>(
+                    "SELECT id, description, quantity, unit_cost, markup_value, item_type, sort_order FROM quote_material_items WHERE section_id=@sid AND COALESCE(is_active,1)=1 ORDER BY sort_order, id",
+                    new { sid = (int)ms.id }, tx).ToList();
+
+                foreach (var item in quoteItems)
+                {
+                    int newItemId = (int)c.ExecuteScalar<long>(@"
+                        INSERT INTO project_material_items (section_id, description, quantity, unit_cost, markup_value, item_type, sort_order)
+                        VALUES (@sid, @desc, @qty, @cost, @markup, @type, @sort);
+                        SELECT LAST_INSERT_ID()",
+                        new
+                        {
+                            sid = newMsId,
+                            desc = (string)item.description,
+                            qty = (decimal)item.quantity,
+                            cost = (decimal)item.unit_cost,
+                            markup = (decimal)item.markup_value,
+                            type = (string)item.item_type,
+                            sort = (int)item.sort_order
+                        }, tx);
+                    itemIdMap[(int)item.id] = newItemId;
+                }
+            }
+
+            var itemsWithParent = c.Query<(int QuoteItemId, int QuoteParentId)>(@"
+                SELECT qmi.id, qmi.parent_item_id
+                FROM quote_material_items qmi
+                JOIN quote_material_sections qms ON qms.id = qmi.section_id
+                WHERE qms.quote_id = @qid AND qmi.parent_item_id IS NOT NULL",
+                new { qid = id }, tx).ToList();
+
+            foreach (var (quoteItemId, quoteParentId) in itemsWithParent)
+            {
+                if (itemIdMap.TryGetValue(quoteItemId, out int projItemId) &&
+                    itemIdMap.TryGetValue(quoteParentId, out int projParentId))
+                {
+                    c.Execute("UPDATE project_material_items SET parent_item_id=@parentId WHERE id=@itemId",
+                        new { parentId = projParentId, itemId = projItemId }, tx);
+                }
+            }
+
+            c.Execute(@"
+                INSERT INTO project_pricing (project_id, contingency_pct, negotiation_margin_pct, travel_markup, allowance_markup)
+                SELECT @projectId, contingency_pct, negotiation_margin_pct, travel_markup, allowance_markup
+                FROM quote_pricing WHERE quote_id=@quoteId",
+                new { projectId, quoteId = id }, tx);
+
+            c.Execute("UPDATE quotes SET status='converted', converted_at=NOW(), project_id=@projectId WHERE id=@Id",
+                new { projectId, Id = id }, tx);
+
+            try
+            {
+                string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+                string fullPath = Path.Combine(basePath, year.ToString(), projectCode);
+                c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = projectId }, tx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[QuotesController] Impossibile aggiornare server_path per il progetto {ProjectId}", projectId);
+            }
+
+            tx.Commit();
+
+            try { _templateCopy.CopyToProject(projectCode); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[QuotesController] Impossibile copiare il template della cartella per il progetto {ProjectCode}", projectCode);
+            }
+
+            try
+            {
+                string qn = (string)quote.quote_number;
+                _notif.Create("QUOTE_CONVERTED", "INFO",
+                    $"Nuova commessa {projectCode} da preventivo {qn}",
+                    $"Il preventivo {qn} - {(string)quote.title} - e' stato convertito in commessa {projectCode}.",
+                    "PROJECT", projectId, projectId, GetCurrentEmployeeId(),
+                    new[] { req.PmId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[QuotesController] Impossibile creare la notifica QUOTE_CONVERTED per il PM {PmId} sul progetto {ProjectId}", req.PmId, projectId);
+            }
+
+            return Ok(ApiResponse<int>.Ok(projectId, $"Commessa {projectCode} creata"));
+        }
+        catch (Exception ex)
+        {
+            tx.Rollback();
+            return StatusCode(500, ApiResponse<string>.Fail($"Errore: {ex.Message}"));
+        }
+    }
+
+    [HttpPost("{id}/revision")]
+    public IActionResult CreateRevision(int id)
+    {
+        try
+        {
+            using var c = _qdb.Open();
+            using var tx = c.BeginTransaction();
+
+            var original = c.QueryFirstOrDefault<dynamic>(
+                "SELECT * FROM quotes WHERE id=@Id", new { Id = id }, tx);
+            if (original == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+
+            int masterId = (int?)original.parent_quote_id ?? id;
+
+            int maxRev = c.ExecuteScalar<int>(
+                "SELECT COALESCE(MAX(revision),0) FROM quotes WHERE parent_quote_id=@MasterId OR id=@MasterId",
+                new { MasterId = masterId }, tx);
+            int newRev = maxRev + 1;
+
+            string baseNumber = ((string)original.quote_number).Split(" Rev")[0];
+            string newNumber = $"{baseNumber} Rev {newRev}";
+
+            int newId = (int)c.ExecuteScalar<long>(@"
+                INSERT INTO quotes (quote_number, title, customer_id, contact_name1, contact_name2, contact_name3,
+                    delivery_days, validity_days, payment_type, language, price_list_id, group_id,
+                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices,
+                    hide_quantities, notes_internal, notes_quote, assigned_to, created_by,
+                    status, quote_type, revision, parent_quote_id)
+                VALUES (@Number, @Title, @CustId, @C1, @C2, @C3,
+                    @DelDays, @ValDays, @PayType, @Lang, @PlId, @GrpId,
+                    @DiscPct, @DiscAbs, @SIP, @SS, @SSP,
+                    @HQ, @NI, @NQ, @AssTo, @CreBy,
+                    'draft', @QType, @Rev, @ParentId);
+                SELECT LAST_INSERT_ID()",
+                new
+                {
+                    Number = newNumber,
+                    Title = (string)original.title,
+                    CustId = (int)original.customer_id,
+                    C1 = (string?)original.contact_name1,
+                    C2 = (string?)original.contact_name2,
+                    C3 = (string?)original.contact_name3,
+                    DelDays = (int)original.delivery_days,
+                    ValDays = (int)original.validity_days,
+                    PayType = (string?)original.payment_type,
+                    Lang = (string?)original.language,
+                    PlId = (int?)original.price_list_id,
+                    GrpId = (int?)original.group_id,
+                    DiscPct = (decimal)original.discount_pct,
+                    DiscAbs = (decimal)original.discount_abs,
+                    SIP = (bool)original.show_item_prices,
+                    SS = (bool)original.show_summary,
+                    SSP = (bool)original.show_summary_prices,
+                    HQ = (bool)(original.hide_quantities ?? false),
+                    NI = (string?)original.notes_internal,
+                    NQ = (string?)original.notes_quote,
+                    AssTo = (int?)original.assigned_to,
+                    CreBy = GetCurrentEmployeeId(),
+                    QType = (string)(original.quote_type ?? "SERVICE"),
+                    Rev = newRev,
+                    ParentId = masterId
+                }, tx);
+
+            QuoteService.CopyQuoteItems(c, tx, id, newId);
+
+            string quoteType = (string)(original.quote_type ?? "SERVICE");
+            if (quoteType == "IMPIANTO")
+                QuoteService.CopyQuoteCosting(c, tx, id, newId);
+
+            c.Execute("UPDATE quotes SET status='superseded' WHERE id=@Id", new { Id = id }, tx);
+
+            c.Execute(@"INSERT INTO quote_status_log (quote_id, old_status, new_status, changed_by, notes)
+                        VALUES (@Id, @OldSt, 'superseded', @By, @Notes)",
+                new { Id = id, OldSt = (string)original.status, By = GetCurrentEmployeeId(),
+                      Notes = $"Superato da {newNumber}" }, tx);
+            c.Execute(@"INSERT INTO quote_status_log (quote_id, old_status, new_status, changed_by, notes)
+                        VALUES (@Id, '', 'draft', @By, @Notes)",
+                new { Id = newId, By = GetCurrentEmployeeId(),
+                      Notes = $"Revisione {newRev} da {(string)original.quote_number}" }, tx);
+
+            tx.Commit();
+            return Ok(ApiResponse<int>.Ok(newId, $"Revisione {newNumber} creata"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
+    }
 
     [HttpPost("{id}/duplicate")]
     public IActionResult Duplicate(int id)
@@ -686,84 +1086,83 @@ public class QuotesController : ControllerBase
             using var c = _qdb.Open();
             using var tx = c.BeginTransaction();
 
-            var src = c.QueryFirstOrDefault<QuoteDto>(@"
-                SELECT * FROM quotes WHERE id=@Id", new { Id = id }, tx);
-            if (src == null) return Ok(ApiResponse<int>.Fail("Non trovato"));
+            var original = c.QueryFirstOrDefault<dynamic>(
+                "SELECT * FROM quotes WHERE id=@Id", new { Id = id }, tx);
+            if (original == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
 
-            // Genera nuovo numero
             int year = DateTime.Now.Year;
             string prefix = $"PRV-{year}-";
             int maxNum = c.ExecuteScalar<int>(
-                "SELECT COALESCE(MAX(CAST(SUBSTRING(quote_number, @len+1) AS UNSIGNED)),0) FROM quotes WHERE quote_number LIKE @pref",
+                "SELECT COALESCE(MAX(CAST(SUBSTRING(quote_number, @len+1, 4) AS UNSIGNED)),0) FROM quotes WHERE quote_number LIKE @pref",
                 new { len = prefix.Length, pref = prefix + "%" }, tx);
             string newNumber = $"{prefix}{(maxNum + 1):D4}";
 
             int newId = (int)c.ExecuteScalar<long>(@"
                 INSERT INTO quotes (quote_number, title, customer_id, contact_name1, contact_name2, contact_name3,
-                    delivery_days, validity_days, payment_type, language, group_id, price_list_id,
-                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices, hide_quantities,
-                    notes_internal, notes_quote, assigned_to, created_by, status, revision)
-                SELECT @NewNum, CONCAT(title, ' (copia)'), customer_id, contact_name1, contact_name2, contact_name3,
-                    delivery_days, validity_days, payment_type, language, group_id, price_list_id,
-                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices, hide_quantities,
-                    notes_internal, notes_quote, assigned_to, @By, status, 0
-                FROM quotes WHERE id=@Id;
+                    delivery_days, validity_days, payment_type, language, price_list_id, group_id,
+                    discount_pct, discount_abs, show_item_prices, show_summary, show_summary_prices,
+                    hide_quantities, notes_internal, notes_quote, assigned_to, created_by,
+                    status, quote_type, revision, parent_quote_id)
+                VALUES (@Number, @Title, @CustId, @C1, @C2, @C3,
+                    @DelDays, @ValDays, @PayType, @Lang, @PlId, @GrpId,
+                    @DiscPct, @DiscAbs, @SIP, @SS, @SSP,
+                    @HQ, @NI, @NQ, @AssTo, @CreBy,
+                    'draft', @QType, 0, NULL);
                 SELECT LAST_INSERT_ID()",
-                new { NewNum = newNumber, By = GetCurrentEmployeeId(), Id = id }, tx);
+                new
+                {
+                    Number = newNumber,
+                    Title = $"{(string)original.title} (copia)",
+                    CustId = (int)original.customer_id,
+                    C1 = (string?)original.contact_name1,
+                    C2 = (string?)original.contact_name2,
+                    C3 = (string?)original.contact_name3,
+                    DelDays = (int)original.delivery_days,
+                    ValDays = (int)original.validity_days,
+                    PayType = (string?)original.payment_type,
+                    Lang = (string?)original.language,
+                    PlId = (int?)original.price_list_id,
+                    GrpId = (int?)original.group_id,
+                    DiscPct = (decimal)original.discount_pct,
+                    DiscAbs = (decimal)original.discount_abs,
+                    SIP = (bool)original.show_item_prices,
+                    SS = (bool)original.show_summary,
+                    SSP = (bool)original.show_summary_prices,
+                    HQ = (bool)(original.hide_quantities ?? false),
+                    NI = (string?)original.notes_internal,
+                    NQ = (string?)original.notes_quote,
+                    AssTo = (int?)original.assigned_to,
+                    CreBy = GetCurrentEmployeeId(),
+                    QType = (string)(original.quote_type ?? "SERVICE")
+                }, tx);
 
-            // Clona items
-            // Clona items mantenendo gerarchia padre/figlio
-            var oldItems = c.Query<(int Id, int? ParentItemId)>(
-                "SELECT id, parent_item_id FROM quote_items WHERE quote_id=@Id ORDER BY sort_order",
-                new { Id = id }, tx).ToList();
+            QuoteService.CopyQuoteItems(c, tx, id, newId);
 
-            // Prima inserisci i padri (parent_item_id IS NULL)
-            var idMap = new Dictionary<int, int>(); // oldId → newId
-            foreach (var item in oldItems.Where(x => x.ParentItemId == null))
+            string quoteType = (string)(original.quote_type ?? "SERVICE");
+            if (quoteType == "IMPIANTO")
             {
-                int newItemId = (int)c.ExecuteScalar<long>(@"
-                    INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
-                        code, name, description_rtf, unit, quantity,
-                        cost_price, sell_price, discount_pct, vat_pct,
-                        line_total, line_profit, sort_order, is_active, is_confirmed, is_auto_include)
-                    SELECT @NewId, product_id, variant_id, item_type,
-                        code, name, description_rtf, unit, quantity,
-                        cost_price, sell_price, discount_pct, vat_pct,
-                        line_total, line_profit, sort_order, is_active, is_confirmed, COALESCE(is_auto_include,0)
-                    FROM quote_items WHERE id=@OldId;
-                    SELECT LAST_INSERT_ID()",
-                    new { NewId = newId, OldId = item.Id }, tx);
-                idMap[item.Id] = newItemId;
+                QuoteService.CopyQuoteCosting(c, tx, id, newId);
+                QuoteService.CopyTotalsFromSource(c, id, newId, tx);
+            }
+            else
+            {
+                QuoteService.RecalcTotals(c, newId, tx);
             }
 
-            // Poi inserisci i figli con parent_item_id mappato
-            foreach (var item in oldItems.Where(x => x.ParentItemId != null))
-            {
-                int? newParentId = idMap.GetValueOrDefault(item.ParentItemId!.Value);
-                c.Execute(@"
-                    INSERT INTO quote_items (quote_id, product_id, variant_id, item_type,
-                        code, name, description_rtf, unit, quantity,
-                        cost_price, sell_price, discount_pct, vat_pct,
-                        line_total, line_profit, sort_order, is_active, is_confirmed, parent_item_id, is_auto_include)
-                    SELECT @NewId, product_id, variant_id, item_type,
-                        code, name, description_rtf, unit, quantity,
-                        cost_price, sell_price, discount_pct, vat_pct,
-                        line_total, line_profit, sort_order, is_active, is_confirmed, @NewParentId, COALESCE(is_auto_include,0)
-                    FROM quote_items WHERE id=@OldId",
-                    new { NewId = newId, OldId = item.Id, NewParentId = newParentId }, tx);
-            }
-
-            RecalcTotals(c, newId, tx);
+            c.Execute(@"INSERT INTO quote_status_log (quote_id, old_status, new_status, changed_by, notes)
+                        VALUES (@Id, '', 'draft', @By, @Notes)",
+                new { Id = newId, By = GetCurrentEmployeeId(),
+                      Notes = $"Duplicato da {(string)original.quote_number}" }, tx);
 
             tx.Commit();
-            return Ok(ApiResponse<int>.Ok(newId, $"Preventivo duplicato come {newNumber}"));
+            return Ok(ApiResponse<int>.Ok(newId, $"Preventivo {newNumber} creato (duplicato)"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // ITEM ACTIONS (clone, field patch)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpPost("{quoteId}/items/{itemId}/clone")]
     public IActionResult CloneItem(int quoteId, int itemId)
@@ -822,7 +1221,7 @@ public class QuotesController : ControllerBase
             }
 
             tx.Commit();
-            RecalcTotals(c, quoteId, null);
+            QuoteService.RecalcTotals(c, quoteId, null);
             return Ok(ApiResponse<int>.Ok(newParentId, "Prodotto duplicato"));
         }
         catch (Exception ex) { return StatusCode(500, $"Errore clone: {ex.Message}"); }
@@ -843,7 +1242,7 @@ public class QuotesController : ControllerBase
         c.Execute($"UPDATE quotes SET `{req.Field}`=@Value WHERE id=@id", new { Value = dbValue, id });
         // Non ricalcolare totali se stiamo aggiornando total/profit direttamente (IMPIANTO costing)
         if (req.Field != "total" && req.Field != "profit")
-            RecalcTotals(c, id, null);
+            QuoteService.RecalcTotals(c, id, null);
         return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
     }
 
@@ -859,11 +1258,11 @@ public class QuotesController : ControllerBase
         string? dbValue = NormalizeDecimalValue(req.Field, req.Value);
         c.Execute($"UPDATE quote_items SET `{req.Field}`=@Value WHERE id=@itemId AND quote_id=@quoteId",
             new { Value = dbValue, itemId, quoteId });
-        RecalcTotals(c, quoteId, null);
+        QuoteService.RecalcTotals(c, quoteId, null);
         return Ok(ApiResponse<string>.Ok("", "Campo aggiornato"));
     }
 
-    // Campi decimali nelle quote: converte virgola→punto per MySQL
+    // Campi decimali nelle quote: converte virgolaâ†’punto per MySQL
     private static readonly HashSet<string> _decimalFields = new()
     {
         "total", "profit", "discount_pct", "discount_abs", "delivery_days", "validity_days",
@@ -876,9 +1275,9 @@ public class QuotesController : ControllerBase
         return value.Replace(',', '.');
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // PDF
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpGet("{id}/pdf")]
     public IActionResult GeneratePdf(int id)
@@ -927,7 +1326,7 @@ public class QuotesController : ControllerBase
             if (quote.QuoteType == "IMPIANTO")
             {
                 // Carica dati costing per IMPIANTO
-                var costingData = LoadCostingData(c, id);
+                ProjectCostingData costingData = CostingDataService.LoadQuote(c, id);
                 pdf = _pdf.GenerateImpianto(quote, costingData);
             }
             else
@@ -943,9 +1342,9 @@ public class QuotesController : ControllerBase
         }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // STATS
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     [HttpGet("stats")]
     public IActionResult GetStats()
@@ -972,100 +1371,5 @@ public class QuotesController : ControllerBase
         }
         catch (Exception ex) { return Ok(ApiResponse<QuoteStatsDto>.Fail($"Errore: {ex.Message}")); }
     }
-
-    // ═══════════════════════════════════════════════════════
-    // RECALC TOTALS
-    // ═══════════════════════════════════════════════════════
-
-    private void RecalcTotals(MySqlConnector.MySqlConnection c, int quoteId, System.Data.IDbTransaction? tx)
-    {
-        var totals = c.QueryFirstOrDefault<dynamic>(@"
-            SELECT COALESCE(SUM(line_total),0) AS subtotal,
-                   COALESCE(SUM(line_total * vat_pct / 100),0) AS vat_total,
-                   COALESCE(SUM(CASE WHEN item_type='product' THEN quantity * cost_price ELSE 0 END),0) AS cost_total
-            FROM quote_items WHERE quote_id=@Id AND COALESCE(is_active,1)=1 AND quantity>0",
-            new { Id = quoteId }, (System.Data.IDbTransaction?)tx);
-
-        decimal subtotal = (decimal)(totals?.subtotal ?? 0m);
-        decimal vatTotal = (decimal)(totals?.vat_total ?? 0m);
-        decimal costTotal = (decimal)(totals?.cost_total ?? 0m);
-
-        // Applica sconto globale
-        var discountInfo = c.QueryFirstOrDefault<dynamic>(
-            "SELECT discount_pct, discount_abs FROM quotes WHERE id=@Id",
-            new { Id = quoteId }, (System.Data.IDbTransaction?)tx);
-
-        decimal discPct = (decimal)(discountInfo?.discount_pct ?? 0m);
-        decimal discAbs = (decimal)(discountInfo?.discount_abs ?? 0m);
-        decimal discountAmount = subtotal * discPct / 100m + discAbs;
-        decimal total = subtotal - discountAmount;
-        decimal totalWithVat = total + vatTotal;
-        decimal profit = total - costTotal;
-
-        c.Execute(@"UPDATE quotes SET subtotal=@Sub, vat_total=@Vat, total=@Tot,
-                    total_with_vat=@TotVat, cost_total=@Cost, profit=@Profit WHERE id=@Id",
-            new { Sub = subtotal, Vat = vatTotal, Tot = total, TotVat = totalWithVat,
-                  Cost = costTotal, Profit = profit, Id = quoteId },
-            (System.Data.IDbTransaction?)tx);
-    }
-
-    /// <summary>Carica dati costing per preventivo IMPIANTO (usato per PDF)</summary>
-    private static ProjectCostingData LoadCostingData(MySqlConnector.MySqlConnection c, int quoteId)
-    {
-        var sections = c.Query<ProjectCostSectionDto>(@"
-            SELECT id, quote_id AS ProjectId, template_id AS TemplateId, name, section_type AS SectionType,
-                   group_name AS GroupName, sort_order AS SortOrder, is_enabled AS IsEnabled,
-                   contingency_pct AS ContingencyPct, margin_pct AS MarginPct,
-                   contingency_pinned AS ContingencyPinned, margin_pinned AS MarginPinned,
-                   COALESCE(is_shadowed,0) AS IsShadowed
-            FROM quote_cost_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
-
-        var allResources = c.Query<ProjectCostResourceDto>(@"
-            SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId,
-                   r.resource_name AS ResourceName, r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay,
-                   r.hourly_cost AS HourlyCost, r.markup_value AS MarkupValue,
-                   r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm,
-                   r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel,
-                   r.allowance_days AS AllowanceDays, r.daily_allowance AS DailyAllowance,
-                   r.sort_order AS SortOrder
-            FROM quote_cost_resources r
-            JOIN quote_cost_sections s ON s.id = r.section_id
-            WHERE s.quote_id=@quoteId ORDER BY r.sort_order", new { quoteId }).ToList();
-        foreach (var sec in sections)
-            sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
-
-        var matSections = c.Query<ProjectMaterialSectionDto>(@"
-            SELECT id, quote_id AS ProjectId, name, markup_value AS MarkupValue,
-                   commission_markup AS CommissionMarkup, sort_order AS SortOrder, is_enabled AS IsEnabled
-            FROM quote_material_sections WHERE quote_id=@quoteId ORDER BY sort_order", new { quoteId }).ToList();
-
-        var allItems = c.Query<ProjectMaterialItemDto>(@"
-            SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId,
-                   i.product_id AS ProductId, i.variant_id AS VariantId,
-                   COALESCE(i.code,'') AS Code, i.description AS Description,
-                   i.description_rtf AS DescriptionRtf,
-                   i.quantity AS Quantity, i.unit_cost AS UnitCost,
-                   i.markup_value AS MarkupValue, i.item_type AS ItemType, i.sort_order AS SortOrder,
-                   i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
-                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned,
-                   COALESCE(i.is_shadowed,0) AS IsShadowed, COALESCE(i.is_active,1) AS IsActive
-            FROM quote_material_items i
-            JOIN quote_material_sections s ON s.id = i.section_id
-            WHERE s.quote_id=@quoteId ORDER BY i.sort_order", new { quoteId }).ToList();
-        foreach (var ms in matSections)
-            ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
-
-        var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
-            SELECT id, quote_id AS ProjectId, contingency_pct AS ContingencyPct,
-                   negotiation_margin_pct AS NegotiationMarginPct,
-                   travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup
-            FROM quote_pricing WHERE quote_id=@quoteId", new { quoteId })
-            ?? new ProjectPricingDto { ProjectId = quoteId };
-
-        return new ProjectCostingData
-        {
-            ProjectId = quoteId, IsInitialized = true,
-            CostSections = sections, MaterialSections = matSections, Pricing = pricing
-        };
-    }
 }
+

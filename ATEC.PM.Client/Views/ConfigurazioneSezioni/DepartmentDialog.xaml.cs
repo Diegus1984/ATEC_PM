@@ -1,4 +1,9 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Windows;
+using ATEC.PM.Client.Controls;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -6,20 +11,18 @@ public partial class DepartmentDialog : Window
 {
     private readonly DepartmentDto? _existing;
 
-    // Nuovo reparto
     public DepartmentDialog()
     {
         InitializeComponent();
         _existing = null;
-        txtDialogTitle.Text = "Nuovo Reparto";
+        txtDialogTitle.Text = "Nuovo reparto";
     }
 
-    // Modifica reparto esistente
     public DepartmentDialog(DepartmentDto dept)
     {
         InitializeComponent();
         _existing = dept;
-        txtDialogTitle.Text = $"Modifica Reparto — {dept.Code}";
+        txtDialogTitle.Text = $"Modifica reparto — {dept.Code}";
         txtCode.Text = dept.Code;
         txtName.Text = dept.Name;
         txtHourlyCost.Text = dept.HourlyCost.ToString("F2", CultureInfo.InvariantCulture);
@@ -29,27 +32,28 @@ public partial class DepartmentDialog : Window
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
+        txtError.Text = "";
         string code = txtCode.Text.Trim().ToUpper();
         string name = txtName.Text.Trim();
 
         if (string.IsNullOrEmpty(code))
         {
-            MessageBox.Show("Codice obbligatorio.", "Attenzione");
+            txtError.Text = "Codice obbligatorio.";
             return;
         }
         if (string.IsNullOrEmpty(name))
         {
-            MessageBox.Show("Nome obbligatorio.", "Attenzione");
+            txtError.Text = "Nome obbligatorio.";
             return;
         }
         if (!decimal.TryParse(txtHourlyCost.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal hourlyCost))
         {
-            MessageBox.Show("Costo orario non valido.", "Attenzione");
+            txtError.Text = "Costo orario non valido.";
             return;
         }
         if (!decimal.TryParse(txtDefaultMarkup.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal defaultMarkup))
         {
-            MessageBox.Show("K Ricarico non valido.", "Attenzione");
+            txtError.Text = "K ricarico non valido.";
             return;
         }
         if (!int.TryParse(txtSortOrder.Text, out int sortOrder))
@@ -68,34 +72,23 @@ public partial class DepartmentDialog : Window
         try
         {
             string json = JsonSerializer.Serialize(req);
-            string result;
+            string result = _existing == null
+                ? await ApiClient.PostAsync("/api/departments", json)
+                : await ApiClient.PutAsync($"/api/departments/{_existing.Id}", json);
 
-            if (_existing == null)
-                result = await ApiClient.PostAsync("/api/departments", json);
-            else
-                result = await ApiClient.PutAsync($"/api/departments/{_existing.Id}", json);
-
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 DialogResult = true;
                 Close();
             }
             else
-            {
-                string msg = doc.RootElement.GetProperty("message").GetString() ?? "Errore";
-                MessageBox.Show(msg, "Errore");
-            }
+                txtError.Text = msg ?? "Errore";
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore");
+            txtError.Text = $"Errore: {ex.Message}";
         }
     }
 
-    private void BtnCancel_Click(object sender, RoutedEventArgs e)
-    {
-        DialogResult = false;
-        Close();
-    }
+    private void BtnCancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 }

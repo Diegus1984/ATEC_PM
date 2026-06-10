@@ -230,6 +230,11 @@ public class QuoteItemDto
     public bool IsAutoInclude { get; set; }
 }
 
+public class QuoteConvertDto
+{
+    public int PmId { get; set; }
+}
+
 public class QuoteSaveDto
 {
     public string QuoteType { get; set; } = "SERVICE";

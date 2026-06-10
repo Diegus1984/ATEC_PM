@@ -34,6 +34,13 @@ public class CatalogItemSaveRequest
     public bool IsActive { get; set; } = true;
 }
 
+public class CatalogFilterMetaDto
+{
+    public List<string> Suppliers { get; set; } = new();
+    public List<string> Manufacturers { get; set; } = new();
+    public List<string> Categories { get; set; } = new();
+}
+
 public class CatalogItem
 {
     public int Id { get; set; }

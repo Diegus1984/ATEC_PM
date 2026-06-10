@@ -306,7 +306,8 @@ public class DaneaSyncService : BackgroundService
             if (hasIDFornitore)
             {
                 int idForn = 0;
-                try { idForn = (int?)a.IDFornitore ?? 0; } catch { }
+                try { idForn = (int?)a.IDFornitore ?? 0; } 
+                catch (Exception ex) { _log.LogDebug(ex, "Impossibile convertire IDFornitore per l'articolo {CodArticolo}", code); }
                 if (idForn > 0 && fornitori.TryGetValue(idForn, out string? fornNome)
                     && !string.IsNullOrEmpty(fornNome)
                     && supplierLookup.TryGetValue(fornNome.ToLower(), out int sid))

@@ -14,28 +14,98 @@ public class CatalogController : ControllerBase
     private readonly DbService _db;
     public CatalogController(DbService db) => _db = db;
 
-    [HttpGet]
-    public IActionResult GetAll()
+    [HttpGet("filter-meta")]
+    public IActionResult GetFilterMeta()
     {
         try
         {
             using var c = _db.Open();
-            // Leggiamo dalla tabella catalog_items dove hai importato gli articoli
-            var rows = c.Query<CatalogItemListItem>(@"
+            var suppliers = c.Query<string>(@"
+                SELECT DISTINCT s.company_name FROM catalog_items i
+                INNER JOIN suppliers s ON s.id = i.supplier_id
+                WHERE i.is_active = 1 AND s.company_name IS NOT NULL AND s.company_name <> ''
+                ORDER BY s.company_name").ToList();
+            var manufacturers = c.Query<string>(@"
+                SELECT DISTINCT manufacturer FROM catalog_items
+                WHERE is_active = 1 AND manufacturer IS NOT NULL AND manufacturer <> ''
+                ORDER BY manufacturer").ToList();
+            var categories = c.Query<string>(@"
+                SELECT DISTINCT category FROM catalog_items
+                WHERE is_active = 1 AND category IS NOT NULL AND category <> ''
+                ORDER BY category").ToList();
+            return Ok(ApiResponse<object>.Ok(new { suppliers, manufacturers, categories }));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<object>.Fail(ex.Message)); }
+    }
+
+    [HttpGet]
+    public IActionResult GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
+        [FromQuery] string? search = null,
+        [FromQuery] string? code = null,
+        [FromQuery] string? description = null,
+        [FromQuery] string? supplier = null,
+        [FromQuery] string? manufacturer = null,
+        [FromQuery] string? category = null)
+    {
+        try
+        {
+            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
+            var clauses = new List<string> { "i.is_active = 1" };
+            var dp = new Dapper.DynamicParameters();
+
+            void AddLike(string column, string? filter, string param)
+            {
+                string? pat = PagedQueryHelper.ToLikePattern(filter);
+                if (pat == null) return;
+                clauses.Add($"{column} LIKE @{param}");
+                dp.Add(param, pat);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = $"%{search.Trim()}%";
+                clauses.Add(@"(i.code LIKE @Search OR i.description LIKE @Search OR s.company_name LIKE @Search
+                    OR i.manufacturer LIKE @Search OR i.category LIKE @Search)");
+                dp.Add("Search", term);
+            }
+
+            AddLike("i.code", code, "Code");
+            AddLike("i.description", description, "Description");
+            AddLike("s.company_name", supplier, "Supplier");
+            AddLike("i.manufacturer", manufacturer, "Manufacturer");
+            AddLike("i.category", category, "Category");
+
+            string where = "WHERE " + string.Join(" AND ", clauses);
+            string from = @"FROM catalog_items i LEFT JOIN suppliers s ON s.id = i.supplier_id";
+
+            using var c = _db.Open();
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*) {from} {where}", dp);
+            dp.Add("Limit", pageSize);
+            dp.Add("Offset", offset);
+
+            var rows = c.Query<CatalogItemListItem>($@"
                 SELECT i.id, i.code, i.description, i.category, i.unit, 
                        i.unit_cost AS UnitCost, i.list_price AS ListPrice,
                        s.company_name AS SupplierName, i.manufacturer
-                FROM catalog_items i
-                LEFT JOIN suppliers s ON s.id = i.supplier_id
-                WHERE i.is_active = 1
-                ORDER BY i.code").ToList();
+                {from} {where}
+                ORDER BY i.code
+                LIMIT @Limit OFFSET @Offset", dp).ToList();
 
-            return Ok(ApiResponse<List<CatalogItemListItem>>.Ok(rows));
+            int loaded = offset + rows.Count;
+            return Ok(ApiResponse<PagedResult<CatalogItemListItem>>.Ok(new PagedResult<CatalogItemListItem>
+            {
+                Items = rows,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize,
+                HasMore = loaded < total
+            }));
         }
         catch (Exception ex)
         {
-            // Restituiamo un errore in formato JSON, così il client non crasha
-            return Ok(ApiResponse<List<CatalogItemListItem>>.Fail(ex.Message));
+            return Ok(ApiResponse<PagedResult<CatalogItemListItem>>.Fail(ex.Message));
         }
     }
 

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Hubs;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -13,36 +15,113 @@ public class ProjectsController : ControllerBase
 {
     private readonly DbService _db;
     private readonly NotificationService _notif;
-    public ProjectsController(DbService db, NotificationService notif) { _db = db; _notif = notif; }
+    private readonly ProjectTemplateCopyService _templateCopy;
+    private readonly ILogger<ProjectsController> _logger;
+    private readonly IHubContext<ProjectHub> _hub;
+    public ProjectsController(
+        DbService db,
+        NotificationService notif,
+        ProjectTemplateCopyService templateCopy,
+        ILogger<ProjectsController> logger,
+        IHubContext<ProjectHub> hub)
+    {
+        _db = db;
+        _notif = notif;
+        _templateCopy = templateCopy;
+        _logger = logger;
+        _hub = hub;
+    }
+
+    // Notifica real-time: chi guarda QUESTA commessa (gruppo "project-{id}") + il Gestore DDP (gruppo globale
+    // "ddp-all"), escludendo chi ha fatto la modifica (conn) per non auto-ricaricarsi.
+    private void NotifyDdpChange(int projectId, string? conn, string action, int itemId)
+    {
+        var payload = new DdpChange { ProjectId = projectId, Action = action, ItemId = itemId };
+        foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
+        {
+            IClientProxy target = string.IsNullOrEmpty(conn)
+                ? _hub.Clients.Group(group)
+                : _hub.Clients.GroupExcept(group, conn);
+            _ = target.SendAsync("DdpChanged", payload);
+        }
+    }
 
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
     [HttpGet]
-    public IActionResult GetAll()
+    public IActionResult GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 0, [FromQuery] string? search = null)
     {
         try
         {
+            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
+
+            string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+            string searchClause = term == null
+                ? ""
+                : @" WHERE (p.code LIKE @Term OR p.title LIKE @Term OR cu.company_name LIKE @Term
+                    OR CONCAT(e.first_name,' ',e.last_name) LIKE @Term)";
+            object countParams = term == null ? new { } : new { Term = $"%{term}%" };
+            object listParams = term == null
+                ? new { Limit = pageSize, Offset = offset }
+                : new { Term = $"%{term}%", Limit = pageSize, Offset = offset };
+
             using var c = _db.Open();
-            // Utilizziamo LEFT JOIN per evitare che la mancanza di un PM o Cliente rompa la lista
-            // COALESCE gestisce i valori NULL per PM e Cliente trasformandoli in stringhe vuote
-            var rows = c.Query<ProjectListItem>(@"
+            int total = c.ExecuteScalar<int>($@"
+                SELECT COUNT(*)
+                FROM projects p
+                LEFT JOIN customers cu ON cu.id = p.customer_id
+                LEFT JOIN employees e ON e.id = p.pm_id{searchClause}", countParams);
+
+            var rows = c.Query<ProjectListItem>($@"
             SELECT p.id, p.code, p.title, 
                    COALESCE(cu.company_name, 'CLIENTE MANCANTE') AS CustomerName,
                    COALESCE(CONCAT(e.first_name,' ',e.last_name), 'NON ASSEGNATO') AS PmName,
                    p.status, p.priority, p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
-                   p.revenue, p.budget_hours_total AS BudgetHoursTotal
+                   p.revenue, p.budget_hours_total AS BudgetHoursTotal,
+                   COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS LinkedQuoteId
             FROM projects p
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            LEFT JOIN employees e ON e.id = p.pm_id
-            ORDER BY p.created_at DESC").ToList();
-            return Ok(ApiResponse<List<ProjectListItem>>.Ok(rows));
+            LEFT JOIN employees e ON e.id = p.pm_id{searchClause}
+            ORDER BY p.created_at DESC
+            LIMIT @Limit OFFSET @Offset", listParams).ToList();
+
+            int loaded = (page - 1) * pageSize + rows.Count;
+            var result = new PagedResult<ProjectListItem>
+            {
+                Items = rows,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize,
+                HasMore = loaded < total
+            };
+            return Ok(ApiResponse<PagedResult<ProjectListItem>>.Ok(result));
         }
         catch (Exception ex)
         {
-            // Se c'è un errore SQL, restituiamo un oggetto ApiResponse valido con errore 
-            // invece di lasciar crashare il server (che manderebbe HTML al client)
-            return Ok(ApiResponse<List<ProjectListItem>>.Fail($"Errore DB: {ex.Message}"));
+            return Ok(ApiResponse<PagedResult<ProjectListItem>>.Fail($"Errore DB: {ex.Message}"));
+        }
+    }
+
+    [HttpGet("tree")]
+    public IActionResult GetTree()
+    {
+        try
+        {
+            using var c = _db.Open();
+            List<ProjectTreeItemDto> rows = c.Query<ProjectTreeItemDto>(@"
+                SELECT p.id, p.code, p.title,
+                       p.status,
+                       COALESCE(cu.company_name, '') AS CustomerName
+                FROM projects p
+                LEFT JOIN customers cu ON cu.id = p.customer_id
+                WHERE p.status <> 'CANCELLED'
+                ORDER BY p.code DESC").ToList();
+            return Ok(ApiResponse<List<ProjectTreeItemDto>>.Ok(rows));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<List<ProjectTreeItemDto>>.Fail($"Errore DB: {ex.Message}"));
         }
     }
 
@@ -54,8 +133,9 @@ public class ProjectsController : ControllerBase
             SELECT id, code, title, customer_id AS CustomerId, pm_id AS PmId, description,
                    start_date AS StartDate, end_date_planned AS EndDatePlanned,
                    budget_total AS BudgetTotal, budget_hours_total AS BudgetHoursTotal,
-                   revenue, status, priority, server_path AS ServerPath, notes
-            FROM projects WHERE id=@Id", new { Id = id });
+                   revenue, status, priority, server_path AS ServerPath, notes,
+                   COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS LinkedQuoteId
+            FROM projects p WHERE id=@Id", new { Id = id });
         if (proj == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
         return Ok(ApiResponse<ProjectSaveRequest>.Ok(proj));
     }
@@ -96,7 +176,7 @@ public class ProjectsController : ControllerBase
         // Dopo il commit — operazioni non transazionali
         try
         {
-            CopyTemplateToProject(req.Code);
+            _templateCopy.CopyToProject(req.Code);
 
             string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
             string year = DateTime.Now.Year.ToString();
@@ -182,7 +262,10 @@ public class ProjectsController : ControllerBase
                 "PROJECT", projectId, projectId, currentEmpId,
                 recipients);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Errore durante l'invio delle notifiche per cambio stato commessa {ProjectCode}", projectCode);
+        }
     }
 
     /// <summary>
@@ -300,7 +383,7 @@ public class ProjectsController : ControllerBase
 
         if (!Directory.Exists(fullPath))
         {
-            CopyTemplateToProject(code);
+            _templateCopy.CopyToProject(code);
         }
 
         c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = id });
@@ -718,71 +801,77 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet("/api/lookup/employees")]
-    public IActionResult LookupEmployees()
+    public IActionResult LookupEmployees([FromQuery] string? role = null)
     {
         using var c = _db.Open();
-        var rows = c.Query<LookupItem>("SELECT id AS Id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status='ACTIVE' ORDER BY last_name").ToList();
+        string sql = "SELECT id AS Id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status='ACTIVE'";
+        if (!string.IsNullOrEmpty(role))
+        {
+            sql += " AND user_role=@Role";
+        }
+        sql += " ORDER BY last_name";
+        var rows = c.Query<LookupItem>(sql, new { Role = role }).ToList();
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
     }
     [HttpGet("template-structure")]
     public IActionResult GetTemplateStructure()
     {
-        string templatePath = @"C:\ATEC_Commesse\MASTER_TEMPLATE";
+        using MySqlConnector.MySqlConnection c = _db.Open();
 
-        if (!Directory.Exists(templatePath))
-            return NotFound(ApiResponse<string>.Fail("Cartella MASTER_TEMPLATE non trovata"));
+        List<(int Id, int? ParentId, string Name)> folderList = c.Query<(int Id, int? ParentId, string Name)>(
+            "SELECT id, parent_id, name FROM project_template_folders WHERE is_active=1").ToList();
 
         var result = new TemplateFolderInfo();
+        if (folderList.Count == 0)
+            return Ok(ApiResponse<TemplateFolderInfo>.Ok(result));
 
-        // Tutte le sottocartelle (percorsi relativi)
-        foreach (string dir in Directory.GetDirectories(templatePath, "*", SearchOption.AllDirectories))
+        Dictionary<int, string> folderPaths = new();
+        HashSet<int> unresolved = folderList.Select(f => f.Id).ToHashSet();
+
+        while (unresolved.Count > 0)
         {
-            result.Folders.Add(Path.GetRelativePath(templatePath, dir).Replace("\\", "/"));
+            int resolvedThisPass = 0;
+            foreach ((int Id, int? ParentId, string Name) f in folderList.Where(x => unresolved.Contains(x.Id)))
+            {
+                if (f.ParentId == null)
+                {
+                    folderPaths[f.Id] = f.Name;
+                    unresolved.Remove(f.Id);
+                    resolvedThisPass++;
+                }
+                else if (folderPaths.TryGetValue(f.ParentId.Value, out string? parentPath))
+                {
+                    folderPaths[f.Id] = Path.Combine(parentPath, f.Name);
+                    unresolved.Remove(f.Id);
+                    resolvedThisPass++;
+                }
+            }
+            if (resolvedThisPass == 0)
+                break;
         }
-        result.Folders.Sort();
 
-        // Tutti i file (percorsi relativi + dimensione)
-        foreach (string file in Directory.GetFiles(templatePath, "*.*", SearchOption.AllDirectories))
+        result.Folders = folderPaths.Values
+            .OrderBy(p => p.Length)
+            .Select(p => p.Replace("\\", "/"))
+            .ToList();
+
+        IEnumerable<(int folder_id, string file_name, long file_size)> files = c.Query<(int folder_id, string file_name, long file_size)>(
+            "SELECT folder_id, file_name, file_size FROM project_template_files");
+
+        foreach ((int folder_id, string file_name, long file_size) tf in files)
         {
-            FileInfo fi = new FileInfo(file);
+            if (!folderPaths.TryGetValue(tf.folder_id, out string? relFolder))
+                continue;
+
             result.Files.Add(new TemplateFileInfo
             {
-                RelativePath = Path.GetRelativePath(templatePath, file).Replace("\\", "/"),
-                FileName = fi.Name,
-                SizeBytes = fi.Length
+                RelativePath = Path.Combine(relFolder, tf.file_name).Replace("\\", "/"),
+                FileName = tf.file_name,
+                SizeBytes = tf.file_size
             });
         }
 
         return Ok(ApiResponse<TemplateFolderInfo>.Ok(result));
-    }
-
-    private void CopyTemplateToProject(string projectCode)
-    {
-        string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
-        string templatePath = _db.GetConfig("TemplatePath", @"C:\ATEC_Commesse\MASTER_TEMPLATE");
-        string year = DateTime.Now.Year.ToString();
-        string targetPath = Path.Combine(basePath, year, projectCode);
-
-        if (!Directory.Exists(templatePath))
-        {
-            Directory.CreateDirectory(targetPath);
-            return;
-        }
-
-        Directory.CreateDirectory(targetPath);
-
-        foreach (string dir in Directory.GetDirectories(templatePath, "*", SearchOption.AllDirectories))
-        {
-            string relativePath = Path.GetRelativePath(templatePath, dir);
-            Directory.CreateDirectory(Path.Combine(targetPath, relativePath));
-        }
-
-        foreach (string file in Directory.GetFiles(templatePath, "*.*", SearchOption.AllDirectories))
-        {
-            string relativePath = Path.GetRelativePath(templatePath, file);
-            string destFile = Path.Combine(targetPath, relativePath);
-            System.IO.File.Copy(file, destFile, overwrite: false);
-        }
     }
 
     // --- DDP (Distinta Di Produzione) ---
@@ -800,7 +889,7 @@ public class ProjectsController : ControllerBase
                    b.manufacturer, b.item_status AS ItemStatus,
                    b.requested_by AS RequestedBy, b.danea_ref AS DaneaRef,
                    b.date_needed AS DateNeeded, b.destination, b.notes,
-                   b.ddp_type AS DdpType, b.created_at AS CreatedAt
+                   b.ddp_type AS DdpType, b.created_at AS CreatedAt, b.updated_at AS UpdatedAt
             FROM bom_items b
             LEFT JOIN suppliers s ON s.id = b.supplier_id
             WHERE b.project_id = @Id AND b.ddp_type = @Type
@@ -815,23 +904,24 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPost("{id}/ddp")]
-    public IActionResult AddDdpItem(int id, [FromBody] BomItemSaveRequest req)
+    public IActionResult AddDdpItem(int id, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
         try
         {
             using var c = _db.Open();
             req.ProjectId = id;
             var newId = c.ExecuteScalar<int>(@"
-            INSERT INTO bom_items 
+            INSERT INTO bom_items
                 (project_id, catalog_item_id, part_number, description, unit, quantity,
                  unit_cost, supplier_id, manufacturer, item_status, requested_by,
-                 danea_ref, date_needed, destination, notes, ddp_type)
-            VALUES 
+                 danea_ref, date_needed, destination, notes, ddp_type, updated_at)
+            VALUES
                 (@ProjectId, @CatalogItemId, @PartNumber, @Description, @Unit, @Quantity,
                  @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, @RequestedBy,
-                 @DaneaRef, @DateNeeded, @Destination, @Notes, @DdpType);
+                 @DaneaRef, @DateNeeded, @Destination, @Notes, @DdpType, NOW());
             SELECT LAST_INSERT_ID()", req);
 
+            NotifyDdpChange(id, conn, "create", newId);
             return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
         }
         catch (Exception ex)
@@ -841,11 +931,23 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPut("{id}/ddp/{itemId}")]
-    public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req)
+    public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
         try
         {
             using var c = _db.Open();
+
+            // Concorrenza ottimistica (rete di sicurezza anche col real-time): se il client invia
+            // la versione vista (ExpectedUpdatedAt) e la riga è cambiata nel frattempo → 409, niente lost update.
+            if (req.ExpectedUpdatedAt.HasValue)
+            {
+                DateTime? current = c.ExecuteScalar<DateTime?>(
+                    "SELECT updated_at FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+                    new { ItemId = itemId, Id = id });
+                if (current.HasValue && Math.Abs((current.Value - req.ExpectedUpdatedAt.Value).TotalSeconds) > 1)
+                    return Conflict(ApiResponse<DateTime?>.Fail(
+                        "Riga modificata da un altro utente nel frattempo. Ricarica e riprova."));
+            }
 
             // Leggi stato precedente per confronto
             string? oldStatus = c.ExecuteScalar<string?>(
@@ -855,10 +957,10 @@ public class ProjectsController : ControllerBase
             req.Id = itemId;
             req.ProjectId = id;
             c.Execute(@"
-            UPDATE bom_items SET 
+            UPDATE bom_items SET
                 quantity = @Quantity, item_status = @ItemStatus,
                 danea_ref = @DaneaRef, date_needed = @DateNeeded,
-                destination = @Destination, notes = @Notes
+                destination = @Destination, notes = @Notes, updated_at = NOW()
             WHERE id = @Id AND project_id = @ProjectId", req);
 
             // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
@@ -878,9 +980,9 @@ public class ProjectsController : ControllerBase
 
                     string severity = req.ItemStatus switch
                     {
-                        "DELIVERED" => "SUCCESS",
-                        "CANCELLED" => "WARNING",
-                        "ORDERED" => "INFO",
+                        "CON" => "SUCCESS",   // CONSEGNATO
+                        "ANN" => "WARNING",   // ANNULLATO
+                        "IO" => "INFO",       // IN ORDINE
                         _ => "INFO"
                     };
 
@@ -897,22 +999,29 @@ public class ProjectsController : ControllerBase
                 catch { /* non bloccare l'update per errore notifica */ }
             }
 
-            return Ok(ApiResponse<bool>.Ok(true, "Aggiornato"));
+            // Real-time: avvisa gli altri che guardano la distinta di questa commessa.
+            NotifyDdpChange(id, conn, "update", itemId);
+
+            // Ritorna la nuova versione così il client riallinea il proprio token di concorrenza.
+            DateTime? newTs = c.ExecuteScalar<DateTime?>(
+                "SELECT updated_at FROM bom_items WHERE id = @Id", new { Id = itemId });
+            return Ok(ApiResponse<DateTime?>.Ok(newTs, "Aggiornato"));
         }
         catch (Exception ex)
         {
-            return Ok(ApiResponse<bool>.Fail(ex.Message));
+            return Ok(ApiResponse<DateTime?>.Fail(ex.Message));
         }
     }
 
     [HttpDelete("{id}/ddp/{itemId}")]
-    public IActionResult DeleteDdpItem(int id, int itemId)
+    public IActionResult DeleteDdpItem(int id, int itemId, [FromQuery] string? conn = null)
     {
         try
         {
             using var c = _db.Open();
             c.Execute("DELETE FROM bom_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
+            NotifyDdpChange(id, conn, "delete", itemId);
             return Ok(ApiResponse<bool>.Ok(true, "Eliminato"));
         }
         catch (Exception ex)
@@ -944,13 +1053,19 @@ public class ProjectsController : ControllerBase
         if (data == null) return NotFound(ApiResponse<string>.Fail("Commessa non trovata"));
 
         // Ore lavorate totali + costo consuntivo
+        // Fallback robusto: priorità is_primary, poi is_responsible, poi qualsiasi reparto (MIN id).
         var totals = c.QueryFirstOrDefault<dynamic>(@"
     SELECT COALESCE(SUM(te.hours), 0) AS HoursWorked,
            COALESCE(SUM(te.hours * COALESCE(d.hourly_cost, 0)), 0) AS CostWorked
     FROM timesheet_entries te
     JOIN employees e ON e.id = te.employee_id
     JOIN project_phases pp ON pp.id = te.project_phase_id
-    LEFT JOIN employee_departments ed ON ed.employee_id = e.id AND ed.is_primary = 1
+    LEFT JOIN (
+        SELECT employee_id, department_id,
+               ROW_NUMBER() OVER (PARTITION BY employee_id
+                                  ORDER BY is_primary DESC, is_responsible DESC, id) AS rn
+        FROM employee_departments
+    ) ed ON ed.employee_id = e.id AND ed.rn = 1
     LEFT JOIN departments d ON d.id = ed.department_id
     WHERE pp.project_id = @Id", new { Id = id });
 
@@ -960,7 +1075,7 @@ public class ProjectsController : ControllerBase
         // Costo materiali DDP
         decimal materialCost = c.ExecuteScalar<decimal>(@"
             SELECT COALESCE(SUM(quantity * unit_cost), 0)
-            FROM bom_items WHERE project_id = @Id AND item_status <> 'CANCELLED'", new { Id = id });
+            FROM bom_items WHERE project_id = @Id AND item_status <> 'ANN'", new { Id = id });
 
         data.MaterialCost = materialCost;
         data.TotalCost = data.CostWorked + materialCost;
@@ -986,7 +1101,8 @@ public class ProjectsController : ControllerBase
             WHERE pcs.project_id = @Id AND pcs.is_enabled = 1
             GROUP BY d.code, d.name", new { Id = id }).ToList();
 
-        // Ore assegnate (dalle phase_assignments, raggruppate per reparto fase o reparto dipendente)
+        // Ore assegnate (dalle phase_assignments, raggruppate per reparto fase o reparto dipendente).
+        // Per il reparto del dipendente: priorità is_primary, poi is_responsible, poi qualsiasi (MIN id).
         var assignedByDept = c.Query<(string Code, string Name, decimal Hours)>(@"
             SELECT COALESCE(d.code, ed.code, 'TRASV') AS code,
                    COALESCE(d.name, ed.name, 'Trasversale') AS name,
@@ -994,7 +1110,12 @@ public class ProjectsController : ControllerBase
             FROM phase_assignments pa
             JOIN project_phases pp ON pp.id = pa.project_phase_id
             LEFT JOIN departments d ON d.id = pp.department_id
-            LEFT JOIN employee_departments empd ON empd.employee_id = pa.employee_id AND empd.is_primary = 1
+            LEFT JOIN (
+                SELECT employee_id, department_id,
+                       ROW_NUMBER() OVER (PARTITION BY employee_id
+                                          ORDER BY is_primary DESC, is_responsible DESC, id) AS rn
+                FROM employee_departments
+            ) empd ON empd.employee_id = pa.employee_id AND empd.rn = 1
             LEFT JOIN departments ed ON ed.id = empd.department_id
             WHERE pp.project_id = @Id
             GROUP BY COALESCE(d.code, ed.code, 'TRASV'), COALESCE(d.name, ed.name, 'Trasversale')", new { Id = id }).ToList();
@@ -1012,24 +1133,40 @@ public class ProjectsController : ControllerBase
                        COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
                        1 AS TotalPhases,
                        CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
-                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED'), 0) AS MaterialCost
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'ANN'), 0) AS MaterialCost
                 FROM project_phases pp
                 LEFT JOIN departments d ON d.id = pp.department_id
                 WHERE pp.project_id = @Id AND pp.department_id IS NOT NULL
 
                 UNION ALL
 
-                -- Fasi trasversali: ore attribuite al reparto primario del dipendente
-                SELECT COALESCE(ed.code, 'TRASV') AS dept_code,
-                       COALESCE(ed.name, 'Trasversale') AS dept_name,
-                       SUM(te.hours) AS HoursWorked,
+                -- Fasi senza department_id: ore attribuite al PRIMO reparto della sezione di costo della fase
+                -- (snapshot-aware: usa pp.cost_section_template_id, fallback su phase_templates).
+                -- Se la sezione non ha reparti o la fase non ha sezione → fallback al reparto primario del dipendente.
+                SELECT COALESCE(dsec.code, ed.code, 'TRASV') AS dept_code,
+                       COALESCE(dsec.name, ed.name, 'Trasversale') AS dept_name,
+                       te.hours AS HoursWorked,
                        0 AS TotalPhases, 0 AS CompletedPhases, 0 AS MaterialCost
                 FROM timesheet_entries te
                 JOIN project_phases pp ON pp.id = te.project_phase_id
-                LEFT JOIN employee_departments empd ON empd.employee_id = te.employee_id AND empd.is_primary = 1
+                LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
+                LEFT JOIN project_cost_sections pcs
+                     ON pcs.project_id = pp.project_id
+                    AND pcs.template_id = COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)
+                LEFT JOIN (
+                    SELECT pcsd.project_cost_section_id, MIN(pcsd.department_id) AS department_id
+                    FROM project_cost_section_departments pcsd
+                    GROUP BY pcsd.project_cost_section_id
+                ) firstdept ON firstdept.project_cost_section_id = pcs.id
+                LEFT JOIN departments dsec ON dsec.id = firstdept.department_id
+                LEFT JOIN (
+                    SELECT employee_id, department_id,
+                           ROW_NUMBER() OVER (PARTITION BY employee_id
+                                              ORDER BY is_primary DESC, is_responsible DESC, id) AS rn
+                    FROM employee_departments
+                ) empd ON empd.employee_id = te.employee_id AND empd.rn = 1
                 LEFT JOIN departments ed ON ed.id = empd.department_id
                 WHERE pp.project_id = @Id AND pp.department_id IS NULL
-                GROUP BY ed.code, ed.name
 
                 UNION ALL
 
@@ -1038,7 +1175,7 @@ public class ProjectsController : ControllerBase
                        0 AS HoursWorked,
                        1 AS TotalPhases,
                        CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
-                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'CANCELLED'), 0) AS MaterialCost
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'ANN'), 0) AS MaterialCost
                 FROM project_phases pp
                 WHERE pp.project_id = @Id AND pp.department_id IS NULL
             ) sub
@@ -1074,13 +1211,13 @@ public class ProjectsController : ControllerBase
         // Ultimi 10 inserimenti timesheet
         data.RecentEntries = c.Query<RecentTimesheetEntry>(@"
             SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
-                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+                   COALESCE(NULLIF(pp.custom_name,''), pp.name, pt.name) AS PhaseName,
                    te.work_date AS WorkDate, te.hours, te.entry_type AS EntryType,
                    COALESCE(te.notes, '') AS Notes
             FROM timesheet_entries te
             JOIN employees e ON e.id = te.employee_id
             JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
             WHERE pp.project_id = @Id
             ORDER BY te.work_date DESC, te.id DESC
             LIMIT 10", new { Id = id }).ToList();
@@ -1115,9 +1252,10 @@ public class ProjectsController : ControllerBase
             ORDER BY Year, Week", new { Id = id }).ToList();
 
         // ── Gantt fasi ───────────────────────────────────────────
+        // Snapshot-aware: LEFT JOIN + fallback pp.name per fasi locali (phase_template_id NULL)
         data.PhaseGantt = c.Query<PhaseGanttItem>(@"
             SELECT pp.id AS PhaseId,
-                   COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+                   COALESCE(NULLIF(pp.custom_name,''), pp.name, pt.name) AS PhaseName,
                    COALESCE(d.code, 'TRASV') AS DepartmentCode,
                    pp.status AS Status,
                    pp.progress_pct AS ProgressPct,
@@ -1127,21 +1265,21 @@ public class ProjectsController : ControllerBase
                    pp.end_date AS EndDate,
                    pp.sort_order AS SortOrder
             FROM project_phases pp
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
             LEFT JOIN departments d ON d.id = pp.department_id
             WHERE pp.project_id = @Id
             ORDER BY pp.sort_order", new { Id = id }).ToList();
 
         // ── Scadenze prossime (fasi non completate con end_date) ─
         data.Deadlines = c.Query<UpcomingDeadline>(@"
-            SELECT COALESCE(NULLIF(pp.custom_name,''), pt.name) AS PhaseName,
+            SELECT COALESCE(NULLIF(pp.custom_name,''), pp.name, pt.name) AS PhaseName,
                    COALESCE(d.code, 'TRASV') AS DepartmentCode,
                    pp.end_date AS Deadline,
                    DATEDIFF(pp.end_date, CURDATE()) AS DaysRemaining,
                    pp.status AS Status,
                    pp.progress_pct AS ProgressPct
             FROM project_phases pp
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
             LEFT JOIN departments d ON d.id = pp.department_id
             WHERE pp.project_id = @Id
               AND pp.end_date IS NOT NULL

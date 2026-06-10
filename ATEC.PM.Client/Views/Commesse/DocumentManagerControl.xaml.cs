@@ -1,4 +1,6 @@
 using System.Windows.Media;
+using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 using Microsoft.Win32;
 
 namespace ATEC.PM.Client.UserControls;
@@ -30,12 +32,14 @@ public partial class DocumentManagerControl : UserControl
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-                _serverPath = doc.RootElement.GetProperty("data").GetProperty("serverPath").GetString() ?? "";
+            ProjectSaveRequest? project = await ApiClient.GetDataAsync<ProjectSaveRequest>($"/api/projects/{_projectId}");
+            if (project != null)
+                _serverPath = project.ServerPath;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading project server path: {ex}");
+        }
     }
 
     // ═══ NAVIGATION ═══
@@ -52,13 +56,10 @@ public partial class DocumentManagerControl : UserControl
         try
         {
             string encoded = Uri.EscapeDataString(_currentSubPath);
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/files?subPath={encoded}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            _currentItems = JsonSerializer.Deserialize<List<FileItem>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            List<FileItem>? items = await ApiClient.GetDataAsync<List<FileItem>>(
+                $"/api/projects/{_projectId}/files?subPath={encoded}");
+            if (items == null) return;
+            _currentItems = items;
 
             var display = _currentItems.Select(i => new
             {
@@ -151,7 +152,7 @@ public partial class DocumentManagerControl : UserControl
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(fullPath) { UseShellExecute = true });
         }
-        catch (Exception ex) { MessageBox.Show($"Impossibile aprire: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Impossibile aprire: {ex.Message}"); }
     }
 
     // ═══ UPLOAD ═══
@@ -240,16 +241,15 @@ public partial class DocumentManagerControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { subPath = _currentSubPath, folderName = name },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/create-subfolder", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             { 
                 await LoadFiles();
                 FilesChanged?.Invoke();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg, "Errore");
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     // ═══ APRI IN EXPLORER ═══
@@ -263,7 +263,7 @@ public partial class DocumentManagerControl : UserControl
         if (Directory.Exists(fullPath))
             System.Diagnostics.Process.Start("explorer.exe", fullPath);
         else
-            MessageBox.Show("Cartella non trovata.");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Cartella non trovata.");
     }
 
     // ═══ CONTEXT MENU ═══
@@ -291,7 +291,7 @@ public partial class DocumentManagerControl : UserControl
                 txtStatus.Text = $"Scaricato: {item.Name}";
             }
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void CtxRename_Click(object sender, RoutedEventArgs e)
@@ -307,16 +307,15 @@ public partial class DocumentManagerControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { oldPath = item.RelativePath, newName },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/rename", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 await LoadFiles();
                 FilesChanged?.Invoke();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg, "Errore");
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void CtxDelete_Click(object sender, RoutedEventArgs e)
@@ -325,7 +324,7 @@ public partial class DocumentManagerControl : UserControl
         FileItem item = _currentItems[dgFiles.SelectedIndex];
 
         string tipo = item.IsFolder ? "la cartella" : "il file";
-        if (MessageBox.Show($"Eliminare {tipo} \"{item.Name}\"?{(item.IsFolder ? "\nTutto il contenuto verrà eliminato." : "")}",
+        if (ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Eliminare {tipo} \"{item.Name}\"?{(item.IsFolder ? "\nTutto il contenuto verrà eliminato." : "")}",
             "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         try
@@ -333,16 +332,15 @@ public partial class DocumentManagerControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { itemPath = item.RelativePath },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/delete-item", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             { 
             await LoadFiles();
             FilesChanged?.Invoke();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg, "Errore");
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     private async void CtxMove_Click(object sender, RoutedEventArgs e)
@@ -358,16 +356,15 @@ public partial class DocumentManagerControl : UserControl
             string jsonBody = JsonSerializer.Serialize(new { sourcePath = item.RelativePath, destinationFolder = destFolder },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/move-item", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             {
                 await LoadFiles();
                 FilesChanged?.Invoke();
             }
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(msg, "Errore");
         }
-        catch (Exception ex) { MessageBox.Show($"Errore: {ex.Message}"); }
+        catch (Exception ex) { ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}"); }
     }
 
     // ═══ HELPERS ═══

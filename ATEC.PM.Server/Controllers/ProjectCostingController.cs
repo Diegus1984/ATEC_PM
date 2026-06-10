@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/projects/{projectId}/costing")]
 [Authorize]
+// Dati economici (costi/margini commessa): visibili solo da livello PM in su (feature data.costs).
+[RequireFeature("data.costs")]
 public class ProjectCostingController : ControllerBase
 {
     private readonly DbService _db;
@@ -102,139 +105,17 @@ public class ProjectCostingController : ControllerBase
     public IActionResult GetAvailableTemplates(int projectId)
     {
         using var c = _db.Open();
-
-        // Gruppi template attivi
-        var allGroups = c.Query<CostSectionGroupDto>(
-            "SELECT id, name, sort_order AS SortOrder, is_active AS IsActive FROM cost_section_groups WHERE is_active=1 ORDER BY sort_order").ToList();
-
-        // Sezioni template attive (tutte, non solo is_default)
-        var allTemplates = c.Query<CostSectionTemplateDto>(@"
-            SELECT t.id, t.name, t.section_type AS SectionType, t.group_id AS GroupId,
-                   g.name AS GroupName, t.is_default_project AS IsDefault, t.is_default_quote AS IsDefaultQuote, t.sort_order AS SortOrder
-            FROM cost_section_templates t
-            JOIN cost_section_groups g ON g.id = t.group_id
-            WHERE t.is_active=1
-            ORDER BY t.sort_order").ToList();
-
-        // Sezioni già presenti nella commessa (per template_id)
-        var usedTemplateIds = c.Query<int?>(
-            "SELECT template_id FROM project_cost_sections WHERE project_id=@projectId AND template_id IS NOT NULL",
-            new { projectId }).Where(id => id.HasValue).Select(id => id!.Value).ToHashSet();
-
-        // Gruppi già presenti nella commessa
-        var usedGroupNames = c.Query<string>(
-            "SELECT DISTINCT group_name FROM project_cost_sections WHERE project_id=@projectId",
-            new { projectId }).ToHashSet();
-
-        // Filtra: template non ancora usati
-        var availableTemplates = allTemplates.Where(t => !usedTemplateIds.Contains(t.Id)).ToList();
-
-        // Gruppi che hanno almeno un template disponibile O non sono ancora nella commessa
-        var availableGroups = allGroups.Where(g =>
-            !usedGroupNames.Contains(g.Name) ||
-            availableTemplates.Any(t => t.GroupId == g.Id)
-        ).ToList();
-
-        return Ok(ApiResponse<object>.Ok(new
-        {
-            Groups = availableGroups,
-            Templates = availableTemplates
-        }));
+        (List<CostSectionGroupDto> groups, List<CostSectionTemplateDto> templates) =
+            CostingDataService.GetAvailableTemplates(c, CostingDataService.CostingScope.Project, projectId);
+        return Ok(ApiResponse<object>.Ok(new { Groups = groups, Templates = templates }));
     }
-
-
 
     [HttpGet]
     public IActionResult GetAll(int projectId)
     {
         using var c = _db.Open();
-
-        int secCount = c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM project_cost_sections WHERE project_id=@projectId", new { projectId });
-
-        if (secCount == 0)
-            return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData { ProjectId = projectId, IsInitialized = false }));
-
-        var sections = c.Query<ProjectCostSectionDto>(@"
-            SELECT pcs.id, pcs.project_id AS ProjectId, pcs.template_id AS TemplateId, pcs.name,
-                   pcs.section_type AS SectionType, pcs.group_name AS GroupName,
-                   COALESCE(csg.bg_color, '#6B7280') AS GroupColor,
-                   pcs.sort_order AS SortOrder, pcs.is_enabled AS IsEnabled,
-                   pcs.contingency_pct AS ContingencyPct, pcs.margin_pct AS MarginPct,
-                   pcs.contingency_pinned AS ContingencyPinned, pcs.margin_pinned AS MarginPinned,
-                   COALESCE(pcs.is_shadowed,0) AS IsShadowed
-            FROM project_cost_sections pcs
-            LEFT JOIN cost_section_templates cst ON cst.id = pcs.template_id
-            LEFT JOIN cost_section_groups csg ON csg.id = cst.group_id
-            WHERE pcs.project_id=@projectId ORDER BY pcs.sort_order",
-            new { projectId }).ToList();
-
-        var sectionDepts = c.Query<(int SectionId, int DepartmentId)>(@"
-            SELECT project_cost_section_id AS SectionId, department_id AS DepartmentId
-            FROM project_cost_section_departments psd
-            JOIN project_cost_sections ps ON ps.id = psd.project_cost_section_id
-            WHERE ps.project_id=@projectId", new { projectId }).ToList();
-
-        foreach (var sec in sections)
-            sec.DepartmentIds = sectionDepts.Where(d => d.SectionId == sec.Id).Select(d => d.DepartmentId).ToList();
-
-        var allResources = c.Query<ProjectCostResourceDto>(@"
-            SELECT r.id, r.section_id AS SectionId, r.employee_id AS EmployeeId,
-                   r.resource_name AS ResourceName,
-                   r.work_days AS WorkDays, r.hours_per_day AS HoursPerDay, r.hourly_cost AS HourlyCost,
-                   r.markup_value AS MarkupValue,
-                   r.num_trips AS NumTrips, r.km_per_trip AS KmPerTrip, r.cost_per_km AS CostPerKm,
-                   r.daily_food AS DailyFood, r.daily_hotel AS DailyHotel,
-                   r.allowance_days AS AllowanceDays, r.daily_allowance AS DailyAllowance,
-                   r.sort_order AS SortOrder
-            FROM project_cost_resources r
-            JOIN project_cost_sections s ON s.id = r.section_id
-            WHERE s.project_id=@projectId ORDER BY r.sort_order",
-            new { projectId }).ToList();
-
-        foreach (var sec in sections)
-            sec.Resources = allResources.Where(r => r.SectionId == sec.Id).ToList();
-
-        var matSections = c.Query<ProjectMaterialSectionDto>(@"
-            SELECT id, project_id AS ProjectId, category_id AS CategoryId, name,
-                   markup_value AS MarkupValue, commission_markup AS CommissionMarkup,
-                   sort_order AS SortOrder, is_enabled AS IsEnabled
-            FROM project_material_sections WHERE project_id=@projectId ORDER BY sort_order",
-            new { projectId }).ToList();
-
-        var allItems = c.Query<ProjectMaterialItemDto>(@"
-            SELECT i.id, i.section_id AS SectionId, i.parent_item_id AS ParentItemId,
-                   i.description AS Description,
-                   i.quantity AS Quantity, i.unit_cost AS UnitCost,
-                   i.markup_value AS MarkupValue, i.item_type AS ItemType,
-                   i.sort_order AS SortOrder,
-                   i.contingency_pct AS ContingencyPct, i.margin_pct AS MarginPct,
-                   i.contingency_pinned AS ContingencyPinned, i.margin_pinned AS MarginPinned,
-                   COALESCE(i.is_shadowed,0) AS IsShadowed
-            FROM project_material_items i
-            JOIN project_material_sections s ON s.id = i.section_id
-            WHERE s.project_id=@projectId ORDER BY i.sort_order, i.id",
-            new { projectId }).ToList();
-
-        foreach (var ms in matSections)
-            ms.Items = allItems.Where(i => i.SectionId == ms.Id).ToList();
-
-        var pricing = c.QueryFirstOrDefault<ProjectPricingDto>(@"
-            SELECT id, project_id AS ProjectId,
-                   contingency_pct AS ContingencyPct,
-                   negotiation_margin_pct AS NegotiationMarginPct,
-                   travel_markup AS TravelMarkup, allowance_markup AS AllowanceMarkup
-            FROM project_pricing WHERE project_id=@projectId",
-            new { projectId }) ?? new ProjectPricingDto { ProjectId = projectId };
-
-        return Ok(ApiResponse<ProjectCostingData>.Ok(new ProjectCostingData
-        {
-            ProjectId = projectId,
-            IsInitialized = true,
-            CostSections = sections,
-            MaterialSections = matSections,
-            Pricing = pricing
-        }));
+        ProjectCostingData data = CostingDataService.LoadProject(c, projectId);
+        return Ok(ApiResponse<ProjectCostingData>.Ok(data));
     }
 
     // ══════════════════════════════════════════════════════════════

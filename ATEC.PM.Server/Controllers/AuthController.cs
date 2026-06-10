@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Dapper;
@@ -42,6 +43,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public IActionResult Login([FromBody] LoginRequest req)
     {
         string key = (req.Username ?? "").ToLower().Trim();
@@ -137,7 +139,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("set-credentials")]
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "ADMIN")]
+    [Authorize(Roles = "ADMIN")]
     public IActionResult SetCredentials([FromBody] SetCredentialsRequest req)
     {
         using var c = _db.Open();
@@ -160,7 +162,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("change-password")]
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize]
     public IActionResult ChangePassword([FromBody] ChangePasswordRequest req)
     {
         int employeeId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);

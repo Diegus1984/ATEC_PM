@@ -1,15 +1,18 @@
 using MySqlConnector;
 using Dapper;
+using Microsoft.Extensions.Logging;
 
 namespace ATEC.PM.Server.Services;
 
 public class DbService
 {
     private readonly string _cs;
+    private readonly ILogger<DbService> _logger;
 
-    public DbService(IConfiguration config)
+    public DbService(IConfiguration config, ILogger<DbService> logger)
     {
         _cs = config.GetConnectionString("Default")!;
+        _logger = logger;
     }
 
     public MySqlConnection Open()
@@ -65,10 +68,29 @@ public class DbService
         Console.WriteLine($"[DB] Database '{dbName}' verificato/creato.");
     }
 
-    public void InitDatabase()
+    public void InitDatabase(bool productionMode = false)
     {
+        _logger.LogInformation("[InitDatabase] Avvio verifica/creazione schema (mode={Mode})...",
+            productionMode ? "PRODUCTION" : "DEVELOPMENT");
         EnsureDatabaseExists();
         using var c = Open();
+
+        EnsureSchemaMigrationsTable(c);
+
+        if (productionMode)
+        {
+            int currentVersion = GetSchemaVersion(c);
+            _logger.LogInformation("[InitDatabase] Schema versione corrente: {Version}", currentVersion);
+            ApplyVersionedMigrations(c, currentVersion);
+
+            // Modulo Preventivi/Catalogo
+            new QuoteDbService(this).ApplyMigrations(c);
+
+            int prodTableCount = c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()");
+            _logger.LogInformation("[InitDatabase] Schema verificato: {TableCount} tabelle presenti", prodTableCount);
+            return;
+        }
 
         // ══════════════════════════════════════════════════════════
         // LIVELLO 0 — Tabelle senza dipendenze
@@ -103,7 +125,8 @@ public class DbService
             password_hash VARCHAR(255) DEFAULT '',
             user_role VARCHAR(20) DEFAULT 'TECH',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_emp_status (status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS customers (
@@ -162,6 +185,60 @@ public class DbService
             sort_order INT NOT NULL DEFAULT 0,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Stati DDP (etichetta + colori riga/combo, editabili da Conf. DDP).
+        // La chiave (status_key) è il valore salvato in bom_items.item_status: NON va cambiata.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_statuses (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            status_key VARCHAR(30) NOT NULL UNIQUE,
+            label VARCHAR(100) NOT NULL,
+            color_bg VARCHAR(9) NOT NULL DEFAULT '#CCCCCC',
+            color_fg VARCHAR(9) NOT NULL DEFAULT '#000000',
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Seed delle causali DDP reali (legenda ATEC). INSERT IGNORE su status_key:
+        // idempotente, NON sovrascrive le modifiche fatte dall'utente. I gruppi condividono il colore.
+        c.Execute(@"INSERT IGNORE INTO ddp_statuses (status_key, label, color_bg, color_fg, sort_order) VALUES
+            ('ANN',  'ANNULLATO',                                       '#000000', '#FFFFFF', 1),
+            ('SOSP', 'SOSPESO',                                         '#000000', '#FFFFFF', 2),
+            ('RAM',  'RIMESSO A MAGAZZINO',                             '#000000', '#FFFFFF', 3),
+            ('SOST', 'SOSTITUITO',                                      '#000000', '#FFFFFF', 4),
+            ('CON',  'CONSEGNATO',                                      '#00B050', '#FFFFFF', 5),
+            ('COS',  'COSTRUITO',                                       '#00B050', '#FFFFFF', 6),
+            ('DISP', 'DISPONIBILE',                                     '#00B050', '#FFFFFF', 7),
+            ('DC',   'DA COSTRUIRE',                                    '#006400', '#FFFFFF', 8),
+            ('DO',   'DA ORDINARE',                                     '#FF0000', '#FFFFFF', 9),
+            ('ASS',  'ASSEGNATO AL MONTATORE',                          '#B4B4B4', '#000000', 10),
+            ('CHEK', 'MAT. CHE NECESSITA CONTROLLO TECNICO/COMMERCIALE','#8B008B', '#FFFFFF', 11),
+            ('IO',   'IN ORDINE',                                       '#FFFF00', '#000000', 12),
+            ('PAR',  'PARZIALMENTE CONSEGNATO o COSTRUITO',             '#7030A0', '#FFFFFF', 13),
+            ('RO',   'RICHIESTA OFFERTA',                               '#FFC000', '#000000', 14),
+            ('VER',  'VERIFICARE SE DISPONIBILE A MAG',                 '#00B0F0', '#FFFFFF', 15),
+            ('SPED', 'SPEDITO AL CLIENTE O AL FORNITORE DI SERVIZI',    '#D9D9D9', '#000000', 16),
+            ('MOD',  'INVIATO A MODULA - MAG',                          '#ADD8E6', '#000000', 17)");
+
+        // Aggregazioni di stato DDP (matrice Stati × Aggregazioni, editabile da "Aggregazioni DDP").
+        // kind: SET=unione stati · ALL=tutti (conteggio per stato) · DATED=stati+data prev. · SUBGROUPS=7 card.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_aggregations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(10) NOT NULL UNIQUE,
+            name VARCHAR(150) NOT NULL,
+            description VARCHAR(500) DEFAULT '',
+            kind VARCHAR(20) NOT NULL DEFAULT 'SET',
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_aggregation_states (
+            aggregation_id INT NOT NULL,
+            status_key VARCHAR(30) NOT NULL,
+            PRIMARY KEY (aggregation_id, status_key),
+            FOREIGN KEY (aggregation_id) REFERENCES ddp_aggregations(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS material_categories (
@@ -356,7 +433,8 @@ public class DbService
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (phase_template_id) REFERENCES phase_templates(id),
-            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+            FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+            INDEX idx_pp_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow (
@@ -364,6 +442,7 @@ public class DbService
             project_id INT NOT NULL UNIQUE,
             payment_amount DECIMAL(12,2) DEFAULT 0,
             month_count INT DEFAULT 13,
+            start_date DATE NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -376,7 +455,9 @@ public class DbService
             total_amount DECIMAL(12,2) DEFAULT 0,
             notes VARCHAR(500) DEFAULT '',
             sort_order INT DEFAULT 0,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            linked_source VARCHAR(100) NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_pcc_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cashflow_data (
@@ -398,7 +479,8 @@ public class DbService
             created_by INT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (created_by) REFERENCES employees(id)
+            FOREIGN KEY (created_by) REFERENCES employees(id),
+            INDEX idx_pch_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_chat_participants (
@@ -422,7 +504,8 @@ public class DbService
             attachment_path VARCHAR(500) DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES project_chats(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id)
+            FOREIGN KEY (employee_id) REFERENCES employees(id),
+            INDEX idx_pcm_chat (chat_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS bom_items (
@@ -437,7 +520,7 @@ public class DbService
             unit_cost DECIMAL(10,2) DEFAULT 0,
             supplier_id INT NULL,
             manufacturer VARCHAR(200) DEFAULT '',
-            item_status VARCHAR(20) DEFAULT 'TO_ORDER',
+            item_status VARCHAR(20) DEFAULT 'DO',
             requested_by VARCHAR(100) DEFAULT '',
             danea_ref VARCHAR(100) DEFAULT '',
             purchase_order VARCHAR(100) DEFAULT '',
@@ -448,9 +531,11 @@ public class DbService
             ddp_type VARCHAR(20) DEFAULT 'COMMERCIAL',
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-            FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL
+            FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL,
+            INDEX idx_bom_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
@@ -466,7 +551,8 @@ public class DbService
             file_size BIGINT DEFAULT 0,
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_doc_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS extra_costs (
@@ -481,7 +567,8 @@ public class DbService
             receipt_ref VARCHAR(100) DEFAULT '',
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_ec_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_sections (
@@ -496,7 +583,9 @@ public class DbService
             contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
+            FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL,
+            INDEX idx_pcs_project (project_id, is_enabled),
+            INDEX idx_pcs_template (template_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_section_departments (
@@ -525,7 +614,8 @@ public class DbService
             daily_allowance DECIMAL(8,2) NOT NULL DEFAULT 0,
             sort_order INT NOT NULL DEFAULT 0,
             FOREIGN KEY (section_id) REFERENCES project_cost_sections(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL,
+            INDEX idx_pcr_section (section_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_material_sections (
@@ -538,19 +628,23 @@ public class DbService
             sort_order INT NOT NULL DEFAULT 0,
             is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES material_categories(id) ON DELETE SET NULL
+            FOREIGN KEY (category_id) REFERENCES material_categories(id) ON DELETE SET NULL,
+            INDEX idx_pms_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_material_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             section_id INT NOT NULL,
+            parent_item_id INT NULL,
             description VARCHAR(500) NOT NULL DEFAULT '',
             quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
             unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
             markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
             item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
             sort_order INT NOT NULL DEFAULT 0,
-            FOREIGN KEY (section_id) REFERENCES project_material_sections(id) ON DELETE CASCADE
+            FOREIGN KEY (section_id) REFERENCES project_material_sections(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_item_id) REFERENCES project_material_items(id) ON DELETE CASCADE,
+            INDEX idx_pmi_section (section_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_pricing (
@@ -576,7 +670,9 @@ public class DbService
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_phase_id) REFERENCES project_phases(id) ON DELETE CASCADE,
-            FOREIGN KEY (employee_id) REFERENCES employees(id)
+            FOREIGN KEY (employee_id) REFERENCES employees(id),
+            INDEX idx_pa_phase (project_phase_id),
+            INDEX idx_pa_employee (employee_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS timesheet_entries (
@@ -589,7 +685,9 @@ public class DbService
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees(id),
-            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id)
+            FOREIGN KEY (project_phase_id) REFERENCES project_phases(id),
+            INDEX idx_te_phase_date (project_phase_id, work_date),
+            INDEX idx_te_employee (employee_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ══════════════════════════════════════════════════════════
@@ -663,6 +761,34 @@ public class DbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ══════════════════════════════════════════════════════════
+        // TEMPLATE CARTELLE COMMESSE
+        // ══════════════════════════════════════════════════════════
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_template_folders (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            parent_id INT NULL,
+            name VARCHAR(200) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_id) REFERENCES project_template_folders(id) ON DELETE CASCADE,
+            INDEX idx_ptf_parent (parent_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_template_files (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            folder_id INT NOT NULL,
+            file_name VARCHAR(300) NOT NULL,
+            disk_path VARCHAR(500) NOT NULL,
+            file_size BIGINT NOT NULL DEFAULT 0,
+            uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            uploaded_by INT NULL,
+            FOREIGN KEY (folder_id) REFERENCES project_template_folders(id) ON DELETE CASCADE,
+            FOREIGN KEY (uploaded_by) REFERENCES employees(id) ON DELETE SET NULL,
+            INDEX idx_ptfi_folder (folder_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ══════════════════════════════════════════════════════════
         // SISTEMA PERMESSI A LIVELLI (stile VisiWin7)
         // ══════════════════════════════════════════════════════════
 
@@ -706,9 +832,7 @@ public class DbService
                 ('nav.dashboard',         'Dashboard',               'navigation', 0, 'HIDDEN'),
                 ('nav.timesheet',         'Timesheet',               'navigation', 0, 'HIDDEN'),
                 ('nav.commesse',          'Commesse',                'navigation', 0, 'HIDDEN'),
-                ('nav.preventivi_nuovo',  'Preventivi (Nuovo)',      'navigation', 1, 'HIDDEN'),
                 ('nav.preventivi',        'Preventivi',              'navigation', 2, 'HIDDEN'),
-                ('nav.offerte',           'Offerte',                 'navigation', 2, 'HIDDEN'),
                 ('nav.cat_preventivi',    'Cat. Preventivi',         'navigation', 2, 'HIDDEN'),
                 ('nav.clienti',           'Clienti',                 'navigation', 2, 'HIDDEN'),
                 ('nav.fornitori',         'Fornitori',               'navigation', 2, 'HIDDEN'),
@@ -718,6 +842,7 @@ public class DbService
                 ('nav.utenti',            'Utenti',                  'navigation', 3, 'HIDDEN'),
                 ('nav.config_sezioni',    'Configurazione Sezioni',  'navigation', 3, 'HIDDEN'),
                 ('nav.ddp_destinazioni',  'Destinazioni DDP',        'navigation', 1, 'HIDDEN'),
+                ('nav.project_templates', 'Template Commesse',       'navigation', 2, 'HIDDEN'),
                 ('nav.backup',            'Backup DB',               'navigation', 3, 'HIDDEN'),
                 ('nav.permessi',          'Gestione Permessi',       'navigation', 3, 'HIDDEN'),
                 ('action.create_project', 'Crea Commessa',           'action',     2, 'DISABLED'),
@@ -726,7 +851,8 @@ public class DbService
                 ('data.budget',           'Dati Budget',             'data',       2, 'HIDDEN'),
                 ('data.costs',            'Dati Costi',              'data',       2, 'HIDDEN'),
                 ('data.revenue',          'Dati Ricavi',             'data',       2, 'HIDDEN'),
-                ('data.hourly_cost',      'Costo Orario',            'data',       3, 'HIDDEN')");
+                ('data.hourly_cost',      'Costo Orario',            'data',       3, 'HIDDEN'),
+                ('resources.edit',        'Modifica Allocazioni Risorse', 'action', 1, 'DISABLED')");
             Console.WriteLine("[DB] Seed auth_features completato.");
         }
 
@@ -744,8 +870,7 @@ public class DbService
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM app_config") == 0)
         {
             c.Execute(@"INSERT INTO app_config (config_key, config_value, description) VALUES
-                ('BasePath', 'C:\\ATEC_Commesse', 'Percorso base cartelle commesse'),
-                ('TemplatePath', 'C:\\ATEC_Commesse\\MASTER_TEMPLATE', 'Percorso cartella template')");
+                ('BasePath', 'C:\\ATEC_Commesse', 'Percorso base cartelle commesse')");
         }
 
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM employees") == 0)
@@ -760,118 +885,7 @@ public class DbService
         // ══════════════════════════════════════════════════════════
         // MIGRAZIONI su tabelle esistenti
         // ══════════════════════════════════════════════════════════
-
-        ApplyMigrations(c);
-
-        // Modulo Preventivi/Catalogo
-        new QuoteDbService(this).InitTables(c);
-        new QuoteDbService(this).ApplyMigrations(c);
-
-        Console.WriteLine("[DB] Inizializzato.");
-    }
-
-    private void ApplyMigrations(MySqlConnection c)
-    {
-        AddUniqueIndexIfMissing(c, "customers", "UQ_Customer_Vat", "vat_number");
-        AddUniqueIndexIfMissing(c, "suppliers", "UQ_Supplier_Vat", "vat_number");
-        AddColumnIfMissing(c, "project_phases", "start_date", "DATE NULL AFTER notes");
-        AddColumnIfMissing(c, "project_phases", "end_date", "DATE NULL AFTER start_date");
-        AddColumnIfMissing(c, "departments", "default_markup", "DECIMAL(5,3) NOT NULL DEFAULT 1.450 AFTER hourly_cost");
-        AddColumnIfMissing(c, "bom_items", "manufacturer", "VARCHAR(200) DEFAULT '' AFTER supplier_id");
-        AddColumnIfMissing(c, "bom_items", "requested_by", "VARCHAR(100) DEFAULT '' AFTER item_status");
-        AddColumnIfMissing(c, "bom_items", "danea_ref", "VARCHAR(100) DEFAULT '' AFTER requested_by");
-        AddColumnIfMissing(c, "bom_items", "destination", "VARCHAR(200) DEFAULT '' AFTER date_received");
-        AddColumnIfMissing(c, "bom_items", "ddp_type", "VARCHAR(20) DEFAULT 'COMMERCIAL' AFTER destination");
-        // Tabelle offer_* rimosse — migration solo su project_*
-        AddColumnIfMissing(c, "project_cost_sections", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER is_enabled");
-        AddColumnIfMissing(c, "project_cost_sections", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
-        AddColumnIfMissing(c, "project_cost_sections", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
-        AddColumnIfMissing(c, "project_cost_sections", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
-        AddColumnIfMissing(c, "project_material_items", "contingency_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER sort_order");
-        AddColumnIfMissing(c, "project_material_items", "margin_pct", "DECIMAL(7,4) NOT NULL DEFAULT 0 AFTER contingency_pct");
-        AddColumnIfMissing(c, "project_material_items", "contingency_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pct");
-        AddColumnIfMissing(c, "project_material_items", "margin_pinned", "BOOLEAN NOT NULL DEFAULT FALSE AFTER contingency_pinned");
-
-        // Shadow: nascondi voce e spalma costo
-        AddColumnIfMissing(c, "project_cost_sections", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
-        AddColumnIfMissing(c, "project_material_items", "is_shadowed", "BOOLEAN NOT NULL DEFAULT FALSE AFTER margin_pinned");
-
-        // Codex compositions: rimuovi UNIQUE constraint e colonna quantity (ogni riga = 1 pezzo)
-        DropIndexIfExists(c, "codex_compositions", "uq_parent_child");
-        DropColumnIfExists(c, "codex_compositions", "quantity");
-
-        // Colori gruppi centri di costo
-        AddColumnIfMissing(c, "cost_section_groups", "bg_color", "VARCHAR(10) NOT NULL DEFAULT '#3B82F6' AFTER name");
-        AddColumnIfMissing(c, "cost_section_groups", "text_color", "VARCHAR(10) NOT NULL DEFAULT '#FFFFFF' AFTER bg_color");
-
-        // Sdoppiamento is_default → is_default_project + is_default_quote
-        AddColumnIfMissing(c, "cost_section_templates", "is_default_quote", "BOOLEAN NOT NULL DEFAULT TRUE AFTER is_default");
-        // Rinomina is_default → is_default_project (se non già fatto)
-        try
-        {
-            int hasOld = c.ExecuteScalar<int>(@"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cost_section_templates' AND COLUMN_NAME='is_default'");
-            if (hasOld > 0)
-            {
-                c.Execute("ALTER TABLE cost_section_templates CHANGE COLUMN is_default is_default_project BOOLEAN NOT NULL DEFAULT TRUE");
-                Console.WriteLine("[DB Migration] Rinominata is_default → is_default_project su cost_section_templates");
-            }
-        }
-        catch { }
-
-        // Codex compositions: supporto figli da catalogo
-        AddColumnIfMissing(c, "codex_compositions", "child_catalog_id", "INT NULL AFTER child_codex_id");
-        // Rendere child_codex_id nullable (può essere NULL se figlio è da catalogo)
-        try { c.Execute("ALTER TABLE codex_compositions MODIFY child_codex_id INT NULL"); } catch { }
-
-        // ══════════════════════════════════════════════════════════
-        // INDICI PERFORMANCE — FK e colonne usate in JOIN/WHERE
-        // ══════════════════════════════════════════════════════════
-
-        // Timesheet: query più frequenti (weekly view, BudgetVsActual)
-        AddIndexIfMissing(c, "timesheet_entries", "idx_te_phase_date", "project_phase_id, work_date");
-        AddIndexIfMissing(c, "timesheet_entries", "idx_te_employee", "employee_id");
-
-        // Phase assignments: JOIN in LoadPhases, BudgetVsActual
-        AddIndexIfMissing(c, "phase_assignments", "idx_pa_phase", "project_phase_id");
-        AddIndexIfMissing(c, "phase_assignments", "idx_pa_employee", "employee_id");
-
-        // Project phases: caricamento fasi per commessa
-        AddIndexIfMissing(c, "project_phases", "idx_pp_project", "project_id");
-
-        // Cost sections: apertura costing e BudgetVsActual
-        AddIndexIfMissing(c, "project_cost_sections", "idx_pcs_project", "project_id, is_enabled");
-        AddIndexIfMissing(c, "project_cost_sections", "idx_pcs_template", "template_id");
-
-        // Cost resources: dettaglio risorse per sezione
-        AddIndexIfMissing(c, "project_cost_resources", "idx_pcr_section", "section_id");
-
-        // Material sections e items
-        AddIndexIfMissing(c, "project_material_sections", "idx_pms_project", "project_id");
-        AddIndexIfMissing(c, "project_material_items", "idx_pmi_section", "section_id");
-
-        // Cashflow
-        AddIndexIfMissing(c, "project_cashflow_categories", "idx_pcc_project", "project_id");
-
-        // Chat
-        AddIndexIfMissing(c, "project_chats", "idx_pch_project", "project_id");
-        AddIndexIfMissing(c, "project_chat_messages", "idx_pcm_chat", "chat_id");
-
-        // BOM, Documents, Extra costs
-        AddIndexIfMissing(c, "bom_items", "idx_bom_project", "project_id");
-        AddIndexIfMissing(c, "documents", "idx_doc_project", "project_id");
-        AddIndexIfMissing(c, "extra_costs", "idx_ec_project", "project_id");
-
-        // Soft-delete filter columns
-        AddIndexIfMissing(c, "employees", "idx_emp_status", "status");
-        AddIndexIfMissing(c, "customers", "idx_cust_active", "is_active");
-        AddIndexIfMissing(c, "suppliers", "idx_sup_active", "is_active");
-
-        // ══════════════════════════════════════════════════════════
-        // VIEW — Timesheet con sezione costo (per BudgetVsActual)
-        // ══════════════════════════════════════════════════════════
-
-        try
+try
         {
             c.Execute(@"CREATE OR REPLACE VIEW v_timesheet_with_section AS
                 SELECT
@@ -902,127 +916,216 @@ public class DbService
         {
             Console.WriteLine($"[DB Migration] Warning view: {ex.Message}");
         }
+
+        // Modulo Preventivi/Catalogo
+        new QuoteDbService(this).InitTables(c);
+        new QuoteDbService(this).ApplyMigrations(c);
+
+        // Modulo Gamma Robot (distinta schede/componenti per robot+quadro)
+        new GammaRobotDbService(this).InitTables(c);
+
+        // Modulo MoM (verbali di riunione → action item)
+        new MoMDbService(this).InitTables(c);
+
+        // Modulo Gestione Risorse (allocazioni op/flex/ferie su dipendenti)
+        new ResourcesDbService(this).InitTables(c);
+
+        // Migrazioni versionati (dopo CREATE TABLE idempotente in dev)
+        int devVersion = GetSchemaVersion(c);
+        ApplyVersionedMigrations(c, devVersion);
+
+        int tableCount = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()");
+        _logger.LogInformation("[InitDatabase] Schema verificato: {TableCount} tabelle presenti", tableCount);
     }
 
-    private void AddUniqueIndexIfMissing(MySqlConnection c, string table, string indexName, string column)
+    // ══════════════════════════════════════════════════════════════
+    // SCHEMA VERSIONING
+    // ══════════════════════════════════════════════════════════════
+
+    private const int LatestSchemaVersion = 7;
+
+    private static void EnsureSchemaMigrationsTable(MySqlConnection c)
     {
-        try
-        {
-            int exists = c.ExecuteScalar<int>(@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
-                WHERE TABLE_SCHEMA = DATABASE() 
-                  AND TABLE_NAME = @Table 
-                  AND INDEX_NAME = @Index",
-                new { Table = table, Index = indexName });
-
-            if (exists == 0)
-            {
-                c.Execute($@"
-                    DELETE t1 FROM `{table}` t1
-                    INNER JOIN `{table}` t2
-                    ON t1.`{column}` = t2.`{column}`
-                    AND t1.`{column}` != ''
-                    AND t1.id > t2.id");
-
-                c.Execute($"ALTER TABLE `{table}` ADD UNIQUE KEY `{indexName}` (`{column}`)");
-                Console.WriteLine($"[DB Migration] Aggiunto UNIQUE {indexName} su {table}.{column}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DB Migration] Warning: {indexName} su {table}: {ex.Message}");
-        }
+        c.Execute(@"CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INT NOT NULL PRIMARY KEY,
+            description VARCHAR(200) NOT NULL DEFAULT '',
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
-    private void AddColumnIfMissing(MySqlConnection c, string table, string column, string definition)
+    private static int GetSchemaVersion(MySqlConnection c)
     {
-        try
-        {
-            int exists = c.ExecuteScalar<int>(@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = @Table
-                  AND COLUMN_NAME = @Column",
-                new { Table = table, Column = column });
-
-            if (exists == 0)
-            {
-                c.Execute($"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition}");
-                Console.WriteLine($"[DB Migration] Aggiunta colonna {table}.{column}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DB Migration] Warning: {table}.{column}: {ex.Message}");
-        }
+        return c.ExecuteScalar<int>("SELECT COALESCE(MAX(version), 0) FROM schema_migrations");
     }
 
-    private void AddIndexIfMissing(MySqlConnection c, string table, string indexName, string columns)
+    private void ApplyVersionedMigrations(MySqlConnection c, int currentVersion)
     {
-        try
+        if (currentVersion >= LatestSchemaVersion)
         {
-            int exists = c.ExecuteScalar<int>(@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = @Table
-                  AND INDEX_NAME = @Index",
-                new { Table = table, Index = indexName });
+            _logger.LogInformation("[Migrations] Schema aggiornato (v{Version})", currentVersion);
+            return;
+        }
 
-            if (exists == 0)
+        // v1: aggiunge project_material_items.is_active (allineamento quote)
+        if (currentVersion < 1)
+        {
+            try
             {
-                c.Execute($"ALTER TABLE `{table}` ADD INDEX `{indexName}` ({columns})");
-                Console.WriteLine($"[DB Migration] Aggiunto indice {indexName} su {table}({columns})");
+                bool hasColumn = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'project_material_items'
+                      AND column_name = 'is_active'") > 0;
+
+                if (!hasColumn)
+                {
+                    c.Execute("ALTER TABLE project_material_items ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE");
+                    _logger.LogInformation("[Migration v1] Aggiunta colonna project_material_items.is_active");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (1, 'project_material_items.is_active')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v1] Errore (non bloccante): {Message}", ex.Message);
             }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DB Migration] Warning: indice {indexName} su {table}: {ex.Message}");
-        }
-    }
 
-    private void DropIndexIfExists(MySqlConnection c, string table, string indexName)
-    {
-        try
+        // v2: rimuove feature keys orfane (nav.preventivi_nuovo, nav.offerte)
+        if (currentVersion < 2)
         {
-            int exists = c.ExecuteScalar<int>(@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = @Table
-                  AND INDEX_NAME = @Index",
-                new { Table = table, Index = indexName });
-
-            if (exists > 0)
+            try
             {
-                c.Execute($"ALTER TABLE `{table}` DROP INDEX `{indexName}`");
-                Console.WriteLine($"[DB Migration] Rimosso indice {indexName} da {table}");
+                c.Execute("DELETE FROM auth_features WHERE feature_key IN ('nav.preventivi_nuovo', 'nav.offerte')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (2, 'cleanup orphan feature keys')");
+                _logger.LogInformation("[Migration v2] Rimosse feature keys orfane");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v2] Errore (non bloccante): {Message}", ex.Message);
             }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DB Migration] Warning: drop index {indexName} su {table}: {ex.Message}");
-        }
-    }
 
-    private void DropColumnIfExists(MySqlConnection c, string table, string column)
-    {
-        try
+        // v3: aggiunge feature key nav.project_templates
+        if (currentVersion < 3)
         {
-            int exists = c.ExecuteScalar<int>(@"
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = @Table
-                  AND COLUMN_NAME = @Column",
-                new { Table = table, Column = column });
-
-            if (exists > 0)
+            try
             {
-                c.Execute($"ALTER TABLE `{table}` DROP COLUMN `{column}`");
-                Console.WriteLine($"[DB Migration] Rimossa colonna {table}.{column}");
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.project_templates', 'Template Commesse', 'navigation', 2, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (3, 'nav.project_templates feature key')");
+                _logger.LogInformation("[Migration v3] Aggiunta feature key nav.project_templates");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v3] Errore (non bloccante): {Message}", ex.Message);
             }
         }
-        catch (Exception ex)
+
+        // v4: feature key resources.edit (gating scrittura allocazioni risorse: RESP_REPARTO+ )
+        if (currentVersion < 4)
         {
-            Console.WriteLine($"[DB Migration] Warning: drop column {table}.{column}: {ex.Message}");
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('resources.edit', 'Modifica Allocazioni Risorse', 'action', 1, 'DISABLED')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (4, 'resources.edit feature key')");
+                _logger.LogInformation("[Migration v4] Aggiunta feature key resources.edit");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v4] Errore (non bloccante): {Message}", ex.Message);
+            }
         }
+
+        // v5: bom_items.updated_at — concorrenza ottimistica della distinta DDP (real-time + anti lost-update)
+        if (currentVersion < 5)
+        {
+            try
+            {
+                bool hasColumn = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'bom_items'
+                      AND column_name = 'updated_at'") > 0;
+
+                if (!hasColumn)
+                {
+                    c.Execute("ALTER TABLE bom_items ADD COLUMN updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP");
+                    _logger.LogInformation("[Migration v5] Aggiunta colonna bom_items.updated_at");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (5, 'bom_items.updated_at')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v5] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v6: causali DDP reali — rimuove le 12 chiavi generiche seedate in precedenza (TO_ORDER, ecc.).
+        // Il seed con le 17 causali reali gira ad ogni avvio (INSERT IGNORE) nella creazione tabelle.
+        if (currentVersion < 6)
+        {
+            try
+            {
+                c.Execute(@"DELETE FROM ddp_statuses WHERE status_key IN
+                    ('TO_ORDER','ORDERED','DELIVERED','PARTIAL','TO_BUILD','RFQ',
+                     'TO_CHECK','CANCELLED','ASSIGNED','SHIPPED','TECH_CHECK','TO_MODULA')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (6, 'ddp_statuses causali reali')");
+                _logger.LogInformation("[Migration v6] Rimosse le causali DDP generiche (sostituite dal set reale)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v6] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v7: seed aggregazioni di stato DDP (matrice dall'Excel V53.1). Una sola volta: dopo, le modifiche
+        // dell'utente persistono (NON ri-seedato ad ogni avvio, a differenza di un INSERT IGNORE nella creazione tabelle).
+        if (currentVersion < 7)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO ddp_aggregations (code, name, description, kind, sort_order) VALUES
+                    ('A1','Conteggio per stato','Tutti gli stati conteggiati singolarmente (base di tutte le viste)','ALL',1),
+                    ('A2','Materiale Consegnato','CON+COS+DISP+ASS+MOD','SET',2),
+                    ('A3','Mat. Par. Cons.','Parzialmente consegnato/costruito (PAR)','SET',3),
+                    ('A4','Materiale in Consegna','Righe con Data prev. e stato NON consegnato (finestra/ritardo)','DATED',4),
+                    ('A5','Stati Avanzamento (7 card)','VER · CHEK · DO · RO · IO · DDP Stop(ANN+SOSP+RAM+SOST) · Sped-Mod(SPED+MOD)','SUBGROUPS',5),
+                    ('A6','Feedback Acquisti','VER+CHEK+DO+RO+PAR','SET',6),
+                    ('A7','Feedback Magazzino','CON+COS+DISP+PAR+MOD','SET',7),
+                    ('A8','Esclusione Dati Mancanti','Stati esclusi dall analisi di completezza','SET',8)");
+
+                var seed = new Dictionary<string, string[]>
+                {
+                    ["A1"] = new[] { "VER", "DISP", "RO", "DO", "IO", "PAR", "CON", "COS", "ASS", "CHEK", "SPED", "MOD", "ANN", "RAM", "SOSP", "SOST", "ND" },
+                    ["A2"] = new[] { "CON", "COS", "DISP", "ASS", "MOD" },
+                    ["A3"] = new[] { "PAR" },
+                    ["A4"] = new[] { "VER", "RO", "DO", "IO", "PAR", "CHEK", "SPED", "ANN", "RAM", "SOSP", "SOST", "ND" },
+                    ["A5"] = new[] { "VER", "CHEK", "DO", "RO", "IO", "ANN", "SOSP", "RAM", "SOST", "SPED", "MOD" },
+                    ["A6"] = new[] { "VER", "CHEK", "DO", "RO", "PAR" },
+                    ["A7"] = new[] { "CON", "COS", "DISP", "PAR", "MOD" },
+                    ["A8"] = new[] { "ANN", "SOSP", "RAM", "SOST", "DO", "CHEK", "IO", "RO" }
+                };
+                foreach (KeyValuePair<string, string[]> kv in seed)
+                {
+                    int aggId = c.ExecuteScalar<int>("SELECT id FROM ddp_aggregations WHERE code=@C", new { C = kv.Key });
+                    foreach (string st in kv.Value)
+                        c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A,@S)",
+                            new { A = aggId, S = st });
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (7, 'ddp aggregazioni stato')");
+                _logger.LogInformation("[Migration v7] Seed aggregazioni di stato DDP (A1-A8)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v7] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        _logger.LogInformation("[Migrations] Migrazioni applicate fino a v{Version}", LatestSchemaVersion);
     }
 }

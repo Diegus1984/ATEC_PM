@@ -29,14 +29,8 @@ public partial class CostMaterialItemDialog : Window
 
         try
         {
-            string json = await ApiClient.GetAsync(
+            List<string> items = await ApiClient.GetListAsync<string>(
                 $"/api/projects/{_projectId}/costing/material-items/suggestions?q={Uri.EscapeDataString(query)}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
-
-            List<string> items = JsonSerializer.Deserialize<List<string>>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
 
             if (items.Count > 0)
             {
@@ -120,14 +114,13 @@ public partial class CostMaterialItemDialog : Window
             }, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
 
             string result = await ApiClient.PostAsync($"/api/projects/{_projectId}/costing/material-items", json);
-            var doc = System.Text.Json.JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out _))
             {
                 DialogResult = true;
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = "Errore salvataggio.";
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }

@@ -54,14 +54,14 @@ public partial class CodexCompositionPage : Page
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/codex");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CodexListItem>>>(json, _jsonOpt);
-            if (response?.Success == true)
-                _allItems = response.Data ?? new();
+            string url = PagedApiHelper.BuildUrl("/api/codex", 1, 200, null);
+            PagedResult<CodexListItem>? pageData = await PagedApiHelper.GetPageAsync<CodexListItem>(url);
+            if (pageData != null)
+                _allItems = pageData.Items;
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore caricamento: {ex.Message}", "Errore",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore caricamento: {ex.Message}", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -83,18 +83,17 @@ public partial class CodexCompositionPage : Page
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/catalog");
-            var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            string url = PagedApiHelper.BuildUrl("/api/catalog", 1, 200, null);
+            PagedResult<CatalogItemListItem>? pageData = await PagedApiHelper.GetPageAsync<CatalogItemListItem>(url);
+            if (pageData != null)
             {
-                _catalogItems = JsonSerializer.Deserialize<List<CatalogItemListItem>>(
-                    doc.RootElement.GetProperty("data").GetRawText(), _jsonOpt) ?? new();
+                _catalogItems = pageData.Items;
                 _catalogLoaded = true;
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore caricamento catalogo: {ex.Message}", "Errore",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore caricamento catalogo: {ex.Message}", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         RefreshBottomPanel();
@@ -258,16 +257,16 @@ public partial class CodexCompositionPage : Page
 
         try
         {
-            string json = await ApiClient.GetAsync($"/api/codex/compositions/tree/{parentId}");
-            var response = JsonSerializer.Deserialize<ApiResponse<CompositionTreeNode>>(json, _jsonOpt);
+            CompositionTreeNode? tree = await ApiClient.GetDataAsync<CompositionTreeNode>(
+                $"/api/codex/compositions/tree/{parentId}");
 
-            if (response?.Success == true && response.Data != null)
+            if (tree != null)
             {
-                var rootNode = BuildTreeViewItem(response.Data, isRoot: true);
+                TreeViewItem rootNode = BuildTreeViewItem(tree, isRoot: true);
                 rootNode.IsExpanded = true;
                 tvComposition.Items.Add(rootNode);
 
-                int count = CountNodes(response.Data) - 1;
+                int count = CountNodes(tree) - 1;
                 txtStatus.Text = $"{count} componenti nella composizione";
             }
         }
@@ -521,12 +520,12 @@ public partial class CodexCompositionPage : Page
             if (response?.Success == true)
                 await LoadTree(_selectedParentId!.Value);
             else
-                MessageBox.Show(response?.Message ?? "Errore", "Attenzione",
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(response?.Message ?? "Errore", "Attenzione",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -644,13 +643,13 @@ public partial class CodexCompositionPage : Page
             }
             else
             {
-                MessageBox.Show(response?.Message ?? "Errore", "Attenzione",
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(response?.Message ?? "Errore", "Attenzione",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore",
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -664,7 +663,7 @@ public partial class CodexCompositionPage : Page
 
         int compositionId = (int)btn.Tag;
 
-        var result = MessageBox.Show(
+        var result = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             "Rimuovere questo elemento dalla composizione?",
             "Conferma rimozione", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
@@ -678,11 +677,11 @@ public partial class CodexCompositionPage : Page
             if (delResponse?.Success == true)
                 await LoadTree(_selectedParentId.Value);
             else
-                MessageBox.Show(delResponse?.Message ?? "Errore", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(delResponse?.Message ?? "Errore", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

@@ -1,16 +1,22 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using ATEC.PM.Client.Services;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace ATEC.PM.Client.UserControls;
 
 public partial class HtmlEditor : UserControl
 {
     private bool _isReady;
+    private bool _isInitializing;
     private string _pendingContent = "";
+    private Task? _initTask;
+    private WebView2? _webView;
 
     /// <summary>Evento scatenato quando il contenuto HTML cambia nell'editor.</summary>
     public event Action<string>? ContentChanged;
@@ -18,49 +24,132 @@ public partial class HtmlEditor : UserControl
     public HtmlEditor()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await InitWebView();
+        IsVisibleChanged += OnIsVisibleChanged;
+        Unloaded += (_, _) => TeardownWebView();
     }
 
-    private async System.Threading.Tasks.Task InitWebView()
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        if (IsVisible && !_isReady && !_isInitializing)
+            _ = EnsureInitializedAsync();
+    }
+
+    /// <summary>
+    /// Crea WebView2 e carica TinyMCE — solo al primo utilizzo (dialog visibile o SetContent/GetContent).
+    /// </summary>
+    public Task EnsureInitializedAsync()
+    {
+        if (_isReady)
+            return Task.CompletedTask;
+
+        if (_initTask != null)
+            return _initTask;
+
+        _initTask = InitWebViewCoreAsync();
+        return _initTask;
+    }
+
+    private async Task InitWebViewCoreAsync()
+    {
+        if (_isReady || _isInitializing)
+            return;
+
+        _isInitializing = true;
+        txtLoading.Visibility = Visibility.Visible;
+
         try
         {
-            string wvDataFolder = Path.Combine(Path.GetTempPath(), "ATEC_PM_WebView2");
-            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: wvDataFolder);
-            await webView.EnsureCoreWebView2Async(env);
+            CoreWebView2Environment env = await WebView2Host.GetEnvironmentAsync().ConfigureAwait(true);
 
-            // Pulisci cache per forzare reload di editor.html
-            await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(
-                CoreWebView2BrowsingDataKinds.DiskCache | CoreWebView2BrowsingDataKinds.CacheStorage);
+            WebView2 webView = new WebView2
+            {
+                DefaultBackgroundColor = System.Drawing.Color.White
+            };
+            editorHost.Children.Insert(0, webView);
+            _webView = webView;
+
+            await webView.EnsureCoreWebView2Async(env).ConfigureAwait(true);
 
             webView.CoreWebView2.WebMessageReceived += OnWebMessage;
 
-            string htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "tinymce", "editor.html");
-            if (File.Exists(htmlPath))
-            {
-                string cacheBust = $"?v={DateTime.Now.Ticks}";
-                webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri + cacheBust);
-                webView.CoreWebView2.NavigationCompleted += async (_, _) =>
-                {
-                    // Passa contenuto, API base URL e token a TinyMCE
-                    string escaped = JsonSerializer.Serialize(_pendingContent);
-                    string apiUrl = JsonSerializer.Serialize(App.ApiBaseUrl ?? "");
-                    string token = JsonSerializer.Serialize(App.Token ?? "");
-                    await webView.CoreWebView2.ExecuteScriptAsync(
-                        $"initEditor({escaped}, {apiUrl}, {token})");
-                    _isReady = true;
-                    txtLoading.Visibility = Visibility.Collapsed;
-                };
-            }
-            else
+            string htmlPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "Assets", "tinymce", "editor.html");
+
+            if (!File.Exists(htmlPath))
             {
                 txtLoading.Text = $"File editor non trovato: {htmlPath}";
+                return;
             }
+
+            long version = File.GetLastWriteTimeUtc(htmlPath).Ticks;
+            string cacheBust = $"?v={version}";
+            webView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri + cacheBust);
+
+            TaskCompletionSource<bool> navigationDone = new TaskCompletionSource<bool>();
+            EventHandler<CoreWebView2NavigationCompletedEventArgs>? onNavCompleted = null;
+            onNavCompleted = async (_, args) =>
+            {
+                if (webView.CoreWebView2 != null && onNavCompleted != null)
+                    webView.CoreWebView2.NavigationCompleted -= onNavCompleted;
+
+                if (!args.IsSuccess)
+                {
+                    txtLoading.Text = "Errore caricamento editor HTML.";
+                    navigationDone.TrySetResult(false);
+                    return;
+                }
+
+                CoreWebView2 core = webView.CoreWebView2
+                    ?? throw new InvalidOperationException("WebView2 non inizializzato.");
+                string escaped = JsonSerializer.Serialize(_pendingContent);
+                string apiUrl = JsonSerializer.Serialize(App.ApiBaseUrl ?? "");
+                string token = JsonSerializer.Serialize(App.Token ?? "");
+                await core.ExecuteScriptAsync(
+                    $"initEditor({escaped}, {apiUrl}, {token})").ConfigureAwait(true);
+
+                _isReady = true;
+                txtLoading.Visibility = Visibility.Collapsed;
+                navigationDone.TrySetResult(true);
+            };
+            webView.CoreWebView2.NavigationCompleted += onNavCompleted;
+
+            await navigationDone.Task.ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             txtLoading.Text = $"Errore WebView2: {ex.Message}";
         }
+        finally
+        {
+            _isInitializing = false;
+        }
+    }
+
+    private void TeardownWebView()
+    {
+        _isReady = false;
+        _isInitializing = false;
+        _initTask = null;
+
+        if (_webView == null)
+            return;
+
+        try
+        {
+            if (_webView.CoreWebView2 != null)
+                _webView.CoreWebView2.WebMessageReceived -= OnWebMessage;
+        }
+        catch
+        {
+            // ignore during shutdown
+        }
+
+        editorHost.Children.Remove(_webView);
+        _webView.Dispose();
+        _webView = null;
+
+        txtLoading.Visibility = Visibility.Visible;
+        txtLoading.Text = "Caricamento editor...";
     }
 
     private void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -68,7 +157,7 @@ public partial class HtmlEditor : UserControl
         try
         {
             string json = e.WebMessageAsJson;
-            var doc = JsonDocument.Parse(json);
+            JsonDocument doc = JsonDocument.Parse(json);
             string type = doc.RootElement.GetProperty("type").GetString() ?? "";
 
             if (type == "contentChanged")
@@ -77,25 +166,41 @@ public partial class HtmlEditor : UserControl
                 ContentChanged?.Invoke(html);
             }
         }
-        catch { }
-    }
-
-    /// <summary>Imposta il contenuto HTML nell'editor.</summary>
-    public async void SetContent(string html)
-    {
-        _pendingContent = html ?? "";
-        if (_isReady)
+        catch (Exception ex)
         {
-            string escaped = JsonSerializer.Serialize(_pendingContent);
-            await webView.CoreWebView2.ExecuteScriptAsync($"setContent({escaped})");
+            System.Diagnostics.Trace.WriteLine($"[HtmlEditor] Errore parsing messaggio web: {ex.Message}");
         }
     }
 
-    /// <summary>Ottiene il contenuto HTML corrente dall'editor.</summary>
-    public async System.Threading.Tasks.Task<string> GetContentAsync()
+    /// <summary>Imposta il contenuto HTML nell'editor.</summary>
+    public void SetContent(string html)
     {
-        if (!_isReady) return _pendingContent;
-        string result = await webView.CoreWebView2.ExecuteScriptAsync("getContent()");
+        _pendingContent = html ?? "";
+        if (_isReady && _webView?.CoreWebView2 != null)
+            _ = ApplyContentAsync();
+        else if (IsVisible)
+            _ = EnsureInitializedAsync();
+    }
+
+    private async Task ApplyContentAsync()
+    {
+        if (!_isReady || _webView?.CoreWebView2 == null)
+            return;
+
+        string escaped = JsonSerializer.Serialize(_pendingContent);
+        await _webView.CoreWebView2.ExecuteScriptAsync($"setContent({escaped})").ConfigureAwait(true);
+    }
+
+    /// <summary>Ottiene il contenuto HTML corrente dall'editor.</summary>
+    public async Task<string> GetContentAsync()
+    {
+        if (IsVisible && !_isReady)
+            await EnsureInitializedAsync().ConfigureAwait(true);
+
+        if (!_isReady || _webView?.CoreWebView2 == null)
+            return _pendingContent;
+
+        string result = await _webView.CoreWebView2.ExecuteScriptAsync("getContent()").ConfigureAwait(true);
         return JsonSerializer.Deserialize<string>(result) ?? "";
     }
 }

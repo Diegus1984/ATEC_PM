@@ -122,7 +122,16 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid>
+                <TextBlock
+                    x:Name="txtQuoteLocked"
+                    Margin="0,16,0,0"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="#059669"
+                    Visibility="Collapsed"
+                    Text="🔒 Valori ereditati dal Preventivo (Sola lettura)" />
+
+                <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="12" />

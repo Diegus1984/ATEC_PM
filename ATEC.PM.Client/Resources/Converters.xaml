@@ -18,6 +18,7 @@
     <conv:ItemTypeToBadgeColorConverter x:Key="ItemTypeToBadgeColor" />
 
     <!--  ========== CONVERTER NUMERICI ==========  -->
+    <conv:DecimalInputConverter x:Key="DecimalInput" />
     <conv:EuroCurrencyConverter x:Key="EuroCurrency" />
     <conv:MarkupToStringConverter x:Key="MarkupToString" />
     <conv:PctToStringConverter x:Key="PctToString" />

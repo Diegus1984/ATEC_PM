@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -31,49 +32,43 @@ public partial class EasyfattImportDialog : Window
         try
         {
             string encoded = Uri.EscapeDataString(filePath);
-            string json = await ApiClient.GetAsync($"/api/import/easyfatt/suppliers?filePath={encoded}");
-            JsonDocument doc = JsonDocument.Parse(json);
+            ApiResponse<EasyfattSuppliersPreviewDto>? previewResp = await ApiClient.GetApiAsync<EasyfattSuppliersPreviewDto>(
+                $"/api/import/easyfatt/suppliers?filePath={encoded}");
 
-            if (!doc.RootElement.GetProperty("success").GetBoolean())
+            if (previewResp == null || !previewResp.Success || previewResp.Data == null)
             {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore";
+                txtStatus.Text = previewResp?.Message ?? "Errore";
                 return;
             }
 
-            JsonElement data = doc.RootElement.GetProperty("data");
-            int totalFound = data.GetProperty("totalFound").GetInt32();
-            int newCount = data.GetProperty("newCount").GetInt32();
-            int dupCount = data.GetProperty("duplicateCount").GetInt32();
-
-            txtSummary.Text = $"Totale: {totalFound}  |  Nuovi: {newCount}  |  Duplicati: {dupCount}";
+            EasyfattSuppliersPreviewDto preview = previewResp.Data;
+            txtSummary.Text = $"Totale: {preview.TotalFound}  |  Nuovi: {preview.NewCount}  |  Duplicati: {preview.DuplicateCount}";
 
             _allRows.Clear();
-            JsonElement suppliers = data.GetProperty("suppliers");
-
-            foreach (JsonElement s in suppliers.EnumerateArray())
+            foreach (EasyfattSupplierDto s in preview.Suppliers)
             {
-                string status = s.GetProperty("status").GetString() ?? "NUOVO";
+                string status = s.Status ?? "NUOVO";
                 _allRows.Add(new ImportRow
                 {
                     IsSelected = status == "NUOVO",
-                    CompanyName = s.GetProperty("companyName").GetString() ?? "",
-                    ContactName = s.GetProperty("contactName").GetString() ?? "",
-                    Email = s.GetProperty("email").GetString() ?? "",
-                    Phone = s.GetProperty("phone").GetString() ?? "",
-                    Address = s.GetProperty("address").GetString() ?? "",
-                    VatNumber = s.GetProperty("vatNumber").GetString() ?? "",
-                    FiscalCode = s.GetProperty("fiscalCode").GetString() ?? "",
-                    Notes = s.GetProperty("notes").GetString() ?? "",
+                    CompanyName = s.CompanyName,
+                    ContactName = s.ContactName,
+                    Email = s.Email,
+                    Phone = s.Phone,
+                    Address = s.Address,
+                    VatNumber = s.VatNumber,
+                    FiscalCode = s.FiscalCode,
+                    Notes = s.Notes,
                     Status = status,
-                    ExistingId = s.GetProperty("existingId").GetInt32(),
-                    ExistingName = s.GetProperty("existingName").GetString() ?? "",
-                    Action = status == "NUOVO" ? "INSERT" : "SKIP"
+                    ExistingId = s.ExistingId,
+                    ExistingName = s.ExistingName,
+                    Action = string.IsNullOrEmpty(s.Action) ? (status == "NUOVO" ? "INSERT" : "SKIP") : s.Action
                 });
             }
 
             ApplyFilter();
             btnImport.IsEnabled = true;
-            txtStatus.Text = $"Caricati {totalFound} fornitori. Selezionare quelli da importare.";
+            txtStatus.Text = $"Caricati {preview.TotalFound} fornitori. Selezionare quelli da importare.";
         }
         catch (Exception ex)
         {
@@ -126,11 +121,11 @@ public partial class EasyfattImportDialog : Window
         List<ImportRow> toImport = _allRows.Where(r => r.IsSelected && r.Action != "SKIP").ToList();
         if (toImport.Count == 0)
         {
-            MessageBox.Show("Nessun fornitore selezionato.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Nessun fornitore selezionato.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        MessageBoxResult confirm = MessageBox.Show(
+        MessageBoxResult confirm = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Importare {toImport.Count} fornitori?\n\n" +
             $"INSERT: {toImport.Count(r => r.Action == "INSERT")}\n" +
             $"UPDATE: {toImport.Count(r => r.Action == "UPDATE")}",
@@ -164,25 +159,18 @@ public partial class EasyfattImportDialog : Window
 
             string jsonBody = JsonSerializer.Serialize(payload);
             string result = await ApiClient.PostAsync("/api/import/easyfatt/suppliers", jsonBody);
-            JsonDocument doc = JsonDocument.Parse(result);
 
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<EasyfattImportResultDto>(result, out EasyfattImportResultDto? importResult, out string errMsg)
+                && importResult != null)
             {
-                JsonElement d = doc.RootElement.GetProperty("data");
-                int imported = d.GetProperty("imported").GetInt32();
-                int updated = d.GetProperty("updated").GetInt32();
-                int skipped = d.GetProperty("skipped").GetInt32();
-
-                MessageBox.Show($"Import completato!\n\nInseriti: {imported}\nAggiornati: {updated}\nSaltati: {skipped}",
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Import completato!\n\nInseriti: {importResult.Imported}\nAggiornati: {importResult.Updated}\nSaltati: {importResult.Skipped}",
                     "Risultato", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 DialogResult = true;
                 Close();
             }
             else
-            {
-                txtStatus.Text = doc.RootElement.GetProperty("message").GetString() ?? "Errore import";
-            }
+                txtStatus.Text = errMsg ?? "Errore import";
         }
         catch (Exception ex)
         {

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
@@ -25,52 +26,46 @@ public partial class AuthLevelsPage : Page
     private async Task LoadAsync()
     {
         _loading = true;
+        txtStatus.Text = "Caricamento...";
         try
         {
             // Carica livelli
-            string levelsJson = await ApiClient.GetAsync("/api/auth-levels");
-            var levelsDoc = JsonDocument.Parse(levelsJson);
-            if (levelsDoc.RootElement.GetProperty("success").GetBoolean())
+            List<AuthLevelDto> levels = await ApiClient.GetListAsync<AuthLevelDto>("/api/auth-levels");
+            LevelOptions.Clear();
+            foreach (AuthLevelDto l in levels)
             {
-                LevelOptions.Clear();
-                foreach (var l in levelsDoc.RootElement.GetProperty("data").EnumerateArray())
+                LevelOptions.Add(new LevelOption
                 {
-                    LevelOptions.Add(new LevelOption
-                    {
-                        Value = l.GetProperty("levelValue").GetInt32(),
-                        Name = l.GetProperty("displayName").GetString() ?? ""
-                    });
-                }
-            }
-
-            // Carica feature
-            string json = await ApiClient.GetAsync("/api/auth-levels/features");
-            var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (!root.GetProperty("success").GetBoolean()) return;
-
-            _rows.Clear();
-            foreach (var f in root.GetProperty("data").EnumerateArray())
-            {
-                _rows.Add(new FeatureRowVM
-                {
-                    Id = f.GetProperty("id").GetInt32(),
-                    FeatureKey = f.GetProperty("featureKey").GetString() ?? "",
-                    DisplayName = f.GetProperty("displayName").GetString() ?? "",
-                    Category = f.GetProperty("category").GetString() ?? "",
-                    MinLevel = f.GetProperty("minLevel").GetInt32(),
-                    Behavior = f.GetProperty("behavior").GetString() ?? "HIDDEN",
-                    LevelOptions = LevelOptions
+                    Value = l.LevelValue,
+                    Name = AuthFeatureLabels.LevelDisplay(l.LevelValue, l.DisplayName)
                 });
             }
 
-            dgFeatures.ItemsSource = null;
-            dgFeatures.ItemsSource = _rows;
+            List<AuthFeatureDto> features = await ApiClient.GetListAsync<AuthFeatureDto>("/api/auth-levels/features");
+
+            _rows.Clear();
+            foreach (AuthFeatureDto f in features)
+            {
+                _rows.Add(new FeatureRowVM
+                {
+                    Id = f.Id,
+                    FeatureKey = f.FeatureKey,
+                    DisplayName = f.DisplayName,
+                    Category = f.Category,
+                    MinLevel = f.MinLevel,
+                    Behavior = f.Behavior,
+                    LevelOptions = LevelOptions,
+                    BehaviorOptions = AuthFeatureLabels.BehaviorOptions.ToList()
+                });
+            }
+
+            ApplyFilter();
+            txtStatus.Text = BuildStatusText();
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore caricamento: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            txtStatus.Text = $"Errore: {ex.Message}";
+            ShadcnMessageBox.Show($"Errore caricamento: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -114,7 +109,73 @@ public partial class AuthLevelsPage : Page
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore salvataggio: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShadcnMessageBox.Show($"Errore salvataggio: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private string BuildStatusText()
+    {
+        string filter = txtSearch.Text.Trim();
+        if (string.IsNullOrEmpty(filter))
+            return $"{_rows.Count} funzioni";
+
+        int visible = dgFeatures.ItemsSource is IEnumerable<FeatureRowVM> items ? items.Count() : _rows.Count;
+        return $"{visible} di {_rows.Count} funzioni";
+    }
+
+    private void ApplyFilter()
+    {
+        string filter = txtSearch.Text.Trim().ToLower();
+        List<FeatureRowVM> filtered = string.IsNullOrEmpty(filter)
+            ? _rows
+            : _rows.Where(r =>
+                r.DisplayNameReadable.ToLower().Contains(filter) ||
+                r.CategoryDisplay.ToLower().Contains(filter) ||
+                r.FeatureKeyDisplay.ToLower().Contains(filter) ||
+                r.FeatureKey.ToLower().Contains(filter)).ToList();
+        dgFeatures.ItemsSource = filtered;
+        txtStatus.Text = BuildStatusText();
+    }
+
+    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        txtSearchPlaceholder.Visibility = string.IsNullOrEmpty(txtSearch.Text) ? Visibility.Visible : Visibility.Collapsed;
+        ApplyFilter();
+    }
+
+    private void BtnRowOptions_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu != null)
+        {
+            btn.ContextMenu.PlacementTarget = btn;
+            btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private async void MenuItemDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is FeatureRowVM row)
+        {
+            dgFeatures.SelectedItem = row;
+            await ExecuteDeleteAsync(row);
+        }
+    }
+
+    private async Task ExecuteDeleteAsync(FeatureRowVM row)
+    {
+        if (ShadcnMessageBox.Show($"Eliminare la feature '{row.DisplayNameReadable}'?", "Conferma",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        try
+        {
+            await ApiClient.DeleteAsync($"/api/auth-levels/features/{row.Id}");
+            _rows.Remove(row);
+            RefreshGrid();
+            txtStatus.Text = BuildStatusText();
+        }
+        catch (Exception ex)
+        {
+            ShadcnMessageBox.Show(ex.Message, "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -122,7 +183,7 @@ public partial class AuthLevelsPage : Page
     {
         _loading = true;
         dgFeatures.ItemsSource = null;
-        dgFeatures.ItemsSource = _rows;
+        ApplyFilter();
         // Ritarda il reset di _loading: WPF processa i binding in modo asincrono,
         // i ComboBox scatenano SelectionChanged DOPO il re-bind
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () => _loading = false);
@@ -144,35 +205,14 @@ public partial class AuthLevelsPage : Page
                 Behavior = "HIDDEN"
             };
             string result = await ApiClient.PostAsync("/api/auth-levels/features", JsonSerializer.Serialize(payload, _jopt));
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
                 await LoadAsync();
             else
-                MessageBox.Show(doc.RootElement.GetProperty("message").GetString(), "Errore");
+                ShadcnMessageBox.Show(msg, "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Errore");
-        }
-    }
-
-    private async void BtnDeleteFeature_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button btn) return;
-        if (btn.DataContext is not FeatureRowVM row) return;
-
-        if (MessageBox.Show($"Eliminare la feature '{row.DisplayName}'?", "Conferma",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
-        try
-        {
-            await ApiClient.DeleteAsync($"/api/auth-levels/features/{row.Id}");
-            _rows.Remove(row);
-            RefreshGrid();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Errore");
+            ShadcnMessageBox.Show(ex.Message, "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }
@@ -192,8 +232,12 @@ public class FeatureRowVM : INotifyPropertyChanged
     public string DisplayName { get; set; } = "";
     public string Category { get; set; } = "";
 
-    /// <summary>Lista livelli per il ComboBox (condivisa da tutte le righe)</summary>
+    public string CategoryDisplay => AuthFeatureLabels.CategoryDisplay(Category);
+    public string FeatureKeyDisplay => AuthFeatureLabels.FeatureKeyDisplay(FeatureKey);
+    public string DisplayNameReadable => AuthFeatureLabels.ImproveDisplayName(FeatureKey, DisplayName);
+
     public List<LevelOption> LevelOptions { get; set; } = new();
+    public List<BehaviorOption> BehaviorOptions { get; set; } = new();
 
     private int _minLevel;
     public int MinLevel

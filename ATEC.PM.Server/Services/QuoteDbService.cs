@@ -1,13 +1,19 @@
 using MySqlConnector;
 using Dapper;
+using Microsoft.Extensions.Logging;
 
 namespace ATEC.PM.Server.Services;
 
 public class QuoteDbService
 {
     private readonly DbService _db;
+    private readonly ILogger<QuoteDbService>? _logger;
 
-    public QuoteDbService(DbService db) => _db = db;
+    public QuoteDbService(DbService db, ILogger<QuoteDbService>? logger = null)
+    {
+        _db = db;
+        _logger = logger;
+    }
 
     public MySqlConnection Open() => _db.Open();
 
@@ -87,12 +93,12 @@ public class QuoteDbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // Migration: add markup_value, drop obsolete columns
-        try { c.Execute("ALTER TABLE quote_product_variants ADD COLUMN markup_value DECIMAL(5,3) DEFAULT 1.300 AFTER cost_price"); } catch { }
-        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN sell_price"); } catch { }
-        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN discount_pct"); } catch { }
-        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN vat_pct"); } catch { }
-        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN unit"); } catch { }
-        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN default_qty"); } catch { }
+        try { c.Execute("ALTER TABLE quote_product_variants ADD COLUMN markup_value DECIMAL(5,3) DEFAULT 1.300 AFTER cost_price"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD COLUMN markup_value fallito o già presente"); }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN sell_price"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] DROP COLUMN sell_price fallito o già eseguito"); }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN discount_pct"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] DROP COLUMN discount_pct fallito o già eseguito"); }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN vat_pct"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] DROP COLUMN vat_pct fallito o già eseguito"); }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN unit"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] DROP COLUMN unit fallito o già eseguito"); }
+        try { c.Execute("ALTER TABLE quote_product_variants DROP COLUMN default_qty"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] DROP COLUMN default_qty fallito o già eseguito"); }
 
         // ──────────────────────────────────────────────────
         // QUOTES — Preventivi
@@ -263,9 +269,39 @@ public class QuoteDbService
 
         // ── Tabelle costing per preventivi IMPIANTO (mirror di offer_cost_*) ──
         CreateQuoteCostingTables(c);
+
+        MigrateQuoteMaterialItemsColumns(c);
     }
 
-    private static void CreateQuoteCostingTables(MySqlConnection c)
+    /// <summary>
+    /// Colonne catalogo CMS su quote_material_items (product_id, variant_id, code, RTF, is_active).
+    /// </summary>
+    private void MigrateQuoteMaterialItemsColumns(MySqlConnection c)
+    {
+        AddColumnIfMissing(c, "quote_material_items", "product_id", "INT NULL AFTER parent_item_id");
+        AddColumnIfMissing(c, "quote_material_items", "variant_id", "INT NULL AFTER product_id");
+        AddColumnIfMissing(c, "quote_material_items", "code", "VARCHAR(100) NOT NULL DEFAULT '' AFTER variant_id");
+        AddColumnIfMissing(c, "quote_material_items", "description_rtf", "LONGTEXT NULL AFTER description");
+        AddColumnIfMissing(c, "quote_material_items", "is_active", "BOOLEAN NOT NULL DEFAULT TRUE AFTER sort_order");
+
+        try
+        {
+            c.Execute(@"
+                ALTER TABLE quote_material_items
+                ADD CONSTRAINT fk_qmi_product FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE SET NULL");
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_product già presente o non applicabile"); }
+
+        try
+        {
+            c.Execute(@"
+                ALTER TABLE quote_material_items
+                ADD CONSTRAINT fk_qmi_variant FOREIGN KEY (variant_id) REFERENCES quote_product_variants(id) ON DELETE SET NULL");
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_variant già presente o non applicabile"); }
+    }
+
+    private void CreateQuoteCostingTables(MySqlConnection c)
     {
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_cost_sections (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -331,24 +367,33 @@ public class QuoteDbService
             id INT AUTO_INCREMENT PRIMARY KEY,
             section_id INT NOT NULL,
             parent_item_id INT NULL,
+            product_id INT NULL,
+            variant_id INT NULL,
+            code VARCHAR(100) NOT NULL DEFAULT '',
             description VARCHAR(500) NOT NULL DEFAULT '',
+            description_rtf LONGTEXT NULL,
             quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
             unit_cost DECIMAL(10,4) NOT NULL DEFAULT 0,
             markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
             item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
             sort_order INT NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             contingency_pinned BOOLEAN NOT NULL DEFAULT FALSE,
             margin_pinned BOOLEAN NOT NULL DEFAULT FALSE,
             is_shadowed BOOLEAN NOT NULL DEFAULT FALSE,
             FOREIGN KEY (section_id) REFERENCES quote_material_sections(id) ON DELETE CASCADE,
-            FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE
+            FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE SET NULL,
+            FOREIGN KEY (variant_id) REFERENCES quote_product_variants(id) ON DELETE SET NULL,
+            INDEX idx_qmi_section (section_id),
+            INDEX idx_qmi_product (product_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Migration: add parent_item_id if missing
-        try { c.Execute("ALTER TABLE quote_material_items ADD COLUMN parent_item_id INT NULL AFTER section_id"); } catch { }
-        try { c.Execute("ALTER TABLE quote_material_items ADD FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE"); } catch { }
+        // Migration legacy: parent_item_id su DB creati prima della gerarchia prodotti
+        try { c.Execute("ALTER TABLE quote_material_items ADD COLUMN parent_item_id INT NULL AFTER section_id"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD COLUMN parent_item_id fallito o già presente"); }
+        try { c.Execute("ALTER TABLE quote_material_items ADD FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD FOREIGN KEY (parent_item_id) fallito o già presente"); }
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -361,8 +406,8 @@ public class QuoteDbService
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // Migration: parent_quote_id per revisioni + status superseded
-        try { c.Execute("ALTER TABLE quotes ADD COLUMN parent_quote_id INT NULL AFTER revision"); } catch { }
-        try { c.Execute("ALTER TABLE quotes MODIFY COLUMN status ENUM('draft','sent','negotiation','accepted','rejected','expired','converted','superseded') NOT NULL DEFAULT 'draft'"); } catch { }
+        try { c.Execute("ALTER TABLE quotes ADD COLUMN parent_quote_id INT NULL AFTER revision"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD COLUMN parent_quote_id fallito o già presente"); }
+        try { c.Execute("ALTER TABLE quotes MODIFY COLUMN status ENUM('draft','sent','negotiation','accepted','rejected','expired','converted','superseded') NOT NULL DEFAULT 'draft'"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] MODIFY COLUMN status fallito"); }
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing_distribution (
             id INT AUTO_INCREMENT PRIMARY KEY,

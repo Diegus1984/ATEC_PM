@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/projects/{projectId}/cashflow")]
 [Authorize]
+// Dati economici (ricavi/incassi): visibili solo da livello PM in su (feature data.revenue).
+[RequireFeature("data.revenue")]
 public class CashFlowController : ControllerBase
 {
     private readonly DbService _db;

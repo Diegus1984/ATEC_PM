@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 using OxyPlot;
@@ -17,6 +18,7 @@ namespace ATEC.PM.Client.UserControls;
 public partial class ProjectDashboardControl : UserControl
 {
     private int _projectId;
+    private int _renderGeneration;
     private static readonly Dictionary<string, string> DeptColors = new()
     {
         { "PM", "#4F6EF7" }, { "UTM", "#059669" }, { "UTE", "#2563EB" },
@@ -30,22 +32,19 @@ public partial class ProjectDashboardControl : UserControl
     public async void Load(int projectId)
     {
         _projectId = projectId;
-        await LoadDashboard();
+        int generation = ++_renderGeneration;
+        await LoadDashboard(generation);
     }
 
-    private async Task LoadDashboard()
+    private async Task LoadDashboard(int generation)
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/projects/{_projectId}/dashboard");
-            var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.GetProperty("success").GetBoolean()) return;
+            ProjectDashboardData? data = await ApiClient.GetDataAsync<ProjectDashboardData>(
+                $"/api/projects/{_projectId}/dashboard");
 
-            var data = JsonSerializer.Deserialize<ProjectDashboardData>(
-                doc.RootElement.GetProperty("data").GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (data != null) Render(data);
+            if (data != null && generation == _renderGeneration)
+                Render(data, generation);
         }
         catch (Exception ex)
         {
@@ -54,7 +53,7 @@ public partial class ProjectDashboardControl : UserControl
         }
     }
 
-    private void Render(ProjectDashboardData d)
+    private void Render(ProjectDashboardData d, int generation)
     {
         pnlContent.Children.Clear();
         bool isPm = App.CurrentUser.IsPm;
@@ -108,7 +107,7 @@ public partial class ProjectDashboardControl : UserControl
                 if (System.IO.Directory.Exists(folderPath))
                     System.Diagnostics.Process.Start("explorer.exe", folderPath);
                 else
-                    MessageBox.Show("Cartella non trovata.", "Errore");
+                    ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Cartella non trovata.", "Errore");
             };
             spFolder.Children.Add(btnOpen);
             pnlContent.Children.Add(Card(spFolder));
@@ -126,23 +125,8 @@ public partial class ProjectDashboardControl : UserControl
             }));
         }
 
-        if (d.DepartmentSummaries.Any())
-        {
-            pnlContent.Children.Add(Title("Analisi per Reparto"));
-            RenderCharts(d);
-        }
-
-        if (d.WeeklyHours != null && d.WeeklyHours.Any())
-        {
-            pnlContent.Children.Add(Title("Andamento Ore Settimanali"));
-            pnlContent.Children.Add(Card(CreateWeeklyChart(d)));
-        }
-
-        if (d.PhaseGantt != null && d.PhaseGantt.Any())
-        {
-            pnlContent.Children.Add(Title("Timeline Fasi"));
-            pnlContent.Children.Add(Card(CreateGanttChart(d)));
-        }
+        int chartInsertIndex = pnlContent.Children.Count;
+        ScheduleChartSections(d, generation, chartInsertIndex);
 
         if (d.Deadlines != null && d.Deadlines.Any())
         {
@@ -197,7 +181,32 @@ public partial class ProjectDashboardControl : UserControl
         if (d.ActiveTechnicians.Any())
         {
             pnlContent.Children.Add(Title("Personale su Commessa"));
-            pnlContent.Children.Add(Card(new ItemsControl
+
+            StackPanel techPanel = new();
+
+            Grid header = new() { Margin = new Thickness(0, 0, 0, 4) };
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+
+            System.Windows.Media.Brush headerBrush = (System.Windows.Media.Brush)FindResource("Gray500Brush");
+            TextBlock hName = new() { Text = "TECNICO", FontSize = 10, FontWeight = System.Windows.FontWeights.SemiBold, Foreground = headerBrush };
+            TextBlock hDept = new() { Text = "REPARTO", FontSize = 10, FontWeight = System.Windows.FontWeights.SemiBold, Foreground = headerBrush, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
+            TextBlock hPhases = new() { Text = "FASI", FontSize = 10, FontWeight = System.Windows.FontWeights.SemiBold, Foreground = headerBrush, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+            TextBlock hHours = new() { Text = "ORE LAV.", FontSize = 10, FontWeight = System.Windows.FontWeights.SemiBold, Foreground = headerBrush, TextAlignment = TextAlignment.Right };
+
+            Grid.SetColumn(hName, 0);
+            Grid.SetColumn(hDept, 1);
+            Grid.SetColumn(hPhases, 2);
+            Grid.SetColumn(hHours, 3);
+            header.Children.Add(hName);
+            header.Children.Add(hDept);
+            header.Children.Add(hPhases);
+            header.Children.Add(hHours);
+
+            techPanel.Children.Add(header);
+            techPanel.Children.Add(new ItemsControl
             {
                 ItemTemplate = (DataTemplate)Resources["TechnicianRowTemplate"],
                 ItemsSource = d.ActiveTechnicians.Select(t => new
@@ -208,7 +217,9 @@ public partial class ProjectDashboardControl : UserControl
                     t.TotalHours,
                     DeptBrush = GetBrush(t.DepartmentCode)
                 })
-            }));
+            });
+
+            pnlContent.Children.Add(Card(techPanel));
         }
 
         if (d.RecentEntries.Any())
@@ -295,27 +306,63 @@ public partial class ProjectDashboardControl : UserControl
     }
 
     // ══════════════════════════════════════════════════════════
-    // GRAFICI OxyPlot
+    // GRAFICI OxyPlot (caricati in background dopo KPI/testo)
     // ══════════════════════════════════════════════════════════
 
-    private void RenderCharts(ProjectDashboardData d)
+    private void ScheduleChartSections(ProjectDashboardData d, int generation, int insertIndex)
+    {
+        bool hasDeptCharts = d.DepartmentSummaries.Any();
+        bool hasWeekly = d.WeeklyHours != null && d.WeeklyHours.Any();
+        bool hasGantt = d.PhaseGantt != null && d.PhaseGantt.Any();
+        if (!hasDeptCharts && !hasWeekly && !hasGantt)
+            return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (generation != _renderGeneration)
+                return;
+
+            int at = insertIndex;
+
+            if (hasDeptCharts)
+            {
+                pnlContent.Children.Insert(at++, Title("Analisi per Reparto"));
+                at = InsertChartsGrid(d, at);
+            }
+
+            if (hasWeekly)
+            {
+                pnlContent.Children.Insert(at++, Title("Andamento Ore Settimanali"));
+                pnlContent.Children.Insert(at++, Card(CreateWeeklyChart(d)));
+            }
+
+            if (hasGantt)
+            {
+                pnlContent.Children.Insert(at++, Title("Timeline Fasi"));
+                pnlContent.Children.Insert(at, Card(CreateGanttChart(d)));
+            }
+        });
+    }
+
+    private int InsertChartsGrid(ProjectDashboardData d, int insertIndex)
     {
         Grid grid = new() { Margin = new Thickness(0, 0, 0, 12) };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
-        var pieCard = Card(CreatePie(d));
+        Border pieCard = Card(CreatePie(d));
         pieCard.Height = 260;
         Grid.SetColumn(pieCard, 0);
 
-        var barCard = Card(CreateBar(d));
+        Border barCard = Card(CreateBar(d));
         barCard.Height = 260;
         Grid.SetColumn(barCard, 2);
 
         grid.Children.Add(pieCard);
         grid.Children.Add(barCard);
-        pnlContent.Children.Add(grid);
+        pnlContent.Children.Insert(insertIndex, grid);
+        return insertIndex + 1;
     }
 
     private PlotView CreatePie(ProjectDashboardData d)

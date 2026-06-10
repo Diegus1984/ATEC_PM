@@ -4,128 +4,208 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:uc="clr-namespace:ATEC.PM.Client.UserControls"
     MinWidth="800"
-    Background="#F7F8FA">
+    FontFamily="{StaticResource ShadcnFontFamily}"
+    Background="{DynamicResource ShadcnMutedBrush}">
 
     <Page.Resources>
-        <!-- Label stile per dettagli -->
-        <Style x:Key="DetailLbl" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="Margin" Value="0,0,0,2" />
-        </Style>
-        <!-- Valore readonly -->
-        <Style x:Key="DetailVal" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="#111827" />
-            <Setter Property="Margin" Value="0,0,0,12" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-        <!-- Input per modalita edit -->
-        <Style x:Key="DetailInp" TargetType="TextBox">
-            <Setter Property="Height" Value="28" />
-            <Setter Property="Padding" Value="6,4" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="BorderBrush" Value="#D1D5DB" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Margin" Value="0,0,0,12" />
-            <Setter Property="Background" Value="White" />
-        </Style>
-        <!-- Tab stile flat -->
-        <Style x:Key="DetailTabItem" TargetType="TabItem">
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+
+        <!--  Bottone Success (verde) in chiave Shadcn — non c'e' un token nativo  -->
+        <Style x:Key="ShadcnButtonSuccess" BasedOn="{StaticResource ShadcnButtonBase}" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource ShadcnSuccessBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ShadcnSuccessForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ShadcnSuccessBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border
-                            x:Name="tabBorder"
-                            Padding="{TemplateBinding Padding}"
-                            Background="Transparent"
-                            BorderBrush="Transparent"
-                            BorderThickness="0,0,0,2"
-                            Cursor="Hand">
-                            <ContentPresenter
-                                HorizontalAlignment="Center"
-                                ContentSource="Header" />
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Margin="{TemplateBinding Padding}" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="tabBorder" Property="BorderBrush" Value="#2563EB" />
-                                <Setter Property="Foreground" Value="#2563EB" />
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="tabBorder" Property="Background" Value="#F3F4F6" />
+                                <Setter TargetName="border" Property="Background" Value="#059669" />
+                                <Setter TargetName="border" Property="BorderBrush" Value="#059669" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#047857" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!--  Search box compatta per gli header di colonna (filtri)  -->
+        <Style x:Key="FilterSearchBox" BasedOn="{StaticResource ShadcnTextBox}" TargetType="TextBox">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+        </Style>
+
+        <!--  Label stile per dettagli  -->
+        <Style x:Key="DetailLbl" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource ShadcnMutedForegroundBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <!--  Valore readonly  -->
+        <Style x:Key="DetailVal" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource ShadcnForegroundBrush}" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <!--  Input per modalita edit (single-line)  -->
+        <Style x:Key="DetailInp" BasedOn="{StaticResource ShadcnTextBox}" TargetType="TextBox">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+
+        <!--  Textarea per le note (multi-line)  -->
+        <Style x:Key="DetailNotesBox" TargetType="TextBox">
+            <Setter Property="Height" Value="100" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontFamily" Value="{StaticResource ShadcnFontFamily}" />
+            <Setter Property="Background" Value="{DynamicResource ShadcnBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ShadcnInputBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource ShadcnForegroundBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource ShadcnForegroundBrush}" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#A1A1AA" />
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ShadcnPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style for Customer Row ContextMenu Header (Information card inside popup) -->
+        <Style x:Key="RowMenuHeaderStyle" TargetType="MenuItem">
+            <Setter Property="IsEnabled" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border Padding="12,10,12,8" Background="Transparent" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Circular Initials Avatar inside popup -->
+                                <Border Grid.Column="0" Style="{StaticResource ShadcnAvatar}" Width="32" Height="32" CornerRadius="16" Background="White">
+                                    <TextBlock Text="{Binding Path=PlacementTarget.DataContext.Initials, RelativeSource={RelativeSource AncestorType=ContextMenu}}" FontSize="11.5" FontWeight="SemiBold" Foreground="#09090B" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+
+                                <!-- Company Name and Role -->
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Path=PlacementTarget.DataContext.CompanyName, RelativeSource={RelativeSource AncestorType=ContextMenu}}" FontSize="12.5" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="180" />
+                                    <TextBlock Text="CLIENTE" FontSize="10.5" Foreground="#71717A" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </Page.Resources>
 
     <DockPanel>
-        <!-- Toolbar -->
+        <!--  Toolbar  -->
         <Border
-            Style="{StaticResource ToolbarBorder}"
+            Padding="12,8"
+            Background="{DynamicResource ShadcnCardBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,0,0,1"
             DockPanel.Dock="Top">
             <Grid>
                 <StackPanel Orientation="Horizontal">
                     <Button
                         x:Name="btnNew"
+                        Margin="0,0,8,0"
                         Click="BtnNew_Click"
                         Content="+ Nuovo Cliente"
-                        Style="{StaticResource PrimaryBtn}" />
+                        Style="{StaticResource ShadcnButtonDefault}" />
                     <Button
+                        Margin="0,0,8,0"
                         Click="BtnClearFilters_Click"
                         Content="Pulisci Filtri"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource ShadcnButtonOutline}" />
                     <Button
                         Click="BtnRefresh_Click"
                         Content="Aggiorna"
-                        Style="{StaticResource FlatBtn}" />
+                        Style="{StaticResource ShadcnButtonOutline}" />
                 </StackPanel>
                 <Button
                     HorizontalAlignment="Right"
-                    Background="#12B76A"
                     Click="BtnImportEasyfatt_Click"
                     Content="Importa da Easyfatt"
-                    Foreground="White"
-                    Style="{StaticResource SuccessBtn}" />
+                    Style="{StaticResource ShadcnButtonSuccess}" />
             </Grid>
         </Border>
 
-        <!-- Sync bar -->
+        <!--  Sync bar  -->
         <uc:DaneaSyncBar x:Name="syncBar" DockPanel.Dock="Top" />
 
-        <!-- Status bar -->
+        <!--  Status bar  -->
         <Border
-            Padding="20,10"
-            Background="White"
-            BorderBrush="#E4E7EC"
+            Padding="16,8"
+            Background="{DynamicResource ShadcnCardBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
             BorderThickness="0,1,0,0"
             DockPanel.Dock="Bottom">
             <Grid>
                 <TextBlock
                     x:Name="txtStatus"
                     HorizontalAlignment="Left"
-                    FontSize="12"
-                    Foreground="#667085"
+                    FontSize="11"
+                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                     Text="Pronto" />
                 <TextBlock
                     HorizontalAlignment="Right"
                     FontSize="11"
                     FontStyle="Italic"
-                    Foreground="#9CA3AF"
+                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                     Text="Filtri: abc = contiene  |  abc* = inizia con  |  *abc = finisce con" />
             </Grid>
         </Border>
 
-        <!-- Main content: master-detail -->
+        <!--  Main content: master-detail  -->
         <Grid Margin="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="colList" Width="2*" MinWidth="300" />
@@ -133,98 +213,151 @@
                 <ColumnDefinition x:Name="colDetail" Width="3*" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
-            <!-- LEFT: DataGrid lista clienti -->
-            <DataGrid
-                x:Name="dgCustomers"
+            <!--  LEFT: DataGrid lista clienti (wrapped in rounded border card)  -->
+            <Border
                 Grid.Column="0"
                 Margin="12,12,0,12"
-                IsReadOnly="True"
-                SelectionChanged="Dg_SelectionChanged"
-                MouseDoubleClick="Dg_DoubleClick"
-                Style="{StaticResource ModernDataGrid}">
+                Background="{DynamicResource ShadcnCardBrush}"
+                BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                ClipToBounds="True">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="4" Direction="270" Opacity="0.04" ShadowDepth="1" Color="Black" />
+                </Border.Effect>
 
-                <DataGrid.Columns>
-                    <DataGridTemplateColumn Width="*" MinWidth="150">
-                        <DataGridTemplateColumn.HeaderTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock FontWeight="Bold" Foreground="#667085" Text="Ragione Sociale" />
-                                    <TextBox
-                                        Loaded="Filter_Loaded"
-                                        Style="{StaticResource HeaderSearchBox}"
-                                        Tag="Name"
-                                        TextChanged="Filter_Changed" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.HeaderTemplate>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding CompanyName}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                <DataGrid
+                    x:Name="dgCustomers"
+                    BorderThickness="0"
+                    IsReadOnly="True"
+                    SelectionChanged="Dg_SelectionChanged"
+                    MouseDoubleClick="Dg_DoubleClick"
+                    Style="{StaticResource ShadcnDataGrid}">
 
-                    <DataGridTemplateColumn Width="130" MinWidth="80">
-                        <DataGridTemplateColumn.HeaderTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock FontWeight="Bold" Foreground="#667085" Text="P.IVA" />
-                                    <TextBox
-                                        Loaded="Filter_Loaded"
-                                        Style="{StaticResource HeaderSearchBox}"
-                                        Tag="Vat"
-                                        TextChanged="Filter_Changed" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.HeaderTemplate>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock VerticalAlignment="Center" Text="{Binding VatNumber}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Width="*" MinWidth="150">
+                            <DataGridTemplateColumn.HeaderTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ShadcnMutedForegroundBrush}" Text="Ragione Sociale" />
+                                        <TextBox
+                                            Loaded="Filter_Loaded"
+                                            Style="{StaticResource FilterSearchBox}"
+                                            Tag="Name"
+                                            TextChanged="Filter_Changed" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.HeaderTemplate>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock VerticalAlignment="Center" FontWeight="Medium" Text="{Binding CompanyName}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <DataGridTextColumn
-                        Width="110"
-                        MinWidth="70"
-                        Binding="{Binding Phone}"
-                        Header="Telefono" />
+                        <DataGridTemplateColumn Width="130" MinWidth="80">
+                            <DataGridTemplateColumn.HeaderTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ShadcnMutedForegroundBrush}" Text="P.IVA" />
+                                        <TextBox
+                                            Loaded="Filter_Loaded"
+                                            Style="{StaticResource FilterSearchBox}"
+                                            Tag="Vat"
+                                            TextChanged="Filter_Changed" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.HeaderTemplate>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding VatNumber}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Width="60" Header="">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
-                                    <Button
-                                        Click="BtnDelete_Click"
-                                        Style="{StaticResource RowDeleteBtn}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                        <DataGridTemplateColumn Width="110" MinWidth="70">
+                            <DataGridTemplateColumn.HeaderTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ShadcnMutedForegroundBrush}" Text="Telefono" />
+                                        <!-- Spacer to align the header vertically with columns containing search filters -->
+                                        <Border Height="28" Margin="0,6,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.HeaderTemplate>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding Phone}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-            <!-- GridSplitter -->
+                        <!-- Column: Menu Azioni Rapide (Tre puntini verticali) -->
+                        <DataGridTemplateColumn Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="⋮" 
+                                            Style="{StaticResource ShadcnButtonGhost}" 
+                                            Foreground="#71717A"
+                                            FontSize="14"
+                                            Padding="0"
+                                            Width="30"
+                                            Height="30"
+                                            HorizontalAlignment="Center"
+                                            Click="BtnRowOptions_Click">
+                                        <Button.ContextMenu>
+                                            <ContextMenu Style="{StaticResource ShadcnContextMenuDark}">
+                                                <ContextMenu.Resources>
+                                                    <Style TargetType="MenuItem" BasedOn="{StaticResource ShadcnMenuItemDark}" />
+                                                    <Style TargetType="Separator" BasedOn="{StaticResource ShadcnMenuSeparatorDark}" />
+                                                </ContextMenu.Resources>
+                                                <MenuItem Style="{StaticResource RowMenuHeaderStyle}" />
+                                                <Separator />
+                                                <MenuItem Header="Modifica" Click="MenuItemEdit_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Elimina" Click="MenuItemDelete_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <!--  GridSplitter  -->
             <GridSplitter
                 x:Name="splitter"
                 Grid.Column="1"
                 Width="4"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Stretch"
-                Background="#E5E7EB"
+                Background="{DynamicResource ShadcnBorderBrush}"
                 Cursor="SizeWE"
                 DragCompleted="Splitter_DragCompleted" />
 
-            <!-- RIGHT: Pannello dettagli -->
+            <!--  RIGHT: Pannello dettagli (card Shadcn)  -->
             <Border
                 Grid.Column="2"
                 Margin="0,12,12,12"
-                Background="White"
-                BorderBrush="#E4E7EC"
-                BorderThickness="1">
+                Background="{DynamicResource ShadcnCardBrush}"
+                BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="4" Direction="270" Opacity="0.04" ShadowDepth="1" Color="Black" />
+                </Border.Effect>
 
                 <Grid>
-                    <!-- Placeholder: nessun cliente selezionato -->
+                    <!--  Placeholder: nessun cliente selezionato  -->
                     <StackPanel
                         x:Name="panelPlaceholder"
                         HorizontalAlignment="Center"
@@ -232,18 +365,18 @@
                         <TextBlock
                             HorizontalAlignment="Center"
                             FontSize="14"
-                            Foreground="#9CA3AF"
+                            Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                             Text="Seleziona un cliente dalla lista" />
                     </StackPanel>
 
-                    <!-- Dettagli cliente -->
+                    <!--  Dettagli cliente  -->
                     <DockPanel x:Name="panelDetail" Visibility="Collapsed">
 
-                        <!-- Header con nome cliente -->
+                        <!--  Header con nome cliente  -->
                         <Border
-                            Padding="16,12"
-                            Background="#F9FAFB"
-                            BorderBrush="#E4E7EC"
+                            Padding="16,14"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource ShadcnBorderBrush}"
                             BorderThickness="0,0,0,1"
                             DockPanel.Dock="Top">
                             <Grid>
@@ -251,98 +384,81 @@
                                     x:Name="txtDetailTitle"
                                     FontSize="16"
                                     FontWeight="SemiBold"
-                                    Foreground="#111827"
+                                    Foreground="{DynamicResource ShadcnForegroundBrush}"
                                     Text="Cliente"
                                     TextTrimming="CharacterEllipsis" />
                             </Grid>
                         </Border>
 
-                        <!-- Barra azioni in basso -->
+                        <!--  Barra azioni in basso  -->
                         <Border
-                            Padding="16,10"
-                            Background="#F9FAFB"
-                            BorderBrush="#E4E7EC"
+                            Padding="16,12"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource ShadcnBorderBrush}"
                             BorderThickness="0,1,0,0"
                             DockPanel.Dock="Bottom">
                             <StackPanel Orientation="Horizontal">
-                                <!-- Modalita lettura -->
+                                <!--  Modalita lettura  -->
                                 <StackPanel x:Name="panelReadActions" Orientation="Horizontal">
                                     <Button
                                         Click="BtnEditInline_Click"
                                         Content="Modifica"
-                                        Style="{StaticResource PrimaryBtn}" />
+                                        Style="{StaticResource ShadcnButtonDefault}" />
                                 </StackPanel>
-                                <!-- Modalita scrittura -->
+                                <!--  Modalita scrittura  -->
                                 <StackPanel x:Name="panelEditActions" Orientation="Horizontal" Visibility="Collapsed">
                                     <Button
+                                        Margin="0,0,8,0"
                                         Click="BtnSaveInline_Click"
                                         Content="Salva"
-                                        Style="{StaticResource PrimaryBtn}" />
+                                        Style="{StaticResource ShadcnButtonDefault}" />
                                     <Button
-                                        Margin="8,0,0,0"
                                         Click="BtnCancelInline_Click"
                                         Content="Annulla"
-                                        Style="{StaticResource FlatBtn}" />
+                                        Style="{StaticResource ShadcnButtonOutline}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
 
-                        <!-- Errore -->
+                        <!--  Errore  -->
                         <Border
                             x:Name="panelError"
                             Padding="16,8"
-                            Background="#FEE2E2"
-                            BorderBrush="#DC2626"
+                            Background="#FEF2F2"
+                            BorderBrush="{DynamicResource ShadcnDestructiveBrush}"
                             BorderThickness="0,0,0,1"
                             DockPanel.Dock="Bottom"
                             Visibility="Collapsed">
                             <TextBlock
                                 x:Name="txtDetailError"
                                 FontSize="12"
-                                Foreground="#DC2626"
+                                Foreground="{DynamicResource ShadcnDestructiveBrush}"
                                 TextWrapping="Wrap" />
                         </Border>
 
-                        <!-- Tab content -->
-                        <TabControl
-                            x:Name="tabDetail"
-                            Background="Transparent"
-                            BorderThickness="0">
-
-                            <!-- Stile del TabControl per rimuovere bordi -->
-                            <TabControl.Style>
-                                <Style TargetType="TabControl">
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="TabControl">
-                                                <DockPanel>
-                                                    <Border
-                                                        Padding="12,0"
-                                                        BorderBrush="#E4E7EC"
-                                                        BorderThickness="0,0,0,1"
-                                                        DockPanel.Dock="Top">
-                                                        <TabPanel IsItemsHost="True" />
-                                                    </Border>
-                                                    <ContentPresenter
-                                                        Margin="0"
-                                                        ContentSource="SelectedContent" />
-                                                </DockPanel>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </TabControl.Style>
-
-                            <!-- TAB: Anagrafica -->
-                            <TabItem Header="Anagrafica" Style="{StaticResource DetailTabItem}">
-                                <ScrollViewer
-                                    Padding="16,12"
-                                    VerticalScrollBarVisibility="Auto">
+                        <!-- Customer Details Sections (stacked cards instead of tabs) -->
+                        <ScrollViewer
+                            VerticalScrollBarVisibility="Auto"
+                            Padding="16"
+                            Background="{DynamicResource ShadcnMutedBrush}">
+                            <StackPanel>
+                                <!-- Card: Anagrafica -->
+                                <Border
+                                    Margin="0,0,0,16"
+                                    Padding="16"
+                                    Background="{DynamicResource ShadcnCardBrush}"
+                                    BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
                                     <StackPanel>
-                                        <!-- Ragione Sociale -->
+                                        <TextBlock
+                                            Text="Anagrafica"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Foreground="{DynamicResource ShadcnForegroundBrush}"
+                                            Margin="0,0,0,12" />
+
+                                        <!--  Ragione Sociale  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="RAGIONE SOCIALE" />
                                         <TextBlock x:Name="lblCompanyName" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtCompanyName" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
@@ -353,13 +469,13 @@
                                                 <ColumnDefinition Width="12" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <!-- P.IVA -->
+                                            <!--  P.IVA  -->
                                             <StackPanel Grid.Column="0">
                                                 <TextBlock Style="{StaticResource DetailLbl}" Text="P.IVA" />
                                                 <TextBlock x:Name="lblVatNumber" Style="{StaticResource DetailVal}" />
                                                 <TextBox x:Name="txtVatNumber" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
                                             </StackPanel>
-                                            <!-- C.F. -->
+                                            <!--  C.F.  -->
                                             <StackPanel Grid.Column="2">
                                                 <TextBlock Style="{StaticResource DetailLbl}" Text="CODICE FISCALE" />
                                                 <TextBlock x:Name="lblFiscalCode" Style="{StaticResource DetailVal}" />
@@ -367,7 +483,7 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <!-- SDI -->
+                                        <!--  SDI  -->
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
@@ -381,21 +497,30 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <!-- Indirizzo -->
+                                        <!--  Indirizzo  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="INDIRIZZO" />
                                         <TextBlock x:Name="lblAddress" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtAddress" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
                                     </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
+                                </Border>
 
-                            <!-- TAB: Contatti -->
-                            <TabItem Header="Contatti" Style="{StaticResource DetailTabItem}">
-                                <ScrollViewer
-                                    Padding="16,12"
-                                    VerticalScrollBarVisibility="Auto">
+                                <!-- Card: Contatti -->
+                                <Border
+                                    Margin="0,0,0,16"
+                                    Padding="16"
+                                    Background="{DynamicResource ShadcnCardBrush}"
+                                    BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
                                     <StackPanel>
-                                        <!-- Referente -->
+                                        <TextBlock
+                                            Text="Contatti"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Foreground="{DynamicResource ShadcnForegroundBrush}"
+                                            Margin="0,0,0,12" />
+
+                                        <!--  Referente  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="REFERENTE" />
                                         <TextBlock x:Name="lblContactName" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtContactName" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
@@ -406,13 +531,13 @@
                                                 <ColumnDefinition Width="12" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <!-- Telefono -->
+                                            <!--  Telefono  -->
                                             <StackPanel Grid.Column="0">
                                                 <TextBlock Style="{StaticResource DetailLbl}" Text="TELEFONO" />
                                                 <TextBlock x:Name="lblPhone" Style="{StaticResource DetailVal}" />
                                                 <TextBox x:Name="txtPhone" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
                                             </StackPanel>
-                                            <!-- Cellulare -->
+                                            <!--  Cellulare  -->
                                             <StackPanel Grid.Column="2">
                                                 <TextBlock Style="{StaticResource DetailLbl}" Text="CELLULARE" />
                                                 <TextBlock x:Name="lblCell" Style="{StaticResource DetailVal}" />
@@ -420,49 +545,50 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <!-- Email -->
+                                        <!--  Email  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="EMAIL" />
                                         <TextBlock x:Name="lblEmail" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtEmail" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
 
-                                        <!-- PEC -->
+                                        <!--  PEC  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="PEC" />
                                         <TextBlock x:Name="lblPec" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtPec" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
                                     </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
+                                </Border>
 
-                            <!-- TAB: Altro -->
-                            <TabItem Header="Altro" Style="{StaticResource DetailTabItem}">
-                                <ScrollViewer
-                                    Padding="16,12"
-                                    VerticalScrollBarVisibility="Auto">
+                                <!-- Card: Altro -->
+                                <Border
+                                    Margin="0,0,0,0"
+                                    Padding="16"
+                                    Background="{DynamicResource ShadcnCardBrush}"
+                                    BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
                                     <StackPanel>
-                                        <!-- Condizioni pagamento -->
+                                        <TextBlock
+                                            Text="Altro"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Foreground="{DynamicResource ShadcnForegroundBrush}"
+                                            Margin="0,0,0,12" />
+
+                                        <!--  Condizioni pagamento  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="CONDIZIONI PAGAMENTO" />
                                         <TextBlock x:Name="lblPaymentTerms" Style="{StaticResource DetailVal}" />
                                         <TextBox x:Name="txtPaymentTerms" Style="{StaticResource DetailInp}" Visibility="Collapsed" />
 
-                                        <!-- Note -->
+                                        <!--  Note  -->
                                         <TextBlock Style="{StaticResource DetailLbl}" Text="NOTE" />
                                         <TextBlock x:Name="lblNotes" Style="{StaticResource DetailVal}" />
                                         <TextBox
                                             x:Name="txtNotes"
-                                            Height="100"
-                                            Padding="6,4"
-                                            FontSize="12"
-                                            BorderBrush="#D1D5DB"
-                                            BorderThickness="1"
-                                            Margin="0,0,0,12"
-                                            Background="White"
-                                            AcceptsReturn="True"
-                                            TextWrapping="Wrap"
+                                            Style="{StaticResource DetailNotesBox}"
                                             Visibility="Collapsed" />
                                     </StackPanel>
-                                </ScrollViewer>
-                            </TabItem>
-                        </TabControl>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </DockPanel>
                 </Grid>
             </Border>

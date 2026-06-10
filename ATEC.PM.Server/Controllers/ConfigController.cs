@@ -23,8 +23,8 @@ public class ConfigController : ControllerBase
         return Ok(ApiResponse<List<AppConfigItem>>.Ok(rows));
     }
 
+    /// <summary>Lettura singola chiave — solo ADMIN (stesso ruolo della classe).</summary>
     [HttpGet("{key}")]
-    [AllowAnonymous]
     public IActionResult GetByKey(string key)
     {
         using var c = _db.Open();

@@ -1,4 +1,4 @@
-﻿using Dapper;
+using Dapper;
 
 namespace ATEC.PM.Server.Services;
 
@@ -104,7 +104,8 @@ public class CodexGeneratorService
         catch
         {
             tx.Rollback();
-            try { conn.ExecuteScalar("SELECT RELEASE_LOCK(@LockKey)", new { LockKey = $"codex_reserve_{prefix}" }); } catch { }
+            try { conn.ExecuteScalar("SELECT RELEASE_LOCK(@LockKey)", new { LockKey = $"codex_reserve_{prefix}" }); } 
+            catch (Exception ex) { _log.LogDebug(ex, "Impossibile rilasciare il lock codex_reserve_{Prefix} durante il rollback", prefix); }
             throw;
         }
     }

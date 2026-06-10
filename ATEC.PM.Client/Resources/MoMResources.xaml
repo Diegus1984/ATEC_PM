@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        ============================================================
+        MoM — colori semantici condivisi (lista + dettaglio).
+        Centralizzati qui per evitare hex duplicati nelle pagine.
+        ============================================================
+    -->
+
+    <!--  Sfondo righe tabella dettaglio per stato  -->
+    <SolidColorBrush x:Key="MoMRowDefaultBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="MoMRowCriticalBrush" Color="#F6C7C7" />
+    <SolidColorBrush x:Key="MoMRowStandbyBrush" Color="#FCF1C2" />
+    <SolidColorBrush x:Key="MoMRowClosedBrush" Color="#C6EFCE" />
+
+    <!--  Combo priorità "retroilluminata" (dettaglio)  -->
+    <SolidColorBrush x:Key="MoMPri1Brush" Color="#FFD0D6" />
+    <SolidColorBrush x:Key="MoMPri2Brush" Color="#FFEDB0" />
+    <SolidColorBrush x:Key="MoMPri3Brush" Color="#C9EFD2" />
+
+    <!--  Badge ripartizione priorità (card della lista) — bg + testo  -->
+    <SolidColorBrush x:Key="MoMBadgeP1Bg" Color="#FEE2E2" />
+    <SolidColorBrush x:Key="MoMBadgeP1Ink" Color="#B91C1C" />
+    <SolidColorBrush x:Key="MoMBadgeP2Bg" Color="#FEF9C3" />
+    <SolidColorBrush x:Key="MoMBadgeP2Ink" Color="#A16207" />
+    <SolidColorBrush x:Key="MoMBadgeP3Bg" Color="#DCFCE7" />
+    <SolidColorBrush x:Key="MoMBadgeP3Ink" Color="#15803D" />
+
+</ResourceDictionary>

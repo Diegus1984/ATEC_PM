@@ -29,13 +29,11 @@ public partial class BackupPage : Page
         txtFooter.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/backup/list");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<BackupFileInfo>>>(json, _jsonOpt);
-
-            if (response?.Success == true && response.Data != null)
+            List<BackupFileInfo> backups = await ApiClient.GetListAsync<BackupFileInfo>("/api/backup/list");
+            if (backups.Count > 0)
             {
-                dgBackups.ItemsSource = response.Data;
-                txtFooter.Text = $"{response.Data.Count} backup disponibili";
+                dgBackups.ItemsSource = backups;
+                txtFooter.Text = $"{backups.Count} backup disponibili";
             }
             else
             {
@@ -94,7 +92,7 @@ public partial class BackupPage : Page
     {
         if (sender is not Button btn || btn.Tag is not string fileName) return;
 
-        var result = MessageBox.Show(
+        var result = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Sei sicuro di voler ripristinare il backup:\n\n{fileName}\n\n" +
             "ATTENZIONE: tutti i dati attuali verranno sovrascritti!\n" +
             "Un backup di sicurezza verrà creato automaticamente prima del ripristino.",
@@ -105,7 +103,7 @@ public partial class BackupPage : Page
         if (result != MessageBoxResult.Yes) return;
 
         // Seconda conferma
-        var result2 = MessageBox.Show(
+        var result2 = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             "Confermi DEFINITIVAMENTE il ripristino?\n\nQuesta operazione non può essere annullata.",
             "Ultima Conferma",
             MessageBoxButton.YesNo,
@@ -129,7 +127,7 @@ public partial class BackupPage : Page
                 txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#12B76A"));
 
-                MessageBox.Show(
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
                     $"{response.Message}\n\nBackup di sicurezza salvato in:\n{response.Data}",
                     "Ripristino Completato",
                     MessageBoxButton.OK,
@@ -143,7 +141,7 @@ public partial class BackupPage : Page
                 txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F04438"));
 
-                MessageBox.Show(
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
                     response?.Message ?? "Errore durante il ripristino",
                     "Errore",
                     MessageBoxButton.OK,
@@ -156,7 +154,7 @@ public partial class BackupPage : Page
             txtStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                 (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F04438"));
 
-            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -204,7 +202,7 @@ public partial class BackupPage : Page
     {
         if (sender is not Button btn || btn.Tag is not string fileName) return;
 
-        var result = MessageBox.Show(
+        var result = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Eliminare il backup {fileName}?",
             "Conferma Eliminazione",
             MessageBoxButton.YesNo,

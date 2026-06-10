@@ -360,6 +360,71 @@ public class ItemTypeToBadgeColorConverter : IValueConverter
 }
 
 /// <summary>
+/// Binding bidirezionale decimal ↔ testo per campi numerici inline.
+/// ConverterParameter: "formato;min;max" (es. "N0;0;99999", "N2;0;9999999", "N3;0;99").
+/// Accetta virgola e punto; valori fuori range vengono clampati; input non valido → Binding.DoNothing.
+/// </summary>
+public class DecimalInputConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        string format = ParseFormat(parameter, out decimal _, out decimal _);
+        if (value is decimal d)
+            return d.ToString(format, culture);
+        if (value is double dbl)
+            return ((decimal)dbl).ToString(format, culture);
+        if (value is int i)
+            return ((decimal)i).ToString(format, culture);
+        return 0m.ToString(format, culture);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        ParseFormat(parameter, out decimal min, out decimal max);
+        string text = (value?.ToString() ?? "").Trim();
+        if (string.IsNullOrEmpty(text))
+            return Clamp(0m, min, max);
+
+        text = text.Replace("€", "").Trim();
+        if (!decimal.TryParse(text, NumberStyles.Number, culture, out decimal result))
+        {
+            text = text.Replace('.', ',');
+            if (!decimal.TryParse(text, NumberStyles.Number, culture, out result))
+                return Binding.DoNothing;
+        }
+
+        return Clamp(result, min, max);
+    }
+
+    private static string ParseFormat(object? parameter, out decimal min, out decimal max)
+    {
+        min = decimal.MinValue;
+        max = decimal.MaxValue;
+        string format = "N2";
+        if (parameter == null)
+            return format;
+
+        string[] parts = parameter.ToString()!.Split(';');
+        if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
+            format = parts[0].Trim();
+
+        if (parts.Length > 1 && decimal.TryParse(parts[1].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal mn))
+            min = mn;
+        if (parts.Length > 2 && decimal.TryParse(parts[2].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal mx))
+            max = mx;
+
+        return format;
+    }
+
+    private static decimal Clamp(decimal value, decimal min, decimal max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+}
+
+/// <summary>
 /// Converte valore in euro formattato
 /// </summary>
 public class EuroCurrencyConverter : IValueConverter

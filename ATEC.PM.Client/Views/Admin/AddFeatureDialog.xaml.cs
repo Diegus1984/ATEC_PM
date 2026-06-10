@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using ATEC.PM.Client.Controls;
 
 namespace ATEC.PM.Client.Views.Admin;
 
@@ -14,6 +15,8 @@ public partial class AddFeatureDialog : Window
     public AddFeatureDialog(List<LevelOption> levelOptions)
     {
         InitializeComponent();
+        cboCategory.ItemsSource = AuthFeatureLabels.CategoryOptions;
+        cboCategory.SelectedIndex = 0;
         cboLevel.ItemsSource = levelOptions;
         if (levelOptions.Count > 0)
             cboLevel.SelectedIndex = 0;
@@ -23,13 +26,13 @@ public partial class AddFeatureDialog : Window
     {
         if (string.IsNullOrWhiteSpace(txtKey.Text) || string.IsNullOrWhiteSpace(txtName.Text))
         {
-            MessageBox.Show("Chiave e Nome sono obbligatori.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShadcnMessageBox.Show("Nome e codice interno sono obbligatori.", "Attenzione", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        FeatureKey = txtKey.Text.Trim();
+        FeatureKey = txtKey.Text.Trim().ToLowerInvariant();
         FeatureDisplayName = txtName.Text.Trim();
-        FeatureCategory = (cboCategory.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "navigation";
+        FeatureCategory = (cboCategory.SelectedItem as CategoryOption)?.Value ?? "navigation";
         FeatureMinLevel = (cboLevel.SelectedItem as LevelOption)?.Value ?? 0;
 
         DialogResult = true;

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,7 +11,7 @@ namespace ATEC.PM.Client.Views;
 public partial class DdpDestinationsPage : Page
 {
     private List<DdpDestinationItem> _allItems = new();
-    private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
+    private List<DdpStatusItem> _statuses = new();
 
     public DdpDestinationsPage()
     {
@@ -25,26 +24,26 @@ public partial class DdpDestinationsPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/ddp-destinations");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<DdpDestinationItem>>>(json, _jsonOpt);
-            if (response?.Success == true)
-            {
-                _allItems = response.Data ?? new();
-                dgDestinations.ItemsSource = _allItems;
-                txtCount.Text = $"({_allItems.Count} voci)";
-                txtStatus.Text = $"{_allItems.Count} destinazioni caricate";
-            }
+            _allItems = await ApiClient.GetListAsync<DdpDestinationItem>("/api/ddp-destinations");
+            dgDestinations.ItemsSource = _allItems;
+
+            _statuses = await ApiClient.GetListAsync<DdpStatusItem>("/api/ddp-statuses");
+            dgStatuses.ItemsSource = _statuses;
+
+            txtCount.Text = $"({_allItems.Count} destinazioni · {_statuses.Count} stati)";
+            txtStatus.Text = $"{_allItems.Count} destinazioni, {_statuses.Count} stati caricati";
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
     }
 
+    // ── Destinazioni ──
     private async void BtnAdd_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new DdpDestinationDialog { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) await Load();
     }
 
-    private async void Dg_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private async void DgDest_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (dgDestinations.SelectedItem is DdpDestinationItem item)
         {
@@ -53,7 +52,21 @@ public partial class DdpDestinationsPage : Page
         }
     }
 
-    private void Dg_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+    // ── Stati / Causali (crea + modifica etichetta/colore) ──
+    private async void BtnAddStatus_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new DdpStatusDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true) await Load();
+    }
+
+    private async void DgStatus_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (dgStatuses.SelectedItem is DdpStatusItem item)
+        {
+            var dlg = new DdpStatusDialog(item) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) await Load();
+        }
+    }
 
     private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await Load();
 }

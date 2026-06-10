@@ -2,142 +2,190 @@
     x:Class="ATEC.PM.Client.Views.CostSectionsTreePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="#F7F8FA">
+    Background="{DynamicResource ShadcnMutedBrush}"
+    FontFamily="{DynamicResource ShadcnFontFamily}">
 
+    <!-- Preset: https://ui.shadcn.com/create?preset=bIkeymG (zinc, sidebar scura, card chiare) -->
     <Page.Resources>
-        <Style x:Key="DragBadge" TargetType="Border">
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="Margin" Value="0,2" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="SidebarBgBrush" Color="#09090B" />
+            <SolidColorBrush x:Key="SidebarFgBrush" Color="#FAFAFA" />
+            <SolidColorBrush x:Key="SidebarMutedBrush" Color="#A1A1AA" />
+            <SolidColorBrush x:Key="SidebarBorderBrush" Color="#27272A" />
+            <SolidColorBrush x:Key="SidebarHoverBrush" Color="#18181B" />
+            <SolidColorBrush x:Key="SidebarAccentBrush" Color="#27272A" />
+
+            <Style x:Key="PanelSectionLabel" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource ShadcnMutedForegroundBrush}" />
+            </Style>
+
+            <Style x:Key="SidebarSectionLabel" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource SidebarMutedBrush}" />
+            </Style>
+
+            <Style x:Key="DragBadge" TargetType="Border">
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="8,4" />
+                <Setter Property="Margin" Value="0,2" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+        </ResourceDictionary>
     </Page.Resources>
 
-    <DockPanel>
+    <DockPanel Margin="0">
 
-        <!--  TOOLBAR  -->
-        <Border Style="{StaticResource ToolbarBorder}" DockPanel.Dock="Top">
+        <!-- Toolbar -->
+        <Border
+            Padding="20,14"
+            Background="{DynamicResource ShadcnCardBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,0,0,1"
+            DockPanel.Dock="Top">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Style="{StaticResource ShadcnH2}" Text="Sezioni costo" />
                     <TextBlock
-                        VerticalAlignment="Center" FontSize="16" FontWeight="Bold"
-                        Foreground="#1A1D26" Text="Sezioni Costo — Configurazione" />
+                        Margin="0,4,0,0"
+                        Style="{StaticResource ShadcnMuted}"
+                        Text="Configura gruppi, sezioni, fasi e collegamenti ai reparti" />
                     <TextBlock
-                        x:Name="txtCount" Margin="16,0,0,0"
-                        VerticalAlignment="Center" FontSize="13" Foreground="#6B7280" />
+                        x:Name="txtCount"
+                        Margin="0,8,0,0"
+                        FontSize="12"
+                        Foreground="{DynamicResource ShadcnMutedForegroundBrush}" />
                 </StackPanel>
-                <StackPanel HorizontalAlignment="Right" DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Background="#059669"
-                            Click="BtnAddGroup_Click" Content="+ Gruppo"
-                            Foreground="White" Style="{StaticResource SuccessBtn}" />
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        Click="BtnAddGroup_Click"
+                        Content="+ Gruppo"
+                        Style="{StaticResource ShadcnButtonDefault}" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!--  STATUS BAR  -->
-        <Border Padding="16,6" Background="White" BorderBrush="#E4E7EC"
-                BorderThickness="0,1,0,0" DockPanel.Dock="Bottom">
-            <TextBlock x:Name="txtStatus" FontSize="12" Foreground="#6B7280" />
+        <!-- Status -->
+        <Border
+            Padding="20,8"
+            Background="{DynamicResource ShadcnCardBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <TextBlock
+                x:Name="txtStatus"
+                FontSize="12"
+                Foreground="{DynamicResource ShadcnMutedForegroundBrush}" />
         </Border>
 
-        <!--  MAIN CONTENT  -->
-        <Grid>
+        <!-- Main -->
+        <Grid Margin="16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" MinWidth="220" />
+                <ColumnDefinition Width="300" MinWidth="240" />
                 <ColumnDefinition Width="5" />
                 <ColumnDefinition Width="*" MinWidth="400" />
             </Grid.ColumnDefinitions>
 
-            <!--  LEFT PANEL  -->
-            <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!--  REPARTI  -->
-                <DockPanel Grid.Row="0">
-                    <Border Padding="12,8" Background="#F0F4FF"
-                            BorderBrush="#E4E7EC" BorderThickness="0,0,0,1"
-                            DockPanel.Dock="Top">
+            <!-- Reparti (sidebar stile preset / dashboard Shadcn) -->
+            <Border
+                Grid.Column="0"
+                Background="{StaticResource SidebarBgBrush}"
+                BorderBrush="{StaticResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <DockPanel>
+                    <Border
+                        Padding="16,12"
+                        BorderBrush="{StaticResource SidebarBorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        DockPanel.Dock="Top">
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Click="BtnAddDepartment_Click"
-                                    Content="+" Width="22" Height="22" FontSize="12"
-                                    FontWeight="Bold" Background="#E0E7FF" Foreground="#4F6EF7"
-                                    BorderThickness="0" Cursor="Hand" ToolTip="Nuovo reparto" />
-                            <TextBlock FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#4F6EF7" Text="REPARTI — trascina su una sezione"
-                                       VerticalAlignment="Center" />
-                        </DockPanel>
-                    </Border>
-                    <StackPanel x:Name="pnlDepartments" Margin="8,6,8,8" />
-                </DockPanel>
-
-                <!--  FASI TEMPLATE (non collegate)  -->
-                <DockPanel Grid.Row="1">
-                    <Border Padding="12,8" Background="#FFF8F0"
-                            BorderBrush="#E4E7EC" BorderThickness="0,0,0,1"
-                            DockPanel.Dock="Top">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right"
-                                    Click="BtnAddPhaseGlobal_Click"
-                                    Content="+ Fase"
-                                    Height="24" Padding="8,0"
-                                    Background="#D9770620" BorderThickness="0"
-                                    Foreground="#D97706" FontSize="11" FontWeight="SemiBold"
-                                    Cursor="Hand" VerticalAlignment="Center"
-                                    ToolTip="Crea nuova fase template" />
-                            <StackPanel>
-                                <TextBlock FontSize="12" FontWeight="SemiBold"
-                                           Foreground="#D97706" Text="FASI TEMPLATE — trascina su una sezione" />
-                                <TextBlock x:Name="txtPhaseCount" Margin="0,2,0,0"
-                                           FontSize="11" Foreground="#9CA3AF" />
+                            <Button
+                                Width="28"
+                                Height="28"
+                                Padding="0"
+                                HorizontalAlignment="Right"
+                                Click="BtnAddDepartment_Click"
+                                Content="+"
+                                DockPanel.Dock="Right"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Style="{StaticResource ShadcnButtonGhost}"
+                                Foreground="{StaticResource SidebarFgBrush}"
+                                ToolTip="Nuovo reparto" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock
+                                    Style="{StaticResource SidebarSectionLabel}"
+                                    Text="REPARTI" />
+                                <TextBlock
+                                    Margin="0,2,0,0"
+                                    FontSize="12"
+                                    Foreground="{StaticResource SidebarFgBrush}"
+                                    Text="Trascina su una sezione" />
                             </StackPanel>
                         </DockPanel>
                     </Border>
-                    <TextBox x:Name="txtSearchPhase" DockPanel.Dock="Top"
-                             Height="28" Margin="8,6,8,4"
-                             Padding="6,3" BorderBrush="#D0D5DD" FontSize="12"
-                             Tag="Cerca fase..." TextChanged="TxtSearchPhase_TextChanged" />
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="pnlPhases" Margin="8,2,8,8" />
+                    <ScrollViewer
+                        Padding="8,8,8,12"
+                        VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="pnlDepartments" />
                     </ScrollViewer>
                 </DockPanel>
-            </Grid>
+            </Border>
 
-            <!--  SPLITTER  -->
-            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="#E4E7EC" />
+            <GridSplitter
+                Grid.Column="1"
+                HorizontalAlignment="Stretch"
+                Background="{DynamicResource ShadcnBorderBrush}" />
 
-            <!--  RIGHT: TREEVIEW  -->
-            <DockPanel Grid.Column="2">
-                <Border Padding="12,8" Background="#F0FFF4"
-                        BorderBrush="#E4E7EC" BorderThickness="0,0,0,1"
+            <!-- Struttura sezioni + fasi -->
+            <Border
+                Grid.Column="2"
+                Padding="0"
+                Style="{StaticResource ShadcnCard}">
+                <DockPanel>
+                    <Border
+                        Padding="0,0,0,12"
+                        BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                        BorderThickness="0,0,0,1"
                         DockPanel.Dock="Top">
-                    <TextBlock FontSize="12" FontWeight="SemiBold"
-                               Foreground="#12B76A" Text="STRUTTURA SEZIONI COSTO" />
-                </Border>
-                <TreeView x:Name="tvSections" Padding="8"
-                          AllowDrop="True" Background="White" BorderThickness="0"
-                          DragOver="TvSections_DragOver" Drop="TvSections_Drop" FontSize="13">
-                    <TreeView.Resources>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="Padding" Value="4,2" />
-                            <Setter Property="IsExpanded" Value="True" />
-                            <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="BorderThickness" Value="0" />
-                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                            <Style.Resources>
-                                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent" />
-                                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black" />
-                                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent" />
-                                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black" />
-                            </Style.Resources>
-                        </Style>
-                    </TreeView.Resources>
-                </TreeView>
-            </DockPanel>
-
+                        <StackPanel>
+                            <TextBlock
+                                Style="{StaticResource PanelSectionLabel}"
+                                Text="STRUTTURA" />
+                            <TextBlock
+                                Margin="0,2,0,0"
+                                Style="{StaticResource ShadcnH3}"
+                                Text="Gruppi, sezioni e fasi" />
+                        </StackPanel>
+                    </Border>
+                    <TreeView
+                        x:Name="tvSections"
+                        AllowDrop="True"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        DragOver="TvSections_DragOver"
+                        Drop="TvSections_Drop"
+                        FontSize="13"
+                        Padding="4,8,4,4"
+                        Style="{StaticResource ShadcnTreeView}">
+                        <TreeView.Resources>
+                            <Style BasedOn="{StaticResource ShadcnTreeViewItem}" TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="True" />
+                            </Style>
+                        </TreeView.Resources>
+                    </TreeView>
+                </DockPanel>
+            </Border>
         </Grid>
-
     </DockPanel>
 </Page>

@@ -33,3 +33,10 @@ public class CreateAuthFeatureRequest
     public int MinLevel { get; set; }
     public string Behavior { get; set; } = "HIDDEN";
 }
+
+public class AuthFeaturesContextDto
+{
+    public int UserLevel { get; set; }
+    public List<AuthFeatureDto> Features { get; set; } = new();
+    public List<AuthLevelDto> Levels { get; set; } = new();
+}

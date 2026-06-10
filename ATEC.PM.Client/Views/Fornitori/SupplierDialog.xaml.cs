@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows;
 using ATEC.PM.Client.Services;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -20,20 +21,18 @@ public partial class SupplierDialog : Window
     {
         try
         {
-            var json = await ApiClient.GetAsync($"/api/suppliers/{_id}");
-            var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
-            {
-                var d = doc.RootElement.GetProperty("data");
-                txtCompanyName.Text = d.GetProperty("companyName").GetString() ?? "";
-                txtContactName.Text = d.GetProperty("contactName").GetString() ?? "";
-                txtEmail.Text = d.GetProperty("email").GetString() ?? "";
-                txtPhone.Text = d.GetProperty("phone").GetString() ?? "";
-                txtAddress.Text = d.GetProperty("address").GetString() ?? "";
-                txtVatNumber.Text = d.GetProperty("vatNumber").GetString() ?? "";
-                txtFiscalCode.Text = d.GetProperty("fiscalCode").GetString() ?? "";
-                txtNotes.Text = d.GetProperty("notes").GetString() ?? "";
-            }
+            SupplierSaveRequest? d = await ApiClient.GetDataAsync<SupplierSaveRequest>($"/api/suppliers/{_id}");
+            if (d == null)
+                return;
+
+            txtCompanyName.Text = d.CompanyName;
+            txtContactName.Text = d.ContactName;
+            txtEmail.Text = d.Email;
+            txtPhone.Text = d.Phone;
+            txtAddress.Text = d.Address;
+            txtVatNumber.Text = d.VatNumber;
+            txtFiscalCode.Text = d.FiscalCode;
+            txtNotes.Text = d.Notes;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }
@@ -51,10 +50,9 @@ public partial class SupplierDialog : Window
             var result = _id == 0
                 ? await ApiClient.PostAsync("/api/suppliers", jsonBody)
                 : await ApiClient.PutAsync($"/api/suppliers/{_id}", jsonBody);
-            var doc = JsonDocument.Parse(result);
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.IsApiSuccess(result, out string msg))
             { DialogResult = true; Close(); }
-            else txtError.Text = doc.RootElement.GetProperty("message").GetString();
+            else txtError.Text = msg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
         finally { btnSave.IsEnabled = true; }

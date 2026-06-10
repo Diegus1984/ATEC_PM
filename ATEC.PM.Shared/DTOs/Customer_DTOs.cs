@@ -16,6 +16,28 @@ public class CustomerListItem
     public string Notes { get; set; } = "";
     public string PaymentTerms { get; set; } = "";
     public bool IsActive { get; set; }
+
+    public string Initials
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(CompanyName)) return "";
+            var words = CompanyName.Split(new[] { ' ', '-', '_', '.', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0) return "";
+            if (words.Length == 1)
+            {
+                string word = words[0];
+                return word.Length >= 2 ? word.Substring(0, 2).ToUpper() : word.Substring(0, 1).ToUpper();
+            }
+            else
+            {
+                // Take first char of first word, and first char of second word
+                string first = words[0].Substring(0, 1);
+                string second = words[1].Substring(0, 1);
+                return (first + second).ToUpper();
+            }
+        }
+    }
 }
 
 public class CustomerSaveRequest

@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/projects/{projectId}/budget-vs-actual")]
 [Authorize]
+// Dati economici (budget/actual): visibili solo da livello PM in su (feature data.budget).
+[RequireFeature("data.budget")]
 public class BudgetVsActualController : ControllerBase
 {
     private readonly DbService _db;
@@ -56,14 +59,16 @@ public class BudgetVsActualController : ControllerBase
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // ── ASSEGNATE: ore da phase_assignments aggregate per cost_section ──
+        // Usa snapshot pp.cost_section_template_id (fallback su phase_templates per dati legacy)
         var assigned = c.Query<dynamic>(@"
             SELECT pcs.id AS CostSectionId,
                    SUM(pa.planned_hours) AS Hours
             FROM phase_assignments pa
             JOIN project_phases pp ON pp.id = pa.project_phase_id
-            JOIN phase_templates pt ON pt.id = pp.phase_template_id
-            JOIN project_cost_sections pcs ON pcs.template_id = pt.cost_section_template_id
-                                          AND pcs.project_id = pp.project_id
+            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN project_cost_sections pcs
+                 ON pcs.template_id = COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)
+                AND pcs.project_id = pp.project_id
             WHERE pp.project_id = @pid AND pcs.is_enabled = 1
             GROUP BY pcs.id", new { pid = projectId }).ToList();
 
@@ -300,10 +305,10 @@ public class BudgetVsActualController : ControllerBase
 
         decimal budgetTravelTotal = result.Groups.Sum(g => g.Sections.Sum(s => s.BudgetTotalTravelCost));
 
-        // Consuntivo acquisti: bom_items attivi (tutti tranne CANCELLED) — stessa query della dashboard commessa
+        // Consuntivo acquisti: bom_items attivi (tutti tranne ANN = ANNULLATO) — stessa query della dashboard commessa
         decimal actualMaterialCost = c.ExecuteScalar<decimal?>(@"
             SELECT SUM(quantity * unit_cost)
-            FROM bom_items WHERE project_id = @pid AND item_status <> 'CANCELLED'",
+            FROM bom_items WHERE project_id = @pid AND item_status <> 'ANN'",
             new { pid = projectId }) ?? 0;
 
         // Tecnici attivi e fasi
@@ -320,7 +325,12 @@ public class BudgetVsActualController : ControllerBase
 
         decimal orderPrice = (decimal)(proj?.revenue ?? 0m);
         decimal actualTravelCost = (decimal)(proj?.actual_travel_cost ?? 0m);
-        decimal budgetCost = result.TotalBudgetCost + result.TotalMaterialNetCost + budgetTravelTotal;
+        
+        // Se non ci sono gruppi (no preventivo), usiamo i totali manuali della commessa
+        bool hasQuoteSections = result.Groups.Any();
+        decimal computedBudgetCost = result.TotalBudgetCost + result.TotalMaterialNetCost + budgetTravelTotal;
+        decimal budgetCost = hasQuoteSections ? computedBudgetCost : (decimal)(proj?.budget_total ?? 0m);
+
         decimal actualTotalCost = result.TotalActualCost + actualMaterialCost + actualTravelCost;
         int totalPhases = (int)(phaseCounts?.Total ?? 0);
         int completedPhases = (int)(phaseCounts?.Completed ?? 0);
@@ -332,8 +342,8 @@ public class BudgetVsActualController : ControllerBase
             TotalNetCost = result.Pricing?.NetCost ?? 0,
             ContingencyAmount = result.Pricing?.ContingencyAmount ?? 0,
             BudgetCost = budgetCost,
-            BudgetResourceHours = result.TotalBudgetHours,
-            BudgetResourceCost = result.TotalBudgetCost,
+            BudgetResourceHours = hasQuoteSections ? result.TotalBudgetHours : (decimal)(proj?.budget_hours_total ?? 0m),
+            BudgetResourceCost = hasQuoteSections ? result.TotalBudgetCost : (decimal)(proj?.budget_total ?? 0m),
             BudgetMaterialCost = result.TotalMaterialNetCost,
             BudgetTravelCost = budgetTravelTotal,
             ActualResourceHours = result.TotalActualHours,

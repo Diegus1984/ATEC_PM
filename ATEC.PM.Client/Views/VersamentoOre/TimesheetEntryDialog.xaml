@@ -4,48 +4,91 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Registra Ore"
     Width="420"
-    Height="Auto"
-    Background="#F7F8FA"
+    SizeToContent="Height"
+    MinHeight="480"
+    Background="{DynamicResource ShadcnMutedBrush}"
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner">
     <Window.Resources>
-        <Style x:Key="Lbl" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="Margin" Value="0,12,0,4" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="Lbl" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource ShadcnFontFamily}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource ShadcnMutedForegroundBrush}" />
+                <Setter Property="Margin" Value="0,12,0,4" />
+            </Style>
+            <Style x:Key="ShadcnPasswordBox" TargetType="PasswordBox">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontFamily" Value="{StaticResource ShadcnFontFamily}" />
+                <Setter Property="Background" Value="{DynamicResource ShadcnBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ShadcnInputBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="Foreground" Value="{DynamicResource ShadcnForegroundBrush}" />
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
     <DockPanel>
         <Border
+            Padding="20,14"
+            Background="{DynamicResource ShadcnPrimaryBrush}"
+            DockPanel.Dock="Top">
+            <StackPanel>
+                <TextBlock
+                    x:Name="hdrDate"
+                    FontFamily="{StaticResource ShadcnFontFamily}"
+                    FontSize="18"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource ShadcnPrimaryForegroundBrush}"
+                    Text="" />
+                <TextBlock
+                    x:Name="hdrSubtitle"
+                    Margin="0,2,0,0"
+                    FontFamily="{StaticResource ShadcnFontFamily}"
+                    FontSize="12"
+                    Foreground="{DynamicResource ShadcnPrimaryForegroundBrush}"
+                    Opacity="0.85"
+                    TextWrapping="Wrap"
+                    Text="Registrazione ore" />
+            </StackPanel>
+        </Border>
+        <Border
             Padding="16,12"
-            Background="White"
-            BorderBrush="#E4E7EC"
+            Background="{DynamicResource ShadcnCardBrush}"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
             BorderThickness="0,1,0,0"
             DockPanel.Dock="Bottom">
-            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+            <DockPanel LastChildFill="False">
+                <!-- Elimina: visibile solo in modifica di una timbratura esistente -->
                 <Button
+                    x:Name="btnDelete"
+                    DockPanel.Dock="Left"
                     Width="90"
-                    Height="34"
-                    Background="#F3F4F6"
-                    BorderThickness="0"
-                    Click="BtnCancel_Click"
-                    Content="Annulla"
-                    Cursor="Hand"
-                    Foreground="#374151" />
-                <Button
-                    x:Name="btnSave"
-                    Width="90"
-                    Height="34"
-                    Margin="8,0,0,0"
-                    Background="#4F6EF7"
-                    BorderThickness="0"
-                    Click="BtnSave_Click"
-                    Content="Salva"
-                    Cursor="Hand"
-                    FontWeight="SemiBold"
-                    Foreground="White" />
-            </StackPanel>
+                    Click="BtnDelete_Click"
+                    Content="Elimina"
+                    Foreground="{DynamicResource ShadcnDestructiveBrush}"
+                    Style="{StaticResource ShadcnButtonSecondary}"
+                    Visibility="Collapsed" />
+                <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right" Orientation="Horizontal">
+                    <Button
+                        Width="90"
+                        Click="BtnCancel_Click"
+                        Content="Annulla"
+                        Style="{StaticResource ShadcnButtonSecondary}" />
+                    <Button
+                        x:Name="btnSave"
+                        Width="90"
+                        Margin="8,0,0,0"
+                        Click="BtnSave_Click"
+                        Content="Salva"
+                        Style="{StaticResource ShadcnButtonDefault}" />
+                </StackPanel>
+            </DockPanel>
         </Border>
         <StackPanel Margin="24,8,24,16">
             <TextBlock
@@ -96,13 +139,17 @@
                     <TextBlock Style="{StaticResource Lbl}" Text="ORE *" />
                     <TextBox
                         x:Name="txtHours"
-                        Height="34"
-                        Padding="8,6"
-                        BorderBrush="#E4E7EC"
-                        FontSize="13"
-                        Text="8" />
+                        Style="{StaticResource ShadcnTextBox}" />
                 </StackPanel>
             </Grid>
+            <TextBlock
+                x:Name="txtDayHint"
+                Margin="0,4,0,0"
+                FontFamily="{StaticResource ShadcnFontFamily}"
+                FontSize="11"
+                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                TextWrapping="Wrap"
+                Text="" />
 
             <TextBlock Style="{StaticResource Lbl}" Text="TIPO" />
             <ComboBox
@@ -118,17 +165,16 @@
             <TextBox
                 x:Name="txtNotes"
                 Height="50"
-                Padding="8,6"
                 AcceptsReturn="True"
-                BorderBrush="#E4E7EC"
-                FontSize="13"
+                Style="{StaticResource ShadcnTextBox}"
                 TextWrapping="Wrap" />
 
             <TextBlock
                 x:Name="txtError"
                 Margin="0,12,0,0"
+                FontFamily="{StaticResource ShadcnFontFamily}"
                 FontSize="12"
-                Foreground="#EF4444"
+                Foreground="{DynamicResource ShadcnDestructiveBrush}"
                 TextWrapping="Wrap" />
         </StackPanel>
     </DockPanel>

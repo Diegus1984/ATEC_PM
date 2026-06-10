@@ -10,11 +10,36 @@ namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/import")]
-[AllowAnonymous]
+[Authorize(Roles = "ADMIN,PM")]
 public class ImportController : ControllerBase
 {
     private readonly IConfiguration _config;
     private readonly DbService _db;
+
+    private static readonly HashSet<string> AllowedEasyfattTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TAnagrafica",
+        "TArticoli",
+        "TDocTestate",
+        "TDocRighe",
+        "TDocIva",
+        "TTipiDoc"
+    };
+
+    private bool IsValidFilePath(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return false;
+        try
+        {
+            string ext = Path.GetExtension(filePath);
+            return ext.Equals(".eft", StringComparison.OrdinalIgnoreCase) || 
+                   ext.Equals(".fdb", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public ImportController(IConfiguration config, DbService db)
     {
@@ -28,8 +53,8 @@ public class ImportController : ControllerBase
     [HttpGet("easyfatt/suppliers")]
     public IActionResult GetEasyfattSuppliers([FromQuery] string filePath)
     {
-        if (string.IsNullOrEmpty(filePath))
-            return BadRequest("filePath richiesto");
+        if (!IsValidFilePath(filePath))
+            return BadRequest(ApiResponse<object>.Fail("File non valido o estensione non consentita (.eft, .fdb)"));
 
         try
         {
@@ -164,8 +189,15 @@ public class ImportController : ControllerBase
     [HttpGet("easyfatt/preview")]
     public IActionResult PreviewTable([FromQuery] string filePath, [FromQuery] string tableName, [FromQuery] int maxRows = 10)
     {
-        if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(tableName))
-            return BadRequest("filePath e tableName richiesti");
+        if (!IsValidFilePath(filePath))
+            return BadRequest(ApiResponse<object>.Fail("File non valido o estensione non consentita (.eft, .fdb)"));
+
+        if (string.IsNullOrEmpty(tableName))
+            return BadRequest(ApiResponse<object>.Fail("tableName richiesto"));
+
+        string cleanTableName = tableName.Trim('"');
+        if (!AllowedEasyfattTables.Contains(cleanTableName))
+            return BadRequest(ApiResponse<object>.Fail("Tabella non consentita o non valida"));
 
         try
         {
@@ -173,7 +205,7 @@ public class ImportController : ControllerBase
             using var conn = new FbConnection(connStr);
             conn.Open();
 
-            using var cmd = new FbCommand($"SELECT FIRST {maxRows} * FROM \"{tableName}\"", conn);
+            using var cmd = new FbCommand($"SELECT FIRST {maxRows} * FROM \"{cleanTableName}\"", conn);
             using var reader = cmd.ExecuteReader();
 
             var columns = new List<string>();
@@ -206,12 +238,22 @@ public class ImportController : ControllerBase
     [HttpGet("easyfatt/columns")]
     public IActionResult GetColumns([FromQuery] string filePath, [FromQuery] string tableName)
     {
+        if (!IsValidFilePath(filePath))
+            return BadRequest(ApiResponse<object>.Fail("File non valido o estensione non consentita (.eft, .fdb)"));
+
+        if (string.IsNullOrEmpty(tableName))
+            return BadRequest(ApiResponse<object>.Fail("tableName richiesto"));
+
+        string cleanTableName = tableName.Trim('"');
+        if (!AllowedEasyfattTables.Contains(cleanTableName))
+            return BadRequest(ApiResponse<object>.Fail("Tabella non consentita o non valida"));
+
         try
         {
             var connStr = BuildConnectionString(filePath);
             using var conn = new FbConnection(connStr);
             conn.Open();
-            var colsData = conn.GetSchema("Columns", new[] { null, null, tableName, null });
+            var colsData = conn.GetSchema("Columns", new[] { null, null, cleanTableName, null });
             var columns = new List<object>();
             foreach (System.Data.DataRow colRow in colsData.Rows)
             {
@@ -236,8 +278,8 @@ public class ImportController : ControllerBase
     [HttpGet("easyfatt/articles")]
     public IActionResult GetEasyfattArticles([FromQuery] string filePath)
     {
-        if (string.IsNullOrEmpty(filePath))
-            return BadRequest("filePath richiesto");
+        if (!IsValidFilePath(filePath))
+            return BadRequest(ApiResponse<object>.Fail("File non valido o estensione non consentita (.eft, .fdb)"));
 
         try
         {
@@ -405,8 +447,8 @@ public class ImportController : ControllerBase
     [HttpGet("easyfatt/customers")]
     public IActionResult GetEasyfattCustomers([FromQuery] string filePath)
     {
-        if (string.IsNullOrEmpty(filePath))
-            return BadRequest("filePath richiesto");
+        if (!IsValidFilePath(filePath))
+            return BadRequest(ApiResponse<object>.Fail("File non valido o estensione non consentita (.eft, .fdb)"));
 
         try
         {

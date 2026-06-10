@@ -443,7 +443,7 @@ public class QuoteCatalogController : ControllerBase
 
             Log.Information("[QuoteProduct] Prodotto inserito con Id={ProductId}", productId);
 
-            foreach (var v in dto.Variants)
+            foreach (var v in dto.Variants ?? new())
             {
                 c.Execute(@"INSERT INTO quote_product_variants
                     (product_id, code, name, cost_price, markup_value, sort_order)
@@ -452,7 +452,7 @@ public class QuoteCatalogController : ControllerBase
             }
 
             tx.Commit();
-            Log.Information("[QuoteProduct] Commit OK — prodotto {Id} creato con {VarCount} varianti", productId, dto.Variants.Count);
+            Log.Information("[QuoteProduct] Commit OK — prodotto {Id} creato con {VarCount} varianti", productId, dto.Variants?.Count ?? 0);
             return Ok(ApiResponse<int>.Ok(productId, "Prodotto creato"));
         }
         catch (Exception ex)
@@ -482,6 +482,10 @@ public class QuoteCatalogController : ControllerBase
             using var c = _qdb.Open();
             using var tx = c.BeginTransaction();
 
+            // Snapshot della descrizione precedente per individuare le immagini rimosse
+            string? oldRtf = c.ExecuteScalar<string?>(
+                "SELECT description_rtf FROM quote_products WHERE id=@Id", new { Id = id }, tx);
+
             Log.Information("[QuoteProduct] Esecuzione UPDATE quote_products per Id={Id}", id);
             c.Execute(@"UPDATE quote_products SET category_id=@CategoryId, item_type=@ItemType,
                         code=@Code, name=@Name, description_rtf=@DescriptionRtf,
@@ -493,8 +497,9 @@ public class QuoteCatalogController : ControllerBase
             Log.Information("[QuoteProduct] UPDATE OK");
 
             // Strategia varianti: elimina le non presenti, aggiorna le esistenti, inserisci le nuove
-            var incomingIds = dto.Variants.Where(v => v.Id > 0).Select(v => v.Id).ToList();
-            Log.Information("[QuoteProduct] Varianti: {Existing} esistenti, {Total} totali", incomingIds.Count, dto.Variants.Count);
+            List<QuoteProductVariantSaveDto> variants = dto.Variants ?? new();
+            var incomingIds = variants.Where(v => v.Id > 0).Select(v => v.Id).ToList();
+            Log.Information("[QuoteProduct] Varianti: {Existing} esistenti, {Total} totali", incomingIds.Count, variants.Count);
 
             if (incomingIds.Count > 0)
                 c.Execute("DELETE FROM quote_product_variants WHERE product_id=@Pid AND id NOT IN @Ids",
@@ -503,7 +508,7 @@ public class QuoteCatalogController : ControllerBase
                 c.Execute("DELETE FROM quote_product_variants WHERE product_id=@Pid",
                     new { Pid = id }, tx);
 
-            foreach (var v in dto.Variants)
+            foreach (var v in variants)
             {
                 if (v.Id > 0)
                 {
@@ -523,6 +528,12 @@ public class QuoteCatalogController : ControllerBase
 
             tx.Commit();
             Log.Information("[QuoteProduct] Commit OK — prodotto {Id} aggiornato", id);
+
+            // Elimina dal disco le immagini che erano nella vecchia descrizione e non sono più usate
+            HashSet<string> removedImages = ExtractProductImageFiles(oldRtf);
+            removedImages.ExceptWith(ExtractProductImageFiles(dto.DescriptionRtf));
+            if (removedImages.Count > 0) DeleteOrphanImages(c, removedImages);
+
             return Ok(ApiResponse<string>.Ok("Prodotto aggiornato"));
         }
         catch (Exception ex)
@@ -612,10 +623,85 @@ public class QuoteCatalogController : ControllerBase
         try
         {
             using var c = _qdb.Open();
+            string? rtf = c.ExecuteScalar<string?>(
+                "SELECT description_rtf FROM quote_products WHERE id=@Id", new { Id = id });
             c.Execute("DELETE FROM quote_products WHERE id=@Id", new { Id = id });
+
+            // Rimuovi dal disco le immagini del prodotto non più referenziate altrove
+            HashSet<string> files = ExtractProductImageFiles(rtf);
+            if (files.Count > 0) DeleteOrphanImages(c, files);
+
             return Ok(ApiResponse<string>.Ok("Prodotto eliminato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ── Pulizia immagini orfane su disco ──
+
+    private string GetProductsDir()
+    {
+        string cmsPath = _config["Uploads:CmsPath"]
+            ?? Path.Combine(AppContext.BaseDirectory, "uploads", "cms");
+        return Path.Combine(cmsPath, "products");
+    }
+
+    /// <summary>Estrae i nomi dei file immagine (cartella products) referenziati in un HTML, sia con URL assoluto sia relativo.</summary>
+    private static HashSet<string> ExtractProductImageFiles(string? html)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(html)) return set;
+
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+            html, @"/uploads/cms/products/([^""'\s>)]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            string name = System.Net.WebUtility.HtmlDecode(m.Groups[1].Value);
+            int cut = name.IndexOfAny(new[] { '?', '#' });
+            if (cut >= 0) name = name.Substring(0, cut);
+            if (name.Length > 0) set.Add(name);
+        }
+        return set;
+    }
+
+    /// <summary>True se il file è ancora referenziato in qualche descrizione (catalogo, righe preventivo o materiali).</summary>
+    private static bool IsImageStillReferenced(MySqlConnector.MySqlConnection c, string fileName)
+    {
+        int n = c.ExecuteScalar<int>(@"
+            SELECT
+              (SELECT COUNT(*) FROM quote_products       WHERE description_rtf LIKE @p) +
+              (SELECT COUNT(*) FROM quote_items          WHERE description_rtf LIKE @p) +
+              (SELECT COUNT(*) FROM quote_material_items WHERE description_rtf LIKE @p)",
+            new { p = "%" + fileName + "%" });
+        return n > 0;
+    }
+
+    /// <summary>Elimina dal disco i file indicati, solo se dentro products/ e non più referenziati.</summary>
+    private void DeleteOrphanImages(MySqlConnector.MySqlConnection c, IEnumerable<string> fileNames)
+    {
+        string productsDir = Path.GetFullPath(GetProductsDir());
+        foreach (string raw in fileNames)
+        {
+            // Sicurezza: solo nome file semplice, nessun path traversal
+            string fileName = Path.GetFileName(raw);
+            if (string.IsNullOrWhiteSpace(fileName) || fileName != raw) continue;
+
+            try
+            {
+                if (IsImageStillReferenced(c, fileName)) continue;
+
+                string full = Path.GetFullPath(Path.Combine(productsDir, fileName));
+                if (!full.StartsWith(productsDir, StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (System.IO.File.Exists(full))
+                {
+                    System.IO.File.Delete(full);
+                    Log.Information("[QuoteProduct] Immagine orfana eliminata: {File}", fileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[QuoteProduct] Impossibile eliminare immagine orfana {File}", raw);
+            }
+        }
     }
 
     // ── Upload allegato prodotto ──
@@ -639,12 +725,37 @@ public class QuoteCatalogController : ControllerBase
             string productsDir = Path.Combine(cmsPath, "products");
             Directory.CreateDirectory(productsDir);
 
-            // Nome sicuro con timestamp per evitare collisioni
+            // Nome file univoco: timestamp (leggibilità) + token GUID (anti-collisione) + nome originale.
+            // L'estensione originale è preservata (serve per il content-type degli static files).
             string safeName = Path.GetFileName(file.FileName).Replace("..", "");
-            string fileName = $"att_{DateTime.Now:yyyyMMdd_HHmmss}_{safeName}";
-            string fullPath = Path.Combine(productsDir, fileName);
+            string ext = Path.GetExtension(safeName);
+            string baseName = Path.GetFileNameWithoutExtension(safeName);
+            if (string.IsNullOrWhiteSpace(baseName)) baseName = "image";
 
-            using (var stream = new FileStream(fullPath, FileMode.Create))
+            // FileMode.CreateNew NON sovrascrive mai: se per assurdo il nome esistesse già
+            // (col GUID è praticamente impossibile) si rigenera. Gli errori di scrittura veri
+            // (es. disco pieno) propagano al catch esterno e non vengono ritentati.
+            string fileName;
+            string fullPath;
+            FileStream stream;
+            int attempt = 0;
+            while (true)
+            {
+                string unique = Guid.NewGuid().ToString("N").Substring(0, 8);
+                fileName = $"att_{DateTime.Now:yyyyMMdd_HHmmss}_{unique}_{baseName}{ext}";
+                fullPath = Path.Combine(productsDir, fileName);
+                try
+                {
+                    stream = new FileStream(fullPath, FileMode.CreateNew);
+                    break;
+                }
+                catch (IOException) when (++attempt < 5)
+                {
+                    // Nome già presente: rigenera token e riprova.
+                }
+            }
+
+            using (stream)
                 file.CopyTo(stream);
 
             // Ritorna il path relativo per accesso via URL

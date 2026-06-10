@@ -30,6 +30,7 @@ public class PhaseListItem
     // Sezione costo di appartenenza (dalla fase template)
     public string CostSectionName { get; set; } = "";
     public int? CostSectionTemplateId { get; set; }
+    public bool IsLocal { get; set; }
 }
 
 public class PhaseAssignmentDto
@@ -75,4 +76,12 @@ public class BulkPhaseRequest
 public class PlannedHoursUpdate
 {
     public decimal PlannedHours { get; set; }
+}
+
+public class LocalPhaseRequest
+{
+    public int ProjectId { get; set; }
+    public int? CostSectionTemplateId { get; set; }
+    public string Name { get; set; } = "";
+    public int? DepartmentId { get; set; }
 }

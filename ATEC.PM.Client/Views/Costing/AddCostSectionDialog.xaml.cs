@@ -99,11 +99,9 @@ public partial class AddCostSectionDialog : Window
             };
             string json = JsonSerializer.Serialize(req, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             string result = await ApiClient.PostAsync($"{_apiBasePath}/sections", json);
-            JsonDocument doc = JsonDocument.Parse(result);
 
-            if (doc.RootElement.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<int>(result, out int newSectionId, out string errMsg))
             {
-                int newSectionId = doc.RootElement.GetProperty("data").GetInt32();
 
                 // Se da template, copia anche i reparti associati
                 if (templateId.HasValue)
@@ -124,7 +122,7 @@ public partial class AddCostSectionDialog : Window
                 Close();
             }
             else
-                txtError.Text = doc.RootElement.GetProperty("message").GetString();
+                txtError.Text = errMsg;
         }
         catch (Exception ex) { txtError.Text = $"Errore: {ex.Message}"; }
     }

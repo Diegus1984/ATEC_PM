@@ -93,7 +93,7 @@ public class NotificationService
 
 /// <summary>
 /// BackgroundService che ogni mattina:
-/// 1. Controlla articoli DDP scaduti (date_needed < oggi e stato non DELIVERED/CANCELLED)
+/// 1. Controlla articoli DDP scaduti (date_needed < oggi e stato non CON=consegnato / ANN=annullato)
 /// 2. Pulisce notifiche vecchie (retention 5gg lette, 30gg non lette)
 /// </summary>
 public class NotificationBackgroundService : BackgroundService
@@ -102,6 +102,7 @@ public class NotificationBackgroundService : BackgroundService
     private readonly ILogger<NotificationBackgroundService> _log;
     private readonly int _retentionReadDays;
     private readonly int _retentionUnreadDays;
+    private readonly TimeSpan _interval;
 
     public NotificationBackgroundService(IServiceProvider sp, IConfiguration config, ILogger<NotificationBackgroundService> log)
     {
@@ -109,12 +110,15 @@ public class NotificationBackgroundService : BackgroundService
         _log = log;
         _retentionReadDays = int.TryParse(config["Notifications:RetentionReadDays"], out int r) ? r : 5;
         _retentionUnreadDays = int.TryParse(config["Notifications:RetentionUnreadDays"], out int u) ? u : 30;
+        int hours = int.TryParse(config["Notifications:IntervalHours"], out int h) ? h : 6;
+        _interval = TimeSpan.FromHours(hours);
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        // Attendi avvio server
         await Task.Delay(10000, ct);
+
+        _log.LogInformation("[Notifications] Job attivo — intervallo {Hours}h", _interval.TotalHours);
 
         while (!ct.IsCancellationRequested)
         {
@@ -129,8 +133,7 @@ public class NotificationBackgroundService : BackgroundService
                 _log.LogError(ex, "[Notifications] Errore nel job giornaliero");
             }
 
-            // Prossimo check tra 6 ore (o configurabile)
-            await Task.Delay(TimeSpan.FromHours(6), ct);
+            await Task.Delay(_interval, ct);
         }
     }
 
@@ -149,7 +152,7 @@ public class NotificationBackgroundService : BackgroundService
             FROM bom_items b
             JOIN projects p ON p.id = b.project_id
             WHERE b.date_needed < CURDATE()
-              AND b.item_status NOT IN ('DELIVERED', 'CANCELLED')
+              AND b.item_status NOT IN ('CON', 'ANN')
               AND b.date_needed IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n

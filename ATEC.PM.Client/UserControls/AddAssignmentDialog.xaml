@@ -9,20 +9,27 @@
     ResizeMode="NoResize"
     WindowStartupLocation="CenterOwner">
 
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
     <DockPanel>
 
         <!--  Footer  -->
         <Border
             Padding="16,12"
             Background="White"
-            BorderBrush="#E4E7EC"
+            BorderBrush="{DynamicResource ShadcnBorderBrush}"
             BorderThickness="0,1,0,0"
             DockPanel.Dock="Bottom">
             <DockPanel>
                 <TextBlock
                     x:Name="txtError"
                     VerticalAlignment="Center"
-                    FontSize="11"
+                    Style="{StaticResource ShadcnSmall}"
                     Foreground="#EF4444" />
                 <StackPanel
                     HorizontalAlignment="Right"
@@ -31,23 +38,16 @@
                     <Button
                         Width="80"
                         Height="32"
-                        Background="#F3F4F6"
-                        BorderThickness="0"
                         Click="BtnCancel_Click"
                         Content="Annulla"
-                        Cursor="Hand"
-                        Foreground="#374151" />
+                        Style="{StaticResource ShadcnButtonOutline}" />
                     <Button
                         Width="80"
                         Height="32"
                         Margin="8,0,0,0"
-                        Background="#4F6EF7"
-                        BorderThickness="0"
                         Click="BtnAdd_Click"
                         Content="Aggiungi"
-                        Cursor="Hand"
-                        FontWeight="SemiBold"
-                        Foreground="White" />
+                        Style="{StaticResource ShadcnButtonDefault}" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -56,33 +56,34 @@
         <StackPanel Margin="20,16">
 
             <TextBlock
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
+                Style="{StaticResource ShadcnSmall}"
+                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                 Text="TECNICO *" />
             <ComboBox
                 x:Name="cmbEmployee"
                 Height="32"
                 Margin="0,4,0,0"
-                BorderBrush="#E4E7EC"
                 DisplayMemberPath="Name"
-                FontSize="12"
-                SelectedValuePath="Id" />
+                SelectedValuePath="Id"
+                Style="{StaticResource ShadcnComboBox}" />
 
             <TextBlock
                 Margin="0,12,0,0"
-                FontSize="11"
-                FontWeight="SemiBold"
-                Foreground="#6B7280"
+                Style="{StaticResource ShadcnSmall}"
+                Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
                 Text="ORE PIANIFICATE *" />
             <TextBox
                 x:Name="txtHours"
                 Height="32"
                 Margin="0,4,0,0"
-                Padding="8,5"
-                BorderBrush="#E4E7EC"
-                FontSize="13"
+                Style="{StaticResource ShadcnTextBox}"
                 Text="0" />
+
+            <CheckBox
+                x:Name="chkAllPhases"
+                Margin="0,16,0,0"
+                Content="Assegna a tutte le fasi della sezione"
+                Style="{StaticResource ShadcnCheckBox}" />
 
         </StackPanel>
     </DockPanel>

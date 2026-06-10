@@ -19,6 +19,18 @@ public class UserRow
     public List<string> DepartmentCodes { get; set; } = new();
     public List<string> CompetenceCodes { get; set; } = new();
     public string DepartmentCodesDisplay => string.Join(", ", DepartmentCodes);
+
+    public string Initials
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(FullName)) return "??";
+            string[] parts = FullName.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length >= 2
+                ? $"{parts[0][0]}{parts[1][0]}".ToUpper()
+                : FullName.Substring(0, System.Math.Min(2, FullName.Length)).ToUpper();
+        }
+    }
 }
 
 /// <summary>

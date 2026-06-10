@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
@@ -12,7 +13,12 @@ namespace ATEC.PM.Server.Controllers;
 public class DashboardController : ControllerBase
 {
     private readonly DbService _db;
-    public DashboardController(DbService db) => _db = db;
+    private readonly FeatureAccessService _access;
+    public DashboardController(DbService db, FeatureAccessService access)
+    {
+        _db = db;
+        _access = access;
+    }
 
     [HttpGet]
     public IActionResult Get()
@@ -42,6 +48,12 @@ public class DashboardController : ControllerBase
             GROUP BY p.id
             ORDER BY p.created_at DESC
             LIMIT 10").ToList();
+
+        // Il fatturato è dato economico: lo azzera per chi non ha la feature data.revenue
+        // (la dashboard resta visibile a tutti per i KPI operativi: commesse, ore, ecc.).
+        string role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        if (!_access.CanAccess(role, "data.revenue"))
+            stats.TotalRevenue = 0;
 
         return Ok(ApiResponse<DashboardData>.Ok(stats));
     }

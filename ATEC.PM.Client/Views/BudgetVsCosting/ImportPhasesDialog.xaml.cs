@@ -22,7 +22,7 @@ public partial class ImportPhasesDialog : Window
 
         if (SelectedTemplateIds.Count == 0)
         {
-            MessageBox.Show("Seleziona almeno una fase.", "Avviso");
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show("Seleziona almeno una fase.", "Avviso");
             return;
         }
 

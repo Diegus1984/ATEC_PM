@@ -31,12 +31,9 @@ public partial class CodexGenerateDialog : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/codex/prefixes");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CodexPrefix>>>(json, _jsonOpt);
-
-            if (response?.Success == true && response.Data != null)
+            List<CodexPrefix> prefixes = await ApiClient.GetListAsync<CodexPrefix>("/api/codex/prefixes");
             {
-                cmbPrefisso.ItemsSource = response.Data;
+                cmbPrefisso.ItemsSource = prefixes;
                 cmbPrefisso.DisplayMemberPath = "Display";
                 cmbPrefisso.SelectedValuePath = "Codice";
             }
@@ -128,7 +125,7 @@ public partial class CodexGenerateDialog : Window
                 _confirmed = true;
                 _currentReservationId = null;
 
-                MessageBox.Show(
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
                     $"Codice {GeneratedCode} generato con successo.",
                     "Codice Generato",
                     MessageBoxButton.OK,
@@ -181,7 +178,10 @@ public partial class CodexGenerateDialog : Window
         {
             await ApiClient.PostAsync($"/api/codex/release/{_currentReservationId.Value}", "{}");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error releasing current codex reservation: {ex}");
+        }
 
         _currentReservationId = null;
         _currentReservedCode = "";

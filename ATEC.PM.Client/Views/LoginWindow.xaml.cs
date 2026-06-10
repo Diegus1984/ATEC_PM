@@ -48,16 +48,13 @@ public partial class LoginWindow : Window
         {
             App.ApiBaseUrl = txtServer.Text.TrimEnd('/');
             string result = await ApiClient.PostLogin(txtUsername.Text, txtPassword.Password);
-            JsonDocument doc = JsonDocument.Parse(result);
-            JsonElement root = doc.RootElement;
 
-            if (root.GetProperty("success").GetBoolean())
+            if (ApiClient.TryGetApiData<LoginResponse>(result, out LoginResponse? login, out string errMsg) && login != null)
             {
-                JsonElement data = root.GetProperty("data");
-                App.Token = data.GetProperty("token").GetString() ?? "";
-                App.UserFullName = data.GetProperty("fullName").GetString() ?? "";
-                App.UserRole = data.GetProperty("userRole").GetString() ?? "";
-                App.UserId = data.GetProperty("employeeId").GetInt32();
+                App.Token = login.Token;
+                App.UserFullName = login.FullName;
+                App.UserRole = login.UserRole;
+                App.UserId = login.EmployeeId;
 
                 // Carica reparti e competenze per il PermissionEngine
                 await LoadUserContextAsync();
@@ -72,13 +69,12 @@ public partial class LoginWindow : Window
                 Close();
             }
             else
-            {
-                txtError.Text = root.GetProperty("message").GetString();
-            }
+                txtError.Text = errMsg;
         }
         catch (Exception ex)
         {
-            txtError.Text = $"Errore: {ex.Message}";
+            Serilog.Log.Error(ex, "Errore durante il login o l'apertura di MainWindow");
+            txtError.Text = $"Errore: {ex.Message} (Dettaglio: {ex.InnerException?.Message ?? "nessuno"})";
         }
         finally
         {
@@ -91,28 +87,22 @@ public partial class LoginWindow : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync($"/api/users/{App.UserId}");
-            JsonDocument doc = JsonDocument.Parse(json);
-            JsonElement root = doc.RootElement;
-
-            if (!root.GetProperty("success").GetBoolean()) return;
-
-            JsonElement data = root.GetProperty("data");
+            UserDetailDto? user = await ApiClient.GetDataAsync<UserDetailDto>($"/api/users/{App.UserId}");
+            if (user == null) return;
 
             List<string> deptCodes = new();
             List<string> respCodes = new();
             List<string> compCodes = new();
 
-            foreach (JsonElement d in data.GetProperty("departments").EnumerateArray())
+            foreach (EmployeeDepartmentDto d in user.Departments)
             {
-                string code = d.GetProperty("departmentCode").GetString() ?? "";
-                deptCodes.Add(code);
-                if (d.GetProperty("isResponsible").GetBoolean())
-                    respCodes.Add(code);
+                deptCodes.Add(d.DepartmentCode);
+                if (d.IsResponsible)
+                    respCodes.Add(d.DepartmentCode);
             }
 
-            foreach (JsonElement c in data.GetProperty("competences").EnumerateArray())
-                compCodes.Add(c.GetProperty("departmentCode").GetString() ?? "");
+            foreach (EmployeeCompetenceDto c in user.Competences)
+                compCodes.Add(c.DepartmentCode);
 
             App.SetCurrentUser(App.UserId, App.UserRole, deptCodes, respCodes, compCodes);
         }
@@ -129,41 +119,13 @@ public partial class LoginWindow : Window
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/auth-levels/features/my");
-            JsonDocument doc = JsonDocument.Parse(json);
-            JsonElement root = doc.RootElement;
+            AuthFeaturesContextDto? ctx = await ApiClient.GetDataAsync<AuthFeaturesContextDto>(
+                "/api/auth-levels/features/my");
+            if (ctx == null) return;
 
-            if (!root.GetProperty("success").GetBoolean()) return;
-
-            JsonElement data = root.GetProperty("data");
-            int userLevel = data.GetProperty("userLevel").GetInt32();
-
-            var features = new List<AuthFeatureDto>();
-            foreach (JsonElement f in data.GetProperty("features").EnumerateArray())
-            {
-                features.Add(new AuthFeatureDto
-                {
-                    Id = f.GetProperty("id").GetInt32(),
-                    FeatureKey = f.GetProperty("featureKey").GetString() ?? "",
-                    DisplayName = f.GetProperty("displayName").GetString() ?? "",
-                    Category = f.GetProperty("category").GetString() ?? "",
-                    MinLevel = f.GetProperty("minLevel").GetInt32(),
-                    Behavior = f.GetProperty("behavior").GetString() ?? "HIDDEN"
-                });
-            }
-
-            var levels = new List<AuthLevelDto>();
-            foreach (JsonElement l in data.GetProperty("levels").EnumerateArray())
-            {
-                levels.Add(new AuthLevelDto
-                {
-                    Id = l.GetProperty("id").GetInt32(),
-                    LevelValue = l.GetProperty("levelValue").GetInt32(),
-                    RoleName = l.GetProperty("roleName").GetString() ?? "",
-                    DisplayName = l.GetProperty("displayName").GetString() ?? "",
-                    SortOrder = l.GetProperty("sortOrder").GetInt32()
-                });
-            }
+            int userLevel = ctx.UserLevel;
+            List<AuthFeatureDto> features = ctx.Features;
+            List<AuthLevelDto> levels = ctx.Levels;
 
             PermissionEngine.LoadFeatures(features, levels, userLevel);
         }

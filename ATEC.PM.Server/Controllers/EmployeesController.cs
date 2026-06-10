@@ -24,6 +24,17 @@ public class EmployeesController : ControllerBase
     }
 
     /// <summary>
+    /// Solo dipendenti reali: esclude ADMIN, cessati e wildcard reparto ([PM] Generico, …).
+    /// </summary>
+    [HttpGet("real")]
+    public IActionResult GetRealEmployees()
+    {
+        using var c = _db.Open();
+        List<LookupItem> rows = c.Query<LookupItem>(EmployeeLookupQueries.RealEmployeesSql).ToList();
+        return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
+    }
+
+    /// <summary>
     /// Tecnici che appartengono a un reparto (employee_departments).
     /// Se departmentId è null/0 (fase trasversale) → restituisce tutti.
     /// </summary>
@@ -62,13 +73,21 @@ public class EmployeesController : ControllerBase
     public IActionResult GetByPhase(int phaseId)
     {
         using var c = _db.Open();
+        // Eredita reparti dalla SEZIONE DI COSTO DELLA COMMESSA (project_cost_sections),
+        // non dal template globale. Così se i reparti della sezione sono stati modificati
+        // localmente nella commessa, la fase rispetta quei reparti.
+        // Snapshot-aware: phase locale → pp.cost_section_template_id ; legacy → pt.cost_section_template_id
         List<LookupItem> rows = c.Query<LookupItem>(@"
             SELECT DISTINCT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name
-            FROM employees e
-            JOIN employee_departments ed ON ed.employee_id = e.id
-            JOIN cost_section_template_departments cstd ON cstd.department_id = ed.department_id
-            JOIN phase_templates pt ON pt.cost_section_template_id = cstd.section_template_id
-            JOIN project_phases pp ON pp.phase_template_id = pt.id
+            FROM project_phases pp
+            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
+            JOIN project_cost_sections pcs
+                 ON pcs.project_id = pp.project_id
+                AND pcs.template_id = COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)
+            JOIN project_cost_section_departments pcsd
+                 ON pcsd.project_cost_section_id = pcs.id
+            JOIN employee_departments ed ON ed.department_id = pcsd.department_id
+            JOIN employees e ON e.id = ed.employee_id
             WHERE pp.id = @PhaseId
               AND e.status <> 'TERMINATED'
               AND e.user_role <> 'ADMIN'
@@ -108,7 +127,9 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<EmployeeSaveRequest>.Ok(emp));
     }
 
+    // Anagrafica dipendenti in scrittura: solo ADMIN (cfr. PermissionEngine.CanEditEmployee).
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public IActionResult Create([FromBody] EmployeeSaveRequest req)
     {
         using var c = _db.Open();
@@ -119,6 +140,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "ADMIN")]
     public IActionResult Update(int id, [FromBody] EmployeeSaveRequest req)
     {
         using var c = _db.Open();
@@ -130,6 +152,7 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "ADMIN")]
     public IActionResult Delete(int id)
     {
         using var c = _db.Open();

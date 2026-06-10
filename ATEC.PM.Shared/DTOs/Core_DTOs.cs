@@ -43,3 +43,13 @@ public class ToggleActiveRequest
 {
     public bool IsActive { get; set; }
 }
+
+/// <summary>Risultato paginato per liste API (page, pageSize, search).</summary>
+public class PagedResult<T>
+{
+    public List<T> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public bool HasMore { get; set; }
+}

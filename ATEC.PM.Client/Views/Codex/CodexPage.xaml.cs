@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,11 +16,44 @@ namespace ATEC.PM.Client.Views;
 
 public partial class CodexPage : Page
 {
-    private List<CodexListItem> _allItems = new();
+    private const int PageSize = 50;
+
+    private ObservableCollection<CodexListItem> _allItems = new();
     private Dictionary<string, TextBox> _filterBoxes = new();
     private CancellationTokenSource? _filterCts;
     private DispatcherTimer? _syncTimer;
     private static readonly JsonSerializerOptions _jsonOpt = new() { PropertyNameCaseInsensitive = true };
+
+    private int _loadedPage;
+    private int _totalCount;
+    private bool _hasMore;
+    private bool _loading;
+    private InfiniteScrollHelper? _infiniteScroll;
+
+    private static readonly Dictionary<string, string> CodexFilterQueryKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Codice"] = "codice",
+        ["Descr"] = "descr",
+        ["CodeForn"] = "codeForn",
+        ["Fornitore"] = "fornitore",
+        ["PrezzoForn"] = "prezzoForn",
+        ["Iva"] = "iva",
+        ["Produttore"] = "produttore",
+        ["Data"] = "data",
+        ["Categoria"] = "categoria",
+        ["Barcode"] = "barcode",
+        ["Tipologia"] = "tipologia",
+        ["Extra1"] = "extra1",
+        ["Extra2"] = "extra2",
+        ["Extra3"] = "extra3",
+        ["CodeProd"] = "codeProd",
+        ["Spec"] = "spec",
+        ["Oper"] = "oper",
+        ["Um"] = "um",
+        ["Ubicazione"] = "ubicazione",
+        ["Codexforn"] = "codexforn",
+        ["Note"] = "note"
+    };
 
     // Mappa colonna → (x:Name, label per checkbox)
     private readonly List<(string Key, string Label, DataGridColumn Column)> _columnDefs = new();
@@ -33,6 +67,10 @@ public partial class CodexPage : Page
     public CodexPage()
     {
         InitializeComponent();
+        _infiniteScroll = new InfiniteScrollHelper(
+            () => _hasMore && !_loading,
+            () => Load(append: true));
+        _infiniteScroll.Attach(dgCodex);
         InitColumnDefs();
         LoadColumnSettings();
         BuildColumnCheckboxes();
@@ -112,7 +150,10 @@ public partial class CodexPage : Page
                 }
             }
         }
-        catch { /* ignora file corrotto, usa default */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading column settings: {ex}");
+        }
 
         ApplyColumnVisibility();
     }
@@ -126,7 +167,10 @@ public partial class CodexPage : Page
             string json = JsonSerializer.Serialize(_columnVisibility, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json);
         }
-        catch { /* silenzioso */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error saving column settings: {ex}");
+        }
     }
 
     private void BuildColumnCheckboxes()
@@ -173,37 +217,86 @@ public partial class CodexPage : Page
 
     // ── LOAD DATA ─────────────────────────────────────────────────
 
-    private async Task Load()
+    private async Task Load(bool append = false)
     {
-        txtStatus.Text = "Caricamento...";
+        if (_loading) return;
+        _loading = true;
+        if (!append)
+        {
+            _loadedPage = 0;
+            _allItems.Clear();
+        }
+
+        int page = append ? _loadedPage + 1 : 1;
+        string url = PagedApiHelper.BuildUrl("/api/codex", page, PageSize, BuildCodexQuery());
+        txtStatus.Text = append ? "Caricamento altri articoli..." : "Caricamento...";
         try
         {
-            string json = await ApiClient.GetAsync("/api/codex");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CodexListItem>>>(json, _jsonOpt);
-
-            if (response != null && response.Success)
+            PagedResult<CodexListItem>? pageData = await PagedApiHelper.GetPageAsync<CodexListItem>(url);
+            if (pageData != null)
             {
-                _allItems = response.Data ?? new();
-                ApplyFilter();
+                _loadedPage = pageData.Page;
+                _totalCount = pageData.TotalCount;
+                _hasMore = pageData.HasMore;
+                MergePageItems(pageData.Items, append);
+                UpdateListStatus();
+                _infiniteScroll?.NotifyContentUpdated(dgCodex);
             }
             else
-            {
                 txtStatus.Text = "Nessun dato — eseguire una sincronizzazione";
-            }
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Dictionary<string, string?> BuildCodexQuery()
+    {
+        Dictionary<string, string?> query = new();
+        foreach (KeyValuePair<string, string> kv in CodexFilterQueryKeys)
+        {
+            string val = F(kv.Key);
+            if (!string.IsNullOrEmpty(val))
+                query[kv.Value] = val;
+        }
+        return query;
+    }
+
+    private void UpdateListStatus()
+    {
+        if (_totalCount <= 0)
+            txtStatus.Text = "Nessun articolo";
+        else if (_allItems.Count >= _totalCount)
+            txtStatus.Text = $"{_totalCount:N0} articoli";
+        else
+            txtStatus.Text = $"{_allItems.Count:N0} di {_totalCount:N0} articoli";
+    }
+
+    /// <summary>Aggiorna la griglia con notifiche CollectionChanged (no AddRange su List).</summary>
+    private void MergePageItems(IReadOnlyList<CodexListItem> items, bool append)
+    {
+        if (!append)
+            _allItems.Clear();
+        foreach (CodexListItem item in items)
+            _allItems.Add(item);
+        if (dgCodex.ItemsSource != _allItems)
+            dgCodex.ItemsSource = _allItems;
     }
 
     private async Task LoadSyncStatus()
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/codex/sync-status");
-            var response = JsonSerializer.Deserialize<ApiResponse<CodexSyncStatus>>(json, _jsonOpt);
-            if (response?.Success == true && response.Data != null)
-                UpdateSyncStatusUI(response.Data);
+            CodexSyncStatus? status = await ApiClient.GetDataAsync<CodexSyncStatus>("/api/codex/sync-status");
+            if (status != null)
+                UpdateSyncStatusUI(status);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error loading sync status: {ex}");
+        }
     }
 
     private void UpdateSyncStatusUI(CodexSyncStatus s)
@@ -274,7 +367,7 @@ public partial class CodexPage : Page
         try
         {
             await Task.Delay(300, _filterCts.Token);
-            ApplyFilter();
+            await Load(append: false);
         }
         catch (TaskCanceledException) { }
     }
@@ -285,73 +378,13 @@ public partial class CodexPage : Page
     private static bool Match(string? value, string filter)
     {
         if (string.IsNullOrEmpty(filter)) return true;
-        var v = value?.ToLower() ?? "";
-
+        string v = value?.ToLower() ?? "";
         bool startsWild = filter.StartsWith('*');
         bool endsWild = filter.EndsWith('*');
-
-        if (startsWild && endsWild)
-            return v.Contains(filter.Trim('*'));
-        if (endsWild)
-            return v.StartsWith(filter.TrimEnd('*'));
-        if (startsWild)
-            return v.EndsWith(filter.TrimStart('*'));
-
+        if (startsWild && endsWild) return v.Contains(filter.Trim('*'));
+        if (endsWild) return v.StartsWith(filter.TrimEnd('*'));
+        if (startsWild) return v.EndsWith(filter.TrimStart('*'));
         return v.Contains(filter);
-    }
-
-    private void ApplyFilter()
-    {
-        if (_allItems == null) return;
-
-        string fCodice = F("Codice");
-        string fDescr = F("Descr");
-        string fCodeForn = F("CodeForn");
-        string fFornitore = F("Fornitore");
-        string fPrezzoForn = F("PrezzoForn");
-        string fIva = F("Iva");
-        string fProduttore = F("Produttore");
-        string fData = F("Data");
-        string fCategoria = F("Categoria");
-        string fBarcode = F("Barcode");
-        string fTipologia = F("Tipologia");
-        string fExtra1 = F("Extra1");
-        string fExtra2 = F("Extra2");
-        string fExtra3 = F("Extra3");
-        string fCodeProd = F("CodeProd");
-        string fSpec = F("Spec");
-        string fOper = F("Oper");
-        string fUm = F("Um");
-        string fUbicazione = F("Ubicazione");
-        string fCodexforn = F("Codexforn");
-        string fNote = F("Note");
-
-        var filtered = _allItems.Where(r =>
-            Match(r.Codice, fCodice) &&
-            Match(r.Descr, fDescr) &&
-            Match(r.CodeForn, fCodeForn) &&
-            Match(r.Fornitore, fFornitore) &&
-            Match(r.PrezzoForn.ToString("N2"), fPrezzoForn) &&
-            Match(r.Iva, fIva) &&
-            Match(r.Produttore, fProduttore) &&
-            Match(r.Data.ToString("dd/MM/yyyy"), fData) &&
-            Match(r.Categoria, fCategoria) &&
-            Match(r.Barcode, fBarcode) &&
-            Match(r.Tipologia, fTipologia) &&
-            Match(r.Extra1, fExtra1) &&
-            Match(r.Extra2, fExtra2) &&
-            Match(r.Extra3, fExtra3) &&
-            Match(r.CodeProd, fCodeProd) &&
-            Match(r.Spec, fSpec) &&
-            Match(r.Oper.ToString(), fOper) &&
-            Match(r.Um, fUm) &&
-            Match(r.Ubicazione, fUbicazione) &&
-            Match(r.Codexforn, fCodexforn) &&
-            Match(r.Note, fNote)
-        ).ToList();
-
-        dgCodex.ItemsSource = filtered;
-        txtStatus.Text = $"{filtered.Count:N0} articoli trovati su {_allItems.Count:N0}";
     }
 
     // ── GENERA CODICE INLINE ──────────────────────────────────────
@@ -375,11 +408,10 @@ public partial class CodexPage : Page
     {
         try
         {
-            string json = await ApiClient.GetAsync("/api/codex/prefixes");
-            var response = JsonSerializer.Deserialize<ApiResponse<List<CodexPrefix>>>(json, _jsonOpt);
-            if (response?.Success == true && response.Data != null)
+            List<CodexPrefix> prefixes = await ApiClient.GetListAsync<CodexPrefix>("/api/codex/prefixes");
+            if (prefixes.Count > 0)
             {
-                cmbPrefisso.ItemsSource = response.Data;
+                cmbPrefisso.ItemsSource = prefixes;
                 cmbPrefisso.DisplayMemberPath = "Display";
                 cmbPrefisso.SelectedValuePath = "Codice";
             }
@@ -522,7 +554,10 @@ public partial class CodexPage : Page
     {
         if (_currentReservationId == null) return;
         try { await ApiClient.PostAsync($"/api/codex/release/{_currentReservationId.Value}", "{}"); }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine($"Error releasing current reservation: {ex}");
+        }
         _currentReservationId = null;
         _currentReservedCode = "";
     }
@@ -582,7 +617,11 @@ public partial class CodexPage : Page
                 RefType = "201"
             };
             try { await ApiClient.PostAsync("/api/codex/references", JsonSerializer.Serialize(req201, jsonOpts)); }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Error saving Codex 201 reference: {ex}");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio del riferimento 201: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // Rif. 401 (materia prima)
@@ -596,7 +635,11 @@ public partial class CodexPage : Page
                 RefType = "401"
             };
             try { await ApiClient.PostAsync("/api/codex/references", JsonSerializer.Serialize(req401, jsonOpts)); }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Error saving Codex 401 reference: {ex}");
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore durante il salvataggio del riferimento 401: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
@@ -626,14 +669,14 @@ public partial class CodexPage : Page
 
     private void BtnClearFilters_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var tb in _filterBoxes.Values) tb.Clear();
-        ApplyFilter();
+        foreach (TextBox tb in _filterBoxes.Values) tb.Clear();
+        _ = Load(append: false);
     }
 
     private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
     {
         await LoadSyncStatus();
-        await Load();
+        await Load(append: false);
     }
 
     // ── MODIFICA / ELIMINA PER RIGA ─────────────────────────────
@@ -699,7 +742,7 @@ public partial class CodexPage : Page
     {
         if (sender is not Button btn || btn.Tag is not CodexListItem item) return;
 
-        var result = MessageBox.Show(
+        var result = ATEC.PM.Client.Controls.ShadcnMessageBox.Show(
             $"Eliminare definitivamente l'articolo {item.Codice}?\n\n\"{item.Descr}\"\n\nQuesta operazione non è reversibile.",
             "Conferma eliminazione",
             MessageBoxButton.YesNo,
@@ -720,12 +763,12 @@ public partial class CodexPage : Page
             }
             else
             {
-                MessageBox.Show(response?.Message ?? "Errore", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+                ATEC.PM.Client.Controls.ShadcnMessageBox.Show(response?.Message ?? "Errore", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ATEC.PM.Client.Controls.ShadcnMessageBox.Show($"Errore: {ex.Message}", "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

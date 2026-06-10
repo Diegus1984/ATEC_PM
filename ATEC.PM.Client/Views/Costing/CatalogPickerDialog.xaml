@@ -37,9 +37,8 @@
                                 <DataTemplate>
                                     <Border Margin="0,2" Padding="10,5" Background="#FAFBFC" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="4">
                                         <DockPanel>
-                                            <Button DockPanel.Dock="Right" Content="X" Width="20" Height="20" FontSize="9"
-                                                    Background="Transparent" BorderThickness="0" Foreground="#DC2626" Cursor="Hand"
-                                                    Click="BtnRemoveFromCart_Click" Tag="{Binding}" Padding="0" />
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource RowDeleteBtn}"
+                                                    Click="BtnRemoveFromCart_Click" Tag="{Binding}" />
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding SellPrice, StringFormat='{}{0:N2} &#x20AC;'}"
                                                        FontSize="11" FontWeight="SemiBold" Foreground="#059669" VerticalAlignment="Center" Margin="0,0,12,0" />
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding CostPrice, StringFormat='{}{0:N2} &#x20AC;'}"
