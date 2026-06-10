@@ -50,6 +50,12 @@ public class SaveUserRoleRequest
     public string UserRole { get; set; } = "";
 }
 
+public class SaveUserStatusRequest
+{
+    public int EmployeeId { get; set; }
+    public bool IsActive { get; set; }
+}
+
 public class SaveEmployeeDepartmentsRequest
 {
     public int EmployeeId { get; set; }
@@ -84,8 +90,16 @@ public class SetCredentialsRequest
 
 public class ChangePasswordRequest
 {
-    public string OldPassword { get; set; } = "";
+    /// <summary>Valorizzato solo per il cambio password dalla schermata di login (senza sessione).</summary>
+    public string Username { get; set; } = "";
+    public string CurrentPassword { get; set; } = "";
     public string NewPassword { get; set; } = "";
+    public string ConfirmNewPassword { get; set; } = "";
+}
+
+public class ResetPasswordRequest
+{
+    public int EmployeeId { get; set; }
 }
 
 public class TemplateFolderInfo

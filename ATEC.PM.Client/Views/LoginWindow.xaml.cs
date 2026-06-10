@@ -12,7 +12,17 @@ public partial class LoginWindow : Window
     public LoginWindow()
     {
         InitializeComponent();
-        txtUsername.Focus();
+
+        LoginSettings saved = LoginSettingsStore.Load();
+        if (!string.IsNullOrWhiteSpace(saved.LastUsername))
+        {
+            txtUsername.Text = saved.LastUsername;
+            txtPassword.Focus();
+        }
+        else
+        {
+            txtUsername.Focus();
+        }
     }
 
     // ── EYE TOGGLE ──────────────────────────────────────────────
@@ -51,6 +61,8 @@ public partial class LoginWindow : Window
 
             if (ApiClient.TryGetApiData<LoginResponse>(result, out LoginResponse? login, out string errMsg) && login != null)
             {
+                LoginSettingsStore.Save(new LoginSettings { LastUsername = txtUsername.Text.Trim() });
+
                 App.Token = login.Token;
                 App.UserFullName = login.FullName;
                 App.UserRole = login.UserRole;
@@ -61,6 +73,19 @@ public partial class LoginWindow : Window
 
                 // Carica feature e livelli per il sistema permessi a livelli
                 await LoadAuthFeaturesAsync();
+
+                // Primo accesso con password iniziale (n.cognome): cambio obbligatorio.
+                if (login.MustChangePassword)
+                {
+                    ChangePasswordDialog dlg = new ChangePasswordDialog(
+                        forced: true, currentPassword: txtPassword.Password)
+                    { Owner = this };
+                    if (dlg.ShowDialog() != true)
+                    {
+                        App.Token = "";
+                        return;
+                    }
+                }
 
                 // Check notifiche pendenti (fire-and-forget)
                 _ = ApiClient.PostAsync("/api/notifications/check-pending", "{}");
@@ -133,6 +158,30 @@ public partial class LoginWindow : Window
         {
             // Se il server non supporta ancora i livelli, fallback silenzioso
         }
+    }
+
+    private void BtnChangePassword_Click(object sender, RoutedEventArgs e)
+    {
+        txtError.Text = "";
+        if (string.IsNullOrWhiteSpace(txtUsername.Text))
+        {
+            txtError.Text = "Inserisci lo username prima di cambiare la password.";
+            return;
+        }
+
+        App.ApiBaseUrl = txtServer.Text.TrimEnd('/');
+
+        ChangePasswordDialog dlg = new ChangePasswordDialog(
+            forced: false,
+            currentPassword: txtPassword.Password,
+            username: txtUsername.Text.Trim(),
+            fromLogin: true)
+        {
+            Owner = this
+        };
+
+        if (dlg.ShowDialog() == true)
+            txtError.Text = "Password aggiornata. Accedi con la nuova password.";
     }
 
     private void txtPassword_KeyDown(object sender, KeyEventArgs e)

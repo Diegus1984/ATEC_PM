@@ -103,6 +103,14 @@ public static class ApiClient
         return await resp.Content.ReadAsStringAsync();
     }
 
+    /// <summary>POST senza token (es. cambio password da schermata login).</summary>
+    public static async Task<string> PostAnonymousAsync(string endpoint, string jsonBody)
+    {
+        StringContent content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+        HttpResponseMessage resp = await _http.PostAsync($"{App.ApiBaseUrl}{endpoint}", content);
+        return await resp.Content.ReadAsStringAsync();
+    }
+
     // ── GET ─────────────────────────────────────────────────────
 
     public static async Task<string> GetAsync(string endpoint)

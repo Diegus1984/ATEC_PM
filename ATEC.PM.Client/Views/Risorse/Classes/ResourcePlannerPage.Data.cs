@@ -21,7 +21,9 @@ public partial class ResourcePlannerPage
             _projects = await ApiClient.GetListAsync<LookupItem>("/api/resource-planner/lookups/projects");
             _services = await ApiClient.GetListAsync<ResServiceDto>("/api/resource-planner/services");
             _others = await ApiClient.GetListAsync<ResOtherActivityDto>("/api/resource-planner/others");
+            UpdateResourceFilterButtonLabel(); // riallinea il conteggio alle risorse realmente esistenti
             BindProjectFilter();
+            ApplyPendingProjectFilter();
             await LoadAssignments();
         }
         catch (Exception ex) { txtStatus.Text = $"Errore: {ex.Message}"; }

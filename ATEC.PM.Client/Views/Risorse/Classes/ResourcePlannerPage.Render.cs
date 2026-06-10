@@ -42,10 +42,15 @@ public partial class ResourcePlannerPage
         try
         {
             RenderGanttCore();
-            double offset = Math.Min(bodyHScroll.HorizontalOffset, bodyHScroll.ScrollableWidth);
-            if (offset < 0) offset = 0;
-            bodyHScroll.ScrollToHorizontalOffset(offset);
-            headerHScroll.ScrollToHorizontalOffset(offset);
+            if (_restoreScrollH.HasValue || _restoreScrollV.HasValue)
+                ApplyPendingScrollRestore();
+            else
+            {
+                double offset = Math.Min(bodyHScroll.HorizontalOffset, bodyHScroll.ScrollableWidth);
+                if (offset < 0) offset = 0;
+                bodyHScroll.ScrollToHorizontalOffset(offset);
+                headerHScroll.ScrollToHorizontalOffset(offset);
+            }
         }
         finally
         {
@@ -85,13 +90,19 @@ public partial class ResourcePlannerPage
             timelineBody.MinWidth = timelineWidth;
         }
 
-        RenderHeader(winEnd);
+        // Larghezza giorno FISSA (px), identica in header e in tutte le corsie. Le colonne "*"
+        // dentro lo ScrollViewer orizzontale venivano misurate in base al contenuto (barre con
+        // etichetta larga) → la griglia si sfasava solo nelle righe con attività. Con px fissi
+        // i bordi delle barre coincidono sempre con i confini dei giorni.
+        double dayWidth = timelineWidth / _windowDays;
+
+        RenderHeader(winEnd, dayWidth);
         RenderBody(winEnd, timelineWidth);
         UpdateConflictPanel(winEnd);
         UpdateDefaultStatus(GetFilteredResources(winEnd).Count, winEnd);
     }
 
-    private void RenderHeader(DateTime winEnd)
+    private void RenderHeader(DateTime winEnd, double dayWidth)
     {
         headerHost.ColumnDefinitions.Clear();
         headerHost.RowDefinitions.Clear();
@@ -99,7 +110,7 @@ public partial class ResourcePlannerPage
         headerHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         headerHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (int i = 0; i < _windowDays; i++)
-            headerHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(dayWidth) });
 
         int gi = 0;
         while (gi < _windowDays)
@@ -179,6 +190,9 @@ public partial class ResourcePlannerPage
         timelineBody.Children.Clear();
         timelineBody.RowDefinitions.Clear();
 
+        // Stessa larghezza giorno fissa usata dall'header → barre e griglia perfettamente allineate.
+        double dayWidth = timelineWidth / _windowDays;
+
         List<LookupItem> filtered = GetFilteredResources(winEnd);
         int rowIdx = 0;
 
@@ -251,7 +265,7 @@ public partial class ResourcePlannerPage
 
             Grid lane = new() { Tag = res.Id, MinWidth = timelineWidth };
             for (int i = 0; i < _windowDays; i++)
-                lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(dayWidth) });
             for (int li = 0; li < laneCount; li++)
                 lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(LaneHeight) });
 
@@ -333,6 +347,10 @@ public partial class ResourcePlannerPage
                 .ToHashSet();
             q = q.Where(r => conflictEmployees.Contains(r.Id));
         }
+
+        // Selezione manuale risorse (pulsante «Risorse»): mostra solo quelle scelte.
+        if (_resourceFilterActive)
+            q = q.Where(r => _selectedResourceIds.Contains(r.Id));
 
         return q.ToList();
     }

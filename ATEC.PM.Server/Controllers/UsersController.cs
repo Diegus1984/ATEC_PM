@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
+using ATEC.PM.Shared;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 
@@ -16,19 +17,22 @@ public class UsersController : ControllerBase
 
     // ── Lista utenti ─────────────────────────────────────────────────
     [HttpGet]
-    public IActionResult GetAll()
+    public IActionResult GetAll([FromQuery] bool includeTerminated = false)
     {
+        // I cessati sono nascosti di default; col flag tornano visibili per poterli riattivare.
+        string terminatedFilter = includeTerminated ? "" : "AND status <> 'TERMINATED'";
+
         using var c = _db.Open();
 
         var employees = c.Query<UserListItem>(
-            @"SELECT id,
+            $@"SELECT id,
                      CONCAT(first_name,' ',last_name) AS FullName,
                      email, user_role AS UserRole, status,
                      username,
                      (username IS NOT NULL AND username <> '') AS HasCredentials
               FROM employees
-              WHERE status <> 'TERMINATED'
-                AND first_name NOT LIKE '[%'   -- esclude le wildcard reparto ([XXX] Generico, usate solo dalla MoM)
+              WHERE first_name NOT LIKE '[%'   -- esclude le wildcard reparto ([XXX] Generico, usate solo dalla MoM)
+                {terminatedFilter}
               ORDER BY last_name").ToList();
 
         // Carica reparti e competenze per ogni dipendente
@@ -86,6 +90,52 @@ public class UsersController : ControllerBase
         using var c = _db.Open();
         c.Execute("UPDATE employees SET user_role=@UserRole WHERE id=@EmployeeId", req);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    // ── Reset credenziali a quelle iniziali (username e password = n.cognome) ──
+    [HttpPost("reset-password")]
+    public IActionResult ResetPassword([FromBody] ResetPasswordRequest req)
+    {
+        using var c = _db.Open();
+        EmployeeNameRow? row = c.QueryFirstOrDefault<EmployeeNameRow>(
+            "SELECT first_name AS FirstName, last_name AS LastName FROM employees WHERE id=@EmployeeId",
+            new { req.EmployeeId });
+
+        if (row == null)
+            return NotFound(ApiResponse<string>.Fail("Utente non trovato"));
+
+        string initialLogin = InitialPasswordHelper.Build(row.FirstName, row.LastName);
+        if (string.IsNullOrEmpty(initialLogin))
+            return BadRequest(ApiResponse<string>.Fail("Impossibile calcolare la password iniziale"));
+
+        string hash = BCrypt.Net.BCrypt.HashPassword(initialLogin);
+        c.Execute(
+            "UPDATE employees SET username=@Username, password_hash=@Hash WHERE id=@EmployeeId",
+            new { Username = initialLogin, Hash = hash, req.EmployeeId });
+
+        return Ok(ApiResponse<string>.Ok(initialLogin, $"Password reimpostata a {initialLogin}"));
+    }
+
+    private class EmployeeNameRow
+    {
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+    }
+
+    // ── Cambia stato (riattivazione cessati / disattivazione) ─────────
+    [HttpPut("status")]
+    public IActionResult SetStatus([FromBody] SaveUserStatusRequest req)
+    {
+        string status = req.IsActive ? "ACTIVE" : "TERMINATED";
+
+        using var c = _db.Open();
+        int rows = c.Execute(
+            "UPDATE employees SET status=@Status WHERE id=@EmployeeId",
+            new { Status = status, req.EmployeeId });
+        if (rows == 0)
+            return NotFound(ApiResponse<string>.Fail("Utente non trovato"));
+
+        return Ok(ApiResponse<bool>.Ok(true, req.IsActive ? "Utente riattivato" : "Utente cessato"));
     }
 
     // ── Salva reparti dipendente (replace completo) ───────────────────

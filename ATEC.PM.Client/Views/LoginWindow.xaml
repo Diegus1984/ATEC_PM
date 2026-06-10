@@ -127,6 +127,15 @@
                     Click="BtnLogin_Click"
                     Content="Accedi"
                     FontSize="14" />
+                <Button
+                    x:Name="btnChangePassword"
+                    Height="32"
+                    Margin="0,10,0,0"
+                    Style="{StaticResource ShadcnButtonOutline}"
+                    Click="BtnChangePassword_Click"
+                    Content="Cambia password"
+                    FontSize="12"
+                    ToolTip="Cambia la password senza accedere (richiede username e password attuale)" />
             </StackPanel>
         </Border>
     </Grid>

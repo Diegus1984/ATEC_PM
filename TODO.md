@@ -333,21 +333,21 @@ Modifiche fatte sul programma lite `C:\Users\diego\Desktop\ATEC_Risorse` (2026-0
 
 ### Gantt / Risorse
 
-- [ ] **Regola conflitti: FERIE+FERIE = conflitto** *(richiesta utente 2026-06-10)*
+- [x] **Regola conflitti: FERIE+FERIE = conflitto** *(richiesta utente 2026-06-10 — PORTATO 2026-06-10, build 0 err)*
   File PM: `ATEC.PM.Client/Views/Risorse/Classes/ResourcePlannerHelpers.cs:235` (`Forbidden`).
   Oggi PM usa il vecchio XOR: due ferie sovrapposte sulla stessa risorsa NON sono segnalate. Sostituire con la versione del lite (`ATEC_Risorse/ATEC.Risorse.Client/Views/Risorse/Classes/ResourcePlannerHelpers.cs`, `Forbidden` riscritta e commentata). Matrice finale: overlap lecito SOLO per OP+FLEX e FLEX+FLEX; le FERIE confliggono con tutto, ferie incluse. Copia-incolla di 1 funzione.
 
-- [ ] **Fix sfasamento colonne giorno nel Gantt (glitch grafico)**
+- [x] **Fix sfasamento colonne giorno nel Gantt (glitch grafico)** *(PORTATO 2026-06-10 — da verificare a vista nel Gantt)*
   File PM: `ATEC.PM.Client/Views/Risorse/Classes/ResourcePlannerPage.Render.cs:102` (header) e `:254` (corsie).
   Colonne giorno a larghezza `*` dentro lo ScrollViewer orizzontale (`bodyHScroll` Auto) → misura con larghezza infinita → le colonne si dilatano sul contenuto e la griglia si sfasa nelle righe con barre. Fix (come nel lite, `ResourcePlannerPage.Render.cs`): larghezza fissa `dayWidth = timelineWidth / _windowDays` in `RenderHeader(winEnd, dayWidth)` e nelle lane di `RenderBody`. **NB:** `FerieDashboardWindow` ha lo stesso pattern star MA niente scroller orizzontale (misura finita) → NON serve toccarla.
 
-- [ ] **Selettore risorse visibili nel Gantt («Risorse: tutte ▾»)**
+- [x] **Selettore risorse visibili nel Gantt («Risorse: tutte ▾»)** *(PORTATO 2026-06-10 con PlannerUiSettingsStore completo: persiste finestra/filtri/scroll/selezione in %AppData%\ATEC_PM\planner-ui.json — da verificare a vista)*
   Sorgente lite: `ResourcePlannerPage.ResourceFilter.cs` (partial nuovo), popup in `ResourcePlannerPage.xaml` (2 colonne, slide toggle `ToggleSwitchStyle`, pulsanti Tutte/Nessuna), filtro in `GetFilteredResources` (Render.cs), etichetta col conteggio robusto alle cessazioni (id orfani non contati ma mantenuti → la riattivazione fa ricomparire la risorsa).
   ⚠️ Dipendenza: il lite persiste la selezione in `Services/PlannerUiSettingsStore.cs` (`%AppData%\ATEC_Risorse\planner-ui.json`, salva TUTTI i filtri del planner con debounce 400ms + restore in `ResourcePlannerPage.Settings.cs`) — PM non ha nulla di simile: portare anche lo store (rinominando cartella AppData) o agganciare a `UserPreferences`.
 
 ### Utenti
 
-- [ ] **Riattivazione utenti cessati (TERMINATED)**
+- [x] **Riattivazione utenti cessati (TERMINATED)** *(PORTATO 2026-06-10 — testato runtime: ?includeTerminated 25→26 utenti; nuovo PUT /api/users/status; UI: spunta «Mostra cessati» + «Riattiva» nel menu ⋮)*
   File PM: `ATEC.PM.Server/Controllers/UsersController.cs:30` (GetAll esclude TERMINATED senza alternativa) + `ATEC.PM.Client/Views/Utenti/UsersPage.xaml(.cs)`.
   Oggi un cessato sparisce per sempre dalla UI. Portare dal lite: parametro `GET /api/users?includeTerminated=true`, spunta «Mostra cessati», colonna Stato, azione «Riattiva» nel menu riga (riporta status ACTIVE — in PM può riusare `PUT /api/employees/{id}`), testo conferma eliminazione che spiega la reversibilità. Sorgente lite: `UsersController.cs` + `Views/Admin/AdminWindow.xaml(.cs)`.
 
@@ -355,23 +355,23 @@ Modifiche fatte sul programma lite `C:\Users\diego\Desktop\ATEC_Risorse` (2026-0
   Sorgente lite: `EmployeesController.cs` (`GET /api/employees/export`, `POST /api/employees/import` — ADMIN, import = replace completo con id preservati, FK off fuori transazione, bootstrap admin rigarantito, rifiuto file vuoto) + `User_DTOs.cs` (`EmployeeExportDto` con `PasswordHash`, `EmployeesBackupDto`) + pulsanti in `AdminWindow`.
   Per PM: utile come backup/ripristino utenti. Adattare SQL (`LAST_INSERT_ID()`, niente `sqlite_sequence`) e includere le colonne extra di PM (`badge_number`, `supplier_id`, `hourly_cost`, …).
 
-### Login (assenti in PM — verificato 2026-06-10)
+### Login (assenti in PM — verificato 2026-06-10, PORTATI 2026-06-10)
 
-- [ ] **Password iniziale «n.cognome» + cambio forzato al primo accesso**
-  PM non ha `InitialPasswordHelper` (assente da `ATEC.PM.Shared`) né `MustChangePassword` in `LoginResponse`. Portare dal lite: `ATEC.Risorse.Shared/InitialPasswordHelper.cs`, calcolo `MustChangePassword` nel login (`AuthController`), flusso client che forza `ChangePasswordDialog`, e `POST /api/users/reset-password` (reset a n.cognome) + pulsante «Reset psw» in UsersPage — oggi l'admin PM non ha un reset rapido.
+- [x] **Password iniziale «n.cognome» + cambio forzato al primo accesso** *(PORTATO — testato runtime: login restituisce mustChangePassword)*
+  Aggiunti: `ATEC.PM.Shared/InitialPasswordHelper.cs`, `MustChangePassword` in `LoginResponse` + calcolo nel login, flusso forzato in `LoginWindow`, `POST /api/users/reset-password` + voce «Reset password» nel menu ⋮ di UsersPage.
 
-- [ ] **Cambio password dalla schermata di login**
-  PM ha solo `change-password` autenticato e senza regole. Portare: `ChangePasswordDialog.xaml(.cs)` (modalità forzata + volontaria), endpoint anonimo `POST /api/auth/change-password-login`, validazioni (conferma obbligatoria, ≠ attuale, ≠ password iniziale, lunghezza minima).
+- [x] **Cambio password dalla schermata di login** *(PORTATO — testato runtime: pwd errata → 400 con messaggio corretto)*
+  Aggiunti: `ChangePasswordDialog.xaml(.cs)`, `POST /api/auth/change-password-login` (anonimo), `ChangePasswordRequest` esteso (era OldPassword/NewPassword senza consumatori → sostituito), validazioni complete in `ApplyPasswordChange`, pulsante «Cambia password» in LoginWindow, `ApiClient.PostAnonymousAsync`.
 
-- [ ] **SessionGuard — logout se l'utente viene disattivato**
-  In PM un utente disattivato dall'admin continua a lavorare fino alla scadenza del token (8h). Portare: `GET /api/auth/session` (`AuthController`, verifica status ACTIVE) + `Services/SessionGuard.cs` client (check dopo i reload, logout forzato).
+- [x] **SessionGuard — logout se l'utente viene disattivato** *(PORTATO — testato runtime: GET /api/auth/session → {employeeId, isActive})*
+  Aggiunti: `GET /api/auth/session`, `SessionStatusDto`, `Services/SessionGuard.cs`; hook nel reload realtime del planner. NB: il check scatta sui reload del planner — per una copertura app-wide valutare un hook anche su MainWindow (timer o cambio pagina).
 
-- [ ] **Ricordare ultimo username al login**
-  Portare `Services/LoginSettingsStore.cs` (salva ultimo username in `%AppData%`, precompila e mette focus sulla password). Aggancio in `LoginWindow`.
+- [x] **Ricordare ultimo username al login** *(PORTATO)*
+  Aggiunto `Services/LoginSettingsStore.cs` (`%AppData%\ATEC_PM\login-settings.json`) + aggancio in `LoginWindow` (precompila username, focus su password).
 
 ### Già allineati (verificato, NON servono)
 Lockout 5 tentativi/5min, bcrypt + migrazione SHA256→bcrypt, gestione 401→re-login: identici nei due programmi. La gestione utenti del lite (ricerca/CRUD/EmployeeDialog) era a sua volta un port DA PM.
 
 ---
 
-*Ultimo aggiornamento: 2026-06-10 — aggiunta sez. 9: porting delle modifiche fatte su ATEC Risorse standalone (regola conflitti ferie+ferie, fix colonne Gantt, selettore risorse, riattivazione cessati, export/import utenti, blocco login)*
+*Ultimo aggiornamento: 2026-06-10 — sez. 9 PORTATA (tranne export/import JSON, da valutare): conflitti ferie+ferie, fix colonne Gantt, selettore risorse+persistenza, riattivazione cessati, blocco login completo. Build 0 err/0 warn; endpoint testati runtime read-only (login/mustChangePassword, session, includeTerminated, change-password-login). DA VERIFICARE A VISTA: Gantt allineato, selettore risorse, flusso cambio password forzato, reset password, riattiva cessato.*

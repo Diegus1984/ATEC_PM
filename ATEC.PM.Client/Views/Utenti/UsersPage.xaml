@@ -75,6 +75,15 @@
                         Width="130"
                         Content="+ Nuovo Utente"
                         Style="{StaticResource ShadcnButtonDefault}" />
+                    <CheckBox
+                        x:Name="chkShowTerminated"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        Checked="ChkShowTerminated_Changed"
+                        Unchecked="ChkShowTerminated_Changed"
+                        Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                        Content="Mostra cessati"
+                        ToolTip="Includi i dipendenti cessati per poterli riattivare" />
                 </StackPanel>
                 <StackPanel
                     HorizontalAlignment="Right"
@@ -228,6 +237,16 @@
                                                 <MenuItem Header="Elimina" Style="{StaticResource ShadcnMenuItem}" Click="MenuItemDelete_Click">
                                                     <MenuItem.Icon>
                                                         <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Riattiva" Style="{StaticResource ShadcnMenuItem}" Click="MenuItemReactivate_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" />
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Reset password" Style="{StaticResource ShadcnMenuItem}" Click="MenuItemResetPassword_Click">
+                                                    <MenuItem.Icon>
+                                                        <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" />
                                                     </MenuItem.Icon>
                                                 </MenuItem>
                                             </ContextMenu>

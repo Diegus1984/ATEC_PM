@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Dapper;
+using ATEC.PM.Shared;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 
@@ -37,8 +39,18 @@ public class AuthController : ControllerBase
     private class LoginUserRow
     {
         public int EmployeeId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
         public string FullName { get; set; } = "";
         public string UserRole { get; set; } = "";
+        public string PasswordHash { get; set; } = "";
+    }
+
+    private class EmployeePasswordRow
+    {
+        public int EmployeeId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
         public string PasswordHash { get; set; } = "";
     }
 
@@ -71,6 +83,8 @@ public class AuthController : ControllerBase
         // Query SENZA check password — la verifica avviene in C# (bcrypt non può essere verificato in SQL)
         var user = c.QueryFirstOrDefault<LoginUserRow>(@"
             SELECT id AS EmployeeId,
+                   first_name AS FirstName,
+                   last_name AS LastName,
                    CONCAT(first_name,' ',last_name) AS FullName,
                    user_role AS UserRole,
                    password_hash AS PasswordHash
@@ -131,7 +145,9 @@ public class AuthController : ControllerBase
             EmployeeId = user.EmployeeId,
             FullName = user.FullName,
             UserRole = user.UserRole,
-            Token = new JwtSecurityTokenHandler().WriteToken(token)
+            Token = new JwtSecurityTokenHandler().WriteToken(token),
+            MustChangePassword = InitialPasswordHelper.IsInitialPassword(
+                req.Password, user.FirstName, user.LastName)
         };
 
         _log.LogInformation("[Auth] Login riuscito: {User} (ID: {Id}, Ruolo: {Role})", user.FullName, user.EmployeeId, user.UserRole);
@@ -168,31 +184,111 @@ public class AuthController : ControllerBase
         int employeeId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
 
         using var c = _db.Open();
+        EmployeePasswordRow? row = c.QueryFirstOrDefault<EmployeePasswordRow>(@"
+            SELECT id AS EmployeeId, first_name AS FirstName, last_name AS LastName, password_hash AS PasswordHash
+            FROM employees
+            WHERE id=@EmployeeId AND status='ACTIVE'",
+            new { EmployeeId = employeeId });
 
-        string? storedHash = c.ExecuteScalar<string?>(
-            "SELECT password_hash FROM employees WHERE id=@Id",
-            new { Id = employeeId });
-
-        if (string.IsNullOrEmpty(storedHash))
+        if (row == null || string.IsNullOrEmpty(row.PasswordHash))
             return BadRequest(ApiResponse<string>.Fail("Utente non trovato"));
 
-        // Verifica vecchia password con dual-hash
-        bool oldPasswordValid;
-        if (storedHash.StartsWith("$2"))
-            oldPasswordValid = BCrypt.Net.BCrypt.Verify(req.OldPassword, storedHash);
-        else
-            oldPasswordValid = string.Equals(ComputeSha256(req.OldPassword), storedHash, StringComparison.OrdinalIgnoreCase);
+        return ApplyPasswordChange(row, req, c);
+    }
 
-        if (!oldPasswordValid)
+    /// <summary>Cambio password dalla schermata di login (senza sessione): richiede username + password attuale.</summary>
+    [HttpPost("change-password-login")]
+    [AllowAnonymous]
+    public IActionResult ChangePasswordFromLogin([FromBody] ChangePasswordRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Username))
+            return BadRequest(ApiResponse<string>.Fail("Username obbligatorio"));
+
+        using var c = _db.Open();
+        EmployeePasswordRow? row = c.QueryFirstOrDefault<EmployeePasswordRow>(@"
+            SELECT id AS EmployeeId, first_name AS FirstName, last_name AS LastName, password_hash AS PasswordHash
+            FROM employees
+            WHERE username=@Username AND status='ACTIVE'",
+            new { Username = req.Username.Trim() });
+
+        if (row == null || string.IsNullOrEmpty(row.PasswordHash))
+            return BadRequest(ApiResponse<string>.Fail("Credenziali non valide"));
+
+        return ApplyPasswordChange(row, req, c);
+    }
+
+    /// <summary>Verifica se l'utente loggato è ancora attivo (es. dopo disattivazione da admin).</summary>
+    [HttpGet("session")]
+    [Authorize]
+    public IActionResult GetSession()
+    {
+        string? idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(idClaim, out int employeeId))
+            return Unauthorized(ApiResponse<string>.Fail("Sessione non valida"));
+
+        using var c = _db.Open();
+        string? status = c.QueryFirstOrDefault<string>(
+            "SELECT status FROM employees WHERE id=@Id",
+            new { Id = employeeId });
+
+        bool active = string.Equals(status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+        return Ok(ApiResponse<SessionStatusDto>.Ok(new SessionStatusDto
+        {
+            EmployeeId = employeeId,
+            IsActive = active
+        }));
+    }
+
+    private IActionResult ApplyPasswordChange(
+        EmployeePasswordRow row, ChangePasswordRequest req, IDbConnection c)
+    {
+        if (string.IsNullOrWhiteSpace(req.NewPassword)
+            || req.NewPassword.Length < InitialPasswordHelper.MinPasswordLength)
+        {
+            return BadRequest(ApiResponse<string>.Fail(
+                $"La nuova password deve avere almeno {InitialPasswordHelper.MinPasswordLength} caratteri"));
+        }
+
+        if (!string.Equals(req.NewPassword, req.ConfirmNewPassword, StringComparison.Ordinal))
+            return BadRequest(ApiResponse<string>.Fail("Le due password non coincidono"));
+
+        if (string.Equals(req.NewPassword, req.CurrentPassword, StringComparison.Ordinal))
+            return BadRequest(ApiResponse<string>.Fail("La nuova password deve essere diversa da quella attuale"));
+
+        if (InitialPasswordHelper.IsInitialPassword(req.NewPassword, row.FirstName, row.LastName))
+        {
+            return BadRequest(ApiResponse<string>.Fail(
+                "La nuova password non può essere uguale alla password iniziale (n.cognome)"));
+        }
+
+        if (!VerifyPassword(req.CurrentPassword, row.PasswordHash, row.EmployeeId, c))
             return BadRequest(ApiResponse<string>.Fail("Password attuale non corretta"));
 
-        // Nuova password sempre in bcrypt
         string newHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
-        c.Execute("UPDATE employees SET password_hash=@Hash WHERE id=@Id",
-            new { Hash = newHash, Id = employeeId });
+        c.Execute(
+            "UPDATE employees SET password_hash=@Hash WHERE id=@EmployeeId",
+            new { Hash = newHash, EmployeeId = row.EmployeeId });
 
-        _log.LogInformation("[Auth] Password cambiata (bcrypt) per dipendente ID: {Id}", employeeId);
+        _log.LogInformation("[Auth] Password cambiata (bcrypt) per dipendente ID: {Id}", row.EmployeeId);
         return Ok(ApiResponse<string>.Ok("Password aggiornata"));
+    }
+
+    /// <summary>Verifica bcrypt ($2...) oppure legacy SHA256, con migrazione trasparente a bcrypt.</summary>
+    private bool VerifyPassword(string password, string storedHash, int employeeId, IDbConnection c)
+    {
+        if (storedHash.StartsWith("$2", StringComparison.Ordinal))
+            return BCrypt.Net.BCrypt.Verify(password, storedHash);
+
+        string sha256Hash = ComputeSha256(password);
+        bool valid = string.Equals(sha256Hash, storedHash, StringComparison.OrdinalIgnoreCase);
+        if (!valid)
+            return false;
+
+        string bcryptHash = BCrypt.Net.BCrypt.HashPassword(password);
+        c.Execute("UPDATE employees SET password_hash=@Hash WHERE id=@Id",
+            new { Hash = bcryptHash, Id = employeeId });
+        _log.LogInformation("[Auth] Password migrata SHA2→bcrypt per dipendente ID: {Id}", employeeId);
+        return true;
     }
 
     // ── HELPERS ──────────────────────────────────────────────────────

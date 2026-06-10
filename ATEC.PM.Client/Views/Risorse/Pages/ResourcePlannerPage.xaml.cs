@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using ATEC.PM.Client.Controls;
+using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.Risorse;
@@ -145,11 +146,16 @@ public partial class ResourcePlannerPage : Page
         _canEdit = ATEC.PM.Shared.PermissionEngine.CanAccess("resources.edit");
         ApplyEditPermissions();
         BindProjectFilter();
+        ApplyPlannerSettings(PlannerUiSettingsStore.Load());
         await LoadAll();
         await StartRealtimeAsync();
     }
 
-    private void Page_Unloaded(object sender, RoutedEventArgs e) => StopRealtime();
+    private void Page_Unloaded(object sender, RoutedEventArgs e)
+    {
+        SavePlannerSettingsNow();
+        StopRealtime();
+    }
 
     // Nasconde i comandi di scrittura quando l'utente è in sola lettura.
     private void ApplyEditPermissions()
@@ -165,18 +171,21 @@ public partial class ResourcePlannerPage : Page
     {
         _windowStart = _windowStart.AddDays(-PanStepDays);
         RenderGantt();
+        ScheduleSavePlannerSettings();
     }
 
     private void BtnNext_Click(object sender, RoutedEventArgs e)
     {
         _windowStart = _windowStart.AddDays(PanStepDays);
         RenderGantt();
+        ScheduleSavePlannerSettings();
     }
 
     private void BtnToday_Click(object sender, RoutedEventArgs e)
     {
         _windowStart = ResourcePlannerHelpers.MondayOf(DateTime.Today);
         RenderGantt();
+        ScheduleSavePlannerSettings();
     }
 
     private void BtnHelp_Click(object sender, RoutedEventArgs e) => helpPopup.IsOpen = !helpPopup.IsOpen;
@@ -185,7 +194,10 @@ public partial class ResourcePlannerPage : Page
     {
         if (_syncingWindowCombo) return;
         if (cmbWindow.SelectedItem is ComboBoxItem ci && int.TryParse(ci.Tag as string, out int d))
+        {
             SetWindowDays(d, syncCombo: false);
+            ScheduleSavePlannerSettings();
+        }
     }
 
     private void Gantt_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -201,6 +213,7 @@ public partial class ResourcePlannerPage : Page
             _windowDays = clamped;
             SyncWindowComboSelection();
             ScheduleRenderGantt();
+            ScheduleSavePlannerSettings();
             return;
         }
 
@@ -209,6 +222,7 @@ public partial class ResourcePlannerPage : Page
             e.Handled = true;
             _windowStart = _windowStart.AddDays(e.Delta > 0 ? -PanStepDays : PanStepDays);
             ScheduleRenderGantt();
+            ScheduleSavePlannerSettings();
         }
     }
 
@@ -226,6 +240,14 @@ public partial class ResourcePlannerPage : Page
         _syncingScroll = true;
         try { dst.ScrollToHorizontalOffset(target); }
         finally { _syncingScroll = false; }
+
+        ScheduleSavePlannerSettings();
+    }
+
+    private void BodyVScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.VerticalChange != 0)
+            ScheduleSavePlannerSettings();
     }
 
     private void SetWindowDays(int days, bool syncCombo)
@@ -238,7 +260,10 @@ public partial class ResourcePlannerPage : Page
         if (syncCombo)
             SyncWindowComboSelection();
         if (IsLoaded)
+        {
             RenderGantt();
+            ScheduleSavePlannerSettings();
+        }
     }
 
     private void SyncWindowComboSelection()
@@ -264,13 +289,18 @@ public partial class ResourcePlannerPage : Page
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         _search = txtSearch.Text.Trim().ToLower();
-        if (IsLoaded) ScheduleRenderGantt();
+        if (IsLoaded)
+        {
+            ScheduleRenderGantt();
+            ScheduleSavePlannerSettings();
+        }
     }
 
     private void Filter_Changed(object sender, RoutedEventArgs e)
     {
         if (_syncingFilters || !IsLoaded) return;
         RenderGantt();
+        ScheduleSavePlannerSettings();
     }
 
     private void LstConflicts_SelectionChanged(object sender, SelectionChangedEventArgs e)

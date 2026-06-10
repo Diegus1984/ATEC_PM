@@ -231,10 +231,95 @@
                 <ComboBox
                     x:Name="cmbProjectFilter"
                     Width="180"
+                    Margin="0,0,12,0"
                     DisplayMemberPath="Name"
                     SelectedValuePath="Id"
                     SelectionChanged="Filter_Changed"
                     Style="{StaticResource ShadcnComboBox}" />
+                <!--  Selettore risorse visibili  -->
+                <TextBlock
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    FontSize="11"
+                    Foreground="{DynamicResource ShadcnMutedForegroundBrush}"
+                    Text="Risorse:" />
+                <Button
+                    x:Name="btnResourceFilter"
+                    MinWidth="130"
+                    Margin="0,0,12,0"
+                    HorizontalContentAlignment="Left"
+                    Click="BtnResourceFilter_Click"
+                    Content="tutte  ▾"
+                    Style="{StaticResource ShadcnButtonOutline}"
+                    ToolTip="Scegli quali risorse vedere nel Gantt" />
+                <Popup
+                    x:Name="resourceFilterPopup"
+                    AllowsTransparency="True"
+                    Placement="Bottom"
+                    PlacementTarget="{Binding ElementName=btnResourceFilter}"
+                    StaysOpen="False">
+                    <Border
+                        MinWidth="500"
+                        MaxWidth="560"
+                        Padding="10"
+                        Background="{DynamicResource ShadcnCardBrush}"
+                        BorderBrush="{DynamicResource ShadcnBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                        <DockPanel>
+                            <StackPanel
+                                Margin="0,0,0,8"
+                                DockPanel.Dock="Top"
+                                Orientation="Horizontal">
+                                <Button
+                                    Margin="0,0,6,0"
+                                    Padding="8,2"
+                                    Click="BtnSelectAllResources_Click"
+                                    Content="Tutte"
+                                    Style="{StaticResource ShadcnButtonOutline}" />
+                                <Button
+                                    Padding="8,2"
+                                    Click="BtnSelectNoneResources_Click"
+                                    Content="Nessuna"
+                                    Style="{StaticResource ShadcnButtonOutline}" />
+                            </StackPanel>
+                            <ScrollViewer
+                                MaxHeight="540"
+                                HorizontalScrollBarVisibility="Disabled"
+                                VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="lstResourcePicks">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel
+                                                Width="230"
+                                                Margin="2,5"
+                                                Orientation="Horizontal">
+                                                <CheckBox
+                                                    VerticalAlignment="Center"
+                                                    Checked="ResourcePick_Toggled"
+                                                    IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                    Style="{StaticResource ToggleSwitchStyle}"
+                                                    Unchecked="ResourcePick_Toggled" />
+                                                <TextBlock
+                                                    Margin="10,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Foreground="{DynamicResource ShadcnForegroundBrush}"
+                                                    Text="{Binding Name}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Popup>
             </StackPanel>
         </Border>
 
@@ -348,6 +433,7 @@
                     x:Name="bodyVScroll"
                     Grid.Row="1"
                     HorizontalScrollBarVisibility="Disabled"
+                    ScrollChanged="BodyVScroll_ScrollChanged"
                     VerticalScrollBarVisibility="Auto">
                     <Grid x:Name="bodyGrid">
                         <Grid.ColumnDefinitions>

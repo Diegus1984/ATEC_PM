@@ -5,6 +5,7 @@ using System.Windows.Input;
 using ATEC.PM.Client.Controls;
 using ATEC.PM.Client.Services;
 using ATEC.PM.Client.ViewModels;
+using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views;
 
@@ -23,7 +24,10 @@ public partial class UsersPage : Page
         txtStatus.Text = "Caricamento...";
         try
         {
-            _allUsers = await ApiClient.GetListAsync<UserRow>("/api/users");
+            string url = chkShowTerminated?.IsChecked == true
+                ? "/api/users?includeTerminated=true"
+                : "/api/users";
+            _allUsers = await ApiClient.GetListAsync<UserRow>(url);
             ApplyFilter();
             txtStatus.Text = $"{_allUsers.Count} utenti";
         }
@@ -31,6 +35,12 @@ public partial class UsersPage : Page
         {
             txtStatus.Text = $"Errore: {ex.Message}";
         }
+    }
+
+    private async void ChkShowTerminated_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        await LoadUsers();
     }
 
     private void ApplyFilter()
@@ -69,7 +79,9 @@ public partial class UsersPage : Page
             return;
         }
 
-        if (ShadcnMessageBox.Show($"Eliminare {row.FullName}?\nL'utente verrà disattivato.", "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        if (ShadcnMessageBox.Show(
+                $"Eliminare {row.FullName}?\nL'utente verrà cessato (reversibile: «Mostra cessati» → «Riattiva»).",
+                "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
         try
@@ -119,6 +131,63 @@ public partial class UsersPage : Page
                 await ExecuteDelete(rowItem);
             }
         }
+    }
+
+    private async void MenuItemResetPassword_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.DataContext is not UserRow row)
+            return;
+
+        if (ShadcnMessageBox.Show(
+                $"Reimpostare le credenziali di {row.FullName}?\n\n" +
+                "Username e password torneranno alla forma iniziale (iniziale.cognome) " +
+                "e al prossimo accesso l'utente dovrà scegliere una nuova password.",
+                "Reset password", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        string body = JsonSerializer.Serialize(new ResetPasswordRequest { EmployeeId = row.Id });
+        string json = await ApiClient.PostAsync("/api/users/reset-password", body);
+        if (ApiClient.TryGetApiData(json, out string? initialLogin, out string msg))
+        {
+            ShadcnMessageBox.Show(
+                $"Credenziali reimpostate.\nUsername e password: {initialLogin}",
+                "Reset password", MessageBoxButton.OK, MessageBoxImage.Information);
+            await LoadUsers();
+        }
+        else
+        {
+            ShadcnMessageBox.Show(string.IsNullOrEmpty(msg) ? "Reset non riuscito." : msg,
+                "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void MenuItemReactivate_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem || menuItem.DataContext is not UserRow row)
+            return;
+
+        if (string.Equals(row.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            ShadcnMessageBox.Show($"{row.FullName} è già attivo.", "Riattiva", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (ShadcnMessageBox.Show(
+                $"Riattivare {row.FullName}?\nTornerà attivo e potrà accedere di nuovo.",
+                "Riattiva", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        string body = JsonSerializer.Serialize(new SaveUserStatusRequest
+        {
+            EmployeeId = row.Id,
+            IsActive = true
+        });
+        string json = await ApiClient.PutAsync("/api/users/status", body);
+        if (ApiClient.IsApiSuccess(json, out string msg))
+            await LoadUsers();
+        else
+            ShadcnMessageBox.Show(string.IsNullOrEmpty(msg) ? "Riattivazione non riuscita." : msg,
+                "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)

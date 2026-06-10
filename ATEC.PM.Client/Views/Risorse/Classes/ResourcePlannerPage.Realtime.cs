@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.SignalR.Client;
+using ATEC.PM.Client.Services;
 using ATEC.PM.Shared.DTOs;
 
 namespace ATEC.PM.Client.Views.Risorse;
@@ -122,6 +123,9 @@ public partial class ResourcePlannerPage
         try
         {
             await LoadAssignments();
+            // L'utente potrebbe essere stato disattivato da un admin: verifica e forza il logout.
+            if (!await SessionGuard.EnsureActiveOrLogoutAsync())
+                return;
             ShowToast("Aggiornato");
         }
         catch (Exception)

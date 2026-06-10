@@ -25,6 +25,16 @@ public class LoginResponse
     public int EmployeeId { get; set; }
     public string FullName { get; set; } = "";
     public string UserRole { get; set; } = "";
+
+    /// <summary>True se l'utente è entrato con la password iniziale (n.cognome): cambio obbligatorio.</summary>
+    public bool MustChangePassword { get; set; }
+}
+
+/// <summary>Stato sessione: l'utente loggato è ancora attivo? (es. disattivato da admin).</summary>
+public class SessionStatusDto
+{
+    public int EmployeeId { get; set; }
+    public bool IsActive { get; set; }
 }
 
 public class LookupItem

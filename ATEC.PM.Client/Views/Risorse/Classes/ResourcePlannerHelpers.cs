@@ -232,11 +232,34 @@ internal static class ResourcePlannerHelpers
     public static bool Overlap(ResAssignmentDto a, DateTime start, DateTime end) =>
         a.DataInizio.Date <= end.Date && start.Date <= a.DataFine.Date;
 
+    /// <summary>
+    /// Regole di sovrapposizione fra due attività della STESSA risorsa.
+    /// Causali: OP (operativo), FLEX (flessibile, può subire stop), FERIE.
+    ///
+    /// Sovrapposizione AMMESSA (nessun conflitto):
+    ///   • OP + FLEX (e viceversa)
+    ///   • FLEX + FLEX  (anche N flessibili sullo stesso periodo)
+    ///
+    /// Sovrapposizione VIETATA (conflitto da segnalare):
+    ///   • OP + OP
+    ///   • OP + FERIE (e viceversa)
+    ///   • FLEX + FERIE (e viceversa)
+    ///   • FERIE + FERIE
+    ///
+    /// In sintesi: le FERIE non tollerano alcuna sovrapposizione; per il resto
+    /// l'overlap è lecito solo se almeno una delle due è FLEX (il flessibile la assorbe).
+    /// </summary>
     public static bool Forbidden(string t1, string t2)
     {
-        if (t1 == "OP" && t2 == "OP") return true;
-        bool f1 = t1 == "FERIE", f2 = t2 == "FERIE";
-        return f1 ^ f2;
+        const string ferie = "FERIE";
+        const string flex = "FLEX";
+
+        // Le ferie sono esclusive: confliggono con qualsiasi altra attività, ferie incluse.
+        if (t1 == ferie || t2 == ferie)
+            return true;
+
+        // Restano solo OP/FLEX: ammesso solo se almeno una è flessibile.
+        return t1 != flex && t2 != flex;
     }
 
     // ── Misc ────────────────────────────────────────────────────
