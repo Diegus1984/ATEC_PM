@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="ATEC PM">
+  <rect width="32" height="32" rx="8" fill="#2563EB"/>
+  <path
+    fill="#FFFFFF"
+    d="M16 7.5 22.75 24h-2.65l-1.35-3.55h-5.5L12.15 24H9.5L16 7.5Zm-2.1 11.35h4.2L16 13.2l-2.1 5.65Z"
+  />
+</svg>

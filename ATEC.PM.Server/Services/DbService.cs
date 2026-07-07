@@ -1,3 +1,4 @@
+using ATEC.PM.Server.Data;
 using MySqlConnector;
 using Dapper;
 using Microsoft.Extensions.Logging;
@@ -528,6 +529,7 @@ public class DbService
             date_ordered DATE,
             date_received DATE,
             destination VARCHAR(200) DEFAULT '',
+            destination_spec VARCHAR(200) DEFAULT '',
             ddp_type VARCHAR(20) DEFAULT 'COMMERCIAL',
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -536,6 +538,35 @@ public class DbService
             FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
             FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL,
             INDEX idx_bom_project (project_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Distinta DDP Officina (particolari meccanici, template "Mod. DDP - OFFICINA"): tabella dedicata,
+        // schema allineato al Codex (codici 101). NESSUNA FK verso codex_items per scelta: codice/
+        // descrizione/fornitore/costo sono uno snapshot denormalizzato al momento della scelta dal picker
+        // (la riga DDP non deve cambiare se il Codex viene aggiornato). Stati e destinazioni CONDIVISI
+        // con la DDP commerciale (ddp_statuses / ddp_destinations). updated_at = token di concorrenza
+        // ottimistica (pattern v5).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_officina_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            part_number VARCHAR(100) DEFAULT '',
+            description VARCHAR(300) DEFAULT '',
+            quantity DECIMAL(10,3) DEFAULT 0,
+            material VARCHAR(200) DEFAULT '',
+            treatment VARCHAR(200) DEFAULT '',
+            supplier_name VARCHAR(200) DEFAULT '',
+            unit_cost DECIMAL(10,2) DEFAULT 0,
+            item_status VARCHAR(20) DEFAULT 'DO',
+            requested_by VARCHAR(100) DEFAULT '',
+            danea_ref VARCHAR(100) DEFAULT '',
+            date_needed DATE,
+            destination VARCHAR(200) DEFAULT '',
+            destination_spec VARCHAR(200) DEFAULT '',
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_ddpoff_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
@@ -692,11 +723,15 @@ public class DbService
 
         // ══════════════════════════════════════════════════════════
         // STANDALONE — nessuna FK verso tabelle app
+        // (eccezione: codex_compositions.child_catalog_id → catalog_items, FK aggiunta in v10)
         // ══════════════════════════════════════════════════════════
 
+        // remote_id NULL = codice generato localmente (ConfirmReservation), non ancora presente sul
+        // Codex remoto. Il sync (CodexSyncService) fa UPSERT per remote_id: gli id locali sono stabili
+        // tra i sync, quindi le FK di codex_compositions/codex_item_references restano valide.
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            remote_id INT NOT NULL,
+            remote_id INT NULL,
             codice VARCHAR(15) NOT NULL DEFAULT '',
             code_forn VARCHAR(200) NOT NULL DEFAULT '',
             fornitore VARCHAR(40) NOT NULL DEFAULT '',
@@ -719,6 +754,7 @@ public class DbService
             ubicazione VARCHAR(200) NOT NULL DEFAULT '',
             codexforn VARCHAR(200) NOT NULL DEFAULT '',
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_codex_remote_id (remote_id),
             INDEX idx_codice (codice),
             INDEX idx_fornitore (fornitore),
             INDEX idx_categoria (categoria)
@@ -736,16 +772,21 @@ public class DbService
             INDEX idx_expires (expires_at, status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Figlio = articolo Codex (child_codex_id) OPPURE articolo catalogo (child_catalog_id):
+        // esattamente uno dei due è valorizzato. La FK verso catalog_items è aggiunta dalla
+        // migrazione v10 perché catalog_items viene creata più avanti (QuoteDbService.InitTables).
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_compositions (
             id INT AUTO_INCREMENT PRIMARY KEY,
             parent_codex_id INT NOT NULL,
-            child_codex_id INT NOT NULL,
+            child_codex_id INT NULL,
+            child_catalog_id INT NULL,
             sort_order INT NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (parent_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
             FOREIGN KEY (child_codex_id) REFERENCES codex_items(id) ON DELETE CASCADE,
             INDEX idx_parent (parent_codex_id),
-            INDEX idx_child (child_codex_id)
+            INDEX idx_child (child_codex_id),
+            INDEX idx_cc_catalog (child_catalog_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_item_references (
@@ -845,6 +886,8 @@ public class DbService
                 ('nav.project_templates', 'Template Commesse',       'navigation', 2, 'HIDDEN'),
                 ('nav.backup',            'Backup DB',               'navigation', 3, 'HIDDEN'),
                 ('nav.permessi',          'Gestione Permessi',       'navigation', 3, 'HIDDEN'),
+                ('nav.digest_email',      'Digest Email',            'navigation', 3, 'HIDDEN'),
+                ('nav.anagrafica_attivita','Anagrafica Attività',    'navigation', 2, 'HIDDEN'),
                 ('action.create_project', 'Crea Commessa',           'action',     2, 'DISABLED'),
                 ('action.edit_project',   'Modifica Commessa',       'action',     2, 'DISABLED'),
                 ('action.delete_project', 'Elimina Commessa',        'action',     3, 'HIDDEN'),
@@ -927,8 +970,17 @@ try
         // Modulo MoM (verbali di riunione → action item)
         new MoMDbService(this).InitTables(c);
 
+        // Modulo Check list / Attività (attività per commessa reale o gruppo generico)
+        new CheckListDbService(this).InitTables(c);
+
+        // Moduli Anagrafica attività (catalogo globale) + Milestone (pianificazione per-commessa)
+        new MilestonesDbService(this).InitTables(c);
+
         // Modulo Gestione Risorse (allocazioni op/flex/ferie su dipendenti)
         new ResourcesDbService(this).InitTables(c);
+
+        // Modulo SAL / Fatturazione a stati d'avanzamento
+        new SalDbService(this).InitTables(c);
 
         // Migrazioni versionati (dopo CREATE TABLE idempotente in dev)
         int devVersion = GetSchemaVersion(c);
@@ -943,7 +995,7 @@ try
     // SCHEMA VERSIONING
     // ══════════════════════════════════════════════════════════════
 
-    private const int LatestSchemaVersion = 7;
+    private const int LatestSchemaVersion = 17;
 
     private static void EnsureSchemaMigrationsTable(MySqlConnection c)
     {
@@ -1123,6 +1175,314 @@ try
             catch (Exception ex)
             {
                 _logger.LogWarning("[Migration v7] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v8: tabella dedicata DDP Officina (particolari meccanici, vedi commento CREATE TABLE in InitDatabase).
+        if (currentVersion < 8)
+        {
+            try
+            {
+                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_officina_items (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    project_id INT NOT NULL,
+                    part_number VARCHAR(100) DEFAULT '',
+                    description VARCHAR(300) DEFAULT '',
+                    quantity DECIMAL(10,3) DEFAULT 0,
+                    material VARCHAR(200) DEFAULT '',
+                    treatment VARCHAR(200) DEFAULT '',
+                    supplier_name VARCHAR(200) DEFAULT '',
+                    unit_cost DECIMAL(10,2) DEFAULT 0,
+                    item_status VARCHAR(20) DEFAULT 'DO',
+                    requested_by VARCHAR(100) DEFAULT '',
+                    danea_ref VARCHAR(100) DEFAULT '',
+                    date_needed DATE,
+                    destination VARCHAR(200) DEFAULT '',
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                    INDEX idx_ddpoff_project (project_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (8, 'ddp_officina_items')");
+                _logger.LogInformation("[Migration v8] Creata tabella ddp_officina_items (distinta officina)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v8] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v9: sync Codex non distruttivo. remote_id diventa NULL-able (NULL = codice generato
+        // localmente, non ancora presente sul Codex remoto) e UNIQUE, così CodexSyncService può fare
+        // upsert per remote_id invece di DELETE+reinsert: gli id locali restano stabili tra i sync e
+        // le FK ON DELETE CASCADE di codex_compositions/codex_item_references non svuotano più
+        // composizioni e riferimenti a ogni sincronizzazione.
+        if (currentVersion < 9)
+        {
+            try
+            {
+                // Dedup difensivo per remote_id prima dell'indice UNIQUE (esclusi i codici locali,
+                // che condividono remote_id=0 e NON sono duplicati). La DELETE con self-join è O(n²)
+                // senza indice su remote_id e col timeout default (30s) andava in timeout già a ~18k
+                // righe: si esegue solo se servono davvero dedup, e con timeout esteso.
+                int dupGroups = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM (
+                        SELECT remote_id FROM codex_items
+                        WHERE remote_id <> 0
+                        GROUP BY remote_id HAVING COUNT(*) > 1) d");
+                if (dupGroups > 0)
+                    c.Execute(@"DELETE ci FROM codex_items ci
+                        JOIN codex_items keep ON keep.remote_id = ci.remote_id AND keep.id < ci.id
+                        WHERE ci.remote_id <> 0", commandTimeout: 600);
+
+                c.Execute("ALTER TABLE codex_items MODIFY remote_id INT NULL", commandTimeout: 600);
+                c.Execute("UPDATE codex_items SET remote_id = NULL WHERE remote_id = 0", commandTimeout: 600);
+
+                bool hasIndex = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.statistics
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'codex_items'
+                      AND index_name = 'uq_codex_remote_id'") > 0;
+                if (!hasIndex)
+                    c.Execute("ALTER TABLE codex_items ADD UNIQUE KEY uq_codex_remote_id (remote_id)", commandTimeout: 600);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (9, 'codex_items.remote_id NULL + UNIQUE (sync upsert)')");
+                _logger.LogInformation("[Migration v9] codex_items.remote_id NULL-able + UNIQUE: il sync Codex ora fa upsert");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v9] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v10: allinea codex_compositions allo schema usato da CodexController (figli da catalogo):
+        // child_codex_id NULL-able + colonna child_catalog_id, che mancavano nel CREATE TABLE
+        // (un DB nato da zero rompeva l'Editor Composizione). FK verso catalog_items aggiunta qui
+        // perché in InitDatabase catalog_items viene creata dopo codex_compositions.
+        if (currentVersion < 10)
+        {
+            try
+            {
+                bool childNullable = c.ExecuteScalar<string>(@"
+                    SELECT IS_NULLABLE FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'codex_compositions'
+                      AND column_name = 'child_codex_id'") == "YES";
+                if (!childNullable)
+                    c.Execute("ALTER TABLE codex_compositions MODIFY child_codex_id INT NULL");
+
+                bool hasCatalogCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'codex_compositions'
+                      AND column_name = 'child_catalog_id'") > 0;
+                if (!hasCatalogCol)
+                    c.Execute(@"ALTER TABLE codex_compositions
+                        ADD COLUMN child_catalog_id INT NULL AFTER child_codex_id,
+                        ADD INDEX idx_cc_catalog (child_catalog_id)");
+
+                bool hasFk = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.table_constraints
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'codex_compositions'
+                      AND constraint_name = 'fk_cc_catalog'") > 0;
+                if (!hasFk)
+                {
+                    // Pulizia orfani prima della FK (DB esistenti con colonna aggiunta a mano)
+                    c.Execute(@"DELETE FROM codex_compositions
+                        WHERE child_catalog_id IS NOT NULL
+                          AND child_catalog_id NOT IN (SELECT id FROM catalog_items)");
+                    c.Execute(@"ALTER TABLE codex_compositions
+                        ADD CONSTRAINT fk_cc_catalog FOREIGN KEY (child_catalog_id)
+                        REFERENCES catalog_items(id) ON DELETE CASCADE");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (10, 'codex_compositions.child_catalog_id + child_codex_id NULL')");
+                _logger.LogInformation("[Migration v10] codex_compositions allineata (child_catalog_id, child_codex_id NULL-able)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v10] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v11: feature key nav.digest_email (voce di menu "Digest Email" — solo ADMIN)
+        if (currentVersion < 11)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.digest_email', 'Digest Email', 'navigation', 3, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (11, 'nav.digest_email feature key')");
+                _logger.LogInformation("[Migration v11] Aggiunta feature key nav.digest_email");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v11] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v12: Feedback Acquisti (nota + nascosto per DDP+stato) e Feedback Magazzino (nascosto per riga).
+        // Stati tracciati = aggregazioni A6 (acquisti) / A7 (magazzino), già seedate in ddp_aggregations.
+        if (currentVersion < 12)
+        {
+            try
+            {
+                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_feedback_acquisti (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    project_id INT NOT NULL,
+                    ddp_type VARCHAR(20) NOT NULL,
+                    status_key VARCHAR(20) NOT NULL,
+                    note TEXT,
+                    hidden TINYINT(1) NOT NULL DEFAULT 0,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_ddp_feedback_acquisti (project_id, ddp_type, status_key),
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_feedback_magazzino_hidden (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    project_id INT NOT NULL,
+                    ddp_type VARCHAR(20) NOT NULL,
+                    item_id INT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_ddp_feedback_magazzino (project_id, ddp_type, item_id),
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (12, 'ddp_feedback_acquisti + ddp_feedback_magazzino_hidden')");
+                _logger.LogInformation("[Migration v12] Create tabelle ddp_feedback_acquisti e ddp_feedback_magazzino_hidden");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v12] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v13: specifica destinazione sulle righe DDP + seed elenco standard destinazioni (demo V1).
+        if (currentVersion < 13)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bom_items' AND COLUMN_NAME = 'destination_spec'") == 0)
+                {
+                    c.Execute("ALTER TABLE bom_items ADD COLUMN destination_spec VARCHAR(200) NOT NULL DEFAULT '' AFTER destination");
+                    _logger.LogInformation("[Migration v13] Aggiunta colonna bom_items.destination_spec");
+                }
+
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ddp_officina_items' AND COLUMN_NAME = 'destination_spec'") == 0)
+                {
+                    c.Execute("ALTER TABLE ddp_officina_items ADD COLUMN destination_spec VARCHAR(200) NOT NULL DEFAULT '' AFTER destination");
+                    _logger.LogInformation("[Migration v13] Aggiunta colonna ddp_officina_items.destination_spec");
+                }
+
+                c.Execute("DELETE FROM ddp_destinations WHERE name IN ('DEMO', 'DUE', 'TRE')");
+
+                for (int i = 0; i < DdpDestinationSeed.Names.Length; i++)
+                {
+                    string name = DdpDestinationSeed.Names[i];
+                    c.Execute(@"
+                        INSERT INTO ddp_destinations (name, sort_order, is_active)
+                        SELECT @Name, 0, TRUE
+                        WHERE NOT EXISTS (SELECT 1 FROM ddp_destinations WHERE name = @Name)",
+                        new { Name = name });
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (13, 'ddp destination_spec + seed destinazioni standard')");
+                _logger.LogInformation("[Migration v13] destination_spec + {Count} destinazioni standard seedate",
+                    DdpDestinationSeed.Names.Length);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v13] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v14: aggregazione A9 «Escluso da totale/conteggi» (membri default ANN/SOSP/RAM/SOST).
+        // Gli stati membri di A9 non contano nei totali € né nei conteggi di scadenza. Configurabile
+        // dall'admin in «Aggregazioni DDP» come le altre. Idempotente (INSERT IGNORE), non sovrascrive
+        // eventuali membri già modificati.
+        if (currentVersion < 14)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO ddp_aggregations (code, name, description, kind, sort_order) VALUES
+                    ('A9','Escluso da totale/conteggi','Stati esclusi dai totali € e dai conteggi (annullato, sospeso, ecc.)','SET',9)");
+
+                int a9Id = c.ExecuteScalar<int>("SELECT id FROM ddp_aggregations WHERE code='A9'");
+                foreach (string st in new[] { "ANN", "SOSP", "RAM", "SOST" })
+                    c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A,@S)",
+                        new { A = a9Id, S = st });
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (14, 'ddp aggregazione A9 (escluso da totale)')");
+                _logger.LogInformation("[Migration v14] Aggregazione A9 (escluso da totale/conteggi) + membri default");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v14] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v15: moduli "Anagrafica attività" (catalogo globale activity_catalog) + "Milestone"
+        // (pianificazione per-commessa project_milestones). Crea le tabelle (idempotente), seeda il
+        // catalogo standard una-tantum e registra la feature key di navigazione della nuova pagina.
+        if (currentVersion < 15)
+        {
+            try
+            {
+                var milestones = new MilestonesDbService(this);
+                milestones.InitTables(c);
+                milestones.SeedCatalog(c);
+
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.anagrafica_attivita', 'Anagrafica Attività', 'navigation', 2, 'HIDDEN')");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (15, 'activity_catalog + project_milestones + nav.anagrafica_attivita')");
+                _logger.LogInformation("[Migration v15] Tabelle activity_catalog + project_milestones, seed catalogo, feature key nav.anagrafica_attivita");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v15] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v16: modulo "SAL / Fatturazione" (sal_conditions + project_sal + sal_rows) + anagrafica condizioni.
+        if (currentVersion < 16)
+        {
+            try
+            {
+                var sal = new SalDbService(this);
+                sal.InitTables(c);
+                sal.SeedConditions(c);
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.sal_condizioni', 'Condizioni Pagamento SAL', 'navigation', 2, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (16, 'sal_conditions + project_sal + sal_rows + nav.sal_condizioni')");
+                _logger.LogInformation("[Migration v16] Tabelle SAL + seed condizioni + feature key nav.sal_condizioni");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v16] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v17: feature key per la pagina PM SAL globale
+        if (currentVersion < 17)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.sal', 'SAL / Fatturazione', 'navigation', 2, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (17, 'nav.sal feature key')");
+                _logger.LogInformation("[Migration v17] feature key nav.sal");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v17] Errore (non bloccante): {Message}", ex.Message);
             }
         }
 

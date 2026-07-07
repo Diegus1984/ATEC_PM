@@ -1,0 +1,300 @@
+import * as React from "react"
+import { Cell, Pie, PieChart } from "recharts"
+
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
+
+import {
+  DEFAULT_DELIVERED,
+  type BarRow,
+} from "./ddp-sintesi-logic"
+import { DdpPieSliceLabel } from "./ddp-pie-slice-label"
+
+/** Stati «DDP STOP» (nero in legenda ATEC). */
+export const DDP_STOP_STATES = ["ANN", "SOSP", "RAM", "SOST"] as const
+
+/** Verde acceso in seed DB (materiale concluso/disponibile). */
+export const DDP_BRIGHT_GREEN_STATES = ["CON", "COS", "DISP"] as const
+
+export interface DdpHealthBuckets {
+  total: number
+  /** Consegnato / gestito (A2 default: CON, COS, DISP, ASS, MOD). */
+  delivered: number
+  deliveredPct: string
+  /** Stop (ANN, SOSP, RAM, SOST). */
+  stop: number
+  stopPct: string
+  /** Tutto il resto: ancora in lavorazione (DO, IO, RO, VER, …). */
+  inProgress: number
+  inProgressPct: string
+}
+
+function pct(count: number, total: number): string {
+  if (total <= 0) return "—"
+  return `${((count / total) * 100).toLocaleString("it-IT", {
+    maximumFractionDigits: 1,
+  })}%`
+}
+
+export function computeDdpHealthBuckets(
+  bars: BarRow[],
+  total: number
+): DdpHealthBuckets {
+  const deliveredSet = new Set(DEFAULT_DELIVERED)
+  const stopSet = new Set<string>(DDP_STOP_STATES)
+
+  let delivered = 0
+  let stop = 0
+  for (const bar of bars) {
+    if (deliveredSet.has(bar.key)) delivered += bar.count
+    else if (stopSet.has(bar.key)) stop += bar.count
+  }
+  const inProgress = Math.max(0, total - delivered - stop)
+
+  return {
+    total,
+    delivered,
+    deliveredPct: pct(delivered, total),
+    stop,
+    stopPct: pct(stop, total),
+    inProgress,
+    inProgressPct: pct(inProgress, total),
+  }
+}
+
+function chartKey(bar: BarRow, index: number): string {
+  return bar.key || `slice-${index}`
+}
+
+/** Torta panoramica stato distinta + sintesi salute (in cima alla pagina sintesi). */
+export function DdpOverviewPie({
+  bars,
+  className,
+  variant = "commercial",
+  title,
+  description,
+}: {
+  bars: BarRow[]
+  className?: string
+  variant?: "commercial" | "officina"
+  title?: string
+  description?: React.ReactNode
+}) {
+  const total = React.useMemo(
+    () => bars.reduce((sum, bar) => sum + bar.count, 0),
+    [bars]
+  )
+
+  const health = React.useMemo(
+    () => computeDdpHealthBuckets(bars, total),
+    [bars, total]
+  )
+
+  const chartConfig = React.useMemo(() => {
+    const config: ChartConfig = {}
+    bars.forEach((bar, index) => {
+      const id = chartKey(bar, index)
+      config[id] = { label: bar.label, color: bar.bg }
+    })
+    return config
+  }, [bars])
+
+  const chartData = React.useMemo(
+    () =>
+      bars.map((bar, index) => ({
+        id: chartKey(bar, index),
+        label: bar.label,
+        key: bar.key,
+        count: bar.count,
+        fill: bar.bg,
+        fg: bar.fg,
+        pct: bar.pct,
+      })),
+    [bars]
+  )
+
+  if (bars.length === 0 || total === 0) {
+    return (
+      <div
+        className={cn(
+          "rounded-xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-xs",
+          className
+        )}
+      >
+        Nessuna riga in distinta.
+      </div>
+    )
+  }
+
+  const targetOk = health.inProgress === 0
+  const distintaLabel =
+    variant === "officina" ? "distinta meccanica" : "distinta commerciale"
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-4 shadow-xs",
+        className
+      )}
+    >
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold">
+          {title ?? `Stato della ${distintaLabel}`}
+        </h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {description ?? (
+            <>
+              Ogni fetta è un codice stato (colori da Conf. DDP). Obietivo a
+              commessa chiusa: tutto{" "}
+              <span className="font-medium text-foreground">
+                consegnato/gestito
+              </span>{" "}
+              o in{" "}
+              <span className="font-medium text-foreground">stop</span>{" "}
+              (annullato, sospeso, …); durante il cantiere rosso/giallo/arancio
+              sono normali.
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(220px,300px)_1fr] lg:items-center">
+        <ChartContainer
+          config={chartConfig}
+          className="mx-auto aspect-square max-h-[280px] w-full"
+        >
+          <PieChart>
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  hideLabel
+                  formatter={(value, _name, item) => {
+                    const row = item.payload as {
+                      label: string
+                      key: string
+                      pct: string
+                    }
+                    const code = row.key ? `${row.key} · ` : ""
+                    return (
+                      <span className="font-medium tabular-nums">
+                        {code}
+                        {row.label}: {value} ({row.pct})
+                      </span>
+                    )
+                  }}
+                />
+              }
+            />
+            <Pie
+              data={chartData}
+              dataKey="count"
+              nameKey="label"
+              innerRadius={0}
+              outerRadius="90%"
+              paddingAngle={chartData.length > 1 ? 1 : 0}
+              strokeWidth={1}
+              stroke="var(--background)"
+              label={DdpPieSliceLabel}
+              labelLine={false}
+            >
+              {chartData.map((entry) => (
+                <Cell key={entry.id} fill={entry.fill} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <HealthPill
+              label="Consegnato / gestito"
+              count={health.delivered}
+              pct={health.deliveredPct}
+              hint="CON, COS, DISP, ASS, MOD"
+              tone="success"
+            />
+            <HealthPill
+              label="In lavorazione"
+              count={health.inProgress}
+              pct={health.inProgressPct}
+              hint="DO, IO, RO, VER, …"
+              tone={health.inProgress > 0 ? "warning" : "muted"}
+            />
+            <HealthPill
+              label="Stop / escluso"
+              count={health.stop}
+              pct={health.stopPct}
+              hint="ANN, SOSP, RAM, SOST"
+              tone="neutral"
+            />
+          </div>
+
+          <p
+            className={cn(
+              "rounded-lg border px-3 py-2 text-xs",
+              targetOk
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+            )}
+          >
+            {targetOk ? (
+              <>
+                Nessuna riga in stati intermedi: la distinta è tutta in stati
+                conclusi o in stop.
+              </>
+            ) : (
+              <>
+                Restano{" "}
+                <strong className="tabular-nums">{health.inProgress}</strong>{" "}
+                righe in stati intermedi — da portare a verde (concluso) o a
+                nero (annullato/stop).
+              </>
+            )}
+          </p>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HealthPill({
+  label,
+  count,
+  pct,
+  hint,
+  tone,
+}: {
+  label: string
+  count: number
+  pct: string
+  hint: string
+  tone: "success" | "warning" | "muted" | "neutral"
+}) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/30"
+      : tone === "warning"
+        ? "border-amber-200/80 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/30"
+        : "border-border bg-muted/30"
+
+  return (
+    <div className={cn("rounded-lg border px-3 py-2", toneClass)}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-xl font-bold tabular-nums">{count}</span>
+        <span className="text-sm font-medium text-muted-foreground tabular-nums">
+          {pct}
+        </span>
+      </div>
+      <div className="mt-0.5 text-[10px] text-muted-foreground">{hint}</div>
+    </div>
+  )
+}

@@ -1,0 +1,365 @@
+/* Port del layout Gantt per le Milestones.
+   Solo tema chiaro. Le classi m-* sono adattate per fedeltà visiva. */
+
+.m-planner-root {
+  --g-line: #e4e4e7;
+  --g-line-soft: #f1f5f9;
+  --g-muted: #71717a;
+  --g-ink: #09090b;
+  --g-weekend: #f4f4f5;
+  --g-holiday: #fef2f2;
+  --g-today: #fef9c3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+/* ---- Gantt scroller ---- */
+.m-gantt-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--g-line);
+  border-radius: 8px;
+  background: #fff;
+  position: relative;
+}
+.m-gantt {
+  position: relative;
+  display: inline-block;
+  width: max-content;
+  min-width: 100%;
+  vertical-align: top;
+}
+
+/* ---- Header (mesi + settimane + giorni) ---- */
+.m-head {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.m-corner {
+  width: var(--m-name-w, 280px);
+  min-width: var(--m-name-w, 280px);
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: #fafafa;
+  border-right: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line);
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-muted);
+}
+.m-corner-label {
+  flex: 1;
+  min-width: 0;
+}
+.m-thead {
+  display: flex;
+  flex-direction: column;
+}
+.m-months {
+  display: flex;
+}
+.m-month {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-muted);
+  padding: 0.2rem 0.4rem;
+  box-sizing: border-box;
+  background: #fafafa;
+  border-right: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.m-weeks {
+  display: flex;
+}
+.m-week {
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--week-ink, #33639b);
+  background: var(--week-chip, #e9f1fa);
+  text-align: center;
+  padding: 3px 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 1px solid var(--g-line);
+  border-bottom: 1px solid var(--g-line);
+}
+
+.m-days {
+  display: flex;
+}
+.m-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0.1rem 0;
+  background: #fafafa;
+  border-right: 1px solid var(--g-line-soft);
+  border-bottom: 1px solid var(--g-line);
+}
+.m-day.today {
+  background: var(--g-today);
+}
+.m-day.weekend {
+  background: var(--g-weekend);
+}
+.m-day.holiday {
+  background: var(--g-holiday);
+}
+.m-dow {
+  font-size: 9px;
+  color: var(--g-muted);
+}
+.m-dnum {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-ink);
+}
+.m-dnum.red {
+  color: #dc2626;
+}
+
+/* ---- Righe + nomi ---- */
+.m-row {
+  display: flex;
+  border-bottom: 1px solid var(--g-line);
+}
+.m-row:hover .m-name {
+  background: #fbfbfb;
+}
+.m-row:hover .m-track {
+  background: #fbfbfb;
+}
+.m-name {
+  width: var(--m-name-w, 280px);
+  min-width: var(--m-name-w, 280px);
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fff;
+  border-right: 1px solid var(--g-line);
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.m-name-num {
+  font-size: 11px;
+  color: var(--g-muted);
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  width: 20px;
+}
+.m-name-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--g-ink);
+}
+.m-name-weeks {
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--g-muted);
+  background: #f4f4f5;
+  border: 1px solid #e4e4e7;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+/* ---- Track + celle + barre ---- */
+.m-track {
+  position: relative;
+  box-sizing: border-box;
+}
+.m-cells {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.m-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.m-overlay.today {
+  background: var(--g-today);
+}
+.m-overlay.holiday {
+  background: var(--g-holiday);
+}
+
+/* Linea oggi verticale */
+.m-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f97316; /* amber-500 / orange-500 */
+  z-index: 4;
+  pointer-events: none;
+}
+
+.m-bar {
+  position: absolute;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  user-select: none;
+  border: 1px solid transparent;
+  z-index: 2;
+}
+
+.m-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  transition: width 0.2s ease;
+}
+
+.m-bar-label {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.35rem;
+}
+
+/* Stati delle barre */
+.m-bar.status-done {
+  background-color: #f0fdfa; /* teal-50 */
+  border-color: #99f6e4;     /* teal-200 */
+  color: #115e59;            /* teal-800 per leggibilità */
+}
+.m-bar.status-done .m-bar-fill {
+  background-color: #5eead4; /* teal-300 */
+}
+
+.m-bar.status-current {
+  background-color: #eff6ff; /* blue-50 */
+  border-color: #bfdbfe;     /* blue-200 */
+  color: #1e40af;            /* blue-800 */
+}
+.m-bar.status-current .m-bar-fill {
+  background-color: #93c5fd; /* blue-300 */
+}
+
+.m-bar.status-late {
+  background-color: #fef2f2; /* red-50 */
+  border-color: #fecaca;     /* red-200 */
+  color: #991b1b;            /* red-800 */
+}
+.m-bar.status-late .m-bar-fill {
+  background-color: #fca5a5; /* red-300 */
+}
+
+.m-bar.status-none {
+  background-color: #fafafa; /* neutral-50 */
+  border-color: #e5e5e5;     /* neutral-200 */
+  color: #404040;            /* neutral-700 */
+}
+.m-bar.status-none .m-bar-fill {
+  background-color: #d4d4d4; /* neutral-300 */
+}
+
+/* Evidenziazione (hl) per urgenza */
+.m-bar.m-bar-evidenza {
+  outline: 2px solid #f59e0b; /* ambra */
+  outline-offset: -1px;
+}
+
+.m-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--g-muted);
+  font-size: 13px;
+}
+
+@media print {
+  body.printing-gantt [data-slot="sidebar"],
+  body.printing-gantt header,
+  body.printing-gantt .no-print {
+    display: none !important;
+  }
+  body.printing-gantt,
+  body.printing-gantt main,
+  body.printing-gantt [data-slot="sidebar-inset"] {
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+  }
+  body.printing-gantt .m-planner-root {
+    height: auto !important;
+  }
+  body.printing-gantt .m-gantt-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    border: none !important;
+  }
+  body.printing-gantt * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* ---- Keyframe Animations for slide transitions ---- */
+@keyframes m-slide-in-right {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes m-slide-in-left {
+  from {
+    transform: translateX(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.m-animate-slide-in-right {
+  animation: m-slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.m-animate-slide-in-left {
+  animation: m-slide-in-left 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

@@ -3,6 +3,12 @@ using MySqlConnector;
 
 namespace ATEC.PM.Server.Services;
 
+/// <summary>Stati DDP considerati "materiale consegnato" (aggregazione A2) — allineato a Gestore DDP / WPF.</summary>
+internal static class DdpDeliveredStatuses
+{
+    internal static readonly string[] Keys = { "CON", "COS", "DISP", "ASS", "MOD" };
+}
+
 /// <summary>
 /// Servizio centralizzato per creare notifiche.
 /// Usato dal controller DDP (trigger su cambio stato) e dal BackgroundService (scadenze).
@@ -89,11 +95,19 @@ public class NotificationService
             JOIN employees e ON e.id = ed.employee_id
             WHERE d.code = 'ACQ' AND e.status = 'ACTIVE'").ToList();
     }
+
+    /// <summary>ADMIN attivi — destinatari di direzione / fallback quando manca un referente specifico.</summary>
+    public List<int> GetAdminIds()
+    {
+        using var c = _db.Open();
+        return c.Query<int>(
+            "SELECT id FROM employees WHERE user_role = 'ADMIN' AND status = 'ACTIVE'").ToList();
+    }
 }
 
 /// <summary>
 /// BackgroundService che ogni mattina:
-/// 1. Controlla articoli DDP scaduti (date_needed < oggi e stato non CON=consegnato / ANN=annullato)
+/// 1. Controlla articoli DDP scaduti (date_needed &lt; oggi, non in A2 consegnato né ANN)
 /// 2. Pulisce notifiche vecchie (retention 5gg lette, 30gg non lette)
 /// </summary>
 public class NotificationBackgroundService : BackgroundService
@@ -102,6 +116,7 @@ public class NotificationBackgroundService : BackgroundService
     private readonly ILogger<NotificationBackgroundService> _log;
     private readonly int _retentionReadDays;
     private readonly int _retentionUnreadDays;
+    private readonly int _warningDays;
     private readonly TimeSpan _interval;
 
     public NotificationBackgroundService(IServiceProvider sp, IConfiguration config, ILogger<NotificationBackgroundService> log)
@@ -110,6 +125,8 @@ public class NotificationBackgroundService : BackgroundService
         _log = log;
         _retentionReadDays = int.TryParse(config["Notifications:RetentionReadDays"], out int r) ? r : 5;
         _retentionUnreadDays = int.TryParse(config["Notifications:RetentionUnreadDays"], out int u) ? u : 30;
+        // Giorni di anticipo per l'avviso "in scadenza" (WARNING) prima della scadenza.
+        _warningDays = int.TryParse(config["Notifications:DeadlineWarningDays"], out int w) ? w : 3;
         int hours = int.TryParse(config["Notifications:IntervalHours"], out int h) ? h : 6;
         _interval = TimeSpan.FromHours(hours);
     }
@@ -126,6 +143,10 @@ public class NotificationBackgroundService : BackgroundService
             {
                 await CheckOverdueDdp();
                 await CheckTimesheetAnomalies();
+                await CheckChecklistDeadlines();
+                await CheckMoMDeadlines();
+                await CheckProjectDeadlines();
+                await CheckSalDeadlines();
                 await CleanupRetention();
             }
             catch (Exception ex)
@@ -145,14 +166,34 @@ public class NotificationBackgroundService : BackgroundService
 
         using var c = db.Open();
 
-        // Articoli scaduti non ancora notificati oggi
+        // Stati «esclusi da totale/conteggi» (aggregazione A9): un articolo in questi stati
+        // (annullato/sospeso/rimesso/sostituito) non è "in ritardo" e non va notificato.
+        string[] excluded = DdpAggregationSet.Load(c, "A9");
+
+        // Rimuove notifiche "in ritardo" ormai risolte (consegnato, escluso da A9, o data non scaduta).
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            JOIN bom_items b ON b.id = n.reference_id
+            WHERE n.notification_type = 'DDP_OVERDUE'
+              AND n.reference_type = 'BOM'
+              AND (
+                  b.item_status IN @Delivered
+                  OR b.item_status IN @Excluded
+                  OR b.date_needed IS NULL
+                  OR b.date_needed >= CURDATE()
+              )",
+            new { Delivered = DdpDeliveredStatuses.Keys, Excluded = excluded });
+
+        // Articoli scaduti non ancora notificati oggi (stessa logica KPI Gestore DDP).
         var overdue = c.Query<dynamic>(@"
             SELECT b.id, b.project_id, b.part_number, b.description, b.date_needed,
                    COALESCE(p.code, '') AS project_code
             FROM bom_items b
             JOIN projects p ON p.id = b.project_id
             WHERE b.date_needed < CURDATE()
-              AND b.item_status NOT IN ('CON', 'ANN')
+              AND b.item_status NOT IN @Delivered
+              AND COALESCE(b.item_status,'') NOT IN @Excluded
               AND b.date_needed IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
@@ -160,7 +201,7 @@ public class NotificationBackgroundService : BackgroundService
                     AND n.reference_type = 'BOM'
                     AND n.reference_id = b.id
                     AND DATE(n.created_at) = CURDATE()
-              )").ToList();
+              )", new { Delivered = DdpDeliveredStatuses.Keys, Excluded = excluded }).ToList();
 
         foreach (var item in overdue)
         {
@@ -291,6 +332,321 @@ public class NotificationBackgroundService : BackgroundService
         if (count > 0)
             _log.LogInformation("[Notifications] {Count} anomalie timesheet notificate.", count);
 
+        await Task.CompletedTask;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // NOTIFICHE DI SCADENZA — attività (check list), azioni MoM, commesse
+    // ───────────────────────────────────────────────────────────────
+    // Regola comune (frequenza = promemoria giornaliero):
+    //   giorni = DATEDIFF(scadenza, oggi)
+    //     0 ≤ giorni ≤ N  → WARNING "in scadenza"
+    //     giorni < 0       → ALARM   "scaduta"
+    //   Dedup: al massimo un WARNING e un ALARM per entità AL GIORNO
+    //   (severità + DATE(created_at)=CURDATE()), così ri-avvisa ogni giorno finché non gestita.
+    //   Prima di creare, una pulizia rimuove le notifiche pendenti di entità ormai risolte
+    //   (chiuse/eliminate/consegnate/senza data) o la cui severità non è più coerente
+    //   (es. una WARNING quando l'entità è ora scaduta): al giro dopo nasce l'ALARM corretto.
+    // ═══════════════════════════════════════════════════════════════
+
+    private static string DueText(int days) =>
+        days < 0 ? $"scaduta da {-days} g" : days == 0 ? "scade oggi" : $"scade tra {days} g";
+
+    private static string Trunc(string? s, int max) =>
+        string.IsNullOrEmpty(s) ? "" : (s!.Length <= max ? s! : s!.Substring(0, max - 1) + "…");
+
+    /// <summary>Attività check list (checklist_items.due_date) in scadenza o scadute, non CLOSED.</summary>
+    private async Task CheckChecklistDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        // Pulizia: rimuove le notifiche non più pertinenti (item risolto/eliminato o severità superata).
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN checklist_items i ON i.id = n.reference_id
+            WHERE n.notification_type = 'CHECKLIST_DUE' AND n.reference_type = 'CHECKLIST'
+              AND (
+                  i.id IS NULL OR i.status = 'CLOSED' OR i.due_date IS NULL
+                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(i.due_date, CURDATE()) BETWEEN 0 AND @Warn))
+                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(i.due_date, CURDATE()) < 0))
+              )", new { Warn = _warningDays });
+
+        var rows = c.Query<dynamic>(@"
+            SELECT i.id, i.project_id, i.description, i.due_date, i.created_by,
+                   DATEDIFF(i.due_date, CURDATE()) AS days,
+                   CASE WHEN DATEDIFF(i.due_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev,
+                   COALESCE(p.code, '') AS project_code
+            FROM checklist_items i
+            LEFT JOIN projects p ON p.id = i.project_id
+            WHERE i.due_date IS NOT NULL
+              AND i.status <> 'CLOSED'
+              AND DATEDIFF(i.due_date, CURDATE()) <= @Warn
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'CHECKLIST_DUE' AND n.reference_type = 'CHECKLIST'
+                    AND n.reference_id = i.id
+                    AND n.severity = CASE WHEN DATEDIFF(i.due_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
+                    AND DATE(n.created_at) = CURDATE()
+              )", new { Warn = _warningDays }).ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int? projectId = (int?)r.project_id;
+            int days = (int)r.days;
+            string sev = (string)r.sev;
+            string code = (string)r.project_code;
+
+            // Destinatari mirati: item di commessa → PM+ADMIN; item di gruppo generico → creatore + ADMIN.
+            List<int> recipients;
+            if (projectId.HasValue)
+                recipients = notif.GetProjectPmIds(projectId.Value);
+            else
+            {
+                recipients = notif.GetAdminIds();
+                if (r.created_by != null) recipients.Add((int)r.created_by);
+            }
+            if (recipients.Count == 0) continue;
+
+            string label = string.IsNullOrEmpty(code) ? "Check list" : code;
+            string title = (sev == "ALARM" ? "Attività scaduta — " : "Attività in scadenza — ") + label;
+            string msg = $"{Trunc((string?)r.description, 300)} — {DueText(days)} ({((DateTime)r.due_date):dd/MM/yyyy})";
+
+            notif.Create("CHECKLIST_DUE", sev, Trunc(title, 200), Trunc(msg, 500),
+                "CHECKLIST", id, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} attività check list in scadenza/scadute notificate.", count);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Azioni MoM (mom_action_items.data_check) in scadenza o scadute, non CLOSED.</summary>
+    private async Task CheckMoMDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN mom_action_items a ON a.id = n.reference_id
+            WHERE n.notification_type = 'MOM_DUE' AND n.reference_type = 'MOM_ACTION'
+              AND (
+                  a.id IS NULL OR a.status = 'CLOSED' OR a.data_check IS NULL
+                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(a.data_check, CURDATE()) BETWEEN 0 AND @Warn))
+                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(a.data_check, CURDATE()) < 0))
+              )", new { Warn = _warningDays });
+
+        var rows = c.Query<dynamic>(@"
+            SELECT a.id, a.attivita, a.data_check, a.resp1_id, a.resp2_id, a.resp3_id,
+                   m.project_id,
+                   DATEDIFF(a.data_check, CURDATE()) AS days,
+                   CASE WHEN DATEDIFF(a.data_check, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev,
+                   COALESCE(p.code, '') AS project_code
+            FROM mom_action_items a
+            JOIN mom_records m ON m.id = a.mom_id
+            LEFT JOIN projects p ON p.id = m.project_id
+            WHERE a.data_check IS NOT NULL
+              AND a.status <> 'CLOSED'
+              AND DATEDIFF(a.data_check, CURDATE()) <= @Warn
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'MOM_DUE' AND n.reference_type = 'MOM_ACTION'
+                    AND n.reference_id = a.id
+                    AND n.severity = CASE WHEN DATEDIFF(a.data_check, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
+                    AND DATE(n.created_at) = CURDATE()
+              )", new { Warn = _warningDays }).ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int? projectId = (int?)r.project_id;
+            int days = (int)r.days;
+            string sev = (string)r.sev;
+            string code = (string)r.project_code;
+
+            // Responsabili reali dell'azione (tabella N + fallback legacy resp1/2/3), esclusi i
+            // dipendenti "wildcard" ([PM] Generico, …) e i cessati.
+            List<int> recipients = c.Query<int>(@"
+                SELECT DISTINCT e.id FROM employees e
+                WHERE e.status = 'ACTIVE'
+                  AND NOT (e.first_name LIKE '[%]' AND e.last_name = 'Generico')
+                  AND e.id IN (
+                      SELECT employee_id FROM mom_action_item_responsibles WHERE action_item_id = @Id
+                      UNION
+                      SELECT resp_id FROM (
+                          SELECT @R1 AS resp_id UNION SELECT @R2 UNION SELECT @R3
+                      ) t WHERE resp_id IS NOT NULL
+                  )",
+                new { Id = id, R1 = (int?)r.resp1_id, R2 = (int?)r.resp2_id, R3 = (int?)r.resp3_id }).ToList();
+
+            // Le scadenze MoM interessano il PM della commessa (NON gli admin): solo il pm_id
+            // specifico della commessa, oltre ai responsabili dell'azione.
+            if (projectId.HasValue)
+            {
+                int? pmId = c.ExecuteScalar<int?>(
+                    @"SELECT p.pm_id FROM projects p
+                      JOIN employees e ON e.id = p.pm_id AND e.status = 'ACTIVE'
+                      WHERE p.id = @Pid", new { Pid = projectId.Value });
+                if (pmId.HasValue) recipients.Add(pmId.Value);
+            }
+            recipients = recipients.Distinct().ToList();
+            if (recipients.Count == 0) continue;
+
+            string label = string.IsNullOrEmpty(code) ? "MoM" : code;
+            string title = (sev == "ALARM" ? "Azione MoM scaduta — " : "Azione MoM in scadenza — ") + label;
+            string msg = $"{Trunc((string?)r.attivita, 300)} — {DueText(days)} ({((DateTime)r.data_check):dd/MM/yyyy})";
+
+            notif.Create("MOM_DUE", sev, Trunc(title, 200), Trunc(msg, 500),
+                "MOM_ACTION", id, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} azioni MoM in scadenza/scadute notificate.", count);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Commesse (projects.end_date_planned) in scadenza o scadute, attive e non ancora consegnate.</summary>
+    private async Task CheckProjectDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN projects p ON p.id = n.reference_id
+            WHERE n.notification_type = 'PROJECT_DUE' AND n.reference_type = 'PROJECT'
+              AND (
+                  p.id IS NULL OR p.status <> 'ACTIVE' OR p.end_date_planned IS NULL
+                  OR p.end_date_actual IS NOT NULL
+                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(p.end_date_planned, CURDATE()) BETWEEN 0 AND @Warn))
+                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(p.end_date_planned, CURDATE()) < 0))
+              )", new { Warn = _warningDays });
+
+        var rows = c.Query<dynamic>(@"
+            SELECT p.id, p.code, p.title, p.end_date_planned,
+                   DATEDIFF(p.end_date_planned, CURDATE()) AS days,
+                   CASE WHEN DATEDIFF(p.end_date_planned, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+            FROM projects p
+            WHERE p.end_date_planned IS NOT NULL
+              AND p.end_date_actual IS NULL
+              AND p.status = 'ACTIVE'
+              AND DATEDIFF(p.end_date_planned, CURDATE()) <= @Warn
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'PROJECT_DUE' AND n.reference_type = 'PROJECT'
+                    AND n.reference_id = p.id
+                    AND n.severity = CASE WHEN DATEDIFF(p.end_date_planned, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
+                    AND DATE(n.created_at) = CURDATE()
+              )", new { Warn = _warningDays }).ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int days = (int)r.days;
+            string sev = (string)r.sev;
+            string code = (string)r.code;
+
+            // Destinatari: PM + dipendenti assegnati alla commessa (fallback PM/ADMIN).
+            List<int> recipients = notif.GetProjectEmployeeIds(id);
+            if (recipients.Count == 0) recipients = notif.GetProjectPmIds(id);
+            if (recipients.Count == 0) continue;
+
+            string title = (sev == "ALARM" ? "Commessa scaduta — " : "Commessa in scadenza — ") + code;
+            string msg = $"{Trunc((string?)r.title, 300)} — {DueText(days)} ({((DateTime)r.end_date_planned):dd/MM/yyyy})";
+
+            notif.Create("PROJECT_DUE", sev, Trunc(title, 200), Trunc(msg, 500),
+                "PROJECT", id, id, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} commesse in scadenza/scadute notificate.", count);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Step/scadenze SAL (sal_rows.data_fatt) in scadenza o scaduti, non ancora emessi/pagati.</summary>
+    private async Task CheckSalDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        // 1. Pulisce le vecchie notifiche SAL_DUE ormai risolte (stato non vuoto, data rimossa o riga eliminata)
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN sal_rows sr ON sr.id = n.reference_id
+            WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
+              AND (
+                  sr.id IS NULL OR sr.data_fatt IS NULL OR sr.stato <> ''
+                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) BETWEEN 0 AND @Warn))
+                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) < 0))
+              )", new { Warn = _warningDays });
+
+        // 2. Query per nuove scadenze SAL non emesse/pagate da notificare
+        var rows = c.Query<dynamic>(@"
+            SELECT sr.id, sr.project_id, sr.step, sr.data_fatt, sr.perc, ps.valore, p.code,
+                   DATEDIFF(sr.data_fatt, CURDATE()) AS days,
+                   CASE WHEN DATEDIFF(sr.data_fatt, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+            FROM sal_rows sr
+            JOIN projects p ON p.id = sr.project_id
+            LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
+            WHERE sr.data_fatt IS NOT NULL
+              AND sr.stato = ''
+              AND DATEDIFF(sr.data_fatt, CURDATE()) <= @Warn
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
+                    AND n.reference_id = sr.id
+                    AND n.severity = CASE WHEN DATEDIFF(sr.data_fatt, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
+                    AND DATE(n.created_at) = CURDATE()
+              )", new { Warn = _warningDays }).ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int projectId = (int)r.project_id;
+            int days = (int)r.days;
+            string sev = (string)r.sev;
+            string code = (string)r.code;
+            decimal? perc = (decimal?)r.perc;
+            decimal? valore = (decimal?)r.valore;
+
+            // Destinatari: PM della commessa + ADMIN
+            List<int> recipients = notif.GetProjectPmIds(projectId);
+            if (recipients.Count == 0) continue;
+
+            string importoStr = "";
+            if (valore.HasValue && perc.HasValue)
+            {
+                var importo = valore.Value * (perc.Value / 100m);
+                importoStr = " — " + importo.ToString("N2", new System.Globalization.CultureInfo("it-IT")) + " €";
+            }
+
+            string title = (sev == "ALARM" ? "Fatturazione SAL scaduta — " : "Fatturazione SAL in scadenza — ") + code;
+            string msg = $"{Trunc((string?)r.step, 300)} — {DueText(days)} ({((DateTime)r.data_fatt):dd/MM/yyyy}){importoStr}";
+
+            notif.Create("SAL_DUE", sev, Trunc(title, 200), Trunc(msg, 500),
+                "SAL_ROW", id, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} scadenze SAL in scadenza/scadute notificate.", count);
         await Task.CompletedTask;
     }
 
