@@ -1,7 +1,8 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowDownToLine, ArrowUpToLine, GripVertical, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { ArrowDownToLine, ArrowUpToLine, GripVertical, Lock, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { getSession } from "@/lib/auth/session"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { DateField } from "@/components/shared/date-field"
@@ -67,12 +68,14 @@ function GrowTextarea({
   onCommit,
   placeholder,
   className,
+  disabled,
 }: {
   value: string
   onChange: (v: string) => void
   onCommit: () => void
   placeholder?: string
   className?: string
+  disabled?: boolean
 }) {
   return (
     <Textarea
@@ -80,6 +83,7 @@ function GrowTextarea({
       value={value}
       placeholder={placeholder}
       spellCheck={false}
+      disabled={disabled}
       className={cn(
         "field-sizing-content min-h-8 resize-none px-2 py-1 text-sm leading-5 shadow-none",
         className
@@ -108,6 +112,12 @@ export function ProjectSal({
   const navigate = useNavigate()
   const confirm = useConfirm()
 
+  const session = getSession()
+  const role = session?.user.userRole
+  const isAdmin = role === "ADMIN"
+  const isPm = role === "PM"
+  const canSeeEconomics = isAdmin || isPm
+
   const queryKey = React.useMemo(() => ["sal", "project", projectId], [projectId])
   const query = useQuery({
     queryKey,
@@ -130,6 +140,13 @@ export function ProjectSal({
   const bundle = query.data
   const header = bundle?.header
   const rows = React.useMemo(() => bundle?.rows ?? [], [bundle])
+
+  const { totalPerc, paidPerc, advancedIncasso } = React.useMemo(() => {
+    const tot = rows.reduce((acc, r) => acc + Number(r.perc ?? 0), 0)
+    const paid = rows.reduce((acc, r) => acc + (r.stato === "pagata" ? Number(r.perc ?? 0) : 0), 0)
+    const adv = tot > 0 ? (paid / tot) * 100 : 0
+    return { totalPerc: tot, paidPerc: paid, advancedIncasso: adv }
+  }, [rows])
 
   // Stato interno per l'editing dell'header
   const [cliente, setCliente] = React.useState("")
@@ -166,14 +183,6 @@ export function ProjectSal({
       notifyError(err as Error)
     }
   }
-
-  // Avanzamento Incasso
-  const { totalPerc, paidPerc, advancedIncasso } = React.useMemo(() => {
-    const tot = rows.reduce((acc, r) => acc + Number(r.perc ?? 0), 0)
-    const paid = rows.reduce((acc, r) => acc + (r.stato === "pagata" ? Number(r.perc ?? 0) : 0), 0)
-    const adv = tot > 0 ? (paid / tot) * 100 : 0
-    return { totalPerc: tot, paidPerc: paid, advancedIncasso: adv }
-  }, [rows])
 
   // Drag & Drop
   const dragIdRef = React.useRef<number | null>(null)
@@ -246,7 +255,6 @@ export function ProjectSal({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Testata SAL */}
       <Card className="overflow-hidden py-0">
         <CardHeader className="flex flex-row flex-wrap items-center gap-6 border-b bg-muted/30 py-3">
           <div className="flex flex-wrap items-center gap-4">
@@ -258,19 +266,22 @@ export function ProjectSal({
                 onBlur={() => void handleSaveHeader({ cliente })}
                 placeholder="Inserisci cliente..."
                 className="h-8 w-64 shadow-none"
+                disabled={!canSeeEconomics}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Valore Commessa (€)</label>
-              <Input
-                type="number"
-                value={valore}
-                onChange={(e) => setValore(e.target.value)}
-                onBlur={() => void handleSaveHeader({ valore: valore === "" ? null : Number(valore) })}
-                placeholder="Valore (€)..."
-                className="h-8 w-44 font-mono text-right shadow-none"
-              />
-            </div>
+            {canSeeEconomics && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Valore Commessa (€)</label>
+                <Input
+                  type="number"
+                  value={valore}
+                  onChange={(e) => setValore(e.target.value)}
+                  onBlur={() => void handleSaveHeader({ valore: valore === "" ? null : Number(valore) })}
+                  placeholder="Valore (€)..."
+                  className="h-8 w-44 font-mono text-right shadow-none"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-row gap-6 items-center">
@@ -291,15 +302,17 @@ export function ProjectSal({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSeedTemplate}
-              disabled={rows.length > 0}
-              title="Precarica i 6 step SAL standard (15/15/10/20/20/20)"
-            >
-              Precarica modello standard
-            </Button>
+            {canSeeEconomics && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSeedTemplate}
+                disabled={rows.length > 0}
+                title="Precarica i 6 step SAL standard (15/15/10/20/20/20)"
+              >
+                Precarica modello standard
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -313,6 +326,17 @@ export function ProjectSal({
         </CardHeader>
 
         <CardContent className="p-3">
+          {rows.length > 0 && totalPerc !== 100 && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50/50 text-amber-800 text-xs flex items-center justify-between font-medium">
+              <span>
+                ⚠️ Attenzione: il totale delle percentuali degli step SAL è <strong>{fmtPct(totalPerc)}%</strong>.
+                {totalPerc < 100
+                  ? ` Mancano ancora ${fmtPct(100 - totalPerc)}% per completare la pianificazione (residuo da pianificare).`
+                  : ` Supera il 100% di ${fmtPct(totalPerc - 100)}%.`}
+              </span>
+            </div>
+          )}
+
           {rows.length === 0 ? (
             <p className="mb-3 text-sm text-muted-foreground text-center py-6">
               Nessun pagamento SAL pianificato per questa commessa. Precarica il modello standard o aggiungi uno step qui sotto.
@@ -327,7 +351,7 @@ export function ProjectSal({
                   <TableHead className="min-w-[18rem]">Descrizione / Step SAL</TableHead>
                   <TableHead className="w-24 text-center">%</TableHead>
                   <TableHead className="w-56">Condizione Pagamento</TableHead>
-                  <TableHead className="w-36 text-right">Importo (€)</TableHead>
+                  {canSeeEconomics && <TableHead className="w-36 text-right">Importo (€)</TableHead>}
                   <TableHead className="w-48 text-center">Ipotesi Fatturazione</TableHead>
                   <TableHead className="w-48">Stato</TableHead>
                   <TableHead className="w-12"></TableHead>
@@ -366,15 +390,18 @@ export function ProjectSal({
                       handleReorder={handleReorder}
                       clearDrag={clearDrag}
                       navigate={navigate}
+                      canSeeEconomics={canSeeEconomics}
+                      isAdmin={isAdmin}
                     />
                   )
                 })}
 
-                {/* Riga aggiunta in coda */}
-                <NewSalRowComponent
-                  projectId={projectId}
-                  onMutated={invalidate}
-                />
+                {canSeeEconomics && (
+                  <NewSalRowComponent
+                    projectId={projectId}
+                    onMutated={invalidate}
+                  />
+                )}
               </TableBody>
             </Table>
           </div>
@@ -404,6 +431,8 @@ interface SalRowComponentProps {
   handleReorder: (dragId: number, targetId: number, after: boolean) => Promise<void>
   clearDrag: () => void
   navigate: ReturnType<typeof useNavigate>
+  canSeeEconomics: boolean
+  isAdmin: boolean
 }
 
 function SalRowComponent({
@@ -426,7 +455,10 @@ function SalRowComponent({
   handleReorder,
   clearDrag,
   navigate,
+  canSeeEconomics,
+  isAdmin,
 }: SalRowComponentProps) {
+  const isLocked = row.stato === "pagata" && !isAdmin
   const [stepText, setStepText] = React.useState(row.step)
   const [percText, setPercText] = React.useState(row.perc === null ? "" : String(row.perc))
 
@@ -468,7 +500,7 @@ function SalRowComponent({
       if (row.perc !== null) void patch({ perc: null })
       return
     }
-    let n = parseFloat(val)
+    let n = parseFloat(val.replace(",", "."))
     if (isNaN(n)) {
       setPercText(row.perc === null ? "" : String(row.perc))
       return
@@ -497,7 +529,6 @@ function SalRowComponent({
     }
   }
 
-  // Costruisce la lista di condizioni, includendo quella corrente anche se inattiva.
   const selectOptions = React.useMemo(() => {
     const opts = [...activeConditions]
     if (row.condizione && !opts.some((o) => o.label === row.condizione)) {
@@ -506,12 +537,10 @@ function SalRowComponent({
     return opts
   }, [activeConditions, row.condizione])
 
-  // Drag and Drop handlers
   const onDragStart = (e: React.DragEvent) => {
     dragIdRef.current = row.id
     setDraggingId(row.id)
     e.dataTransfer.effectAllowed = "move"
-    // HTML5 requirement
     e.dataTransfer.setData("text/plain", "")
   }
 
@@ -544,7 +573,7 @@ function SalRowComponent({
 
   return (
     <TableRow
-      draggable={grabId === row.id}
+      draggable={!isLocked && grabId === row.id}
       onDragStart={onDragStart}
       onDragEnd={clearDrag}
       onDragOver={onDragOver}
@@ -560,16 +589,25 @@ function SalRowComponent({
     >
       <TableCell className="w-16 py-1.5 align-top">
         <div className="flex items-center gap-1">
-          <span
-            role="button"
-            aria-label="Trascina per riordinare"
-            title="Trascina per riordinare"
-            className="inline-flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
-            onMouseDown={() => setGrabId(row.id)}
-            onMouseUp={() => setGrabId(null)}
-          >
-            <GripVertical className="size-3.5" />
-          </span>
+          {isLocked ? (
+            <span
+              className="inline-flex size-6 items-center justify-center rounded text-muted-foreground/40"
+              title="Fattura pagata (sola lettura per non-ADMIN)"
+            >
+              <Lock className="size-3.5" />
+            </span>
+          ) : (
+            <span
+              role="button"
+              aria-label="Trascina per riordinare"
+              title="Trascina per riordinare"
+              className="inline-flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+              onMouseDown={() => setGrabId(row.id)}
+              onMouseUp={() => setGrabId(null)}
+            >
+              <GripVertical className="size-3.5" />
+            </span>
+          )}
           <span className="text-xs tabular-nums text-muted-foreground">
             {String(index + 1).padStart(2, "0")}
           </span>
@@ -583,6 +621,7 @@ function SalRowComponent({
           onCommit={commitStep}
           placeholder="Descrizione step di pagamento (es. Acconto all'ordine...)"
           className="border-transparent bg-transparent focus-visible:border-input focus-visible:bg-background"
+          disabled={isLocked}
         />
       </TableCell>
 
@@ -597,6 +636,7 @@ function SalRowComponent({
             }}
             placeholder="0.0"
             className="h-8 w-16 px-1 text-center font-mono tabular-nums shadow-none"
+            disabled={isLocked}
           />
           <span className="text-xs text-muted-foreground font-semibold">%</span>
         </div>
@@ -612,6 +652,7 @@ function SalRowComponent({
             }
             void patch({ condizione: val === "__empty__" ? "" : val })
           }}
+          disabled={isLocked}
         >
           <SelectTrigger className="h-8 shadow-none bg-transparent border-zinc-200">
             <SelectValue />
@@ -623,18 +664,22 @@ function SalRowComponent({
                 {o.label} {!o.isActive && row.condizione === o.label ? "(inattiva)" : ""}
               </SelectItem>
             ))}
-            <SelectItem value="__new_condition__" className="text-primary font-semibold">
-              ➕ Nuova condizione…
-            </SelectItem>
+            {isAdmin && (
+              <SelectItem value="__new_condition__" className="text-primary font-semibold">
+                ➕ Nuova condizione…
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
       </TableCell>
 
-      <TableCell className="w-36 py-1.5 align-top text-right pr-4">
-        <div className="flex h-8 items-center justify-end font-mono text-xs font-semibold tabular-nums text-foreground">
-          {formattedImporto}
-        </div>
-      </TableCell>
+      {canSeeEconomics && (
+        <TableCell className="w-36 py-1.5 align-top text-right pr-4">
+          <div className="flex h-8 items-center justify-end font-mono text-xs font-semibold tabular-nums text-foreground">
+            {formattedImporto}
+          </div>
+        </TableCell>
+      )}
 
       <TableCell className="w-48 py-1.5 align-top">
         <DateField
@@ -643,6 +688,7 @@ function SalRowComponent({
           size="sm"
           placeholder="—"
           className="h-8 w-full min-w-0 shadow-none"
+          disabled={isLocked}
         />
       </TableCell>
 
@@ -652,6 +698,7 @@ function SalRowComponent({
           onValueChange={(val) => {
             void patch({ stato: val === "__empty__" ? "" : val })
           }}
+          disabled={row.stato === "pagata" && !isAdmin}
         >
           <SelectTrigger className="h-8 shadow-none bg-transparent border-zinc-200">
             <SelectValue />
@@ -680,13 +727,17 @@ function SalRowComponent({
                 icon: ArrowDownToLine,
                 onClick: () => onInsert("below"),
               },
-              {
-                label: "Elimina step SAL",
-                icon: Trash2,
-                destructive: true,
-                separatorBefore: true,
-                onClick: () => void removeRow(),
-              },
+              ...(!isLocked
+                ? [
+                    {
+                      label: "Elimina step SAL",
+                      icon: Trash2,
+                      destructive: true,
+                      separatorBefore: true,
+                      onClick: () => void removeRow(),
+                    },
+                  ]
+                : []),
             ]}
           />
         </div>

@@ -20,6 +20,7 @@ import type { ProjectListItem } from "@/lib/api/types"
 import { salSummaryDots } from "@/features/commesse/sal-utils"
 import { ProjectSal } from "@/features/commesse/ProjectSal"
 import { SalProspettoView } from "./SalProspettoView"
+import { useGlobalSalHub } from "@/lib/signalr/use-sal-hub"
 import { cn } from "@/lib/utils"
 
 const SUMMARY_QUERY_KEY = ["sal-summary"] as const
@@ -43,12 +44,14 @@ export function SalPage() {
     queryFn: fetchSalSummary,
   })
 
-  const refetchAll = () => {
+  const refetchAll = React.useCallback(() => {
     void projectsQuery.refetch()
     void summaryQuery.refetch()
     void queryClient.invalidateQueries({ queryKey: ["sal"] })
     void queryClient.invalidateQueries({ queryKey: ["sal-prospetto"] })
-  }
+  }, [projectsQuery, summaryQuery, queryClient])
+
+  useGlobalSalHub(true, refetchAll)
 
   const allProjects = React.useMemo(() => {
     return projectsQuery.data?.items ?? []
