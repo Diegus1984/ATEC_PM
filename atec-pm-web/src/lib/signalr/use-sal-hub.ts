@@ -54,3 +54,42 @@ export function useSalHub(
     }
   }, [enabled, projectId])
 }
+
+/**
+ * Sottoscrive l'hub commesse (`/hubs/project`) per gli aggiornamenti SAL globali
+ * e richiama `onChange` quando una commessa qualsiasi subisce modifiche SAL (GlobalSalChanged).
+ */
+export function useGlobalSalHub(
+  enabled: boolean,
+  onChange: () => void
+): void {
+  const handlerRef = React.useRef(onChange)
+  React.useEffect(() => {
+    handlerRef.current = onChange
+  }, [onChange])
+
+  React.useEffect(() => {
+    if (!enabled) return
+
+    let disposed = false
+    let debounce: ReturnType<typeof setTimeout> | null = null
+    const connection = createHubConnection("project")
+
+    connection.on("GlobalSalChanged", () => {
+      if (debounce) clearTimeout(debounce)
+      debounce = setTimeout(() => handlerRef.current(), 400)
+    })
+
+    void (async () => {
+      const ok = await startHub(connection)
+      if (!ok || disposed) return
+    })()
+
+    return () => {
+      disposed = true
+      if (debounce) clearTimeout(debounce)
+      void stopHub(connection)
+    }
+  }, [enabled])
+}
+
