@@ -31,9 +31,12 @@ public class SalController : ControllerBase
 
     public const string ConflictMessage = "CONFLITTO: record SAL modificato da un altro utente";
 
-    private void NotifyChanged(string action, int projectId) =>
+    private void NotifyChanged(string action, int projectId)
+    {
         _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
             .SendAsync("SalChanged", new { action, projectId });
+        _ = _hub.Clients.All.SendAsync("GlobalSalChanged", new { action, projectId });
+    }
 
     [HttpGet]
     public IActionResult GetBundle([FromQuery] int projectId)
@@ -56,7 +59,8 @@ public class SalController : ControllerBase
         var rows = c.Query<SalRowDto>(@"
             SELECT id AS Id, project_id AS ProjectId, step AS Step, perc AS Perc,
                    condizione AS Condizione, data_fatt AS DataFatt, stato AS Stato,
-                   sort_order AS SortOrder, row_version AS RowVersion
+                   sort_order AS SortOrder, row_version AS RowVersion,
+                   paid_by AS PaidBy, paid_at AS PaidAt
             FROM sal_rows WHERE project_id=@Pid ORDER BY sort_order, id", new { Pid = projectId }).ToList();
 
         var bundle = new SalBundleDto
@@ -134,9 +138,43 @@ public class SalController : ControllerBase
     public IActionResult UpdateRow(int id, [FromBody] SalRowSaveRequest req)
     {
         using var c = _db.Open();
+        string? role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        // Recupera lo stato attuale della riga per verificare se è già pagata
+        var current = c.QueryFirstOrDefault<dynamic>(
+            "SELECT stato, project_id FROM sal_rows WHERE id=@Id", new { Id = id });
+        if (current != null)
+        {
+            string currentStato = (string)current.stato;
+            if (currentStato == "pagata" && role != "ADMIN")
+            {
+                return Ok(ApiResponse<int>.Fail("La riga è già stata pagata e non può essere modificata se non da un utente ADMIN."));
+            }
+        }
+
+        string? currentStatoStr = current?.stato;
+        int? paidBy = null;
+        DateTime? paidAt = null;
+
+        if (req.Stato == "pagata")
+        {
+            if (currentStatoStr == "pagata")
+            {
+                var audit = c.QueryFirstOrDefault<dynamic>("SELECT paid_by, paid_at FROM sal_rows WHERE id=@Id", new { Id = id });
+                paidBy = (int?)audit?.paid_by;
+                paidAt = (DateTime?)audit?.paid_at;
+            }
+            else
+            {
+                paidBy = CurrentEmployeeId > 0 ? CurrentEmployeeId : (int?)null;
+                paidAt = DateTime.Now;
+            }
+        }
+
         int rows = c.Execute(@"
             UPDATE sal_rows SET
                 step=@Step, perc=@Perc, condizione=@Condizione, data_fatt=@DataFatt, stato=@Stato,
+                paid_by=@PaidBy, paid_at=@PaidAt,
                 row_version = row_version + 1, updated_at = CURRENT_TIMESTAMP
              WHERE id=@Id AND (@RowVersion IS NULL OR row_version=@RowVersion)",
             new
@@ -146,6 +184,8 @@ public class SalController : ControllerBase
                 Condizione = req.Condizione ?? "",
                 req.DataFatt,
                 Stato = req.Stato ?? "",
+                PaidBy = paidBy,
+                PaidAt = paidAt,
                 Id = id,
                 req.RowVersion
             });
@@ -156,7 +196,7 @@ public class SalController : ControllerBase
             return Ok(ApiResponse<int>.Fail(exists > 0 ? ConflictMessage : "Step SAL non trovato"));
         }
 
-        int projectId = c.ExecuteScalar<int>("SELECT project_id FROM sal_rows WHERE id=@Id", new { Id = id });
+        int projectId = current != null ? (int)current.project_id : 0;
         NotifyChanged("update_row", projectId);
         return Ok(ApiResponse<int>.Ok(id, "Step SAL aggiornato"));
     }
@@ -165,8 +205,20 @@ public class SalController : ControllerBase
     public IActionResult DeleteRow(int id)
     {
         using var c = _db.Open();
-        int projectId = c.ExecuteScalar<int>(
-            "SELECT COALESCE((SELECT project_id FROM sal_rows WHERE id=@Id), 0)", new { Id = id });
+        string? role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        var current = c.QueryFirstOrDefault<dynamic>(
+            "SELECT stato, project_id FROM sal_rows WHERE id=@Id", new { Id = id });
+        if (current != null)
+        {
+            string currentStato = (string)current.stato;
+            if (currentStato == "pagata" && role != "ADMIN")
+            {
+                return Ok(ApiResponse<bool>.Fail("La riga è già stata pagata e non può essere eliminata se non da un utente ADMIN."));
+            }
+        }
+
+        int projectId = current != null ? (int)current.project_id : 0;
         int rows = c.Execute("DELETE FROM sal_rows WHERE id=@Id", new { Id = id });
         if (rows == 0) return Ok(ApiResponse<bool>.Fail("Step SAL non trovato"));
 
@@ -353,7 +405,7 @@ public class SalController : ControllerBase
             ) t
             JOIN projects p ON p.id = t.project_id
             LEFT JOIN project_sal ps ON ps.project_id = t.project_id
-            WHERE t.row_num <= 2
+            WHERE t.row_num <= 2 AND p.status = 'ACTIVE'
             ORDER BY p.code, t.data_fatt ASC").ToList();
 
         return Ok(ApiResponse<List<SalProspettoRowDto>>.Ok(rows));

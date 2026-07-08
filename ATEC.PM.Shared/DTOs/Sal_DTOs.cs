@@ -15,6 +15,8 @@ public class SalRowDto
     public string Stato { get; set; } = "";
     public int SortOrder { get; set; }
     public int RowVersion { get; set; }
+    public int? PaidBy { get; set; }
+    public DateTime? PaidAt { get; set; }
 }
 
 // DTO per rappresentare la testata SAL di una commessa (cliente e valore).

@@ -56,6 +56,8 @@ public class SalDbService
             sort_order INT NOT NULL DEFAULT 0,
             row_version INT NOT NULL DEFAULT 0,
             created_by INT NULL,
+            paid_by INT NULL,
+            paid_at DATETIME NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL,
             CONSTRAINT fk_salrow_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
