@@ -207,4 +207,4 @@ Quando l'utente chiede una nuova pagina:
 5. **Adatta** nomi, colonne, campi all'entità richiesta
 6. **Registra la navigazione** — indica all'utente dove aggiungere il case in `MainWindow.xaml.cs`
 
-Ricorda: il codice deve essere **funzionante** e collegato alle API REST del server (`http://localhost:5100`). Usa sempre `ApiClient.GetAsync/PostAsync/PutAsync/DeleteAsync` per le chiamate.
+Ricorda: il codice deve essere **funzionante** e collegato alle API REST del server (`http://localhost:5150`). Usa sempre `ApiClient.GetAsync/PostAsync/PutAsync/DeleteAsync` per le chiamate.

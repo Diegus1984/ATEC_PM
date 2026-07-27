@@ -1,44 +1,50 @@
-# ATEC PM — Project Context for Claude Code
+# ATEC PM — INDICE MASTER (leggi questo per primo)
 
-## Project
-ATEC PM is a WPF/.NET 8 project management application built by ATEC - Automation Technology S.r.l. (Turin, Italy).
+> Questo file viene caricato **in automatico** a inizio sessione. È l'UNICO punto
+> d'ingresso: non leggere a caso gli altri `.md` — usa la tabella qui sotto per andare
+> diretto al documento giusto in base a cosa stai facendo.
 
-## Tech Stack
-- **UI**: WPF (Windows Presentation Foundation) — NOT WinUI, NOT Avalonia, NOT MAUI
-- **Language**: C# / .NET 8
-- **Backend**: ASP.NET Core Web API
-- **Database**: MySQL with Dapper (no EF Core)
-- **Pattern**: Code-behind with partial MVVM (no strict MVVM framework)
+## 👉 Su cosa stai lavorando?
 
-## Key Architecture Rules
-- `PhaseChanged` event triggers full `LoadPhases()` reload
-- `SummaryChanged` event updates totals only
-- `_loading` flag prevents cascading `SelectionChanged` events
-- Financial data (costs, margins) visible only to PM/ADMIN roles
+| Area | Leggi PRIMA (in ordine) |
+|------|-------------------------|
+| **Client WEB** — `atec-pm-web/` (React + Vite + shadcn) | 1) [atec-pm-web/HANDOFF.md](atec-pm-web/HANDOFF.md) — stato + regole + prossimi passi · 2) [BLOCKS-RULES.md](atec-pm-web/BLOCKS-RULES.md) layout pagine · 3) [DESIGN-RULES.md](atec-pm-web/DESIGN-RULES.md) tema/token · 4) [WEB-MIGRATION.md](atec-pm-web/WEB-MIGRATION.md) storico migrazione |
+| **Server / API** — `ATEC.PM.Server/` | Controller in `ATEC.PM.Server/Controllers/` + DTO in `ATEC.PM.Shared/DTOs/` (leggi il contratto reale prima di scrivere client) |
+| **DB / migrazioni** | Migrazioni gestite dal server all'avvio; MySQL (Dapper, no EF). Vedi memoria `MEMORY.md` per stato schema/porte |
 
-## Design System
-**ALWAYS read `.claude/skills/atec-design-system/SKILL.md` before generating ANY XAML.**
-- Flat design: NO CornerRadius, NO shadows, NO gradients
-- Palette: Blue corporate (#2563EB) + Cold gray
-- Compact density: 28px row height, 4px base unit
-- All colors via StaticResource brushes — never hardcode colors in XAML
-- Font: Segoe UI, 12px body, 11px secondary
+> **Client WPF retired (20/07/2026).** Sorgenti in `backups/ATEC.PM.Client_retired_20260720/`. Non è più in `ATEC.PM.sln`. Il client ufficiale è solo web.
 
-## Code Style
-- Explicit types always (no `var` unless type is obvious from right side)
-- Italian comments for business logic, English for technical comments
-- ResourceDictionaries in `/Styles/` folder, merged in App.xaml
+## 🗂️ Mappa dei documenti (cosa sta dove)
 
-## Current Modules
-ProjectCostingControl, PhaseRowControl, DocumentManagerControl, Chat, Timesheet, Dashboard, CodexViewer, **ResourcePlanner** (Gestione Risorse)
+**Web** (`atec-pm-web/`):
+- `HANDOFF.md` — **punto d'ingresso web**: stato modulo per modulo, come avviare, regole, roadmap
+- `BLOCKS-RULES.md` — regole layout pagine (fedeltà ai blocchi shadcn, recipe copia-incolla)
+- `DESIGN-RULES.md` — preset/tema/token (radix-vega, neutral, Inter, radius 0.625rem)
+- `WEB-MIGRATION.md` — storico migrazione WPF → web
+- `README.md` — avvio rapido e struttura cartelle
 
-### Gestione Risorse (`Views/Risorse/`)
-- **`Pages/`** — XAML + code-behind: `ResourcePlannerPage`, `AssignmentDialog`, `FerieDashboardWindow`, `FerieEditDialog`
-- **`Classes/`** — partial class + helper: `ResourcePlannerPage.{Data,Render,Drag}.cs`, `ResourcePlannerHelpers.cs`, `FerieDashboardWindow.Drag.cs`
-- Namespace unico: `ATEC.PM.Client.Views.Risorse` (MainWindow: `new Risorse.ResourcePlannerPage()`)
-- Gantt: drag orizzontale fluido, auto-pan ai bordi, `_busy` durante API, glow hover sulle barre
-- Ferie: conteggio giorni lavorativi (`WorkingDayCount` / `DisplayDayCount`); dashboard dedicata da toolbar «Piano ferie»
+**Progetto (root `ATEC_PM/`):**
+- `CLAUDE.md` (questo) / `AGENTS.md` — indice master (Claude Code / Codex). **Tienili allineati.**
+- `TODO.md`, `BUGS.md` — cose aperte
+- Memoria automatica: `~/.claude/projects/.../memory/MEMORY.md` — caricata in automatico, indice delle note persistenti
 
-## Commands
-- `dotnet build` — Build solution
-- `dotnet run --project ATEC_PM` — Run client
+## ⚙️ Avvio rapido
+
+```powershell
+# API + SPA (dev)
+dotnet run --project ATEC.PM.Server      # API → http://localhost:5150 (Release serve anche la SPA)
+cd atec-pm-web; npm run dev               # SPA → http://localhost:5173 (proxy /api → 5150)
+```
+
+> Nota shell: Node non è nel PATH. Per npm/tsc/eslint: `$env:Path = "C:\Program Files\nodejs;" + $env:Path`.
+
+## Stack
+
+- **UI**: React 19 + Vite 7 + TypeScript + shadcn (`atec-pm-web`)
+- **Backend**: ASP.NET Core 8 Web API · **DB**: MySQL con Dapper (no EF Core)
+- **Shared**: `ATEC.PM.Shared` (DTO + PermissionEngine)
+
+## Comandi
+
+- `dotnet build ATEC.PM.sln` — Server + Shared (+ stub Web)
+- `dotnet run --project ATEC.PM.Server` — API (e SPA in Release)

@@ -66,9 +66,9 @@ Legenda: `[ ]` aperto · `[~]` in corso · `[x]` fatto · `[-]` scartato
   File: `ATEC.PM.Client/Views/MainWindow.xaml.cs:351-354`
   Si rompe su DPI ≠ 100% o se si aggiungono MenuItem. Calcolare dinamicamente o documentare il perché.
 
-- [ ] **LoginWindow — URL default mismatch http:5100 vs https:5101**
-  File: `ATEC.PM.Client/Services/AppSession.cs:11` vs `LoginWindow.xaml:68`
-  `AppSession.ApiBaseUrl = "http://localhost:5100"` ma il TextBox ha `Text="https://localhost:5101"`. Allineare con il vero `launchSettings.json` del server.
+- [x] **LoginWindow — URL default mismatch http:5100 vs https:5101** — RISOLTO 10/06/2026
+  File: `ATEC.PM.Client/Services/AppSession.cs` vs `LoginWindow.xaml`
+  Allineati entrambi a `https://localhost:5151` contestualmente allo spostamento porte server 5100/5101 → 5150/5151 (per non collidere con altri server di test, es. ATEC_Risorse su 5100).
 
 - [ ] **Controller — uniformare ritorno: `BadRequest` / `StatusCode(500)` invece di `Ok(Fail(...))`**
   Files: `TemplateController.cs`, altri post-refactor.

@@ -2,7 +2,10 @@
 
 Stato migrazione dal client WPF al client React (`atec-pm-web`).
 
-> **Onestà sullo stato:** il web ha **le stesse voci di menu** del WPF, ma molti moduli sono solo **liste base** o **CRUD semplificato**. Il WPF resta il client completo per lavoro operativo quotidiano finché non chiudiamo i gap sotto.
+> **Migrazione chiusa (20/07/2026):** il client ufficiale è **solo web**. Il WPF è
+> archiviato in `backups/ATEC.PM.Client_retired_20260720/` e non è più in
+> `ATEC.PM.sln`. Questo file resta come storico parità e backlog gap residui
+> (es. anagrafiche Service/Altre, import Easyfatt, dialog cambio password).
 
 ## Legenda
 
@@ -23,9 +26,11 @@ Stato migrazione dal client WPF al client React (`atec-pm-web`).
 | Timesheet | ~85% (calendario mese/settimana) | ✅ |
 | Prev. vs Consuntivo (commessa) | ✅ tab dedicato (conto economico, prev/assegn/cons, fasi&assegnazioni) | ✅ |
 | Preventivi / Costing (commerciale) | ✅ Fase D completa (lista+catene revisione, dettaglio SERVICE, costing tree IMPIANTO, convert→commessa) | ✅ |
+| Gamma Robot | ✅ live (Per Robot + Magazzino + Composizione ADMIN DnD; v36) | ✅ |
 | DDP (Gestore DDP + sintesi) | ~85% (gestore+sintesi completi, **distinte commerciale e officina sotto commessa** con inserimento da picker Catalogo/Codex fedele al WPF) | ✅ |
 | PM — Milestone (per commessa + pagina globale) | ✅ **nuovo** (dal prototipo `Gestione_Commesse_V31.html`): anagrafica attività, tab Milestone tabella + **Gantt**, precarico dal catalogo, realtime | — (non esiste nel WPF) |
-| PM — SAL / Fatturazione (per commessa + pagina globale) | ✅ **nuovo** (dal prototipo `Gestione_Commesse_V31.html`): tab SAL nel dettaglio commessa (step/%/condizioni/ipotesi fatturazione/stati, avanzamento incasso, semaforo warn/pre, realtime), anagrafica condizioni, **pagina PM globale `/sal`** (sidebar commesse + **Prospetto SAL**), warning in campanella. Migrazioni v16+v17 | — (non esiste nel WPF) |
+| PM — SAL / Fatturazione (per commessa + pagina globale) | ✅ **parità v10** (09/07/2026, prototipo `Gestione_Pagamenti_SAL_v10.html`, piano `SAL-V10-PLAN.md`): foglio 16 colonne ordine Excel (IVA/%IVA/Tot+IVA/Data prev. saldo/GG saldo/N° fattura/Conto SAP/Pagamento/Data incasso/Note), Pagamento separato dallo Stato, header PO/Rif. Offerta, anagrafiche a 3 tab, warning incasso (`SAL_INCASSO_DUE` + sorgente in /scadenze), Prospetto completo con controllo periodico 15 gg, Cash Flow + Analisi drill-down (`/sal?view=`). Migrazioni v16+v17+v18+**v21**. Runtime GUI da verificare | — (non esiste nel WPF) |
+| PM — Scadenze (cruscotto unificato) | ✅ **nuovo** (su spec `SCADENZE-SPEC.md`): elenco scadenze unificato a sinistra (SAL, commesse, checklist, MoM, DDP), ricerca + toggle tipo + switch "solo da gestire", dettaglio destra con tasto «Apri», link campanella. Migrazione v19 | — (non esiste nel WPF) |
 | Risorse / Gantt | ~98% (Fase 1+2+3 + presenza online + rifiniture + **digest email**; **manca** solo editor anagrafiche Service/Altre) | ✅ |
 | Codex / Catalogo | ✅ (lista+sync+genera codice, catalogo articoli, **composizione**) | ✅ |
 | Gestione avanzata | ✅ parità | ✅ |
@@ -135,7 +140,7 @@ Stato migrazione dal client WPF al client React (`atec-pm-web`).
 |------------|-----|
 | **Preventivi** (QuotesHomePage + costing tree) | ✅ Lista con catene di revisione, filtri, vista griglia/cliente, stato inline, PDF, revisione/duplica/elimina; **dettaglio SERVICE** (prodotti/varianti editabili, contenuti automatici, totali) e **IMPIANTO** (costing tree: sezioni costo+risorse+trasferte, materiali, scheda prezzi, tabella distribuzione prezzo con pin/shadow/ridistribuisci) |
 | **Cat. Preventivi** (QuoteCatalogPage) | ✅ Albero listini→gruppi→categorie→prodotti→varianti (accordion, natural sort, ricerca), CRUD gruppo/categoria/sotto-categoria/prodotto, sposta (drag&drop), tabella prodotti (varianti espandibili, filtri colonna jolly, range prezzo/costo, auto-include), **editor descrizione TinyMCE 5 self-hosted** con upload immagini. Manca: import Excel |
-| **Gamma Robot** | ❌ (sottosistema a sé, fuori Fase D) |
+| **Gamma Robot** | ✅ **live** (20/07/2026): 3 tab Per Robot / Magazzino / Composizione; lazy tree, distinta OPT/ALT + totali VB, usage magazzino, scheda prodotto; Composizione ADMIN con CRUD robot/quadro + DnD (sezione→principale, principale→alternativa), qty/optional/delete. API esistenti `/api/gamma-robot/*` + migrazione **v36** `nav.gamma_robot`. Fuori scope: aggancio preventivo, import Excel/ABB |
 | Conversione preventivo → commessa | ✅ `ConvertQuoteDialog` (scelta PM → commessa) dalla lista, su IMPIANTO accettati |
 
 ---
@@ -211,8 +216,9 @@ Stato migrazione dal client WPF al client React (`atec-pm-web`).
 - ✅ **D5 — Costing tree IMPIANTO** (`quote-costing.ts` = 29 endpoint + tipi; editor `CostingTree`: sezioni costo raggruppate con risorse editabili gg/ore/€h/K + trasferte, reparti per sezione, sezioni materiali con righe qtà/costo/K/attiva, scheda prezzi netto→contingency→offerta→margine→finale, **tabella distribuzione prezzo** per-sezione con pesi proporzionali alla vendita, pin/shadow/ridistribuisci + salvataggio batch; gated PM/ADMIN). tsc/eslint OK + verificata a runtime (calcoli esatti). (25/06/2026)
 - ✅ **D6 — Convert → commessa**: `ConvertQuoteDialog` (scelta PM → POST convert → naviga alla nuova commessa), agganciato dalla lista sui preventivi IMPIANTO accettati. Fedele al WPF (il dettaglio WPF non espone un bottone convert). (25/06/2026)
 
-> **Fase D completata** (Commerciale: Preventivi + Cat. Preventivi). Gamma Robot resta fuori scope. Build/tsc/eslint OK; **verifica runtime GUI autenticata FATTA (25/06/2026)**: Cat. Preventivi (albero, 721 prodotti reali), lista con catene di revisione/stati/azioni, dettaglio SERVICE (prodotti/varianti), IMPIANTO con costing tree (sezioni/risorse/materiali/scheda prezzi + **tabella distribuzione prezzo**, calcoli corretti), editor TinyMCE — **zero errori console**. Fase D completa, nessun gap residuo (Gamma Robot e import Excel restano fuori scope).
+> **Fase D completata** (Commerciale: Preventivi + Cat. Preventivi). Build/tsc/eslint OK; **verifica runtime GUI autenticata FATTA (25/06/2026)** su Preventivi. Import Excel resta fuori scope.
 11. ✅ Codex + composizione (19/06/2026)
+12. ✅ **Gamma Robot** (20/07/2026) — port WPF completo: `src/features/gamma-robot/*`, `src/lib/api/gamma-robot.ts`, route live, migrazione v36. eslint OK sul modulo; tsc repo ha errori preesistenti fuori scope. **Runtime GUI da verificare** su dati reali (ADMIN + non-ADMIN).
 
 ---
 

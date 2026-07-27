@@ -1,3 +1,8 @@
+> ⚠️ **SUPERSEDED (09/07/2026)**: il modello dati e le regole di questa spec (prototipo V31) sono stati
+> estesi alla parità col prototipo `Gestione_Pagamenti_SAL_v10.html` — vedi **`SAL-V10-PLAN.md`**
+> (fonte di verità attuale: campi IVA/saldo/pagamento, anagrafiche SAP/pagamenti, warning incasso,
+> Prospetto con controllo periodico, Cash Flow + Analisi, migrazione schema v21).
+
 # Istruzioni per Antigravity — Gestione SAL / Fatturazione a stati d'avanzamento
 
 > Obiettivo: portare in `atec-pm-web` (React) + `ATEC.PM.Server` (ASP.NET) la **Gestione SAL**
