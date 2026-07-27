@@ -603,6 +603,11 @@
   background: #22c55e;
 }
 
+/* Nasconde l'intestazione di stampa a schermo */
+.gantt-print-header {
+  display: none;
+}
+
 /* ---- Stampa grafica del Gantt ----
    Attiva SOLO con body.printing-gantt (impostato da printGantt()), per non interferire
    con altre stampe dell'app. L'orientamento @page A4 landscape viene iniettato via JS
@@ -639,6 +644,33 @@
   body.printing-gantt .g2-name-toggle,
   body.printing-gantt .g2-name-mode {
     display: none !important;
+  }
+  body.printing-gantt .gantt-print-header {
+    display: block !important;
+    border-bottom: 2px solid #2F6098 !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 12px !important;
+    width: 100% !important;
+  }
+  body.printing-gantt .gantt-print-logo {
+    height: 30px !important;
+    width: auto !important;
+    display: block !important;
+    margin-bottom: 6px !important;
+  }
+  body.printing-gantt .gantt-print-title {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    color: #1f2d3a !important;
+    margin: 0 !important;
+  }
+  body.printing-gantt .gantt-print-subtitle {
+    font-size: 10px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: #788896 !important;
+    font-weight: 700 !important;
+    margin-top: 2px !important;
   }
   body.printing-gantt * {
     -webkit-print-color-adjust: exact !important;

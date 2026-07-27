@@ -49,6 +49,13 @@ public class DashboardController : ControllerBase
             ORDER BY p.created_at DESC
             LIMIT 10").ToList();
 
+        stats.DailyHours = c.Query<DashboardDailyHours>(@"
+            SELECT work_date AS WorkDate, COALESCE(SUM(hours), 0) AS Hours
+            FROM timesheet_entries
+            WHERE work_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+            GROUP BY work_date
+            ORDER BY work_date").ToList();
+
         // Il fatturato è dato economico: lo azzera per chi non ha la feature data.revenue
         // (la dashboard resta visibile a tutti per i KPI operativi: commesse, ore, ecc.).
         string role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { Pencil, Trash2 } from "lucide-react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { ArrowLeft, PanelLeft, Pencil, Trash2 } from "lucide-react"
+import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
@@ -25,6 +25,7 @@ import { ProjectDdpCommercial } from "./ProjectDdpCommercial"
 import { ProjectDetailsSection } from "./ProjectDetailsSection"
 import { ProjectDialog } from "./ProjectDialog"
 import { ProjectDocuments } from "./ProjectDocuments"
+import { ProjectWorkRequests } from "./ProjectWorkRequests"
 
 const TREE_WIDTH_KEY = "atec_pm_commesse_tree_width"
 const TREE_MIN = 180
@@ -41,6 +42,7 @@ const SECTION_TITLES: Record<string, string> = {
   checklist: "Check list",
   ddp_commercial: "DDP Commerciali",
   ddp_officina: "DDP Officina",
+  work_requests: "Lavorazioni",
   documents: "Documenti",
 }
 
@@ -61,6 +63,8 @@ export function CommessePage() {
   const navigate = useNavigate()
   const params = useParams()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const fromGlobal = location.state?.fromGlobal
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const isAdmin = getSession()?.user.userRole === "ADMIN"
@@ -80,6 +84,7 @@ export function CommessePage() {
 
   // Larghezza pannello albero (persistita), con splitter trascinabile.
   const [treeWidth, setTreeWidth] = React.useState<number>(loadTreeWidth)
+  const [isTreeCollapsed, setIsTreeCollapsed] = React.useState(false)
   const treeWidthRef = React.useRef(treeWidth)
   treeWidthRef.current = treeWidth
   const draggingRef = React.useRef(false)
@@ -210,8 +215,8 @@ export function CommessePage() {
     >
       {/* Pannello albero */}
       <div
-        style={{ width: treeWidth }}
-        className="flex shrink-0 flex-col overflow-hidden"
+        style={{ width: isTreeCollapsed ? 52 : treeWidth }}
+        className="flex shrink-0 flex-col overflow-hidden transition-[width] duration-200 ease-in-out"
       >
         <CommessaTree
           selectedProjectId={projectId}
@@ -223,6 +228,7 @@ export function CommessePage() {
           onOpenDocumentFolder={openDocumentFolder}
           onOpenDocumentFile={openDocumentFile}
           onNewProject={() => setDialogProject("new")}
+          isCollapsed={isTreeCollapsed}
         />
       </div>
 
@@ -230,17 +236,44 @@ export function CommessePage() {
       <div
         role="separator"
         aria-orientation="vertical"
-        className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/40"
-        onMouseDown={() => {
-          draggingRef.current = true
-          document.body.style.cursor = "col-resize"
-          document.body.style.userSelect = "none"
-        }}
+        className={cn(
+          "w-px shrink-0 bg-border",
+          !isTreeCollapsed && "w-1 cursor-col-resize hover:bg-primary/40"
+        )}
+        onMouseDown={
+          isTreeCollapsed
+            ? undefined
+            : () => {
+                draggingRef.current = true
+                document.body.style.cursor = "col-resize"
+                document.body.style.userSelect = "none"
+              }
+        }
       />
 
       {/* Contenuto sezione */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b px-5 py-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsTreeCollapsed(!isTreeCollapsed)}
+            title={isTreeCollapsed ? "Mostra elenco commesse" : "Nascondi elenco commesse"}
+          >
+            <PanelLeft className="size-4" />
+          </Button>
+          {fromGlobal && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(fromGlobal)}
+              className="h-8 gap-1.5"
+            >
+              <ArrowLeft className="size-4" />
+              Indietro
+            </Button>
+          )}
           {showCommessaHeader ? (
             <div className="min-w-0">
               <h2 className="truncate text-xl font-bold leading-tight">
@@ -410,6 +443,8 @@ function SectionContent({
       )
     case "ddp_officina":
       return <ProjectDdpOfficina projectId={projectId} />
+    case "work_requests":
+      return <ProjectWorkRequests projectId={projectId} />
     default:
       return (
         <p className="text-sm text-muted-foreground">Sezione sconosciuta.</p>

@@ -3,7 +3,7 @@ import * as React from "react"
 import type { ConfirmOptions } from "@/components/shared/confirm"
 import type { DdpStatusItem } from "@/lib/api/types"
 
-import { DDP_STATUS_CANCELLED } from "./ddp-constants"
+import { DDP_STATUS_CANCELLED, isCommercialQtyEditable } from "./ddp-constants"
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>
 
@@ -34,8 +34,11 @@ export function useDdpQuantityAdjust<T extends DdpQuantityRow>({
         return
       }
 
-      // Riga in stato escluso (A9): per cambiare la quantità serve prima ripristinare uno stato attivo.
-      if (excludedSet?.has(item.itemStatus)) {
+      // Quantità modificabile in VER/DO (e non negli stati esclusi A9).
+      if (
+        !isCommercialQtyEditable(item.itemStatus) ||
+        excludedSet?.has(item.itemStatus)
+      ) {
         return
       }
 
@@ -46,10 +49,6 @@ export function useDdpQuantityAdjust<T extends DdpQuantityRow>({
 
       if (item.quantity > 1) {
         onApply(item, { quantity: item.quantity - 1 })
-        return
-      }
-
-      if (item.itemStatus === DDP_STATUS_CANCELLED) {
         return
       }
 

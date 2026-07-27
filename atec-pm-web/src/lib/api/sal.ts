@@ -6,6 +6,8 @@ import type {
   SalRowSaveRequest,
   SalCondition,
   SalConditionSaveRequest,
+  SalEconomics,
+  SalProspettoCheck,
   SalProspettoRow,
   SalSummary,
 } from "@/lib/api/types"
@@ -54,10 +56,13 @@ export async function updateSalRow(
   return unwrapApi(response)
 }
 
-/** Elimina una riga/step SAL. */
-export async function deleteSalRow(id: number): Promise<boolean> {
+/** Elimina una riga/step SAL (con check di concorrenza su rowVersion). */
+export async function deleteSalRow(
+  id: number,
+  rowVersion: number
+): Promise<boolean> {
   const response = await apiDelete<ApiResponse<boolean>>(
-    `/api/sal/rows/${id}`
+    `/api/sal/rows/${id}?rowVersion=${rowVersion}`
   )
   return unwrapApi(response)
 }
@@ -148,6 +153,168 @@ export async function resetSalConditions(): Promise<boolean> {
   return unwrapApi(response)
 }
 
+// ------------------------------------------------------------------
+// Anagrafica Causali Conto SAP (/api/sal/sap-causali) — stesso shape
+// e stesso CRUD delle condizioni di pagamento.
+// ------------------------------------------------------------------
+
+/** Recupera tutte le causali Conto SAP. */
+export async function fetchSapCausali(): Promise<SalCondition[]> {
+  const response = await apiGet<ApiResponse<SalCondition[]>>(
+    "/api/sal/sap-causali"
+  )
+  return unwrapApi(response)
+}
+
+/** Recupera le sole causali Conto SAP attive. */
+export async function fetchSapCausaliActive(): Promise<SalCondition[]> {
+  const response = await apiGet<ApiResponse<SalCondition[]>>(
+    "/api/sal/sap-causali/active"
+  )
+  return unwrapApi(response)
+}
+
+/** Crea una nuova causale Conto SAP. */
+export async function createSapCausale(label: string): Promise<number> {
+  const response = await apiPost<ApiResponse<number>>(
+    "/api/sal/sap-causali",
+    { label }
+  )
+  return unwrapApi(response)
+}
+
+/** Rinomina una causale Conto SAP. */
+export async function updateSapCausale(
+  id: number,
+  label: string
+): Promise<number> {
+  const response = await apiPut<ApiResponse<number>>(
+    `/api/sal/sap-causali/${id}`,
+    { label }
+  )
+  return unwrapApi(response)
+}
+
+/** Attiva/Disattiva una causale Conto SAP. */
+export async function toggleSapCausale(
+  id: number,
+  active: boolean
+): Promise<number> {
+  const response = await apiPut<ApiResponse<number>>(
+    `/api/sal/sap-causali/${id}/toggle-active?active=${active}`
+  )
+  return unwrapApi(response)
+}
+
+/** Elimina una causale Conto SAP. */
+export async function deleteSapCausale(id: number): Promise<boolean> {
+  const response = await apiDelete<ApiResponse<boolean>>(
+    `/api/sal/sap-causali/${id}`
+  )
+  return unwrapApi(response)
+}
+
+/** Riordina le causali Conto SAP. */
+export async function reorderSapCausali(ids: number[]): Promise<boolean> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    "/api/sal/sap-causali/reorder",
+    { ids }
+  )
+  return unwrapApi(response)
+}
+
+/** Ripristina le causali Conto SAP standard (Acconto, Ricavo). */
+export async function resetSapCausali(): Promise<boolean> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    "/api/sal/sap-causali/reset"
+  )
+  return unwrapApi(response)
+}
+
+// ------------------------------------------------------------------
+// Anagrafica Stati Pagamento (/api/sal/payment-states) — le voci
+// 'Pagata' e 'Parzialmente Pagata' sono di sistema (no rename/delete).
+// ------------------------------------------------------------------
+
+/** Recupera tutti gli stati pagamento. */
+export async function fetchPaymentStates(): Promise<SalCondition[]> {
+  const response = await apiGet<ApiResponse<SalCondition[]>>(
+    "/api/sal/payment-states"
+  )
+  return unwrapApi(response)
+}
+
+/** Recupera i soli stati pagamento attivi. */
+export async function fetchPaymentStatesActive(): Promise<SalCondition[]> {
+  const response = await apiGet<ApiResponse<SalCondition[]>>(
+    "/api/sal/payment-states/active"
+  )
+  return unwrapApi(response)
+}
+
+/** Crea un nuovo stato pagamento (colori opzionali). */
+export async function createPaymentState(
+  request: SalConditionSaveRequest
+): Promise<number> {
+  const response = await apiPost<ApiResponse<number>>(
+    "/api/sal/payment-states",
+    request
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * Aggiorna uno stato pagamento: PUT full-replace di etichetta + colori
+ * (colorBg/colorFg null = nessuna tinta). Il rename delle voci di sistema è
+ * bloccato dal server, ma i loro COLORI restano modificabili (stessa label).
+ */
+export async function updatePaymentState(
+  id: number,
+  request: SalConditionSaveRequest
+): Promise<number> {
+  const response = await apiPut<ApiResponse<number>>(
+    `/api/sal/payment-states/${id}`,
+    request
+  )
+  return unwrapApi(response)
+}
+
+/** Attiva/Disattiva uno stato pagamento. */
+export async function togglePaymentState(
+  id: number,
+  active: boolean
+): Promise<number> {
+  const response = await apiPut<ApiResponse<number>>(
+    `/api/sal/payment-states/${id}/toggle-active?active=${active}`
+  )
+  return unwrapApi(response)
+}
+
+/** Elimina uno stato pagamento (voci di sistema escluse). */
+export async function deletePaymentState(id: number): Promise<boolean> {
+  const response = await apiDelete<ApiResponse<boolean>>(
+    `/api/sal/payment-states/${id}`
+  )
+  return unwrapApi(response)
+}
+
+/** Riordina gli stati pagamento. */
+export async function reorderPaymentStates(ids: number[]): Promise<boolean> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    "/api/sal/payment-states/reorder",
+    { ids }
+  )
+  return unwrapApi(response)
+}
+
+/** Ripristina gli stati pagamento standard (Pagata, Parzialmente Pagata). */
+export async function resetPaymentStates(): Promise<boolean> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    "/api/sal/payment-states/reset"
+  )
+  return unwrapApi(response)
+}
+
 /** Recupera il prospetto globale delle ipotesi di fatturazione aperte. */
 export async function fetchSalProspetto(): Promise<SalProspettoRow[]> {
   const response = await apiGet<ApiResponse<SalProspettoRow[]>>(
@@ -158,5 +325,29 @@ export async function fetchSalProspetto(): Promise<SalProspettoRow[]> {
 
 export async function fetchSalSummary(): Promise<SalSummary[]> {
   const response = await apiGet<ApiResponse<SalSummary[]>>("/api/sal/summary")
+  return unwrapApi(response)
+}
+
+/** Stato del controllo periodico del prospetto (ultima conferma + scadenza 15 gg). */
+export async function fetchSalProspettoCheck(): Promise<SalProspettoCheck> {
+  const response = await apiGet<ApiResponse<SalProspettoCheck>>(
+    "/api/sal/prospetto/check"
+  )
+  return unwrapApi(response)
+}
+
+/** Registra la conferma del controllo periodico del prospetto; ritorna lo stato aggiornato. */
+export async function confirmSalProspettoCheck(): Promise<SalProspettoCheck> {
+  const response = await apiPost<ApiResponse<SalProspettoCheck>>(
+    "/api/sal/prospetto/check"
+  )
+  return unwrapApi(response)
+}
+
+/** Dati economici SAL globali (Cash Flow / Analisi) — solo PM/ADMIN (403 altrimenti). */
+export async function fetchSalEconomics(): Promise<SalEconomics> {
+  const response = await apiGet<ApiResponse<SalEconomics>>(
+    "/api/sal/economics"
+  )
   return unwrapApi(response)
 }

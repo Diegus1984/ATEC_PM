@@ -22,3 +22,15 @@ public class DdpStatusSaveRequest
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 }
+
+// Riga della matrice degli avanzamenti di stato (v7): stato corrente + stati selezionabili,
+// per tipo di distinta (COMMERCIAL | OFFICINA — la commerciale non contempla DC).
+// FromKey speciale 'INIZIO' = finestra di partenza delle righe senza stato.
+// ToKeys vuota = stato terminale (governato, nessun avanzamento: ANN, SOST).
+// Una coppia (tipo, stato) ASSENTE dall'elenco non è governata → finestra opzioni completa.
+public class DdpStatusTransitionItem
+{
+    public string DdpType { get; set; } = "";
+    public string FromKey { get; set; } = "";
+    public List<string> ToKeys { get; set; } = new();
+}

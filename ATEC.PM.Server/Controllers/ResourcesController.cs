@@ -21,10 +21,12 @@ public class ResourcesController : ControllerBase
 {
     private readonly ResourcesDbService _rdb;
     private readonly IHubContext<ResourcePlannerHub> _hub;
-    public ResourcesController(ResourcesDbService rdb, IHubContext<ResourcePlannerHub> hub)
+    private readonly PlanNotificationService _notify;
+    public ResourcesController(ResourcesDbService rdb, IHubContext<ResourcePlannerHub> hub, PlanNotificationService notify)
     {
         _rdb = rdb;
         _hub = hub;
+        _notify = notify;
     }
 
     // Id dipendente/utente dal token (claim NameIdentifier), per l'audit "ultima modifica".
@@ -162,6 +164,19 @@ public class ResourcesController : ControllerBase
         try
         {
             using var c = _rdb.Open();
+
+            // Prima di perdere la riga: registra chi cancella + lo stato originale, per il digest
+            // email (la DELETE la fa sparire da res_assignments, "chi l'ha fatto" andrebbe perso).
+            c.Execute(@"
+                INSERT INTO res_notify_pending
+                    (assignment_id, made_by, action, orig_employee_id, orig_tipo, orig_data_inizio, orig_data_fine,
+                     orig_project_id, orig_service_id, orig_other_activity_id, orig_descrizione)
+                SELECT id, @MadeBy, 'delete', employee_id, tipo, data_inizio, data_fine,
+                       project_id, service_id, other_activity_id, descrizione
+                FROM res_assignments WHERE id=@Id
+                ON DUPLICATE KEY UPDATE made_by=VALUES(made_by), touched_at=NOW()",
+                new { Id = id, MadeBy = CallerId() });
+
             int rows = c.Execute("DELETE FROM res_assignments WHERE id=@Id", new { Id = id });
             if (rows == 0) return Ok(ApiResponse<bool>.Fail("Allocazione non trovata"));
             NotifyChange(conn, "delete", id);
@@ -322,12 +337,97 @@ public class ResourcesController : ControllerBase
         try
         {
             using var c = _rdb.Open();
+            // Solo commesse ATTIVE: seguono la filiera offerta-accettata → conversione-in-commessa,
+            // quindi rappresentano già il lavoro reale in corso (bozze/completate/sospese escluse).
             var rows = c.Query<LookupItem>(@"
                 SELECT id AS Id, CONCAT_WS(' — ', code, title) AS Name
-                FROM projects WHERE status <> 'CANCELLED' ORDER BY code DESC").ToList();
+                FROM projects WHERE status = 'ACTIVE' ORDER BY code DESC").ToList();
             return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<LookupItem>>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // DIGEST EMAIL — riepilogo modifiche piano (dipendente/responsabile/PM)
+    // ═══════════════════════════════════════════════════════
+
+    // Badge toolbar: conteggio modifiche pendenti dall'ultima istantanea (nessun invio).
+    [HttpGet("notify/pending")]
+    [RequireFeature("resources.edit")]
+    public IActionResult GetNotifyPending()
+    {
+        try { return Ok(ApiResponse<NotifyPendingDto>.Ok(_notify.ComputePending())); }
+        catch (Exception ex) { return Ok(ApiResponse<NotifyPendingDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // Anteprima completa (nessun invio, nessuna nuova istantanea).
+    [HttpGet("digest/preview")]
+    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    public IActionResult PreviewDigest()
+    {
+        try { return Ok(ApiResponse<DigestPreviewDto>.Ok(_notify.PreviewDigest())); }
+        catch (Exception ex) { return Ok(ApiResponse<DigestPreviewDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // Anteprima selettiva per il dialog "Notifica subito" (una riga spuntabile per modifica).
+    [HttpGet("digest/preview-selective")]
+    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    public IActionResult PreviewSelective()
+    {
+        try { return Ok(ApiResponse<SelectivePreviewDto>.Ok(_notify.BuildSelectivePreview())); }
+        catch (Exception ex) { return Ok(ApiResponse<SelectivePreviewDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // Esecuzione digest immediata ("Esegui ora"): non tocca digest_last_run, il giro
+    // automatico del giorno resta indipendente.
+    [HttpPost("digest/run-now")]
+    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    public IActionResult RunDigestNow()
+    {
+        try { return Ok(ApiResponse<NotifySendResultDto>.Ok(_notify.SendDigest("manuale"))); }
+        catch (Exception ex) { return Ok(ApiResponse<NotifySendResultDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // Invio selettivo dal dialog "Notifica subito": solo le variazioni scelte.
+    [HttpPost("digest/send-selected")]
+    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    public IActionResult SendSelected([FromBody] SendSelectedRequest req)
+    {
+        try
+        {
+            if (req.AssignmentIds == null || req.AssignmentIds.Count == 0)
+                return Ok(ApiResponse<NotifySendResultDto>.Fail("Nessuna modifica selezionata"));
+            return Ok(ApiResponse<NotifySendResultDto>.Ok(_notify.SendSelected(req.AssignmentIds, "manuale")));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<NotifySendResultDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpGet("digest/settings")]
+    [Authorize(Roles = "ADMIN")]
+    public IActionResult GetDigestSettings()
+    {
+        try { return Ok(ApiResponse<PlanDigestSettingsDto>.Ok(_notify.GetSettings())); }
+        catch (Exception ex) { return Ok(ApiResponse<PlanDigestSettingsDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpPut("digest/settings")]
+    [Authorize(Roles = "ADMIN")]
+    public IActionResult SaveDigestSettings([FromBody] PlanDigestSettingsDto dto)
+    {
+        try
+        {
+            _notify.SaveSettings(dto);
+            return Ok(ApiResponse<bool>.Ok(true, "Impostazioni digest salvate"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<bool>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpGet("digest/status")]
+    [Authorize(Roles = "ADMIN")]
+    public IActionResult GetDigestStatus()
+    {
+        try { return Ok(ApiResponse<DigestStatusDto>.Ok(_notify.GetStatus())); }
+        catch (Exception ex) { return Ok(ApiResponse<DigestStatusDto>.Fail($"Errore: {ex.Message}")); }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -363,8 +463,10 @@ public class ResourcesController : ControllerBase
 
     private static bool Forbidden(string t1, string t2)
     {
-        if (t1 == "OP" && t2 == "OP") return true;
-        bool f1 = t1 == "FERIE", f2 = t2 == "FERIE";
-        return f1 ^ f2; // esattamente uno è FERIE → conflitto (FERIE vs OP/FLEX)
+        // FLEX non va mai in conflitto con nulla. Tutto il resto (OP e FERIE, in qualsiasi
+        // combinazione — INCLUSO FERIE+FERIE) confligge se si sovrappone. Regola allineata al
+        // programma Gestione Risorse (PlannerLogic.Forbidden) da cui è portato il modulo web.
+        if (t1 == "FLEX" || t2 == "FLEX") return false;
+        return true;
     }
 }

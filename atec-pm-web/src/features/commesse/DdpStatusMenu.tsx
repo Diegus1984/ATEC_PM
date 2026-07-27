@@ -12,31 +12,44 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { DdpStatusItem } from "@/lib/api/types"
 
-/** Menu ⋮ per cambiare rapidamente lo stato di una riga DDP (opzioni da Conf. DDP). */
+import { filterStatusOptions } from "./ddp-constants"
+
+/**
+ * Menu ⋮ per cambiare rapidamente lo stato di una riga DDP (opzioni da Conf. DDP).
+ * Con `transitions` (matrice avanzamenti v7) la finestra opzioni si restringe alle sole
+ * transizioni ammesse dallo stato corrente; riga senza stato o stato non governato →
+ * finestra completa; stato terminale (nessuna uscita) → menu nascosto.
+ */
 export function DdpStatusMenu({
   currentStatusKey,
   statuses,
+  transitions,
   disabled,
   onSelect,
 }: {
   currentStatusKey: string
   statuses: DdpStatusItem[]
+  transitions?: Record<string, string[]>
   disabled?: boolean
   onSelect: (statusKey: string) => void
 }) {
   const options = React.useMemo(
     () =>
-      [...statuses]
-        .filter((status) => status.isActive)
-        .sort(
-          (a, b) =>
-            a.sortOrder - b.sortOrder ||
-            a.label.localeCompare(b.label, "it")
-        ),
-    [statuses]
+      filterStatusOptions(statuses, currentStatusKey, transitions).sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder ||
+          a.label.localeCompare(b.label, "it")
+      ),
+    [statuses, transitions, currentStatusKey]
   )
 
-  if (options.length === 0) {
+  // Nessuna opzione oltre lo stato corrente (es. terminale ANN/SOST): niente menu.
+  if (
+    options.every(
+      (status) =>
+        status.statusKey.toUpperCase() === (currentStatusKey ?? "").toUpperCase()
+    )
+  ) {
     return null
   }
 
@@ -47,7 +60,7 @@ export function DdpStatusMenu({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="size-7 shrink-0"
+          className="size-7 shrink-0 text-current hover:bg-black/10 hover:text-current"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
         >

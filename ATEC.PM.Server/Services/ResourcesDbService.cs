@@ -76,7 +76,74 @@ public class ResourcesDbService
         AddColumnIfMissing(c, "res_assignments", "updated_by", "INT NULL");
         AddColumnIfMissing(c, "res_assignments", "updated_at", "DATETIME NULL");
 
+        InitDigestTables(c);
+
         _logger?.LogInformation("[InitTables] Tabelle Gestione Risorse verificate/create.");
+    }
+
+    /// <summary>
+    /// Tabelle del digest email (riepilogo giornaliero modifiche piano): traccia chi ha
+    /// cancellato un'allocazione, istantanee del piano per il confronto, config SMTP
+    /// (chiave-valore) e registro delle esecuzioni. Vedi PlanNotificationService/EmailService.
+    /// </summary>
+    private void InitDigestTables(MySqlConnection c)
+    {
+        // res_notify_pending — chi ha cancellato un'allocazione (creazioni/modifiche restano
+        // su res_assignments.updated_by; la DELETE perde la riga, quindi va registrata a parte).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS res_notify_pending (
+            assignment_id INT PRIMARY KEY,
+            made_by INT NULL,
+            action VARCHAR(10) NOT NULL DEFAULT 'delete',
+            orig_employee_id INT NULL,
+            orig_tipo VARCHAR(10) NULL,
+            orig_data_inizio DATE NULL,
+            orig_data_fine DATE NULL,
+            orig_project_id INT NULL,
+            orig_service_id INT NULL,
+            orig_other_activity_id INT NULL,
+            orig_descrizione VARCHAR(500) NULL,
+            touched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // res_plan_snapshot_batches / res_plan_snapshots — "fotografia" del piano al momento
+        // dell'ultimo digest; il confronto con lo stato attuale produce le variazioni da notificare.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS res_plan_snapshot_batches (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            created_utc DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"CREATE TABLE IF NOT EXISTS res_plan_snapshots (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            batch_id INT NOT NULL,
+            assignment_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            tipo VARCHAR(10) NOT NULL,
+            data_inizio DATE NOT NULL,
+            data_fine DATE NOT NULL,
+            project_id INT NULL,
+            service_id INT NULL,
+            other_activity_id INT NULL,
+            descrizione VARCHAR(500) NULL,
+            KEY idx_snap_batch (batch_id),
+            KEY idx_snap_assignment (assignment_id),
+            CONSTRAINT fk_snap_batch FOREIGN KEY (batch_id) REFERENCES res_plan_snapshot_batches(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // res_settings — chiave/valore: config SMTP (email.*) + impostazioni digest (digest_*).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS res_settings (
+            `key` VARCHAR(60) PRIMARY KEY,
+            `value` VARCHAR(500) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // res_digest_log — storico esecuzioni digest (pannello admin).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS res_digest_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            run_utc DATETIME NOT NULL,
+            trigger_kind VARCHAR(20) NOT NULL,
+            email_inviate INT NOT NULL DEFAULT 0,
+            senza_email INT NOT NULL DEFAULT 0,
+            esito VARCHAR(500) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
     /// <summary>ALTER TABLE … ADD COLUMN idempotente (verifica information_schema prima).</summary>

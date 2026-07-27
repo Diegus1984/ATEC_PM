@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Hubs;
 using System.Security.Claims;
 
 namespace ATEC.PM.Server.Controllers;
@@ -15,13 +17,59 @@ public class CodexController : ControllerBase
     private readonly DbService _db;
     private readonly CodexSyncService _sync;
     private readonly CodexGeneratorService _generator;
+    private readonly IHubContext<CodexHub> _codexHub;
 
-    public CodexController(DbService db, CodexSyncService sync, CodexGeneratorService generator)
+    public CodexController(DbService db, CodexSyncService sync, CodexGeneratorService generator,
+        IHubContext<CodexHub> codexHub)
     {
         _db = db;
         _sync = sync;
         _generator = generator;
+        _codexHub = codexHub;
     }
+
+    // Notifica real-time ai client che guardano la Composizione (hub /hubs/codex),
+    // escludendo chi ha fatto la modifica (conn) per non auto-ricaricarsi.
+    private void NotifyCompositionChange(string? conn, int parentCodexId, string action, int compositionId)
+    {
+        var payload = new CompositionChange
+        {
+            ParentCodexId = parentCodexId,
+            Action = action,
+            CompositionId = compositionId
+        };
+        IClientProxy target = string.IsNullOrEmpty(conn)
+            ? _codexHub.Clients.All
+            : _codexHub.Clients.AllExcept(conn);
+        _ = target.SendAsync("CompositionChanged", payload);
+    }
+
+    /// <summary>Colonne ordinabili (chiave client → colonna SQL).</summary>
+    private static readonly Dictionary<string, string> CodexSortColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["codice"] = "codice",
+        ["codiceNuovo"] = "codice_nuovo",
+        ["descr"] = "descr",
+        ["codeForn"] = "code_forn",
+        ["fornitore"] = "fornitore",
+        ["prezzoForn"] = "prezzo_forn",
+        ["iva"] = "iva",
+        ["produttore"] = "produttore",
+        ["data"] = "data",
+        ["categoria"] = "categoria",
+        ["barcode"] = "barcode",
+        ["tipologia"] = "tipologia",
+        ["extra1"] = "extra1",
+        ["extra2"] = "extra2",
+        ["extra3"] = "extra3",
+        ["codeProd"] = "code_prod",
+        ["spec"] = "spec",
+        ["oper"] = "oper",
+        ["um"] = "um",
+        ["ubicazione"] = "ubicazione",
+        ["codexforn"] = "codexforn",
+        ["note"] = "note",
+    };
 
     [HttpGet]
     public IActionResult GetAll(
@@ -48,7 +96,12 @@ public class CodexController : ControllerBase
         [FromQuery] string? oper = null,
         [FromQuery] string? um = null,
         [FromQuery] string? ubicazione = null,
-        [FromQuery] string? codexforn = null)
+        [FromQuery] string? codexforn = null,
+        [FromQuery] string? codiceNuovo = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
+        [FromQuery] string? codicePrefixes = null,
+        [FromQuery] string? newCodeState = null)
     {
         try
         {
@@ -64,16 +117,30 @@ public class CodexController : ControllerBase
                 dp.Add(param, pat);
             }
 
-            if (!string.IsNullOrWhiteSpace(search))
+            // Onora le regole jolly (abc, abc*, *abc, *abc*) anche sulla ricerca globale,
+            // come per i filtri per-colonna (stesso helper).
+            string? searchPat = PagedQueryHelper.ToLikePattern(search);
+            if (searchPat != null)
             {
-                string term = $"%{search.Trim()}%";
-                clauses.Add(@"(codice LIKE @Search OR descr LIKE @Search OR code_forn LIKE @Search
+                string searchCodicePat = searchPat.Replace(".", "");
+                clauses.Add(@"(codice LIKE @SearchCodice OR codice_nuovo LIKE @SearchCodice
+                    OR descr LIKE @Search OR code_forn LIKE @Search
                     OR fornitore LIKE @Search OR produttore LIKE @Search OR categoria LIKE @Search
                     OR barcode LIKE @Search OR note LIKE @Search OR code_prod LIKE @Search)");
-                dp.Add("Search", term);
+                dp.Add("Search", searchPat);
+                dp.Add("SearchCodice", searchCodicePat);
             }
 
+            if (codice != null)
+            {
+                codice = codice.Replace(".", "");
+            }
+            if (codiceNuovo != null)
+            {
+                codiceNuovo = codiceNuovo.Replace(".", "");
+            }
             AddLike("codice", codice, "Codice");
+            AddLike("codice_nuovo", codiceNuovo, "CodiceNuovo");
             AddLike("descr", descr, "Descr");
             AddLike("code_forn", codeForn, "CodeForn");
             AddLike("fornitore", fornitore, "Fornitore");
@@ -95,14 +162,45 @@ public class CodexController : ControllerBase
             AddLike("ubicazione", ubicazione, "Ubicazione");
             AddLike("codexforn", codexforn, "Codexforn");
 
+            // Stato ricodifica (pagina Ricodifica Codex): missing = senza codice nuovo, done = con.
+            if (string.Equals(newCodeState, "missing", StringComparison.OrdinalIgnoreCase))
+                clauses.Add("(codice_nuovo IS NULL OR codice_nuovo = '')");
+            else if (string.Equals(newCodeState, "done", StringComparison.OrdinalIgnoreCase))
+                clauses.Add("(codice_nuovo IS NOT NULL AND codice_nuovo <> '')");
+
+            // Filtro per prefisso del codice (OR di più prefissi), usato dal picker
+            // della composizione (es. 5xx → figli 1xx-4xx). Valori sanificati.
+            if (!string.IsNullOrWhiteSpace(codicePrefixes))
+            {
+                var parts = codicePrefixes
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(p => new string(p.Where(char.IsLetterOrDigit).ToArray()))
+                    .Where(p => p.Length > 0)
+                    .Distinct()
+                    .ToList();
+                if (parts.Count > 0)
+                {
+                    var ors = new List<string>();
+                    for (int i = 0; i < parts.Count; i++)
+                    {
+                        string pn = $"Pref{i}";
+                        ors.Add($"codice LIKE @{pn}");
+                        dp.Add(pn, parts[i] + "%");
+                    }
+                    clauses.Add("(" + string.Join(" OR ", ors) + ")");
+                }
+            }
+
             string where = clauses.Count > 0 ? "WHERE " + string.Join(" AND ", clauses) : "";
+            string orderBy = PagedQueryHelper.OrderBy(sortBy, sortDir, CodexSortColumns, "ORDER BY codice");
             using var c = _db.Open();
             int total = c.ExecuteScalar<int>($"SELECT COUNT(*) FROM codex_items {where}", dp);
             dp.Add("Limit", pageSize);
             dp.Add("Offset", offset);
 
             var rows = c.Query<CodexListItem>($@"
-            SELECT id, codice AS Codice, code_forn AS CodeForn, fornitore AS Fornitore,
+            SELECT id, codice AS Codice, COALESCE(codice_nuovo,'') AS CodiceNuovo,
+                   code_forn AS CodeForn, fornitore AS Fornitore,
                    prezzo_forn AS PrezzoForn, iva AS Iva, produttore AS Produttore,
                    data AS Data, descr AS Descr, note AS Note, categoria AS Categoria,
                    barcode AS Barcode, tipologia AS Tipologia,
@@ -110,7 +208,7 @@ public class CodexController : ControllerBase
                    code_prod AS CodeProd, spec AS Spec, oper AS Oper, um AS Um,
                    ubicazione AS Ubicazione, codexforn AS Codexforn
             FROM codex_items {where}
-            ORDER BY codice
+            {orderBy}
             LIMIT @Limit OFFSET @Offset", dp).ToList();
 
             int loaded = offset + rows.Count;
@@ -134,7 +232,8 @@ public class CodexController : ControllerBase
     {
         using var c = _db.Open();
         var item = c.QueryFirstOrDefault<CodexListItem>(@"
-            SELECT id, codice AS Codice, code_forn AS CodeForn, fornitore AS Fornitore,
+            SELECT id, codice AS Codice, COALESCE(codice_nuovo,'') AS CodiceNuovo,
+                   code_forn AS CodeForn, fornitore AS Fornitore,
                    prezzo_forn AS PrezzoForn, iva AS Iva, produttore AS Produttore,
                    data AS Data, descr AS Descr, note AS Note, categoria AS Categoria,
                    barcode AS Barcode, tipologia AS Tipologia,
@@ -144,6 +243,229 @@ public class CodexController : ControllerBase
             FROM codex_items WHERE id=@Id", new { Id = id });
         if (item == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
         return Ok(ApiResponse<CodexListItem>.Ok(item));
+    }
+
+    // ── NUOVA CODIFICA (ricodifica manuale, ampliamento Codex 21/07/2026) ──
+    // Colonna codice_nuovo: di proprietà di ATEC PM (il sync remoto non la tocca),
+    // compilata SOLO a mano. Formato = solo cifre come il codice attuale (il punto di
+    // display viene rimosso), unicità contro ENTRAMBE le colonne (mai un nuovo uguale
+    // a un vecchio esistente). Ruoli: ADMIN, PM, RESP_REPARTO.
+
+    [HttpPut("{id}/new-code")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult SetNewCode(int id, [FromBody] CodexNewCodeSaveRequest req)
+    {
+        string raw = (req.NewCode ?? "").Replace(".", "").Trim();
+
+        using var c = _db.Open();
+        string? oldCode = c.ExecuteScalar<string?>(
+            "SELECT codice FROM codex_items WHERE id=@Id", new { Id = id });
+        if (oldCode == null) return NotFound(ApiResponse<string>.Fail("Articolo non trovato"));
+
+        if (raw.Length == 0)
+        {
+            // Rimozione del codice nuovo (torna "non ricodificato").
+            c.Execute("UPDATE codex_items SET codice_nuovo = NULL WHERE id=@Id", new { Id = id });
+            return Ok(ApiResponse<string>.Ok("", "Codice nuovo rimosso"));
+        }
+
+        // REGOLA (21/07/2026): il codice NON si digita a mano. Deve arrivare da una
+        // prenotazione del sistema (POST new-code/reserve): l'operatore lo accetta e basta.
+        if (!req.ReservationId.HasValue)
+            return Ok(ApiResponse<string>.Fail(
+                "Il codice nuovo va generato dal sistema: usa i pulsanti famiglia per prenotarlo."));
+
+        string? reservedCode = c.ExecuteScalar<string?>(@"
+            SELECT reserved_code FROM codex_reservations
+            WHERE id = @ResId AND status = 'RESERVED' AND expires_at > NOW()",
+            new { ResId = req.ReservationId.Value });
+        if (reservedCode == null)
+            return Ok(ApiResponse<string>.Fail(
+                "Prenotazione scaduta o non valida: genera di nuovo il codice dai pulsanti famiglia."));
+        if (!string.Equals(reservedCode, raw, StringComparison.Ordinal))
+            return Ok(ApiResponse<string>.Fail(
+                "Il codice non corrisponde alla prenotazione: genera di nuovo il codice dai pulsanti famiglia."));
+
+        // Reti di sicurezza (il codice prenotato nasce già libero, ma il vincolo resta):
+        // mai uguale a un codice vecchio né a un codice nuovo di un'altra riga.
+        int clash = c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM codex_items
+            WHERE codice = @Code OR (codice_nuovo = @Code AND id <> @Id)",
+            new { Code = raw, Id = id });
+        if (clash > 0)
+            return Ok(ApiResponse<string>.Fail(
+                $"Il codice {CodexListItem.FormatCodice(raw)} risulta già usato."));
+
+        c.Execute("UPDATE codex_items SET codice_nuovo = @Code WHERE id=@Id",
+            new { Code = raw, Id = id });
+
+        // Il codice ora è custodito dalla colonna (UNIQUE): la prenotazione ha finito il suo compito.
+        c.Execute("DELETE FROM codex_reservations WHERE id = @Id", new { Id = req.ReservationId.Value });
+
+        return Ok(ApiResponse<string>.Ok(CodexListItem.FormatCodice(raw), "Codice nuovo assegnato"));
+    }
+
+    // PRENOTA il prossimo codice della famiglia secondo la REGOLA CODEX —
+    // prefisso famiglia (3) + data odierna ddMMyy (6) + progressivo del giorno (3),
+    // stessa meccanica del generatore (GET_LOCK + codex_reservations): più operatori
+    // che ricodificano in parallelo NON ricevono mai lo stesso codice. La prenotazione
+    // (TTL 10 min) si libera al salvataggio o con /api/codex/release/{id}.
+    [HttpPost("new-code/reserve")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult ReserveNewCode([FromBody] CodexNewCodeReserveRequest req)
+    {
+        string fam = new string((req.Family ?? "").Where(char.IsDigit).ToArray());
+        if (fam.Length != 3)
+            return Ok(ApiResponse<CodexReservationResult>.Fail("Famiglia non valida (3 cifre, es. 201)."));
+
+        try
+        {
+            string userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
+            var (code, reservationId) = _generator.ReserveNextNewCode(fam, userName);
+            return Ok(ApiResponse<CodexReservationResult>.Ok(new CodexReservationResult
+            {
+                Codice = CodexGeneratorService.FormatCodeForDisplay(code),
+                ReservationId = reservationId,
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<CodexReservationResult>.Fail(ex.Message));
+        }
+    }
+
+    // Assegnazione MASSIVA, fase 1: prenota N codici della famiglia per le righe
+    // selezionate senza codice nuovo e ritorna l'anteprima vecchio→nuovo+descrizione
+    // che l'operatore conferma nel form (bulk-commit) o annulla (bulk-release).
+    [HttpPost("new-code/bulk-reserve")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult BulkReserveNewCodes([FromBody] CodexBulkAssignRequest req)
+    {
+        string fam = new string((req.Family ?? "").Where(char.IsDigit).ToArray());
+        if (fam.Length != 3)
+            return Ok(ApiResponse<CodexBulkReserveResult>.Fail("Famiglia non valida (3 cifre, es. 201)."));
+        var ids = (req.Ids ?? new List<int>()).Where(i => i > 0).Distinct().ToList();
+        if (ids.Count == 0)
+            return Ok(ApiResponse<CodexBulkReserveResult>.Fail("Nessuna riga selezionata."));
+
+        try
+        {
+            string userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
+            var (items, skipped) = _generator.ReserveNextNewCodesBulk(fam, ids, userName);
+            return Ok(ApiResponse<CodexBulkReserveResult>.Ok(new CodexBulkReserveResult
+            {
+                Items = items.Select(i => new CodexBulkReserveItem
+                {
+                    Id = i.ItemId,
+                    Codice = CodexListItem.FormatCodice(i.OldCode),
+                    Descr = i.Descr,
+                    NewCode = CodexListItem.FormatCodice(i.NewCode),
+                    ReservationId = i.ReservationId,
+                }).ToList(),
+                Skipped = skipped,
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<CodexBulkReserveResult>.Fail(ex.Message));
+        }
+    }
+
+    // Assegnazione MASSIVA, fase 2: il pulsante «Assegna» del form scrive i codici
+    // prenotati sulle righe. Ogni voce viene verificata contro la sua prenotazione;
+    // righe nel frattempo ricodificate da altri vengono saltate.
+    [HttpPost("new-code/bulk-commit")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult BulkCommitNewCodes([FromBody] CodexBulkCommitRequest req)
+    {
+        var items = req.Items ?? new List<CodexBulkReserveItem>();
+        if (items.Count == 0)
+            return Ok(ApiResponse<CodexBulkAssignResult>.Fail("Nessuna riga da assegnare."));
+
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+        int assigned = 0, skipped = 0;
+        foreach (CodexBulkReserveItem item in items)
+        {
+            string raw = (item.NewCode ?? "").Replace(".", "").Trim();
+
+            // La prenotazione deve esistere, essere attiva e portare esattamente questo codice.
+            string? reserved = c.ExecuteScalar<string?>(@"
+                SELECT reserved_code FROM codex_reservations
+                WHERE id = @ResId AND status = 'RESERVED' AND expires_at > NOW()",
+                new { ResId = item.ReservationId }, tx);
+            if (reserved == null || !string.Equals(reserved, raw, StringComparison.Ordinal))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Riga nel frattempo ricodificata da un altro operatore → saltata, prenotazione liberata.
+            int updated = c.Execute(@"
+                UPDATE codex_items SET codice_nuovo = @Code
+                WHERE id = @Id AND (codice_nuovo IS NULL OR codice_nuovo = '')",
+                new { Code = raw, Id = item.Id }, tx);
+            if (updated > 0) assigned++;
+            else skipped++;
+
+            c.Execute("DELETE FROM codex_reservations WHERE id = @ResId",
+                new { ResId = item.ReservationId }, tx);
+        }
+        tx.Commit();
+
+        string msg = skipped > 0
+            ? $"{assigned} codici assegnati, {skipped} righe saltate"
+            : $"{assigned} codici assegnati";
+        return Ok(ApiResponse<CodexBulkAssignResult>.Ok(
+            new CodexBulkAssignResult { Assigned = assigned, Skipped = skipped }, msg));
+    }
+
+    // Annulla del form: libera in blocco le prenotazioni dell'anteprima.
+    [HttpPost("new-code/bulk-release")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult BulkReleaseNewCodes([FromBody] CodexBulkReleaseRequest req)
+    {
+        var ids = (req.ReservationIds ?? new List<int>()).Where(i => i > 0).Distinct().ToList();
+        if (ids.Count > 0)
+        {
+            using var c = _db.Open();
+            c.Execute("DELETE FROM codex_reservations WHERE id IN @Ids AND status = 'RESERVED'",
+                new { Ids = ids });
+        }
+        return Ok(ApiResponse<bool>.Ok(true, "Prenotazioni rilasciate"));
+    }
+
+    // Reset MASSIVO del codice nuovo (l'operatore ha sbagliato la qualifica):
+    // le righe selezionate tornano "non ricodificate".
+    [HttpPost("new-code/bulk-remove")]
+    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    public IActionResult BulkRemoveNewCodes([FromBody] CodexBulkRemoveRequest req)
+    {
+        var ids = (req.Ids ?? new List<int>()).Where(i => i > 0).Distinct().ToList();
+        if (ids.Count == 0)
+            return Ok(ApiResponse<int>.Fail("Nessuna riga selezionata."));
+
+        using var c = _db.Open();
+        int removed = c.Execute(@"
+            UPDATE codex_items SET codice_nuovo = NULL
+            WHERE id IN @Ids AND codice_nuovo IS NOT NULL AND codice_nuovo <> ''",
+            new { Ids = ids });
+        return Ok(ApiResponse<int>.Ok(removed, $"{removed} codici nuovi rimossi"));
+    }
+
+    // Avanzamento ricodifica per la pagina "a tappeto" (default famiglia vecchia 201xxx).
+    [HttpGet("recode-stats")]
+    public IActionResult RecodeStats([FromQuery] string? prefix = "201")
+    {
+        string pref = new string((prefix ?? "201").Where(char.IsLetterOrDigit).ToArray());
+        if (pref.Length == 0) pref = "201";
+
+        using var c = _db.Open();
+        var stats = c.QueryFirst<CodexRecodeStats>(@"
+            SELECT COUNT(*) AS Total,
+                   CAST(COALESCE(SUM(CASE WHEN codice_nuovo IS NOT NULL AND codice_nuovo <> '' THEN 1 ELSE 0 END), 0) AS SIGNED) AS Done
+            FROM codex_items WHERE codice LIKE @Pref", new { Pref = pref + "%" });
+        return Ok(ApiResponse<CodexRecodeStats>.Ok(stats));
     }
 
     // ── SYNC ────────────────────────────────────────────────
@@ -270,6 +592,7 @@ public class CodexController : ControllerBase
                COALESCE(ci.codice, cat.code) AS ChildCodice,
                COALESCE(ci.descr, cat.description) AS ChildDescr,
                cc.sort_order AS SortOrder,
+               cc.quantity AS Quantity,
                CASE WHEN cc.child_catalog_id IS NOT NULL THEN 'catalog' ELSE 'codex' END AS Source
         FROM codex_compositions cc
         LEFT JOIN codex_items ci ON ci.id = cc.child_codex_id
@@ -325,7 +648,8 @@ public class CodexController : ControllerBase
                 Codice = child.ChildCodice,
                 Descr = child.ChildDescr,
                 CompositionId = child.Id,
-                Source = child.Source
+                Source = child.Source,
+                Quantity = child.Quantity
             };
             // Solo nodi codex possono avere sotto-figli
             if (child.ChildCodexId.HasValue)
@@ -335,7 +659,7 @@ public class CodexController : ControllerBase
     }
 
     [HttpPost("compositions")]
-    public IActionResult AddComposition([FromBody] AddCompositionRequest req)
+    public IActionResult AddComposition([FromBody] AddCompositionRequest req, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();
 
@@ -373,43 +697,256 @@ public class CodexController : ControllerBase
                 return BadRequest(ApiResponse<string>.Fail("Articolo catalogo non trovato"));
         }
 
-        int maxSort = c.ExecuteScalar<int>(
-            "SELECT COALESCE(MAX(sort_order),0) FROM codex_compositions WHERE parent_codex_id=@P",
-            new { P = req.ParentCodexId });
-
         int qty = Math.Max(1, req.Quantity);
-        int lastId = 0;
-        for (int i = 0; i < qty; i++)
+
+        // Una riga per componente: se il figlio è già in composizione si incrementa
+        // la quantità invece di duplicare la riga (<=> = uguaglianza NULL-safe).
+        int existingId = c.ExecuteScalar<int?>(@"
+            SELECT id FROM codex_compositions
+            WHERE parent_codex_id = @ParentCodexId
+              AND child_codex_id <=> @ChildCodexId
+              AND child_catalog_id <=> @ChildCatalogId",
+            new { req.ParentCodexId, req.ChildCodexId, req.ChildCatalogId }) ?? 0;
+
+        int lastId;
+        if (existingId > 0)
         {
+            c.Execute("UPDATE codex_compositions SET quantity = quantity + @Qty WHERE id=@Id",
+                new { Qty = qty, Id = existingId });
+            lastId = existingId;
+        }
+        else
+        {
+            int maxSort = c.ExecuteScalar<int>(
+                "SELECT COALESCE(MAX(sort_order),0) FROM codex_compositions WHERE parent_codex_id=@P",
+                new { P = req.ParentCodexId });
+
             lastId = c.ExecuteScalar<int>(@"
-                INSERT INTO codex_compositions (parent_codex_id, child_codex_id, child_catalog_id, sort_order)
-                VALUES (@ParentCodexId, @ChildCodexId, @ChildCatalogId, @Sort);
+                INSERT INTO codex_compositions (parent_codex_id, child_codex_id, child_catalog_id, sort_order, quantity)
+                VALUES (@ParentCodexId, @ChildCodexId, @ChildCatalogId, @Sort, @Qty);
                 SELECT LAST_INSERT_ID()",
-                new { req.ParentCodexId, req.ChildCodexId, req.ChildCatalogId, Sort = maxSort + 1 + i });
+                new { req.ParentCodexId, req.ChildCodexId, req.ChildCatalogId, Sort = maxSort + 1, Qty = qty });
         }
 
-        string msg = qty > 1 ? $"{qty} elementi aggiunti" : "Composizione aggiunta";
+        NotifyCompositionChange(conn, req.ParentCodexId, existingId > 0 ? "update" : "create", lastId);
+
+        string msg = existingId > 0
+            ? $"Quantità incrementata (+{qty})"
+            : qty > 1 ? $"Componente aggiunto ×{qty}" : "Composizione aggiunta";
         return Ok(ApiResponse<int>.Ok(lastId, msg));
     }
 
+    /// <summary>
+    /// Aggiorna quantità e/o ordinamento di una riga di composizione. Semantica
+    /// "0 = non toccare": i client inviano solo il campo che vogliono cambiare.
+    /// </summary>
     [HttpPut("compositions/{id}")]
-    public IActionResult UpdateComposition(int id, [FromBody] UpdateCompositionRequest req)
+    public IActionResult UpdateComposition(int id, [FromBody] UpdateCompositionRequest req, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();
-        int rows = c.Execute(
-            "UPDATE codex_compositions SET sort_order=@SortOrder WHERE id=@Id",
-            new { req.SortOrder, Id = id });
+        int parentId = c.ExecuteScalar<int>(
+            "SELECT COALESCE(parent_codex_id, 0) FROM codex_compositions WHERE id=@Id", new { Id = id });
+        int rows = c.Execute(@"
+            UPDATE codex_compositions
+            SET sort_order = CASE WHEN @SortOrder >= 1 THEN @SortOrder ELSE sort_order END,
+                quantity   = CASE WHEN @Quantity  >= 1 THEN @Quantity  ELSE quantity   END
+            WHERE id=@Id",
+            new { req.SortOrder, req.Quantity, Id = id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+        NotifyCompositionChange(conn, parentId, "update", id);
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
     [HttpDelete("compositions/{id}")]
-    public IActionResult DeleteComposition(int id)
+    public IActionResult DeleteComposition(int id, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();
+        // Recupera il parent prima della delete per poterlo includere nella notifica real-time.
+        int parentId = c.ExecuteScalar<int>(
+            "SELECT COALESCE(parent_codex_id, 0) FROM codex_compositions WHERE id=@Id", new { Id = id });
         int rows = c.Execute("DELETE FROM codex_compositions WHERE id=@Id", new { Id = id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+        NotifyCompositionChange(conn, parentId, "delete", id);
         return Ok(ApiResponse<bool>.Ok(true, "Rimosso"));
+    }
+
+    [HttpPost("compositions/import-preview/{parentId}")]
+    public IActionResult ImportPreview(int parentId, [FromBody] List<CodexImportItem> items)
+    {
+        using var c = _db.Open();
+        var parent = c.QueryFirstOrDefault<CodexListItem>(
+            "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id",
+            new { Id = parentId });
+
+        if (parent == null)
+            return BadRequest(ApiResponse<string>.Fail("Articolo parent non trovato"));
+
+        string parentPrefix = parent.Codice.Substring(0, 1);
+        var results = new List<CodexImportPreviewResult>();
+
+        foreach (var item in items)
+        {
+            var cleanCode = (item.Code ?? "").Replace(".", "").Trim();
+            if (string.IsNullOrEmpty(cleanCode)) continue;
+
+            // Cerca nel Codex
+            var codexItem = c.QueryFirstOrDefault<CodexListItem>(
+                "SELECT id, codice AS Codice, descr AS Descr FROM codex_items WHERE codice = @Code",
+                new { Code = cleanCode });
+
+            if (codexItem != null)
+            {
+                string childPrefix = codexItem.Codice.Substring(0, 1);
+                string? hierarchyError = ValidateHierarchy(parentPrefix, childPrefix);
+                results.Add(new CodexImportPreviewResult
+                {
+                    Code = item.Code,
+                    Quantity = item.Quantity,
+                    Descr = codexItem.Descr,
+                    Id = codexItem.Id,
+                    Source = "codex",
+                    IsValid = hierarchyError == null,
+                    Error = hierarchyError
+                });
+            }
+            else
+            {
+                // Cerca a catalogo
+                var catalogItem = c.QueryFirstOrDefault<(int Id, string Description)>(
+                    "SELECT id, description FROM catalog_items WHERE code = @Code",
+                    new { Code = cleanCode });
+
+                if (catalogItem.Id > 0)
+                {
+                    results.Add(new CodexImportPreviewResult
+                    {
+                        Code = item.Code,
+                        Quantity = item.Quantity,
+                        Descr = catalogItem.Description,
+                        Id = catalogItem.Id,
+                        Source = "catalog",
+                        IsValid = true, // Articoli catalogo sempre ammessi
+                        Error = null
+                    });
+                }
+                else
+                {
+                    results.Add(new CodexImportPreviewResult
+                    {
+                        Code = item.Code,
+                        Quantity = item.Quantity,
+                        Descr = null,
+                        Id = null,
+                        Source = null,
+                        IsValid = false,
+                        Error = "Articolo non trovato"
+                    });
+                }
+            }
+        }
+
+        return Ok(ApiResponse<List<CodexImportPreviewResult>>.Ok(results));
+    }
+
+    [HttpPost("compositions/import-commit")]
+    public IActionResult ImportCommit([FromBody] CodexImportCommitRequest req, [FromQuery] string? conn = null)
+    {
+        using var c = _db.Open();
+        using var tx = c.BeginTransaction();
+        try
+        {
+            var parent = c.QueryFirstOrDefault<CodexListItem>(
+                "SELECT id, codice AS Codice FROM codex_items WHERE id=@Id",
+                new { Id = req.ParentId }, tx);
+            if (parent == null)
+                return BadRequest(ApiResponse<string>.Fail("Articolo parent non trovato"));
+
+            string parentPrefix = parent.Codice.Substring(0, 1);
+
+            if (req.ReplaceExisting)
+            {
+                c.Execute("DELETE FROM codex_compositions WHERE parent_codex_id = @ParentId", new { req.ParentId }, tx);
+            }
+
+            int maxSort = c.ExecuteScalar<int>(
+                "SELECT COALESCE(MAX(sort_order),0) FROM codex_compositions WHERE parent_codex_id=@P",
+                new { P = req.ParentId }, tx);
+
+            int currentSort = maxSort + 1;
+
+            foreach (var item in req.Items)
+            {
+                var cleanCode = (item.Code ?? "").Replace(".", "").Trim();
+                if (string.IsNullOrEmpty(cleanCode)) continue;
+
+                // Trova l'id
+                var codexItem = c.QueryFirstOrDefault<CodexListItem>(
+                    "SELECT id, codice AS Codice FROM codex_items WHERE codice = @Code",
+                    new { Code = cleanCode }, tx);
+
+                int? childCodexId = null;
+                int? childCatalogId = null;
+
+                if (codexItem != null)
+                {
+                    childCodexId = codexItem.Id;
+                    string childPrefix = codexItem.Codice.Substring(0, 1);
+                    string? hierarchyError = ValidateHierarchy(parentPrefix, childPrefix);
+                    if (hierarchyError != null)
+                        throw new InvalidOperationException($"L'articolo {item.Code} viola le regole di struttura: {hierarchyError}");
+                }
+                else
+                {
+                    var catalogItem = c.QueryFirstOrDefault<(int Id, string Description)>(
+                        "SELECT id, description FROM catalog_items WHERE code = @Code",
+                        new { Code = cleanCode }, tx);
+
+                    if (catalogItem.Id > 0)
+                    {
+                        childCatalogId = catalogItem.Id;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Articolo {item.Code} non trovato a sistema");
+                    }
+                }
+
+                int qty = Math.Max(1, item.Quantity);
+
+                // Una riga per componente: se il figlio è già presente (import in
+                // aggiunta, o codice ripetuto nella lista) si somma la quantità.
+                int existingId = c.ExecuteScalar<int?>(@"
+                    SELECT id FROM codex_compositions
+                    WHERE parent_codex_id = @ParentId
+                      AND child_codex_id <=> @ChildCodexId
+                      AND child_catalog_id <=> @ChildCatalogId",
+                    new { ParentId = req.ParentId, ChildCodexId = childCodexId, ChildCatalogId = childCatalogId }, tx) ?? 0;
+
+                if (existingId > 0)
+                {
+                    c.Execute("UPDATE codex_compositions SET quantity = quantity + @Qty WHERE id=@Id",
+                        new { Qty = qty, Id = existingId }, tx);
+                }
+                else
+                {
+                    c.Execute(@"
+                        INSERT INTO codex_compositions (parent_codex_id, child_codex_id, child_catalog_id, sort_order, quantity)
+                        VALUES (@ParentId, @ChildCodexId, @ChildCatalogId, @Sort, @Qty)",
+                        new { ParentId = req.ParentId, ChildCodexId = childCodexId, ChildCatalogId = childCatalogId, Sort = currentSort, Qty = qty }, tx);
+                    currentSort++;
+                }
+            }
+
+            tx.Commit();
+
+            NotifyCompositionChange(conn, req.ParentId, "create", 0);
+            return Ok(ApiResponse<bool>.Ok(true, "Composizione importata con successo"));
+        }
+        catch (Exception ex)
+        {
+            tx.Rollback();
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 
     private static string? ValidateHierarchy(string parentPrefix, string childPrefix)

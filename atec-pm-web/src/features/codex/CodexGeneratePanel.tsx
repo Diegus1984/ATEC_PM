@@ -53,7 +53,7 @@ function CodexRefSearch({
 
   const query = useQuery({
     queryKey: ["codex-ref", prefix, debounced],
-    queryFn: () => fetchCodex({ search: debounced, pageSize: 50 }),
+    queryFn: () => fetchCodex({ search: debounced, codicePrefixes: [prefix], pageSize: 50 }),
     enabled: !value && debounced.length >= 2,
   })
 
@@ -101,7 +101,7 @@ function CodexRefSearch({
             onBlur={() => window.setTimeout(() => setFocused(false), 150)}
           />
           {showResults ? (
-            <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
+            <div className="absolute z-50 mt-1 max-h-[480px] w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
               {query.isFetching && results.length === 0 ? (
                 <p className="px-2 py-1.5 text-sm text-muted-foreground">
                   Ricerca…
@@ -172,7 +172,6 @@ export function CodexGeneratePanel({
     code: string
   } | null>(null)
   const [ref201, setRef201] = React.useState<RefItem | null>(null)
-  const [ref401, setRef401] = React.useState<RefItem | null>(null)
   const [reserving, setReserving] = React.useState(false)
   const [confirming, setConfirming] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -208,7 +207,6 @@ export function CodexGeneratePanel({
     await releaseCurrent()
     setSelectedPrefix(value)
     setRef201(null)
-    setRef401(null)
     if (!value) {
       return
     }
@@ -243,33 +241,19 @@ export function CodexGeneratePanel({
       reservationRef.current = null
       // I riferimenti sono opzionali: un loro errore non deve annullare la
       // creazione dell'articolo (già avvenuta) — come nella CodexPage WPF.
-      if (is101) {
-        const refErrors: string[] = []
-        if (ref201) {
-          try {
-            await addCodexReference({
-              sourceCodexId: generated.id,
-              refCodexId: ref201.id,
-              refType: "201",
-            })
-          } catch (err) {
-            refErrors.push(`Rif. 201: ${(err as Error).message}`)
-          }
-        }
-        if (ref401) {
-          try {
-            await addCodexReference({
-              sourceCodexId: generated.id,
-              refCodexId: ref401.id,
-              refType: "401",
-            })
-          } catch (err) {
-            refErrors.push(`Rif. 401: ${(err as Error).message}`)
-          }
-        }
-        if (refErrors.length > 0) {
+      // Vincolo 401 liberato (21/07/2026): nella creazione dei 101 resta solo il
+      // riferimento commerciale opzionale; il rif. Materia Prima non si compila più da qui
+      // (l'API dei riferimenti lo supporta ancora, il campo è solo nascosto).
+      if (is101 && ref201) {
+        try {
+          await addCodexReference({
+            sourceCodexId: generated.id,
+            refCodexId: ref201.id,
+            refType: "201",
+          })
+        } catch (err) {
           notifyInfo(
-            `Articolo ${generated.codice} creato, ma alcuni riferimenti non sono stati salvati:\n\n${refErrors.join("\n")}`
+            `Articolo ${generated.codice} creato, ma il riferimento non è stato salvato:\n\nRif. 201: ${(err as Error).message}`
           )
         }
       }
@@ -286,7 +270,9 @@ export function CodexGeneratePanel({
   }
 
   return (
-    <Card className="border-primary/40 bg-primary/5">
+    // overflow-visible: la Card base ha overflow-hidden, che taglierebbe la tendina
+    // dei suggerimenti 201/401 al bordo del pannello invece di lasciarla sopra la griglia.
+    <Card className="overflow-visible border-primary/40 bg-primary/5">
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Genera un nuovo articolo Codex</p>
@@ -346,13 +332,8 @@ export function CodexGeneratePanel({
               value={ref201}
               onSelect={setRef201}
             />
-            <CodexRefSearch
-              prefix="4"
-              label="Rif. Materia Prima (401) — opzionale"
-              placeholder="Digita per cercare un 4xx…"
-              value={ref401}
-              onSelect={setRef401}
-            />
+            {/* Rif. Materia Prima (401): vincolo liberato il 21/07/2026 — campo nascosto,
+                l'API dei riferimenti resta disponibile se servirà ripristinarlo. */}
           </div>
         ) : null}
 

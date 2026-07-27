@@ -1,33 +1,49 @@
 import type { BomItemSaveRequest, DdpRowItem } from "@/lib/api/types"
 
-/** Payload PUT per aggiornare una riga DDP commerciale (stato, destinazione o dialog modifica). */
+/** Campi modificabili inline/da dialog; quelli assenti restano al valore della riga. */
+export interface DdpCommercialRowOverrides {
+  itemStatus?: string
+  quantity?: number
+  unitCost?: number
+  destination?: string
+  destinationSpec?: string
+  daneaRef?: string
+  /** Presente (anche `null` = data rimossa) = la PUT aggiorna la data prevista. */
+  dateNeeded?: string | null
+  notes?: string
+  /** Presente = la PUT aggiorna il fornitore (`updateSupplier: true`); `id: null` = nessun fornitore. */
+  supplier?: { id: number | null }
+}
+
+/** Payload PUT per aggiornare una riga DDP commerciale (edit inline o dialog modifica). */
 export function ddpCommercialRowToSaveRequest(
   projectId: number,
   row: DdpRowItem,
-  itemStatus: string,
-  quantity?: number,
-  destination?: string,
-  destinationSpec?: string
+  overrides: DdpCommercialRowOverrides = {}
 ): BomItemSaveRequest {
   return {
     id: row.id,
     projectId,
-    catalogItemId: null,
+    catalogItemId: row.catalogItemId ?? null,
     partNumber: row.partNumber,
     description: row.description,
     unit: row.unit || "PZ",
-    quantity: quantity ?? row.quantity,
-    unitCost: row.unitCost,
-    supplierId: null,
+    quantity: overrides.quantity ?? row.quantity,
+    unitCost: overrides.unitCost ?? row.unitCost,
+    supplierId: overrides.supplier ? overrides.supplier.id : (row.supplierId ?? null),
+    // Il server tocca supplier_id solo se richiesto esplicitamente: gli altri edit non lo azzerano.
+    updateSupplier: overrides.supplier !== undefined,
     manufacturer: row.manufacturer ?? "",
-    itemStatus,
+    itemStatus: overrides.itemStatus ?? row.itemStatus,
     requestedBy: row.requestedBy ?? "",
-    daneaRef: row.daneaRef ?? "",
-    dateNeeded: row.dateNeeded,
-    destination: destination ?? row.destination ?? "",
-    destinationSpec: destinationSpec ?? row.destinationSpec ?? "",
-    notes: row.notes ?? "",
+    daneaRef: overrides.daneaRef ?? row.daneaRef ?? "",
+    dateNeeded:
+      overrides.dateNeeded !== undefined ? overrides.dateNeeded : row.dateNeeded,
+    destination: overrides.destination ?? row.destination ?? "",
+    destinationSpec: overrides.destinationSpec ?? row.destinationSpec ?? "",
+    notes: overrides.notes ?? row.notes ?? "",
     ddpType: "COMMERCIAL",
+    atecCode: row.atecCode ?? "",
     expectedUpdatedAt: row.updatedAt ?? null,
   }
 }

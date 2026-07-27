@@ -2,9 +2,12 @@ import { apiDelete, apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   AddCodexReferenceRequest,
   ApiResponse,
+  CodexBulkReserveItem,
+  CodexBulkReserveResult,
   CodexGeneratedCode,
   CodexListItem,
   CodexPrefix,
+  CodexRecodeStats,
   CodexReservationResult,
   CodexSyncStatus,
   PagedResult,
@@ -20,6 +23,8 @@ export interface FetchCodexParams {
   codicePrefixes?: string[]
   /** Filtri per colonna (chiave = parametro server, es. codice/descr/fornitore/…). */
   filters?: Record<string, string>
+  /** Stato ricodifica: "missing" = senza codice nuovo, "done" = con codice nuovo. */
+  newCodeState?: "missing" | "done"
 }
 
 /** Lista articoli Codex (paginata server-side, ricerca multi-colonna, ordinamento). */
@@ -43,6 +48,9 @@ export async function fetchCodex(
   }
   if (params.codicePrefixes && params.codicePrefixes.length > 0) {
     query.set("codicePrefixes", params.codicePrefixes.join(","))
+  }
+  if (params.newCodeState) {
+    query.set("newCodeState", params.newCodeState)
   }
   if (params.filters) {
     for (const [key, value] of Object.entries(params.filters)) {
@@ -130,6 +138,97 @@ export async function confirmCodexReservation(
   const response = await apiPost<ApiResponse<CodexGeneratedCode>>(
     "/api/codex/confirm",
     { reservationId, descrizione }
+  )
+  return unwrapApi(response)
+}
+
+// ── NUOVA CODIFICA (ricodifica manuale) ─────────────────
+
+/**
+ * Assegna (o rimuove, con newCode vuoto) il codice nuovo di una riga Codex.
+ * `reservationId` = prenotazione ottenuta da reserveCodexNewCode: il server la
+ * libera al salvataggio.
+ */
+export async function updateCodexNewCode(
+  id: number,
+  newCode: string,
+  reservationId?: number | null
+): Promise<string> {
+  const response = await apiPut<ApiResponse<string>>(
+    `/api/codex/${id}/new-code`,
+    { newCode, reservationId: reservationId ?? null }
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * PRENOTA il prossimo codice della famiglia (regola Codex: famiglia + data odierna
+ * ggMMaa + progressivo del giorno), come il generatore: più operatori in parallelo
+ * non ricevono mai lo stesso codice. Va liberata col salvataggio o con
+ * releaseCodexReservation se l'operatore annulla.
+ */
+export async function reserveCodexNewCode(
+  family: string
+): Promise<CodexReservationResult> {
+  const response = await apiPost<ApiResponse<CodexReservationResult>>(
+    "/api/codex/new-code/reserve",
+    { family }
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * Assegnazione MASSIVA, fase 1: prenota N codici della famiglia per le righe
+ * selezionate senza codice nuovo e ritorna l'anteprima vecchio→nuovo+descrizione
+ * da confermare (commit) o annullare (release).
+ */
+export async function bulkReserveCodexNewCodes(
+  ids: number[],
+  family: string
+): Promise<CodexBulkReserveResult> {
+  const response = await apiPost<ApiResponse<CodexBulkReserveResult>>(
+    "/api/codex/new-code/bulk-reserve",
+    { ids, family }
+  )
+  return unwrapApi(response)
+}
+
+/** Fase 2: il pulsante «Assegna» del form scrive i codici prenotati sulle righe. */
+export async function bulkCommitCodexNewCodes(
+  items: CodexBulkReserveItem[]
+): Promise<{ assigned: number; skipped: number }> {
+  const response = await apiPost<
+    ApiResponse<{ assigned: number; skipped: number }>
+  >("/api/codex/new-code/bulk-commit", { items })
+  return unwrapApi(response)
+}
+
+/** Annulla del form: libera in blocco le prenotazioni dell'anteprima. */
+export async function bulkReleaseCodexReservations(
+  reservationIds: number[]
+): Promise<void> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    "/api/codex/new-code/bulk-release",
+    { reservationIds }
+  )
+  unwrapApi(response)
+}
+
+/** Reset massivo: le righe selezionate tornano "non ricodificate". */
+export async function bulkRemoveCodexNewCodes(ids: number[]): Promise<number> {
+  const response = await apiPost<ApiResponse<number>>(
+    "/api/codex/new-code/bulk-remove",
+    { ids }
+  )
+  return unwrapApi(response)
+}
+
+/** Avanzamento ricodifica della famiglia vecchia indicata (default 201xxx). */
+export async function fetchCodexRecodeStats(
+  prefix = "201"
+): Promise<CodexRecodeStats> {
+  const response = await apiGet<ApiResponse<CodexRecodeStats>>(
+    `/api/codex/recode-stats?prefix=${encodeURIComponent(prefix)}`
   )
   return unwrapApi(response)
 }

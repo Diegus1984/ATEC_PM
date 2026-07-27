@@ -50,6 +50,15 @@ export async function deleteNotification(id: number): Promise<void> {
   unwrapApi(response)
 }
 
+/** POST /api/notifications/clean-resolved — rimuove notifiche risolte/chiuse. Ritorna il numero di rimosse. */
+export async function cleanResolvedNotifications(): Promise<number> {
+  const response = await apiPost<ApiResponse<number>>(
+    "/api/notifications/clean-resolved",
+    {}
+  )
+  return unwrapApi(response)
+}
+
 /**
  * POST /api/notifications/check-pending — genera le notifiche pendenti
  * (commesse attive / assegnazioni fasi) al login. Fire-and-forget, come il WPF.

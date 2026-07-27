@@ -201,16 +201,16 @@ public class DbService
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Seed delle causali DDP reali (legenda ATEC). INSERT IGNORE su status_key:
+        // Seed delle causali DDP reali (matrice stati v7, 20/07/2026). INSERT IGNORE su status_key:
         // idempotente, NON sovrascrive le modifiche fatte dall'utente. I gruppi condividono il colore.
+        // Gli stati legacy CON/COS/SPED/MOD sono stati assorbiti (v7): CON/COS/SPED→DISP, MOD→RAM
+        // (migrazione v39 sui DB esistenti; qui non vengono più seedati).
         c.Execute(@"INSERT IGNORE INTO ddp_statuses (status_key, label, color_bg, color_fg, sort_order) VALUES
             ('ANN',  'ANNULLATO',                                       '#000000', '#FFFFFF', 1),
             ('SOSP', 'SOSPESO',                                         '#000000', '#FFFFFF', 2),
             ('RAM',  'RIMESSO A MAGAZZINO',                             '#000000', '#FFFFFF', 3),
             ('SOST', 'SOSTITUITO',                                      '#000000', '#FFFFFF', 4),
-            ('CON',  'CONSEGNATO',                                      '#00B050', '#FFFFFF', 5),
-            ('COS',  'COSTRUITO',                                       '#00B050', '#FFFFFF', 6),
-            ('DISP', 'DISPONIBILE',                                     '#00B050', '#FFFFFF', 7),
+            ('DISP', 'DISPONIBILE / CONSEGNATO',                        '#00B050', '#FFFFFF', 7),
             ('DC',   'DA COSTRUIRE',                                    '#006400', '#FFFFFF', 8),
             ('DO',   'DA ORDINARE',                                     '#FF0000', '#FFFFFF', 9),
             ('ASS',  'ASSEGNATO AL MONTATORE',                          '#B4B4B4', '#000000', 10),
@@ -218,9 +218,46 @@ public class DbService
             ('IO',   'IN ORDINE',                                       '#FFFF00', '#000000', 12),
             ('PAR',  'PARZIALMENTE CONSEGNATO o COSTRUITO',             '#7030A0', '#FFFFFF', 13),
             ('RO',   'RICHIESTA OFFERTA',                               '#FFC000', '#000000', 14),
-            ('VER',  'VERIFICARE SE DISPONIBILE A MAG',                 '#00B0F0', '#FFFFFF', 15),
-            ('SPED', 'SPEDITO AL CLIENTE O AL FORNITORE DI SERVIZI',    '#D9D9D9', '#000000', 16),
-            ('MOD',  'INVIATO A MODULA - MAG',                          '#ADD8E6', '#000000', 17)");
+            ('VER',  'VERIFICARE SE DISPONIBILE A MAG',                 '#00B0F0', '#FFFFFF', 15)");
+
+        // Matrice degli avanzamenti di stato (riga = stato corrente, colonna = stato selezionabile).
+        // Un record (from,to) = transizione ammessa; il record sentinella (from,'') marca uno stato
+        // "governato" senza uscite (terminale: ANN, SOST). Stati SENZA alcun record = non governati
+        // dalla matrice → finestra opzioni completa (retro-compatibilità con stati custom di Conf. DDP).
+        // from_key speciale 'INIZIO' = finestra di partenza delle righe senza stato.
+        // Seed nella migrazione v39, sdoppiata per tipo dalla v40 (ddp_type COMMERCIAL/OFFICINA:
+        // la commerciale non contempla DC — il materiale commerciale si acquista). One-shot:
+        // l'editor in Conf. DDP può togliere archi senza vederseli riapparire a ogni avvio.
+        // Creata qui nella forma v39 (senza tipo): sui DB nuovi la v40 la porta subito al PK triplo.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_status_transitions (
+            from_key VARCHAR(30) NOT NULL,
+            to_key VARCHAR(30) NOT NULL DEFAULT '',
+            PRIMARY KEY (from_key, to_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Trattamenti DDP Officina (anagrafica editabile da Conf. DDP; le righe distinta
+        // salvano il trattamento per NOME). Stessa definizione della migrazione v30.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_treatments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL UNIQUE,
+            sort_order INT NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active) VALUES
+            ('ANODIZZATO', 10, 1),
+            ('BRUNITO', 20, 1),
+            ('ZINCATO', 30, 1),
+            ('VERNICIATO', 40, 1),
+            ('SABBIATO', 50, 1)");
+
+        // Backfill: i trattamenti già digitati a mano sulle righe officina entrano in
+        // anagrafica (UNIQUE(name) case-insensitive dedupa via INSERT IGNORE)
+        c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active)
+            SELECT DISTINCT TRIM(treatment), 100, 1
+            FROM ddp_officina_items
+            WHERE TRIM(COALESCE(treatment, '')) <> ''");
 
         // Aggregazioni di stato DDP (matrice Stati × Aggregazioni, editabile da "Aggregazioni DDP").
         // kind: SET=unione stati · ALL=tutti (conteggio per stato) · DATED=stati+data prev. · SUBGROUPS=7 card.
@@ -336,10 +373,13 @@ public class DbService
             notes TEXT,
             is_active BOOLEAN DEFAULT TRUE,
             easyfatt_id INT NULL,
+            atec_code VARCHAR(15) NULL,
+            codex_item_id INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY UQ_CatalogItem_Code (code),
             INDEX IX_CatalogItems_Description (description(255)),
+            INDEX IX_CatalogItems_AtecCode (atec_code),
             FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -521,9 +561,10 @@ public class DbService
             unit_cost DECIMAL(10,2) DEFAULT 0,
             supplier_id INT NULL,
             manufacturer VARCHAR(200) DEFAULT '',
-            item_status VARCHAR(20) DEFAULT 'DO',
+            item_status VARCHAR(20) DEFAULT 'VER',
             requested_by VARCHAR(100) DEFAULT '',
             danea_ref VARCHAR(100) DEFAULT '',
+            danea_order_iddoc INT NULL,
             purchase_order VARCHAR(100) DEFAULT '',
             date_needed DATE,
             date_ordered DATE,
@@ -531,13 +572,15 @@ public class DbService
             destination VARCHAR(200) DEFAULT '',
             destination_spec VARCHAR(200) DEFAULT '',
             ddp_type VARCHAR(20) DEFAULT 'COMMERCIAL',
+            atec_code VARCHAR(15) NULL,
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
             FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL,
-            INDEX idx_bom_project (project_id)
+            INDEX idx_bom_project (project_id),
+            INDEX IX_BomItems_AtecCode (atec_code)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // Distinta DDP Officina (particolari meccanici, template "Mod. DDP - OFFICINA"): tabella dedicata,
@@ -552,6 +595,7 @@ public class DbService
             part_number VARCHAR(100) DEFAULT '',
             description VARCHAR(300) DEFAULT '',
             quantity DECIMAL(10,3) DEFAULT 0,
+            quantity_produced DECIMAL(10,3) NOT NULL DEFAULT 0,
             material VARCHAR(200) DEFAULT '',
             treatment VARCHAR(200) DEFAULT '',
             supplier_name VARCHAR(200) DEFAULT '',
@@ -560,12 +604,16 @@ public class DbService
             requested_by VARCHAR(100) DEFAULT '',
             danea_ref VARCHAR(100) DEFAULT '',
             date_needed DATE,
+            order_date DATE NULL,
             destination VARCHAR(200) DEFAULT '',
             destination_spec VARCHAR(200) DEFAULT '',
             notes TEXT,
+            parent_officina_item_id INT NULL,
+            composition_qty DECIMAL(10,3) NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_officina_item_id) REFERENCES ddp_officina_items(id) ON DELETE SET NULL,
             INDEX idx_ddpoff_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -729,10 +777,14 @@ public class DbService
         // remote_id NULL = codice generato localmente (ConfirmReservation), non ancora presente sul
         // Codex remoto. Il sync (CodexSyncService) fa UPSERT per remote_id: gli id locali sono stabili
         // tra i sync, quindi le FK di codex_compositions/codex_item_references restano valide.
+        // codice_nuovo = NUOVA CODIFICA (ampliamento Codex 21/07/2026): di proprietà di ATEC PM,
+        // il sync remoto NON la tocca mai; si compila SOLO a mano (ricodifica manuale dei 201xxx,
+        // famiglie nuove 201 generici / 211 elettrici / 221 pneumatici, …). NULL = non ricodificato.
         c.Execute(@"CREATE TABLE IF NOT EXISTS codex_items (
             id INT AUTO_INCREMENT PRIMARY KEY,
             remote_id INT NULL,
             codice VARCHAR(15) NOT NULL DEFAULT '',
+            codice_nuovo VARCHAR(15) NULL,
             code_forn VARCHAR(200) NOT NULL DEFAULT '',
             fornitore VARCHAR(40) NOT NULL DEFAULT '',
             prezzo_forn DECIMAL(7,2) NOT NULL DEFAULT 0,
@@ -755,6 +807,7 @@ public class DbService
             codexforn VARCHAR(200) NOT NULL DEFAULT '',
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uq_codex_remote_id (remote_id),
+            UNIQUE KEY uq_codex_codice_nuovo (codice_nuovo),
             INDEX idx_codice (codice),
             INDEX idx_fornitore (fornitore),
             INDEX idx_categoria (categoria)
@@ -888,6 +941,7 @@ public class DbService
                 ('nav.permessi',          'Gestione Permessi',       'navigation', 3, 'HIDDEN'),
                 ('nav.digest_email',      'Digest Email',            'navigation', 3, 'HIDDEN'),
                 ('nav.anagrafica_attivita','Anagrafica Attività',    'navigation', 2, 'HIDDEN'),
+                ('nav.scadenze',          'Scadenze',                'navigation', 2, 'HIDDEN'),
                 ('action.create_project', 'Crea Commessa',           'action',     2, 'DISABLED'),
                 ('action.edit_project',   'Modifica Commessa',       'action',     2, 'DISABLED'),
                 ('action.delete_project', 'Elimina Commessa',        'action',     3, 'HIDDEN'),
@@ -979,8 +1033,15 @@ try
         // Modulo Gestione Risorse (allocazioni op/flex/ferie su dipendenti)
         new ResourcesDbService(this).InitTables(c);
 
-        // Modulo SAL / Fatturazione a stati d'avanzamento
-        new SalDbService(this).InitTables(c);
+        // Modulo SAL / Fatturazione a stati d'avanzamento (tabelle + seed anagrafiche, idempotenti)
+        SalDbService salDb = new SalDbService(this);
+        salDb.InitTables(c);
+        salDb.SeedConditions(c);
+        salDb.SeedSapCausali(c);
+        salDb.SeedPaymentStates(c);
+
+        // Modulo Lavorazioni meccaniche (work requests, griglia per commessa + pannello globale)
+        EnsureWorkRequestsTable(c);
 
         // Migrazioni versionati (dopo CREATE TABLE idempotente in dev)
         int devVersion = GetSchemaVersion(c);
@@ -995,7 +1056,59 @@ try
     // SCHEMA VERSIONING
     // ══════════════════════════════════════════════════════════════
 
-    private const int LatestSchemaVersion = 17;
+    private const int LatestSchemaVersion = 51;
+
+    /// <summary>
+    /// Tabella del modulo Lavorazioni meccaniche (project_work_requests) — idempotente.
+    /// Chiamata sia dal percorso dev (InitDatabase) sia dalla migrazione v20 (produzione).
+    /// Le offerte RDO sono denormalizzate in JSON nella colonna `rfqs` (max 4 per riga);
+    /// i timestamp delivered_at/treatment_confirmed_at/created_at sono Unix millis (BIGINT).
+    /// `row_version` è il concurrency token (pattern MoM/Check list): la PUT lo confronta
+    /// e ogni scrittura lo incrementa.
+    /// </summary>
+    private static void EnsureWorkRequestsTable(MySqlConnection c)
+    {
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_work_requests (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            request_date DATE NULL,
+            description TEXT NULL,
+            type VARCHAR(20) NOT NULL DEFAULT '',
+            priority TINYINT NOT NULL DEFAULT 2,
+            availability_date DATE NULL,
+            notes TEXT NULL,
+            is_ultra_critical TINYINT(1) NOT NULL DEFAULT 0,
+            is_delivered TINYINT(1) NOT NULL DEFAULT 0,
+            delivered_at BIGINT NULL,
+            is_staging TINYINT(1) NOT NULL DEFAULT 0,
+            rfqs TEXT NULL,
+            po_supplier VARCHAR(200) NOT NULL DEFAULT '',
+            po_number VARCHAR(100) NOT NULL DEFAULT '',
+            po_date DATE NULL,
+            has_treatment TINYINT(1) NOT NULL DEFAULT 0,
+            treatment_date DATE NULL,
+            treatment_notes TEXT NULL,
+            is_treatment_confirmed TINYINT(1) NOT NULL DEFAULT 0,
+            treatment_confirmed_at BIGINT NULL,
+            row_version INT NOT NULL DEFAULT 0,
+            created_at BIGINT NOT NULL DEFAULT 0,
+            ddp_officina_item_id INT NULL,
+            CONSTRAINT fk_pwr_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            CONSTRAINT fk_pwr_ddp_officina FOREIGN KEY (ddp_officina_item_id)
+                REFERENCES ddp_officina_items(id) ON DELETE SET NULL,
+            UNIQUE KEY uq_pwr_ddp_officina (ddp_officina_item_id),
+            KEY idx_pwr_project (project_id),
+            KEY idx_pwr_staging (is_staging),
+            KEY idx_pwr_delivered (is_delivered)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Installazioni dove la tabella è nata senza row_version (v20 già applicata): ALTER idempotente.
+        int hasRowVersion = c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'project_work_requests' AND COLUMN_NAME = 'row_version'");
+        if (hasRowVersion == 0)
+            c.Execute("ALTER TABLE project_work_requests ADD COLUMN row_version INT NOT NULL DEFAULT 0 AFTER treatment_confirmed_at");
+    }
 
     private static void EnsureSchemaMigrationsTable(MySqlConnection c)
     {
@@ -1483,6 +1596,1062 @@ try
             catch (Exception ex)
             {
                 _logger.LogWarning("[Migration v17] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v18: blocco righe pagate + audit fields + indici
+        if (currentVersion < 18)
+        {
+            try
+            {
+                // Verifica se la colonna paid_by esiste già in sal_rows
+                bool hasPaidBy = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'sal_rows'
+                      AND column_name = 'paid_by'") > 0;
+                if (!hasPaidBy)
+                {
+                    c.Execute("ALTER TABLE sal_rows ADD COLUMN paid_by INT NULL, ADD COLUMN paid_at DATETIME NULL");
+                    _logger.LogInformation("[Migration v18] Aggiunte colonne paid_by e paid_at a sal_rows");
+                }
+
+                // Verifica se l'indice idx_salrow_stato_data esiste
+                bool hasIndex = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.statistics
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'sal_rows'
+                      AND index_name = 'idx_salrow_stato_data'") > 0;
+                if (!hasIndex)
+                {
+                    c.Execute("ALTER TABLE sal_rows ADD INDEX idx_salrow_stato_data (stato, data_fatt)");
+                    _logger.LogInformation("[Migration v18] Aggiunto indice idx_salrow_stato_data a sal_rows");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (18, 'sal_rows paid_by + paid_at + index')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v18] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v19: feature key nav.scadenze
+        if (currentVersion < 19)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.scadenze', 'Scadenze', 'navigation', 2, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (19, 'nav.scadenze feature key')");
+                _logger.LogInformation("[Migration v19] Aggiunta feature key nav.scadenze");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v19] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v20: tabella Lavorazioni meccaniche (project_work_requests) — modulo Gestione Lavorazioni
+        if (currentVersion < 20)
+        {
+            try
+            {
+                EnsureWorkRequestsTable(c);
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (20, 'Tabella project_work_requests (modulo Lavorazioni)')");
+                _logger.LogInformation("[Migration v20] Creata tabella project_work_requests");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v20] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v21: SAL v10 — campi fatturazione/incasso su sal_rows, PO/riferimento offerta su project_sal,
+        // anagrafiche causali Conto SAP e stati pagamento, storico controlli periodici del prospetto.
+        // Le righe legacy con stato='pagata' diventano stato='emessa' + pagamento='Pagata'
+        // (paid_by/paid_at restano come audit dell'incasso).
+        if (currentVersion < 21)
+        {
+            try
+            {
+                // Tabelle nuove (sal_sap_causali, sal_payment_states, sal_prospetto_checks);
+                // no-op sulle tabelle SAL già esistenti (CREATE TABLE IF NOT EXISTS).
+                var sal = new SalDbService(this);
+                sal.InitTables(c);
+
+                // Nuove colonne sal_rows, una per volta con check di esistenza; la catena AFTER
+                // replica l'ordine del CREATE TABLE (tra 'stato' e 'sort_order').
+                (string Column, string Definition)[] salRowColumns = new (string, string)[]
+                {
+                    ("iva_perc",       "INT NULL AFTER stato"),
+                    ("gg_saldo",       "INT NULL AFTER iva_perc"),
+                    ("n_fatt",         "VARCHAR(50) NOT NULL DEFAULT '' AFTER gg_saldo"),
+                    ("conto_sap",      "VARCHAR(200) NOT NULL DEFAULT '' AFTER n_fatt"),
+                    ("pagamento",      "VARCHAR(100) NOT NULL DEFAULT '' AFTER conto_sap"),
+                    ("data_pagamento", "DATE NULL AFTER pagamento"),
+                    ("note",           "VARCHAR(2000) NOT NULL DEFAULT '' AFTER data_pagamento")
+                };
+                foreach ((string Column, string Definition) col in salRowColumns)
+                {
+                    bool hasColumn = c.ExecuteScalar<int>(@"
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'sal_rows'
+                          AND column_name = @Column", new { col.Column }) > 0;
+                    if (!hasColumn)
+                    {
+                        c.Execute($"ALTER TABLE sal_rows ADD COLUMN {col.Column} {col.Definition}");
+                        _logger.LogInformation("[Migration v21] Aggiunta colonna sal_rows.{Column}", col.Column);
+                    }
+                }
+
+                // Indice per warning incasso / prospetto (pagamento + data fattura)
+                bool hasIndex = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.statistics
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'sal_rows'
+                      AND index_name = 'idx_salrow_pag_saldo'") > 0;
+                if (!hasIndex)
+                {
+                    c.Execute("ALTER TABLE sal_rows ADD INDEX idx_salrow_pag_saldo (pagamento, data_fatt)");
+                    _logger.LogInformation("[Migration v21] Aggiunto indice idx_salrow_pag_saldo a sal_rows");
+                }
+
+                // Header esteso project_sal: PO - Ordine cliente + Riferimento Offerta ATEC
+                (string Column, string Definition)[] headerColumns = new (string, string)[]
+                {
+                    ("po",          "VARCHAR(150) NOT NULL DEFAULT '' AFTER valore"),
+                    ("rif_offerta", "VARCHAR(200) NOT NULL DEFAULT '' AFTER po")
+                };
+                foreach ((string Column, string Definition) col in headerColumns)
+                {
+                    bool hasColumn = c.ExecuteScalar<int>(@"
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'project_sal'
+                          AND column_name = @Column", new { col.Column }) > 0;
+                    if (!hasColumn)
+                    {
+                        c.Execute($"ALTER TABLE project_sal ADD COLUMN {col.Column} {col.Definition}");
+                        _logger.LogInformation("[Migration v21] Aggiunta colonna project_sal.{Column}", col.Column);
+                    }
+                }
+
+                // Seed anagrafiche (idempotenti: solo se tabella vuota)
+                sal.SeedSapCausali(c);
+                sal.SeedPaymentStates(c);
+
+                // Migrazione dati: lo stato legacy 'pagata' si sdoppia in fatturazione 'emessa'
+                // + pagamento 'Pagata' (idempotente: al secondo giro non resta nessuna 'pagata').
+                int migratedRows = c.Execute("UPDATE sal_rows SET pagamento='Pagata', stato='emessa' WHERE stato='pagata'");
+                if (migratedRows > 0)
+                    _logger.LogInformation("[Migration v21] {Count} righe sal_rows migrate da stato 'pagata' a emessa + Pagata", migratedRows);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (21, 'SAL v10: campi fatturazione/incasso su sal_rows, po/rif_offerta su project_sal, anagrafiche causali SAP e stati pagamento, controlli prospetto')");
+                _logger.LogInformation("[Migration v21] Schema SAL v10 applicato (colonne, indice, anagrafiche, migrazione stato pagata)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v21] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        if (currentVersion < 22)
+        {
+            try
+            {
+                // Regola di business SAL: le righe senza %IVA (legacy, pre-v10) valgono 22%
+                // come nel prototipo; le righe nuove nascono già a 22 (default in CreateRow).
+                int fixedRows = c.Execute("UPDATE sal_rows SET iva_perc = 22 WHERE iva_perc IS NULL");
+                if (fixedRows > 0)
+                    _logger.LogInformation("[Migration v22] {Count} righe sal_rows legacy portate a IVA 22%", fixedRows);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (22, 'SAL v10: default IVA 22% sulle righe legacy senza %IVA')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v22] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v23: SAL — colori configurabili sugli stati pagamento (sal_payment_states).
+        // color_bg/color_fg VARCHAR(9) NULL (#RRGGBB o #RRGGBBAA): NULL = stato neutro senza tinta.
+        // Priorità colore riga nel foglio: colore del pagamento selezionato > giallo 'emessa' > nessuno.
+        // I colori sono pura estetica: la semantica (lock, incasso, warning, bucket Cash Flow)
+        // resta cablata sulle etichette di sistema 'Pagata'/'Parzialmente Pagata'.
+        if (currentVersion < 23)
+        {
+            try
+            {
+                // Nuove colonne colore, una per volta con check di esistenza (pattern v21)
+                (string Column, string Definition)[] colorColumns = new (string, string)[]
+                {
+                    ("color_bg", "VARCHAR(9) NULL AFTER is_active"),
+                    ("color_fg", "VARCHAR(9) NULL AFTER color_bg")
+                };
+                foreach ((string Column, string Definition) col in colorColumns)
+                {
+                    bool hasColumn = c.ExecuteScalar<int>(@"
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'sal_payment_states'
+                          AND column_name = @Column", new { col.Column }) > 0;
+                    if (!hasColumn)
+                    {
+                        c.Execute($"ALTER TABLE sal_payment_states ADD COLUMN {col.Column} {col.Definition}");
+                        _logger.LogInformation("[Migration v23] Aggiunta colonna sal_payment_states.{Column}", col.Column);
+                    }
+                }
+
+                // Seed colori di default delle voci di sistema SOLO se ancora NULL (idempotente,
+                // non sovrascrive eventuali personalizzazioni): Pagata = verde pastello (parità con
+                // l'attuale riga emerald del foglio v10), Parzialmente Pagata = rosso pastello.
+                int seeded = c.Execute(@"UPDATE sal_payment_states
+                    SET color_bg='#D1FAE5', color_fg='#065F46'
+                    WHERE LOWER(label)='pagata' AND color_bg IS NULL");
+                seeded += c.Execute(@"UPDATE sal_payment_states
+                    SET color_bg='#FEE2E2', color_fg='#991B1B'
+                    WHERE LOWER(label)='parzialmente pagata' AND color_bg IS NULL");
+                if (seeded > 0)
+                    _logger.LogInformation("[Migration v23] Colori di default impostati su {Count} stati pagamento di sistema", seeded);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (23, 'SAL: colori configurabili stati pagamento')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v23] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        if (currentVersion < 24)
+        {
+            try
+            {
+                // Regola di business SAL: GG saldo nullo (legacy) → 0 giorni (stesso giorno fattura).
+                int fixedRows = c.Execute("UPDATE sal_rows SET gg_saldo = 0 WHERE gg_saldo IS NULL");
+                if (fixedRows > 0)
+                    _logger.LogInformation("[Migration v24] {Count} righe sal_rows legacy portate a GG saldo 0", fixedRows);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (24, 'SAL: default GG saldo 0 sulle righe legacy senza valore')");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v24] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v25: stato MIT (Materiale in trattamento, tipico Officina) — presente nella legenda
+        // DDP di ATEC ma assente dal seed storico. INSERT IGNORE: chi lo ha già creato/ritoccato
+        // da Conf. DDP non viene toccato. MIT entra in A1 (conteggio per stato) e A4 (in consegna).
+        if (currentVersion < 25)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO ddp_statuses (status_key, label, color_bg, color_fg, sort_order)
+                    VALUES ('MIT', 'MATERIALE IN TRATTAMENTO', '#7FC1B0', '#000000', 18)");
+
+                foreach (string aggCode in new[] { "A1", "A4" })
+                {
+                    int aggId = c.ExecuteScalar<int>("SELECT COALESCE(MAX(id), 0) FROM ddp_aggregations WHERE code=@C", new { C = aggCode });
+                    if (aggId > 0)
+                        c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A, 'MIT')", new { A = aggId });
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (25, 'ddp: stato MIT + membership aggregazioni A1/A4')");
+                _logger.LogInformation("[Migration v25] Stato MIT seedato in ddp_statuses + aggregazioni A1/A4");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v25] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v26: lavorazioni alimentate dalla DDP Officina — colonna di collegamento
+        // ddp_officina_item_id (UNIQUE: una lavorazione per riga) + backfill bozze in
+        // staging per tutte le righe officina esistenti non ancora collegate.
+        if (currentVersion < 26)
+        {
+            try
+            {
+                int hasCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'project_work_requests'
+                      AND COLUMN_NAME = 'ddp_officina_item_id'");
+                if (hasCol == 0)
+                {
+                    c.Execute(@"ALTER TABLE project_work_requests
+                        ADD COLUMN ddp_officina_item_id INT NULL,
+                        ADD UNIQUE KEY uq_pwr_ddp_officina (ddp_officina_item_id),
+                        ADD CONSTRAINT fk_pwr_ddp_officina FOREIGN KEY (ddp_officina_item_id)
+                            REFERENCES ddp_officina_items(id) ON DELETE SET NULL");
+                }
+
+                List<int> orphans = c.Query<int>(@"
+                    SELECT o.id FROM ddp_officina_items o
+                    LEFT JOIN project_work_requests wr ON wr.ddp_officina_item_id = o.id
+                    WHERE wr.id IS NULL").ToList();
+                foreach (int itemId in orphans)
+                    WorkRequestDdpSync.Upsert(c, itemId);
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (26, 'lavorazioni: link ddp_officina_item_id + backfill bozze da DDP Officina')");
+                _logger.LogInformation("[Migration v26] Link lavorazioni-DDP Officina + {Count} bozze generate", orphans.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v26] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v27: quantità sulle composizioni Codex — una riga per componente con colonna
+        // quantity, invece di N righe duplicate (quantità 4 = 4 insert identici).
+        // Collassa i duplicati esistenti (stesso padre + stesso figlio) sommando le
+        // occorrenze sulla riga con id minimo ed eliminando le altre.
+        if (currentVersion < 27)
+        {
+            try
+            {
+                int hasCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'codex_compositions'
+                      AND COLUMN_NAME = 'quantity'");
+                if (hasCol == 0)
+                {
+                    c.Execute("ALTER TABLE codex_compositions ADD COLUMN quantity INT NOT NULL DEFAULT 1");
+                }
+
+                c.Execute(@"
+                    UPDATE codex_compositions cc
+                    JOIN (
+                        SELECT MIN(id) AS keep_id, SUM(quantity) AS qty
+                        FROM codex_compositions
+                        GROUP BY parent_codex_id, child_codex_id, child_catalog_id
+                        HAVING COUNT(*) > 1
+                    ) g ON cc.id = g.keep_id
+                    SET cc.quantity = g.qty");
+
+                // <=> = uguaglianza NULL-safe: uno tra child_codex_id e child_catalog_id è sempre NULL.
+                int deleted = c.Execute(@"
+                    DELETE cc FROM codex_compositions cc
+                    JOIN (
+                        SELECT MIN(id) AS keep_id, parent_codex_id, child_codex_id, child_catalog_id
+                        FROM codex_compositions
+                        GROUP BY parent_codex_id, child_codex_id, child_catalog_id
+                        HAVING COUNT(*) > 1
+                    ) g ON cc.parent_codex_id = g.parent_codex_id
+                       AND cc.child_codex_id <=> g.child_codex_id
+                       AND cc.child_catalog_id <=> g.child_catalog_id
+                       AND cc.id <> g.keep_id");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (27, 'codex_compositions: colonna quantity + collasso righe duplicate')");
+                _logger.LogInformation("[Migration v27] Colonna quantity su codex_compositions, {Deleted} righe duplicate collassate", deleted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v27] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v28: «comanda il padre» — i componenti importati dalla composizione Codex in DDP
+        // Officina restano collegati alla riga del padre (parent_officina_item_id) con la
+        // quantità unitaria di composizione (composition_qty): al cambio Qtà del padre i
+        // figli seguono con delta = composition_qty × ΔQtà. FK ON DELETE SET NULL: eliminato
+        // il padre, i figli restano come righe libere (scollegati).
+        if (currentVersion < 28)
+        {
+            try
+            {
+                int hasCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'ddp_officina_items'
+                      AND COLUMN_NAME = 'parent_officina_item_id'");
+                if (hasCol == 0)
+                {
+                    c.Execute(@"ALTER TABLE ddp_officina_items
+                        ADD COLUMN parent_officina_item_id INT NULL AFTER notes,
+                        ADD COLUMN composition_qty DECIMAL(10,3) NULL AFTER parent_officina_item_id,
+                        ADD CONSTRAINT fk_ddpoff_parent FOREIGN KEY (parent_officina_item_id)
+                            REFERENCES ddp_officina_items(id) ON DELETE SET NULL");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (28, 'ddp_officina_items: parent_officina_item_id + composition_qty (comanda il padre)')");
+                _logger.LogInformation("[Migration v28] Colonne parent_officina_item_id/composition_qty su ddp_officina_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v28] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v29: aggiunge supplier_id a ddp_officina_items per supportare la scelta del fornitore da anagrafica
+        if (currentVersion < 29)
+        {
+            try
+            {
+                int hasCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'ddp_officina_items'
+                      AND COLUMN_NAME = 'supplier_id'");
+                if (hasCol == 0)
+                {
+                    c.Execute(@"ALTER TABLE ddp_officina_items
+                        ADD COLUMN supplier_id INT NULL AFTER treatment,
+                        ADD CONSTRAINT fk_ddpoff_supplier FOREIGN KEY (supplier_id)
+                            REFERENCES suppliers(id) ON DELETE SET NULL");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (29, 'ddp_officina_items: colonna supplier_id per fornitore da anagrafica')");
+                _logger.LogInformation("[Migration v29] Colonna supplier_id su ddp_officina_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v29] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v30: aggiunge tabella ddp_treatments per i trattamenti gestiti da anagrafica
+        if (currentVersion < 30)
+        {
+            try
+            {
+                c.Execute(@"
+                    CREATE TABLE IF NOT EXISTS ddp_treatments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(200) NOT NULL UNIQUE,
+                        sort_order INT NOT NULL DEFAULT 0,
+                        is_active TINYINT(1) NOT NULL DEFAULT 1,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
+
+                c.Execute(@"
+                    INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active) VALUES
+                    ('ANODIZZATO', 10, 1),
+                    ('BRUNITO', 20, 1),
+                    ('ZINCATO', 30, 1),
+                    ('VERNICIATO', 40, 1),
+                    ('SABBIATO', 50, 1);");
+
+                // Backfill dei trattamenti già digitati a mano sulle righe officina
+                c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active)
+                    SELECT DISTINCT TRIM(treatment), 100, 1
+                    FROM ddp_officina_items
+                    WHERE TRIM(COALESCE(treatment, '')) <> ''");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (30, 'ddp_treatments: tabella e seed iniziale trattamenti')");
+                _logger.LogInformation("[Migration v30] Tabella ddp_treatments creata e popolata");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v30] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v31: Lavorazioni = solo particolari a disegno (prefisso Codex 101).
+        // Rimuove le bozze staging nate da righe DDP Officina con altri prefissi
+        // (201/301/401/501/…); le promosse restano (nascoste dalle GET).
+        if (currentVersion < 31)
+        {
+            try
+            {
+                int deleted = c.Execute(@"
+                    DELETE wr FROM project_work_requests wr
+                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
+                    WHERE wr.is_staging = 1
+                      AND REPLACE(REPLACE(COALESCE(o.part_number, ''), '.', ''), ' ', '') NOT LIKE '101%'");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (31, 'lavorazioni: elimina staging non-101 da DDP Officina')");
+                _logger.LogInformation("[Migration v31] Eliminate {Count} bozze lavorazioni non-101", deleted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v31] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v32: bozze lavorazioni — tipo Interna/Esterna one-shot dallo stato DDP Officina.
+        // DO/RO/IO → External; DC/COS → Internal (+ fornitore ATEC). Solo se type è ancora vuoto.
+        if (currentVersion < 32)
+        {
+            try
+            {
+                int updatedExt = c.Execute(@"
+                    UPDATE project_work_requests wr
+                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
+                    SET wr.type = 'External',
+                        wr.row_version = wr.row_version + 1
+                    WHERE wr.is_staging = 1
+                      AND TRIM(COALESCE(wr.type, '')) = ''
+                      AND UPPER(TRIM(COALESCE(o.item_status, ''))) IN ('DO', 'RO', 'IO')");
+
+                int updatedInt = c.Execute(@"
+                    UPDATE project_work_requests wr
+                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
+                    SET wr.type = 'Internal',
+                        wr.po_supplier = 'ATEC',
+                        wr.po_number = '',
+                        wr.row_version = wr.row_version + 1
+                    WHERE wr.is_staging = 1
+                      AND TRIM(COALESCE(wr.type, '')) = ''
+                      AND UPPER(TRIM(COALESCE(o.item_status, ''))) IN ('DC', 'COS')");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (32, 'lavorazioni: tipo Internal/External one-shot da stato DDP')");
+                _logger.LogInformation(
+                    "[Migration v32] Tipo bozze: {Ext} External, {Int} Internal",
+                    updatedExt, updatedInt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v32] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v33: commessa di sistema INTERNA — contenitore per lavorazioni generiche
+        // (bozze staging non legate a una commessa reale). customer_id/pm_id sono NOT NULL.
+        if (currentVersion < 33)
+        {
+            try
+            {
+                int exists = c.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM projects WHERE code = @Code",
+                    new { Code = ATEC.PM.Shared.SystemProjects.InternaCode });
+                if (exists == 0)
+                {
+                    // Cliente di sistema (vat univoco) — riusa se già presente da un run precedente.
+                    const string systemVat = "__SYSTEM_INTERNA__";
+                    int customerId = c.ExecuteScalar<int>(
+                        "SELECT COALESCE(MAX(id), 0) FROM customers WHERE vat_number = @Vat",
+                        new { Vat = systemVat });
+                    if (customerId == 0)
+                    {
+                        customerId = c.ExecuteScalar<int>(@"
+                            INSERT INTO customers (company_name, vat_number, notes, is_active)
+                            VALUES (@Name, @Vat, @Notes, 1);
+                            SELECT LAST_INSERT_ID()", new
+                        {
+                            Name = "ATEC — Sistema",
+                            Vat = systemVat,
+                            Notes = ATEC.PM.Shared.SystemProjects.InternaNotes,
+                        });
+                    }
+
+                    int pmId = c.ExecuteScalar<int>(
+                        "SELECT COALESCE(MIN(id), 0) FROM employees WHERE status = 'ACTIVE'");
+                    if (pmId == 0)
+                        pmId = c.ExecuteScalar<int>("SELECT COALESCE(MIN(id), 0) FROM employees");
+                    if (pmId == 0)
+                        throw new InvalidOperationException(
+                            "Impossibile creare progetto INTERNA: nessun employee in anagrafica.");
+
+                    c.Execute(@"
+                        INSERT INTO projects
+                            (code, title, customer_id, pm_id, description, status, priority, notes)
+                        VALUES
+                            (@Code, @Title, @CustomerId, @PmId, @Description, 'ACTIVE', 'MEDIUM', @Notes)",
+                        new
+                        {
+                            Code = ATEC.PM.Shared.SystemProjects.InternaCode,
+                            Title = ATEC.PM.Shared.SystemProjects.InternaTitle,
+                            CustomerId = customerId,
+                            PmId = pmId,
+                            Description = ATEC.PM.Shared.SystemProjects.InternaTitle,
+                            Notes = ATEC.PM.Shared.SystemProjects.InternaNotes,
+                        });
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (33, 'progetto sistema INTERNA per lavorazioni generiche')");
+                _logger.LogInformation("[Migration v33] Progetto sistema INTERNA assicurato");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v33] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v34: data ordine su DDP Officina (valorizzata in automatico al passaggio a IO).
+        if (currentVersion < 34)
+        {
+            try
+            {
+                int hasCol = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'ddp_officina_items'
+                      AND COLUMN_NAME = 'order_date'");
+                if (hasCol == 0)
+                {
+                    c.Execute(@"ALTER TABLE ddp_officina_items
+                        ADD COLUMN order_date DATE NULL AFTER date_needed");
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (34, 'ddp_officina_items: order_date (data In Ordine)')");
+                _logger.LogInformation("[Migration v34] Colonna order_date su ddp_officina_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v34] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v35: priorità default P2 (più bassa) sulle lavorazioni senza priorità.
+        if (currentVersion < 35)
+        {
+            try
+            {
+                c.Execute(@"UPDATE project_work_requests SET priority = 2 WHERE priority IS NULL");
+                try
+                {
+                    c.Execute(@"ALTER TABLE project_work_requests
+                        MODIFY COLUMN priority TINYINT NOT NULL DEFAULT 2");
+                }
+                catch (Exception alterEx)
+                {
+                    _logger.LogWarning("[Migration v35] ALTER priority default: {Message}", alterEx.Message);
+                }
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (35, 'work_requests: default priority P2')");
+                _logger.LogInformation("[Migration v35] Priorità default P2 su project_work_requests");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v35] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v36: feature key navigazione Gamma Robot (allineata a Preventivi, min_level 2)
+        if (currentVersion < 36)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.gamma_robot', 'Gamma Robot', 'navigation', 2, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (36, 'nav.gamma_robot feature key')");
+                _logger.LogInformation("[Migration v36] feature key nav.gamma_robot");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v36] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v37: inbox Officina (Responsabile) — visibile da RESP_REPARTO in su
+        if (currentVersion < 37)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.officina_inbox', 'Officina — Inbox', 'navigation', 1, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (37, 'nav.officina_inbox feature key')");
+                _logger.LogInformation("[Migration v37] feature key nav.officina_inbox");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v37] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v38: pezzi prodotti su distinta Officina (RESP / inbox)
+        if (currentVersion < 38)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'ddp_officina_items'
+                      AND COLUMN_NAME = 'quantity_produced'") == 0)
+                {
+                    c.Execute(@"ALTER TABLE ddp_officina_items
+                        ADD COLUMN quantity_produced DECIMAL(10,3) NOT NULL DEFAULT 0
+                        AFTER quantity");
+                }
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (38, 'ddp_officina_items: quantity_produced')");
+                _logger.LogInformation("[Migration v38] Colonna quantity_produced su ddp_officina_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v38] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v39: matrice degli avanzamenti di stato DDP v7 (MATRICE_STATI_DDP_V7 + relazione tecnica
+        // DDP-MATRICE-STATI del 20/07/2026). Tre interventi:
+        //  1) consolidamento stati legacy sulle righe: CON/COS/SPED → DISP, MOD → RAM
+        //     (bom_items + ddp_officina_items) + disattivazione dei 4 stati + etichetta DISP v7;
+        //  2) pulizia ddp_aggregation_states dalle chiavi legacy (le righe non le porteranno più);
+        //  3) seed one-shot della matrice transizioni (l'editor in Conf. DDP la modifica liberamente).
+        if (currentVersion < 39)
+        {
+            try
+            {
+                int remapped = 0;
+                remapped += c.Execute("UPDATE bom_items SET item_status='DISP', updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) IN ('CON','COS','SPED')");
+                remapped += c.Execute("UPDATE bom_items SET item_status='RAM',  updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) = 'MOD'");
+                remapped += c.Execute("UPDATE ddp_officina_items SET item_status='DISP', updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) IN ('CON','COS','SPED')");
+                remapped += c.Execute("UPDATE ddp_officina_items SET item_status='RAM',  updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) = 'MOD'");
+
+                c.Execute("UPDATE ddp_statuses SET is_active=FALSE WHERE status_key IN ('CON','COS','SPED','MOD')");
+                c.Execute("UPDATE ddp_statuses SET label='DISPONIBILE / CONSEGNATO' WHERE status_key='DISP' AND label='DISPONIBILE'");
+
+                c.Execute("DELETE FROM ddp_aggregation_states WHERE status_key IN ('CON','COS','SPED','MOD')");
+
+                // Matrice v7: riga INIZIO (nessuno stato) non è memorizzata → finestra completa.
+                // ('ANN','') e ('SOST','') = terminali governati senza uscite.
+                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (from_key, to_key) VALUES
+                    ('VER','CHEK'),('VER','RO'),('VER','DO'),('VER','IO'),('VER','DC'),('VER','DISP'),('VER','SOSP'),('VER','ANN'),('VER','SOST'),
+                    ('CHEK','RO'),('CHEK','DO'),('CHEK','IO'),('CHEK','DC'),('CHEK','DISP'),('CHEK','SOSP'),('CHEK','ANN'),('CHEK','SOST'),
+                    ('RO','CHEK'),('RO','DO'),('RO','IO'),('RO','DC'),('RO','SOSP'),('RO','ANN'),('RO','SOST'),
+                    ('DO','IO'),('DO','SOSP'),('DO','ANN'),('DO','SOST'),
+                    ('IO','DC'),('IO','MIT'),('IO','PAR'),('IO','DISP'),('IO','RAM'),('IO','ASS'),('IO','SOSP'),('IO','ANN'),('IO','SOST'),
+                    ('DC','MIT'),('DC','PAR'),('DC','DISP'),('DC','RAM'),('DC','ASS'),('DC','SOSP'),('DC','ANN'),('DC','SOST'),
+                    ('MIT','PAR'),('MIT','DISP'),('MIT','RAM'),('MIT','ASS'),('MIT','SOSP'),('MIT','ANN'),('MIT','SOST'),
+                    ('PAR','DISP'),('PAR','RAM'),('PAR','ASS'),('PAR','SOSP'),('PAR','ANN'),('PAR','SOST'),
+                    ('DISP','MIT'),('DISP','PAR'),('DISP','RAM'),('DISP','ASS'),('DISP','SOSP'),('DISP','ANN'),('DISP','SOST'),
+                    ('RAM','VER'),('RAM','CHEK'),('RAM','DISP'),('RAM','SOSP'),('RAM','ANN'),('RAM','SOST'),
+                    ('ASS','RAM'),('ASS','SOSP'),('ASS','ANN'),('ASS','SOST'),
+                    ('SOSP','VER'),('SOSP','CHEK'),('SOSP','RO'),('SOSP','DO'),('SOSP','IO'),('SOSP','DC'),('SOSP','MIT'),('SOSP','PAR'),('SOSP','DISP'),('SOSP','ASS'),('SOSP','ANN'),('SOSP','SOST'),
+                    ('ANN',''),
+                    ('SOST','')");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (39, 'matrice stati DDP v7: transizioni + consolidamento CON/COS/SPED/MOD')");
+                _logger.LogInformation("[Migration v39] Matrice stati DDP v7 seedata; {Remapped} righe rimappate (CON/COS/SPED→DISP, MOD→RAM)", remapped);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v39] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v40: matrice transizioni PER TIPO di distinta (regola 20/07/2026: nella DDP commerciale
+        // DC non deve esistere — il materiale commerciale si acquista e basta — mentre in officina sì,
+        // incluso DO→DC per dirottare alla produzione interna un pezzo "da ordinare").
+        // ddp_type ∈ {COMMERCIAL, OFFICINA}; la matrice v39 (senza tipo) viene duplicata nei due tipi.
+        // Nuova riga speciale from_key='INIZIO' = finestra di partenza per le righe senza stato
+        // (COMMERCIAL senza DC); se assente, fallback permissivo come per gli altri stati.
+        if (currentVersion < 40)
+        {
+            try
+            {
+                bool hasType = c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'ddp_status_transitions'
+                      AND COLUMN_NAME = 'ddp_type'") > 0;
+                if (!hasType)
+                {
+                    c.Execute("ALTER TABLE ddp_status_transitions ADD COLUMN ddp_type VARCHAR(20) NOT NULL DEFAULT '' FIRST");
+                    c.Execute("ALTER TABLE ddp_status_transitions DROP PRIMARY KEY, ADD PRIMARY KEY (ddp_type, from_key, to_key)");
+                }
+
+                // Duplica la matrice "senza tipo" (v39 o pre-esistente) nei due tipi, poi la rimuove.
+                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
+                            SELECT 'COMMERCIAL', from_key, to_key FROM ddp_status_transitions WHERE ddp_type = ''");
+                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
+                            SELECT 'OFFICINA', from_key, to_key FROM ddp_status_transitions WHERE ddp_type = ''");
+                c.Execute("DELETE FROM ddp_status_transitions WHERE ddp_type = ''");
+
+                // Divergenze: commerciale senza DC (né in ingresso né in uscita); officina apre DO→DC.
+                c.Execute("DELETE FROM ddp_status_transitions WHERE ddp_type = 'COMMERCIAL' AND (from_key = 'DC' OR to_key = 'DC')");
+                c.Execute("INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key) VALUES ('OFFICINA','DO','DC')");
+
+                // Finestra di partenza (riga INIZIO dell'Excel): tutti gli stati attivi,
+                // meno DC sulla commerciale.
+                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
+                            SELECT 'COMMERCIAL', 'INIZIO', status_key FROM ddp_statuses
+                            WHERE is_active = TRUE AND status_key <> 'DC'");
+                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
+                            SELECT 'OFFICINA', 'INIZIO', status_key FROM ddp_statuses
+                            WHERE is_active = TRUE");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (40, 'matrice transizioni per tipo DDP + finestra INIZIO (commerciale senza DC)')");
+                _logger.LogInformation("[Migration v40] Matrice transizioni sdoppiata per tipo (COMMERCIAL senza DC, OFFICINA con DO→DC) + righe INIZIO");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v40] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v41: ampliamento Codex — colonna codice_nuovo (nuova codifica, vedi commento CREATE TABLE).
+        // Solo schema: nessuna conversione automatica, la ricodifica dei 201xxx è manuale (decisione 21/07/2026).
+        if (currentVersion < 41)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'codex_items'
+                      AND COLUMN_NAME = 'codice_nuovo'") == 0)
+                {
+                    c.Execute("ALTER TABLE codex_items ADD COLUMN codice_nuovo VARCHAR(15) NULL AFTER codice", commandTimeout: 600);
+                    c.Execute("ALTER TABLE codex_items ADD UNIQUE KEY uq_codex_codice_nuovo (codice_nuovo)", commandTimeout: 600);
+                }
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (41, 'codex_items: colonna codice_nuovo (nuova codifica manuale)')");
+                _logger.LogInformation("[Migration v41] Colonna codice_nuovo su codex_items (nuova codifica)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v41] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v42: mapping Danea ↔ codice ATEC (piano Acquisti, 21/07/2026). Sul catalogo (specchio
+        // degli articoli Danea): atec_code = Extra1 dell'articolo (convenzione: SOLO codici nuovi
+        // della nuova codifica Codex) + codex_item_id = risoluzione verso la riga Codex.
+        if (currentVersion < 42)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'catalog_items'
+                      AND COLUMN_NAME = 'atec_code'") == 0)
+                {
+                    c.Execute("ALTER TABLE catalog_items ADD COLUMN atec_code VARCHAR(15) NULL AFTER easyfatt_id", commandTimeout: 600);
+                    c.Execute("ALTER TABLE catalog_items ADD COLUMN codex_item_id INT NULL AFTER atec_code", commandTimeout: 600);
+                    c.Execute("ALTER TABLE catalog_items ADD INDEX IX_CatalogItems_AtecCode (atec_code)", commandTimeout: 600);
+                }
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (42, 'catalog_items: atec_code + codex_item_id (mapping Danea Extra1)')");
+                _logger.LogInformation("[Migration v42] Colonne atec_code/codex_item_id su catalog_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v42] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v43: snapshot codice ATEC sulle righe distinta commerciale (piano Acquisti Fase 2).
+        if (currentVersion < 43)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'bom_items'
+                      AND COLUMN_NAME = 'atec_code'") == 0)
+                {
+                    c.Execute("ALTER TABLE bom_items ADD COLUMN atec_code VARCHAR(15) NULL AFTER ddp_type", commandTimeout: 600);
+                    c.Execute("ALTER TABLE bom_items ADD INDEX IX_BomItems_AtecCode (atec_code)", commandTimeout: 600);
+                }
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (43, 'bom_items: atec_code (snapshot codice ATEC in distinta)')");
+                _logger.LogInformation("[Migration v43] Colonna atec_code su bom_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v43] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v44: ciclo RDO Acquisti (testata + righe BOM + offerte fornitori).
+        if (currentVersion < 44)
+        {
+            try
+            {
+                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfqs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    atec_code VARCHAR(15) NOT NULL,
+                    description VARCHAR(300) NOT NULL DEFAULT '',
+                    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+                    notes TEXT,
+                    created_by INT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    sent_at DATETIME NULL,
+                    closed_at DATETIME NULL,
+                    updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX IX_PurchaseRfqs_Atec (atec_code),
+                    INDEX IX_PurchaseRfqs_Status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfq_items (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    rfq_id INT NOT NULL,
+                    bom_item_id INT NOT NULL,
+                    project_id INT NOT NULL,
+                    quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
+                    FOREIGN KEY (rfq_id) REFERENCES purchase_rfqs(id) ON DELETE CASCADE,
+                    FOREIGN KEY (bom_item_id) REFERENCES bom_items(id) ON DELETE CASCADE,
+                    UNIQUE KEY uq_rfq_bom (rfq_id, bom_item_id),
+                    INDEX IX_PurchaseRfqItems_Bom (bom_item_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfq_offers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    rfq_id INT NOT NULL,
+                    supplier_id INT NOT NULL,
+                    catalog_item_id INT NULL,
+                    unit_price DECIMAL(12,2) NULL,
+                    valid_until DATE NULL,
+                    notes TEXT,
+                    email_sent_at DATETIME NULL,
+                    is_winner TINYINT(1) NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (rfq_id) REFERENCES purchase_rfqs(id) ON DELETE CASCADE,
+                    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+                    UNIQUE KEY uq_rfq_supplier (rfq_id, supplier_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (44, 'purchase_rfqs + items + offers (ciclo RDO Acquisti)')");
+                _logger.LogInformation("[Migration v44] Tabelle purchase_rfq* (ciclo RDO)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v44] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v45: feature key nav inbox Acquisti.
+        if (currentVersion < 45)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.acquisti_inbox', 'Acquisti — Inbox', 'navigation', 1, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (45, 'nav.acquisti_inbox feature key')");
+                _logger.LogInformation("[Migration v45] feature key nav.acquisti_inbox");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v45] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v46: invariante «codice ATEC = codice_nuovo, sempre» — gli articoli NATI nelle
+        // famiglie nuove (201/211/221, generatore locale ⇒ remote_id NULL) ricevono
+        // codice_nuovo = codice, così mapping Danea / orfani / ricerche non hanno bisogno
+        // di predicati sul formato. Da qui in poi ci pensa ConfirmReservation.
+        if (currentVersion < 46)
+        {
+            try
+            {
+                c.Execute(@"
+                    UPDATE codex_items
+                    SET codice_nuovo = codice
+                    WHERE remote_id IS NULL
+                      AND (codice_nuovo IS NULL OR codice_nuovo = '')
+                      AND codice REGEXP '^(201|211|221)[0-9]{9}$'");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (46, 'codex_items: codice_nuovo = codice per gli articoli nati nelle famiglie nuove')");
+                _logger.LogInformation("[Migration v46] codice_nuovo allineato per gli articoli nati nelle famiglie nuove");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v46] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v47: righe distinta nate col fornitore vuoto perché il catalogo era monco
+        // (bug sync fornitori IDAnag, fixato 22/07/2026): ricopia il fornitore
+        // dell'articolo di catalogo SOLO dove in riga manca. One-shot, idempotente.
+        if (currentVersion < 47)
+        {
+            try
+            {
+                int n = c.Execute(@"
+                    UPDATE bom_items b
+                    JOIN catalog_items ci ON ci.id = b.catalog_item_id
+                    SET b.supplier_id = ci.supplier_id
+                    WHERE b.supplier_id IS NULL AND ci.supplier_id IS NOT NULL", commandTimeout: 600);
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (47, 'bom_items: backfill supplier_id dal catalogo (righe pre-fix sync fornitori)')");
+                _logger.LogInformation("[Migration v47] Fornitore ricopiato dal catalogo su {Count} righe distinta", n);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v47] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v48: feature key nav pagina Trasferimento catalogo Danea (migrazione Atec_PM).
+        if (currentVersion < 48)
+        {
+            try
+            {
+                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                    VALUES ('nav.danea_migration', 'Trasferimento Danea', 'navigation', 1, 'HIDDEN')");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (48, 'nav.danea_migration feature key')");
+                _logger.LogInformation("[Migration v48] feature key nav.danea_migration");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v48] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v49: default stato nuove righe DDP commerciale = VER (verificare magazzino).
+        // Solo bom_items: la officina resta su DO.
+        if (currentVersion < 49)
+        {
+            try
+            {
+                c.Execute("ALTER TABLE bom_items ALTER item_status SET DEFAULT 'VER'");
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (49, 'bom_items: default item_status VER (DDP commerciale)')");
+                _logger.LogInformation("[Migration v49] bom_items.item_status DEFAULT → VER");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v49] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v50: tracciamento ordine fornitore Danea generato dalla RDO (strada B, 22/07/2026).
+        if (currentVersion < 50)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'purchase_rfqs'
+                      AND COLUMN_NAME = 'danea_order_iddoc'") == 0)
+                {
+                    c.Execute(@"ALTER TABLE purchase_rfqs
+                        ADD COLUMN danea_order_iddoc INT NULL AFTER closed_at,
+                        ADD COLUMN danea_order_num INT NULL AFTER danea_order_iddoc");
+                }
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (50, 'purchase_rfqs: riferimento ordine fornitore Danea (iddoc + numero)')");
+                _logger.LogInformation("[Migration v50] Colonne ordine Danea su purchase_rfqs");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v50] Errore (non bloccante): {Message}", ex.Message);
+            }
+        }
+
+        // v51: riferimento ordine Danea sulla singola riga distinta commerciale — la generazione
+        // ordine dalla RDO scrive danea_ref (numero) + danea_order_iddoc (chiave per il popup
+        // di rendering dell'ordine). Colonna presente anche nel CREATE TABLE (ramo dev).
+        if (currentVersion < 51)
+        {
+            try
+            {
+                if (c.ExecuteScalar<int>(@"
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'bom_items'
+                      AND COLUMN_NAME = 'danea_order_iddoc'") == 0)
+                {
+                    c.Execute(@"ALTER TABLE bom_items
+                        ADD COLUMN danea_order_iddoc INT NULL AFTER danea_ref");
+                }
+
+                // Backfill delle RDO già evase: il riferimento risale dalle righe RDO.
+                c.Execute(@"
+                    UPDATE bom_items b
+                    JOIN purchase_rfq_items i ON i.bom_item_id = b.id
+                    JOIN purchase_rfqs r ON r.id = i.rfq_id
+                    SET b.danea_order_iddoc = r.danea_order_iddoc,
+                        b.danea_ref = CASE WHEN COALESCE(b.danea_ref,'') = ''
+                                           THEN CAST(r.danea_order_num AS CHAR)
+                                           ELSE b.danea_ref END
+                    WHERE r.danea_order_iddoc IS NOT NULL");
+
+                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (51, 'bom_items: riferimento ordine Danea di riga (danea_order_iddoc + backfill danea_ref)')");
+                _logger.LogInformation("[Migration v51] Colonna danea_order_iddoc su bom_items");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("[Migration v51] Errore (non bloccante): {Message}", ex.Message);
             }
         }
 

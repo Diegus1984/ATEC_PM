@@ -9,6 +9,7 @@ namespace ATEC.PM.Shared.DTOs;
 public class BudgetVsActualData
 {
     public int ProjectId { get; set; }
+    public int LinkedQuoteId { get; set; }
     public List<BvaGroupDto> Groups { get; set; } = new();
     public decimal TotalBudgetHours { get; set; }
     public decimal TotalBudgetCost { get; set; }
@@ -46,6 +47,7 @@ public class BvaGroupDto
 
 public class BvaSectionDto
 {
+    public int SectionId { get; set; }
     public string SectionName { get; set; } = "";
     public string SectionType { get; set; } = "IN_SEDE"; // IN_SEDE / DA_CLIENTE
     public int? TemplateId { get; set; }
@@ -79,6 +81,8 @@ public class BvaSectionDto
 /// <summary>Riga preventivo: risorsa pianificata</summary>
 public class BvaBudgetResourceDto
 {
+    public int ResourceId { get; set; }
+    public int? EmployeeId { get; set; }
     public string ResourceName { get; set; } = "";
     public decimal WorkDays { get; set; }
     public decimal HoursPerDay { get; set; }
@@ -139,6 +143,7 @@ public class BvaActualDetailDto
 
 public class BvaMaterialSectionDto
 {
+    public int SectionId { get; set; }
     public string SectionName { get; set; } = "";
     public decimal MarkupValue { get; set; }
     public decimal CommissionMarkup { get; set; }

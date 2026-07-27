@@ -27,5 +27,6 @@ export const COMMESSA_SECTIONS: CommessaSection[] = [
   { key: "sal", label: "SAL / Fatturazione", icon: "💶" },
   { key: "ddp_commercial", label: "DDP Commerciali", icon: "📋" },
   { key: "ddp_officina", label: "DDP Officina", icon: "🔧" },
+  { key: "work_requests", label: "Lavorazioni", icon: "⚙️" },
   { key: "documents", label: "Documenti", icon: "📁" },
 ]

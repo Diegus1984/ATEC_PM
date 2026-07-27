@@ -143,7 +143,7 @@ export function DdpDestinationCombo({
                   </CommandItem>
                 ))}
               </CommandGroup>
-              {destination.trim() ? (
+              {(destination ?? "").trim() ? (
                 <>
                   <CommandSeparator />
                   <CommandGroup>
@@ -166,7 +166,7 @@ export function DdpDestinationCombo({
         open={formOpen}
         item={null}
         initialName={formInitial}
-        existingNames={destinations.map((d) => d.name)}
+        existingNames={destinations.map((d) => d.name).filter(Boolean)}
         onClose={() => setFormOpen(false)}
         onSaved={async (name) => {
           setFormOpen(false)

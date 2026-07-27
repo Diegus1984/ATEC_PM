@@ -13,10 +13,20 @@ using Serilog;
 
 ExcelPackage.License.SetNonCommercialOrganization("ATEC");
 
+// WIN1252 per le connessioni Firebird/Danea (migrazione catalogo): su .NET Core i
+// codepage Windows richiedono la registrazione esplicita del provider.
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
     .CreateLogger();
+
+if (args.Contains("--cleanup-base64-images"))
+{
+    await QuoteHtmlCleanup.RunCliAsync(args);
+    return;
+}
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -64,6 +74,9 @@ if (OperatingSystem.IsWindows())
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
+        // CamelCase obbligatorio per il client web (altrimenti name/Name non allineati
+        // e le liste FE risultano vuote, es. trattamenti DDP).
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
@@ -73,7 +86,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors(o => o.AddPolicy("All", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
-// Compressione risposte JSON (gzip + brotli) per client WPF
+// Compressione risposte JSON (gzip + brotli) per client web
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -145,17 +158,22 @@ builder.Services.AddSingleton<FeatureAccessService>();
 builder.Services.AddSingleton<QuoteDbService>();
 builder.Services.AddSingleton<GammaRobotDbService>();
 builder.Services.AddSingleton<MoMDbService>();
+builder.Services.AddSingleton<CheckListDbService>();
 builder.Services.AddSingleton<ResourcesDbService>();
+builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<QuotePdfService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddSingleton<ProjectTemplateCopyService>();
 builder.Services.AddSingleton<CodexGeneratorService>();
+builder.Services.AddSingleton<EmailService>();
+builder.Services.AddSingleton<PlanNotificationService>();
 
 // BackgroundServices — abilitabili da appsettings.json sezione "Services"
 bool svcNotifications = builder.Configuration.GetValue("Services:Notifications", true);
 bool svcCodexSync = builder.Configuration.GetValue("Services:CodexSync", true);
 bool svcDaneaSync = builder.Configuration.GetValue("Services:DaneaSync", true);
 bool svcBackup = builder.Configuration.GetValue("Services:Backup", true);
+bool svcPlanDigest = builder.Configuration.GetValue("Services:PlanDigest", false);
 
 if (svcNotifications)
     builder.Services.AddHostedService<NotificationBackgroundService>();
@@ -165,12 +183,22 @@ if (svcCodexSync)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CodexSyncService>());
 
 builder.Services.AddSingleton<DaneaSyncService>();
+builder.Services.AddSingleton<DaneaMappingService>();
+builder.Services.AddSingleton<DaneaMigrationService>();
+builder.Services.AddSingleton<DaneaOrderService>();
 if (svcDaneaSync)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
 
 builder.Services.AddScoped<BackupController>();
 if (svcBackup)
     builder.Services.AddHostedService<BackupBackgroundService>();
+
+// Email digest: la coda di invio (EmailService) gira sempre (accoda a vuoto se non configurata);
+// lo scheduler automatico (PlanDigestService) resta spento finché l'admin non lo abilita da config
+// (di default "false": niente invii finché SMTP non è configurato e il digest attivato consapevolmente).
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailService>());
+if (svcPlanDigest)
+    builder.Services.AddHostedService<PlanDigestService>();
 
 var app = builder.Build();
 
@@ -198,11 +226,17 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads/cms"
 });
 
+// Client web React (atec-pm-web) — stesso host dell'API
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ResourcePlannerHub>("/hubs/resource-planner");
 app.MapHub<ProjectHub>("/hubs/project");
+app.MapHub<CodexHub>("/hubs/codex");
+app.MapFallbackToFile("index.html");
 try
 {
     string envName = app.Environment.EnvironmentName;
@@ -239,6 +273,13 @@ catch (Exception ex)
     Console.WriteLine("Premi un tasto per uscire...");
     Console.ReadKey();
     return;
+}
+
+// In Debug (Development): avvia il dev server Vite (atec-pm-web) e apre il browser su 5173,
+// così premendo Avvia (F5) partono insieme API e client web. In Release non fa nulla.
+if (app.Environment.IsDevelopment())
+{
+    DevSpaLauncher.Launch(app.Logger, app.Environment.ContentRootPath);
 }
 
 try

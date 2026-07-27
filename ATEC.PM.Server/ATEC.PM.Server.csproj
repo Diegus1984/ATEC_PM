@@ -6,6 +6,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
+		<PackageReference Include="MsgReader" Version="6.1.0" />
 		<PackageReference Include="MySqlConnector" Version="2.5.0" />
 		<PackageReference Include="Dapper" Version="2.1.72" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
@@ -15,10 +16,12 @@
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.5" />
 		<PackageReference Include="FirebirdSql.Data.FirebirdClient" Version="10.3.4" />
+		<PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
 		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.5" />
 		<PackageReference Include="EPPlus" Version="8.5.0" />
 		<PackageReference Include="Mammoth" Version="1.11.0" />
+		<PackageReference Include="MailKit" Version="4.17.0" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
@@ -26,4 +29,26 @@
 	<ItemGroup>
 		<None Include="Firebird\**\*" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
+
+	<!-- Publish client React (atec-pm-web) in wwwroot — come ATEC Risorse con Blazor.
+	     In Debug VS non richiede npm: usa `npm run dev` in atec-pm-web.
+	     Per forzare: dotnet build -p:BuildWebClient=true -->
+	<PropertyGroup>
+		<_WebDir>$(MSBuildProjectDirectory)\..\atec-pm-web</_WebDir>
+		<_WebOut>$(OutputPath)wwwroot\</_WebOut>
+		<BuildWebClient Condition="'$(BuildWebClient)' == ''">false</BuildWebClient>
+		<BuildWebClient Condition="'$(Configuration)' == 'Release'">true</BuildWebClient>
+		<_NpmCmd Condition="Exists('$(ProgramFiles)\nodejs\npm.cmd')">"$(ProgramFiles)\nodejs\npm.cmd"</_NpmCmd>
+		<_NpmCmd Condition="'$(_NpmCmd)' == '' AND Exists('$(LOCALAPPDATA)\Programs\node\npm.cmd')">"$(LOCALAPPDATA)\Programs\node\npm.cmd"</_NpmCmd>
+	</PropertyGroup>
+
+	<Target Name="CopyWebClient" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' AND Exists('$(_WebDir)\package.json')">
+		<Exec Command="$(_NpmCmd) run build" WorkingDirectory="$(_WebDir)" Condition="'$(BuildWebClient)' == 'true' AND '$(_NpmCmd)' != '' AND Exists('$(_WebDir)\node_modules')" />
+		<Exec Command="$(_NpmCmd) install &amp;&amp; $(_NpmCmd) run build" WorkingDirectory="$(_WebDir)" Condition="'$(BuildWebClient)' == 'true' AND '$(_NpmCmd)' != '' AND !Exists('$(_WebDir)\node_modules')" />
+		<Warning Text="BuildWebClient=true ma npm non trovato. Installa Node.js o aggiungilo al PATH, oppure esegui `npm run build` in atec-pm-web." Condition="'$(BuildWebClient)' == 'true' AND '$(_NpmCmd)' == ''" />
+		<ItemGroup Condition="Exists('$(_WebDir)\dist\index.html')">
+			<_WebFiles Include="$(_WebDir)\dist\**\*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_WebFiles)" DestinationFiles="@(_WebFiles->'$(_WebOut)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(_WebFiles)' != ''" />
+	</Target>
 </Project>

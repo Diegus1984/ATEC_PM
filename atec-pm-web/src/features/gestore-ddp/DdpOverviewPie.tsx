@@ -19,7 +19,8 @@ import { DdpPieSliceLabel } from "./ddp-pie-slice-label"
 export const DDP_STOP_STATES = ["ANN", "SOSP", "RAM", "SOST"] as const
 
 /** Verde acceso in seed DB (materiale concluso/disponibile). */
-export const DDP_BRIGHT_GREEN_STATES = ["CON", "COS", "DISP"] as const
+// Matrice stati v7: DISP (chiusura positiva) assorbe i vecchi CON/COS.
+export const DDP_BRIGHT_GREEN_STATES = ["DISP"] as const
 
 export interface DdpHealthBuckets {
   total: number

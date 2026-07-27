@@ -27,7 +27,7 @@ export function DdpQuantityStepper({
 }) {
   return (
     <div
-      className={cn("inline-flex items-center gap-0.5", className)}
+      className={cn("inline-flex items-center gap-0.5 text-current", className)}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
@@ -39,7 +39,7 @@ export function DdpQuantityStepper({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-4 rounded-sm p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="size-4 rounded-sm p-0 text-current hover:bg-black/10 hover:text-current"
           disabled={disabled}
           aria-label="Aumenta quantità"
           onClick={(event) => {
@@ -53,7 +53,7 @@ export function DdpQuantityStepper({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-4 rounded-sm p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="size-4 rounded-sm p-0 text-current hover:bg-black/10 hover:text-current"
           disabled={disabled || decrementDisabled}
           aria-label="Diminuisci quantità"
           onClick={(event) => {

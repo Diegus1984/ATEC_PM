@@ -563,52 +563,10 @@ public class QuoteCatalogController : ControllerBase
         try
         {
             using var c = _qdb.Open();
-
-            // Trova prodotti con base64 nel description_rtf
-            var products = c.Query<(int Id, string DescriptionRtf)>(
-                "SELECT id AS Id, description_rtf AS DescriptionRtf FROM quote_products WHERE description_rtf LIKE '%data:image%'").ToList();
-
-            int cleaned = 0;
-            foreach (var p in products)
-            {
-                // Rimuovi tag <img> con src base64
-                string html = System.Text.RegularExpressions.Regex.Replace(
-                    p.DescriptionRtf ?? "",
-                    @"<img[^>]*src\s*=\s*[""']data:image[^""']*[""'][^>]*\/?>",
-                    "",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-                c.Execute("UPDATE quote_products SET description_rtf=@Html WHERE id=@Id",
-                    new { Html = html, Id = p.Id });
-                cleaned++;
-            }
-
-            // Pulisci image_path e attachment_path con path locali
-            int pathsCleaned = c.Execute(@"
-                UPDATE quote_products SET image_path='', attachment_path=''
-                WHERE image_path LIKE 'C:%' OR image_path LIKE 'D:%'
-                   OR attachment_path LIKE 'C:%' OR attachment_path LIKE 'D:%'");
-
-            // Stessa pulizia per quote_items
-            var items = c.Query<(int Id, string DescriptionRtf)>(
-                "SELECT id AS Id, description_rtf AS DescriptionRtf FROM quote_items WHERE description_rtf LIKE '%data:image%'").ToList();
-
-            foreach (var item in items)
-            {
-                string html = System.Text.RegularExpressions.Regex.Replace(
-                    item.DescriptionRtf ?? "",
-                    @"<img[^>]*src\s*=\s*[""']data:image[^""']*[""'][^>]*\/?>",
-                    "",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-                c.Execute("UPDATE quote_items SET description_rtf=@Html WHERE id=@Id",
-                    new { Html = html, Id = item.Id });
-            }
-
-            Log.Information("[QuoteProduct] Cleanup: {Products} prodotti puliti, {Paths} path locali rimossi, {Items} quote_items puliti",
-                cleaned, pathsCleaned, items.Count);
-
-            return Ok(ApiResponse<string>.Ok($"Pulizia completata: {cleaned} prodotti, {items.Count} items, {pathsCleaned} path locali"));
+            QuoteHtmlCleanup.CleanupStats stats = QuoteHtmlCleanup.Run(c);
+            return Ok(ApiResponse<string>.Ok(
+                $"Pulizia completata: {stats.Products} prodotti, {stats.QuoteItems} quote_items, " +
+                $"{stats.MaterialItems} material_items, {stats.LocalPathsCleared} path locali"));
         }
         catch (Exception ex)
         {

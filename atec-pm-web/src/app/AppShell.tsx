@@ -26,6 +26,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuBadge,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -37,6 +38,7 @@ import {
   type NavItemConfig,
 } from "@/config/navigation"
 import { NotificationsBell } from "@/features/notifications/NotificationsBell"
+import { useDeadlinesCount } from "@/features/scadenze/useDeadlinesCount"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import {
   clearSession,
@@ -76,6 +78,7 @@ export function AppShell() {
   const session = getSession()
   const navGroups = React.useMemo(() => filterNavGroups(), [location.pathname])
   const currentPage = findNavItemByPath(location.pathname)
+  const { pendingCount, sectionCounts } = useDeadlinesCount()
 
   React.useEffect(() => {
     return onSessionExpired(() => {
@@ -123,6 +126,7 @@ export function AppShell() {
                   {group.items.map((item) => {
                     const Icon = item.icon
                     const active = isNavActive(item, location.pathname)
+                    const badgeCount = item.id === "scadenze" ? pendingCount : sectionCounts?.[item.id] || 0
 
                     return (
                       <SidebarMenuItem key={item.id}>
@@ -136,6 +140,11 @@ export function AppShell() {
                             <span>{item.label}</span>
                           </button>
                         </SidebarMenuButton>
+                        {badgeCount > 0 && (
+                          <SidebarMenuBadge className="bg-destructive text-destructive-foreground font-semibold">
+                            {badgeCount}
+                          </SidebarMenuBadge>
+                        )}
                       </SidebarMenuItem>
                     )
                   })}

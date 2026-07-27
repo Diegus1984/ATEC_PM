@@ -13,19 +13,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 /**
- * Piccolo dialog per la quantità all'aggiunta di un componente via drag&drop,
- * equivalente del `QuantityDialog` WPF (intero >= 1, Invio conferma, "1"
- * preselezionato per sovrascriverlo subito). `onConfirm` viene invocato una sola
- * volta: un secondo Invio/click ravvicinato è ignorato (niente doppio inserimento).
+ * Piccolo dialog per la quantità, equivalente del `QuantityDialog` WPF (intero >= 1,
+ * Invio conferma, valore preselezionato per sovrascriverlo subito). Due modalità:
+ * `add` (default) all'aggiunta via drag&drop, `edit` per cambiare la quantità di una
+ * riga esistente (badge ×N nell'albero). `onConfirm` viene invocato una sola volta:
+ * un secondo Invio/click ravvicinato è ignorato (niente doppio inserimento).
  */
 export function QuantityDialog({
   open,
   childCodice,
+  mode = "add",
+  initialQuantity = 1,
   onConfirm,
   onCancel,
 }: {
   open: boolean
   childCodice: string
+  mode?: "add" | "edit"
+  initialQuantity?: number
   onConfirm: (quantity: number) => void
   onCancel: () => void
 }) {
@@ -34,10 +39,10 @@ export function QuantityDialog({
 
   React.useEffect(() => {
     if (open) {
-      setValue("1")
+      setValue(String(Math.max(1, initialQuantity)))
       submittedRef.current = false
     }
-  }, [open])
+  }, [open, initialQuantity])
 
   function confirm() {
     if (submittedRef.current) return
@@ -54,11 +59,11 @@ export function QuantityDialog({
         <DialogHeader>
           <DialogTitle>Quantità</DialogTitle>
           <DialogDescription>
-            Quante unità di{" "}
+            {mode === "edit" ? "Nuova quantità di " : "Quante unità di "}
             <span className="font-mono font-medium text-foreground">
               {childCodice}
-            </span>{" "}
-            aggiungere?
+            </span>
+            {mode === "edit" ? " nella composizione." : " aggiungere?"}
           </DialogDescription>
         </DialogHeader>
 
@@ -85,7 +90,7 @@ export function QuantityDialog({
           <Button variant="outline" onClick={onCancel}>
             Annulla
           </Button>
-          <Button onClick={confirm}>Aggiungi</Button>
+          <Button onClick={confirm}>{mode === "edit" ? "Salva" : "Aggiungi"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

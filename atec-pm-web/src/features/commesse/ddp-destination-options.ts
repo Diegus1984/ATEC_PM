@@ -10,14 +10,16 @@ export const DDP_DESTINATION_NONE = "__none__"
  */
 export function buildDestinationOptions(
   destinations: DdpDestinationItem[],
-  current: string
+  current: string | null | undefined
 ): string[] {
-  const options = [...destinations]
-    .filter((d) => d.isActive)
-    .sort((a, b) => a.name.localeCompare(b.name, "it", { sensitivity: "base" }))
+  // name/current possono arrivare null da righe storiche del DB: mai assumere stringa.
+  const options = destinations
+    .filter((d) => d.isActive && (d.name ?? "").trim())
     .map((d) => d.name)
-  if (current.trim() && !options.includes(current)) {
-    options.push(current)
+    .sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }))
+  const safeCurrent = (current ?? "").trim()
+  if (safeCurrent && !options.includes(safeCurrent)) {
+    options.push(safeCurrent)
   }
   return options
 }

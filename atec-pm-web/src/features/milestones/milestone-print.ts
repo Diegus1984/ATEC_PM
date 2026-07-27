@@ -12,6 +12,7 @@ import {
 } from "@/features/risorse/planner-logic"
 import { isoWeek, weekLabel, weekTot, avgAvanz } from "@/features/milestones/milestone-utils"
 import { isoToDate } from "@/lib/date-iso"
+import { printHtml } from "@/lib/print-template"
 
 // Sigle giorno settimana con lunedì in testa (dn = (getDay()+6)%7).
 const DOW_MON = ["L", "M", "M", "G", "V", "S", "D"] as const
@@ -293,22 +294,11 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
       ? `<th class="tl"><div class="bands"><div class="mrow" style="width:${timeW}px">${months}</div><div class="wrow" style="width:${timeW}px">${weeks}</div><div class="drow" style="width:${timeW}px">${dayHdr}</div></div></th>`
       : "")
 
-  const logoUri = `${window.location.origin}/atec-logo.png`
   const title = projectCode
-    ? `${escapeHtml(projectCode)}${projectTitle ? " — " + escapeHtml(projectTitle) : ""}`
+    ? `<span class="code">${escapeHtml(projectCode)}</span>${projectTitle ? " — " + escapeHtml(projectTitle) : ""}`
     : "Milestones"
-  const genTxt = `Documento generato il ${new Date().toLocaleString("it-IT")} · Settimane ISO 8601 · ${milestones.length} milestone`
 
-  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Gantt — ${escapeHtml(projectCode || "Milestones")}</title>
-  <style>
-    @page{ size:A3 landscape; margin:10mm }
-    *{box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact}
-    html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
-    body{font-family:'Hanken Grotesk',Segoe UI,Arial,sans-serif; color:#27384A; margin:0; font-size:10px}
-    .doc-logo{height:30px; width:auto; display:block; margin-bottom:6px}
-    h1{font-size:18px; line-height:1.25; margin:0; color:#1F2D3A; font-weight:700; letter-spacing:-.015em}
-    h1 .code{font-family:'JetBrains Mono',monospace; color:#2F6098}
-    .head{border-bottom:2px solid #2F6098; padding-bottom:8px; margin-bottom:8px}
+  const customStyles = `
     .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:9px; color:#5A6B7A; margin-bottom:8px}
     .legend .lg{display:flex; align-items:center; gap:5px} .legend .sw{display:inline-block; width:18px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.08)}
     .sw.base{background:#2E75B6} .sw.prog{background:#1F5A92} .sw.done{background:#3E8E63} .sw.tdy{background:#FFD966}
@@ -325,12 +315,9 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
     .dh .dw{display:block; font-size:5px; font-weight:700; text-transform:uppercase; color:#788896}
     .dh.we{background:#E8EDF3} .dh.t{background:#FFD966; color:#27384A}
     tr:nth-child(even) td.ds, tr:nth-child(even) td.ce, tr:nth-child(even) td.ix, tr:nth-child(even) td.nt{background:#F6FAFE}
-    .foot{margin-top:10px;font-size:8px;color:#9AA7B4;border-top:1px solid #E4ECF5;padding-top:6px}
-  </style></head><body>
-    <div class="head">
-      <img class="doc-logo" src="${logoUri}" alt="Automation Technology" onerror="this.style.display='none'">
-      <h1>${projectCode ? `<span class="code">${escapeHtml(projectCode)}</span>${projectTitle ? " — " + escapeHtml(projectTitle) : ""}` : escapeHtml(title)}</h1>
-    </div>
+  `
+
+  const contentHtml = `
     <div class="legend">
       <span class="lg"><span class="sw base"></span>Pianificato</span>
       <span class="lg"><span class="sw prog"></span>Avanzamento</span>
@@ -342,19 +329,20 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
       <thead><tr>${headCells}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="foot">${escapeHtml(genTxt)}</div>
-    <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>
-  </body></html>`
+  `
 
-  const w = window.open("", "_blank")
-  if (!w) {
-    fail("Consenti i popup per la stampa")
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.focus()
+  printHtml({
+    title,
+    subtitle: "Gantt Milestones",
+    meta: [
+      { label: "Milestones", value: milestones.length },
+      { label: "Note", value: "Settimane ISO 8601" }
+    ],
+    contentHtml,
+    orientation: "landscape",
+    paperSize: "A3",
+    customStyles,
+  })
 }
 
 export interface PrintMilestoneTableOptions {
@@ -377,12 +365,7 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
     projectSub,
     milestones,
     allMilestones,
-    onError,
   } = opts
-
-  const fail = (msg: string) => {
-    if (onError) onError(msg)
-  }
 
   const now = new Date()
   const avg = avgAvanz(allMilestones)
@@ -421,29 +404,16 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
     })
     .join("")
 
-  const logoUri = `${window.location.origin}/atec-logo.png`
   const docTitle = projectCode
-    ? `Milestones di Commessa — ${projectCode}`
+    ? `<span class="code">${escapeHtml(projectCode)}</span>${
+        projectTitle ? " — " + escapeHtml(projectTitle) : ""
+      }`
     : "Milestones di Commessa"
 
   const dayName = ITALIAN_DAYS[now.getDay()]
   const dateStr = `${now.getDate()} ${ITALIAN_MONTHS[now.getMonth()]} ${now.getFullYear()}`
 
-  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
-  <title>${escapeHtml(docTitle)}</title>
-  <style>
-    @page{ size:A4 landscape; margin:14mm }
-    *{box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact}
-    html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
-    body{font-family:'Hanken Grotesk',Segoe UI,Arial,sans-serif; color:#27384A; margin:0; font-size:11px}
-    .doc-head{border-bottom:2px solid #2F6098; padding-bottom:10px; margin-bottom:14px}
-    .doc-head .comm-name{margin:2px 0 4px; font-size:22px; color:#243340; font-weight:800; letter-spacing:-.01em; line-height:1.2}
-    .doc-head .comm-name .code{font-family:'JetBrains Mono',monospace; font-weight:700; color:#2F6098}
-    .doc-head .doc-subtitle{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#788896; font-weight:700}
-    .doc-head .sub{font-size:12px; color:#5A6B7A; margin-top:4px}
-    .doc-logo{height:34px; width:auto; display:block; margin-bottom:8px}
-    .meta{display:flex; gap:26px; flex-wrap:wrap; margin:10px 0 16px; font-size:11px}
-    .meta b{display:block; font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:#788896; font-weight:700; margin-bottom:2px}
+  const customStyles = `
     table{width:100%; border-collapse:collapse}
     th{background:#EAF1F9; border:1px solid #D1DFEC; padding:6px 7px; font-size:9px; text-transform:uppercase; letter-spacing:.03em; color:#5A6B7A; text-align:left}
     td{border:1px solid #E4ECF5; padding:5px 7px; vertical-align:middle}
@@ -460,43 +430,27 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
     td.av em{font-style:normal; font-family:'JetBrains Mono',monospace; font-weight:600; margin-left:6px; font-size:10px}
     td.av em.dn{color:#3E7A52; font-weight:700}
     tr:nth-child(even) td{background:#F6FAFE}
-    .foot{margin-top:14px; font-size:9px; color:#9AA7B4; border-top:1px solid #E4ECF5; padding-top:8px}
-  </style></head><body>
-    <div class="doc-head">
-      <img class="doc-logo" src="${logoUri}" alt="Automation Technology" onerror="this.style.display='none'">
-      <div class="comm-name">${
-        projectCode
-          ? `<span class="code">${escapeHtml(projectCode)}</span>${
-              projectTitle ? " — " + escapeHtml(projectTitle) : ""
-            }`
-          : ""
-      }</div>
-      <div class="doc-subtitle">Milestones di Commessa</div>
-      ${projectSub ? `<div class="sub">${escapeHtml(projectSub)}</div>` : ""}
-    </div>
-    <div class="meta">
-      <div><b>Milestones</b>${milestones.length}</div>
-      <div><b>Avanzamento medio</b>${avg == null ? "—" : avg + "%"}</div>
-      <div><b>Periodo pianificato</b>${rangeTxt}</div>
-      <div><b>Data documento</b>${dayName} ${dateStr}</div>
-    </div>
+  `
+
+  const contentHtml = `
     <table>
       <thead><tr><th>#</th><th>Attività / Descrizione</th><th>W. Inizio</th><th>Data Inizio</th><th>W. Fine</th><th>Data Fine</th><th>W. Tot</th><th>Avanzamento</th><th>Note</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="foot">Documento generato da Gestione Commesse Milestones — ${new Date().toLocaleString(
-      "it-IT"
-    )}. Numerazione settimane secondo standard ISO 8601.</div>
-    <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>
-  </body></html>`
+  `
 
-  const w = window.open("", "_blank")
-  if (!w) {
-    fail("Consenti i popup per la stampa")
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.focus()
+  printHtml({
+    title: docTitle,
+    subtitle: projectSub ? `Milestones di Commessa — ${projectSub}` : "Milestones di Commessa",
+    meta: [
+      { label: "Milestones", value: milestones.length },
+      { label: "Avanzamento medio", value: avg == null ? "—" : avg + "%" },
+      { label: "Periodo pianificato", value: rangeTxt },
+      { label: "Data documento", value: `${dayName} ${dateStr}` }
+    ],
+    contentHtml,
+    orientation: "landscape",
+    paperSize: "A4",
+    customStyles,
+  })
 }

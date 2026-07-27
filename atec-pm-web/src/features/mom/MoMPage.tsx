@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { deleteMoM, fetchMoMList, updateMoM } from "@/lib/api/mom"
+import { formatDateShort } from "@/lib/date-iso"
 import { getSession } from "@/lib/auth/session"
 import { useMoMHub } from "@/lib/signalr/use-mom-hub"
 import type { MoMListItem, MoMSaveRequest } from "@/lib/api/types"
@@ -60,7 +61,7 @@ const DEFAULT_SORTING: SortingState = [{ id: "meetingDate", desc: true }]
 function formatDate(value: string | null): string {
   if (!value) return "—"
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("it-IT")
+  return Number.isNaN(date.getTime()) ? "—" : formatDateShort(date)
 }
 
 function periodLabel(item: MoMListItem): string {

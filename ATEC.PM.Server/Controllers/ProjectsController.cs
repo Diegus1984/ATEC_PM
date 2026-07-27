@@ -34,9 +34,10 @@ public class ProjectsController : ControllerBase
 
     // Notifica real-time: chi guarda QUESTA commessa (gruppo "project-{id}") + il Gestore DDP (gruppo globale
     // "ddp-all"), escludendo chi ha fatto la modifica (conn) per non auto-ricaricarsi.
-    private void NotifyDdpChange(int projectId, string? conn, string action, int itemId)
+    // ddpType ("COMMERCIAL" | "OFFICINA") permette ai client di ignorare la distinta che non li riguarda.
+    private void NotifyDdpChange(int projectId, string? conn, string action, int itemId, string ddpType = "COMMERCIAL")
     {
-        var payload = new DdpChange { ProjectId = projectId, Action = action, ItemId = itemId };
+        var payload = new DdpChange { ProjectId = projectId, Action = action, ItemId = itemId, DdpType = ddpType };
         foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
         {
             IClientProxy target = string.IsNullOrEmpty(conn)
@@ -44,6 +45,27 @@ public class ProjectsController : ControllerBase
                 : _hub.Clients.GroupExcept(group, conn);
             _ = target.SendAsync("DdpChanged", payload);
         }
+    }
+
+    // Il sync DDP Officina → lavorazioni tocca project_work_requests: avvisa il Pannello
+    // Lavorazioni (gruppo globale) e la griglia nel dettaglio commessa (stesso contratto
+    // del WorkRequestsController).
+    private void NotifyWorkRequestsChanged(string action, int projectId)
+    {
+        _ = _hub.Clients.Group(ProjectHub.WorkRequestsGroup)
+            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId });
+        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
+            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId });
+    }
+
+    // Notifica real-time ai client che guardano la commessa che i documenti (file/cartelle su disco)
+    // sono cambiati: le viste aperte (albero a sinistra + elenco a destra) ricaricano in ~1s.
+    // Scope per-commessa ("project-{id}"). Niente self-exclusion: l'autore ricarica già localmente,
+    // un eventuale secondo refresh è innocuo (nessun editing live da interrompere).
+    private void NotifyDocumentsChanged(int projectId, string action)
+    {
+        var payload = new DocumentsChange { ProjectId = projectId, Action = action };
+        _ = _hub.Clients.Group($"project-{projectId}").SendAsync("DocumentsChanged", payload);
     }
 
     private int GetCurrentEmployeeId() =>
@@ -387,6 +409,7 @@ public class ProjectsController : ControllerBase
         }
 
         c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = id });
+        NotifyDocumentsChanged(id, "create");
         return Ok(ApiResponse<string>.Ok(fullPath));
     }
 
@@ -535,10 +558,22 @@ public class ProjectsController : ControllerBase
             ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".png" => "image/png",
             ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            ".mp4" or ".m4v" => "video/mp4",
+            ".webm" => "video/webm",
+            ".mov" => "video/quicktime",
+            ".avi" => "video/x-msvideo",
+            ".mkv" => "video/x-matroska",
+            ".ogv" => "video/ogg",
+            ".wmv" => "video/x-ms-wmv",
             ".dwg" => "application/acad",
             ".zip" => "application/zip",
             ".txt" => "text/plain",
             ".csv" => "text/csv",
+            ".msg" => "application/vnd.ms-outlook",
+            ".eml" => "message/rfc822",
             _ => "application/octet-stream"
         };
 
@@ -563,11 +598,16 @@ public class ProjectsController : ControllerBase
         if (!System.IO.File.Exists(fullPath)) return NotFound("File non trovato");
 
         var ext = Path.GetExtension(fullPath).ToLower();
-        if (ext is not (".xlsx" or ".xls" or ".csv" or ".docx")) return BadRequest("Tipo non supportato");
+        if (ext is not (".xlsx" or ".xls" or ".csv" or ".docx" or ".eml" or ".msg")) return BadRequest("Tipo non supportato");
 
         try
         {
             var fileName = Path.GetFileName(fullPath);
+
+            // === EMAIL (.eml / .msg) ===
+            if (ext is ".eml" or ".msg")
+                return Content(EmailPreviewService.RenderHtml(fullPath), "text/html");
+
             var sb = new System.Text.StringBuilder();
 
             sb.Append(@"<!DOCTYPE html><html><head><meta charset='utf-8'><style>
@@ -881,19 +921,31 @@ public class ProjectsController : ControllerBase
         try
         {
             using var c = _db.Open();
+            // COALESCE su tutte le colonne testo nullable: righe storiche/importate possono
+            // avere NULL (lo schema lo permette) e un null manderebbe in crash le combo web.
             var rows = c.Query<BomItemListItem>(@"
             SELECT b.id, b.project_id AS ProjectId, b.catalog_item_id AS CatalogItemId,
-                   b.part_number AS PartNumber, b.description, b.unit, b.quantity,
+                   COALESCE(b.part_number,'') AS PartNumber, COALESCE(b.description,'') AS Description,
+                   COALESCE(b.unit,'') AS Unit, b.quantity,
                    b.unit_cost AS UnitCost,
+                   b.supplier_id AS SupplierId,
                    COALESCE(s.company_name, '') AS SupplierName,
-                   b.manufacturer, b.item_status AS ItemStatus,
-                   b.requested_by AS RequestedBy, b.danea_ref AS DaneaRef,
-                   b.date_needed AS DateNeeded, b.destination, b.notes,
-                   b.ddp_type AS DdpType, b.created_at AS CreatedAt, b.updated_at AS UpdatedAt
+                   COALESCE(b.manufacturer,'') AS Manufacturer, COALESCE(b.item_status,'') AS ItemStatus,
+                   COALESCE(b.requested_by,'') AS RequestedBy, COALESCE(b.danea_ref,'') AS DaneaRef,
+                   b.danea_order_iddoc AS DaneaOrderIdDoc,
+                   b.date_needed AS DateNeeded, COALESCE(b.destination,'') AS Destination,
+                   b.destination_spec AS DestinationSpec, COALESCE(b.notes,'') AS Notes,
+                   -- Codice ATEC effettivo: snapshot di riga, altrimenti mapping vivo dell'articolo.
+                   b.ddp_type AS DdpType, COALESCE(NULLIF(b.atec_code,''), ci.atec_code, '') AS AtecCode,
+                   b.created_at AS CreatedAt, b.updated_at AS UpdatedAt
             FROM bom_items b
             LEFT JOIN suppliers s ON s.id = b.supplier_id
+            LEFT JOIN catalog_items ci ON ci.id = b.catalog_item_id
             WHERE b.project_id = @Id AND b.ddp_type = @Type
             ORDER BY b.id", new { Id = id, Type = type }).ToList();
+            foreach (BomItemListItem row in rows)
+                if (row.AtecCode.Length > 0)
+                    row.AtecCode = CodexListItem.FormatCodice(row.AtecCode);
 
             return Ok(ApiResponse<List<BomItemListItem>>.Ok(rows));
         }
@@ -910,15 +962,28 @@ public class ProjectsController : ControllerBase
         {
             using var c = _db.Open();
             req.ProjectId = id;
+
+            // Finestra di partenza (riga INIZIO della matrice, per tipo): sulla commerciale
+            // esclude DC — il materiale commerciale si acquista, non si costruisce.
+            string? startError = DdpTransitionService.Validate(
+                c, DdpTransitionService.TypeCommercial, null, req.ItemStatus);
+            if (startError != null)
+                return BadRequest(ApiResponse<int>.Fail(startError));
+
+            // Normalizza atec_code senza punti (formato DB Codex).
+            req.AtecCode = (req.AtecCode ?? "").Replace(".", "").Trim();
+
             var newId = c.ExecuteScalar<int>(@"
             INSERT INTO bom_items
                 (project_id, catalog_item_id, part_number, description, unit, quantity,
                  unit_cost, supplier_id, manufacturer, item_status, requested_by,
-                 danea_ref, date_needed, destination, notes, ddp_type, updated_at)
+                 danea_ref, date_needed, destination, destination_spec, notes, ddp_type,
+                 atec_code, updated_at)
             VALUES
                 (@ProjectId, @CatalogItemId, @PartNumber, @Description, @Unit, @Quantity,
                  @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, @RequestedBy,
-                 @DaneaRef, @DateNeeded, @Destination, @Notes, @DdpType, NOW());
+                 @DaneaRef, @DateNeeded, @Destination, @DestinationSpec, @Notes, @DdpType,
+                 NULLIF(@AtecCode,''), NOW());
             SELECT LAST_INSERT_ID()", req);
 
             NotifyDdpChange(id, conn, "create", newId);
@@ -949,18 +1014,52 @@ public class ProjectsController : ControllerBase
                         "Riga modificata da un altro utente nel frattempo. Ricarica e riprova."));
             }
 
-            // Leggi stato precedente per confronto
-            string? oldStatus = c.ExecuteScalar<string?>(
-                "SELECT item_status FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+            // Leggi stato e quantità precedenti per confronto
+            (string? ItemStatus, decimal Quantity) before = c.QueryFirstOrDefault<(string?, decimal)>(
+                "SELECT item_status, quantity FROM bom_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
+            string? oldStatus = before.ItemStatus;
+
+            // Matrice degli avanzamenti di stato (v7, tipo COMMERCIAL): il server rifiuta le
+            // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
+            // client vecchi e modifiche concorrenti).
+            string? transitionError = DdpTransitionService.Validate(
+                c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus);
+            if (transitionError != null)
+                return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
+
+            // Quantità modificabile in VER (ingresso) o DO (da ordinare), o tornando in uno
+            // di questi nella stessa save.
+            if (req.Quantity != before.Quantity
+                && !IsCommercialQtyEditable(oldStatus)
+                && !IsCommercialQtyEditable(req.ItemStatus))
+            {
+                return BadRequest(ApiResponse<DateTime?>.Fail(
+                    "La quantità è modificabile solo in stato Verificare magazzino o Da Ordinare."));
+            }
 
             req.Id = itemId;
             req.ProjectId = id;
+            req.AtecCode = (req.AtecCode ?? "").Replace(".", "").Trim();
             c.Execute(@"
             UPDATE bom_items SET
                 quantity = @Quantity, item_status = @ItemStatus,
+                -- Rif. Danea cambiato/svuotato a mano: il link all'ordine generato non è più
+                -- affidabile → si azzera (valutato PRIMA dell'assegnazione di danea_ref: le
+                -- SET di MySQL sono applicate in ordine, qui danea_ref è ancora quello vecchio).
+                danea_order_iddoc = IF(COALESCE(danea_ref,'') <> @DaneaRef, NULL, danea_order_iddoc),
                 danea_ref = @DaneaRef, date_needed = @DateNeeded,
-                destination = @Destination, notes = @Notes, updated_at = NOW()
+                destination = @Destination, destination_spec = @DestinationSpec,
+                supplier_id = IF(@UpdateSupplier OR @UpdateCatalogSnapshot, @SupplierId, supplier_id),
+                catalog_item_id = IF(@UpdateCatalogSnapshot, @CatalogItemId, catalog_item_id),
+                part_number = IF(@UpdateCatalogSnapshot, @PartNumber, part_number),
+                description = IF(@UpdateCatalogSnapshot, @Description, description),
+                unit = IF(@UpdateCatalogSnapshot, @Unit, unit),
+                unit_cost = IF(@UpdateCatalogSnapshot, @UnitCost, unit_cost),
+                manufacturer = IF(@UpdateCatalogSnapshot, @Manufacturer, manufacturer),
+                atec_code = IF(@UpdateCatalogSnapshot OR LENGTH(@AtecCode) > 0,
+                               NULLIF(@AtecCode,''), atec_code),
+                notes = @Notes, updated_at = NOW()
             WHERE id = @Id AND project_id = @ProjectId", req);
 
             // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
@@ -980,7 +1079,7 @@ public class ProjectsController : ControllerBase
 
                     string severity = req.ItemStatus switch
                     {
-                        "CON" => "SUCCESS",   // CONSEGNATO
+                        "DISP" => "SUCCESS",  // DISPONIBILE / CONSEGNATO (chiusura positiva v7)
                         "ANN" => "WARNING",   // ANNULLATO
                         "IO" => "INFO",       // IN ORDINE
                         _ => "INFO"
@@ -1030,6 +1129,437 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    // --- DDP OFFICINA (distinta particolari meccanici, tabella dedicata ddp_officina_items) ---
+    // Stesso contratto della DDP commerciale (concorrenza ottimistica, real-time, notifiche cambio stato),
+    // ma campi del template officina: Codice 101, Materiale, Trattamento, fornitore testuale.
+    [HttpGet("{id}/ddp-officina")]
+    public IActionResult GetOfficinaItems(int id)
+    {
+        try
+        {
+            using var c = _db.Open();
+            // COALESCE su tutte le colonne testo nullable: righe storiche/importate possono
+            // avere NULL (lo schema lo permette) e un null manderebbe in crash le combo web.
+            var rows = c.Query<OfficinaItemListItem>(@"
+            SELECT id, project_id AS ProjectId, COALESCE(part_number,'') AS PartNumber,
+                   COALESCE(description,'') AS Description,
+                   quantity, quantity_produced AS QuantityProduced,
+                   unit_cost AS UnitCost, COALESCE(material,'') AS Material,
+                   COALESCE(treatment,'') AS Treatment,
+                   supplier_id AS SupplierId, COALESCE(supplier_name,'') AS SupplierName,
+                   COALESCE(item_status,'') AS ItemStatus,
+                   COALESCE(requested_by,'') AS RequestedBy, COALESCE(danea_ref,'') AS DaneaRef,
+                   date_needed AS DateNeeded, order_date AS OrderDate,
+                   COALESCE(destination,'') AS Destination,
+                   destination_spec AS DestinationSpec, COALESCE(notes,'') AS Notes,
+                   parent_officina_item_id AS ParentOfficinaItemId, composition_qty AS CompositionQty,
+                   created_at AS CreatedAt, updated_at AS UpdatedAt
+            FROM ddp_officina_items
+            WHERE project_id = @Id
+            ORDER BY id", new { Id = id }).ToList();
+
+            return Ok(ApiResponse<List<OfficinaItemListItem>>.Ok(rows));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<List<OfficinaItemListItem>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("{id}/ddp-officina")]
+    public IActionResult AddOfficinaItem(int id, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
+    {
+        try
+        {
+            using var c = _db.Open();
+            req.ProjectId = id;
+
+            // Finestra di partenza (riga INIZIO della matrice, tipo OFFICINA).
+            string? startError = DdpTransitionService.Validate(
+                c, DdpTransitionService.TypeOfficina, null, req.ItemStatus);
+            if (startError != null)
+                return BadRequest(ApiResponse<int>.Fail(startError));
+
+            // Auto-fill data ordine al primo passaggio in IO (anche in create).
+            if (string.Equals(req.ItemStatus, "IO", StringComparison.OrdinalIgnoreCase)
+                && !req.OrderDate.HasValue)
+            {
+                req.OrderDate = DateTime.Today;
+            }
+            var newId = c.ExecuteScalar<int>(@"
+            INSERT INTO ddp_officina_items
+                (project_id, part_number, description, quantity, unit_cost, material,
+                 treatment, supplier_id, supplier_name, item_status, requested_by, danea_ref,
+                 date_needed, order_date, destination, destination_spec, notes, updated_at)
+            VALUES
+                (@ProjectId, @PartNumber, @Description, @Quantity, @UnitCost, @Material,
+                 @Treatment, @SupplierId, @SupplierName, @ItemStatus, @RequestedBy, @DaneaRef,
+                 @DateNeeded, @OrderDate, @Destination, @DestinationSpec, @Notes, NOW());
+            SELECT LAST_INSERT_ID()", req);
+
+            // Ogni riga officina genera la sua bozza di lavorazione (Pannello Lavorazioni).
+            WorkRequestDdpSync.SyncResult? sync = WorkRequestDdpSync.Upsert(c, newId);
+            if (sync != null) NotifyWorkRequestsChanged("create", sync.ProjectId);
+
+            NotifyDdpChange(id, conn, "create", newId, "OFFICINA");
+            return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<int>.Fail(ex.Message));
+        }
+    }
+
+    // Import composizione Codex → distinta officina: aggiunto un codice padre (es. assieme 5xx),
+    // i suoi figli DIRETTI (solo articoli Codex, niente ricorsione sui sotto-assiemi) diventano
+    // righe della DDP officina con snapshot codice/descrizione/costo/fornitore, stato DO.
+    // Dedup per codice normalizzato (senza punti): se il figlio è già in distinta si somma la
+    // quantità della composizione alla riga esistente. I figli da Catalogo vengono saltati e contati.
+    [HttpPost("{id}/ddp-officina/import-composition")]
+    public IActionResult ImportOfficinaComposition(int id, [FromBody] OfficinaImportCompositionRequest req, [FromQuery] string? conn = null)
+    {
+        try
+        {
+            using var c = _db.Open();
+            var children = c.Query<OfficinaCompositionChild>(@"
+            SELECT ci.codice AS RawCode, ci.descr AS Descr, ci.fornitore AS Fornitore,
+                   ci.prezzo_forn AS PrezzoForn, cc.quantity AS Quantity,
+                   (cc.child_catalog_id IS NOT NULL) AS IsCatalog
+            FROM codex_compositions cc
+            LEFT JOIN codex_items ci ON ci.id = cc.child_codex_id
+            WHERE cc.parent_codex_id = @ParentId
+            ORDER BY cc.sort_order, ci.codice", new { ParentId = req.CodexParentId }).ToList();
+
+            if (children.Count == 0)
+                return Ok(ApiResponse<OfficinaImportCompositionResult>.Fail("L'articolo non ha una composizione."));
+
+            // Riga del padre in distinta: la sua quantità è il moltiplicatore dell'import
+            // (es. 4 assiemi → ogni componente ×4) e il suo id collega i figli, che da qui
+            // in poi seguono i cambi di quantità del padre («comanda il padre»).
+            decimal parentQty = 1;
+            int? parentRowId = null;
+            string parentKey = (c.ExecuteScalar<string?>(
+                "SELECT codice FROM codex_items WHERE id = @Id", new { Id = req.CodexParentId }) ?? "")
+                .Replace(".", "").Trim();
+            if (parentKey.Length > 0)
+            {
+                (int Id, decimal Quantity) parentRow = c.QueryFirstOrDefault<(int, decimal)>(@"
+                SELECT id, quantity FROM ddp_officina_items
+                WHERE project_id = @Id AND REPLACE(part_number, '.', '') = @Key
+                ORDER BY id LIMIT 1", new { Id = id, Key = parentKey });
+                if (parentRow.Id > 0)
+                {
+                    parentRowId = parentRow.Id;
+                    if (parentRow.Quantity > 0) parentQty = parentRow.Quantity;
+                }
+            }
+
+            // Righe già in distinta, indicizzate per codice normalizzato (il part_number è salvato col punto).
+            var existingByCode = new Dictionary<string, int>();
+            foreach ((int rowId, string partNumber) in c.Query<(int, string)>(
+                "SELECT id, part_number FROM ddp_officina_items WHERE project_id = @Id ORDER BY id", new { Id = id }))
+            {
+                string key = (partNumber ?? "").Replace(".", "").Trim();
+                if (key.Length > 0 && !existingByCode.ContainsKey(key)) existingByCode[key] = rowId;
+            }
+
+            var result = new OfficinaImportCompositionResult { ParentQuantity = parentQty };
+            foreach (OfficinaCompositionChild child in children)
+            {
+                // I figli da Catalogo (preventivi) non sono particolari d'officina: saltati e contati.
+                if (child.IsCatalog || string.IsNullOrWhiteSpace(child.RawCode)) { result.Skipped++; continue; }
+
+                string key = child.RawCode.Replace(".", "").Trim();
+                if (existingByCode.TryGetValue(key, out int existingId))
+                {
+                    // Riga già in distinta: somma la quantità e, se libera, la collega al padre
+                    // (COALESCE: non ruba righe già collegate a un altro padre).
+                    c.Execute(@"UPDATE ddp_officina_items SET
+                                quantity = quantity + @Add,
+                                parent_officina_item_id = COALESCE(parent_officina_item_id, @ParentRowId),
+                                composition_qty = COALESCE(composition_qty, @CompQty),
+                                updated_at = NOW()
+                                WHERE id = @Id",
+                        new { Add = child.Quantity * parentQty, ParentRowId = parentRowId, CompQty = (decimal)child.Quantity, Id = existingId });
+                    WorkRequestDdpSync.Upsert(c, existingId);
+                    result.Updated++;
+                }
+                else
+                {
+                    int newId = c.ExecuteScalar<int>(@"
+                    INSERT INTO ddp_officina_items
+                        (project_id, part_number, description, quantity, unit_cost, material,
+                         treatment, supplier_name, item_status, requested_by, danea_ref,
+                         date_needed, destination, destination_spec, notes,
+                         parent_officina_item_id, composition_qty, updated_at)
+                    VALUES
+                        (@ProjectId, @PartNumber, @Description, @Quantity, @UnitCost, '',
+                         '', @SupplierName, 'DO', @RequestedBy, '',
+                         NULL, '', '', '',
+                         @ParentRowId, @CompQty, NOW());
+                    SELECT LAST_INSERT_ID()", new
+                    {
+                        ProjectId = id,
+                        PartNumber = CodexListItem.FormatCodice(child.RawCode),
+                        Description = child.Descr,
+                        Quantity = child.Quantity * parentQty,
+                        UnitCost = child.PrezzoForn,
+                        SupplierName = child.Fornitore,
+                        RequestedBy = req.RequestedBy,
+                        ParentRowId = parentRowId,
+                        CompQty = (decimal)child.Quantity
+                    });
+                    // Ogni riga officina genera la sua bozza di lavorazione (Pannello Lavorazioni).
+                    WorkRequestDdpSync.Upsert(c, newId);
+                    existingByCode[key] = newId;
+                    result.Added++;
+                }
+            }
+
+            if (result.Added + result.Updated > 0)
+            {
+                NotifyWorkRequestsChanged("create", id);
+                NotifyDdpChange(id, conn, "create", 0, "OFFICINA");
+            }
+            string mult = parentQty != 1 ? $" ×{parentQty:0.###}" : "";
+            return Ok(ApiResponse<OfficinaImportCompositionResult>.Ok(result,
+                $"Composizione importata{mult}: {result.Added} nuove righe, {result.Updated} aggiornate"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<OfficinaImportCompositionResult>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>Figlio della composizione Codex proiettato per l'import in DDP officina.</summary>
+    private sealed class OfficinaCompositionChild
+    {
+        public string RawCode { get; set; } = "";
+        public string Descr { get; set; } = "";
+        public string Fornitore { get; set; } = "";
+        public decimal PrezzoForn { get; set; }
+        public int Quantity { get; set; }
+        public bool IsCatalog { get; set; }
+    }
+
+    [HttpPut("{id}/ddp-officina/{itemId}")]
+    public IActionResult UpdateOfficinaItem(int id, int itemId, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
+    {
+        try
+        {
+            using var c = _db.Open();
+
+            // Concorrenza ottimistica (rete di sicurezza anche col real-time): se il client invia
+            // la versione vista (ExpectedUpdatedAt) e la riga è cambiata nel frattempo → 409, niente lost update.
+            if (req.ExpectedUpdatedAt.HasValue)
+            {
+                DateTime? current = c.ExecuteScalar<DateTime?>(
+                    "SELECT updated_at FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
+                    new { ItemId = itemId, Id = id });
+                if (current.HasValue && Math.Abs((current.Value - req.ExpectedUpdatedAt.Value).TotalSeconds) > 1)
+                    return Conflict(ApiResponse<DateTime?>.Fail(
+                        "Riga modificata da un altro utente nel frattempo. Ricarica e riprova."));
+            }
+
+            // Leggi stato, quantità e order_date precedenti (notifiche + «comanda il padre» + auto IO)
+            (string? ItemStatus, decimal Quantity, int? ParentOfficinaItemId, DateTime? OrderDate) before =
+                c.QueryFirstOrDefault<(string?, decimal, int?, DateTime?)>(
+                "SELECT item_status, quantity, parent_officina_item_id, order_date FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            string? oldStatus = before.ItemStatus;
+
+            // Matrice degli avanzamenti di stato (v7, tipo OFFICINA): il server rifiuta le
+            // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
+            // client vecchi e modifiche concorrenti). Gli auto-avanzamenti successivi
+            // (pezzi prodotti → PAR/DISP) sono transizioni di sistema già coerenti con la matrice.
+            string? transitionError = DdpTransitionService.Validate(
+                c, DdpTransitionService.TypeOfficina, oldStatus, req.ItemStatus);
+            if (transitionError != null)
+                return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
+
+            // Se è un componente figlio, blocca la modifica della quantità ripristinando quella precedente.
+            if (before.ParentOfficinaItemId.HasValue)
+            {
+                req.Quantity = before.Quantity;
+            }
+
+            // Quantità modificabile solo in «Da Ordinare» (o tornando in DO nella stessa save).
+            if (req.Quantity != before.Quantity
+                && !string.Equals(oldStatus, "DO", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(req.ItemStatus, "DO", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(ApiResponse<DateTime?>.Fail(
+                    "La quantità è modificabile solo in stato Da Ordinare."));
+            }
+
+            // Auto-fill data ordine: al passaggio a IO, se ancora NULL (body e DB) → oggi (one-shot).
+            if (string.Equals(req.ItemStatus, "IO", StringComparison.OrdinalIgnoreCase)
+                && !req.OrderDate.HasValue
+                && !before.OrderDate.HasValue)
+            {
+                req.OrderDate = DateTime.Today;
+            }
+            else if (!req.OrderDate.HasValue && before.OrderDate.HasValue)
+            {
+                // Non cancellare la data già salvata se il client non la rimanda.
+                req.OrderDate = before.OrderDate;
+            }
+
+            // Pezzi prodotti: clamp 0…quantity; auto PAR/DISP (salvo ANN).
+            // DISP = chiusura positiva unica della matrice v7 (assorbe il vecchio COS).
+            if (req.QuantityProduced < 0) req.QuantityProduced = 0;
+            if (req.QuantityProduced > req.Quantity) req.QuantityProduced = req.Quantity;
+            if (!string.Equals(req.ItemStatus, "ANN", StringComparison.OrdinalIgnoreCase))
+            {
+                if (req.Quantity > 0 && req.QuantityProduced >= req.Quantity)
+                    req.ItemStatus = "DISP";
+                else if (req.QuantityProduced > 0 && req.QuantityProduced < req.Quantity)
+                    req.ItemStatus = "PAR";
+            }
+
+            req.Id = itemId;
+            req.ProjectId = id;
+            c.Execute(@"
+            UPDATE ddp_officina_items SET
+                quantity = @Quantity, quantity_produced = @QuantityProduced,
+                unit_cost = @UnitCost, material = @Material,
+                treatment = @Treatment, supplier_id = @SupplierId, supplier_name = @SupplierName,
+                item_status = @ItemStatus, danea_ref = @DaneaRef, date_needed = @DateNeeded,
+                order_date = @OrderDate,
+                destination = @Destination, destination_spec = @DestinationSpec,
+                notes = @Notes, updated_at = NOW()
+            WHERE id = @Id AND project_id = @ProjectId", req);
+
+            if (req.UpdateCodexPrice == true && !string.IsNullOrWhiteSpace(req.PartNumber))
+            {
+                var cleanPartNumber = req.PartNumber.Replace(".", "").Trim();
+                c.Execute(
+                    "UPDATE codex_items SET prezzo_forn = @Price, data = NOW() WHERE codice = @Code AND (prezzo_forn IS NULL OR prezzo_forn = 0)",
+                    new { Price = req.UnitCost, Code = cleanPartNumber });
+            }
+
+            // «Comanda il padre»: se la quantità è cambiata, i componenti importati dalla
+            // composizione Codex (righe collegate a questa) seguono con delta =
+            // composition_qty × ΔQtà, mai sotto zero. Escluse le righe negli stati A9
+            // (fuori dai conteggi, quantità bloccata anche in UI).
+            if (!string.IsNullOrEmpty(oldStatus) && req.Quantity != before.Quantity)
+            {
+                decimal delta = req.Quantity - before.Quantity;
+                var excluded = c.Query<string>(@"
+                    SELECT s.status_key FROM ddp_aggregation_states s
+                    JOIN ddp_aggregations a ON a.id = s.aggregation_id
+                    WHERE a.code = 'A9'").ToList();
+                if (excluded.Count == 0) excluded.Add("");   // IN su lista vuota non è SQL valido
+                var childIds = c.Query<int>(@"
+                    SELECT id FROM ddp_officina_items
+                    WHERE parent_officina_item_id = @ParentId AND composition_qty IS NOT NULL
+                      AND item_status NOT IN @Excluded",
+                    new { ParentId = itemId, Excluded = excluded }).ToList();
+                foreach (int childId in childIds)
+                {
+                    c.Execute(@"UPDATE ddp_officina_items
+                        SET quantity = GREATEST(0, quantity + composition_qty * @Delta), updated_at = NOW()
+                        WHERE id = @Id", new { Delta = delta, Id = childId });
+                    WorkRequestDdpSync.Upsert(c, childId);
+                }
+                if (childIds.Count > 0) NotifyWorkRequestsChanged("update", id);
+            }
+
+            // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
+            string projStatus = c.ExecuteScalar<string?>(
+                "SELECT status FROM projects WHERE id = @Id", new { Id = id }) ?? "";
+            if (!string.IsNullOrEmpty(oldStatus) && oldStatus != req.ItemStatus && projStatus == "ACTIVE")
+            {
+                try
+                {
+                    string projCode = c.ExecuteScalar<string?>(
+                        "SELECT code FROM projects WHERE id = @Id", new { Id = id }) ?? "";
+                    int currentEmpId = GetCurrentEmployeeId();
+
+                    string severity = req.ItemStatus switch
+                    {
+                        "DISP" => "SUCCESS",  // DISPONIBILE / CONSEGNATO (chiusura positiva v7)
+                        "ANN" => "WARNING",   // ANNULLATO
+                        "IO" => "INFO",       // IN ORDINE
+                        _ => "INFO"
+                    };
+
+                    string title = $"Cambio stato DDP Officina — {projCode}";
+                    string msg = $"Stato modificato da {DdpStatusMap.ToLabel(oldStatus)} a {DdpStatusMap.ToLabel(req.ItemStatus)}";
+
+                    List<int> recipients = _notif.GetProjectPmIds(id);
+                    recipients.AddRange(_notif.GetAcqEmployeeIds());
+                    recipients.Remove(currentEmpId);
+
+                    if (recipients.Count > 0)
+                        _notif.Create("DDP_STATUS_CHANGED", severity, title, msg, "BOM_OFFICINA", itemId, id, currentEmpId, recipients);
+                }
+                catch { /* non bloccare l'update per errore notifica */ }
+            }
+
+            // Riallinea i campi derivati della lavorazione collegata (o crea la bozza se manca).
+            WorkRequestDdpSync.SyncResult? sync = WorkRequestDdpSync.Upsert(c, itemId);
+            if (sync != null) NotifyWorkRequestsChanged(sync.Created ? "create" : "update", sync.ProjectId);
+
+            // Real-time: avvisa gli altri che guardano la distinta officina di questa commessa.
+            NotifyDdpChange(id, conn, "update", itemId, "OFFICINA");
+
+            // Ritorna la nuova versione così il client riallinea il proprio token di concorrenza.
+            DateTime? newTs = c.ExecuteScalar<DateTime?>(
+                "SELECT updated_at FROM ddp_officina_items WHERE id = @Id", new { Id = itemId });
+            return Ok(ApiResponse<DateTime?>.Ok(newTs, "Aggiornato"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<DateTime?>.Fail(ex.Message));
+        }
+    }
+
+    // Cancellazione DEFINITIVA della riga (diversa dall'annullo, che è un cambio stato):
+    // riservata ad ADMIN e PM, esposta nel menu riga della griglia officina.
+    // «Comanda il padre» anche qui: eliminare un padre elimina in cascata i componenti
+    // importati dalla sua composizione (ognuno con la propria bozza in staging).
+    [HttpDelete("{id}/ddp-officina/{itemId}")]
+    [Authorize(Roles = "ADMIN,PM")]
+    public IActionResult DeleteOfficinaItem(int id, int itemId, [FromQuery] string? conn = null)
+    {
+        try
+        {
+            using var c = _db.Open();
+            // Blocca la cancellazione diretta dei figli.
+            var isChild = c.ExecuteScalar<int?>(
+                "SELECT parent_officina_item_id FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            if (isChild.HasValue)
+                return BadRequest(ApiResponse<bool>.Fail("Impossibile eliminare direttamente un componente figlio. Eliminare il padre."));
+
+            var childIds = c.Query<int>(
+                "SELECT id FROM ddp_officina_items WHERE parent_officina_item_id = @Pid AND project_id = @Id",
+                new { Pid = itemId, Id = id }).ToList();
+            bool anyStagingDeleted = false;
+            foreach (int childId in childIds)
+            {
+                anyStagingDeleted |= WorkRequestDdpSync.DeleteStagingFor(c, childId).HasValue;
+                c.Execute("DELETE FROM ddp_officina_items WHERE id = @Id", new { Id = childId });
+            }
+
+            // La bozza in staging segue la riga; le lavorazioni promosse restano
+            // (la FK ON DELETE SET NULL le scollega alla cancellazione della riga).
+            anyStagingDeleted |= WorkRequestDdpSync.DeleteStagingFor(c, itemId).HasValue;
+            c.Execute("DELETE FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            if (anyStagingDeleted) NotifyWorkRequestsChanged("delete", id);
+            NotifyDdpChange(id, conn, "delete", itemId, "OFFICINA");
+            return Ok(ApiResponse<bool>.Ok(true, childIds.Count > 0
+                ? $"Eliminata riga + {childIds.Count} componenti collegati"
+                : "Eliminato"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
+
     [HttpGet("{id}/dashboard")]
     public IActionResult GetDashboard(int id)
     {
@@ -1072,13 +1602,26 @@ public class ProjectsController : ControllerBase
         data.HoursWorked = (decimal)(totals?.HoursWorked ?? 0m);
         data.CostWorked = (decimal)(totals?.CostWorked ?? 0m);
 
-        // Costo materiali DDP
-        decimal materialCost = c.ExecuteScalar<decimal>(@"
+        // Costo materiali DDP — esclude solo gli stati «esclusi da totale» (aggregazione A9);
+        // i materiali consegnati (A2) SONO un costo reale e restano nel totale.
+        string[] ddpExcluded = DdpAggregationSet.Load(c, "A9");
+        decimal materialCostCommercial = c.ExecuteScalar<decimal>(@"
             SELECT COALESCE(SUM(quantity * unit_cost), 0)
-            FROM bom_items WHERE project_id = @Id AND item_status <> 'ANN'", new { Id = id });
+            FROM bom_items
+            WHERE project_id = @Id AND COALESCE(item_status,'') NOT IN @Excluded",
+            new { Id = id, Excluded = ddpExcluded });
 
-        data.MaterialCost = materialCost;
-        data.TotalCost = data.CostWorked + materialCost;
+        decimal materialCostOfficina = c.ExecuteScalar<decimal>(@"
+            SELECT COALESCE(SUM(quantity * unit_cost), 0)
+            FROM ddp_officina_items
+            WHERE project_id = @Id AND COALESCE(item_status,'') NOT IN @Excluded
+              AND id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)",
+            new { Id = id, Excluded = ddpExcluded });
+
+        data.MaterialCostCommercial = materialCostCommercial;
+        data.MaterialCostOfficina = materialCostOfficina;
+        data.MaterialCost = materialCostCommercial + materialCostOfficina;
+        data.TotalCost = data.CostWorked + data.MaterialCost;
 
         // Conteggio fasi
         var phaseCounts = c.QueryFirstOrDefault<dynamic>(@"
@@ -1133,7 +1676,7 @@ public class ProjectsController : ControllerBase
                        COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
                        1 AS TotalPhases,
                        CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
-                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'ANN'), 0) AS MaterialCost
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND COALESCE(b.item_status,'') NOT IN @Excluded), 0) AS MaterialCost
                 FROM project_phases pp
                 LEFT JOIN departments d ON d.id = pp.department_id
                 WHERE pp.project_id = @Id AND pp.department_id IS NOT NULL
@@ -1175,11 +1718,11 @@ public class ProjectsController : ControllerBase
                        0 AS HoursWorked,
                        1 AS TotalPhases,
                        CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
-                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND b.item_status <> 'ANN'), 0) AS MaterialCost
+                       COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND COALESCE(b.item_status,'') NOT IN @Excluded), 0) AS MaterialCost
                 FROM project_phases pp
                 WHERE pp.project_id = @Id AND pp.department_id IS NULL
             ) sub
-            GROUP BY dept_code, dept_name", new { Id = id }).ToList();
+            GROUP BY dept_code, dept_name", new { Id = id, Excluded = ddpExcluded }).ToList();
 
         // Merge: unisci costing + assigned + fasi in un unico elenco per reparto
         HashSet<string> allDepts = phasesByDept.Select(p => p.DepartmentCode)
@@ -1327,6 +1870,7 @@ public class ProjectsController : ControllerBase
             await file.CopyToAsync(stream);
         }
 
+        NotifyDocumentsChanged(id, "upload");
         return Ok(ApiResponse<string>.Ok(Path.GetFileName(filePath), "File caricato."));
     }
 
@@ -1368,6 +1912,7 @@ public class ProjectsController : ControllerBase
             count++;
         }
 
+        NotifyDocumentsChanged(id, "upload");
         return Ok(ApiResponse<string>.Ok($"{count} file caricati."));
     }
 
@@ -1392,6 +1937,7 @@ public class ProjectsController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail("La cartella esiste già."));
 
         LongPathHelper.CreateDirectory(newFolder);
+        NotifyDocumentsChanged(id, "create");
         return Ok(ApiResponse<string>.Ok(req.FolderName, "Cartella creata."));
     }
 
@@ -1426,6 +1972,7 @@ public class ProjectsController : ControllerBase
         else
             return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
 
+        NotifyDocumentsChanged(id, "rename");
         return Ok(ApiResponse<string>.Ok(req.NewName, "Rinominato."));
     }
 
@@ -1453,6 +2000,7 @@ public class ProjectsController : ControllerBase
         else
             return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
 
+        NotifyDocumentsChanged(id, "delete");
         return Ok(ApiResponse<bool>.Ok(true, "Eliminato."));
     }
 
@@ -1493,6 +2041,12 @@ public class ProjectsController : ControllerBase
         else
             return NotFound(ApiResponse<string>.Fail("File o cartella non trovato."));
 
+        NotifyDocumentsChanged(id, "move");
         return Ok(ApiResponse<bool>.Ok(true, "Spostato."));
     }
+
+    /// <summary>Quantità editabile sulla DDP commerciale: VER (ingresso) o DO.</summary>
+    private static bool IsCommercialQtyEditable(string? status) =>
+        string.Equals(status, "VER", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "DO", StringComparison.OrdinalIgnoreCase);
 }

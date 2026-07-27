@@ -57,3 +57,11 @@ public class ChatAttachmentRequest
     public string FileName { get; set; } = "";
     public string FileData { get; set; } = "";
 }
+
+/** Notifica real-time (SignalR `ChatChanged`) su una chat di commessa. */
+public class ChatChange
+{
+    public int ProjectId { get; set; }
+    public int ChatId { get; set; }
+    public string Action { get; set; } = "";
+}

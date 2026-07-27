@@ -49,7 +49,10 @@ export function RowActionsMenu({
           type="button"
           variant="ghost"
           size={size}
-          className={cn(triggerClassName)}
+          className={cn(
+            "text-current hover:bg-black/10 hover:text-current",
+            triggerClassName
+          )}
         >
           <MoreVertical />
           <span className="sr-only">Azioni</span>

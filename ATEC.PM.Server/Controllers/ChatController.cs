@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Hubs;
 using System.Security.Claims;
 
 namespace ATEC.PM.Server.Controllers;
@@ -13,7 +15,24 @@ namespace ATEC.PM.Server.Controllers;
 public class ChatController : ControllerBase
 {
     private readonly DbService _db;
-    public ChatController(DbService db) => _db = db;
+    private readonly IHubContext<ProjectHub> _hub;
+
+    public ChatController(DbService db, IHubContext<ProjectHub> hub)
+    {
+        _db = db;
+        _hub = hub;
+    }
+
+    private void NotifyChatChange(int projectId, int chatId, string action)
+    {
+        var payload = new ChatChange
+        {
+            ProjectId = projectId,
+            ChatId = chatId,
+            Action = action,
+        };
+        _ = _hub.Clients.Group($"project-{projectId}").SendAsync("ChatChanged", payload);
+    }
 
     private int GetCurrentEmployeeId() =>
     int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
@@ -144,6 +163,7 @@ public class ChatController : ControllerBase
         }
 
         tx.Commit();
+        NotifyChatChange(req.ProjectId, chatId, "create");
         return Ok(ApiResponse<int>.Ok(chatId, "Chat creata"));
     }
 
@@ -157,11 +177,18 @@ public class ChatController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.Message))
             return BadRequest(ApiResponse<string>.Fail("Messaggio vuoto."));
 
+        int? projectId = c.ExecuteScalar<int?>(
+            "SELECT project_id FROM project_chats WHERE id = @ChatId",
+            new { ChatId = chatId });
+
         int msgId = c.ExecuteScalar<int>(@"
             INSERT INTO project_chat_messages (chat_id, employee_id, message)
             VALUES (@ChatId, @EmpId, @Message);
             SELECT LAST_INSERT_ID()",
             new { ChatId = chatId, EmpId = empId, req.Message });
+
+        if (projectId.HasValue)
+            NotifyChatChange(projectId.Value, chatId, "message");
 
         return Ok(ApiResponse<int>.Ok(msgId));
     }
@@ -174,7 +201,7 @@ public class ChatController : ControllerBase
         int empId = GetCurrentEmployeeId();
 
         var msg = c.QueryFirstOrDefault<dynamic>(
-            "SELECT employee_id FROM project_chat_messages WHERE id=@Id",
+            "SELECT employee_id, chat_id AS ChatId FROM project_chat_messages WHERE id=@Id",
             new { Id = messageId });
 
         if (msg == null)
@@ -183,7 +210,16 @@ public class ChatController : ControllerBase
         if ((int)msg.employee_id != empId && !IsPmOrAdmin())
             return Forbid();
 
+        int chatId = (int)msg.ChatId;
+        int? projectId = c.ExecuteScalar<int?>(
+            "SELECT project_id FROM project_chats WHERE id = @ChatId",
+            new { ChatId = chatId });
+
         c.Execute("DELETE FROM project_chat_messages WHERE id=@Id", new { Id = messageId });
+
+        if (projectId.HasValue)
+            NotifyChatChange(projectId.Value, chatId, "delete_message");
+
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -195,6 +231,13 @@ public class ChatController : ControllerBase
         c.Execute(@"INSERT IGNORE INTO project_chat_participants (chat_id, employee_id)
             VALUES (@ChatId, @EmpId)",
             new { ChatId = chatId, EmpId = employeeId });
+
+        int? projectId = c.ExecuteScalar<int?>(
+            "SELECT project_id FROM project_chats WHERE id = @ChatId",
+            new { ChatId = chatId });
+        if (projectId.HasValue)
+            NotifyChatChange(projectId.Value, chatId, "participants");
+
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -205,6 +248,13 @@ public class ChatController : ControllerBase
         using var c = _db.Open();
         c.Execute("DELETE FROM project_chat_participants WHERE chat_id=@ChatId AND employee_id=@EmpId",
             new { ChatId = chatId, EmpId = employeeId });
+
+        int? projectId = c.ExecuteScalar<int?>(
+            "SELECT project_id FROM project_chats WHERE id = @ChatId",
+            new { ChatId = chatId });
+        if (projectId.HasValue)
+            NotifyChatChange(projectId.Value, chatId, "participants");
+
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -216,7 +266,7 @@ public class ChatController : ControllerBase
         int empId = GetCurrentEmployeeId();
 
         var chat = c.QueryFirstOrDefault<dynamic>(
-            "SELECT created_by FROM project_chats WHERE id=@Id",
+            "SELECT created_by, project_id AS ProjectId FROM project_chats WHERE id=@Id",
             new { Id = chatId });
 
         if (chat == null)
@@ -225,7 +275,9 @@ public class ChatController : ControllerBase
         if ((int)chat.created_by != empId && !IsPmOrAdmin())
             return Forbid();
 
+        int projectId = (int)chat.ProjectId;
         c.Execute("DELETE FROM project_chats WHERE id=@Id", new { Id = chatId });
+        NotifyChatChange(projectId, chatId, "delete_chat");
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
@@ -258,6 +310,10 @@ public class ChatController : ControllerBase
         string filePath = Path.Combine(chatFolder, $"{DateTime.Now:yyyyMMdd_HHmmss}_{safeFileName}");
 
         byte[] fileBytes = Convert.FromBase64String(req.FileData);
+        const int maxBytes = 20 * 1024 * 1024;
+        if (fileBytes.Length > maxBytes)
+            return BadRequest(ApiResponse<string>.Fail("File troppo grande (max 20 MB)."));
+
         System.IO.File.WriteAllBytes(filePath, fileBytes);
 
         // Salva messaggio con riferimento allegato
@@ -266,6 +322,8 @@ public class ChatController : ControllerBase
             VALUES (@ChatId, @EmpId, @Message, 1, @AttName, @AttPath);
             SELECT LAST_INSERT_ID()",
             new { ChatId = chatId, EmpId = empId, req.Message, AttName = safeFileName, AttPath = filePath });
+
+        NotifyChatChange((int)chatInfo.project_id, chatId, "message");
 
         return Ok(ApiResponse<int>.Ok(msgId));
     }
@@ -290,5 +348,79 @@ public class ChatController : ControllerBase
         }
 
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    // ── Download allegato messaggio (web: path assoluto su server non esponibile al client) ──
+    [HttpGet("messages/{messageId}/attachment")]
+    public IActionResult DownloadAttachment(int messageId)
+    {
+        using var c = _db.Open();
+        int empId = GetCurrentEmployeeId();
+        bool isPm = IsPmOrAdmin();
+
+        var msg = c.QueryFirstOrDefault<dynamic>(@"
+            SELECT m.chat_id AS ChatId, m.has_attachment AS HasAttachment,
+                   COALESCE(m.attachment_path,'') AS AttachmentPath,
+                   COALESCE(m.attachment_name,'') AS AttachmentName,
+                   ch.project_id AS ProjectId, p.server_path AS ServerPath
+            FROM project_chat_messages m
+            JOIN project_chats ch ON ch.id = m.chat_id
+            JOIN projects p ON p.id = ch.project_id
+            WHERE m.id = @Id",
+            new { Id = messageId });
+
+        if (msg == null)
+            return NotFound(ApiResponse<string>.Fail("Messaggio non trovato."));
+
+        if (!(bool)msg.HasAttachment || string.IsNullOrEmpty((string)msg.AttachmentPath))
+            return NotFound(ApiResponse<string>.Fail("Nessun allegato."));
+
+        int chatId = (int)msg.ChatId;
+        if (!isPm)
+        {
+            int access = c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM project_chat_participants WHERE chat_id=@ChatId AND employee_id=@EmpId",
+                new { ChatId = chatId, EmpId = empId });
+            if (access == 0)
+                return Forbid();
+        }
+
+        string attachmentPath = (string)msg.AttachmentPath;
+        string serverPath = (string)(msg.ServerPath ?? "");
+        if (string.IsNullOrEmpty(serverPath))
+            return NotFound(ApiResponse<string>.Fail("Cartella commessa non trovata."));
+
+        string normalizedFile = Path.GetFullPath(attachmentPath);
+        string normalizedRoot = Path.GetFullPath(serverPath);
+        if (!normalizedFile.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<string>.Fail("Path allegato non valido."));
+
+        if (!System.IO.File.Exists(attachmentPath))
+            return NotFound(ApiResponse<string>.Fail("File non trovato."));
+
+        string fileName = (string)msg.AttachmentName;
+        if (string.IsNullOrEmpty(fileName))
+            fileName = Path.GetFileName(attachmentPath);
+
+        string ext = Path.GetExtension(fileName).ToLower();
+        string contentType = ext switch
+        {
+            ".pdf" => "application/pdf",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls" => "application/vnd.ms-excel",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".zip" => "application/zip",
+            ".txt" => "text/plain",
+            _ => "application/octet-stream"
+        };
+
+        var stream = new FileStream(attachmentPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return File(stream, contentType, fileName);
     }
 }

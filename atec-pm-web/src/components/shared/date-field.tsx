@@ -9,8 +9,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { dateToIso, isoToDate } from "@/lib/date-iso"
-import { WEEKDAYS_SHORT, isRedDay } from "@/lib/it-holidays"
+import { dateToIso, formatDateShort, isoToDate } from "@/lib/date-iso"
+import { WEEKDAYS_SHORT, WEEKDAYS_LONG, isRedDay } from "@/lib/it-holidays"
 import { cn } from "@/lib/utils"
 
 interface DateFieldProps {
@@ -30,6 +30,8 @@ interface DateFieldProps {
   showWeekday?: boolean
   /** Nasconde l'icona calendario. */
   showIcon?: boolean
+  /** Giorno della settimana SOPRA la data (due righe) invece che in linea: campo più stretto per griglie dense. */
+  stackedWeekday?: boolean
 }
 
 /** Etichetta data standard: «Lun, 08/06/2026» (giorno rosso se festivo). */
@@ -39,7 +41,7 @@ export function formatDateWithWeekday(
 ): React.ReactNode {
   const date = isoToDate(value)
   if (!date) return null
-  if (!showWeekday) return date.toLocaleDateString("it-IT")
+  if (!showWeekday) return formatDateShort(date)
   const weekday =
     WEEKDAYS_SHORT[date.getDay()].charAt(0).toUpperCase() +
     WEEKDAYS_SHORT[date.getDay()].slice(1)
@@ -48,8 +50,30 @@ export function formatDateWithWeekday(
       <span className={cn(isRedDay(date) && "text-red-600 dark:text-red-400")}>
         {weekday},
       </span>{" "}
-      {date.toLocaleDateString("it-IT")}
+      {formatDateShort(date)}
     </>
+  )
+}
+
+/** Etichetta impilata: giorno della settimana sopra (rosso se festivo), data gg/mm/aa sotto. */
+function StackedDateLabel({ value }: { value: string | null | undefined }) {
+  const date = isoToDate(value)
+  if (!date) return null
+  const weekday =
+    WEEKDAYS_LONG[date.getDay()].charAt(0).toUpperCase() +
+    WEEKDAYS_LONG[date.getDay()].slice(1)
+  return (
+    <span className="flex min-w-0 flex-col items-start text-left leading-tight">
+      <span
+        className={cn(
+          "text-sm",
+          isRedDay(date) && "text-red-600 dark:text-red-400"
+        )}
+      >
+        {weekday}
+      </span>
+      <span className="truncate text-sm">{formatDateShort(date)}</span>
+    </span>
   )
 }
 
@@ -61,6 +85,7 @@ export function ReadonlyDateField({
   size = "default",
   showWeekday = true,
   showIcon = true,
+  stackedWeekday = false,
 }: {
   value: string | null | undefined
   placeholder?: string
@@ -68,6 +93,7 @@ export function ReadonlyDateField({
   size?: "sm" | "default"
   showWeekday?: boolean
   showIcon?: boolean
+  stackedWeekday?: boolean
 }) {
   const date = isoToDate(value)
 
@@ -77,15 +103,20 @@ export function ReadonlyDateField({
         "inline-flex w-full items-center justify-start gap-2 rounded-full border border-border bg-background font-normal shadow-xs",
         size === "sm" ? "h-8 px-2.5" : "h-9 px-3",
         date ? "" : "text-muted-foreground",
-        className
+        className,
+        stackedWeekday && "h-10 px-2.5 py-1"
       )}
     >
       {showIcon ? (
         <CalendarIcon className="size-4 shrink-0 text-foreground" />
       ) : null}
-      <span className="truncate text-sm">
-        {date ? formatDateWithWeekday(value, showWeekday) : placeholder}
-      </span>
+      {date && stackedWeekday ? (
+        <StackedDateLabel value={value} />
+      ) : (
+        <span className="truncate text-sm">
+          {date ? formatDateWithWeekday(value, showWeekday) : placeholder}
+        </span>
+      )}
     </div>
   )
 }
@@ -103,6 +134,7 @@ export function DateField({
   disabled = false,
   showWeekday = true,
   showIcon = true,
+  stackedWeekday = false,
 }: DateFieldProps) {
   const [open, setOpen] = React.useState(false)
   const date = isoToDate(value)
@@ -123,15 +155,20 @@ export function DateField({
           className={cn(
             "group w-full justify-start gap-2 rounded-full bg-background font-normal shadow-xs",
             date ? "" : "text-muted-foreground",
-            className
+            className,
+            stackedWeekday && "h-10 px-2.5 py-1"
           )}
         >
           {showIcon ? (
             <CalendarIcon className="size-4 shrink-0 text-foreground" />
           ) : null}
-          <span className="truncate text-sm">
-            {date ? formatDateWithWeekday(value, showWeekday) : placeholder}
-          </span>
+          {date && stackedWeekday ? (
+            <StackedDateLabel value={value} />
+          ) : (
+            <span className="truncate text-sm">
+              {date ? formatDateWithWeekday(value, showWeekday) : placeholder}
+            </span>
+          )}
           {clearable && date && !disabled ? (
             <span
               role="button"

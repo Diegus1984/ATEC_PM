@@ -283,7 +283,7 @@ function ProjectMilestoneCard({
 
         <div className="flex items-center gap-3 shrink-0 ml-4" onClick={(e) => e.stopPropagation()}>
           <Button asChild variant="outline" size="sm" className="h-8 gap-1">
-            <Link to={`/commesse/${project.id}/milestones`}>
+            <Link to={`/commesse/${project.id}/milestones`} state={{ fromGlobal: "/milestones-summary" }}>
               <ExternalLink className="size-3.5" />
               Apri
             </Link>

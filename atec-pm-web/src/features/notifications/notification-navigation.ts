@@ -1,7 +1,7 @@
-import type { NotificationListItem } from "@/lib/api/types"
+import type { NotificationListItem, Deadline } from "@/lib/api/types"
 
 /** Sezione commessa in base al reference_type (come MainWindow.NavigateToProject WPF). */
-function commessaSectionForReference(referenceType: string): string {
+export function commessaSectionForReference(referenceType: string): string {
   switch ((referenceType || "").toUpperCase()) {
     case "BOM":
       return "ddp_commercial"
@@ -11,10 +11,14 @@ function commessaSectionForReference(referenceType: string): string {
       return "budget_vs_actual"
     case "CHECKLIST":
       return "checklist"
+    case "WORK_REQUEST":
+      return "work_requests"
     case "MOM_ACTION":
       return "mom"
     case "TIMESHEET":
       return "details"
+    case "SAL_ROW":
+      return "sal"
     default:
       return "details"
   }
@@ -57,3 +61,38 @@ export function getNotificationHref(
   const query = params.toString()
   return `/commesse/${notification.projectId}/${section}${query ? `?${query}` : ""}`
 }
+
+/**
+ * Destinazione della navigazione per una scadenza.
+ */
+export function deadlineHref(d: Deadline): string | null {
+  const ref = (d.refType || "").toUpperCase()
+
+  if (!d.projectId) {
+    if (ref === "CHECKLIST") {
+      return "/checklist"
+    }
+    if (ref === "MOM_ACTION") {
+      return "/mom"
+    }
+    return null
+  }
+
+  if (ref === "PROJECT") {
+    return `/commesse/${d.projectId}/details`
+  }
+
+  const section = commessaSectionForReference(ref)
+  const params = new URLSearchParams()
+
+  if (
+    d.refId > 0 &&
+    (ref === "BOM" || ref === "PHASE" || ref === "SAL_ROW")
+  ) {
+    params.set("item", String(d.refId))
+  }
+
+  const query = params.toString()
+  return `/commesse/${d.projectId}/${section}${query ? `?${query}` : ""}`
+}
+

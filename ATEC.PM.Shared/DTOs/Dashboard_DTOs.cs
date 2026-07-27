@@ -14,6 +14,13 @@ public class DashboardData
     public decimal HoursThisWeek { get; set; }
     public decimal TotalRevenue { get; set; }
     public List<DashboardProjectRow> RecentProjects { get; set; } = new();
+    public List<DashboardDailyHours> DailyHours { get; set; } = new();
+}
+
+public class DashboardDailyHours
+{
+    public DateTime WorkDate { get; set; }
+    public decimal Hours { get; set; }
 }
 
 public class DashboardProjectRow
@@ -48,6 +55,8 @@ public class ProjectDashboardData
     public int TotalPhases { get; set; }
     public int CompletedPhases { get; set; }
     public decimal MaterialCost { get; set; }
+    public decimal MaterialCostCommercial { get; set; }
+    public decimal MaterialCostOfficina { get; set; }
     public decimal TotalCost { get; set; }
 
     public List<DeptSummary> DepartmentSummaries { get; set; } = new();

@@ -1,10 +1,6 @@
-import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
 
-import { useConfirm } from "@/components/shared/confirm"
-import { RowActionsMenu } from "@/components/shared/row-actions"
-import { ActiveStatus } from "@/components/shared/status-dot"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -13,16 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import {
   fetchSalConditions,
   createSalCondition,
@@ -31,402 +23,181 @@ import {
   deleteSalCondition,
   reorderSalConditions,
   resetSalConditions,
+  fetchSapCausali,
+  createSapCausale,
+  updateSapCausale,
+  toggleSapCausale,
+  deleteSapCausale,
+  reorderSapCausali,
+  resetSapCausali,
+  fetchPaymentStates,
+  createPaymentState,
+  updatePaymentState,
+  togglePaymentState,
+  deletePaymentState,
+  reorderPaymentStates,
+  resetPaymentStates,
 } from "@/lib/api/sal"
 import type { SalCondition } from "@/lib/api/types"
-import { cn } from "@/lib/utils"
 
+import { SalOptionListPanel } from "./SalOptionListPanel"
+
+/** Tab della pagina anagrafiche (valori usati anche dal deep-link `state.tab`). */
+type SalAdminTab = "condizioni" | "sap" | "pagamenti"
+
+const TAB_VALUES: SalAdminTab[] = ["condizioni", "sap", "pagamenti"]
+
+/**
+ * Stati pagamento «di sistema» (v10): `Pagata` e `Parzialmente Pagata` guidano
+ * colori e regole di lock delle righe SAL → non rinominabili né eliminabili
+ * (confronto case-insensitive; il server le blocca comunque).
+ */
+function isSystemPaymentState(row: SalCondition): boolean {
+  const label = row.label.trim().toLowerCase()
+  return label === "pagata" || label === "parzialmente pagata"
+}
+
+/**
+ * Pagina «Anagrafiche SAL» (rotta storica `/admin/sal-conditions`, D7: nessuna
+ * nuova rotta/feature key): tre cataloghi globali del modulo SAL in altrettanti
+ * tab — Condizioni pagamento · Causali SAP · Stati Pagamento.
+ */
 export function SalConditionsPage() {
-  const queryClient = useQueryClient()
-  const confirm = useConfirm()
-  const [error, setError] = React.useState<string | null>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const fromProject = location.state?.fromProject
+  const projectId = location.state?.projectId
+  const backUrl = fromProject && projectId ? `/commesse/${projectId}/sal` : null
 
-  // Stati per il Drag and Drop
-  const dragIdRef = React.useRef<number | null>(null)
-  const [grabId, setGrabId] = React.useState<number | null>(null)
-  const [draggingId, setDraggingId] = React.useState<number | null>(null)
-  const [dropHint, setDropHint] = React.useState<{
-    id: number
-    after: boolean
-    valid: boolean
-  } | null>(null)
-
-  const conditionsQuery = useQuery({
-    queryKey: ["sal-conditions"],
-    queryFn: () => fetchSalConditions(false),
-  })
-  const rows = conditionsQuery.data ?? []
-
-  const invalidate = () =>
-    void queryClient.invalidateQueries({ queryKey: ["sal-conditions"] })
-
-  const addMutation = useMutation({
-    mutationFn: (label: string) => createSalCondition({ label }),
-    onSuccess: async () => {
-      setError(null)
-      await invalidate()
-    },
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, label }: { id: number; label: string }) =>
-      updateSalCondition(id, { label }),
-    onSuccess: invalidate,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
-      toggleActiveSalCondition(id, active),
-    onSuccess: invalidate,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteSalCondition,
-    onSuccess: invalidate,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const reorderMutation = useMutation({
-    mutationFn: reorderSalConditions,
-    onSuccess: invalidate,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const resetMutation = useMutation({
-    mutationFn: resetSalConditions,
-    onSuccess: invalidate,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  const clearDrag = () => {
-    dragIdRef.current = null
-    setGrabId(null)
-    setDraggingId(null)
-    setDropHint(null)
-  }
-
-  const handleReorder = (dragId: number, targetId: number, after: boolean) => {
-    const dragIndex = rows.findIndex((r) => r.id === dragId)
-    if (dragIndex === -1) return
-    const next = [...rows]
-    const [moved] = next.splice(dragIndex, 1)
-
-    const targetIndex = next.findIndex((r) => r.id === targetId)
-    if (targetIndex === -1) return
-
-    const insertAt = after ? targetIndex + 1 : targetIndex
-    next.splice(insertAt, 0, moved)
-
-    reorderMutation.mutate(next.map((r) => r.id))
-  }
-
-  const handleAddRow = async (label: string) => {
-    try {
-      await addMutation.mutateAsync(label)
-    } catch {
-      // Errore gestito da addMutation
-    }
-  }
+  // Deep-link: il foglio SAL apre direttamente il tab richiesto via state.tab
+  const requestedTab = location.state?.tab as SalAdminTab | undefined
+  const initialTab: SalAdminTab =
+    requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : "condizioni"
 
   return (
     <div className="space-y-4">
+      {backUrl && (
+        <Button variant="outline" size="sm" onClick={() => navigate(backUrl)} className="gap-1.5">
+          <ArrowLeft className="size-4" />
+          Commessa
+        </Button>
+      )}
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Condizioni di pagamento SAL</CardTitle>
-              <CardDescription>
-                Gestione globale delle condizioni di pagamento utilizzabili negli step SAL delle commesse
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resetMutation.isPending}
-              onClick={() => {
-                void confirm({
+          <CardTitle>Anagrafiche SAL</CardTitle>
+          <CardDescription>
+            Cataloghi globali del modulo SAL: condizioni di pagamento, causali Conto SAP e stati
+            pagamento utilizzabili negli step SAL delle commesse
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue={initialTab}>
+            <TabsList>
+              <TabsTrigger value="condizioni">Condizioni pagamento</TabsTrigger>
+              <TabsTrigger value="sap">Causali SAP</TabsTrigger>
+              <TabsTrigger value="pagamenti">Stati Pagamento</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="condizioni" className="pt-2">
+              <SalOptionListPanel
+                queryKey="sal-conditions"
+                description="Condizioni di pagamento selezionabili nella colonna Condizioni degli step SAL"
+                columnLabel="Condizione di pagamento"
+                newItemPlaceholder="Nuova condizione di pagamento (es. 45 gg. dffm.)..."
+                emptyText="Nessuna condizione presente. Aggiungine una dal campo qui sotto."
+                resetConfirm={{
                   title: "Ripristina condizioni standard",
                   description:
                     "Le condizioni personalizzate verranno sostituite con l'elenco standard (A Vista, 30 gg. dffm., ecc.). Le commesse già create non verranno modificate.",
-                  confirmLabel: "Ripristina",
-                }).then((ok) => {
-                  if (ok) resetMutation.mutate()
-                })
-              }}
-            >
-              <RotateCcw className="size-4 mr-1.5" />
-              Ripristina standard
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+                }}
+                deleteConfirm={{
+                  title: "Elimina condizione",
+                  description: (label) => `Eliminare la condizione "${label}"?`,
+                }}
+                api={{
+                  list: () => fetchSalConditions(false),
+                  create: (label) => createSalCondition({ label }),
+                  rename: (row, label) => updateSalCondition(row.id, { label }),
+                  toggleActive: (id, active) => toggleActiveSalCondition(id, active),
+                  remove: (id) => deleteSalCondition(id),
+                  reorder: (ids) => reorderSalConditions(ids),
+                  reset: () => resetSalConditions(),
+                }}
+              />
+            </TabsContent>
 
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="w-7 print:hidden" />
-                  <TableHead className="w-10 text-center">#</TableHead>
-                  <TableHead>Condizione di pagamento</TableHead>
-                  <TableHead className="w-28">Stato</TableHead>
-                  <TableHead className="w-14 text-right print:hidden">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, index) => (
-                  <ConditionRow
-                    key={row.id}
-                    row={row}
-                    index={index}
-                    grabId={grabId}
-                    setGrabId={setGrabId}
-                    draggingId={draggingId}
-                    dropHint={dropHint}
-                    onDragStart={(event) => {
-                      dragIdRef.current = row.id
-                      setDraggingId(row.id)
-                      event.dataTransfer.effectAllowed = "move"
-                      try {
-                        event.dataTransfer.setData("text/plain", String(row.id))
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                    onDragEnd={clearDrag}
-                    onDragOver={(event) => {
-                      const dragId = dragIdRef.current
-                      if (dragId == null || dragId === row.id) return
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = "move"
-                      const rect = event.currentTarget.getBoundingClientRect()
-                      const after = event.clientY - rect.top > rect.height / 2
-                      setDropHint({ id: row.id, after, valid: true })
-                    }}
-                    onDragLeave={() =>
-                      setDropHint((prev) => (prev?.id === row.id ? null : prev))
-                    }
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      const dragId = dragIdRef.current
-                      clearDrag()
-                      if (dragId == null || dragId === row.id) return
-                      const rect = event.currentTarget.getBoundingClientRect()
-                      const after = event.clientY - rect.top > rect.height / 2
-                      handleReorder(dragId, row.id, after)
-                    }}
-                    onSave={(label) => updateMutation.mutate({ id: row.id, label })}
-                    onToggle={(active) => toggleMutation.mutate({ id: row.id, active })}
-                    onDelete={() => {
-                      void confirm({
-                        title: "Elimina condizione",
-                        description: `Eliminare la condizione "${row.label}"?`,
-                        confirmLabel: "Elimina",
-                      }).then((ok) => {
-                        if (ok) deleteMutation.mutate(row.id)
-                      })
-                    }}
-                  />
-                ))}
-                <NewConditionRow onAddRow={handleAddRow} />
-                {rows.length === 0 && !conditionsQuery.isLoading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-sm text-muted-foreground py-6"
-                    >
-                      Nessuna condizione presente. Aggiungine una dal campo qui sotto.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-                {conditionsQuery.isLoading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-sm text-muted-foreground py-6"
-                    >
-                      Caricamento…
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
+            <TabsContent value="sap" className="pt-2">
+              <SalOptionListPanel
+                queryKey="sal-sap-causali"
+                description="Causali Conto SAP selezionabili nella colonna Conto SAP degli step SAL"
+                columnLabel="Causale Conto SAP"
+                newItemPlaceholder="Nuova causale Conto SAP (es. Acconto)..."
+                emptyText="Nessuna causale presente. Aggiungine una dal campo qui sotto."
+                resetConfirm={{
+                  title: "Ripristina causali standard",
+                  description:
+                    "Le causali personalizzate verranno sostituite con l'elenco standard (Acconto, Ricavo). Le righe SAL già compilate non verranno modificate.",
+                }}
+                deleteConfirm={{
+                  title: "Elimina causale",
+                  description: (label) => `Eliminare la causale "${label}"?`,
+                }}
+                api={{
+                  list: () => fetchSapCausali(),
+                  create: (label) => createSapCausale(label),
+                  rename: (row, label) => updateSapCausale(row.id, label),
+                  toggleActive: (id, active) => toggleSapCausale(id, active),
+                  remove: (id) => deleteSapCausale(id),
+                  reorder: (ids) => reorderSapCausali(ids),
+                  reset: () => resetSapCausali(),
+                }}
+              />
+            </TabsContent>
+
+            <TabsContent value="pagamenti" className="pt-2">
+              <SalOptionListPanel
+                queryKey="sal-payment-states"
+                description="Stati pagamento/incasso selezionabili nella colonna Pagamento degli step SAL. «Pagata» e «Parzialmente Pagata» sono voci di sistema (colori comunque personalizzabili); il colore, se impostato, tinge la riga del foglio SAL."
+                columnLabel="Stato pagamento"
+                newItemPlaceholder="Nuovo stato pagamento (es. Anticipo)..."
+                emptyText="Nessuno stato presente. Aggiungine uno dal campo qui sotto."
+                resetConfirm={{
+                  title: "Ripristina stati standard",
+                  description:
+                    "Gli stati personalizzati verranno sostituiti con l'elenco standard (Pagata, Parzialmente Pagata). Le righe SAL già compilate non verranno modificate.",
+                }}
+                deleteConfirm={{
+                  title: "Elimina stato pagamento",
+                  description: (label) => `Eliminare lo stato "${label}"?`,
+                }}
+                api={{
+                  list: () => fetchPaymentStates(),
+                  create: (label) => createPaymentState({ label }),
+                  // PUT full-replace: nel rename i colori correnti viaggiano
+                  // invariati (altrimenti verrebbero azzerati dal server)
+                  rename: (row, label) =>
+                    updatePaymentState(row.id, {
+                      label,
+                      colorBg: row.colorBg,
+                      colorFg: row.colorFg,
+                    }),
+                  toggleActive: (id, active) => togglePaymentState(id, active),
+                  remove: (id) => deletePaymentState(id),
+                  reorder: (ids) => reorderPaymentStates(ids),
+                  reset: () => resetPaymentStates(),
+                  // Editor colori: label VUOTA = il server aggiorna solo i colori
+                  // senza toccare l'etichetta → non si sovrascrive un eventuale
+                  // rename concorrente con la label stantia della cache locale
+                  saveColors: (row, colorBg, colorFg) =>
+                    updatePaymentState(row.id, { label: "", colorBg, colorFg }),
+                }}
+                isSystemEntry={isSystemPaymentState}
+                withColors
+              />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
-  )
-}
-
-function ConditionRow({
-  row,
-  index,
-  grabId,
-  setGrabId,
-  draggingId,
-  dropHint,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onSave,
-  onToggle,
-  onDelete,
-}: {
-  row: SalCondition
-  index: number
-  grabId: number | null
-  setGrabId: (id: number | null) => void
-  draggingId: number | null
-  dropHint: { id: number; after: boolean; valid: boolean } | null
-  onDragStart: (event: React.DragEvent) => void
-  onDragEnd: () => void
-  onDragOver: (event: React.DragEvent) => void
-  onDragLeave: () => void
-  onDrop: (event: React.DragEvent) => void
-  onSave: (label: string) => void
-  onToggle: (active: boolean) => void
-  onDelete: () => void
-}) {
-  const [label, setLabel] = React.useState(row.label)
-  React.useEffect(() => {
-    setLabel(row.label)
-  }, [row.label])
-
-  const commit = () => {
-    const trimmed = label.trim()
-    if (!trimmed || trimmed === row.label) {
-      setLabel(row.label)
-      return
-    }
-    onSave(trimmed)
-  }
-
-  return (
-    <TableRow
-      draggable={grabId === row.id}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={cn(
-        "border-0 transition-colors",
-        !row.isActive && "opacity-60",
-        draggingId === row.id && "opacity-50",
-        dropHint?.id === row.id &&
-          dropHint.valid &&
-          !dropHint.after &&
-          "[&>td]:shadow-[inset_0_2px_0_0_var(--primary)]",
-        dropHint?.id === row.id &&
-          dropHint.valid &&
-          dropHint.after &&
-          "[&>td]:shadow-[inset_0_-2px_0_0_var(--primary)]"
-      )}
-    >
-      <TableCell className="py-1.5 align-middle print:hidden">
-        <span
-          role="button"
-          aria-label="Trascina per riordinare la riga"
-          title="Trascina per riordinare la riga"
-          className="inline-flex size-7 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
-          onMouseDown={() => setGrabId(row.id)}
-          onMouseUp={() => setGrabId(null)}
-        >
-          <GripVertical className="size-3.5" />
-        </span>
-      </TableCell>
-      <TableCell className="text-center align-middle font-mono text-xs text-muted-foreground">
-        {index + 1}
-      </TableCell>
-      <TableCell className="py-1.5 align-middle">
-        <Input
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur()
-          }}
-          className="h-8 border-transparent bg-transparent shadow-none hover:border-input focus-visible:border-input focus-visible:bg-background"
-        />
-      </TableCell>
-      <TableCell className="py-1.5 align-middle">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={row.isActive}
-            onCheckedChange={onToggle}
-          />
-          <ActiveStatus active={row.isActive} />
-        </div>
-      </TableCell>
-      <TableCell className="py-1.5 align-middle print:hidden">
-        <div className="flex justify-end">
-          <RowActionsMenu
-            actions={[
-              {
-                label: "Elimina",
-                icon: Trash2,
-                destructive: true,
-                onClick: onDelete,
-              },
-            ]}
-          />
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function NewConditionRow({
-  onAddRow,
-}: {
-  onAddRow: (label: string) => void | Promise<void>
-}) {
-  const [text, setText] = React.useState("")
-  const committing = React.useRef(false)
-  const inputRef = React.useRef<HTMLInputElement>(null)
-
-  async function commit() {
-    const v = text.trim()
-    if (!v || committing.current) return
-    committing.current = true
-    try {
-      await onAddRow(v)
-      setText("")
-      requestAnimationFrame(() => inputRef.current?.focus())
-    } finally {
-      committing.current = false
-    }
-  }
-
-  return (
-    <TableRow className="border-0 bg-muted/40 hover:bg-muted/50">
-      <TableCell className="print:hidden" />
-      <TableCell className="text-center text-muted-foreground font-mono text-xs">
-        +
-      </TableCell>
-      <TableCell colSpan={3} className="py-1.5">
-        <div className="flex items-center gap-2">
-          <Plus className="size-4 shrink-0 text-muted-foreground" />
-          <Input
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={() => void commit()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                void commit()
-              }
-            }}
-            placeholder="Nuova condizione di pagamento (es. 45 gg. dffm.)..."
-            className="h-8 border-dashed shadow-none"
-          />
-        </div>
-      </TableCell>
-    </TableRow>
   )
 }

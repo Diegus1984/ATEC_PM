@@ -56,16 +56,17 @@ export function DdpDestinationSpecCell({
   disabled?: boolean
   onSpecCommit: (destinationSpec: string) => void
 }) {
-  const [draftSpec, setDraftSpec] = React.useState(destinationSpec)
+  const [draftSpec, setDraftSpec] = React.useState(destinationSpec ?? "")
 
   React.useEffect(() => {
-    setDraftSpec(destinationSpec)
+    setDraftSpec(destinationSpec ?? "")
   }, [destinationSpec])
 
-  const hasDestination = Boolean(destination.trim())
+  // destination può arrivare null da righe storiche del DB nonostante il tipo.
+  const hasDestination = Boolean((destination ?? "").trim())
 
   if (!hasDestination) {
-    return <span className="text-muted-foreground">—</span>
+    return <span className="opacity-60">—</span>
   }
 
   return (

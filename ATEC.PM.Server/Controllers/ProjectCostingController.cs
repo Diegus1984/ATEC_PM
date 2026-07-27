@@ -136,6 +136,9 @@ public class ProjectCostingController : ControllerBase
             JOIN project_cost_section_departments psd ON psd.department_id = d.id
             WHERE psd.project_cost_section_id = @sectionId
               AND e.status <> 'TERMINATED'
+              -- Preventivo = risorse FITTIZIE: solo i wildcard reparto ([PM] Generico, …).
+              -- I nomi reali stanno solo a destra (fasi assegnate).
+              AND e.first_name LIKE '[%'
             GROUP BY e.id, e.first_name, e.last_name
             ORDER BY e.last_name",
             new { sectionId }).ToList();

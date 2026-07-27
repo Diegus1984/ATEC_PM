@@ -2,6 +2,7 @@
 // (giorno della settimana sotto le date, rosso se festivo — prototipo Gestione_MoM_v9).
 
 export const WEEKDAYS_SHORT = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"]
+export const WEEKDAYS_LONG = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"]
 
 /** Domenica di Pasqua (algoritmo di Gauss/Meeus). */
 export function easterSunday(year: number): Date {

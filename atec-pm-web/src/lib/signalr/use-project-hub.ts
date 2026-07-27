@@ -18,23 +18,37 @@ type ProjectHubScope = "all" | number | null
  */
 export function useProjectHub(
   scope: ProjectHubScope,
-  onDdpChange: (change: DdpChange) => void
+  onDdpChange: (change: DdpChange) => void,
+  /** Evento RDO Acquisti (`PurchaseRfqChanged`, solo gruppo "all"): refetch della lista RDO. */
+  onPurchaseRfqChange?: () => void
 ): void {
   const handlerRef = React.useRef(onDdpChange)
   React.useEffect(() => {
     handlerRef.current = onDdpChange
   }, [onDdpChange])
 
+  const rfqHandlerRef = React.useRef(onPurchaseRfqChange)
+  React.useEffect(() => {
+    rfqHandlerRef.current = onPurchaseRfqChange
+  }, [onPurchaseRfqChange])
+
   React.useEffect(() => {
     if (scope == null) return
 
     let disposed = false
     let debounce: ReturnType<typeof setTimeout> | null = null
+    let rfqDebounce: ReturnType<typeof setTimeout> | null = null
     const connection = createHubConnection("project")
 
     connection.on("DdpChanged", (change: DdpChange) => {
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => handlerRef.current(change), 400)
+    })
+
+    connection.on("PurchaseRfqChanged", () => {
+      if (!rfqHandlerRef.current) return
+      if (rfqDebounce) clearTimeout(rfqDebounce)
+      rfqDebounce = setTimeout(() => rfqHandlerRef.current?.(), 400)
     })
 
     const rejoin = async () => {
@@ -59,6 +73,7 @@ export function useProjectHub(
     return () => {
       disposed = true
       if (debounce) clearTimeout(debounce)
+      if (rfqDebounce) clearTimeout(rfqDebounce)
       void stopHub(connection)
     }
   }, [scope])

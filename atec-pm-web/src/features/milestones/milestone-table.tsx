@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -25,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   createMilestone,
   deleteMilestone,
+  fetchActiveActivityCatalog,
   reorderMilestones,
   updateMilestone,
 } from "@/lib/api/milestones"
@@ -400,6 +402,14 @@ function NewMilestoneRow({
   const [desc, setDesc] = React.useState("")
   const committing = React.useRef(false)
 
+  const catalogQuery = useQuery({
+    queryKey: ["activity-catalog", "active"],
+    queryFn: fetchActiveActivityCatalog,
+    staleTime: 60000,
+  })
+
+  const catalogItems = catalogQuery.data ?? []
+
   async function commit() {
     const v = desc.trim()
     if (!v || committing.current) return
@@ -422,6 +432,7 @@ function NewMilestoneRow({
         <div className="flex items-center gap-2">
           <Plus className="size-4 text-muted-foreground" />
           <Input
+            list="activity-catalog-list"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             onBlur={() => void commit()}
@@ -431,9 +442,14 @@ function NewMilestoneRow({
                 void commit()
               }
             }}
-            placeholder="Aggiungi attività…"
+            placeholder="Aggiungi attività (digita o scegli dal catalogo)…"
             className="h-8 max-w-md border-dashed"
           />
+          <datalist id="activity-catalog-list">
+            {catalogItems.map((item) => (
+              <option key={item.id} value={item.label} />
+            ))}
+          </datalist>
         </div>
       </TableCell>
     </TableRow>

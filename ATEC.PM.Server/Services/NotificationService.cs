@@ -3,10 +3,11 @@ using MySqlConnector;
 
 namespace ATEC.PM.Server.Services;
 
-/// <summary>Stati DDP considerati "materiale consegnato" (aggregazione A2) — allineato a Gestore DDP / WPF.</summary>
+/// <summary>Stati DDP considerati "materiale consegnato" (aggregazione A2) — matrice stati v7
+/// (DISP assorbe CON/COS/SPED; il vecchio MOD è confluito in RAM, fuori dal set consegnato).</summary>
 internal static class DdpDeliveredStatuses
 {
-    internal static readonly string[] Keys = { "CON", "COS", "DISP", "ASS", "MOD" };
+    internal static readonly string[] Keys = { "DISP", "ASS" };
 }
 
 /// <summary>
@@ -103,6 +104,103 @@ public class NotificationService
         return c.Query<int>(
             "SELECT id FROM employees WHERE user_role = 'ADMIN' AND status = 'ACTIVE'").ToList();
     }
+
+    /// <summary>
+    /// Rimuove istantaneamente le notifiche relative a entità che sono state risolte/chiuse/pagate/consegnate.
+    /// </summary>
+    public int CleanResolvedNotifications()
+    {
+        using var c = _db.Open();
+        int totalDeleted = 0;
+
+        // 0. Promemoria superati: il giro giornaliero crea una notifica NUOVA per la stessa
+        // scadenza ancora aperta ("scaduta da 2 g" ieri, "da 3 g" oggi) → per ogni
+        // (dipendente, tipo, riferimento) si tiene solo la più recente
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            JOIN (
+                SELECT nr2.employee_id, n2.notification_type, n2.reference_type, n2.reference_id,
+                       MAX(n2.id) AS keep_id
+                FROM notification_recipients nr2
+                JOIN notifications n2 ON n2.id = nr2.notification_id
+                WHERE n2.reference_id <> 0
+                GROUP BY nr2.employee_id, n2.notification_type, n2.reference_type, n2.reference_id
+                HAVING COUNT(*) > 1
+            ) dup ON dup.employee_id = nr.employee_id
+                 AND dup.notification_type = n.notification_type
+                 AND dup.reference_type = n.reference_type
+                 AND dup.reference_id = n.reference_id
+            WHERE n.id < dup.keep_id");
+
+        // 1. DDP Articoli consegnati, annullati, o non più scaduti
+        string[] excludedDdp = DdpAggregationSet.Load(c, "A9");
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            JOIN bom_items b ON b.id = n.reference_id
+            WHERE n.notification_type = 'DDP_OVERDUE'
+              AND n.reference_type = 'BOM'
+              AND (
+                  b.item_status IN @Delivered
+                  OR b.item_status IN @Excluded
+                  OR b.date_needed IS NULL
+                  OR b.date_needed >= CURDATE()
+              )", new { Delivered = DdpDeliveredStatuses.Keys, Excluded = excludedDdp });
+
+        // 2. Checklist chiuse, rimosse o senza scadenza
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN checklist_items i ON i.id = n.reference_id
+            WHERE n.notification_type = 'CHECKLIST_DUE' AND n.reference_type = 'CHECKLIST'
+              AND (i.id IS NULL OR i.status = 'CLOSED' OR i.due_date IS NULL)");
+
+        // 3. Azioni MoM chiuse, rimosse o senza scadenza
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN mom_action_items a ON a.id = n.reference_id
+            WHERE n.notification_type = 'MOM_DUE' AND n.reference_type = 'MOM_ACTION'
+              AND (a.id IS NULL OR a.status = 'CLOSED' OR a.data_check IS NULL)");
+
+        // 4. Commesse non più attive, completate, o senza scadenza
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN projects p ON p.id = n.reference_id
+            WHERE n.notification_type = 'PROJECT_DUE' AND n.reference_type = 'PROJECT'
+              AND (p.id IS NULL OR p.status <> 'ACTIVE' OR p.end_date_planned IS NULL OR p.end_date_actual IS NOT NULL)");
+
+        // 5. SAL emessi, rimossi o senza scadenza
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN sal_rows sr ON sr.id = n.reference_id
+            WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
+              AND (sr.id IS NULL OR sr.data_fatt IS NULL OR sr.stato = 'emessa')");
+
+        // 6. Incassi SAL pagati, rimossi o senza scadenza/gg saldo
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN sal_rows sr ON sr.id = n.reference_id
+            WHERE n.notification_type = 'SAL_INCASSO_DUE' AND n.reference_type = 'SAL_ROW'
+              AND (sr.id IS NULL OR sr.pagamento = 'Pagata' OR sr.data_fatt IS NULL OR sr.gg_saldo IS NULL)");
+
+        // 7. Trattamenti confermati, rimossi o senza scadenza
+        totalDeleted += c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN project_work_requests wr ON wr.id = n.reference_id
+            WHERE n.notification_type = 'WORKREQUEST_TREATMENT_DUE' AND n.reference_type = 'WORK_REQUEST'
+              AND (wr.id IS NULL OR wr.has_treatment = 0 OR wr.is_treatment_confirmed = 1 OR wr.treatment_date IS NULL)");
+
+        // Rimuove notifiche orfane
+        c.Execute("DELETE FROM notifications WHERE id NOT IN (SELECT DISTINCT notification_id FROM notification_recipients)");
+
+        return totalDeleted;
+    }
 }
 
 /// <summary>
@@ -147,6 +245,8 @@ public class NotificationBackgroundService : BackgroundService
                 await CheckMoMDeadlines();
                 await CheckProjectDeadlines();
                 await CheckSalDeadlines();
+                await CheckSalIncassoDeadlines();
+                await CheckTreatmentDeadlines();
                 await CleanupRetention();
             }
             catch (Exception ex)
@@ -577,7 +677,7 @@ public class NotificationBackgroundService : BackgroundService
         await Task.CompletedTask;
     }
 
-    /// <summary>Step/scadenze SAL (sal_rows.data_fatt) in scadenza o scaduti, non ancora emessi/pagati.</summary>
+    /// <summary>Step/scadenze SAL (sal_rows.data_fatt) in scadenza o scaduti, non ancora emessi (stato '' o 'daEmettere').</summary>
     private async Task CheckSalDeadlines()
     {
         using var scope = _sp.CreateScope();
@@ -585,19 +685,20 @@ public class NotificationBackgroundService : BackgroundService
         var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
         using var c = db.Open();
 
-        // 1. Pulisce le vecchie notifiche SAL_DUE ormai risolte (stato non vuoto, data rimossa o riga eliminata)
+        // 1. Pulisce le vecchie notifiche SAL_DUE ormai risolte (fattura emessa, data rimossa o riga
+        //    eliminata). Il nuovo stato 'daEmettere' NON risolve: continua ad allertare (parità v10).
         c.Execute(@"
             DELETE nr FROM notification_recipients nr
             JOIN notifications n ON n.id = nr.notification_id
             LEFT JOIN sal_rows sr ON sr.id = n.reference_id
             WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
               AND (
-                  sr.id IS NULL OR sr.data_fatt IS NULL OR sr.stato <> ''
+                  sr.id IS NULL OR sr.data_fatt IS NULL OR sr.stato = 'emessa'
                   OR (n.severity = 'WARNING' AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) BETWEEN 0 AND @Warn))
                   OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) < 0))
               )", new { Warn = _warningDays });
 
-        // 2. Query per nuove scadenze SAL non emesse/pagate da notificare
+        // 2. Query per nuove scadenze SAL non ancora emesse ('' o 'daEmettere') da notificare
         var rows = c.Query<dynamic>(@"
             SELECT sr.id, sr.project_id, sr.step, sr.data_fatt, sr.perc, ps.valore, p.code,
                    DATEDIFF(sr.data_fatt, CURDATE()) AS days,
@@ -606,7 +707,7 @@ public class NotificationBackgroundService : BackgroundService
             JOIN projects p ON p.id = sr.project_id
             LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
             WHERE sr.data_fatt IS NOT NULL
-              AND sr.stato = ''
+              AND sr.stato <> 'emessa'
               AND DATEDIFF(sr.data_fatt, CURDATE()) <= @Warn
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
@@ -647,6 +748,161 @@ public class NotificationBackgroundService : BackgroundService
         }
 
         if (count > 0) _log.LogInformation("[Notifications] {Count} scadenze SAL in scadenza/scadute notificate.", count);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Incasso fatture SAL: righe con data fattura e gg saldo valorizzati, non ancora pagate,
+    /// il cui saldo previsto (data_fatt + gg_saldo) è già passato. Regola v10 (salIncassoState):
+    /// sempre ALARM dal giorno dopo la scadenza, nessuna fascia pre-warning, indipendente dallo
+    /// stato di fatturazione.
+    /// </summary>
+    private async Task CheckSalIncassoDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        // 1. Pulisce le vecchie notifiche SAL_INCASSO_DUE ormai risolte: riga eliminata, pagata,
+        //    senza data fattura / gg saldo, o con saldo previsto non più scaduto.
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN sal_rows sr ON sr.id = n.reference_id
+            WHERE n.notification_type = 'SAL_INCASSO_DUE' AND n.reference_type = 'SAL_ROW'
+              AND (
+                  sr.id IS NULL
+                  OR sr.pagamento = 'Pagata'
+                  OR sr.data_fatt IS NULL
+                  OR sr.gg_saldo IS NULL
+                  OR DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) >= CURDATE()
+              )");
+
+        // 2. Fatture con incasso scaduto da notificare (dedupe giornaliero come gli altri check:
+        //    al massimo una notifica per riga al giorno — severità sempre ALARM)
+        var rows = c.Query<dynamic>(@"
+            SELECT sr.id, sr.project_id, sr.step, sr.n_fatt, sr.perc, ps.valore, p.code,
+                   DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) AS data_saldo
+            FROM sal_rows sr
+            JOIN projects p ON p.id = sr.project_id
+            LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
+            WHERE sr.data_fatt IS NOT NULL
+              AND sr.gg_saldo IS NOT NULL
+              AND sr.pagamento <> 'Pagata'
+              AND DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) < CURDATE()
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'SAL_INCASSO_DUE' AND n.reference_type = 'SAL_ROW'
+                    AND n.reference_id = sr.id
+                    AND n.severity = 'ALARM'
+                    AND DATE(n.created_at) = CURDATE()
+              )").ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int projectId = (int)r.project_id;
+            string code = (string)r.code;
+            string nFatt = (string?)r.n_fatt ?? "";
+            decimal? perc = (decimal?)r.perc;
+            decimal? valore = (decimal?)r.valore;
+            DateTime dataSaldo = (DateTime)r.data_saldo;
+
+            // Destinatari: PM della commessa + ADMIN (stessa platea di CheckSalDeadlines)
+            List<int> recipients = notif.GetProjectPmIds(projectId);
+            if (recipients.Count == 0) continue;
+
+            // N° fattura e importo (valore ordine × %SAL) sono facoltativi nel messaggio
+            string nFattStr = string.IsNullOrEmpty(nFatt) ? "" : $" — N° fatt. {nFatt}";
+            string importoStr = "";
+            if (valore.HasValue && perc.HasValue)
+            {
+                decimal importo = valore.Value * (perc.Value / 100m);
+                importoStr = " — " + importo.ToString("N2", new System.Globalization.CultureInfo("it-IT")) + " €";
+            }
+
+            string title = $"Incasso fattura scaduto — {code}";
+            string msg = $"{Trunc((string?)r.step, 300)} — saldo previsto {dataSaldo:dd/MM/yyyy}{nFattStr}{importoStr}";
+
+            notif.Create("SAL_INCASSO_DUE", "ALARM", Trunc(title, 200), Trunc(msg, 500),
+                "SAL_ROW", id, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} incassi fattura SAL scaduti notificati.", count);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Trattamenti lavorazioni (project_work_requests.treatment_date) in scadenza o scaduti:
+    /// richiesti (has_treatment=1), non ancora confermati e non in staging.
+    /// </summary>
+    private async Task CheckTreatmentDeadlines()
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        var notif = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        using var c = db.Open();
+
+        // Pulizia: notifiche non più pertinenti (riga eliminata, trattamento tolto/confermato,
+        // data rimossa o severità superata)
+        c.Execute(@"
+            DELETE nr FROM notification_recipients nr
+            JOIN notifications n ON n.id = nr.notification_id
+            LEFT JOIN project_work_requests wr ON wr.id = n.reference_id
+            WHERE n.notification_type = 'WORKREQUEST_TREATMENT_DUE' AND n.reference_type = 'WORK_REQUEST'
+              AND (
+                  wr.id IS NULL OR wr.has_treatment = 0 OR wr.is_treatment_confirmed = 1
+                  OR wr.treatment_date IS NULL
+                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(wr.treatment_date, CURDATE()) BETWEEN 0 AND @Warn))
+                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(wr.treatment_date, CURDATE()) < 0))
+              )", new { Warn = _warningDays });
+
+        var rows = c.Query<dynamic>(@"
+            SELECT wr.id, wr.project_id, wr.description, wr.treatment_date, p.code,
+                   DATEDIFF(wr.treatment_date, CURDATE()) AS days,
+                   CASE WHEN DATEDIFF(wr.treatment_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+            FROM project_work_requests wr
+            JOIN projects p ON p.id = wr.project_id
+            WHERE wr.treatment_date IS NOT NULL
+              AND wr.has_treatment = 1
+              AND wr.is_treatment_confirmed = 0
+              AND wr.is_staging = 0
+              AND DATEDIFF(wr.treatment_date, CURDATE()) <= @Warn
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n
+                  WHERE n.notification_type = 'WORKREQUEST_TREATMENT_DUE' AND n.reference_type = 'WORK_REQUEST'
+                    AND n.reference_id = wr.id
+                    AND n.severity = CASE WHEN DATEDIFF(wr.treatment_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
+                    AND DATE(n.created_at) = CURDATE()
+              )", new { Warn = _warningDays }).ToList();
+
+        int count = 0;
+        foreach (var r in rows)
+        {
+            int id = (int)r.id;
+            int projectId = (int)r.project_id;
+            int days = (int)r.days;
+            string sev = (string)r.sev;
+            string code = (string)r.code;
+
+            // Destinatari: PM della commessa + ADMIN (stessa platea delle scadenze commessa)
+            List<int> recipients = notif.GetProjectPmIds(projectId);
+            if (recipients.Count == 0) continue;
+
+            // DueText è declinato al femminile: per "trattamento" serve il maschile
+            string dueText = days < 0 ? $"scaduto da {-days} g" : days == 0 ? "scade oggi" : $"scade tra {days} g";
+            string title = (sev == "ALARM" ? "Trattamento scaduto — " : "Trattamento in scadenza — ") + code;
+            string msg = $"{Trunc((string?)r.description, 300)} — {dueText} ({((DateTime)r.treatment_date):dd/MM/yyyy})";
+
+            notif.Create("WORKREQUEST_TREATMENT_DUE", sev, Trunc(title, 200), Trunc(msg, 500),
+                "WORK_REQUEST", id, projectId, null, recipients);
+            count++;
+        }
+
+        if (count > 0) _log.LogInformation("[Notifications] {Count} trattamenti lavorazioni in scadenza/scaduti notificati.", count);
         await Task.CompletedTask;
     }
 

@@ -12,14 +12,16 @@ import { LoginPage } from "@/features/auth/LoginPage"
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
+      // Ambiente multi-reparto (richiesta esplicita 14/07/2026): un dato inserito da
+      // chiunque deve comparire SUBITO. Quindi: ogni ingresso in una pagina rilegge
+      // sempre dal server (staleTime 0) e il ritorno sulla finestra riallinea
+      // (refetchOnWindowFocus). La cache (gcTime) resta solo come placeholder mentre
+      // arriva il dato fresco — la navigazione non mostra mai pagine vuote.
+      // A pagina aperta la diretta la fanno gli hub SignalR dei moduli collaborativi.
+      refetchOnWindowFocus: true,
       retry: 1,
-      // Evita il refetch completo ad ogni ingresso in una pagina: entro questa
-      // finestra i dati arrivano dalla cache. «Aggiorna» e le mutation
-      // (invalidateQueries) forzano comunque il ricaricamento; refetchInterval
-      // (es. polling sync Codex) resta indipendente.
-      staleTime: 5 * 60 * 1000, // 5 min "freschi"
-      gcTime: 30 * 60 * 1000, // cache mantenuta 30 min
+      staleTime: 0,
+      gcTime: 30 * 60 * 1000, // cache mantenuta 30 min (solo come placeholder)
     },
   },
 })

@@ -14,6 +14,21 @@ public class CatalogController : ControllerBase
     private readonly DbService _db;
     public CatalogController(DbService db) => _db = db;
 
+    /// <summary>Colonne ordinabili (chiave client → colonna SQL).</summary>
+    private static readonly Dictionary<string, string> CatalogSortColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["code"] = "i.code",
+        ["description"] = "i.description",
+        ["supplierName"] = "s.company_name",
+        ["manufacturer"] = "i.manufacturer",
+        ["category"] = "i.category",
+        ["subcategory"] = "i.subcategory",
+        ["unit"] = "i.unit",
+        ["unitCost"] = "i.unit_cost",
+        ["listPrice"] = "i.list_price",
+        ["atecCode"] = "i.atec_code",
+    };
+
     [HttpGet("filter-meta")]
     public IActionResult GetFilterMeta()
     {
@@ -33,7 +48,11 @@ public class CatalogController : ControllerBase
                 SELECT DISTINCT category FROM catalog_items
                 WHERE is_active = 1 AND category IS NOT NULL AND category <> ''
                 ORDER BY category").ToList();
-            return Ok(ApiResponse<object>.Ok(new { suppliers, manufacturers, categories }));
+            var subcategories = c.Query<string>(@"
+                SELECT DISTINCT subcategory FROM catalog_items
+                WHERE is_active = 1 AND subcategory IS NOT NULL AND subcategory <> ''
+                ORDER BY subcategory").ToList();
+            return Ok(ApiResponse<object>.Ok(new { suppliers, manufacturers, categories, subcategories }));
         }
         catch (Exception ex) { return Ok(ApiResponse<object>.Fail(ex.Message)); }
     }
@@ -47,7 +66,12 @@ public class CatalogController : ControllerBase
         [FromQuery] string? description = null,
         [FromQuery] string? supplier = null,
         [FromQuery] string? manufacturer = null,
-        [FromQuery] string? category = null)
+        [FromQuery] string? category = null,
+        [FromQuery] string? subcategory = null,
+        [FromQuery] string? atecCode = null,
+        [FromQuery] string? atecState = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null)
     {
         try
         {
@@ -63,12 +87,13 @@ public class CatalogController : ControllerBase
                 dp.Add(param, pat);
             }
 
-            if (!string.IsNullOrWhiteSpace(search))
+            // Onora le regole jolly (abc, abc*, *abc, *abc*) anche sulla ricerca globale.
+            string? searchPat = PagedQueryHelper.ToLikePattern(search);
+            if (searchPat != null)
             {
-                string term = $"%{search.Trim()}%";
                 clauses.Add(@"(i.code LIKE @Search OR i.description LIKE @Search OR s.company_name LIKE @Search
                     OR i.manufacturer LIKE @Search OR i.category LIKE @Search)");
-                dp.Add("Search", term);
+                dp.Add("Search", searchPat);
             }
 
             AddLike("i.code", code, "Code");
@@ -76,9 +101,28 @@ public class CatalogController : ControllerBase
             AddLike("s.company_name", supplier, "Supplier");
             AddLike("i.manufacturer", manufacturer, "Manufacturer");
             AddLike("i.category", category, "Category");
+            AddLike("i.subcategory", subcategory, "Subcategory");
+            AddLike("i.atec_code", atecCode?.Replace(".", ""), "AtecCode");
+
+            // Stato mapping codice ATEC:
+            // missing = senza codice (bonifica), done = associati, orphans = Extra1 senza match Codex.
+            if (string.Equals(atecState, "missing", StringComparison.OrdinalIgnoreCase))
+                clauses.Add("(i.atec_code IS NULL OR i.atec_code = '')");
+            else if (string.Equals(atecState, "done", StringComparison.OrdinalIgnoreCase))
+                clauses.Add("(i.atec_code IS NOT NULL AND i.atec_code <> '')");
+            else if (string.Equals(atecState, "orphans", StringComparison.OrdinalIgnoreCase))
+            {
+                clauses.Add("(i.atec_code IS NOT NULL AND i.atec_code <> '')");
+                clauses.Add(@"NOT EXISTS (
+                    SELECT 1 FROM codex_items cx
+                    WHERE cx.codice_nuovo IS NOT NULL AND cx.codice_nuovo <> ''
+                      AND cx.codice_nuovo = i.atec_code)");
+            }
 
             string where = "WHERE " + string.Join(" AND ", clauses);
             string from = @"FROM catalog_items i LEFT JOIN suppliers s ON s.id = i.supplier_id";
+
+            string orderBy = PagedQueryHelper.OrderBy(sortBy, sortDir, CatalogSortColumns, "ORDER BY i.code");
 
             using var c = _db.Open();
             int total = c.ExecuteScalar<int>($"SELECT COUNT(*) {from} {where}", dp);
@@ -86,12 +130,19 @@ public class CatalogController : ControllerBase
             dp.Add("Offset", offset);
 
             var rows = c.Query<CatalogItemListItem>($@"
-                SELECT i.id, i.code, i.description, i.category, i.unit, 
+                SELECT i.id, i.code, i.description, i.category,
+                       COALESCE(i.subcategory,'') AS Subcategory, i.unit,
                        i.unit_cost AS UnitCost, i.list_price AS ListPrice,
-                       s.company_name AS SupplierName, i.manufacturer
+                       i.supplier_id AS SupplierId,
+                       s.company_name AS SupplierName, i.manufacturer,
+                       COALESCE(i.atec_code,'') AS AtecCode, i.codex_item_id AS CodexItemId,
+                       i.easyfatt_id AS EasyfattId
                 {from} {where}
-                ORDER BY i.code
+                {orderBy}
                 LIMIT @Limit OFFSET @Offset", dp).ToList();
+            foreach (CatalogItemListItem row in rows)
+                if (row.AtecCode.Length > 0)
+                    row.AtecCode = CodexListItem.FormatCodice(row.AtecCode);
 
             int loaded = offset + rows.Count;
             return Ok(ApiResponse<PagedResult<CatalogItemListItem>>.Ok(new PagedResult<CatalogItemListItem>

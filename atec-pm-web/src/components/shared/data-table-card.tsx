@@ -3,7 +3,6 @@ import {
   type ColumnDef,
   type SortingState,
   type VisibilityState,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getSortedRowModel,
@@ -12,6 +11,7 @@ import {
 import { RefreshCw, Search } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { renderColumnDef } from "@/components/shared/render-column-def"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,9 +30,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 export interface DataTableCardProps<TData> {
-  title: string
+  title?: string
   description?: string
   columns: ColumnDef<TData>[]
   data: TData[] | undefined
@@ -50,8 +51,16 @@ export interface DataTableCardProps<TData> {
   initialColumnVisibility?: VisibilityState
   getRowId?: (row: TData) => string
   /** Pulsanti extra nella toolbar a destra (es. «Aggiungi»). */
-  toolbarActions?: React.ReactNode
+  toolbarActions?: React.ReactNode | ((rows: TData[]) => React.ReactNode)
   onRowDoubleClick?: (row: TData) => void
+  /** Nasconde CardHeader (es. pagina con titolo esterno). */
+  embedded?: boolean
+  /** Contenuto tra toolbar e tabella (es. riepilogo o banner interno). */
+  aboveTable?: React.ReactNode
+  /** Classi Tailwind per riga (es. tinta stato SAL). */
+  rowClassName?: (row: TData) => string | undefined
+  /** Chiave localStorage per salvare la visibilità delle colonne. Se non fornita, viene generata dal titolo. */
+  visibilityStorageKey?: string
 }
 
 /**
@@ -79,12 +88,46 @@ export function DataTableCard<TData>({
   getRowId,
   toolbarActions,
   onRowDoubleClick,
+  embedded = false,
+  aboveTable,
+  rowClassName,
+  visibilityStorageKey,
 }: DataTableCardProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(defaultSorting)
+
+  const storageKey = React.useMemo(() => {
+    if (visibilityStorageKey) return visibilityStorageKey
+    if (title) return `table-visibility-${title.toLowerCase().replace(/\s+/g, "-")}`
+    return null
+  }, [visibilityStorageKey, title])
+
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(initialColumnVisibility)
+    React.useState<VisibilityState>(() => {
+      if (storageKey) {
+        try {
+          const saved = localStorage.getItem(storageKey)
+          if (saved) {
+            return JSON.parse(saved)
+          }
+        } catch (e) {
+          console.error("Failed to load column visibility from localStorage", e)
+        }
+      }
+      return initialColumnVisibility
+    })
+
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState("")
+
+  React.useEffect(() => {
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(columnVisibility))
+      } catch (e) {
+        console.error("Failed to save column visibility to localStorage", e)
+      }
+    }
+  }, [storageKey, columnVisibility])
 
   const table = useReactTable({
     data: data ?? [],
@@ -105,35 +148,42 @@ export function DataTableCard<TData>({
   const totalRows = data?.length ?? 0
   const filteredRows = table.getFilteredRowModel().rows.length
   const labelOf = (id: string) => columnLabels[id] ?? id
+  const visibleRows = table.getRowModel().rows.map((row) => row.original)
+  const resolvedToolbarActions =
+    typeof toolbarActions === "function"
+      ? toolbarActions(visibleRows)
+      : toolbarActions
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>{title}</CardTitle>
-              {description ? (
-                <CardDescription>
-                  {description}
-                  {data ? ` — ${totalRows} totali` : ""}
-                </CardDescription>
+        {!embedded && (title || description || onRefresh) ? (
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                {title ? <CardTitle>{title}</CardTitle> : null}
+                {description ? (
+                  <CardDescription>
+                    {description}
+                    {data ? ` — ${totalRows} totali` : ""}
+                  </CardDescription>
+                ) : null}
+              </div>
+              {onRefresh ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRefresh}
+                  disabled={isFetching}
+                >
+                  <RefreshCw className={isFetching ? "animate-spin" : ""} />
+                  Aggiorna
+                </Button>
               ) : null}
             </div>
-            {onRefresh ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRefresh}
-                disabled={isFetching}
-              >
-                <RefreshCw className={isFetching ? "animate-spin" : ""} />
-                Aggiorna
-              </Button>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </CardHeader>
+        ) : null}
+        <CardContent className={cn("space-y-4", embedded && "pt-6")}>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
@@ -156,13 +206,15 @@ export function DataTableCard<TData>({
                     onToggle: (value) => column.toggleVisibility(value),
                   }))}
               />
-              {toolbarActions}
+              {resolvedToolbarActions}
             </div>
           </div>
 
           {error ? <PageErrorAlert message={error.message} /> : null}
 
-          <div className="overflow-hidden rounded-lg border">
+          {aboveTable ? <div className="overflow-x-auto">{aboveTable}</div> : null}
+
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -171,7 +223,7 @@ export function DataTableCard<TData>({
                       <TableHead key={header.id}>
                         {header.isPlaceholder
                           ? null
-                          : flexRender(
+                          : renderColumnDef(
                               header.column.columnDef.header,
                               header.getContext()
                             )}
@@ -204,7 +256,10 @@ export function DataTableCard<TData>({
                     <TableRow
                       key={row.id}
                       data-state={row.getIsSelected() && "selected"}
-                      className={onRowDoubleClick ? "cursor-pointer" : undefined}
+                      className={cn(
+                        onRowDoubleClick && "cursor-pointer",
+                        rowClassName?.(row.original)
+                      )}
                       onDoubleClick={
                         onRowDoubleClick
                           ? () => onRowDoubleClick(row.original)
@@ -213,7 +268,7 @@ export function DataTableCard<TData>({
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id}>
-                          {flexRender(
+                          {renderColumnDef(
                             cell.column.columnDef.cell,
                             cell.getContext()
                           )}

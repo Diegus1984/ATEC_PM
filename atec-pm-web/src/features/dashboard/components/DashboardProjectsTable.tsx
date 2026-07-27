@@ -1,6 +1,5 @@
 import * as React from "react"
 import {
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -8,6 +7,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { renderColumnDef } from "@/components/shared/render-column-def"
 import { TablePagination } from "@/components/shared/table-pagination"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -25,6 +25,9 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import type { DashboardProjectRow } from "@/lib/api/types"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
+
+const DASHBOARD_COLUMNS_KEY = "table-visibility-dashboard-projects"
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -85,9 +88,9 @@ function ProjectsTablePanel({
   rows: DashboardProjectRow[]
   emptyMessage: string
 }) {
-  const [columnVisibility, setColumnVisibility] = React.useState<
-    Record<string, boolean>
-  >({})
+  const [columnVisibility, setColumnVisibility] = usePersistedColumnVisibility(
+    DASHBOARD_COLUMNS_KEY
+  )
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize: 10,
@@ -135,7 +138,7 @@ function ProjectsTablePanel({
                   <TableHead key={header.id}>
                     {header.isPlaceholder
                       ? null
-                      : flexRender(
+                      : renderColumnDef(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
@@ -150,7 +153,7 @@ function ProjectsTablePanel({
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(
+                      {renderColumnDef(
                         cell.column.columnDef.cell,
                         cell.getContext()
                       )}

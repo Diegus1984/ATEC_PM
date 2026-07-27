@@ -5,6 +5,7 @@ import { ChevronRight, Plus, RefreshCw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { fetchProjects } from "@/lib/api/projects"
+import { isSystemProjectCode } from "@/lib/system-projects"
 import type { ProjectListItem } from "@/lib/api/types"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
@@ -12,6 +13,12 @@ import { cn } from "@/lib/utils"
 import { CommessaDocumentsTree } from "./CommessaDocumentsTree"
 import { FolderDocContextMenu, toFolderFileItem } from "./FolderDocContextMenu"
 import { COMMESSA_SECTIONS } from "./commessa-sections"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 const PAGE_SIZE = 50
 
@@ -32,6 +39,7 @@ interface CommessaTreeProps {
     fileRelativePath: string
   ) => void
   onNewProject: () => void
+  isCollapsed?: boolean
 }
 
 /**
@@ -50,6 +58,7 @@ export function CommessaTree({
   onOpenDocumentFolder,
   onOpenDocumentFile,
   onNewProject,
+  isCollapsed = false,
 }: CommessaTreeProps) {
   const [searchInput, setSearchInput] = React.useState("")
   const searchTerm = useDebounced(searchInput.trim(), 350)
@@ -66,8 +75,12 @@ export function CommessaTree({
       lastPage.hasMore ? lastPage.page + 1 : undefined,
   })
 
+  // Esclude le commesse di sistema (es. INTERNA): non sono operative in Commesse.
   const projects = React.useMemo(
-    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    () =>
+      (query.data?.pages.flatMap((page) => page.items) ?? []).filter(
+        (p) => !isSystemProjectCode(p.code)
+      ),
     [query.data]
   )
   const totalCount = query.data?.pages[0]?.totalCount ?? 0
@@ -168,6 +181,98 @@ export function CommessaTree({
       : projects.length >= totalCount
         ? `${totalCount} commesse`
         : `${projects.length} di ${totalCount} commesse`
+
+  if (isCollapsed) {
+    const activeProject = projects.find((p) => p.id === selectedProjectId)
+    const projectSuffix = activeProject ? activeProject.code.slice(-3) : ""
+
+    return (
+      <TooltipProvider delayDuration={100}>
+        <div className="flex h-full flex-col items-center gap-2 py-2 bg-card">
+          {/* Active project code suffix */}
+          {activeProject ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-9 rounded-lg font-mono text-[10px] font-bold bg-muted/60"
+                  onClick={() => onSelectRoot(activeProject)}
+                >
+                  {projectSuffix}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {activeProject.code} — {activeProject.customerName || "Senza cliente"}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 rounded-lg text-muted-foreground"
+                  disabled
+                >
+                  💼
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Seleziona una commessa</TooltipContent>
+            </Tooltip>
+          )}
+
+          <div className="h-px w-8 bg-border my-1" />
+
+          {/* Section icons or project selection */}
+          <div className="flex-1 w-full overflow-y-auto px-1 flex flex-col items-center gap-1.5 min-h-0">
+            {activeProject ? (
+              sections.map((sec) => {
+                const isSelected = selectedSection === sec.key
+                return (
+                  <Tooltip key={sec.key}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={isSelected ? "default" : "ghost"}
+                        size="icon"
+                        className="size-9 rounded-lg shrink-0"
+                        onClick={() => onSelect(activeProject, sec.key)}
+                      >
+                        <span className="text-base leading-none">{sec.icon}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{sec.label}</TooltipContent>
+                  </Tooltip>
+                )
+              })
+            ) : (
+              projects.map((project) => {
+                const isSelected = selectedProjectId === project.id
+                const suffix = project.code.slice(-3)
+                return (
+                  <Tooltip key={project.id}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={isSelected ? "default" : "outline"}
+                        size="icon"
+                        className="size-9 rounded-lg font-mono text-[10px] font-bold shrink-0"
+                        onClick={() => onSelectRoot(project)}
+                      >
+                        {suffix}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {project.code} — {project.customerName || "Senza cliente"}
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              })
+            )}
+          </div>
+        </div>
+      </TooltipProvider>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col">

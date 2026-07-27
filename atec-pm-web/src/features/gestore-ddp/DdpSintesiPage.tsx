@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   ChevronRight,
+  ChevronDown,
   FileSpreadsheet,
   Printer,
 } from "lucide-react"
@@ -55,14 +56,17 @@ function KpiCard({
   value,
   valueClassName,
   small,
+  onOpen,
 }: {
   label: string
   value: React.ReactNode
   valueClassName?: string
   small?: boolean
+  /** Drill-down: apre la sezione di dettaglio corrispondente (card cliccabile). */
+  onOpen?: () => void
 }) {
-  return (
-    <div className="w-[170px] rounded-xl border bg-card px-3.5 py-2.5 shadow-xs">
+  const content = (
+    <>
       <div
         className={cn(
           "font-bold tabular-nums",
@@ -75,7 +79,24 @@ function KpiCard({
       <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-    </div>
+    </>
+  )
+  if (!onOpen) {
+    return (
+      <div className="w-[170px] rounded-xl border bg-card px-3.5 py-2.5 shadow-xs">
+        {content}
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Apri il dettaglio"
+      className="w-[170px] rounded-xl border bg-card px-3.5 py-2.5 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent"
+    >
+      {content}
+    </button>
   )
 }
 
@@ -123,17 +144,34 @@ function RowsTable({
   statoLabel,
   officina,
   markOverdue,
+  collapsedParentIds,
+  parentIdsWithChildren,
+  toggleParentCollapse,
 }: {
   rows: DdpRowItem[]
   statusDefs: Map<string, DdpStatusItem>
   statoLabel: (key: string) => string
   officina: boolean
   markOverdue?: boolean
+  collapsedParentIds?: Set<number>
+  parentIdsWithChildren?: Set<number>
+  toggleParentCollapse?: (id: number) => void
 }) {
   const headers = sintesiTableHeaders(officina)
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">Nessuna riga.</p>
   }
+
+  let visibleRows = rows
+  if (officina && collapsedParentIds) {
+    visibleRows = rows.filter((row) => {
+      if (row.parentOfficinaItemId != null) {
+        return !collapsedParentIds.has(row.parentOfficinaItemId)
+      }
+      return true
+    })
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border">
       <Table className="min-w-[1400px] text-xs">
@@ -147,7 +185,7 @@ function RowsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
+          {visibleRows.map((row) => {
             const def = statusDefs.get(row.itemStatus)
             const style = def
               ? { backgroundColor: def.colorBg, color: def.colorFg }
@@ -157,20 +195,71 @@ function RowsTable({
             })
             return (
               <TableRow key={row.id} style={style}>
-                {cells.map((cell, index) => (
-                  <TableCell
-                    key={index}
-                    className={cn(
-                      index === 4 || index === headers.length - 2
-                        ? "min-w-[160px]"
-                        : "whitespace-nowrap",
-                      index === 0 || index === 5 ? "tabular-nums" : undefined,
-                      index >= headers.length - 2 ? "tabular-nums" : undefined
-                    )}
-                  >
-                    {cell}
-                  </TableCell>
-                ))}
+                {cells.map((cell, index) => {
+                  if (officina && index === 0) {
+                    const isChild = row.parentOfficinaItemId != null
+                    return (
+                      <TableCell
+                        key={index}
+                        className={cn(
+                          isChild ? "pl-3 italic font-normal opacity-70" : "opacity-80 tabular-nums font-semibold",
+                          "whitespace-nowrap"
+                        )}
+                      >
+                        {row.rowNumber}
+                      </TableCell>
+                    )
+                  }
+                  if (officina && index === 3 && parentIdsWithChildren && toggleParentCollapse && collapsedParentIds) {
+                    const isChild = row.parentOfficinaItemId != null
+                    const hasChildren = parentIdsWithChildren.has(row.id)
+                    const isCollapsed = collapsedParentIds.has(row.id)
+                    return (
+                      <TableCell key={index} className="whitespace-nowrap">
+                        <span className="flex items-center gap-1 font-semibold">
+                          {isChild ? (
+                            <span
+                              className="mr-1 select-none text-muted-foreground"
+                              title={`Componente di composizione (${row.compositionQty ?? 1} per padre)`}
+                            >
+                              ↳
+                            </span>
+                          ) : hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleParentCollapse(row.id)
+                              }}
+                              className="mr-1 inline-flex size-5 items-center justify-center rounded hover:bg-muted"
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="size-4" strokeWidth={2.5} />
+                              ) : (
+                                <ChevronDown className="size-4" strokeWidth={2.5} />
+                              )}
+                            </button>
+                          ) : null}
+                          {row.partNumber || "—"}
+                        </span>
+                      </TableCell>
+                    )
+                  }
+                  return (
+                    <TableCell
+                      key={index}
+                      className={cn(
+                        index === 4 || index === headers.length - 2
+                          ? "min-w-[160px]"
+                          : "whitespace-nowrap",
+                        index === 0 || index === 5 ? "tabular-nums" : undefined,
+                        index >= headers.length - 2 ? "tabular-nums" : undefined
+                      )}
+                    >
+                      {cell}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
             )
           })}
@@ -196,7 +285,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border bg-card">
+    <div id={`ddp-section-${id}`} className="rounded-lg border bg-card scroll-mt-16">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <button
           type="button"
@@ -234,11 +323,38 @@ export function DdpSintesiPage() {
   const type = (searchParams.get("type") || "COMMERCIAL").toUpperCase()
   const officina = type === "OFFICINA"
 
+  const [collapsedParentIds, setCollapsedParentIds] = React.useState<Set<number>>(new Set())
+
+  // Reset collapsed parents when commessa/type changes
+  React.useEffect(() => {
+    setCollapsedParentIds(new Set())
+  }, [projectId, type])
+
   const rowsQuery = useQuery({
     queryKey: ["ddp-rows", projectId, type],
     queryFn: () => fetchDdpRows(projectId, type),
     enabled: Number.isFinite(projectId),
   })
+
+  const parentIdsWithChildren = React.useMemo(() => {
+    const set = new Set<number>()
+    const list = rowsQuery.data ?? []
+    for (const item of list) {
+      if (item.parentOfficinaItemId != null) {
+        set.add(item.parentOfficinaItemId)
+      }
+    }
+    return set
+  }, [rowsQuery.data])
+
+  const toggleParentCollapse = React.useCallback((parentId: number) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(parentId)) next.delete(parentId)
+      else next.add(parentId)
+      return next
+    })
+  }, [])
   const statusesQuery = useQuery({
     queryKey: ["ddp-statuses"],
     queryFn: fetchDdpStatuses,
@@ -328,6 +444,16 @@ export function DdpSintesiPage() {
   function toggleMultiOpen(value: boolean) {
     setMultiOpen(value)
     localStorage.setItem(MULTI_OPEN_KEY, value ? "1" : "0")
+  }
+
+  // Drill-down dalle KPI: apre la sezione di dettaglio e la porta a vista.
+  function openSection(id: string) {
+    setOpenSections((prev) => (multiOpen ? { ...prev, [id]: true } : { [id]: true }))
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`ddp-section-${id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
   }
 
   // ── Export ──
@@ -483,24 +609,61 @@ export function DdpSintesiPage() {
         </p>
       ) : (
         <>
-          {/* KPI */}
+          {/* KPI (cliccabili: aprono la sezione di dettaglio) */}
           <div className="flex flex-wrap gap-3">
             <KpiCard
               label="Tot. acquisti"
               value={euro(model.kpi.totValue)}
               valueClassName="text-red-700 dark:text-red-400"
+              onOpen={() => openSection("top10")}
             />
-            <KpiCard label="Inserimenti" value={model.kpi.count} />
+            <KpiCard
+              label="Inserimenti"
+              value={model.kpi.count}
+              onOpen={() => openSection("distinta")}
+            />
             <KpiCard label="Finestra consegne" value={model.kpi.finestra} small />
-            <KpiCard label="Mat. in consegna" value={model.kpi.datedCount} />
+            <KpiCard
+              label="Mat. in consegna"
+              value={model.kpi.inConsegna}
+              onOpen={() => openSection("consegne")}
+            />
             <KpiCard
               label="Mat. in ritardo"
               value={model.kpi.overdue}
               valueClassName={model.kpi.overdue > 0 ? "text-amber-600" : ""}
+              onOpen={() => openSection("consegne")}
             />
-            <KpiCard label="Mat. consegnato" value={model.kpi.consegnato} />
-            <KpiCard label="Mat. parziali" value={model.kpi.parziali} />
+            <KpiCard
+              label="Mat. consegnato"
+              value={model.kpi.consegnato}
+              onOpen={() => openSection("consegnato")}
+            />
+            <KpiCard
+              label="Mat. parziali"
+              value={model.kpi.parziali}
+              onOpen={() => openSection("consegne")}
+            />
           </div>
+
+          {/* Igiene dati (refusi date / costi mancanti) */}
+          {model.kpi.refusiDate > 0 || model.kpi.costoZero > 0 ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Controllo dati:{" "}
+              {model.kpi.refusiDate > 0 ? (
+                <>
+                  <strong>{model.kpi.refusiDate}</strong> data/e di consegna con
+                  annualità implausibile (probabile refuso).{" "}
+                </>
+              ) : null}
+              {model.kpi.costoZero > 0 ? (
+                <>
+                  <strong>{model.kpi.costoZero}</strong> riga/e senza costo unitario
+                  in uno stato che dovrebbe averlo.
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <DdpOverviewPie
             bars={model.ripartizione}
@@ -735,6 +898,9 @@ export function DdpSintesiPage() {
                 statusDefs={statusDefs}
                 statoLabel={statoLabel}
                 officina={officina}
+                collapsedParentIds={collapsedParentIds}
+                parentIdsWithChildren={parentIdsWithChildren}
+                toggleParentCollapse={toggleParentCollapse}
               />
             </Section>
 

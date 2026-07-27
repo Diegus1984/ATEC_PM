@@ -169,4 +169,15 @@ public class NotificationsController : ControllerBase
             new { Id = id, EmpId = empId });
         return Ok(ApiResponse<bool>.Ok(true));
     }
+
+    /// <summary>POST /api/notifications/clean-resolved — Rimuove notifiche risolte/chiuse</summary>
+    [HttpPost("clean-resolved")]
+    public IActionResult CleanResolved()
+    {
+        int empId = GetCurrentEmployeeId();
+        if (empId == 0) return Unauthorized();
+
+        int count = _notif.CleanResolvedNotifications();
+        return Ok(ApiResponse<int>.Ok(count, $"{count} notifiche risolte rimosse"));
+    }
 }

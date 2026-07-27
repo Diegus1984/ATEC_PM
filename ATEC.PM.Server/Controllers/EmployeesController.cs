@@ -91,14 +91,17 @@ public class EmployeesController : ControllerBase
             WHERE pp.id = @PhaseId
               AND e.status <> 'TERMINATED'
               AND e.user_role <> 'ADMIN'
+              -- Fasi assegnate = SOLO persone reali: esclude i wildcard reparto ([PM] Generico, …),
+              -- che sono usati solo a sinistra nel preventivo (risorse fittizie).
+              AND e.first_name NOT LIKE '[%'
             ORDER BY e.last_name",
             new { PhaseId = phaseId }).ToList();
 
-        // Fallback: se la fase non ha sezione costo configurata, restituisce tutti (escluso admin)
+        // Fallback: se la fase non ha sezione costo configurata, restituisce tutti (escluso admin e wildcard)
         if (rows.Count == 0)
         {
             rows = c.Query<LookupItem>(
-                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' AND user_role<>'ADMIN' ORDER BY last_name").ToList();
+                "SELECT id, CONCAT(first_name,' ',last_name) AS Name FROM employees WHERE status<>'TERMINATED' AND user_role<>'ADMIN' AND first_name NOT LIKE '[%' ORDER BY last_name").ToList();
         }
 
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));

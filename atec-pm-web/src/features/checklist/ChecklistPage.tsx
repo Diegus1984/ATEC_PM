@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Plus, RefreshCw, Trash2 } from "lucide-react"
+import { ExternalLink, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
@@ -295,7 +296,19 @@ function ChecklistMainContent({
           refreshing={refreshing}
         />
         <ChecklistContainerCard
-          title={project.display}
+          title={
+            <div className="flex items-center gap-2">
+              <span>{project.display}</span>
+              <Link
+                to={`/commesse/${project.projectId}/checklist`}
+                state={{ fromGlobal: "/checklist" }}
+                className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-primary hover:underline ml-2"
+              >
+                <ExternalLink className="size-3" />
+                Apri commessa
+              </Link>
+            </div>
+          }
           count={project.items.length}
           accent="bg-primary"
         >
@@ -513,7 +526,19 @@ function BoardView({
           {projects.map((p) => (
             <ChecklistContainerCard
               key={`p${p.projectId}`}
-              title={p.display}
+              title={
+                <div className="flex items-center gap-2">
+                  <span>{p.display}</span>
+                  <Link
+                    to={`/commesse/${p.projectId}/checklist`}
+                    state={{ fromGlobal: "/checklist" }}
+                    className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-primary hover:underline ml-2"
+                  >
+                    <ExternalLink className="size-3" />
+                    Apri commessa
+                  </Link>
+                </div>
+              }
               count={p.items.length}
               accent="bg-primary"
             >

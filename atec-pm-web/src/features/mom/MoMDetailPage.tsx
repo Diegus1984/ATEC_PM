@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom"
 import {
   ArrowLeft,
   CircleCheck,
@@ -91,6 +91,7 @@ function blankRowRequest(
 export function MoMDetailPage() {
   const params = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const confirm = useConfirm()
   const momId = Number(params.id)
   const myId = getSession()?.user.employeeId ?? null
@@ -113,6 +114,13 @@ export function MoMDetailPage() {
 
   const today = todayIso()
   const containerRef = React.useRef<HTMLDivElement | null>(null)
+
+  const backUrl =
+    location.state?.fromProject && header?.projectId
+      ? `/commesse/${header.projectId}/mom`
+      : "/mom"
+  const backUrlRef = React.useRef(backUrl)
+  backUrlRef.current = backUrl
 
   // Autosave: stato più recente + debounce per riga + coda seriale di salvataggio.
   const rowsRef = React.useRef<MoMActionItem[]>([])
@@ -599,7 +607,7 @@ export function MoMDetailPage() {
         const tag = (event.target as HTMLElement | null)?.tagName
         if (tag === "INPUT" || tag === "TEXTAREA") return
         event.preventDefault()
-        navigate("/mom")
+        navigate(backUrlRef.current)
       }
     }
     window.addEventListener("keydown", onKeyDown)
@@ -646,9 +654,9 @@ export function MoMDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" size="sm" asChild>
-            <Link to="/mom">
+            <Link to={backUrl}>
               <ArrowLeft />
-              Riepilogo
+              {location.state?.fromProject ? "Commessa" : "Riepilogo"}
             </Link>
           </Button>
           <span className="text-base font-semibold">{headerTitle(header)}</span>

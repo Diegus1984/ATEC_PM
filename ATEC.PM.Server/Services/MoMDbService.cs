@@ -84,6 +84,36 @@ public class MoMDbService
         AddColumnIfMissing(c, "mom_action_items", "sort_order", "INT NOT NULL DEFAULT 0");
         AddColumnIfMissing(c, "mom_action_item_responsibles", "sort_order", "INT NOT NULL DEFAULT 0");
 
+        // ── Gestione v9 (prototipo Gestione_MoM_v9) ──
+        // Revisione del verbale: numero corrente sul record + storico dei cambi data riunione.
+        AddColumnIfMissing(c, "mom_records", "rev", "INT NOT NULL DEFAULT 0");
+        c.Execute(@"CREATE TABLE IF NOT EXISTS mom_revisions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mom_id INT NOT NULL,
+            rev INT NOT NULL,
+            meeting_date DATE NULL,
+            prev_date DATE NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_mrev_mom FOREIGN KEY (mom_id) REFERENCES mom_records(id) ON DELETE CASCADE,
+            KEY idx_mrev_mom (mom_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Note MoM (acquisizione rapida): staging personale per dipendente, la nota
+        // vive qui finché non viene assegnata a un verbale (poi viene eliminata).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS mom_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            note VARCHAR(2000) NOT NULL DEFAULT '',
+            target_mom_id INT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_mnote_emp FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            CONSTRAINT fk_mnote_mom FOREIGN KEY (target_mom_id) REFERENCES mom_records(id) ON DELETE SET NULL,
+            KEY idx_mnote_emp (employee_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Token di concorrenza ottimistica sul foglio condiviso (regola ambiente multi-utente).
+        AddColumnIfMissing(c, "mom_action_items", "row_version", "INT NOT NULL DEFAULT 0");
+
         MigrateLegacyResponsibles(c);
 
         EnsureWildcardEmployees(c);

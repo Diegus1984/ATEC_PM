@@ -75,3 +75,21 @@ export async function seedMilestonesFromCatalog(
   )
   return unwrapApi(response)
 }
+
+export const preloadMilestonesFromCatalog = seedMilestonesFromCatalog
+
+export interface ActivityCatalogItem {
+  id: number
+  label: string
+  sortOrder: number
+  isActive: boolean
+}
+
+/** Recupera le attività attive dall'anagrafica catalogo per il precarico/selezione milestone. */
+export async function fetchActiveActivityCatalog(): Promise<ActivityCatalogItem[]> {
+  const response = await apiGet<ApiResponse<ActivityCatalogItem[]>>(
+    `/api/activity-catalog/active`
+  )
+  return unwrapApi(response)
+}
+

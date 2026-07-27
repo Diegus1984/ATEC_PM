@@ -1,5 +1,5 @@
 import * as React from "react"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 
 import {
   Tooltip,
@@ -41,6 +41,17 @@ export type PmContainer = {
   dots: PmSidebarDot[]
   /** Contenuto del pulsante nel rail compresso; default = sigla di 2 lettere ricavata da `label`. */
   railIcon?: React.ReactNode
+  /** Foglie opzionali per rappresentare un contenitore ad albero. */
+  children?: PmContainerChild[]
+}
+
+export type PmContainerChild = {
+  key: string
+  selected: boolean
+  onClick: () => void
+  label: string
+  count: number
+  dotClass?: string
 }
 
 export type PmSidebarProps = {
@@ -117,47 +128,96 @@ function ContainerNavItem({
   label,
   count,
   dots,
+  children,
+  expanded,
+  onToggleExpanded,
 }: {
   selected: boolean
   onClick: () => void
   label: string
   count: number
   dots: PmSidebarDot[]
+  children?: PmContainerChild[]
+  expanded: boolean
+  onToggleExpanded: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors",
-        selected ? "bg-primary/10" : "hover:bg-muted/60"
-      )}
-    >
-      {dots.length > 0 ? (
-        <span className="flex shrink-0 flex-col gap-0.5 mr-1" aria-hidden>
-          {dots.map((d) => (
-            <span
-              key={d.label}
-              className={cn("size-1.5 rounded-full", d.dotClass)}
-              title={d.label}
-            />
-          ))}
-        </span>
-      ) : (
-        <span className="size-1.5 shrink-0 mr-1" />
-      )}
-      <span
+    <div className="space-y-0.5">
+      <div
         className={cn(
-          "min-w-0 flex-1 truncate text-[12.5px] font-medium",
-          selected && "font-semibold text-primary"
+          "flex items-center rounded-lg transition-colors",
+          selected ? "bg-primary/10" : "hover:bg-muted/60"
         )}
       >
-        {label}
-      </span>
-      <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
-        {count}
-      </span>
-    </button>
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
+        >
+          {dots.length > 0 ? (
+            <span className="mr-1 flex shrink-0 flex-col gap-0.5" aria-hidden>
+              {dots.map((d) => (
+                <span
+                  key={d.label}
+                  className={cn("size-1.5 rounded-full", d.dotClass)}
+                  title={d.label}
+                />
+              ))}
+            </span>
+          ) : (
+            <span className="mr-1 size-1.5 shrink-0" />
+          )}
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[12.5px] font-medium",
+              selected && "font-semibold text-primary"
+            )}
+          >
+            {label}
+          </span>
+          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+            {count}
+          </span>
+        </button>
+        {children && children.length > 0 ? (
+          <button
+            type="button"
+            onClick={onToggleExpanded}
+            className="mr-1 flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background/70 hover:text-foreground"
+            aria-label={expanded ? `Comprimi ${label}` : `Espandi ${label}`}
+            aria-expanded={expanded}
+          >
+            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          </button>
+        ) : null}
+      </div>
+
+      {children && expanded ? (
+        <div className="ml-5 space-y-0.5 border-l pl-2">
+          {children.map((child) => (
+            <button
+              key={child.key}
+              type="button"
+              onClick={child.onClick}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                child.selected
+                  ? "bg-primary/10 font-semibold text-primary"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              {child.dotClass ? (
+                <span className={cn("size-1.5 shrink-0 rounded-full", child.dotClass)} />
+              ) : null}
+              <span className="min-w-0 flex-1 truncate">{child.label}</span>
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {child.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -255,6 +315,22 @@ export function PmSidebar({
       return next
     })
   }, [storageKey])
+  const [expandedContainerKeys, setExpandedContainerKeys] = React.useState<Set<string>>(
+    () =>
+      new Set(
+        containers
+          .filter((container) => container.children?.length)
+          .map((container) => container.key)
+      )
+  )
+  const toggleContainerExpanded = React.useCallback((key: string) => {
+    setExpandedContainerKeys((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   return (
     <aside
@@ -370,6 +446,9 @@ export function PmSidebar({
                     label={c.label}
                     count={c.count}
                     dots={c.dots}
+                    children={c.children}
+                    expanded={expandedContainerKeys.has(c.key)}
+                    onToggleExpanded={() => toggleContainerExpanded(c.key)}
                   />
                 ))}
               </div>

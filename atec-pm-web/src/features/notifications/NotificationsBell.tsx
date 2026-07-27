@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
-import { Bell, BellOff, CheckCheck, X } from "lucide-react"
+import { Bell, BellOff, CheckCheck, RefreshCw, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -9,11 +9,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
 import {
   deleteNotification,
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  cleanResolvedNotifications,
 } from "@/lib/api/notifications"
 import type { NotificationListItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
@@ -38,17 +40,41 @@ export function NotificationsBell() {
   const queryClient = useQueryClient()
   const { unreadCount } = useNotificationsBadge()
 
-  // La lista si carica solo quando il popover è aperto.
-  const listQuery = useQuery({
-    queryKey: NOTIFICATIONS_LIST_KEY,
-    queryFn: () => fetchNotifications(false, 50),
-    enabled: open,
+  // Stato per l'auto-pulizia delle notifiche risolte
+  const [autoClean, setAutoClean] = React.useState(() => {
+    const val = localStorage.getItem("atec-notifications-autoclean")
+    return val !== "false" // Default a true
   })
 
   function invalidateAll() {
     void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_BADGE_KEY })
     void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_LIST_KEY })
   }
+
+  const cleanMutation = useMutation({
+    mutationFn: cleanResolvedNotifications,
+    onSuccess: invalidateAll,
+  })
+
+  // Esegue l'auto-pulizia UNA volta all'apertura del popover, se abilitata.
+  // NB: mai mettere `cleanMutation` nelle dipendenze — l'oggetto cambia identità
+  // a ogni render e l'effetto richiamava mutate() in loop infinito; `mutate` è
+  // stabile, `autoClean` letto via ref per non ri-scattare al toggle (che pulisce già da sé).
+  const cleanMutate = cleanMutation.mutate
+  const autoCleanRef = React.useRef(autoClean)
+  autoCleanRef.current = autoClean
+  React.useEffect(() => {
+    if (open && autoCleanRef.current) {
+      cleanMutate()
+    }
+  }, [open, cleanMutate])
+
+  // La lista si carica solo quando il popover è aperto e non è in corso l'auto-pulizia
+  const listQuery = useQuery({
+    queryKey: NOTIFICATIONS_LIST_KEY,
+    queryFn: () => fetchNotifications(false, 50),
+    enabled: open && (!autoClean || !cleanMutation.isPending),
+  })
 
   const readMutation = useMutation({
     mutationFn: markNotificationRead,
@@ -95,32 +121,61 @@ export function NotificationsBell() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 p-0">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="text-sm font-semibold">
-            Notifiche
+        <div className="flex flex-col border-b bg-muted/20">
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <div className="text-sm font-semibold flex items-center gap-1">
+              Notifiche
+              {unreadCount > 0 ? (
+                <span className="font-normal text-muted-foreground text-xs">
+                  ({unreadCount})
+                </span>
+              ) : null}
+            </div>
             {unreadCount > 0 ? (
-              <span className="ml-1 font-normal text-muted-foreground">
-                ({unreadCount})
-              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => readAllMutation.mutate()}
+                disabled={readAllMutation.isPending}
+              >
+                <CheckCheck className="size-3.5" />
+                Segna tutte lette
+              </Button>
             ) : null}
           </div>
-          {unreadCount > 0 ? (
+          <div className="flex items-center justify-between px-4 py-1.5 border-t border-muted-foreground/10 bg-muted/40 text-[11px] text-muted-foreground select-none">
+            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground">
+              <Switch
+                size="sm"
+                checked={autoClean}
+                onCheckedChange={(checked) => {
+                  setAutoClean(checked)
+                  localStorage.setItem("atec-notifications-autoclean", String(checked))
+                  if (checked) {
+                    cleanMutate()
+                  }
+                }}
+              />
+              Auto-check (rimuovi risolte)
+            </label>
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs"
-              onClick={() => readAllMutation.mutate()}
-              disabled={readAllMutation.isPending}
+              size="xs"
+              className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+              onClick={() => cleanMutation.mutate()}
+              disabled={cleanMutation.isPending}
             >
-              <CheckCheck className="size-3.5" />
-              Segna tutte lette
+              <RefreshCw className={cn("size-2.5", cleanMutation.isPending && "animate-spin")} />
+              Pulisci ora
             </Button>
-          ) : null}
+          </div>
         </div>
 
         <div className="max-h-[26rem] overflow-y-auto">
-          {listQuery.isLoading ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          {cleanMutation.isPending || listQuery.isLoading ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <RefreshCw className="size-4 animate-spin" />
               Caricamento…
             </div>
           ) : items.length === 0 ? (
@@ -213,6 +268,19 @@ export function NotificationsBell() {
               })}
             </ul>
           )}
+        </div>
+        <div className="border-t p-2 bg-muted/20 flex justify-center">
+          <Button
+            variant="link"
+            size="sm"
+            className="text-xs w-full h-8"
+            onClick={() => {
+              setOpen(false)
+              navigate("/scadenze")
+            }}
+          >
+            Vedi tutte le scadenze
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

@@ -1,6 +1,8 @@
 import { apiDelete, apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   ApiResponse,
+  OfficinaImportCompositionRequest,
+  OfficinaImportCompositionResult,
   OfficinaItem,
   OfficinaItemSaveRequest,
 } from "@/lib/api/types"
@@ -35,6 +37,21 @@ export async function updateOfficinaItem(
     req
   )
   unwrapApi(r)
+}
+
+/**
+ * Importa i figli diretti della composizione Codex di un codice padre nella
+ * distinta officina (dedup per codice: le righe già presenti sommano le quantità).
+ */
+export async function importOfficinaComposition(
+  projectId: number,
+  req: OfficinaImportCompositionRequest
+): Promise<OfficinaImportCompositionResult> {
+  const r = await apiPost<ApiResponse<OfficinaImportCompositionResult>>(
+    `/api/projects/${projectId}/ddp-officina/import-composition`,
+    req
+  )
+  return unwrapApi(r)
 }
 
 export async function deleteOfficinaItem(

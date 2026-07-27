@@ -22,6 +22,16 @@ public class BudgetVsActualController : ControllerBase
     {
         using var c = _db.Open();
 
+        // NB: la commessa NON ha una colonna linked_quote_id. Il legame con
+        // l'offerta è inverso: quotes.project_id → la commessa (una commessa è
+        // "convertita" se esiste una quote che la referenzia). Stessa logica di
+        // ProjectsController.GetById.
+        var proj = c.QueryFirstOrDefault<dynamic>(
+            @"SELECT revenue, actual_travel_cost, budget_total, budget_hours_total,
+                     COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS linked_quote_id
+              FROM projects p WHERE p.id=@pid",
+            new { pid = projectId });
+
         // ── PREVENTIVO: sezioni + risorse ──────────────────────────
         var sections = c.Query<dynamic>(@"
             SELECT s.id, s.name, s.section_type, s.group_name, s.sort_order, s.template_id,
@@ -34,7 +44,9 @@ public class BudgetVsActualController : ControllerBase
             ORDER BY s.sort_order", new { pid = projectId }).ToList();
 
         var resources = c.Query<dynamic>(@"
-            SELECT r.section_id AS SectionId,
+            SELECT r.id AS ResourceId,
+                   r.employee_id AS EmployeeId,
+                   r.section_id AS SectionId,
                    r.resource_name AS ResourceName,
                    r.work_days AS WorkDays,
                    r.hours_per_day AS HoursPerDay,
@@ -116,7 +128,11 @@ public class BudgetVsActualController : ControllerBase
         var grouped = sections.GroupBy(s => (string)s.group_name)
             .OrderBy(g => g.Min(s => (int)s.group_sort));
 
-        var result = new BudgetVsActualData { ProjectId = projectId };
+        var result = new BudgetVsActualData 
+        { 
+            ProjectId = projectId,
+            LinkedQuoteId = (int)(proj?.linked_quote_id ?? 0)
+        };
 
         foreach (var grp in grouped)
         {
@@ -132,6 +148,7 @@ public class BudgetVsActualController : ControllerBase
                 int secId = (int)sec.id;
                 var sectionDto = new BvaSectionDto
                 {
+                    SectionId = secId,
                     SectionName = (string)sec.name,
                     SectionType = (string)sec.section_type,
                     TemplateId = (int?)sec.template_id
@@ -144,6 +161,8 @@ public class BudgetVsActualController : ControllerBase
                     {
                         sectionDto.BudgetResources.Add(new BvaBudgetResourceDto
                         {
+                            ResourceId = (int)r.ResourceId,
+                            EmployeeId = (int?)r.EmployeeId,
                             ResourceName = (string)r.ResourceName,
                             WorkDays = (decimal)r.WorkDays,
                             HoursPerDay = (decimal)r.HoursPerDay,
@@ -216,7 +235,7 @@ public class BudgetVsActualController : ControllerBase
 
         // ── MATERIALI ─────────────────────────────────────────────
         var matSections = c.Query<dynamic>(@"
-            SELECT id, name, markup_value, commission_markup
+            SELECT id, id AS SectionId, name, markup_value, commission_markup
             FROM project_material_sections
             WHERE project_id = @pid AND is_enabled = 1
             ORDER BY sort_order", new { pid = projectId }).ToList();
@@ -249,6 +268,7 @@ public class BudgetVsActualController : ControllerBase
             int msId = (int)ms.id;
             var secDto = new BvaMaterialSectionDto
             {
+                SectionId = msId,
                 SectionName = (string)ms.name,
                 MarkupValue = (decimal)ms.markup_value,
                 CommissionMarkup = (decimal)ms.commission_markup
@@ -299,17 +319,24 @@ public class BudgetVsActualController : ControllerBase
         }
 
         // ── RIEPILOGO ECONOMICO ──────────────────────────────────
-        var proj = c.QueryFirstOrDefault<dynamic>(
-            "SELECT revenue, actual_travel_cost FROM projects WHERE id=@pid",
-            new { pid = projectId });
 
         decimal budgetTravelTotal = result.Groups.Sum(g => g.Sections.Sum(s => s.BudgetTotalTravelCost));
 
-        // Consuntivo acquisti: bom_items attivi (tutti tranne ANN = ANNULLATO) — stessa query della dashboard commessa
+        // Consuntivo acquisti: bom_items esclusi solo gli stati «esclusi da totale» (aggregazione A9)
+        // — i consegnati restano (sono un costo reale). Stessa regola della dashboard commessa.
+        string[] ddpExcluded = DdpAggregationSet.Load(c, "A9");
         decimal actualMaterialCost = c.ExecuteScalar<decimal?>(@"
-            SELECT SUM(quantity * unit_cost)
-            FROM bom_items WHERE project_id = @pid AND item_status <> 'ANN'",
-            new { pid = projectId }) ?? 0;
+            SELECT (
+                SELECT COALESCE(SUM(quantity * unit_cost), 0)
+                FROM bom_items
+                WHERE project_id = @pid AND COALESCE(item_status,'') NOT IN @Excluded
+            ) + (
+                SELECT COALESCE(SUM(quantity * unit_cost), 0)
+                FROM ddp_officina_items
+                WHERE project_id = @pid AND COALESCE(item_status,'') NOT IN @Excluded
+                  AND id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)
+            )",
+            new { pid = projectId, Excluded = ddpExcluded }) ?? 0;
 
         // Tecnici attivi e fasi
         int activeTechs = c.ExecuteScalar<int>(@"

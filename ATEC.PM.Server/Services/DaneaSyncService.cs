@@ -109,6 +109,8 @@ public class DaneaSyncService : BackgroundService
         string user = _config["DaneaSync:FbUser"] ?? "SYSDBA";
         string password = _config["DaneaSync:FbPassword"] ?? "masterkey";
 
+        // Charset NONE + WireCrypt Disabled: regola #7 del runbook Danea (ATEC_Warehouse/docs/danea.md),
+        // senza WireCrypt disabilitato i caratteri non ASCII diventano '?'.
         var csb = new FbConnectionStringBuilder
         {
             Database = filePath,
@@ -116,7 +118,8 @@ public class DaneaSyncService : BackgroundService
             UserID = user,
             Password = password,
             ClientLibrary = fbClientPath,
-            Charset = "NONE"
+            Charset = "NONE",
+            WireCrypt = FbWireCrypt.Disabled
         };
 
         if (serverType == 0)
@@ -244,9 +247,11 @@ public class DaneaSyncService : BackgroundService
                     SELECT TRIM(rf.RDB$FIELD_NAME) FROM RDB$RELATION_FIELDS rf
                     WHERE rf.RDB$RELATION_NAME = 'TAnagrafica'")).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                string pkCol = anagCols.Contains("Id") ? "Id" :
-                               anagCols.Contains("IDAnag") ? "IDAnag" :
-                               anagCols.Contains("CodAnagr") ? "CodAnagr" : "";
+                // La PK vera di TAnagrafica è IDAnagr (numerica, la stessa usata da SyncCustomers).
+                // NIENTE fallback su CodAnagr: è il codice anagrafica testuale ("bmt gmbh") e
+                // faceva esplodere il Convert.ToInt32 → fornitori mai agganciati agli articoli.
+                string pkCol = anagCols.Contains("IDAnagr") ? "IDAnagr" :
+                               anagCols.Contains("Id") ? "Id" : "";
 
                 _log.LogInformation("[DaneaSync] TAnagrafica PK candidata: '{Pk}', colonne: {Cols}",
                     pkCol, string.Join(", ", anagCols.Take(15)));
@@ -275,16 +280,30 @@ public class DaneaSyncService : BackgroundService
         string artQuery = hasIDFornitore
             ? @"SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", ""NomeSottocategoria"",
                        ""Udm"", ""PrezzoNetto1"", ""PrezzoNettoForn"", ""CodArticoloForn"",
-                       ""Produttore"", ""CodBarre"", ""Note"", ""IDFornitore""
+                       ""Produttore"", ""CodBarre"", ""Note"", ""Extra1"", ""IDFornitore""
                 FROM ""TArticoli"""
             : @"SELECT ""IDArticolo"", ""CodArticolo"", ""Desc"", ""NomeCategoria"", ""NomeSottocategoria"",
                        ""Udm"", ""PrezzoNetto1"", ""PrezzoNettoForn"", ""CodArticoloForn"",
-                       ""Produttore"", ""CodBarre"", ""Note""
+                       ""Produttore"", ""CodBarre"", ""Note"", ""Extra1""
                 FROM ""TArticoli""";
 
         var remote = (await fb.QueryAsync(artQuery)).ToList();
 
         using var local = db.Open();
+
+        // Mapping codice ATEC (piano Acquisti): Extra1 dell'articolo Danea → codice NUOVO Codex.
+        // Risoluzione SOLO contro codice_nuovo (convenzione: in Extra1 vanno solo codici nuovi).
+        // Con MappingMaster=false ("gestione interna senza Danea") il sync NON tocca il mapping locale.
+        bool mappingMaster = !string.Equals(_config["DaneaSync:MappingMaster"], "false", StringComparison.OrdinalIgnoreCase);
+        var codexByNewCode = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (mappingMaster)
+        {
+            foreach (var row in await local.QueryAsync<(int Id, string CodiceNuovo)>(
+                "SELECT id, codice_nuovo FROM codex_items WHERE codice_nuovo IS NOT NULL AND codice_nuovo <> ''"))
+            {
+                codexByNewCode.TryAdd(row.CodiceNuovo, row.Id);
+            }
+        }
 
         // Prepara lookup fornitori locali per nome (primo match in caso di duplicati)
         var supplierLookup = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -294,6 +313,22 @@ public class DaneaSyncService : BackgroundService
             if (!string.IsNullOrEmpty(key))
                 supplierLookup.TryAdd(key, s.Id);
         }
+
+        // SPECCHIO VERO (F3 migrazione Atec_PM, 22/07/2026): il catalogo locale riflette
+        // SOLO gli articoli presenti nell'archivio Danea sincronizzato. In transazione:
+        // si disattiva tutto, poi ogni upsert riattiva la propria riga → alla fine gli
+        // articoli spariti dall'archivio (o mai trasferiti) restano is_active=0 (nessuna
+        // DELETE: le distinte che li referenziano non perdono nulla). Guardia: se il
+        // remoto è vuoto non si tocca niente (archivio sbagliato ≠ svuotare lo specchio).
+        if (remote.Count == 0)
+        {
+            _log.LogWarning("[DaneaSync] Archivio senza articoli: specchio locale NON toccato");
+            ArticlesCount = 0;
+            return;
+        }
+        using var artTx = local.BeginTransaction();
+        await local.ExecuteAsync(
+            "UPDATE catalog_items SET is_active = 0 WHERE is_active = 1", transaction: artTx);
 
         int count = 0;
         foreach (var a in remote)
@@ -316,14 +351,25 @@ public class DaneaSyncService : BackgroundService
                 }
             }
 
-            await local.ExecuteAsync(@"
+            // Extra1 = codice ATEC (nuova codifica), normalizzato senza punti; vuoto = non mappato.
+            string atecCode = ((string?)a.Extra1)?.Replace(".", "").Trim() ?? "";
+            int? codexItemId = null;
+            if (mappingMaster && atecCode.Length > 0 && codexByNewCode.TryGetValue(atecCode, out int cid))
+                codexItemId = cid;
+
+            string mappingSet = mappingMaster
+                ? ", atec_code=@AtecCode, codex_item_id=@CodexItemId"
+                : "";
+            await local.ExecuteAsync($@"
                 INSERT INTO catalog_items (code, description, category, subcategory, unit, unit_cost,
-                                         list_price, supplier_id, supplier_code, manufacturer, barcode, notes, is_active, easyfatt_id)
+                                         list_price, supplier_id, supplier_code, manufacturer, barcode, notes, is_active, easyfatt_id,
+                                         atec_code, codex_item_id)
                 VALUES (@Code, @Desc, @Cat, @SubCat, @Udm, @CostoForn,
-                        @Listino, @SuppId, @CodForn, @Produttore, @Barcode, @Note, 1, @EftId)
+                        @Listino, @SuppId, @CodForn, @Produttore, @Barcode, @Note, 1, @EftId,
+                        @AtecCode, @CodexItemId)
                 ON DUPLICATE KEY UPDATE
-                    description=@Desc, category=@Cat, unit_cost=@CostoForn,
-                    list_price=@Listino, supplier_id=@SuppId, notes=@Note, easyfatt_id=@EftId",
+                    is_active=1, description=@Desc, category=@Cat, subcategory=@SubCat, unit_cost=@CostoForn,
+                    list_price=@Listino, supplier_id=@SuppId, notes=@Note, easyfatt_id=@EftId{mappingSet}",
                 new
                 {
                     Code = code,
@@ -338,11 +384,17 @@ public class DaneaSyncService : BackgroundService
                     Produttore = ((string?)a.Produttore)?.Trim() ?? "",
                     Barcode = ((string?)a.CodBarre)?.Trim() ?? "",
                     Note = ((string?)a.Note)?.Trim() ?? "",
-                    EftId = (int?)a.IDArticolo
-                });
+                    EftId = (int?)a.IDArticolo,
+                    AtecCode = atecCode.Length > 0 ? atecCode : null,
+                    CodexItemId = codexItemId
+                }, transaction: artTx);
             count++;
         }
+        artTx.Commit();
+        int inactive = await local.QuerySingleAsync<int>(
+            "SELECT COUNT(*) FROM catalog_items WHERE is_active = 0");
         ArticlesCount = count;
-        _log.LogInformation($"[DaneaSync] Articoli: {count} sincronizzati");
+        _log.LogInformation("[DaneaSync] Articoli: {Count} sincronizzati (specchio: {Inactive} disattivati perché assenti dall'archivio)",
+            count, inactive);
     }
 }

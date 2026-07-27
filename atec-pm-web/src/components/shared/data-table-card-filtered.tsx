@@ -3,7 +3,6 @@ import {
   type ColumnFiltersState,
   type SortingState,
   type VisibilityState,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getSortedRowModel,
@@ -12,6 +11,7 @@ import {
 import { FilterX, RefreshCw, Search } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { renderColumnDef } from "@/components/shared/render-column-def"
 import type { DataTableCardProps } from "@/components/shared/data-table-card"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import "@/components/shared/data-table-column-meta"
@@ -86,15 +86,46 @@ export function DataTableCardFiltered<TData>({
   aboveTable,
   externalFiltersActive = false,
   onClearExternalFilters,
+  visibilityStorageKey,
 }: DataTableCardFilteredProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(defaultSorting)
+
+  const storageKey = React.useMemo(() => {
+    if (visibilityStorageKey) return visibilityStorageKey
+    if (title) return `table-visibility-${title.toLowerCase().replace(/\s+/g, "-")}`
+    return null
+  }, [visibilityStorageKey, title])
+
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(initialColumnVisibility)
+    React.useState<VisibilityState>(() => {
+      if (storageKey) {
+        try {
+          const saved = localStorage.getItem(storageKey)
+          if (saved) {
+            return JSON.parse(saved)
+          }
+        } catch (e) {
+          console.error("Failed to load column visibility from localStorage", e)
+        }
+      }
+      return initialColumnVisibility
+    })
+
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   )
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState("")
+
+  React.useEffect(() => {
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(columnVisibility))
+      } catch (e) {
+        console.error("Failed to save column visibility to localStorage", e)
+      }
+    }
+  }, [storageKey, columnVisibility])
 
   const table = useReactTable({
     data: data ?? [],
@@ -124,6 +155,11 @@ export function DataTableCardFiltered<TData>({
   const labelOf = (id: string) => columnLabels[id] ?? id
   const hasColumnFilters = columnFilters.length > 0
   const hasAnyFilters = hasColumnFilters || externalFiltersActive || !!globalFilter
+  const visibleRows = table.getRowModel().rows.map((row) => row.original)
+  const resolvedToolbarActions =
+    typeof toolbarActions === "function"
+      ? toolbarActions(visibleRows)
+      : toolbarActions
 
   function clearAllFilters() {
     setColumnFilters([])
@@ -206,7 +242,7 @@ export function DataTableCardFiltered<TData>({
                     onToggle: (value) => column.toggleVisibility(value),
                   }))}
               />
-              {toolbarActions}
+              {resolvedToolbarActions}
             </div>
           </div>
 
@@ -224,7 +260,7 @@ export function DataTableCardFiltered<TData>({
                         <TableHead key={header.id}>
                           {header.isPlaceholder
                             ? null
-                            : flexRender(
+                            : renderColumnDef(
                                 header.column.columnDef.header,
                                 header.getContext()
                               )}
@@ -311,7 +347,7 @@ export function DataTableCardFiltered<TData>({
                     >
                       {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id}>
-                          {flexRender(
+                          {renderColumnDef(
                             cell.column.columnDef.cell,
                             cell.getContext()
                           )}

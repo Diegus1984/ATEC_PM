@@ -13,9 +13,11 @@ public class MoMListDto
     public string Tipo { get; set; } = "RIUNIONE";   // COMMESSA | RIUNIONE
     public int? ProjectId { get; set; }
     public string? ProjectCode { get; set; }
+    public string? ProjectTitle { get; set; }
     public string Title { get; set; } = "";
     public DateTime? MeetingDate { get; set; }
     public bool InDashboard { get; set; }
+    public int Rev { get; set; }                     // revisione corrente del verbale
     public int ItemsCount { get; set; }
     public int OpenCount { get; set; }               // azioni non chiuse
     public int P1Count { get; set; }                 // ripartizione priorità (Alta)
@@ -36,7 +38,18 @@ public class MoMDetailDto
     public string Title { get; set; } = "";
     public DateTime? MeetingDate { get; set; }
     public bool InDashboard { get; set; }
+    public int Rev { get; set; }
     public List<MoMActionItemDto> Items { get; set; } = new();
+    public List<MoMRevisionDto> Revisions { get; set; } = new();
+}
+
+// Riga dello storico revisioni (cambio data riunione confermato)
+public class MoMRevisionDto
+{
+    public int Rev { get; set; }
+    public DateTime? MeetingDate { get; set; }       // nuova data registrata
+    public DateTime? PrevDate { get; set; }          // data precedente
+    public DateTime CreatedAt { get; set; }
 }
 
 // Singola action item (riga della tabella verbale)
@@ -58,6 +71,8 @@ public class MoMActionItemDto
     public string? Resp3Name { get; set; }
     public DateTime? DataCheck { get; set; }
     public DateTime? DataClose { get; set; }
+    public int SortOrder { get; set; }               // ordine manuale (drag&drop foglio)
+    public int RowVersion { get; set; }              // token concorrenza ottimistica
 
     public List<string> ResponsibleNames { get; set; } = new();
     public List<int> ResponsibleIds { get; set; } = new();
@@ -95,6 +110,32 @@ public class MoMActionItemSaveRequest
     public List<int> ResponsibleIds { get; set; } = new();
     public DateTime? DataCheck { get; set; }
     public DateTime? DataClose { get; set; }
+
+    // Concorrenza ottimistica: se valorizzato, l'update fallisce quando la riga
+    // è stata modificata da un altro utente (i client legacy lo lasciano null).
+    public int? RowVersion { get; set; }
+}
+
+// ── Gestione v9: riordino / note rapide ────────────────────────
+
+// Ordine manuale delle righe del foglio: elenco completo degli id nell'ordine voluto.
+public class MoMReorderRequest
+{
+    public List<int> ItemIds { get; set; } = new();
+}
+
+// Nota di acquisizione rapida (staging personale, vista «Note MoM»)
+public class MoMNoteDto
+{
+    public int Id { get; set; }
+    public string Note { get; set; } = "";
+    public int? TargetMomId { get; set; }
+}
+
+public class MoMNoteSaveRequest
+{
+    public string Note { get; set; } = "";
+    public int? TargetMomId { get; set; }
 }
 
 // ── Lookup per le combo (commesse + dipendenti) ────────────────

@@ -19,11 +19,12 @@ import { getSession } from "@/lib/auth/session"
 import { notifyError } from "@/lib/toast"
 import type { FileItem } from "@/lib/api/types"
 
-type Kind = "pdf" | "image" | "video" | "office" | "other"
+type Kind = "pdf" | "image" | "video" | "office" | "email" | "other"
 
 const IMAGE_EXT = ["png", "jpg", "jpeg", "bmp", "gif", "webp", "svg"]
 const VIDEO_EXT = ["mp4", "webm", "mov", "avi", "mkv", "m4v", "ogv", "wmv"]
 const OFFICE_EXT = ["docx", "xlsx", "xls", "csv"]
+const EMAIL_EXT = ["eml", "msg"]
 
 function extOf(name: string): string {
   const dot = name.lastIndexOf(".")
@@ -36,6 +37,7 @@ function kindOf(name: string): Kind {
   if (IMAGE_EXT.includes(ext)) return "image"
   if (VIDEO_EXT.includes(ext)) return "video"
   if (OFFICE_EXT.includes(ext)) return "office"
+  if (EMAIL_EXT.includes(ext)) return "email"
   return "other"
 }
 
@@ -69,7 +71,7 @@ function PreviewBody({
     let cancelled = false
     let createdUrl: string | null = null
 
-    if (kind === "office") {
+    if (kind === "office" || kind === "email") {
       void fetchProjectPreviewHtml(projectId, item.relativePath)
         .then((content) => {
           if (cancelled) return
@@ -173,7 +175,7 @@ function PreviewBody({
       </div>
     )
   }
-  if (kind === "office" && html != null) {
+  if ((kind === "office" || kind === "email") && html != null) {
     return (
       <iframe
         title={item.name}

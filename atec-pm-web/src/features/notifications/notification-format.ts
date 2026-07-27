@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import type { NotificationListItem } from "@/lib/api/types"
+import { formatDateShort } from "@/lib/date-iso"
 
 export interface SeverityStyle {
   icon: LucideIcon
@@ -82,5 +83,5 @@ export function timeAgo(iso: string): string {
   if (diffD < 7) {
     return `${diffD} g fa`
   }
-  return new Date(iso).toLocaleDateString("it-IT")
+  return formatDateShort(new Date(iso))
 }

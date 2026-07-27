@@ -91,6 +91,72 @@ public class DdpStatusesController : ControllerBase
         return string.Join("_", parts);
     }
 
+    // ── Matrice degli avanzamenti di stato (v7, per tipo di distinta) ──
+    // Riga = (tipo, stato corrente), ToKeys = stati selezionabili nella finestra opzioni.
+    // FromKey 'INIZIO' = finestra di partenza delle righe senza stato.
+    // Il sentinella to_key='' (terminale governato senza uscite) diventa ToKeys vuota.
+    [HttpGet("transitions")]
+    public IActionResult GetTransitions()
+    {
+        using var c = _db.Open();
+        var pairs = c.Query<(string DdpType, string FromKey, string ToKey)>(
+            "SELECT ddp_type, from_key, to_key FROM ddp_status_transitions ORDER BY ddp_type, from_key, to_key").ToList();
+        var rows = pairs
+            .GroupBy(p => (p.DdpType, p.FromKey))
+            .Select(g => new DdpStatusTransitionItem
+            {
+                DdpType = g.Key.DdpType,
+                FromKey = g.Key.FromKey,
+                ToKeys = g.Select(p => p.ToKey).Where(k => !string.IsNullOrEmpty(k)).ToList(),
+            })
+            .ToList();
+        return Ok(ApiResponse<List<DdpStatusTransitionItem>>.Ok(rows));
+    }
+
+    // Salvataggio integrale della matrice (editor in Conf. DDP): sostituisce tutte le righe
+    // di entrambi i tipi. Una coppia (tipo, stato) con ToKeys vuota resta governata
+    // (sentinella ''); una coppia NON presente nel payload esce dalla matrice → finestra completa.
+    [HttpPut("transitions")]
+    public IActionResult SaveTransitions([FromBody] List<DdpStatusTransitionItem> rows)
+    {
+        using var c = _db.Open();
+        var validKeys = c.Query<string>("SELECT status_key FROM ddp_statuses")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var validTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            DdpTransitionService.TypeCommercial,
+            DdpTransitionService.TypeOfficina,
+        };
+
+        using var tx = c.BeginTransaction();
+        c.Execute("DELETE FROM ddp_status_transitions", transaction: tx);
+        foreach (DdpStatusTransitionItem row in rows ?? new List<DdpStatusTransitionItem>())
+        {
+            string type = (row.DdpType ?? "").Trim().ToUpperInvariant();
+            string from = (row.FromKey ?? "").Trim().ToUpperInvariant();
+            bool validFrom = from == "INIZIO" || validKeys.Contains(from);
+            if (!validTypes.Contains(type) || from.Length == 0 || !validFrom) continue;
+
+            var tos = (row.ToKeys ?? new List<string>())
+                .Select(k => (k ?? "").Trim().ToUpperInvariant())
+                .Where(k => k.Length > 0 && k != from && validKeys.Contains(k))
+                .Distinct()
+                .ToList();
+
+            if (tos.Count == 0)
+            {
+                c.Execute("INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key) VALUES (@Type, @From, '')",
+                    new { Type = type, From = from }, tx);
+                continue;
+            }
+            foreach (string to in tos)
+                c.Execute("INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key) VALUES (@Type, @From, @To)",
+                    new { Type = type, From = from, To = to }, tx);
+        }
+        tx.Commit();
+        return Ok(ApiResponse<bool>.Ok(true, "Matrice transizioni salvata"));
+    }
+
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] DdpStatusSaveRequest req)
     {
