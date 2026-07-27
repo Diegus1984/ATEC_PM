@@ -14,6 +14,7 @@ import { deleteSupplier, fetchSuppliers } from "@/lib/api/suppliers"
 import type { SupplierListItem } from "@/lib/api/types"
 
 import { SupplierDialog } from "./SupplierDialog"
+import { dash } from "@/lib/format"
 
 const COLUMN_LABELS: Record<string, string> = {
   companyName: "Ragione sociale",
@@ -27,10 +28,6 @@ const COLUMN_LABELS: Record<string, string> = {
 
 const DEFAULT_SORTING: SortingState = [{ id: "companyName", desc: false }]
 const HIDDEN_COLUMNS = { fiscalCode: false }
-
-function dash(value: string) {
-  return value && value.trim() ? value : "—"
-}
 
 function SortHeader({
   label,

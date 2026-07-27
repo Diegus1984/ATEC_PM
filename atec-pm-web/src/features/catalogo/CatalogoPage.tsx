@@ -2,6 +2,8 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   FilterX,
+  Link2,
+  Link2Off,
   Pencil,
   Plus,
   RefreshCw,
@@ -9,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react"
 
+import { ColumnFilterCombobox } from "@/components/shared/column-filter-combobox"
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { useConfirm } from "@/components/shared/confirm"
@@ -34,11 +37,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { deleteCatalogItem, fetchCatalogItems } from "@/lib/api/catalog"
+import {
+  deleteCatalogItem,
+  fetchCatalogFilterMeta,
+  fetchCatalogItems,
+  unassignCatalogMapping,
+} from "@/lib/api/catalog"
+import { fetchDaneaSyncStatus, runDaneaSync } from "@/lib/api/danea-sync"
 import type { CatalogItemListItem } from "@/lib/api/types"
-import { euro } from "@/lib/format"
+import { getSession } from "@/lib/auth/session"
+import { euro, dash } from "@/lib/format"
+import { notifyInfo } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 
+import { canRecodeCodex } from "@/features/codex/codex-roles"
+import { CatalogAtecAssignDialog } from "./CatalogAtecAssignDialog"
 import { CatalogItemDialog } from "./CatalogItemDialog"
 
 const PAGE_SIZE = 50
@@ -54,16 +67,25 @@ interface CatalogColumn {
   cell: (item: CatalogItemListItem) => React.ReactNode
 }
 
-function dash(value: string): React.ReactNode {
-  return value && value.trim() ? value : "—"
-}
-
 const COLUMNS: CatalogColumn[] = [
   {
     key: "code",
     label: "Codice",
     filterParam: "code",
     cell: (item) => <span className="font-medium">{item.code}</span>,
+  },
+  {
+    key: "atecCode",
+    label: "Codice ATEC",
+    filterParam: "atecCode",
+    cell: (item) =>
+      item.atecCode ? (
+        <span className="font-medium tabular-nums text-primary">
+          {item.atecCode}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
   },
   {
     key: "description",
@@ -93,6 +115,12 @@ const COLUMNS: CatalogColumn[] = [
     label: "Categoria",
     filterParam: "category",
     cell: (item) => dash(item.category),
+  },
+  {
+    key: "subcategory",
+    label: "Sottocategoria",
+    filterParam: "subcategory",
+    cell: (item) => dash(item.subcategory),
   },
   {
     key: "unit",
@@ -150,6 +178,12 @@ export function CatalogoPage() {
     loadVisibility
   )
   const [dialogItem, setDialogItem] = React.useState<number | "new" | null>(null)
+  const [atecItem, setAtecItem] = React.useState<CatalogItemListItem | null>(null)
+  /** Filtro mapping: all | missing | done | orphans (Extra1 senza match Codex). */
+  const [atecState, setAtecState] = React.useState<
+    "" | "missing" | "done" | "orphans"
+  >("")
+  const canMapAtec = canRecodeCodex(getSession()?.user.userRole)
 
   const setColumnFilter = React.useCallback((param: string, value: string) => {
     setColumnFilters((prev) => {
@@ -167,7 +201,7 @@ export function CatalogoPage() {
 
   React.useEffect(() => {
     setPage(1)
-  }, [searchTerm, sort, debouncedFilters])
+  }, [searchTerm, sort, debouncedFilters, atecState])
 
   React.useEffect(() => {
     try {
@@ -178,7 +212,7 @@ export function CatalogoPage() {
   }, [visibility])
 
   const query = useQuery({
-    queryKey: ["catalog", page, searchTerm, sort, debouncedFilters],
+    queryKey: ["catalog", page, searchTerm, sort, debouncedFilters, atecState],
     queryFn: () =>
       fetchCatalogItems({
         page,
@@ -187,11 +221,60 @@ export function CatalogoPage() {
         sortBy: sort.by,
         sortDir: sort.dir,
         filters: debouncedFilters,
+        atecState: atecState || undefined,
       }),
   })
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["catalog"] })
+
+  // Valori distinti per i filtri a tendina (pattern pagina Trasferimento Danea).
+  const filterMetaQuery = useQuery({
+    queryKey: ["catalog-filter-meta"],
+    queryFn: fetchCatalogFilterMeta,
+  })
+  const filterOptions: Record<string, string[]> = React.useMemo(
+    () => ({
+      supplier: filterMetaQuery.data?.suppliers ?? [],
+      manufacturer: filterMetaQuery.data?.manufacturers ?? [],
+      category: filterMetaQuery.data?.categories ?? [],
+      subcategory: filterMetaQuery.data?.subcategories ?? [],
+    }),
+    [filterMetaQuery.data]
+  )
+
+  // Sync manuale con Danea (archivio Atec_PM): avvio + polling dello stato finché gira.
+  const [syncPolling, setSyncPolling] = React.useState(false)
+  const syncStatusQuery = useQuery({
+    queryKey: ["danea-sync-status"],
+    queryFn: fetchDaneaSyncStatus,
+    enabled: syncPolling,
+    refetchInterval: syncPolling ? 1500 : false,
+  })
+  React.useEffect(() => {
+    const s = syncStatusQuery.data
+    if (!syncPolling || !s || s.isSyncing) return
+    setSyncPolling(false)
+    if (s.lastError) {
+      notifyError(`Sync Danea fallito: ${s.lastError}`)
+    } else {
+      notifyInfo(
+        `Sync Danea completato: ${s.articles} articoli, ${s.suppliers} fornitori, ${s.customers} clienti`
+      )
+    }
+    void invalidate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncStatusQuery.data, syncPolling])
+
+  const handleSyncDanea = React.useCallback(async () => {
+    try {
+      await runDaneaSync()
+      // Piccola grazia prima del primo poll: il task parte in background.
+      setTimeout(() => setSyncPolling(true), 1200)
+    } catch (err) {
+      notifyError(err as Error)
+    }
+  }, [])
 
   const deleteMutation = useMutation({
     mutationFn: deleteCatalogItem,
@@ -213,6 +296,27 @@ export function CatalogoPage() {
     [confirm, deleteMutation]
   )
 
+  const unassignMutation = useMutation({
+    mutationFn: (item: CatalogItemListItem) => unassignCatalogMapping(item.id),
+    onSuccess: (_, item) => {
+      notifyInfo(`${item.code} sganciato dal codice ATEC`)
+      void invalidate()
+    },
+    onError: (err: Error) => notifyError(err),
+  })
+
+  const handleUnassignAtec = React.useCallback(
+    async (item: CatalogItemListItem) => {
+      const ok = await confirm({
+        title: "Sgancia codice ATEC",
+        description: `Rimuovere l'associazione di ${item.code} dal codice ${item.atecCode}?\nIn Danea l'Extra 1 dell'articolo verrà svuotato.`,
+        confirmLabel: "Sgancia",
+      })
+      if (ok) unassignMutation.mutate(item)
+    },
+    [confirm, unassignMutation]
+  )
+
   const visibleColumns = COLUMNS.filter((c) => visibility[c.key])
   const items = query.data?.items ?? []
   const totalCount = query.data?.totalCount ?? 0
@@ -231,10 +335,26 @@ export function CatalogoPage() {
                 {query.data ? ` — ${totalCount} totali` : ""}
               </CardDescription>
             </div>
-            <Button size="sm" onClick={() => setDialogItem("new")}>
-              <Plus />
-              Nuovo articolo
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={syncPolling}
+                title={
+                  syncPolling
+                    ? (syncStatusQuery.data?.progress ?? "Sincronizzazione in corso…")
+                    : "Allinea il catalogo all'archivio Danea Atec_PM (specchio: gli articoli assenti vengono disattivati)"
+                }
+                onClick={() => void handleSyncDanea()}
+              >
+                <RefreshCw className={syncPolling ? "animate-spin" : undefined} />
+                {syncPolling ? "Sincronizzazione…" : "Sincronizza Danea"}
+              </Button>
+              <Button size="sm" onClick={() => setDialogItem("new")}>
+                <Plus />
+                Nuovo articolo
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -247,6 +367,28 @@ export function CatalogoPage() {
                 className="pl-8"
                 onChange={(event) => setSearchInput(event.target.value)}
               />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  { key: "", label: "Tutti" },
+                  { key: "missing", label: "Senza ATEC" },
+                  { key: "done", label: "Con ATEC" },
+                  { key: "orphans", label: "Orfani Extra1" },
+                ] as const
+              ).map((opt) => (
+                <Button
+                  key={opt.key || "all"}
+                  variant={atecState === opt.key ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAtecState(opt.key)}
+                >
+                  {opt.label}
+                  {opt.key === "orphans" && atecState === "orphans" && query.data
+                    ? ` (${totalCount})`
+                    : null}
+                </Button>
+              ))}
             </div>
             <div className="ml-auto flex gap-2">
               {hasColumnFilters ? (
@@ -327,7 +469,22 @@ export function CatalogoPage() {
                       key={column.key}
                       className="h-auto px-2 py-2 align-middle"
                     >
-                      {column.filterParam ? (
+                      {column.filterParam && filterOptions[column.filterParam] ? (
+                        <ColumnFilterCombobox
+                          value={columnFilters[column.filterParam] ?? ""}
+                          onChange={(value) =>
+                            setColumnFilter(column.filterParam!, value)
+                          }
+                          options={filterOptions[column.filterParam]}
+                          placeholder={`${column.label}…`}
+                          searchPlaceholder={`Cerca ${column.label.toLowerCase()}…`}
+                          loading={
+                            filterMetaQuery.isLoading &&
+                            filterOptions[column.filterParam].length === 0
+                          }
+                          emptyText="Nessun valore"
+                        />
+                      ) : column.filterParam ? (
                         <ColumnFilterInput
                           value={columnFilters[column.filterParam] ?? ""}
                           onChange={(value) =>
@@ -357,9 +514,11 @@ export function CatalogoPage() {
                       colSpan={colSpan}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      {searchTerm || hasColumnFilters
-                        ? "Nessun articolo corrisponde alla ricerca."
-                        : "Nessun articolo trovato."}
+                      {atecState === "orphans"
+                        ? "Nessun orfano Extra1: tutti i codici ATEC del catalogo esistono nel Codex."
+                        : searchTerm || hasColumnFilters || atecState
+                          ? "Nessun articolo corrisponde alla ricerca."
+                          : "Nessun articolo trovato."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -388,6 +547,29 @@ export function CatalogoPage() {
                               icon: Pencil,
                               onClick: () => setDialogItem(item.id),
                             },
+                            ...(canMapAtec
+                              ? [
+                                  {
+                                    label: item.atecCode
+                                      ? "Codice ATEC…"
+                                      : "Assegna codice ATEC…",
+                                    icon: Link2,
+                                    onClick: () => setAtecItem(item),
+                                  },
+                                ]
+                              : []),
+                            ...(canMapAtec && item.atecCode
+                              ? [
+                                  {
+                                    label: "Sgancia codice ATEC",
+                                    icon: Link2Off,
+                                    destructive: true,
+                                    onClick: () => {
+                                      void handleUnassignAtec(item)
+                                    },
+                                  },
+                                ]
+                              : []),
                             {
                               label: "Elimina",
                               icon: Trash2,
@@ -426,6 +608,15 @@ export function CatalogoPage() {
         onSaved={async () => {
           setDialogItem(null)
           await invalidate()
+        }}
+      />
+
+      <CatalogAtecAssignDialog
+        item={atecItem}
+        onClose={() => setAtecItem(null)}
+        onSaved={() => {
+          setAtecItem(null)
+          void invalidate()
         }}
       />
     </>

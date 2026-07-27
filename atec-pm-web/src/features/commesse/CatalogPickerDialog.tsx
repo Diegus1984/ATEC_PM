@@ -25,8 +25,10 @@ import { fetchCatalogItems } from "@/lib/api/catalog"
 import { createDdpRow, fetchDdpRows, updateDdpRow } from "@/lib/api/project-ddp"
 import type { CatalogItemListItem } from "@/lib/api/types"
 import { getSession } from "@/lib/auth/session"
-import { euro } from "@/lib/format"
+import { euro, dash } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
+
+import { DDP_STATUS_VERIFY } from "./ddp-constants"
 
 const PAGE_SIZE = 50
 
@@ -37,10 +39,6 @@ interface PickerColumn {
   /** Parametro server per il filtro per colonna (assente = colonna non filtrabile). */
   filterParam?: string
   cell: (item: CatalogItemListItem) => React.ReactNode
-}
-
-function dash(value: string): React.ReactNode {
-  return value && value.trim() ? value : "—"
 }
 
 const COLUMNS: PickerColumn[] = [
@@ -94,8 +92,9 @@ const COLUMNS: PickerColumn[] = [
  * `CatalogPickerWindow` del WPF). Doppio clic (o «+») su una riga = aggiunge
  * l'articolo alla distinta con Qtà=1, stato DO e richiedente = utente corrente,
  * copiando codice/descrizione/UM/costo/fornitore/produttore dal catalogo. Se
- * l'articolo è già presente, chiede se aggiungere +1 alla quantità. Resta aperto
- * per inserimenti multipli, come la finestra WPF.
+ * esiste già una riga in stato «Da Ordinare», chiede se aggiungere +1 alla
+ * quantità; altrimenti inserisce una nuova riga. Resta aperto per inserimenti
+ * multipli, come la finestra WPF.
  */
 export function CatalogPickerDialog({
   open,
@@ -159,13 +158,17 @@ export function CatalogPickerDialog({
   const addMutation = useMutation({
     mutationFn: async (item: CatalogItemListItem) => {
       setError(null)
-      // Dedup come il WPF: rilegge la distinta e confronta per catalogItemId.
+      // Dedup solo su righe nello stato di ingresso (VER): se esiste, propone +1;
+      // altrimenti nuova riga (anche se lo stesso articolo è già in altro stato).
       const existing = await fetchDdpRows(projectId, "COMMERCIAL")
-      const duplicate = existing.find((r) => r.catalogItemId === item.id)
+      const duplicate = existing.find(
+        (r) =>
+          r.catalogItemId === item.id && r.itemStatus === DDP_STATUS_VERIFY
+      )
       if (duplicate) {
         const ok = await confirm({
           title: "Articolo già presente",
-          description: `L'articolo ${item.code} è già nella DDP (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
+          description: `L'articolo ${item.code} è già nella DDP in stato Verificare magazzino (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
           confirmLabel: "Aggiungi +1",
           destructive: false,
         })
@@ -205,7 +208,7 @@ export function CatalogPickerDialog({
         unitCost: item.unitCost,
         supplierId: item.supplierId,
         manufacturer: item.manufacturer,
-        itemStatus: "DO",
+        itemStatus: DDP_STATUS_VERIFY,
         requestedBy,
         daneaRef: "",
         dateNeeded: null,
@@ -213,6 +216,7 @@ export function CatalogPickerDialog({
         destinationSpec: "",
         notes: "",
         ddpType: "COMMERCIAL",
+        atecCode: item.atecCode ?? "",
         expectedUpdatedAt: null,
       })
       return { code: item.code, updated: false }

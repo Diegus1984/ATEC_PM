@@ -79,6 +79,8 @@ import { cn } from "@/lib/utils"
 import { QuoteCategoryDialog } from "./QuoteCategoryDialog"
 import { QuoteGroupDialog } from "./QuoteGroupDialog"
 import { QuoteProductDialog } from "./QuoteProductDialog"
+import { fmt2 } from "@/lib/format"
+import { wildcardMatch } from "@/lib/wildcard"
 
 // ── Helper ─────────────────────────────────────────────────
 
@@ -90,26 +92,6 @@ const PRODUCT_TABLE_COL_COUNT = 9
 /** Ordinamento naturale ("IRB 120" prima di "IRB 1200"), come il WPF. */
 function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, "it", { numeric: true, sensitivity: "base" })
-}
-
-/** Match jolly: abc=contiene, abc*=inizia, *abc=finisce, *abc*=contiene. */
-function matchWildcard(value: string | undefined, filter: string): boolean {
-  const f = filter.trim().toLowerCase()
-  if (!f) return true
-  const v = (value ?? "").toLowerCase()
-  const startsWild = f.startsWith("*")
-  const endsWild = f.endsWith("*")
-  if (startsWild && endsWild) return v.includes(f.replace(/^\*+|\*+$/g, ""))
-  if (endsWild) return v.startsWith(f.replace(/\*+$/g, ""))
-  if (startsWild) return v.endsWith(f.replace(/^\*+/g, ""))
-  return v.includes(f)
-}
-
-function fmt2(value: number): string {
-  return value.toLocaleString("it-IT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 }
 
 // ── Modello albero ─────────────────────────────────────────
@@ -751,7 +733,7 @@ export function CatalogoPreventiviPage() {
   const filteredProducts = React.useMemo(
     () =>
       productViews.filter(
-        (p) => matchWildcard(p.code, debFCode) && matchWildcard(p.name, debFName)
+        (p) => wildcardMatch(p.code, debFCode) && wildcardMatch(p.name, debFName)
       ),
     [productViews, debFCode, debFName]
   )

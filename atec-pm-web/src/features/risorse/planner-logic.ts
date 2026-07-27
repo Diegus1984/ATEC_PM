@@ -1,4 +1,5 @@
 import type { ResAssignmentDto, ResTipo } from "@/lib/api/types"
+import { wildcardMatch } from "@/lib/wildcard"
 
 // Port fedele di ATEC.Risorse.Shared/Helpers/PlannerLogic.cs (+ WildcardMatcher,
 // EmployeeDisplay). Tutto in TypeScript per il client React. Le date delle
@@ -13,12 +14,7 @@ export function parseDate(iso: string): Date {
 }
 
 /** Formatta una Date come yyyy-MM-dd usando i componenti locali. */
-export function toIso(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, "0")
-  const d = String(date.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
-}
+export { dateToIso as toIso } from "@/lib/date-iso"
 
 /** Numero di giorni interi tra due date (a-b in giorni). */
 export function diffDays(a: Date, b: Date): number {
@@ -217,18 +213,7 @@ export function buildTooltip(a: ResAssignmentDto, start: Date, end: Date): strin
 
 // ── Ricerca wildcard (port di WildcardMatcher) ──────────────────
 
-export function wildcardMatch(text: string, pattern: string): boolean {
-  const t = (text ?? "").toLowerCase()
-  const p = (pattern ?? "").trim().toLowerCase()
-  if (p.length === 0) return true
-  const starts = p.startsWith("*")
-  const ends = p.endsWith("*")
-  const core = p.replace(/^\*+/, "").replace(/\*+$/, "")
-  if (starts && ends) return t.includes(core)
-  if (starts) return t.endsWith(core)
-  if (ends) return t.startsWith(core)
-  return t.includes(p)
-}
+export { wildcardMatch } from "@/lib/wildcard"
 
 export function assignmentMatchesSearch(
   a: ResAssignmentDto,

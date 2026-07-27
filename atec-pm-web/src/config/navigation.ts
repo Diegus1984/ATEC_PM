@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  AlarmClock,
   Archive,
+  ArrowRightLeft,
   BookOpen,
   Bot,
   BriefcaseBusiness,
@@ -9,6 +11,7 @@ import {
   Cog,
   Database,
   FileStack,
+  Factory,
   FileText,
   FolderKanban,
   LayoutDashboard,
@@ -20,6 +23,7 @@ import {
   ReceiptText,
   Puzzle,
   Shield,
+  ShoppingCart,
   Truck,
   Users,
   Wrench,
@@ -150,6 +154,68 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         description:
           "Piani di fatturazione SAL di tutte le commesse + prospetto delle ipotesi di fatturazione aperte.",
       },
+      {
+        id: "sal-prospetto",
+        label: "Prospetto SAL",
+        path: "/sal/prospetto",
+        featureKey: "nav.sal",
+        icon: CalendarClock,
+        status: "live",
+        description:
+          "Tutte le ipotesi di fatturazione aperte e le fatture emesse non incassate, con semaforo scadenze, controllo periodico, ordinamento ed export.",
+      },
+      {
+        id: "work-requests",
+        label: "Lavorazioni",
+        path: "/work-requests",
+        featureKey: "nav.work_requests",
+        icon: Wrench,
+        status: "live",
+        description:
+          "Pianifica, coordina e monitora le lavorazioni meccaniche interne ed esterne (Bozze, Per Commessa, Priorità, Consegne, Trattamenti).",
+      },
+      {
+        id: "scadenze",
+        label: "Scadenze",
+        path: "/scadenze",
+        featureKey: "nav.scadenze",
+        icon: AlarmClock,
+        status: "live",
+        description:
+          "Cruscotto unificato di tutte le scadenze (SAL, commesse, check list, MoM, DDP): elenco a sinistra, dettaglio del 'colpevole' a destra.",
+      },
+    ],
+  },
+  {
+    id: "officina",
+    label: "Officina",
+    items: [
+      {
+        id: "officina-inbox",
+        label: "Inbox Officina",
+        path: "/officina",
+        featureKey: "nav.officina_inbox",
+        icon: Factory,
+        status: "live",
+        description:
+          "Coda operativa DDP Officina cross-commessa: da fare, ritardi, in ordine, interna, trattamenti e per commessa.",
+      },
+    ],
+  },
+  {
+    id: "acquisti",
+    label: "Acquisti",
+    items: [
+      {
+        id: "acquisti-inbox",
+        label: "Inbox Acquisti",
+        path: "/acquisti",
+        featureKey: "nav.acquisti_inbox",
+        icon: ShoppingCart,
+        status: "live",
+        description:
+          "Inbox Acquisti raggruppata per commessa con card e griglie dedicate: fabbisogni, RDO, ordini Danea.",
+      },
     ],
   },
   {
@@ -182,7 +248,9 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         path: "/gamma-robot",
         featureKey: "nav.gamma_robot",
         icon: Bot,
-        status: "planned",
+        status: "live",
+        description:
+          "Distinta Gamma Robot: Per Robot, Magazzino, Composizione (ADMIN) con drag&drop.",
       },
     ],
   },
@@ -235,6 +303,16 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         status: "live",
         description:
           "Distinta compositi 5xx/6xx/7xx: albero composizione, aggiungi/rimuovi componenti (Codex o Catalogo) con quantità.",
+      },
+      {
+        id: "danea-migrazione",
+        label: "Trasferimento Danea",
+        path: "/danea-migrazione",
+        featureKey: "nav.danea_migration",
+        icon: ArrowRightLeft,
+        status: "live",
+        description:
+          "Migrazione al nuovo archivio Danea «Atec_PM»: trasferimento selettivo articoli (fornitore, IVA, prezzi, immagini) dal vecchio catalogo.",
       },
     ],
   },

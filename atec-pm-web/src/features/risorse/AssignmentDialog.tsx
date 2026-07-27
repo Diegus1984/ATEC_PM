@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Check } from "lucide-react"
 
 import { ApiError } from "@/lib/api/client"
 import {
@@ -25,12 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DateField } from "@/components/shared/date-field"
+import { toDateOnly } from "@/lib/date-iso"
 
 const NONE = "0"
-
-function normDate(value: string | null | undefined): string | null {
-  return value ? value.slice(0, 10) : null
-}
 
 function todayIso(): string {
   const d = new Date()
@@ -80,6 +78,8 @@ export function AssignmentDialog({
   const [projectId, setProjectId] = React.useState<string>(NONE)
   const [descrizione, setDescrizione] = React.useState("")
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
+  // In modifica la risorsa si può cambiare (riassegnare l'attività a un'altra persona).
+  const [editEmployeeId, setEditEmployeeId] = React.useState<number | null>(null)
   const [resSearch, setResSearch] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -93,15 +93,16 @@ export function AssignmentDialog({
     setResSearch("")
     if (existing) {
       setTipo(existing.tipo)
-      setStart(normDate(existing.dataInizio))
-      setEnd(normDate(existing.dataFine))
+      setStart(toDateOnly(existing.dataInizio))
+      setEnd(toDateOnly(existing.dataFine))
       setProjectId(existing.projectId ? String(existing.projectId) : NONE)
       setDescrizione(existing.descrizione ?? "")
       setSelectedIds(new Set([existing.employeeId]))
+      setEditEmployeeId(existing.employeeId)
     } else {
       setTipo(presetTipo ?? "OP")
-      setStart(normDate(presetStart) ?? todayIso())
-      setEnd(normDate(presetEnd) ?? normDate(presetStart) ?? todayIso())
+      setStart(toDateOnly(presetStart) ?? todayIso())
+      setEnd(toDateOnly(presetEnd) ?? toDateOnly(presetStart) ?? todayIso())
       setProjectId(NONE)
       setDescrizione("")
       setSelectedIds(
@@ -109,6 +110,7 @@ export function AssignmentDialog({
           ? new Set([presetEmployeeId])
           : new Set()
       )
+      setEditEmployeeId(null)
     }
   }, [open, existing, presetEmployeeId, presetStart, presetEnd, presetTipo])
 
@@ -141,6 +143,19 @@ export function AssignmentDialog({
     if (!q) return resources
     return resources.filter((r) => r.name.toLowerCase().includes(q))
   }, [resources, resSearch])
+
+  // Lista del picker di riassegnazione (edit): la persona attuale sempre in cima, anche
+  // se il filtro non la matcha, così la selezione resta visibile mentre si cerca.
+  const editPickerResources = React.useMemo(() => {
+    if (!existing) return []
+    const current: LookupItem = resources.find(
+      (r) => r.id === existing.employeeId
+    ) ?? { id: existing.employeeId, name: existing.employeeName }
+    return [
+      current,
+      ...filteredResources.filter((r) => r.id !== existing.employeeId),
+    ]
+  }, [existing, resources, filteredResources])
 
   const allFilteredSelected =
     filteredResources.length > 0 &&
@@ -179,13 +194,18 @@ export function AssignmentDialog({
     const projId = isFerie || projectId === NONE ? null : Number(projectId)
     const desc = descrizione.trim() ? descrizione.trim() : null
 
+    if (existing && (!editEmployeeId || editEmployeeId <= 0)) {
+      setError("Seleziona una risorsa.")
+      return
+    }
+
     setBusy(true)
     try {
       if (existing) {
         await updateAssignment(
           existing.id,
           {
-            employeeId: existing.employeeId,
+            employeeId: editEmployeeId ?? existing.employeeId,
             tipo,
             dataInizio: start,
             dataFine: end,
@@ -243,7 +263,47 @@ export function AssignmentDialog({
 
         <div className="grid gap-4 py-1">
           {/* Risorsa/e */}
-          {singleMode ? (
+          {isEdit ? (
+            /* In modifica la risorsa si può cambiare: scelta singola con ricerca,
+               la persona attuale resta fissata in cima. */
+            <div className="grid gap-1.5">
+              <Label>Risorsa</Label>
+              <Input
+                placeholder="Cerca risorsa…"
+                value={resSearch}
+                onChange={(e) => setResSearch(e.target.value)}
+              />
+              <div className="max-h-40 overflow-y-auto rounded-md border">
+                {editPickerResources.map((r) => {
+                  const isSelected = editEmployeeId === r.id
+                  return (
+                    <button
+                      type="button"
+                      key={r.id}
+                      onClick={() => setEditEmployeeId(r.id)}
+                      className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/50 ${
+                        isSelected ? "bg-muted/60 font-medium" : ""
+                      }`}
+                    >
+                      <Check
+                        className={`h-4 w-4 shrink-0 ${
+                          isSelected ? "opacity-100" : "opacity-0"
+                        }`}
+                      />
+                      <span>
+                        {r.name}
+                        {r.id === existing?.employeeId && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">
+                            (attuale)
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : singleMode ? (
             <div className="grid gap-1.5">
               <Label>Risorsa</Label>
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">

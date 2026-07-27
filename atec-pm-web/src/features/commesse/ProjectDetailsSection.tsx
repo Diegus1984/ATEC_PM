@@ -22,6 +22,7 @@ import type {
   UpcomingDeadline,
 } from "@/lib/api/types"
 import { getSession } from "@/lib/auth/session"
+import { formatDateOrDash } from "@/lib/date-iso"
 
 const DEPT_COLORS: Record<string, string> = {
   PM: "#4F6EF7",
@@ -62,11 +63,6 @@ function priorityColor(p: string): string {
       return "#9CA3AF"
   }
 }
-function fmtDate(value: string | null): string {
-  if (!value) return "—"
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("it-IT")
-}
 const n0 = (v: number) => v.toLocaleString("it-IT", { maximumFractionDigits: 0 })
 const n1 = (v: number) =>
   v.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -85,21 +81,26 @@ function Kpi({
   value,
   subtitle,
   color,
+  extra,
 }: {
   label: string
   value: string
   subtitle: string
   color: string
+  extra?: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border bg-card p-3" style={{ borderLeft: `3px solid ${color}` }}>
-      <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold tabular-nums" style={{ color }}>
-        {value}
-      </p>
-      <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+    <div className="rounded-lg border bg-card p-3 flex justify-between items-center" style={{ borderLeft: `3px solid ${color}` }}>
+      <div>
+        <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className="mt-1 text-xl font-semibold tabular-nums" style={{ color }}>
+          {value}
+        </p>
+        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+      </div>
+      {extra ? <div className="text-right text-[11px] tabular-nums font-semibold border-l pl-3 ml-2 flex flex-col gap-0.5 justify-center leading-none">{extra}</div> : null}
     </div>
   )
 }
@@ -167,9 +168,9 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
         <div className="mt-2 flex flex-wrap gap-2">
           <Chip icon="🏢" text={d.customerName} />
           {d.pmName ? <Chip icon="👤" text={d.pmName} /> : null}
-          {d.startDate ? <Chip icon="📅" text={`Inizio: ${fmtDate(d.startDate)}`} /> : null}
+          {d.startDate ? <Chip icon="📅" text={`Inizio: ${formatDateOrDash(d.startDate)}`} /> : null}
           {d.endDatePlanned ? (
-            <Chip icon="🏁" text={`Fine prev.: ${fmtDate(d.endDatePlanned)}`} />
+            <Chip icon="🏁" text={`Fine prev.: ${formatDateOrDash(d.endDatePlanned)}`} />
           ) : null}
         </div>
       </div>
@@ -179,7 +180,24 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
         <Kpi label="AVANZAMENTO" value={`${phasePct}%`} subtitle={`${d.completedPhases}/${d.totalPhases} Fasi`} color="#4F6EF7" />
         <Kpi label="ORE TOTALI" value={n1(d.hoursWorked)} subtitle={`Budget: ${n0(d.budgetHoursTotal)} h (${hoursPct}%)`} color={hoursPct > 100 ? "#EF4444" : "#059669"} />
         <Kpi label="TECNICI" value={String(d.activeTechnicians.length)} subtitle="Attivi" color="#7C3AED" />
-        <Kpi label="COSTO MAT." value={`${n0(d.materialCost)} €`} subtitle="Da acquisti" color="#0891B2" />
+        <Kpi
+          label="COSTO MAT."
+          value={`${n0(d.materialCost)} €`}
+          subtitle="Da acquisti"
+          color="#0891B2"
+          extra={
+            <>
+              <div className="flex justify-between gap-2 text-muted-foreground">
+                <span>Comm.:</span>
+                <span className="font-bold text-foreground">{n0(d.materialCostCommercial)} €</span>
+              </div>
+              <div className="flex justify-between gap-2 text-muted-foreground">
+                <span>Off.:</span>
+                <span className="font-bold text-foreground">{n0(d.materialCostOfficina)} €</span>
+              </div>
+            </>
+          }
+        />
         {isPm ? (
           <>
             <Kpi label="COSTO ORE" value={`${n0(d.costWorked)} €`} subtitle="Manodopera" color="#D97706" />
@@ -361,7 +379,7 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
               <tbody>
                 {d.recentEntries.map((r, i) => (
                   <tr key={i} className="border-t">
-                    <td className="py-1">{fmtDate(r.workDate)}</td>
+                    <td className="py-1">{formatDateOrDash(r.workDate)}</td>
                     <td>{r.employeeName}</td>
                     <td>{r.phaseName}</td>
                     <td className="text-right tabular-nums">{n1(r.hours)}</td>
@@ -439,7 +457,7 @@ function DeadlineRow({ dl }: { dl: UpcomingDeadline }) {
         {dl.departmentCode}
       </span>
       <span className="flex-1 truncate">{dl.phaseName}</span>
-      <span className="text-xs text-muted-foreground">{fmtDate(dl.deadline)}</span>
+      <span className="text-xs text-muted-foreground">{formatDateOrDash(dl.deadline)}</span>
       <span className="w-28 text-right text-xs font-semibold tabular-nums" style={{ color }}>
         {remaining}
       </span>
@@ -484,7 +502,7 @@ function GanttSection({ data }: { data: ProjectDashboardData }) {
                   <div
                     className="absolute top-0 h-4 rounded"
                     style={{ left: `${left}%`, width: `${width}%`, backgroundColor: deptColor(p.departmentCode), opacity: 0.7 }}
-                    title={`${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}`}
+                    title={`${formatDateOrDash(p.startDate)} → ${formatDateOrDash(p.endDate)}`}
                   />
                 </div>
               </div>

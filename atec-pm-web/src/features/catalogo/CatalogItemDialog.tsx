@@ -12,22 +12,15 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { SupplierSearchCombobox } from "@/components/shared/supplier-search-combobox"
 import {
   createCatalogItem,
   fetchCatalogItem,
   updateCatalogItem,
 } from "@/lib/api/catalog"
 import { fetchSuppliers } from "@/lib/api/suppliers"
-
-const NO_SUPPLIER = "__none__"
+import { parseDecimal } from "@/lib/format"
 
 const EMPTY = {
   code: "",
@@ -45,11 +38,6 @@ const EMPTY = {
 }
 
 type FormState = typeof EMPTY
-
-function parseDecimal(value: string): number {
-  const n = Number(value.replace(",", "."))
-  return Number.isFinite(n) ? n : 0
-}
 
 export function CatalogItemDialog({
   open,
@@ -240,26 +228,15 @@ export function CatalogItemDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Fornitore</Label>
-              <Select
+              <SupplierSearchCombobox
+                suppliers={suppliers}
                 value={
-                  form.supplierId != null ? String(form.supplierId) : NO_SUPPLIER
+                  suppliers.find((s) => s.id === form.supplierId)?.companyName ?? ""
                 }
-                onValueChange={(value) =>
-                  set("supplierId", value === NO_SUPPLIER ? null : Number(value))
+                onValueChange={(_, supplier) =>
+                  set("supplierId", supplier ? supplier.id : null)
                 }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_SUPPLIER}>(nessuno)</SelectItem>
-                  {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={String(supplier.id)}>
-                      {supplier.companyName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="grid gap-2">
               <Label>Codice fornitore</Label>

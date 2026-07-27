@@ -33,16 +33,10 @@ import {
 } from "@/lib/api/quote-catalog"
 import { addQuoteProduct } from "@/lib/api/quotes"
 import { useDebounced } from "@/lib/use-debounced"
+import { fmt2 } from "@/lib/format"
 
 const ALL_GROUPS = "__all_groups__"
 const ALL_CATS = "__all_cats__"
-
-function fmt2(value: number): string {
-  return value.toLocaleString("it-IT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
 
 interface PickItem {
   productId: number

@@ -15,16 +15,11 @@ import {
 import { createMoM, deleteMoM, fetchMoMList } from "@/lib/api/mom"
 import type { MoMListItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—"
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("it-IT")
-}
+import { formatDateOrDash } from "@/lib/date-iso"
 
 function periodLabel(item: MoMListItem): string {
   if (!item.periodStart && !item.periodEnd) return "—"
-  return `${fmtDate(item.periodStart)} → ${fmtDate(item.periodEnd)}`
+  return `${formatDateOrDash(item.periodStart)} → ${formatDateOrDash(item.periodEnd)}`
 }
 
 /** Verbali (MoM) filtrati sulla commessa — variante per-commessa del modulo MoM. */
@@ -51,7 +46,7 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
         meetingDate: new Date().toISOString().slice(0, 10),
         inDashboard: true,
       }),
-    onSuccess: (newId) => navigate(`/mom/${newId}`),
+    onSuccess: (newId) => navigate(`/mom/${newId}`, { state: { fromProject: true } }),
     onError: (err: Error) => notifyError(err),
   })
 
@@ -119,7 +114,7 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
               <button
                 type="button"
                 className="block w-full cursor-pointer p-3.5 text-left"
-                onClick={() => navigate(`/mom/${item.id}`)}
+                onClick={() => navigate(`/mom/${item.id}`, { state: { fromProject: true } })}
               >
                 <span className="truncate text-sm font-semibold">{item.title}</span>
                 <div className="my-2 border-t" />
@@ -141,7 +136,7 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
                   </div>
                 </div>
                 <Row label="Periodo attività" value={periodLabel(item)} />
-                <Row label="Data riunione" value={fmtDate(item.meetingDate)} />
+                <Row label="Data riunione" value={formatDateOrDash(item.meetingDate)} />
               </button>
               <div className="flex justify-end border-t px-3 py-2">
                 <Button

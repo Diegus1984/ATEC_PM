@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { RefreshCw, X } from "lucide-react"
+import { ChevronDown, ChevronUp, RefreshCw, X } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
@@ -25,6 +25,7 @@ import {
   addComposition,
   deleteComposition,
   fetchCompositionTree,
+  updateCompositionQuantity,
 } from "@/lib/api/codex-compositions"
 import { fetchAllCodex, fetchCodex } from "@/lib/api/codex"
 import type { CodexListItem, CompositionTreeNode } from "@/lib/api/types"
@@ -33,7 +34,9 @@ import { useCodexHub } from "@/lib/signalr/use-codex-hub"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
 
+import { CodexImportDialog } from "./CodexImportDialog"
 import { QuantityDialog } from "./QuantityDialog"
+import { wildcardMatch } from "@/lib/wildcard"
 
 // ── CONFIGURAZIONE TIPI ────────────────────────────────────
 
@@ -92,19 +95,11 @@ interface PendingAdd {
 
 // ── HELPER ─────────────────────────────────────────────────
 
-/** Match con regole jolly: `abc`=contiene, `abc*`=inizia, `*abc`=finisce, `*abc*`=contiene. */
-function matchWildcard(value: string | undefined, filter: string): boolean {
-  const f = filter.trim().toLowerCase()
-  if (!f) return true
-  const v = (value ?? "").toLowerCase()
-
-  const startsWild = f.startsWith("*")
-  const endsWild = f.endsWith("*")
-
-  if (startsWild && endsWild) return v.includes(f.replace(/^\*+|\*+$/g, ""))
-  if (endsWild) return v.startsWith(f.replace(/\*+$/g, ""))
-  if (startsWild) return v.endsWith(f.replace(/^\*+/g, ""))
-  return v.includes(f)
+/** Match specifico per il codice che rimuove i punti sia dal valore che dal filtro. */
+function matchCodice(codice: string | undefined, filter: string): boolean {
+  const cleanCodice = (codice ?? "").replace(/\./g, "")
+  const cleanFilter = filter.replace(/\./g, "")
+  return wildcardMatch(cleanCodice, cleanFilter)
 }
 
 /** Inserisce un punto prima delle ultime 3 cifre (formattazione codice Codex). */
@@ -153,6 +148,24 @@ function countComponents(node: CompositionTreeNode): number {
   return node.children.reduce((acc, child) => acc + 1 + countComponents(child), 0)
 }
 
+/** Pezzi totali = somma delle quantità di tutte le righe (senza esplosione ricorsiva). */
+function countPieces(node: CompositionTreeNode): number {
+  return node.children.reduce((acc, child) => acc + child.quantity + countPieces(child), 0)
+}
+
+/** Clona l'albero applicando la nuova quantità alla riga indicata (update ottimistico). */
+function patchQuantity(
+  node: CompositionTreeNode,
+  compositionId: number,
+  quantity: number
+): CompositionTreeNode {
+  return {
+    ...node,
+    quantity: node.compositionId === compositionId ? quantity : node.quantity,
+    children: node.children.map((child) => patchQuantity(child, compositionId, quantity)),
+  }
+}
+
 // ── ALBERO ─────────────────────────────────────────────────
 
 interface TreeCtx {
@@ -163,6 +176,10 @@ interface TreeCtx {
   /** Aggiunge `child` sotto il nodo `parentCodexId`; valida contro `parentCodice`. */
   onDropTo: (parentCodexId: number, parentCodice: string, child: AvailableItem) => void
   onRemove: (node: CompositionTreeNode) => void
+  /** Apre il dialog quantità (click sul numero dello stepper). */
+  onEditQuantity: (node: CompositionTreeNode) => void
+  /** Incrementa/decrementa la quantità di una riga (freccette ▲/▼, delta ±1). */
+  onChangeQuantity: (node: CompositionTreeNode, delta: number) => void
 }
 
 function NodeRow({
@@ -229,16 +246,55 @@ function NodeRow({
         <span className="truncate text-sm" style={{ color: "#444" }}>
           — {node.descr}
         </span>
-        {!isRoot && ctx.canEdit ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="ml-auto shrink-0 text-destructive hover:bg-destructive/10"
-            title="Rimuovi dalla composizione"
-            onClick={() => ctx.onRemove(node)}
-          >
-            <X className="size-3.5" />
-          </Button>
+        {!isRoot ? (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {ctx.canEdit ? (
+              <span className="flex items-stretch overflow-hidden rounded border border-black/20 bg-white/75">
+                <button
+                  type="button"
+                  title="Imposta quantità"
+                  onClick={() => ctx.onEditQuantity(node)}
+                  className="min-w-5 px-1 font-mono text-[11px] font-semibold tabular-nums hover:bg-white"
+                >
+                  {node.quantity}
+                </button>
+                <span className="flex flex-col border-l border-black/10">
+                  <button
+                    type="button"
+                    title="Aumenta quantità"
+                    onClick={() => ctx.onChangeQuantity(node, 1)}
+                    className="flex h-[10px] items-center justify-center px-0.5 text-black/60 hover:bg-white hover:text-black"
+                  >
+                    <ChevronUp className="size-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Diminuisci quantità"
+                    disabled={node.quantity <= 1}
+                    onClick={() => ctx.onChangeQuantity(node, -1)}
+                    className="flex h-[10px] items-center justify-center border-t border-black/10 px-0.5 text-black/60 hover:bg-white hover:text-black disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ChevronDown className="size-2.5" />
+                  </button>
+                </span>
+              </span>
+            ) : (
+              <span className="rounded-full border border-black/10 px-2 font-mono text-[11px] leading-5 tabular-nums opacity-70">
+                ×{node.quantity}
+              </span>
+            )}
+            {ctx.canEdit ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-destructive hover:bg-destructive/10"
+                title="Rimuovi il componente dalla composizione (tutte le quantità)"
+                onClick={() => ctx.onRemove(node)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            ) : null}
+          </span>
         ) : null}
       </div>
 
@@ -269,6 +325,8 @@ function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) 
   const catalog = node.children
     .filter((c) => c.source === "catalog")
     .sort((a, b) => a.codice.localeCompare(b.codice))
+  const codexPieces = codex.reduce((acc, c) => acc + c.quantity, 0)
+  const catalogPieces = catalog.reduce((acc, c) => acc + c.quantity, 0)
 
   function groupDrop(event: React.DragEvent) {
     event.preventDefault()
@@ -303,7 +361,9 @@ function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) 
             style={{ backgroundColor: "#EEF2FF", color: ACCENT_COMPOSITI }}
           >
             🔩 Componenti Codex{" "}
-            <span className="text-xs font-normal text-muted-foreground">({codex.length})</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              ({codex.length} componenti · {codexPieces} pezzi)
+            </span>
           </div>
           {codex.map((child) => (
             <NodeRow key={`codex/${child.compositionId}`} node={child} depth={2} isRoot={false} ctx={ctx} />
@@ -323,7 +383,9 @@ function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) 
             style={{ backgroundColor: "#FFF8F0", color: ACCENT_ARTICOLI }}
           >
             🛒 Componenti commerciali{" "}
-            <span className="text-xs font-normal text-muted-foreground">({catalog.length})</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              ({catalog.length} componenti · {catalogPieces} pezzi)
+            </span>
           </div>
           {catalog.map((child) => (
             <NodeRow key={`catalog/${child.compositionId}`} node={child} depth={2} isRoot={false} ctx={ctx} />
@@ -338,6 +400,8 @@ function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) 
 
 export function CodexCompositionPage() {
   const queryClient = useQueryClient()
+
+
   const confirm = useConfirm()
   const canEdit = getSession()?.user.userRole === "ADMIN"
 
@@ -358,15 +422,27 @@ export function CodexCompositionPage() {
   const dragItem = React.useRef<AvailableItem | null>(null)
   const [hoverKey, setHoverKey] = React.useState<string | null>(null)
   const [pendingAdd, setPendingAdd] = React.useState<PendingAdd | null>(null)
+  // Riga di cui si sta modificando la quantità (badge ×N).
+  const [editQty, setEditQty] = React.useState<CompositionTreeNode | null>(null)
+
+  // Import distinta da file STEP: il pulsante apre direttamente il selettore file,
+  // il composito padre si ricava dalla radice del file (nessuna selezione richiesta).
+  const importFileRef = React.useRef<HTMLInputElement>(null)
+  const [importFile, setImportFile] = React.useState<File | null>(null)
+  // Composito da selezionare dopo un cambio tipo programmato (post-import STEP):
+  // l'effect su typeCode azzererebbe la selezione appena fatta.
+  const pendingSelectRef = React.useRef<CodexListItem | null>(null)
 
   const activeType =
     COMPOSITION_TYPES.find((type) => type.code === typeCode) ?? COMPOSITION_TYPES[0]
   const allowCatalog = activeType.allowCatalog
   const effectiveSource: "codex" | "catalog" = allowCatalog ? source : "codex"
 
-  // Reset al cambio tipo (come CmbType_SelectionChanged nel WPF).
+  // Reset al cambio tipo (come CmbType_SelectionChanged nel WPF). Se il cambio è
+  // stato innescato dall'import STEP, seleziona il composito importato anziché azzerare.
   React.useEffect(() => {
-    setSelectedParent(null)
+    setSelectedParent(pendingSelectRef.current)
+    pendingSelectRef.current = null
     setChildType(ALL)
     setSource("codex")
   }, [typeCode])
@@ -442,13 +518,31 @@ export function CodexCompositionPage() {
     onError: (err: Error) => notifyError(err),
   })
 
+  const quantityMutation = useMutation({
+    mutationFn: (vars: { compositionId: number; quantity: number }) =>
+      updateCompositionQuantity(vars.compositionId, vars.quantity, connectionIdRef.current),
+    // Update ottimistico: i click rapidi su ▲/▼ partono dal valore già aggiornato in cache.
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: ["composition-tree"] })
+      queryClient.setQueryData<CompositionTreeNode>(
+        ["composition-tree", selectedParent?.id],
+        (old) => (old ? patchQuantity(old, vars.compositionId, vars.quantity) : old)
+      )
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["composition-tree"] }),
+    onError: (err: Error) => {
+      notifyError(err)
+      void queryClient.invalidateQueries({ queryKey: ["composition-tree"] })
+    },
+  })
+
   // Compositi (griglia superiore): l'insieme è già ristretto al prefisso del tipo
   // lato server; qui si applica solo il filtro jolly client-side (come il WPF).
   const composites = React.useMemo(() => {
     const items = compositesQuery.data ?? []
     return items
-      .filter((item) => matchWildcard(item.codice, compCode))
-      .filter((item) => matchWildcard(item.descr, compDescr))
+      .filter((item) => matchCodice(item.codice, compCode))
+      .filter((item) => wildcardMatch(item.descr, compDescr))
       .sort((a, b) => a.codice.localeCompare(b.codice))
   }, [compositesQuery.data, compCode, compDescr])
 
@@ -499,9 +593,10 @@ export function CodexCompositionPage() {
 
   const treeData = treeQuery.data
   const componentCount = treeData ? countComponents(treeData) : 0
+  const pieceCount = treeData ? countPieces(treeData) : 0
   const statusText = selectedParent
     ? treeData
-      ? `${componentCount} componenti nella composizione`
+      ? `${componentCount} componenti · ${pieceCount} pezzi nella composizione`
       : "Caricamento composizione…"
     : `${composites.length} compositi ${typeCode} trovati`
 
@@ -512,6 +607,13 @@ export function CodexCompositionPage() {
     setHoverKey,
     onDropTo: handleDropTo,
     onRemove: handleRemove,
+    onEditQuantity: setEditQty,
+    onChangeQuantity: (node, delta) => {
+      const next = node.quantity + delta
+      if (next >= 1) {
+        quantityMutation.mutate({ compositionId: node.compositionId, quantity: next })
+      }
+    },
   }
 
   // Drop sull'area albero (spazio vuoto / fuori dai nodi) → aggiunta alla radice.
@@ -558,20 +660,41 @@ export function CodexCompositionPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void compositesQuery.refetch()
-                  if (selectedParent) void treeQuery.refetch()
-                  if (effectiveSource === "catalog") void catalogQuery.refetch()
-                  else void codexAvailableQuery.refetch()
-                }}
-                disabled={compositesQuery.isFetching}
-              >
-                <RefreshCw className={compositesQuery.isFetching ? "animate-spin" : ""} />
-                Aggiorna
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void compositesQuery.refetch()
+                    if (selectedParent) void treeQuery.refetch()
+                    if (effectiveSource === "catalog") void catalogQuery.refetch()
+                    else void codexAvailableQuery.refetch()
+                  }}
+                  disabled={compositesQuery.isFetching}
+                >
+                  <RefreshCw className={compositesQuery.isFetching ? "animate-spin" : ""} />
+                  Aggiorna
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={!canEdit}
+                  title="Importa la distinta dal file STEP dell'assieme"
+                >
+                  Importa
+                </Button>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".step,.stp,.STEP,.STP"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) setImportFile(file)
+                    // Permette di riselezionare lo stesso file.
+                    event.target.value = ""
+                  }}
+                />
             </div>
           </div>
         </CardHeader>
@@ -792,6 +915,24 @@ export function CodexCompositionPage() {
           </div>
         </CardContent>
       </Card>
+      <CodexImportDialog
+        file={importFile}
+        connRef={connectionIdRef}
+        onSuccess={(parent) => {
+          setImportFile(null)
+          // Mostra subito la distinta importata: seleziona il composito, cambiando
+          // tipo (501/601/701) se il file era di un tipo diverso da quello attivo.
+          const prefix = parent.codice.replace(/\./g, "").slice(0, 3)
+          if (prefix !== typeCode && COMPOSITION_TYPES.some((type) => type.code === prefix)) {
+            pendingSelectRef.current = parent
+            setTypeCode(prefix)
+          } else {
+            setSelectedParent(parent)
+          }
+          void queryClient.invalidateQueries({ queryKey: ["composition-tree"] })
+        }}
+        onCancel={() => setImportFile(null)}
+      />
 
       <QuantityDialog
         open={pendingAdd != null}
@@ -804,6 +945,21 @@ export function CodexCompositionPage() {
           setPendingAdd(null)
           if (add) {
             addMutation.mutate({ parentId: add.parentId, child: add.child, quantity })
+          }
+        }}
+      />
+
+      <QuantityDialog
+        open={editQty != null}
+        mode="edit"
+        childCodice={editQty?.codice ?? ""}
+        initialQuantity={editQty?.quantity ?? 1}
+        onCancel={() => setEditQty(null)}
+        onConfirm={(quantity) => {
+          const node = editQty
+          setEditQty(null)
+          if (node && quantity !== node.quantity) {
+            quantityMutation.mutate({ compositionId: node.compositionId, quantity })
           }
         }}
       />

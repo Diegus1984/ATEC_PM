@@ -1,6 +1,7 @@
 import type { MoMActionItem } from "@/lib/api/types"
 import { isoToDate } from "@/lib/date-iso"
 import { WEEKDAYS_SHORT, isRedDay } from "@/lib/it-holidays"
+import { printHtml, escapeHtml } from "@/lib/print-template"
 
 // Web equivalent dell'export del prototipo Gestione_MoM_v9: Stampa (A4 landscape,
 // righe colorate per stato, giorno della settimana sotto le date, revisione in
@@ -50,14 +51,6 @@ function dowCellHtml(value: string | null): string {
   return `${formatDate(value)}<span style="display:block;font-size:8.5px;font-weight:700;color:${
     fest ? "#C0392B" : "#27384a"
   }">${WEEKDAYS_SHORT[date.getDay()]}</span>`
-}
-
-function escapeHtml(value: string | null | undefined): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
 }
 
 function safeFileName(value: string): string {
@@ -188,25 +181,25 @@ export function exportMoMCsv(args: MoMExportArgs): void {
 }
 
 export function printMoM(args: MoMExportArgs): void {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
-    `MoM ${args.title}`
-  )}</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{font-size:16px;margin:0 0 2px;color:#2F6098}p.meta{color:#666;margin:0 0 10px}span.rev{background:#2F6098;color:#fff;border-radius:999px;padding:2px 10px;font-weight:bold;font-size:11px}table{page-break-inside:auto}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body><h2>${escapeHtml(
-    args.title
-  )}</h2><p class="meta">${escapeHtml(args.tipoBadge)}${
+  const subtitle = `${escapeHtml(args.tipoBadge)}${
     args.meetingDate
       ? ` · Riunione: ${escapeHtml(formatDate(args.meetingDate))}`
       : ""
-  } · <span class="rev">Rev. ${args.rev}</span> · MoM Focus Azioni</p>${buildTable(
-    args.items,
-    true
-  )}</body></html>`
+  } · Rev. ${args.rev} · MoM Focus Azioni`
 
-  const win = window.open("", "_blank")
-  if (!win) return
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  win.setTimeout(() => {
-    win.print()
-  }, 250)
+  const customStyles = `
+    table{page-break-inside:auto; border-collapse:collapse; width:100%}
+    tr{page-break-inside:avoid}
+    thead{display:table-header-group}
+    td,th{border:0.5px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}
+  `
+
+  printHtml({
+    title: args.title,
+    subtitle,
+    contentHtml: buildTable(args.items, true),
+    orientation: "landscape",
+    paperSize: "A4",
+    customStyles,
+  })
 }

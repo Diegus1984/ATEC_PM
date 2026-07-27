@@ -28,6 +28,7 @@ import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError, notifyInfo } from "@/lib/toast"
+import { formatDateShort } from "@/lib/date-iso"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -73,6 +74,7 @@ import {
   quoteStatusMeta,
 } from "./quote-status"
 import { quoteTypeBadge, quoteTypeLabel } from "./quote-type"
+import { fmt2 } from "@/lib/format"
 
 const VIEW_PREF_KEY = "QuotesHomePage.ViewMode"
 const COLUMN_STORAGE_KEY = "atec_pm_quotes_columns"
@@ -147,16 +149,9 @@ function loadColumnVisibility(): Record<string, boolean> {
   }
 }
 
-function fmt2(value: number): string {
-  return value.toLocaleString("it-IT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
 function formatDate(iso: string): string {
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("it-IT")
+  return Number.isNaN(d.getTime()) ? "" : formatDateShort(d)
 }
 
 // ── Catene di revisione (port di QuotesHomePage) ───────────

@@ -36,14 +36,12 @@ import {
   toIsoDate,
 } from "@/lib/api/timesheet"
 import { getSession } from "@/lib/auth/session"
+import { formatDateShort } from "@/lib/date-iso"
 import type { TimesheetEntryDto, TimesheetSaveRequest } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
+import { fmtHours } from "@/lib/format"
 
 const MAX_HOURS_PER_DAY = 24
-
-function fmtHours(hours: number): string {
-  return hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })
-}
 
 export function TimesheetEntryDialog({
   open,
@@ -216,7 +214,7 @@ export function TimesheetEntryDialog({
       title: "Elimina registrazione",
       description: `Eliminare la timbratura di ${fmtHours(
         entry.hours
-      )}h del ${parseIsoDate(entry.workDate).toLocaleDateString("it-IT")}?`,
+      )}h del ${formatDateShort(parseIsoDate(entry.workDate))}?`,
       confirmLabel: "Elimina",
     }).then((ok) => {
       if (ok) {

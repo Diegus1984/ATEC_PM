@@ -61,6 +61,7 @@ import {
 } from "@/lib/api/project-templates"
 import type { TemplateFolderNode } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
+import { formatSize } from "@/lib/format"
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
@@ -83,12 +84,6 @@ interface TemplateTreeNode {
 interface ClipboardState {
   node: TemplateTreeNode
   isCut: boolean
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function convertApiTree(roots: TemplateFolderNode[]): TemplateTreeNode[] {

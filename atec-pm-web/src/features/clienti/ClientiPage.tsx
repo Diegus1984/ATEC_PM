@@ -14,6 +14,7 @@ import { deleteCustomer, fetchCustomers } from "@/lib/api/customers"
 import type { CustomerListItem } from "@/lib/api/types"
 
 import { CustomerDialog } from "./CustomerDialog"
+import { dash } from "@/lib/format"
 
 const COLUMN_LABELS: Record<string, string> = {
   companyName: "Ragione sociale",
@@ -36,10 +37,6 @@ const HIDDEN_COLUMNS = {
   sdiCode: false,
   address: false,
   paymentTerms: false,
-}
-
-function dash(value: string) {
-  return value && value.trim() ? value : "—"
 }
 
 function SortHeader({

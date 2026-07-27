@@ -38,6 +38,7 @@ import {
   toIso,
   workingDayCount,
 } from "@/features/risorse/planner-logic"
+import { dateToIso } from "@/lib/date-iso"
 
 const LANE_HEIGHT = 26
 const BAR_HEIGHT = 18
@@ -78,12 +79,6 @@ function downloadCsv(filename: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function todayIso(): string {
-  const d = new Date()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${d.getFullYear()}-${m}-${day}`
-}
 function fmtDate(iso: string): string {
   const d = parseDate(iso)
   const dd = String(d.getDate()).padStart(2, "0")
@@ -403,7 +398,7 @@ export function FeriePage() {
       )
     }
     downloadCsv(
-      `piano_ferie_${todayIso().replace(/-/g, "")}.csv`,
+      `piano_ferie_${dateToIso(new Date()).replace(/-/g, "")}.csv`,
       lines.join("\r\n")
     )
   }

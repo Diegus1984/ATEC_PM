@@ -41,18 +41,15 @@ import {
   toIsoDate,
 } from "@/lib/api/timesheet"
 import { getSession } from "@/lib/auth/session"
+import { formatDateShort } from "@/lib/date-iso"
 import type { TimesheetEntryDto } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
+import { fmtHours } from "@/lib/format"
 
 type CalView = "month" | "week"
 
 const MAX_CHIPS_PER_DAY = 3
 const DAY_NAMES = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
-
-/** Ore formattate stile WPF `0.#` (cultura it-IT → virgola decimale). */
-function fmtHours(hours: number): string {
-  return hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })
-}
 
 function capitalize(text: string): string {
   return text.length > 0 ? text[0].toUpperCase() + text.slice(1) : text
@@ -357,9 +354,7 @@ export function TimesheetPage() {
       title: "Elimina registrazione",
       description: `Eliminare la registrazione di ${fmtHours(
         entry.hours
-      )} h del ${parseIsoDate(entry.workDate).toLocaleDateString(
-        "it-IT"
-      )} su "${entry.phaseDisplay}"?`,
+      )} h del ${formatDateShort(parseIsoDate(entry.workDate))} su "${entry.phaseDisplay}"?`,
       confirmLabel: "Elimina",
     }).then((ok) => {
       if (ok) {

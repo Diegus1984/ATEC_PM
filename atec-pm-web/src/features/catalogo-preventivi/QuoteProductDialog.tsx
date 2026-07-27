@@ -36,6 +36,7 @@ import {
 } from "@/lib/api/quote-catalog"
 import type { QuoteProductSaveDto } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
+import { fmt2, parseDecimal } from "@/lib/format"
 
 interface VariantRow {
   id: number
@@ -44,18 +45,6 @@ interface VariantRow {
   /** Stringhe per gli input numerici (parse al salvataggio). */
   costPrice: string
   markupValue: string
-}
-
-function parseDecimal(value: string): number {
-  const n = Number((value ?? "").replace(",", "."))
-  return Number.isFinite(n) ? n : 0
-}
-
-function fmt2(value: number): string {
-  return value.toLocaleString("it-IT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 }
 
 function UnitField({

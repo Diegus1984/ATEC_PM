@@ -1,129 +1,75 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { ColumnDef } from "@tanstack/react-table"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
-import { notifyError } from "@/lib/toast"
 import { DataTableCardFiltered } from "@/components/shared/data-table-card-filtered"
-import { DateField } from "@/components/shared/date-field"
-import { RowActionsMenu, type RowAction } from "@/components/shared/row-actions"
 import { Button } from "@/components/ui/button"
-import { ApiError } from "@/lib/api/client"
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
+  buildDdpTransitionMap,
   fetchActiveDdpDestinations,
+  fetchActiveDdpTreatments,
   fetchDdpAggregations,
   fetchDdpStatuses,
+  fetchDdpStatusTransitions,
 } from "@/lib/api/ddp-config"
 import {
   addOfficinaItem,
   fetchOfficinaItems,
   updateOfficinaItem,
 } from "@/lib/api/project-ddp-officina"
-import type {
-  DdpDestinationItem,
-  DdpStatusItem,
-  OfficinaItem,
-  OfficinaItemSaveRequest,
-} from "@/lib/api/types"
+import { getSession } from "@/lib/auth/session"
+import type { OfficinaItem, OfficinaItemSaveRequest } from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
+import { notifyError } from "@/lib/toast"
 
 import { CodexPickerDialog } from "./CodexPickerDialog"
-import {
-  buildDestinationOptions,
-  DDP_DESTINATION_NONE,
-} from "./ddp-destination-options"
-import {
-  DdpDestinationCell,
-  DdpDestinationSpecCell,
-} from "./DdpDestinationCell"
-import { DdpQuantityStepper } from "./DdpQuantityStepper"
 import { DdpStatusFilterBar } from "./DdpStatusFilterBar"
-import { DdpStatusMenu } from "./DdpStatusMenu"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
+import { OfficinaDialog } from "./OfficinaDialog"
+import { buildOfficinaColumns } from "./officina-columns"
+import {
+  buildOfficinaRows,
+  collectParentIdsWithChildren,
+  COLUMN_LABELS,
+  toForm,
+} from "./officina-shared"
+import { useCodexPriceCheck } from "./use-codex-price-check"
 import { useDdpQuantityAdjust } from "./use-ddp-quantity-adjust"
-
-function fmtDate(value: string | null): string {
-  if (!value) return "—"
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("it-IT")
-}
-
-const COLUMN_LABELS: Record<string, string> = {
-  rowNumber: "#",
-  createdAt: "Data",
-  requestedBy: "Rich.",
-  partNumber: "Codice",
-  description: "Descrizione",
-  quantity: "Qtà",
-  unitCost: "€ Unit.",
-  totalCost: "€ Totale",
-  material: "Materiale",
-  treatment: "Trattamento",
-  supplierName: "Fornitore",
-  itemStatus: "Stato",
-  daneaRef: "Rif. Danea",
-  dateNeeded: "Necessario",
-  destination: "Destinazione",
-  destinationSpec: "Specifica",
-  notes: "Note",
-}
-
-function toForm(item: OfficinaItem): OfficinaItemSaveRequest {
-  return {
-    id: item.id,
-    projectId: item.projectId,
-    partNumber: item.partNumber,
-    description: item.description,
-    quantity: item.quantity,
-    unitCost: item.unitCost,
-    material: item.material,
-    treatment: item.treatment,
-    supplierName: item.supplierName,
-    itemStatus: item.itemStatus,
-    requestedBy: item.requestedBy,
-    daneaRef: item.daneaRef,
-    dateNeeded: item.dateNeeded,
-    destination: item.destination,
-    destinationSpec: item.destinationSpec ?? "",
-    notes: item.notes,
-    expectedUpdatedAt: item.updatedAt,
-  }
-}
+import { useOfficinaRowMutations } from "./use-officina-row-mutations"
 
 export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
   const confirm = useConfirm()
   const queryClient = useQueryClient()
+  // Cancellazione definitiva riservata ad ADMIN e PM (il server la blinda con [Authorize(Roles)]).
+  const role = getSession()?.user.userRole ?? ""
+  const canHardDelete = role === "ADMIN" || role === "PM"
   const [searchParams] = useSearchParams()
   const highlightRowId = searchParams.get("item")
+
   const [dialog, setDialog] = React.useState<OfficinaItemSaveRequest | null>(null)
   const [pickerOpen, setPickerOpen] = React.useState(false)
-  const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<
-    Set<string>
-  >(() => new Set())
+  const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<Set<string>>(
+    () => new Set()
+  )
+  const [collapsedParentIds, setCollapsedParentIds] = React.useState<Set<number>>(
+    new Set()
+  )
 
+  const toggleParentCollapse = React.useCallback((parentId: number) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(parentId)) next.delete(parentId)
+      else next.add(parentId)
+      return next
+    })
+  }, [])
+
+  // Arrivando da un link a una riga specifica i filtri di stato la nasconderebbero.
   React.useEffect(() => {
-    if (highlightRowId) {
-      setSelectedStatusKeys(new Set())
-    }
+    if (highlightRowId) setSelectedStatusKeys(new Set())
   }, [highlightRowId])
 
   const query = useQuery({
@@ -132,6 +78,17 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     enabled: projectId > 0,
   })
 
+  const parentIdsWithChildren = React.useMemo(
+    () => collectParentIdsWithChildren(query.data ?? []),
+    [query.data]
+  )
+
+  const [codexPriceInfo, setCodexPriceInfo] = useCodexPriceCheck(
+    dialog,
+    parentIdsWithChildren
+  )
+
+  // ── Configurazione DDP (stati, transizioni, destinazioni, trattamenti) ──
   const statusesQuery = useQuery({
     queryKey: ["ddp-statuses"],
     queryFn: fetchDdpStatuses,
@@ -144,6 +101,15 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     () => new Map(statuses.map((s) => [s.statusKey, s])),
     [statuses]
   )
+  // Matrice avanzamenti (v7): restringe la finestra opzioni di menu ⋮ e dialog.
+  const transitionsQuery = useQuery({
+    queryKey: ["ddp-status-transitions"],
+    queryFn: fetchDdpStatusTransitions,
+  })
+  const transitionMap = React.useMemo(
+    () => buildDdpTransitionMap(transitionsQuery.data ?? [], "OFFICINA"),
+    [transitionsQuery.data]
+  )
 
   const destinationsQuery = useQuery({
     queryKey: ["ddp-destinations", "active"],
@@ -152,6 +118,15 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
   const destinations = React.useMemo(
     () => destinationsQuery.data ?? [],
     [destinationsQuery.data]
+  )
+  const treatmentsQuery = useQuery({
+    // Stessa fonte di Config. DDP (GetAll + filtro attivi in client).
+    queryKey: ["ddp-treatments", "selectable"],
+    queryFn: fetchActiveDdpTreatments,
+  })
+  const treatments = React.useMemo(
+    () => treatmentsQuery.data ?? [],
+    [treatmentsQuery.data]
   )
   const aggregationsQuery = useQuery({
     queryKey: ["ddp-aggregations"],
@@ -182,6 +157,8 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
   )
   useProjectHub(projectId > 0 ? projectId : null, onDdpChange)
 
+  const mutations = useOfficinaRowMutations(projectId, invalidate)
+
   const saveMutation = useMutation({
     mutationFn: async (form: OfficinaItemSaveRequest) => {
       if (form.id > 0) await updateOfficinaItem(projectId, form.id, form)
@@ -194,198 +171,57 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     onError: (err: Error) => notifyError(err),
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({
-      item,
-      statusKey,
-    }: {
-      item: OfficinaItem
-      statusKey: string
-    }) =>
-      updateOfficinaItem(projectId, item.id, {
-        ...toForm(item),
-        itemStatus: statusKey,
-      }),
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => {
-      if (err instanceof ApiError && err.status === 409) {
-        notifyError(
-          "La riga è stata modificata da un altro utente. Ricarica e riprova."
-        )
-        void invalidate()
-        return
-      }
-      notifyError(err)
-    },
-  })
-
-  const quantityMutation = useMutation({
-    mutationFn: ({
-      item,
-      quantity,
-      itemStatus,
-    }: {
-      item: OfficinaItem
-      quantity?: number
-      itemStatus?: string
-    }) =>
-      updateOfficinaItem(projectId, item.id, {
-        ...toForm(item),
-        ...(quantity !== undefined ? { quantity } : {}),
-        ...(itemStatus !== undefined ? { itemStatus } : {}),
-      }),
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => {
-      if (err instanceof ApiError && err.status === 409) {
-        notifyError(
-          "La riga è stata modificata da un altro utente. Ricarica e riprova."
-        )
-        void invalidate()
-        return
-      }
-      notifyError(err)
-    },
-  })
-
-  const applyQuantityPatch = React.useCallback(
-    (
-      item: OfficinaItem,
-      patch: { quantity?: number; itemStatus?: string }
-    ) => {
-      quantityMutation.mutate({ item, ...patch })
-    },
-    [quantityMutation]
-  )
-
   const handleQuantityAdjust = useDdpQuantityAdjust({
     confirm,
     statusMap,
-    isPending: quantityMutation.isPending,
+    isPending: mutations.pending.quantity,
     excludedSet,
-    onApply: applyQuantityPatch,
+    onApply: mutations.applyQuantityPatch,
   })
-
-  const handleStatusChange = React.useCallback(
-    (item: OfficinaItem, statusKey: string) => {
-      if (statusKey === item.itemStatus || statusMutation.isPending) {
-        return
-      }
-      statusMutation.mutate({ item, statusKey })
-    },
-    [statusMutation]
-  )
-
-  const destinationMutation = useMutation({
-    mutationFn: ({
-      item,
-      destination,
-      destinationSpec,
-    }: {
-      item: OfficinaItem
-      destination: string
-      destinationSpec?: string
-    }) =>
-      updateOfficinaItem(projectId, item.id, {
-        ...toForm(item),
-        destination,
-        destinationSpec:
-          destinationSpec ??
-          (!destination.trim()
-            ? ""
-            : !item.destination?.trim()
-              ? ""
-              : (item.destinationSpec ?? "")),
-      }),
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => {
-      if (err instanceof ApiError && err.status === 409) {
-        notifyError(
-          "La riga è stata modificata da un altro utente. Ricarica e riprova."
-        )
-        void invalidate()
-        return
-      }
-      notifyError(err)
-    },
-  })
-
-  const destinationSpecMutation = useMutation({
-    mutationFn: ({
-      item,
-      destinationSpec,
-    }: {
-      item: OfficinaItem
-      destinationSpec: string
-    }) =>
-      updateOfficinaItem(projectId, item.id, {
-        ...toForm(item),
-        destinationSpec,
-      }),
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => {
-      if (err instanceof ApiError && err.status === 409) {
-        notifyError(
-          "La riga è stata modificata da un altro utente. Ricarica e riprova."
-        )
-        void invalidate()
-        return
-      }
-      notifyError(err)
-    },
-  })
-
-  const handleDestinationChange = React.useCallback(
-    (item: OfficinaItem, destination: string) => {
-      const nextSpec = !destination.trim()
-        ? ""
-        : !item.destination?.trim()
-          ? ""
-          : (item.destinationSpec ?? "")
-      if (
-        destination === (item.destination ?? "") &&
-        nextSpec === (item.destinationSpec ?? "")
-      ) {
-        return
-      }
-      if (destinationMutation.isPending) {
-        return
-      }
-      destinationMutation.mutate({ item, destination, destinationSpec: nextSpec })
-    },
-    [destinationMutation]
-  )
-
-  const handleDestinationSpecCommit = React.useCallback(
-    (item: OfficinaItem, destinationSpec: string) => {
-      if (
-        !item.destination?.trim() ||
-        destinationSpec === (item.destinationSpec ?? "") ||
-        destinationSpecMutation.isPending
-      ) {
-        return
-      }
-      destinationSpecMutation.mutate({ item, destinationSpec })
-    },
-    [destinationSpecMutation]
-  )
 
   const handleAnnulRow = React.useCallback(
     async (item: OfficinaItem) => {
-      if (item.itemStatus === DDP_STATUS_CANCELLED || statusMutation.isPending) {
+      if (item.itemStatus === DDP_STATUS_CANCELLED || mutations.pending.status) {
         return
       }
       const rowLabel = item.partNumber || item.description || "questa riga"
       const ok = await confirmDdpRowAnnul(confirm, statusMap, rowLabel)
-      if (ok) {
-        statusMutation.mutate({ item, statusKey: DDP_STATUS_CANCELLED })
-      }
+      if (ok) mutations.changeStatus(item, DDP_STATUS_CANCELLED)
     },
-    [confirm, statusMap, statusMutation]
+    [confirm, statusMap, mutations]
+  )
+
+  const handleDeleteRow = React.useCallback(
+    async (item: OfficinaItem) => {
+      if (mutations.pending.remove) return
+      const rowLabel = item.partNumber || item.description || "questa riga"
+      // «Comanda il padre» anche in cancellazione: i componenti collegati seguono il padre.
+      const linkedChildren = (query.data ?? []).filter(
+        (r) => r.parentOfficinaItemId === item.id
+      ).length
+      const ok = await confirm({
+        title: "Eliminare definitivamente la riga?",
+        description: `La riga "${rowLabel}" verrà eliminata dalla distinta insieme alla sua bozza di lavorazione in staging.${
+          linkedChildren > 0
+            ? `\n\nVerranno eliminati anche i ${linkedChildren} componenti importati dalla sua composizione (con le loro bozze di lavorazione).`
+            : ""
+        }\n\nL'operazione non è reversibile.`,
+        confirmLabel: "Elimina definitivamente",
+        destructive: true,
+      })
+      if (ok) mutations.removeRow(item)
+    },
+    [confirm, mutations, query.data]
+  )
+
+  const handleEditRow = React.useCallback(
+    (item: OfficinaItem) => setDialog(toForm(item)),
+    []
   )
 
   const items = React.useMemo(
-    () => (query.data ?? []).map((it, index) => ({ ...it, rowNumber: index + 1 })),
-    [query.data]
+    () => buildOfficinaRows(query.data ?? [], parentIdsWithChildren),
+    [query.data, parentIdsWithChildren]
   )
 
   const statusFilterItems = React.useMemo(() => {
@@ -408,250 +244,71 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
       })
       .sort(
         (a, b) =>
-          a.sortOrder - b.sortOrder ||
-          a.label.localeCompare(b.label, "it")
+          a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "it")
       )
   }, [items, statusMap])
 
   const statusFilteredItems = React.useMemo(() => {
-    if (selectedStatusKeys.size === 0) {
-      return items
+    let list = items
+    if (selectedStatusKeys.size > 0) {
+      list = list.filter((row) => selectedStatusKeys.has(row.itemStatus ?? ""))
     }
-    return items.filter((row) => selectedStatusKeys.has(row.itemStatus ?? ""))
-  }, [items, selectedStatusKeys])
+    // I componenti spariscono quando il loro padre è collassato.
+    return list.filter((row) =>
+      row.parentOfficinaItemId != null
+        ? !collapsedParentIds.has(row.parentOfficinaItemId)
+        : true
+    )
+  }, [items, selectedStatusKeys, collapsedParentIds])
 
-  const columns = React.useMemo<ColumnDef<OfficinaItem>[]>(
-    () => [
-      {
-        accessorKey: "rowNumber",
-        header: "#",
-        enableColumnFilter: false,
-        cell: ({ row }) => (
-          <span className="tabular-nums opacity-80">{row.original.rowNumber}</span>
-        ),
-      },
-      {
-        accessorKey: "createdAt",
-        header: "Data",
-        enableColumnFilter: false,
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap">
-            {fmtDate(row.original.createdAt)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "requestedBy",
-        header: "Rich.",
-        cell: ({ row }) => row.original.requestedBy || "—",
-      },
-      {
-        accessorKey: "partNumber",
-        header: "Codice",
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.partNumber || "—"}</span>
-        ),
-      },
-      {
-        accessorKey: "description",
-        header: "Descrizione",
-        cell: ({ row }) => (
-          <span
-            className="block max-w-[240px] truncate"
-            title={row.original.description}
-          >
-            {row.original.description || "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "quantity",
-        header: "Qtà",
-        enableColumnFilter: false,
-        cell: ({ row }) => {
-          const item = row.original
-          const isExcluded = excludedSet.has(item.itemStatus)
-          const atMin =
-            item.quantity <= 1 && item.itemStatus === DDP_STATUS_CANCELLED
-          return (
-            <span
-              title={
-                isExcluded
-                  ? "Ripristina uno stato attivo per modificare la quantità"
-                  : undefined
-              }
-            >
-              <DdpQuantityStepper
-                quantity={item.quantity}
-                disabled={quantityMutation.isPending || isExcluded}
-                decrementDisabled={atMin}
-                onIncrement={() => void handleQuantityAdjust(item, 1)}
-                onDecrement={() => void handleQuantityAdjust(item, -1)}
-              />
-            </span>
-          )
-        },
-      },
-      {
-        accessorKey: "unitCost",
-        header: "€ Unit.",
-        enableColumnFilter: false,
-        cell: ({ row }) => (
-          <span className="tabular-nums">{euro(row.original.unitCost)}</span>
-        ),
-      },
-      {
-        accessorKey: "totalCost",
-        header: "€ Totale",
-        enableColumnFilter: false,
-        cell: ({ row }) => (
-          <span className="font-semibold tabular-nums">
-            {euro(row.original.totalCost)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "material",
-        header: "Materiale",
-        cell: ({ row }) => row.original.material || "—",
-      },
-      {
-        accessorKey: "treatment",
-        header: "Trattamento",
-        cell: ({ row }) => row.original.treatment || "—",
-      },
-      {
-        accessorKey: "supplierName",
-        header: "Fornitore",
-        cell: ({ row }) => (
-          <span
-            className="block max-w-[140px] truncate"
-            title={row.original.supplierName}
-          >
-            {row.original.supplierName || "—"}
-          </span>
-        ),
-      },
-      {
-        id: "itemStatus",
-        accessorFn: (r) => statusMap.get(r.itemStatus)?.label ?? r.itemStatus,
-        header: "Stato",
-        cell: ({ row }) => {
-          const s = statusMap.get(row.original.itemStatus)
-          return (
-            <div className="flex min-w-[120px] items-center gap-1">
-              <span className="min-w-0 flex-1 truncate font-semibold whitespace-nowrap">
-                {s ? s.label : row.original.itemStatus || "—"}
-              </span>
-              <DdpStatusMenu
-                currentStatusKey={row.original.itemStatus}
-                statuses={statuses}
-                disabled={statusMutation.isPending}
-                onSelect={(statusKey) =>
-                  handleStatusChange(row.original, statusKey)
-                }
-              />
-            </div>
-          )
-        },
-      },
-      {
-        accessorKey: "daneaRef",
-        header: "Rif. Danea",
-        cell: ({ row }) => row.original.daneaRef || "—",
-      },
-      {
-        accessorKey: "dateNeeded",
-        header: "Necessario",
-        enableColumnFilter: false,
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap">
-            {fmtDate(row.original.dateNeeded)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "destination",
-        header: "Destinazione",
-        cell: ({ row }) => (
-          <DdpDestinationCell
-            destination={row.original.destination ?? ""}
-            destinations={destinations}
-            disabled={destinationMutation.isPending}
-            onDestinationChange={(destination) =>
-              handleDestinationChange(row.original, destination)
-            }
-          />
-        ),
-      },
-      {
-        accessorKey: "destinationSpec",
-        header: "Specifica",
-        cell: ({ row }) => (
-          <DdpDestinationSpecCell
-            destination={row.original.destination ?? ""}
-            destinationSpec={row.original.destinationSpec ?? ""}
-            disabled={destinationSpecMutation.isPending}
-            onSpecCommit={(destinationSpec) =>
-              handleDestinationSpecCommit(row.original, destinationSpec)
-            }
-          />
-        ),
-      },
-      {
-        accessorKey: "notes",
-        header: "Note",
-        cell: ({ row }) => (
-          <span
-            className="block max-w-[200px] truncate"
-            title={row.original.notes}
-          >
-            {row.original.notes || "—"}
-          </span>
-        ),
-      },
-      {
-        id: "actions",
-        header: "",
-        enableHiding: false,
-        enableColumnFilter: false,
-        cell: ({ row }) => {
-          const item = row.original
-          const actions: RowAction[] = [
-            {
-              label: "Modifica",
-              icon: Pencil,
-              onClick: () => setDialog(toForm(item)),
-            },
-          ]
-          if (item.itemStatus !== DDP_STATUS_CANCELLED) {
-            actions.push({
-              label: "Elimina",
-              icon: Trash2,
-              destructive: true,
-              separatorBefore: true,
-              onClick: () => void handleAnnulRow(item),
-            })
-          }
-          return (
-            <RowActionsMenu
-              label={item.partNumber || String(item.id)}
-              actions={actions}
-            />
-          )
-        },
-      },
-    ],
-    [statusMap, statuses, destinations, handleAnnulRow, handleStatusChange, handleDestinationChange, handleDestinationSpecCommit, statusMutation.isPending, destinationMutation.isPending, destinationSpecMutation.isPending, quantityMutation.isPending, handleQuantityAdjust, excludedSet]
+  const columns = React.useMemo(
+    () =>
+      buildOfficinaColumns({
+        statuses,
+        statusMap,
+        transitionMap,
+        destinations,
+        treatments,
+        parentIdsWithChildren,
+        collapsedParentIds,
+        toggleParentCollapse,
+        mutations,
+        canHardDelete,
+        onEdit: handleEditRow,
+        onAnnul: (item) => void handleAnnulRow(item),
+        onDelete: (item) => void handleDeleteRow(item),
+        onQuantityAdjust: (item, delta) => void handleQuantityAdjust(item, delta),
+      }),
+    [
+      statuses,
+      statusMap,
+      transitionMap,
+      destinations,
+      treatments,
+      parentIdsWithChildren,
+      collapsedParentIds,
+      toggleParentCollapse,
+      mutations,
+      canHardDelete,
+      handleEditRow,
+      handleAnnulRow,
+      handleDeleteRow,
+      handleQuantityAdjust,
+    ]
   )
 
-  // Il totale include solo le righe non escluse (aggregazione A9). Le escluse sono contate a parte.
-  const totalCost = items.reduce(
-    (s, i) => (excludedSet.has(i.itemStatus) ? s : s + i.totalCost),
+  // Il totale include solo le righe non escluse (aggregazione A9). Esclude i figli
+  // per evitare double-counting (costo già nel padre).
+  const totalCost = items.reduce((s, i) => {
+    if (excludedSet.has(i.itemStatus)) return s
+    if (i.parentOfficinaItemId != null) return s
+    return s + i.totalCost
+  }, 0)
+  const excludedRows = items.filter((i) => excludedSet.has(i.itemStatus))
+  const excludedValue = excludedRows.reduce(
+    (s, i) => (i.parentOfficinaItemId != null ? s : s + i.totalCost),
     0
   )
-  const excludedRows = items.filter((i) => excludedSet.has(i.itemStatus))
-  const excludedValue = excludedRows.reduce((s, i) => s + i.totalCost, 0)
 
   const rowStyle = React.useCallback(
     (item: OfficinaItem) => {
@@ -665,6 +322,7 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     <>
       <DataTableCardFiltered
         title="DDP officina"
+        visibilityStorageKey="table-visibility-ddp-officina-v1"
         description="Distinta particolari meccanici della commessa"
         columns={columns}
         data={statusFilteredItems}
@@ -697,10 +355,13 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
         }}
         toolbarActions={
           <>
-            <span className="self-center text-sm font-medium tabular-nums">
-              Totale: {euro(totalCost)}
+            <span className="self-center text-sm font-medium">
+              Totale:{" "}
+              <span className="text-lg font-bold tabular-nums ml-1 text-blue-600 dark:text-blue-400">
+                {euro(totalCost)}
+              </span>
               {excludedRows.length > 0 ? (
-                <span className="ml-2 font-normal text-muted-foreground">
+                <span className="ml-2 font-normal text-muted-foreground tabular-nums">
                   · escluse {excludedRows.length} ({euro(excludedValue)})
                 </span>
               ) : null}
@@ -716,11 +377,22 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
       <OfficinaDialog
         form={dialog}
         statuses={statuses}
+        transitions={transitionMap}
         destinations={destinations}
+        treatments={treatments}
         saving={saveMutation.isPending}
+        hasChildren={dialog ? parentIdsWithChildren.has(dialog.id) : false}
+        codexPriceInfo={codexPriceInfo}
+        onCodexPriceInfoChange={setCodexPriceInfo}
         onClose={() => setDialog(null)}
         onChange={setDialog}
-        onSave={() => dialog && saveMutation.mutate(dialog)}
+        onSave={() =>
+          dialog &&
+          saveMutation.mutate({
+            ...dialog,
+            updateCodexPrice: codexPriceInfo.checked,
+          })
+        }
       />
 
       <CodexPickerDialog
@@ -730,166 +402,5 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
         onAdded={() => void invalidate()}
       />
     </>
-  )
-}
-
-function OfficinaDialog({
-  form,
-  statuses,
-  destinations,
-  saving,
-  onClose,
-  onChange,
-  onSave,
-}: {
-  form: OfficinaItemSaveRequest | null
-  statuses: DdpStatusItem[]
-  destinations: DdpDestinationItem[]
-  saving: boolean
-  onClose: () => void
-  onChange: (form: OfficinaItemSaveRequest) => void
-  onSave: () => void
-}) {
-  if (!form) return null
-  // In modifica il Codice (101 Codex), la Descrizione e il Richiedente provengono
-  // dal Codex e sono read-only, come nella griglia officina del WPF.
-  const isEdit = form.id > 0
-  const set = (patch: Partial<OfficinaItemSaveRequest>) =>
-    onChange({ ...form, ...patch })
-  const num = (s: string) => {
-    const v = Number(s.replace(",", "."))
-    return Number.isFinite(v) ? v : 0
-  }
-  const field = (
-    label: string,
-    value: string,
-    key: keyof OfficinaItemSaveRequest,
-    disabled = false
-  ) => (
-    <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        value={value}
-        disabled={disabled}
-        onChange={(e) => set({ [key]: e.target.value })}
-      />
-    </div>
-  )
-
-  return (
-    <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {form.id > 0 ? "Modifica particolare" : "Nuovo particolare"}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          {field("Codice (101 Codex)", form.partNumber, "partNumber", isEdit)}
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Stato</Label>
-            <Select
-              value={form.itemStatus}
-              onValueChange={(v) => set({ itemStatus: v })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statuses.map((s) => (
-                  <SelectItem key={s.statusKey} value={s.statusKey}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="col-span-2">
-            {field("Descrizione", form.description, "description", isEdit)}
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Quantità</Label>
-            <Input
-              inputMode="decimal"
-              value={String(form.quantity)}
-              onChange={(e) => set({ quantity: num(e.target.value) })}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Costo unitario (€)</Label>
-            <Input
-              inputMode="decimal"
-              value={String(form.unitCost)}
-              onChange={(e) => set({ unitCost: num(e.target.value) })}
-            />
-          </div>
-          {field("Materiale", form.material, "material")}
-          {field("Trattamento", form.treatment, "treatment")}
-          {field("Fornitore (officina)", form.supplierName, "supplierName")}
-          {field("Richiesto da", form.requestedBy, "requestedBy", isEdit)}
-          {field("Rif. Danea", form.daneaRef, "daneaRef")}
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Necessario per</Label>
-            <DateField
-              value={form.dateNeeded}
-              onChange={(value) => set({ dateNeeded: value })}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Descr. destinazione</Label>
-            <Select
-              value={form.destination || DDP_DESTINATION_NONE}
-              onValueChange={(v) => {
-                const destination = v === DDP_DESTINATION_NONE ? "" : v
-                set({
-                  destination,
-                  destinationSpec: destination
-                    ? form.destination.trim()
-                      ? form.destinationSpec
-                      : ""
-                    : "",
-                })
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DDP_DESTINATION_NONE}>(nessuna)</SelectItem>
-                {buildDestinationOptions(destinations, form.destination).map(
-                  (name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Specifica destinazione</Label>
-            <Input
-              value={form.destinationSpec}
-              disabled={!form.destination.trim()}
-              placeholder={
-                form.destination.trim()
-                  ? "Es. R1, QE1…"
-                  : "Selezionare prima la descrizione"
-              }
-              onChange={(e) => set({ destinationSpec: e.target.value })}
-            />
-          </div>
-          <div className="col-span-2">{field("Note", form.notes, "notes")}</div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Annulla
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Salvataggio…" : "Salva"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

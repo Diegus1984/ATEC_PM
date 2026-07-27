@@ -1,20 +1,14 @@
 // Export/stampa della Sintesi DDP (port di BtnExportExcel/BtnPrint del WPF):
 // Excel = HTML-table aperto da Excel (.xls); Stampa = finestra HTML + window.print().
 
+import { printHtml, escapeHtml } from "@/lib/print-template"
+
 export interface ExportTable {
   title: string
   headers: string[]
   rows: string[][]
   /** Colore di sfondo per riga (es. colore stato DDP). */
   rowColors?: (string | null)[]
-}
-
-function escapeHtml(value: string | null | undefined): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
 }
 
 function safeFileName(value: string): string {
@@ -77,19 +71,18 @@ export function printDdpTables(
         )}</h3>${tableHtml(table, "#dcdcdc")}`
     )
     .join("")
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
-    title
-  )}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;margin:0}h2{font-size:16px;margin:0 0 2px}table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}</style></head><body><h2>${escapeHtml(
-    title
-  )}</h2><p style="color:#666;margin:0 0 6px">${escapeHtml(
-    subtitle
-  )}</p>${sections}</body></html>`
-  const win = window.open("", "_blank")
-  if (!win) return
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  win.setTimeout(() => {
-    win.print()
-  }, 250)
+
+  const customStyles = `
+    table{border-collapse:collapse;width:100%}
+    td,th{border:0.5px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}
+  `
+
+  printHtml({
+    title,
+    subtitle,
+    contentHtml: sections,
+    orientation: "landscape",
+    paperSize: "A4",
+    customStyles,
+  })
 }

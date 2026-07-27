@@ -19,16 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DateField } from "@/components/shared/date-field"
-
-function normDate(value: string | null | undefined): string | null {
-  return value ? value.slice(0, 10) : null
-}
-function todayIso(): string {
-  const d = new Date()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${d.getFullYear()}-${m}-${day}`
-}
+import { toDateOnly, dateToIso } from "@/lib/date-iso"
 
 export interface FerieEditDialogProps {
   open: boolean
@@ -68,13 +59,13 @@ export function FerieEditDialog({
     endTouched.current = false
     setError(null)
     if (existing) {
-      setStart(normDate(existing.dataInizio))
-      setEnd(normDate(existing.dataFine))
+      setStart(toDateOnly(existing.dataInizio))
+      setEnd(toDateOnly(existing.dataFine))
       setDescrizione(existing.descrizione ?? "")
     } else {
-      const s = normDate(presetStart) ?? todayIso()
+      const s = toDateOnly(presetStart) ?? dateToIso(new Date())
       setStart(s)
-      setEnd(normDate(presetEnd) ?? s)
+      setEnd(toDateOnly(presetEnd) ?? s)
       setDescrizione("")
     }
   }, [open, existing, presetStart, presetEnd])
@@ -181,7 +172,7 @@ export function FerieEditDialog({
                 value={start}
                 onChange={handleStartChange}
                 clearable={false}
-                disableBefore={isNew ? new Date(todayIso()) : undefined}
+                disableBefore={isNew ? new Date(dateToIso(new Date())) : undefined}
               />
             </div>
             <div className="grid gap-1.5">

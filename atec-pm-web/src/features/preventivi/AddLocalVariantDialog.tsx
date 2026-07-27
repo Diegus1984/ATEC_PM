@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { parseDecimal } from "@/lib/format"
 
 export interface LocalVariantValues {
   code: string
@@ -19,11 +20,6 @@ export interface LocalVariantValues {
   quantity: number
   sellPrice: number
   costPrice: number
-}
-
-function parseDecimal(value: string): number {
-  const n = Number((value ?? "").replace(",", "."))
-  return Number.isFinite(n) ? n : 0
 }
 
 /** Aggiunge una variante locale a un prodotto del preventivo. Fedele a AddLocalVariantDialog del WPF. */

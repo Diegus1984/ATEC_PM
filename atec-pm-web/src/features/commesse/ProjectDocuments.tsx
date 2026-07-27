@@ -56,12 +56,8 @@ import { FileDocContextMenu } from "./FileDocContextMenu"
 import { FolderDocContextMenu } from "./FolderDocContextMenu"
 import { useProjectDocumentsActions } from "./project-documents-actions"
 import { ProjectFilePreviewDialog } from "./ProjectFilePreviewDialog"
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+import { formatSize } from "@/lib/format"
+import { sortItems } from "./documents-shared"
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—"
@@ -73,15 +69,6 @@ function formatDateTime(value: string | null): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  })
-}
-
-function sortItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) => {
-    if (a.isFolder !== b.isFolder) {
-      return a.isFolder ? -1 : 1
-    }
-    return a.name.localeCompare(b.name, "it")
   })
 }
 

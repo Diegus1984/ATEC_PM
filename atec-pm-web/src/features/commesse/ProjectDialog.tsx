@@ -32,7 +32,8 @@ import {
 } from "@/lib/api/projects"
 import { fetchActiveActivityCatalog } from "@/lib/api/activity-catalog"
 import { seedMilestonesFromCatalog } from "@/lib/api/milestones"
-import { dateToIso, isoToDate } from "@/lib/date-iso"
+import { dateToIso, isoToDate, toDateOnly } from "@/lib/date-iso"
+import { parseDecimal } from "@/lib/format"
 
 const NO_SELECTION = "__none__"
 
@@ -79,16 +80,6 @@ const EMPTY = {
 }
 
 type FormState = typeof EMPTY
-
-function parseDecimal(value: string): number {
-  const n = Number(value.replace(",", "."))
-  return Number.isFinite(n) ? n : 0
-}
-
-/** Normalizza una data dal server (ISO datetime) a date-only `yyyy-MM-dd`. */
-function toDateOnly(value: string | null): string | null {
-  return value ? value.slice(0, 10) : null
-}
 
 export function ProjectDialog({
   open,

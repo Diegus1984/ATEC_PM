@@ -1,0 +1,28 @@
+/** Tipi API allineati a ATEC.PM.Shared/DTOs — aggiornare con openapi-typescript
+ *  quando Swagger è attivo. Un file per dominio: importare sempre da
+ *  "@/lib/api/types", mai dai singoli file. */
+
+export * from "./acquisti"
+export * from "./admin"
+export * from "./anagrafiche"
+export * from "./auth"
+export * from "./checklist"
+export * from "./codex"
+export * from "./common"
+export * from "./costing"
+export * from "./dashboard"
+export * from "./ddp"
+export * from "./employees"
+export * from "./gamma"
+export * from "./milestones"
+export * from "./mom"
+export * from "./notifiche"
+export * from "./officina"
+export * from "./phases"
+export * from "./projects"
+export * from "./quotes"
+export * from "./resources"
+export * from "./sal"
+export * from "./templates"
+export * from "./timesheet"
+export * from "./work-requests"

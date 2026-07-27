@@ -1,4 +1,5 @@
 import type { MoMActionItem, MoMActionItemSaveRequest } from "@/lib/api/types"
+import { toDateOnly } from "@/lib/date-iso"
 
 export interface HeaderState {
   id: number
@@ -70,19 +71,15 @@ export function todayIso(): string {
   ).padStart(2, "0")}`
 }
 
-export function dayOf(value: string | null): string | null {
-  return value ? value.slice(0, 10) : null
-}
-
 export function formatDate(value: string | null): string {
-  const day = dayOf(value)
+  const day = toDateOnly(value)
   if (!day) return "—"
   const [year, month, date] = day.split("-")
   return `${date}/${month}/${year}`
 }
 
 export function isOverdue(item: MoMActionItem, today: string): boolean {
-  const day = dayOf(item.dataCheck)
+  const day = toDateOnly(item.dataCheck)
   return day != null && item.status !== "CLOSED" && day < today
 }
 

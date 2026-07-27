@@ -21,10 +21,7 @@ import { fetchDdpStatuses } from "@/lib/api/ddp-config"
 import type { DdpFeedbackAcquistiGroup, DdpStatusItem } from "@/lib/api/types"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 import { cn } from "@/lib/utils"
-
-function typeLabel(ddpType: string): string {
-  return ddpType === "OFFICINA" ? "OFFICINA" : "COMMERCIALE"
-}
+import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
 
 function DdpGroupCard({
   group,
@@ -66,7 +63,7 @@ function DdpGroupCard({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-sm">
-          DDP {typeLabel(group.ddpType)}
+          DDP {ddpTypeLabel(group.ddpType)}
         </CardTitle>
         {hiddenCount > 0 && (
           <div className="flex items-center gap-2">

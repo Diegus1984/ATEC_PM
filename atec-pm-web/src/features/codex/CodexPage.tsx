@@ -2,12 +2,16 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   FilterX,
+  Link2,
+  ListChecks,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Tag,
   Trash2,
 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -41,12 +45,17 @@ import {
   startCodexSync,
 } from "@/lib/api/codex"
 import type { CodexListItem } from "@/lib/api/types"
+import { formatDateShort } from "@/lib/date-iso"
 import { getSession } from "@/lib/auth/session"
-import { euro } from "@/lib/format"
+import { decodeHtmlEntities, euro } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 
+import { CodexDaneaMappingDialog } from "./CodexDaneaMappingDialog"
 import { CodexEditDialog } from "./CodexEditDialog"
 import { CodexGeneratePanel } from "./CodexGeneratePanel"
+import { CodexNewCodeDialog } from "./CodexNewCodeDialog"
+import { canRecodeCodex } from "./codex-roles"
+import { dash } from "@/lib/format"
 
 const PAGE_SIZE = 50
 const COLUMN_STORAGE_KEY = "atec_pm_codex_columns"
@@ -63,11 +72,7 @@ function formatCodexDate(value: string): string {
   if (!value) return "—"
   const date = new Date(value)
   if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1) return "—"
-  return date.toLocaleDateString("it-IT")
-}
-
-function dash(value: string): React.ReactNode {
-  return value && value.trim() ? value : "—"
+  return formatDateShort(date)
 }
 
 const COLUMNS: CodexColumn[] = [
@@ -79,11 +84,26 @@ const COLUMNS: CodexColumn[] = [
     ),
   },
   {
+    key: "codiceNuovo",
+    label: "Codice nuovo",
+    cell: (item) =>
+      item.codiceNuovo ? (
+        <span className="font-medium tabular-nums text-primary">
+          {item.codiceNuovo}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     key: "descr",
     label: "Descrizione",
     cell: (item) => (
-      <span className="block max-w-[320px] truncate" title={item.descr}>
-        {dash(item.descr)}
+      <span
+        className="block max-w-[320px] truncate"
+        title={decodeHtmlEntities(item.descr)}
+      >
+        {dash(decodeHtmlEntities(item.descr))}
       </span>
     ),
   },
@@ -187,7 +207,9 @@ function loadVisibility(): Record<string, boolean> {
 export function CodexPage() {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
-  const isAdmin = getSession()?.user.userRole === "ADMIN"
+  const userRole = getSession()?.user.userRole
+  const isAdmin = userRole === "ADMIN"
+  const canRecode = canRecodeCodex(userRole)
 
   const [page, setPage] = React.useState(1)
   const [searchInput, setSearchInput] = React.useState("")
@@ -203,6 +225,8 @@ export function CodexPage() {
   )
   const [showGenerate, setShowGenerate] = React.useState(false)
   const [editItem, setEditItem] = React.useState<CodexListItem | null>(null)
+  const [newCodeItem, setNewCodeItem] = React.useState<CodexListItem | null>(null)
+  const [daneaItem, setDaneaItem] = React.useState<CodexListItem | null>(null)
 
   const setColumnFilter = React.useCallback((param: string, value: string) => {
     setColumnFilters((prev) => {
@@ -293,7 +317,8 @@ export function CodexPage() {
   const items = listQuery.data?.items ?? []
   const totalCount = listQuery.data?.totalCount ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-  const colSpan = visibleColumns.length + (isAdmin ? 1 : 0)
+  const showActions = isAdmin || canRecode
+  const colSpan = visibleColumns.length + (showActions ? 1 : 0)
 
   return (
     <div className="space-y-4">
@@ -341,6 +366,14 @@ export function CodexPage() {
                 <Button size="sm" onClick={() => setShowGenerate(true)}>
                   <Plus />
                   Genera Codice
+                </Button>
+              ) : null}
+              {canRecode ? (
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/codex/ricodifica">
+                    <ListChecks />
+                    Ricodifica
+                  </Link>
                 </Button>
               ) : null}
             </div>
@@ -426,7 +459,7 @@ export function CodexPage() {
                       />
                     </TableHead>
                   ))}
-                  {isAdmin ? <TableHead className="w-12" /> : null}
+                  {showActions ? <TableHead className="w-12" /> : null}
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
                   {visibleColumns.map((column) => (
@@ -440,7 +473,7 @@ export function CodexPage() {
                       />
                     </TableHead>
                   ))}
-                  {isAdmin ? <TableHead className="w-12" /> : null}
+                  {showActions ? <TableHead className="w-12" /> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -484,25 +517,49 @@ export function CodexPage() {
                           {column.cell(item)}
                         </TableCell>
                       ))}
-                      {isAdmin ? (
+                      {showActions ? (
                         <TableCell className="text-right">
                           <RowActionsMenu
                             label={item.codice}
                             actions={[
-                              {
-                                label: "Modifica",
-                                icon: Pencil,
-                                onClick: () => setEditItem(item),
-                              },
-                              {
-                                label: "Elimina",
-                                icon: Trash2,
-                                destructive: true,
-                                separatorBefore: true,
-                                onClick: () => {
-                                  void handleDelete(item)
-                                },
-                              },
+                              ...(canRecode
+                                ? [
+                                    {
+                                      label: item.codiceNuovo
+                                        ? "Codice nuovo…"
+                                        : "Assegna codice nuovo…",
+                                      icon: Tag,
+                                      onClick: () => setNewCodeItem(item),
+                                    },
+                                  ]
+                                : []),
+                              ...(canRecode && item.codiceNuovo
+                                ? [
+                                    {
+                                      label: "Articoli Danea…",
+                                      icon: Link2,
+                                      onClick: () => setDaneaItem(item),
+                                    },
+                                  ]
+                                : []),
+                              ...(isAdmin
+                                ? [
+                                    {
+                                      label: "Modifica",
+                                      icon: Pencil,
+                                      onClick: () => setEditItem(item),
+                                    },
+                                    {
+                                      label: "Elimina",
+                                      icon: Trash2,
+                                      destructive: true,
+                                      separatorBefore: true,
+                                      onClick: () => {
+                                        void handleDelete(item)
+                                      },
+                                    },
+                                  ]
+                                : []),
                             ]}
                           />
                         </TableCell>
@@ -533,6 +590,20 @@ export function CodexPage() {
           setEditItem(null)
           await queryClient.invalidateQueries({ queryKey: ["codex"] })
         }}
+      />
+
+      <CodexNewCodeDialog
+        item={newCodeItem}
+        onClose={() => setNewCodeItem(null)}
+        onSaved={() => {
+          setNewCodeItem(null)
+          void queryClient.invalidateQueries({ queryKey: ["codex"] })
+        }}
+      />
+
+      <CodexDaneaMappingDialog
+        item={daneaItem}
+        onClose={() => setDaneaItem(null)}
       />
     </div>
   )

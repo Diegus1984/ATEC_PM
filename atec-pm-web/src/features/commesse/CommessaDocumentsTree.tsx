@@ -18,15 +18,7 @@ import {
   filterFileTree,
   normalizeDocPath,
 } from "./project-documents-filter"
-
-function sortItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) => {
-    if (a.isFolder !== b.isFolder) {
-      return a.isFolder ? -1 : 1
-    }
-    return a.name.localeCompare(b.name, "it")
-  })
-}
+import { sortItems } from "./documents-shared"
 
 function sortTreeItems(items: FileTreeItem[]): FileTreeItem[] {
   return [...items].sort((a, b) => {

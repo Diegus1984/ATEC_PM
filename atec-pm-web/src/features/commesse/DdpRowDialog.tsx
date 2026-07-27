@@ -1,8 +1,9 @@
 import * as React from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/api/client"
 import { DateField } from "@/components/shared/date-field"
+import { SupplierSearchCombobox } from "@/components/shared/supplier-search-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { updateDdpRow } from "@/lib/api/project-ddp"
+import { fetchSuppliers } from "@/lib/api/suppliers"
 import type {
   DdpDestinationItem,
   DdpRowItem,
@@ -33,10 +35,15 @@ import {
   buildDestinationOptions,
   DDP_DESTINATION_NONE,
 } from "./ddp-destination-options"
+import { DDP_STATUS_VERIFY, filterStatusOptions, isCommercialQtyEditable } from "./ddp-constants"
+import { toDateOnly } from "@/lib/date-iso"
+import { parseDecimal } from "@/lib/format"
 
 const EDITABLE = {
   quantity: "1",
   itemStatus: "",
+  supplierId: null as number | null,
+  supplierName: "",
   daneaRef: "",
   dateNeeded: null as string | null,
   destination: "",
@@ -46,26 +53,18 @@ const EDITABLE = {
 
 type EditableState = typeof EDITABLE
 
-function parseDecimal(value: string): number {
-  const n = Number(value.replace(",", "."))
-  return Number.isFinite(n) ? n : 0
-}
-
-function toDateOnly(value: string | null): string | null {
-  return value ? value.slice(0, 10) : null
-}
-
 /**
  * Modifica di una riga DDP commerciale esistente. Le nuove righe si inseriscono
- * dal picker Catalogo (CatalogPickerDialog); qui il server persiste solo
- * quantità, stato, rif. Danea, data, destinazione e note — codice, descrizione,
- * UM, costo, fornitore e produttore restano in sola lettura.
+ * dal picker Catalogo (CatalogPickerDialog); qui il server persiste quantità,
+ * stato, fornitore, rif. Danea, data, destinazione e note — codice, descrizione,
+ * UM, costo e produttore restano in sola lettura (provengono dal catalogo).
  */
 export function DdpRowDialog({
   open,
   projectId,
   target,
   statuses,
+  transitions,
   destinations,
   onClose,
   onSaved,
@@ -75,6 +74,8 @@ export function DdpRowDialog({
   projectId: number
   target: DdpRowItem | null
   statuses: DdpStatusItem[]
+  /** Matrice avanzamenti (v7): stato corrente → stati selezionabili. */
+  transitions?: Record<string, string[]>
   destinations: DdpDestinationItem[]
   onClose: () => void
   onSaved: () => Promise<void>
@@ -83,13 +84,27 @@ export function DdpRowDialog({
 }) {
   const editRow = target
 
+  // Finestra opzioni: ristretta alle transizioni ammesse dallo stato salvato sulla riga.
+  const statusOptions = React.useMemo(
+    () => filterStatusOptions(statuses, editRow?.itemStatus, transitions),
+    [statuses, editRow?.itemStatus, transitions]
+  )
+
   const defaultStatus =
-    statuses.find((s) => s.statusKey === "DO")?.statusKey ??
+    statuses.find((s) => s.statusKey === DDP_STATUS_VERIFY)?.statusKey ??
     statuses[0]?.statusKey ??
-    "DO"
+    DDP_STATUS_VERIFY
 
   const [form, setForm] = React.useState<EditableState>(EDITABLE)
   const [error, setError] = React.useState<string | null>(null)
+  const canEditQuantity = isCommercialQtyEditable(form.itemStatus)
+
+  // Anagrafica per la combobox fornitore: caricata solo a dialog aperto.
+  const suppliersQuery = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: fetchSuppliers,
+    enabled: open,
+  })
 
   function set<K extends keyof EditableState>(key: K, value: EditableState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -103,6 +118,8 @@ export function DdpRowDialog({
     setForm({
       quantity: String(editRow.quantity ?? 0),
       itemStatus: editRow.itemStatus || defaultStatus,
+      supplierId: editRow.supplierId ?? null,
+      supplierName: editRow.supplierName ?? "",
       daneaRef: editRow.daneaRef ?? "",
       dateNeeded: toDateOnly(editRow.dateNeeded),
       destination: editRow.destination ?? "",
@@ -118,7 +135,14 @@ export function DdpRowDialog({
       if (!editRow) {
         return
       }
-      const quantity = parseDecimal(form.quantity)
+      const nextStatus = form.itemStatus || defaultStatus
+      // Quantità accettata se la riga è/torna in VER o DO; altrimenti resta quella salvata.
+      const quantityEditable =
+        isCommercialQtyEditable(editRow.itemStatus) ||
+        isCommercialQtyEditable(nextStatus)
+      const quantity = quantityEditable
+        ? parseDecimal(form.quantity)
+        : editRow.quantity
       if (!(quantity > 0)) {
         throw new Error("La quantità deve essere maggiore di zero.")
       }
@@ -131,9 +155,10 @@ export function DdpRowDialog({
         unit: editRow.unit,
         quantity,
         unitCost: editRow.unitCost,
-        supplierId: null,
+        supplierId: form.supplierId,
+        updateSupplier: true,
         manufacturer: editRow.manufacturer,
-        itemStatus: form.itemStatus || defaultStatus,
+        itemStatus: nextStatus,
         requestedBy: editRow.requestedBy,
         daneaRef: form.daneaRef.trim(),
         dateNeeded: form.dateNeeded,
@@ -172,8 +197,8 @@ export function DdpRowDialog({
         <DialogHeader>
           <DialogTitle>Modifica riga DDP</DialogTitle>
           <DialogDescription>
-            Si aggiornano quantità, stato, rif. Danea, data, destinazione e note;
-            gli altri campi provengono dal catalogo.
+            Si aggiornano quantità, stato, fornitore, rif. Danea, data,
+            destinazione e note; gli altri campi provengono dal catalogo.
           </DialogDescription>
         </DialogHeader>
 
@@ -199,8 +224,14 @@ export function DdpRowDialog({
               <Label>Quantità</Label>
               <Input
                 inputMode="decimal"
-                autoFocus
+                autoFocus={canEditQuantity}
                 value={form.quantity}
+                disabled={!canEditQuantity}
+                title={
+                  canEditQuantity
+                    ? undefined
+                    : "La quantità è modificabile solo in stato Da Ordinare"
+                }
                 onChange={(event) => set("quantity", event.target.value)}
               />
             </div>
@@ -218,7 +249,7 @@ export function DdpRowDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {statuses.map((status) => (
+                  {statusOptions.map((status) => (
                     <SelectItem key={status.statusKey} value={status.statusKey}>
                       {status.label}
                     </SelectItem>
@@ -231,9 +262,16 @@ export function DdpRowDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Fornitore</Label>
-              <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
-                {editRow.supplierName || "(nessuno)"}
-              </div>
+              <SupplierSearchCombobox
+                suppliers={suppliersQuery.data ?? []}
+                loading={suppliersQuery.isLoading}
+                value={form.supplierName}
+                placeholder="Cerca fornitore… (vuoto = nessuno)"
+                onValueChange={(companyName, supplier) => {
+                  set("supplierName", companyName)
+                  set("supplierId", supplier?.id ?? null)
+                }}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Produttore</Label>

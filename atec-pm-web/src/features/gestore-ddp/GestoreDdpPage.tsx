@@ -4,6 +4,7 @@ import { type ColumnDef, type SortingState } from "@tanstack/react-table"
 import { ArrowUpDown, ClipboardList, ExternalLink, Warehouse } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
+import { ColumnFilterCombobox } from "@/components/shared/column-filter-combobox"
 import { DataTableCardFiltered } from "@/components/shared/data-table-card-filtered"
 import {
   DataTableColumnSelectFilter,
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -27,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getSession } from "@/lib/auth/session"
+import { formatDateShort } from "@/lib/date-iso"
 import { fetchDdpSummary } from "@/lib/api/ddp-manager"
 import { fetchDdpStatuses } from "@/lib/api/ddp-config"
 import type { DdpProjectSummary, DdpStatusItem } from "@/lib/api/types"
@@ -36,6 +39,7 @@ import { cn } from "@/lib/utils"
 
 import { DdpPieWithLegend } from "./DdpPieWithLegend"
 import { buildRipartizioneBars, type BarRow } from "./ddp-sintesi-logic"
+import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
 
 const COLUMN_LABELS: Record<string, string> = {
   code: "Commessa",
@@ -57,15 +61,11 @@ const DEFAULT_SORTING: SortingState = [
 
 type KpiFilter = null | "overdue" | "commercial" | "officina"
 
-function typeLabel(ddpType: string): string {
-  return ddpType === "OFFICINA" ? "OFFICINA" : "COMMERCIALE"
-}
-
 function formatDateTime(value: string | null): string {
   if (!value) return "—"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "—"
-  return `${date.toLocaleDateString("it-IT")} ${date.toLocaleTimeString("it-IT", {
+  return `${formatDateShort(date)} ${date.toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
   })}`
@@ -76,7 +76,7 @@ function deliveryLabel(start: string | null, end: string | null): string {
   const from = new Date(start)
   const to = new Date(end)
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return "—"
-  return `${from.toLocaleDateString("it-IT")} → ${to.toLocaleDateString("it-IT")}`
+  return `${formatDateShort(from)} → ${formatDateShort(to)}`
 }
 
 function SortHeader({
@@ -106,7 +106,7 @@ function TypeBadge({ ddpType }: { ddpType: string }) {
           : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
       )}
     >
-      {typeLabel(ddpType)}
+      {ddpTypeLabel(ddpType)}
     </Badge>
   )
 }
@@ -224,9 +224,12 @@ export function GestoreDdpPage() {
     localStorage.setItem(viewModeStorageKey(), mode)
   }, [])
 
+  // staleTime 0: i KPI aggregati dipendono dalle distinte modificate in altre pagine
+  // e l'hub esclude l'autore della modifica — al rientro si rilegge sempre dal server.
   const query = useQuery({
     queryKey: ["ddp-summary"],
     queryFn: fetchDdpSummary,
+    staleTime: 0,
   })
 
   const statusesQuery = useQuery({
@@ -280,7 +283,7 @@ export function GestoreDdpPage() {
   const tipoFilterOptions = React.useMemo(() => {
     const values = new Set<string>()
     for (const item of filteredData) {
-      values.add(typeLabel(item.ddpType))
+      values.add(ddpTypeLabel(item.ddpType))
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b, "it"))
   }, [filteredData])
@@ -353,11 +356,13 @@ export function GestoreDdpPage() {
         filterFn: exactColumnFilterFn,
         meta: {
           filterInput: ({ value, onChange }) => (
-            <DataTableColumnSelectFilter
-              value={value}
+            <ColumnFilterCombobox
+              value={(value as string) ?? ""}
               onChange={onChange}
               options={codeFilterOptions}
-              allLabel="Tutte"
+              placeholder="Commessa…"
+              searchPlaceholder="Cerca commessa…"
+              emptyText="Nessuna commessa"
             />
           ),
         },
@@ -377,11 +382,13 @@ export function GestoreDdpPage() {
         filterFn: exactColumnFilterFn,
         meta: {
           filterInput: ({ value, onChange }) => (
-            <DataTableColumnSelectFilter
-              value={value}
+            <ColumnFilterCombobox
+              value={(value as string) ?? ""}
               onChange={onChange}
               options={customerFilterOptions}
-              allLabel="Tutti"
+              placeholder="Cliente…"
+              searchPlaceholder="Cerca cliente…"
+              emptyText="Nessun cliente"
             />
           ),
         },
@@ -394,7 +401,7 @@ export function GestoreDdpPage() {
           if (filterValue === undefined || filterValue === null || filterValue === "") {
             return true
           }
-          return typeLabel(String(row.getValue(columnId))) === String(filterValue)
+          return ddpTypeLabel(String(row.getValue(columnId))) === String(filterValue)
         },
         meta: {
           filterInput: ({ value, onChange }) => (
@@ -407,8 +414,8 @@ export function GestoreDdpPage() {
         },
         cell: ({ row }) => <TypeBadge ddpType={row.original.ddpType} />,
         sortingFn: (a, b) =>
-          typeLabel(a.original.ddpType).localeCompare(
-            typeLabel(b.original.ddpType),
+          ddpTypeLabel(a.original.ddpType).localeCompare(
+            ddpTypeLabel(b.original.ddpType),
             "it"
           ),
       },
@@ -492,12 +499,25 @@ export function GestoreDdpPage() {
         cell: ({ row }) => (
           <div className="flex justify-end">
             <RowActionsMenu
-              label={`${row.original.code} ${typeLabel(row.original.ddpType)}`}
+              label={`${row.original.code} ${ddpTypeLabel(row.original.ddpType)}`}
               actions={[
                 {
                   label: "Apri sintesi",
                   icon: ExternalLink,
                   onClick: () => openSintesi(row.original),
+                },
+                {
+                  label: "Apri commessa",
+                  icon: ExternalLink,
+                  onClick: () =>
+                    navigate(
+                      `/commesse/${row.original.projectId}/${
+                        row.original.ddpType === "COMMERCIAL"
+                          ? "ddp_commercial"
+                          : "ddp_officina"
+                      }`,
+                      { state: { fromGlobal: "/gestore-ddp" } }
+                    ),
                 },
               ]}
             />
@@ -525,10 +545,10 @@ export function GestoreDdpPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => navigate("/gestore-ddp/feedback/acquisti")}>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => navigate("/acquisti")}>
           <ClipboardList className="mr-1.5 size-4" />
-          Feedback Acquisti
+          Inbox Acquisti
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate("/gestore-ddp/feedback/magazzino")}>
           <Warehouse className="mr-1.5 size-4" />
@@ -568,34 +588,35 @@ export function GestoreDdpPage() {
           toolbarActions={viewToggle}
         />
       ) : (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-            <div>
-              <CardTitle>Gestore DDP</CardTitle>
-              <CardDescription>
-                Distinte raggruppate per commessa.
-              </CardDescription>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Distinte raggruppate per commessa.
+            </p>
             {viewToggle}
-          </CardHeader>
-          <div className="space-y-6 px-6 pb-6">
-            {query.isLoading ? (
-              <p className="text-sm text-muted-foreground">Caricamento…</p>
-            ) : groupedByCode.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {kpiFilter
-                  ? "Nessuna distinta per il filtro KPI selezionato."
-                  : "Nessuna commessa con righe DDP."}
-              </p>
-            ) : (
-              groupedByCode.map((group) => (
-                <div key={group.code} className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold">{group.code}</span>
-                    <span className="text-sm text-muted-foreground">
+          </div>
+          {query.isLoading ? (
+            <p className="text-sm text-muted-foreground">Caricamento…</p>
+          ) : groupedByCode.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {kpiFilter
+                ? "Nessuna distinta per il filtro KPI selezionato."
+                : "Nessuna commessa con righe DDP."}
+            </p>
+          ) : (
+            // Una card per commessa (come i gruppi del prototipo V30): header con
+            // codice + cliente, dentro le distinte Commerciale/Officina affiancate.
+            groupedByCode.map((group) => (
+              <Card key={group.code}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex flex-wrap items-baseline gap-x-2 text-base">
+                    {group.code}
+                    <span className="text-sm font-normal text-muted-foreground">
                       {group.customerName}
                     </span>
-                  </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     {group.items.map((item) => (
                       <DdpProjectCard
@@ -610,11 +631,11 @@ export function GestoreDdpPage() {
                       />
                     ))}
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       )}
     </div>
   )

@@ -34,6 +34,7 @@ import {
 import type { QuoteDto, QuoteItemDto, QuoteSaveDto } from "@/lib/api/types"
 import { getSession } from "@/lib/auth/session"
 import { notifyError } from "@/lib/toast"
+import { formatDateShort } from "@/lib/date-iso"
 
 import { AddLocalVariantDialog, type LocalVariantValues } from "./AddLocalVariantDialog"
 import { AddQuoteItemDialog } from "./AddQuoteItemDialog"
@@ -41,14 +42,7 @@ import { CostingTree } from "./CostingTree"
 import { RtfEditDialog } from "./RtfEditDialog"
 import { quoteStatusLabel, quoteStatusMeta } from "./quote-status"
 import { quoteTypeLabel } from "./quote-type"
-
-function fmt2(value: number): string {
-  return value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function parseDecimal(value: string): number {
-  const n = Number((value ?? "").replace(",", "."))
-  return Number.isFinite(n) ? n : 0
-}
+import { fmt2, parseDecimal } from "@/lib/format"
 
 interface ProductGroup {
   parent: QuoteItemDto
@@ -264,7 +258,7 @@ export function QuoteDetailPage() {
               </span>
               <span className="font-medium text-[#2563EB]">{quote.customerName}</span>
               <span className="text-xs">di {quote.createdByName}</span>
-              <span className="text-xs">{new Date(quote.createdAt).toLocaleDateString("it-IT")}</span>
+              <span className="text-xs">{formatDateShort(new Date(quote.createdAt))}</span>
               <span
                 className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
                 style={{ backgroundColor: isPlant ? "#FFF7ED" : "#F0FDF4", color: isPlant ? "#EA580C" : "#059669" }}

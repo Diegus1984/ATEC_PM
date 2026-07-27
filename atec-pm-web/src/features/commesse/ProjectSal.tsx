@@ -1,115 +1,65 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowDownToLine, ArrowUpToLine, GripVertical, Lock, Plus, RefreshCw, Trash2 } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import { getSession } from "@/lib/auth/session"
 
 import { useConfirm } from "@/components/shared/confirm"
-import { DateField } from "@/components/shared/date-field"
-import { RowActionsMenu } from "@/components/shared/row-actions"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
+  TableFooter,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  fetchSal,
-  saveSalHeader,
   createSalRow,
-  updateSalRow,
-  deleteSalRow,
-  reorderSalRows,
-  seedSalTemplate,
+  fetchPaymentStatesActive,
+  fetchSal,
   fetchSalConditions,
+  fetchSapCausaliActive,
+  reorderSalRows,
+  saveSalHeader,
+  seedSalTemplate,
 } from "@/lib/api/sal"
-import type { SalRow, SalHeaderSaveRequest, SalRowSaveRequest } from "@/lib/api/types"
-import { useSalHub } from "@/lib/signalr/use-sal-hub"
+import type { SalHeaderSaveRequest } from "@/lib/api/types"
+import { getSession } from "@/lib/auth/session"
+import { euro } from "@/lib/format"
+import { useGlobalSalHub, useSalHub } from "@/lib/signalr/use-sal-hub"
 import { notifyError } from "@/lib/toast"
 import { cn } from "@/lib/utils"
-import { salAlertState, salRowClass } from "./sal-utils"
+import { fmtSalPct } from "@/features/sal/SalIncassoProgress"
 import { toIso } from "@/features/risorse/planner-logic"
 
-type DropHint = { id: number; after: boolean }
-
-/** Percentuale con al massimo 1 decimale, virgola all'italiana (nessun decimale se intera). */
-function fmtPct(n: number): string {
-  const r = Math.round(n * 10) / 10
-  return Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ",")
-}
-
-function Stat({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-sm font-medium">{children}</span>
-    </div>
-  )
-}
-
-function GrowTextarea({
-  value,
-  onChange,
-  onCommit,
-  placeholder,
-  className,
-  disabled,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onCommit: () => void
-  placeholder?: string
-  className?: string
-  disabled?: boolean
-}) {
-  return (
-    <Textarea
-      rows={1}
-      value={value}
-      placeholder={placeholder}
-      spellCheck={false}
-      disabled={disabled}
-      className={cn(
-        "field-sizing-content min-h-8 resize-none px-2 py-1 text-sm leading-5 shadow-none",
-        className
-      )}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onCommit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault()
-          onCommit()
-          e.currentTarget.blur()
-        }
-      }}
-    />
-  )
-}
+import { NewSalRowComponent } from "./sal-new-row"
+import { SalRowComponent } from "./sal-row"
+import { SalSheetHead } from "./sal-sheet-head"
+import {
+  emptyRowRequest,
+  SAL_COL_ORDER,
+  SAL_ECONOMICS_COLS,
+  SAL_HIDEABLE_COLS,
+  SAL_VISIBILITY_STORAGE_KEY,
+  type DropHint,
+  type SalColId,
+} from "./sal-sheet-shared"
+import { SalSheetToolbar } from "./sal-sheet-toolbar"
+import {
+  salIsPagata,
+  salPagamentoStyle,
+  salRowClass,
+  salRowVisualState,
+} from "./sal-utils"
 
 export function ProjectSal({
   projectId,
+  projectCode,
+  projectTitle,
 }: {
   projectId: number
   projectCode?: string
   projectTitle?: string
 }) {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   const confirm = useConfirm()
 
   const session = getSession()
@@ -131,40 +81,114 @@ export function ProjectSal({
 
   useSalHub(projectId > 0, invalidate, projectId)
 
-  // Condizioni di pagamento attive
+  // Realtime anagrafiche: un cambio ai cataloghi SAL da un altro client (colori stati
+  // pagamento, nuove condizioni/causali) deve riflettersi anche qui nel tab commessa.
+  // Invalida SOLO le query dei cataloghi: ["sal","project",...] è già coperta da
+  // useSalHub qui sopra — rifarla qui significherebbe doppio refetch su ogni evento.
+  const invalidateLookups = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["sal", "conditions"] })
+    void queryClient.invalidateQueries({ queryKey: ["sal", "sap-causali"] })
+    void queryClient.invalidateQueries({ queryKey: ["sal", "payment-states"] })
+  }, [queryClient])
+
+  useGlobalSalHub(projectId > 0, invalidateLookups)
+
+  // Anagrafiche attive: Condizioni di pagamento, Causali Conto SAP, Stati Pagamento
   const conditionsQuery = useQuery({
     queryKey: ["sal", "conditions", "active"],
     queryFn: () => fetchSalConditions(true),
+  })
+  const sapCausaliQuery = useQuery({
+    queryKey: ["sal", "sap-causali", "active"],
+    queryFn: fetchSapCausaliActive,
+  })
+  const paymentStatesQuery = useQuery({
+    queryKey: ["sal", "payment-states", "active"],
+    queryFn: fetchPaymentStatesActive,
   })
 
   const bundle = query.data
   const header = bundle?.header
   const rows = React.useMemo(() => bundle?.rows ?? [], [bundle])
 
-  const { totalPerc, paidPerc, advancedIncasso } = React.useMemo(() => {
+  // Avanzamento incasso v10: Σ% delle righe con Pagamento = «Pagata» (non più su stato)
+  const { totalPerc, paidPerc } = React.useMemo(() => {
     const tot = rows.reduce((acc, r) => acc + Number(r.perc ?? 0), 0)
-    const paid = rows.reduce((acc, r) => acc + (r.stato === "pagata" ? Number(r.perc ?? 0) : 0), 0)
-    const adv = tot > 0 ? (paid / tot) * 100 : 0
-    return { totalPerc: tot, paidPerc: paid, advancedIncasso: adv }
+    const paid = rows.reduce(
+      (acc, r) => acc + (salIsPagata(r.pagamento) ? Number(r.perc ?? 0) : 0),
+      0
+    )
+    return { totalPerc: tot, paidPerc: paid }
   }, [rows])
 
-  // Stato interno per l'editing dell'header
-  const [cliente, setCliente] = React.useState("")
+  // Totali economici footer (D4: importo = valore×perc/100, iva = importo×%IVA/100)
+  const sums = React.useMemo(() => {
+    let importo = 0
+    let iva = 0
+    let hasAny = false
+    for (const r of rows) {
+      if (header?.valore == null || r.perc == null) continue
+      const imp = header.valore * (Number(r.perc) / 100)
+      const i = imp * ((r.ivaPerc ?? 0) / 100)
+      importo += imp
+      iva += i
+      hasAny = true
+    }
+    return { importo, iva, tot: importo + iva, hasAny }
+  }, [rows, header])
+
+  // Σ% «esatto» al netto del rumore floating point (verde solo se = 100,00)
+  const percOk = Math.abs(totalPerc - 100) < 0.005
+
+  // Stato interno per l'editing dell'header (cliente = sola lettura dalla commessa)
   const [valore, setValore] = React.useState("")
+  const [po, setPo] = React.useState("")
+  const [rifOfferta, setRifOfferta] = React.useState("")
+
+  const customerName = header?.customerName?.trim() || "—"
+
+  // Sync header → input con deps PRIMITIVE (non l'oggetto header: a ogni refetch
+  // cambia identità anche a dati invariati e resetterebbe i campi mentre l'utente
+  // digita). Dentro l'effect si aggiornano solo i campi realmente cambiati lato
+  // server, tracciati nell'ultimo valore sincronizzato.
+  const headerValore = header?.valore
+  const headerPo = header?.po
+  const headerRifOfferta = header?.rifOfferta
+  const lastSyncedHeader = React.useRef<{
+    valore?: number | null
+    po?: string
+    rifOfferta?: string
+  }>({})
 
   React.useEffect(() => {
-    if (header) {
-      setCliente(header.cliente || "")
-      setValore(header.valore === null || header.valore === undefined ? "" : String(header.valore))
+    const prev = lastSyncedHeader.current
+    if (prev.valore !== headerValore)
+      setValore(
+        headerValore === null || headerValore === undefined ? "" : String(headerValore)
+      )
+    if (prev.po !== headerPo) setPo(headerPo || "")
+    if (prev.rifOfferta !== headerRifOfferta) setRifOfferta(headerRifOfferta || "")
+    lastSyncedHeader.current = {
+      valore: headerValore,
+      po: headerPo,
+      rifOfferta: headerRifOfferta,
     }
-  }, [header])
+  }, [headerValore, headerPo, headerRifOfferta])
 
   const handleSaveHeader = async (updatedFields: Partial<SalHeaderSaveRequest>) => {
     if (!header) return
     try {
+      // Contratto null-preserve: po/rifOfferta SEMPRE stringhe esplicite (anche vuote)
       const payload: SalHeaderSaveRequest = {
-        cliente: updatedFields.cliente !== undefined ? updatedFields.cliente : cliente,
-        valore: updatedFields.valore !== undefined ? updatedFields.valore : (valore === "" ? null : Number(valore)),
+        valore:
+          updatedFields.valore !== undefined
+            ? updatedFields.valore
+            : valore === ""
+              ? null
+              : Number(valore),
+        po: updatedFields.po !== undefined ? updatedFields.po : po,
+        rifOfferta:
+          updatedFields.rifOfferta !== undefined ? updatedFields.rifOfferta : rifOfferta,
         rowVersion: header.rowVersion,
       }
       await saveSalHeader(projectId, payload)
@@ -184,7 +208,7 @@ export function ProjectSal({
     }
   }
 
-  // Drag & Drop
+  // ── Drag & Drop ───────────────────────────────────────────────
   const dragIdRef = React.useRef<number | null>(null)
   const [grabId, setGrabId] = React.useState<number | null>(null)
   const [draggingId, setDraggingId] = React.useState<number | null>(null)
@@ -218,14 +242,7 @@ export function ProjectSal({
 
   const handleInsertRow = async (index: number, where: "above" | "below") => {
     try {
-      const newId = await createSalRow(projectId, {
-        step: "",
-        perc: null,
-        condizione: "",
-        dataFatt: null,
-        stato: "",
-        rowVersion: null,
-      })
+      const newId = await createSalRow(projectId, emptyRowRequest())
       const ids = rows.map((r) => r.id)
       ids.splice(where === "below" ? index + 1 : index, 0, newId)
       await reorderSalRows(projectId, ids)
@@ -236,6 +253,46 @@ export function ProjectSal({
   }
 
   const todayIso = React.useMemo(() => toIso(new Date()), [])
+
+  // ── Visibilità colonne dal menu «Colonne» (true = nascosta), persistita come
+  // nelle DataTableCard; chiave versionata (vedi gotcha localStorage). ──
+  const [hiddenCols, setHiddenCols] = React.useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(SAL_VISIBILITY_STORAGE_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch (e) {
+      console.error("Failed to load column visibility from localStorage", e)
+    }
+    return {}
+  })
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(SAL_VISIBILITY_STORAGE_KEY, JSON.stringify(hiddenCols))
+    } catch (e) {
+      console.error("Failed to save column visibility to localStorage", e)
+    }
+  }, [hiddenCols])
+
+  const showCol = React.useCallback(
+    (id: SalColId) => hiddenCols[id] !== true,
+    [hiddenCols]
+  )
+
+  const columnToggles = SAL_HIDEABLE_COLS.filter(
+    (c) => canSeeEconomics || !SAL_ECONOMICS_COLS.has(c.id)
+  ).map((c) => ({
+    id: c.id,
+    label: c.label,
+    checked: showCol(c.id),
+    onToggle: (checked: boolean) =>
+      setHiddenCols((prev) => ({ ...prev, [c.id]: !checked })),
+  }))
+
+  // Colonne effettivamente renderizzate, in ordine canonico (footer + colSpan).
+  const visibleColIds = SAL_COL_ORDER.filter(
+    (id) => (canSeeEconomics || !SAL_ECONOMICS_COLS.has(id)) && showCol(id)
+  )
 
   if (query.isLoading) {
     return (
@@ -256,129 +313,81 @@ export function ProjectSal({
   return (
     <div className="flex flex-col gap-4">
       <Card className="overflow-hidden py-0">
-        <CardHeader className="flex flex-row flex-wrap items-center gap-6 border-b bg-muted/30 py-3">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Cliente SAL</label>
-              <Input
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-                onBlur={() => void handleSaveHeader({ cliente })}
-                placeholder="Inserisci cliente..."
-                className="h-8 w-64 shadow-none"
-                disabled={!canSeeEconomics}
-              />
-            </div>
-            {canSeeEconomics && (
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Valore Commessa (€)</label>
-                <Input
-                  type="number"
-                  value={valore}
-                  onChange={(e) => setValore(e.target.value)}
-                  onBlur={() => void handleSaveHeader({ valore: valore === "" ? null : Number(valore) })}
-                  placeholder="Valore (€)..."
-                  className="h-8 w-44 font-mono text-right shadow-none"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-row gap-6 items-center">
-            <Stat label="Avanzamento Incasso SAL">
-              <span className="flex items-center gap-2 mt-1">
-                <span className="tabular-nums font-semibold text-xs">{fmtPct(advancedIncasso)}%</span>
-                <span className="h-2 w-24 overflow-hidden rounded bg-zinc-200">
-                  <span
-                    className="block h-full bg-emerald-500 transition-all duration-300"
-                    style={{ width: `${Math.min(100, advancedIncasso)}%` }}
-                  />
-                </span>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ({fmtPct(paidPerc)}% di {fmtPct(totalPerc)}%)
-                </span>
-              </span>
-            </Stat>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            {canSeeEconomics && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSeedTemplate}
-                disabled={rows.length > 0}
-                title="Precarica i 6 step SAL standard (15/15/10/20/20/20)"
-              >
-                Precarica modello standard
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw className={cn("size-3.5 mr-1.5", query.isFetching && "animate-spin")} />
-              Aggiorna
-            </Button>
-          </div>
-        </CardHeader>
+        <SalSheetToolbar
+          projectCode={projectCode}
+          projectTitle={projectTitle}
+          customerName={customerName}
+          po={po}
+          setPo={setPo}
+          rifOfferta={rifOfferta}
+          setRifOfferta={setRifOfferta}
+          valore={valore}
+          setValore={setValore}
+          onSaveHeader={(fields) => void handleSaveHeader(fields)}
+          canSeeEconomics={canSeeEconomics}
+          totalPerc={totalPerc}
+          paidPerc={paidPerc}
+          columnToggles={columnToggles}
+          onSeedTemplate={() => void handleSeedTemplate()}
+          seedDisabled={rows.length > 0}
+          onRefresh={() => void query.refetch()}
+          isFetching={query.isFetching}
+        />
 
         <CardContent className="p-3">
           {rows.length > 0 && totalPerc !== 100 && (
             <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50/50 text-amber-800 text-xs flex items-center justify-between font-medium">
               <span>
-                ⚠️ Attenzione: il totale delle percentuali degli step SAL è <strong>{fmtPct(totalPerc)}%</strong>.
+                ⚠️ Attenzione: il totale delle percentuali degli step SAL è{" "}
+                <strong>{fmtSalPct(totalPerc)}%</strong>.
                 {totalPerc < 100
-                  ? ` Mancano ancora ${fmtPct(100 - totalPerc)}% per completare la pianificazione (residuo da pianificare).`
-                  : ` Supera il 100% di ${fmtPct(totalPerc - 100)}%.`}
+                  ? ` Mancano ancora ${fmtSalPct(100 - totalPerc)}% per completare la pianificazione (residuo da pianificare).`
+                  : ` Supera il 100% di ${fmtSalPct(totalPerc - 100)}%.`}
               </span>
             </div>
           )}
 
           {rows.length === 0 ? (
             <p className="mb-3 text-sm text-muted-foreground text-center py-6">
-              Nessun pagamento SAL pianificato per questa commessa. Precarica il modello standard o aggiungi uno step qui sotto.
+              Nessun pagamento SAL pianificato per questa commessa. Precarica il modello
+              standard o aggiungi uno step qui sotto.
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-lg border">
-            <Table className="border-separate border-spacing-y-1">
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="w-16">#</TableHead>
-                  <TableHead className="min-w-[18rem]">Descrizione / Step SAL</TableHead>
-                  <TableHead className="w-24 text-center">%</TableHead>
-                  <TableHead className="w-56">Condizione Pagamento</TableHead>
-                  {canSeeEconomics && <TableHead className="w-36 text-right">Importo (€)</TableHead>}
-                  <TableHead className="w-48 text-center">Ipotesi Fatturazione</TableHead>
-                  <TableHead className="w-48">Stato</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
+          {/* Tabella larga v10: scroller orizzontale esterno + thead sticky
+              (pattern: [&>div]:overflow-visible neutralizza lo scroller interno shadcn). */}
+          <div className="overflow-x-auto rounded-lg border [&>div]:overflow-visible">
+            <Table className="border-separate border-spacing-y-1.5">
+              <TableHeader className="sticky top-0 z-20 bg-muted/40">
+                <SalSheetHead showCol={showCol} canSeeEconomics={canSeeEconomics} />
               </TableHeader>
               <TableBody>
                 {rows.map((row, index) => {
-                  const alertState = salAlertState(row, todayIso)
-                  const rowBg = salRowClass(alertState)
-                  const isDragging = draggingId === row.id
-                  const isDropOver = dropHint?.id === row.id
-
-                  const importo = header && header.valore != null && row.perc != null
-                    ? header.valore * (row.perc / 100)
-                    : null;
+                  // Tinta riga: colore configurato in anagrafica (style inline,
+                  // stati attivi: quelli storici/disattivati restano neutri) >
+                  // classi cablate di fallback (Pagata verde / Parz. rossa /
+                  // emessa gialla / warn-pre). Mai entrambe (doppia tinta).
+                  const paymentStates = paymentStatesQuery.data ?? []
+                  const importo =
+                    header && header.valore != null && row.perc != null
+                      ? header.valore * (row.perc / 100)
+                      : null
 
                   return (
                     <SalRowComponent
                       key={row.id}
                       row={row}
                       index={index}
-                      rowBg={rowBg}
-                      isDragging={isDragging}
-                      isDropOver={isDropOver}
+                      rowBg={salRowClass(salRowVisualState(row, todayIso, paymentStates))}
+                      rowStyle={salPagamentoStyle(row.pagamento, paymentStates)}
+                      isDragging={draggingId === row.id}
+                      isDropOver={dropHint?.id === row.id}
                       dropHint={dropHint}
                       importo={importo}
+                      todayIso={todayIso}
                       activeConditions={conditionsQuery.data ?? []}
+                      sapCausali={sapCausaliQuery.data ?? []}
+                      paymentStates={paymentStates}
                       onMutated={invalidate}
                       onInsert={(where) => void handleInsertRow(index, where)}
                       onConfirm={confirm}
@@ -389,9 +398,9 @@ export function ProjectSal({
                       dragIdRef={dragIdRef}
                       handleReorder={handleReorder}
                       clearDrag={clearDrag}
-                      navigate={navigate}
                       canSeeEconomics={canSeeEconomics}
                       isAdmin={isAdmin}
+                      showCol={showCol}
                     />
                   )
                 })}
@@ -400,405 +409,82 @@ export function ProjectSal({
                   <NewSalRowComponent
                     projectId={projectId}
                     onMutated={invalidate}
+                    colSpan={visibleColIds.length - 1}
                   />
                 )}
               </TableBody>
+
+              {rows.length > 0 && (
+                <TableFooter className="bg-transparent">
+                  {/* Una cella per ogni colonna visibile (ordine canonico): i totali
+                      restano allineati qualunque sia la selezione del menu «Colonne». */}
+                  <TableRow className="border-0 bg-muted/40 hover:bg-muted/40">
+                    {visibleColIds.map((id) => {
+                      switch (id) {
+                        case "iva":
+                          return (
+                            <TableCell
+                              key={id}
+                              className="py-2 pr-4 text-right text-sm font-bold text-muted-foreground"
+                            >
+                              {sums.hasAny ? euro(sums.iva) : "—"}
+                            </TableCell>
+                          )
+                        case "totIva":
+                          return (
+                            <TableCell
+                              key={id}
+                              className="py-2 pr-4 text-right text-sm font-bold text-foreground"
+                            >
+                              {sums.hasAny ? euro(sums.tot) : "—"}
+                            </TableCell>
+                          )
+                        case "step":
+                          return (
+                            <TableCell
+                              key={id}
+                              className="py-2 text-sm font-bold uppercase tracking-wide text-muted-foreground"
+                            >
+                              Totali
+                            </TableCell>
+                          )
+                        case "perc":
+                          return (
+                            <TableCell
+                              key={id}
+                              className={cn(
+                                "py-2 text-center text-sm font-bold",
+                                percOk ? "text-emerald-600" : "text-amber-600"
+                              )}
+                              title={
+                                percOk
+                                  ? "Pianificazione completa (100%)"
+                                  : "Il totale delle percentuali non è 100%"
+                              }
+                            >
+                              {fmtSalPct(totalPerc)}%
+                            </TableCell>
+                          )
+                        case "importo":
+                          return (
+                            <TableCell
+                              key={id}
+                              className="py-2 pr-4 text-right text-sm font-bold text-foreground"
+                            >
+                              {sums.hasAny ? euro(sums.importo) : "—"}
+                            </TableCell>
+                          )
+                        default:
+                          return <TableCell key={id} className="py-2" />
+                      }
+                    })}
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
-}
-
-interface SalRowComponentProps {
-  row: SalRow
-  index: number
-  rowBg: string
-  isDragging: boolean
-  isDropOver: boolean
-  dropHint: DropHint | null
-  importo: number | null
-  activeConditions: { id: number; label: string; isActive: boolean }[]
-  onMutated: () => void
-  onInsert: (where: "above" | "below") => void
-  onConfirm: ReturnType<typeof useConfirm>
-  grabId: number | null
-  setGrabId: (id: number | null) => void
-  setDraggingId: (id: number | null) => void
-  setDropHint: (hint: DropHint | null) => void
-  dragIdRef: React.MutableRefObject<number | null>
-  handleReorder: (dragId: number, targetId: number, after: boolean) => Promise<void>
-  clearDrag: () => void
-  navigate: ReturnType<typeof useNavigate>
-  canSeeEconomics: boolean
-  isAdmin: boolean
-}
-
-function SalRowComponent({
-  row,
-  index,
-  rowBg,
-  isDragging,
-  isDropOver,
-  dropHint,
-  importo,
-  activeConditions,
-  onMutated,
-  onInsert,
-  onConfirm,
-  grabId,
-  setGrabId,
-  setDraggingId,
-  setDropHint,
-  dragIdRef,
-  handleReorder,
-  clearDrag,
-  navigate,
-  canSeeEconomics,
-  isAdmin,
-}: SalRowComponentProps) {
-  const isLocked = row.stato === "pagata" && !isAdmin
-  const [stepText, setStepText] = React.useState(row.step)
-  const [percText, setPercText] = React.useState(row.perc === null ? "" : String(row.perc))
-
-  React.useEffect(() => {
-    setStepText(row.step)
-  }, [row.step])
-
-  React.useEffect(() => {
-    setPercText(row.perc === null ? "" : String(row.perc))
-  }, [row.perc])
-
-  const patch = async (fields: Partial<SalRowSaveRequest>) => {
-    try {
-      const payload: SalRowSaveRequest = {
-        step: fields.step !== undefined ? fields.step : row.step,
-        perc: fields.perc !== undefined ? fields.perc : row.perc,
-        condizione: fields.condizione !== undefined ? fields.condizione : row.condizione,
-        dataFatt: fields.dataFatt !== undefined ? fields.dataFatt : row.dataFatt,
-        stato: fields.stato !== undefined ? fields.stato : row.stato,
-        rowVersion: row.rowVersion,
-      }
-      await updateSalRow(row.id, payload)
-      onMutated()
-    } catch (err) {
-      notifyError(err as Error)
-      onMutated()
-    }
-  }
-
-  const commitStep = () => {
-    const val = stepText.trim()
-    if (val === row.step) return
-    void patch({ step: val })
-  }
-
-  const commitPerc = () => {
-    const val = percText.trim()
-    if (val === "") {
-      if (row.perc !== null) void patch({ perc: null })
-      return
-    }
-    let n = parseFloat(val.replace(",", "."))
-    if (isNaN(n)) {
-      setPercText(row.perc === null ? "" : String(row.perc))
-      return
-    }
-    n = Math.max(0, Math.min(100, n))
-    if (n !== row.perc) void patch({ perc: n })
-    else setPercText(String(n))
-  }
-
-  const removeRow = async () => {
-    const hasData = row.step.trim() !== "" || row.perc !== null || row.condizione !== "" || row.dataFatt !== null || row.stato !== ""
-    if (hasData) {
-      const ok = await onConfirm({
-        title: "Eliminare lo step SAL?",
-        description: row.step.trim() || `Step ${index + 1}`,
-        confirmLabel: "Elimina",
-      })
-      if (!ok) return
-    }
-
-    try {
-      await deleteSalRow(row.id)
-      onMutated()
-    } catch (err) {
-      notifyError(err as Error)
-    }
-  }
-
-  const selectOptions = React.useMemo(() => {
-    const opts = [...activeConditions]
-    if (row.condizione && !opts.some((o) => o.label === row.condizione)) {
-      opts.unshift({ id: -1, label: row.condizione, isActive: false })
-    }
-    return opts
-  }, [activeConditions, row.condizione])
-
-  const onDragStart = (e: React.DragEvent) => {
-    dragIdRef.current = row.id
-    setDraggingId(row.id)
-    e.dataTransfer.effectAllowed = "move"
-    e.dataTransfer.setData("text/plain", "")
-  }
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    const dragId = dragIdRef.current
-    if (dragId === null || dragId === row.id) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const relativeY = e.clientY - rect.top
-    const after = relativeY > rect.height / 2
-    setDropHint({ id: row.id, after })
-  }
-
-  const onDragLeave = () => {
-    setDropHint(null)
-  }
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const dragId = dragIdRef.current
-    if (dragId === null || dragId === row.id || !dropHint) return
-    void handleReorder(dragId, row.id, dropHint.after)
-    clearDrag()
-  }
-
-  const formattedImporto = importo !== null
-    ? importo.toLocaleString("it-IT", { style: "currency", currency: "EUR" })
-    : "—";
-
-  return (
-    <TableRow
-      draggable={!isLocked && grabId === row.id}
-      onDragStart={onDragStart}
-      onDragEnd={clearDrag}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={cn(
-        "border-0 transition-colors",
-        rowBg,
-        isDragging && "opacity-50",
-        isDropOver && !dropHint?.after && "[&>td]:shadow-[inset_0_2px_0_0_var(--primary)]",
-        isDropOver && dropHint?.after && "[&>td]:shadow-[inset_0_-2px_0_0_var(--primary)]"
-      )}
-    >
-      <TableCell className="w-16 py-1.5 align-top">
-        <div className="flex items-center gap-1">
-          {isLocked ? (
-            <span
-              className="inline-flex size-6 items-center justify-center rounded text-muted-foreground/40"
-              title="Fattura pagata (sola lettura per non-ADMIN)"
-            >
-              <Lock className="size-3.5" />
-            </span>
-          ) : (
-            <span
-              role="button"
-              aria-label="Trascina per riordinare"
-              title="Trascina per riordinare"
-              className="inline-flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
-              onMouseDown={() => setGrabId(row.id)}
-              onMouseUp={() => setGrabId(null)}
-            >
-              <GripVertical className="size-3.5" />
-            </span>
-          )}
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {String(index + 1).padStart(2, "0")}
-          </span>
-        </div>
-      </TableCell>
-
-      <TableCell className="min-w-[18rem] py-1.5 align-top">
-        <GrowTextarea
-          value={stepText}
-          onChange={setStepText}
-          onCommit={commitStep}
-          placeholder="Descrizione step di pagamento (es. Acconto all'ordine...)"
-          className="border-transparent bg-transparent focus-visible:border-input focus-visible:bg-background"
-          disabled={isLocked}
-        />
-      </TableCell>
-
-      <TableCell className="w-24 py-1.5 align-top">
-        <div className="flex items-center gap-1.5 h-8">
-          <Input
-            value={percText}
-            onChange={(e) => setPercText(e.target.value)}
-            onBlur={commitPerc}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur()
-            }}
-            placeholder="0.0"
-            className="h-8 w-16 px-1 text-center font-mono tabular-nums shadow-none"
-            disabled={isLocked}
-          />
-          <span className="text-xs text-muted-foreground font-semibold">%</span>
-        </div>
-      </TableCell>
-
-      <TableCell className="w-56 py-1.5 align-top">
-        <Select
-          value={row.condizione || "__empty__"}
-          onValueChange={(val) => {
-            if (val === "__new_condition__") {
-              navigate("/admin/sal-conditions")
-              return
-            }
-            void patch({ condizione: val === "__empty__" ? "" : val })
-          }}
-          disabled={isLocked}
-        >
-          <SelectTrigger className="h-8 shadow-none bg-transparent border-zinc-200">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__empty__">—</SelectItem>
-            {selectOptions.map((o) => (
-              <SelectItem key={o.id} value={o.label}>
-                {o.label} {!o.isActive && row.condizione === o.label ? "(inattiva)" : ""}
-              </SelectItem>
-            ))}
-            {isAdmin && (
-              <SelectItem value="__new_condition__" className="text-primary font-semibold">
-                ➕ Nuova condizione…
-              </SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-      </TableCell>
-
-      {canSeeEconomics && (
-        <TableCell className="w-36 py-1.5 align-top text-right pr-4">
-          <div className="flex h-8 items-center justify-end font-mono text-xs font-semibold tabular-nums text-foreground">
-            {formattedImporto}
-          </div>
-        </TableCell>
-      )}
-
-      <TableCell className="w-48 py-1.5 align-top">
-        <DateField
-          value={row.dataFatt}
-          onChange={(v) => void patch({ dataFatt: v })}
-          size="sm"
-          placeholder="—"
-          className="h-8 w-full min-w-0 shadow-none"
-          disabled={isLocked}
-        />
-      </TableCell>
-
-      <TableCell className="w-48 py-1.5 align-top">
-        <Select
-          value={row.stato || "__empty__"}
-          onValueChange={(val) => {
-            void patch({ stato: val === "__empty__" ? "" : val })
-          }}
-          disabled={row.stato === "pagata" && !isAdmin}
-        >
-          <SelectTrigger className="h-8 shadow-none bg-transparent border-zinc-200">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__empty__">—</SelectItem>
-            <SelectItem value="emessa">Fattura emessa</SelectItem>
-            <SelectItem value="pagata">Fattura pagata</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-
-      <TableCell className="w-12 py-1.5 align-top">
-        <div className="flex justify-end">
-          <RowActionsMenu
-            size="icon-sm"
-            triggerClassName="size-7"
-            actions={[
-              {
-                label: "Inserisci sopra",
-                icon: ArrowUpToLine,
-                onClick: () => onInsert("above"),
-              },
-              {
-                label: "Inserisci sotto",
-                icon: ArrowDownToLine,
-                onClick: () => onInsert("below"),
-              },
-              ...(!isLocked
-                ? [
-                    {
-                      label: "Elimina step SAL",
-                      icon: Trash2,
-                      destructive: true,
-                      separatorBefore: true,
-                      onClick: () => void removeRow(),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function NewSalRowComponent({
-  projectId,
-  onMutated,
-}: {
-  projectId: number
-  onMutated: () => void
-}) {
-  const [step, setStep] = React.useState("")
-  const committing = React.useRef(false)
-
-  const commit = async () => {
-    const val = step.trim()
-    if (!val || committing.current) return
-    committing.current = true
-    try {
-      await createSalRow(projectId, {
-        step: val,
-        perc: null,
-        condizione: "",
-        dataFatt: null,
-        stato: "",
-        rowVersion: null,
-      })
-      setStep("")
-      onMutated()
-    } catch (err) {
-      notifyError(err as Error)
-    } finally {
-      committing.current = false
-    }
-  }
-
-  return (
-    <TableRow className="border-0 bg-muted/40 hover:bg-muted/50">
-      <TableCell className="w-16" />
-      <TableCell colSpan={7} className="py-1.5">
-        <div className="flex items-center gap-2">
-          <Plus className="size-4 text-muted-foreground" />
-          <Input
-            value={step}
-            onChange={(e) => setStep(e.target.value)}
-            onBlur={() => void commit()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                void commit()
-              }
-            }}
-            placeholder="Aggiungi step SAL…"
-            className="h-8 max-w-md border-dashed"
-          />
-        </div>
-      </TableCell>
-    </TableRow>
   )
 }

@@ -1,11 +1,19 @@
 import type { DdpRowItem, DdpStatusItem } from "@/lib/api/types"
+import { toDateOnly } from "@/lib/date-iso"
 
 // Calcolo della Sintesi DDP, port delle Build* del client WPF (DdpSintesiPage.xaml.cs).
 // Pure: ingredienti = righe DDP + causali (Conf. DDP) + aggregazioni (Aggregazioni DDP),
 // con i fallback cablati quando A2..A8 non sono configurate.
 
-export const DEFAULT_DELIVERED = ["CON", "COS", "DISP", "ASS", "MOD"]
+// Matrice stati v7: DISP assorbe CON/COS/SPED; il vecchio MOD è confluito in RAM.
+export const DEFAULT_DELIVERED = ["DISP", "ASS"]
 export const DEFAULT_EXCL_MISSING = ["ANN", "SOSP", "SOST", "RAM"]
+// Righe SENZA data prevista ma comunque "in consegna" (ordine emesso / in lavorazione):
+// contate nel KPI Materiale in Consegna come nel prototipo V30 (INCONS_NODATE).
+export const DEFAULT_IN_TRANSIT_NODATE = ["IO", "PAR", "MIT"]
+// Stati in cui un costo unitario a zero è plausibile (non ancora quotato/ordinato)
+// o irrilevante (riga chiusa): esclusi dal check igiene "costo zero".
+export const COST_ZERO_OK = ["ANN", "SOSP", "SOST", "RAM", "ND", "RO", "VER", "DO"]
 
 export interface BarRow {
   key: string
@@ -37,7 +45,8 @@ export interface MissingCell {
 }
 
 export interface MissingRow {
-  rowNo: number
+  /** Numero riga: progressivo per i padri, con lettera (es. "3a") per i figli di composizione officina. */
+  rowNo: number | string
   statoKey: string
   desc: string
   stato: MissingCell
@@ -53,10 +62,18 @@ export interface DdpKpis {
   totValue: number
   count: number
   datedCount: number
+  /** Righe senza data prevista in stato ordine/lavorazione (IO, PAR, MIT). */
+  noDateInTransit: number
+  /** Materiale in Consegna = righe datate da evadere + senza-data in transito. */
+  inConsegna: number
   overdue: number
   consegnato: number
   parziali: number
   finestra: string
+  /** Igiene dati: date di consegna implausibili (anno < 2015 o > 2100). */
+  refusiDate: number
+  /** Igiene dati: costo unitario a zero in stati che dovrebbero averlo. */
+  costoZero: number
 }
 
 export interface DdpSintesiModel {
@@ -91,16 +108,12 @@ function todayIso(): string {
   return `${year}-${month}-${day}`
 }
 
-function dayOf(value: string | null): string | null {
-  return value ? value.slice(0, 10) : null
-}
-
 function amount(row: DdpRowItem): number {
   return row.quantity * row.unitCost
 }
 
 function fmtDate(value: string | null): string {
-  const day = dayOf(value)
+  const day = toDateOnly(value)
   if (!day) return ""
   const [year, month, date] = day.split("-")
   return `${date}/${month}/${year}`
@@ -191,10 +204,98 @@ export interface SintesiInputs {
 }
 
 export function buildSintesiModel({
-  rows,
+  rows: rawRows,
   statusDefs,
   aggSets,
 }: SintesiInputs): DdpSintesiModel {
+  const officina = rawRows.some((r) => r.ddpType === "OFFICINA")
+
+  const parentIdsWithChildren = new Set<number>()
+  if (officina) {
+    for (const item of rawRows) {
+      if (item.parentOfficinaItemId != null) {
+        parentIdsWithChildren.add(item.parentOfficinaItemId)
+      }
+    }
+  }
+
+  const rows = officina
+    ? rawRows.filter((r) => !parentIdsWithChildren.has(r.id))
+    : rawRows
+
+  let distintaRows: DdpRowItem[] = rawRows
+  if (officina) {
+    const parents = rawRows.filter((it) => it.parentOfficinaItemId == null)
+    const children = rawRows.filter((it) => it.parentOfficinaItemId != null)
+
+    const childrenMap: Record<number, typeof children> = {}
+    children.forEach((child) => {
+      const pid = child.parentOfficinaItemId!
+      childrenMap[pid] = childrenMap[pid] ?? []
+      childrenMap[pid].push(child)
+    })
+
+    Object.keys(childrenMap).forEach((pidStr) => {
+      const pid = Number(pidStr)
+      childrenMap[pid].sort((a, b) =>
+        (a.partNumber || "").localeCompare(b.partNumber || "", undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      )
+    })
+
+    const sortedList: typeof rawRows = []
+    parents.forEach((parent) => {
+      sortedList.push(parent)
+      const pChildren = childrenMap[parent.id]
+      if (pChildren) {
+        sortedList.push(...pChildren)
+        delete childrenMap[parent.id]
+      }
+    })
+
+    Object.values(childrenMap).forEach((orphans) => {
+      sortedList.push(...orphans)
+    })
+
+    const parentToChildrenLookup: Record<number, typeof children> = {}
+    rawRows.forEach((child) => {
+      if (child.parentOfficinaItemId != null) {
+        const pid = child.parentOfficinaItemId
+        parentToChildrenLookup[pid] = parentToChildrenLookup[pid] ?? []
+        parentToChildrenLookup[pid].push(child)
+      }
+    })
+
+    let parentCount = 0
+    distintaRows = sortedList.map((item) => {
+      let displayIndex: string | number = "•"
+      if (item.parentOfficinaItemId == null) {
+        parentCount++
+        displayIndex = parentCount
+      }
+
+      let unitCost = item.unitCost
+      const hasChildren = parentIdsWithChildren.has(item.id)
+      if (hasChildren) {
+        const itemChildren = parentToChildrenLookup[item.id] ?? []
+        unitCost = itemChildren.reduce(
+          (sum, child) => sum + child.unitCost * (child.compositionQty ?? 1),
+          0
+        )
+      }
+      const totalCost = unitCost * item.quantity
+
+      return {
+        ...item,
+        rowNumber: displayIndex,
+        unitCost,
+        totalCost,
+      } as DdpRowItem
+    })
+  }
+
   const delivered = aggSets.get("A2")?.size
     ? aggSets.get("A2")!
     : new Set(DEFAULT_DELIVERED)
@@ -217,14 +318,35 @@ export function buildSintesiModel({
   )
   const dated = rows.filter(
     (row) =>
-      dayOf(row.dateNeeded) &&
+      toDateOnly(row.dateNeeded) &&
       !delivered.has(row.itemStatus) &&
       !excludedStates.has(row.itemStatus)
   )
-  const overdue = dated.filter((row) => (dayOf(row.dateNeeded) ?? "") < today)
+  const overdue = dated.filter((row) => (toDateOnly(row.dateNeeded) ?? "") < today)
+  // Senza data ma con ordine emesso / in lavorazione: contano come "in consegna"
+  // anche se restano fuori dalla finestra temporale (basata sulle sole righe datate).
+  const noDateSet = new Set(DEFAULT_IN_TRANSIT_NODATE)
+  const noDateInTransit = rows.filter(
+    (row) =>
+      !toDateOnly(row.dateNeeded) &&
+      noDateSet.has(row.itemStatus) &&
+      !excludedStates.has(row.itemStatus)
+  )
+  // Igiene dati: refusi di battitura sulle date e costi assenti dove non dovrebbero.
+  const costZeroOk = new Set(COST_ZERO_OK)
+  const refusiDate = dated.filter((row) => {
+    const year = Number((toDateOnly(row.dateNeeded) ?? "").slice(0, 4))
+    return year > 0 && (year < 2015 || year > 2100)
+  }).length
+  const costoZero = rows.filter(
+    (row) =>
+      !(row.unitCost > 0) &&
+      !costZeroOk.has(row.itemStatus) &&
+      !excludedStates.has(row.itemStatus)
+  ).length
   let finestra = "n/d"
   if (dated.length > 0) {
-    const days = dated.map((row) => dayOf(row.dateNeeded)!).sort()
+    const days = dated.map((row) => toDateOnly(row.dateNeeded)!).sort()
     const min = days[0]
     const max = days[days.length - 1]
     const span =
@@ -237,10 +359,14 @@ export function buildSintesiModel({
     totValue,
     count: total,
     datedCount: dated.length,
+    noDateInTransit: noDateInTransit.length,
+    inConsegna: dated.length + noDateInTransit.length,
     overdue: overdue.length,
     consegnato: rows.filter((row) => delivered.has(row.itemStatus)).length,
     parziali: rows.filter((row) => a3.has(row.itemStatus)).length,
     finestra,
+    refusiDate,
+    costoZero,
   }
 
   // ── Ripartizione per stato ──
@@ -254,18 +380,29 @@ export function buildSintesiModel({
   const ripSub = `${total} righe · ${ripartizione.length} stati presenti`
 
   // ── Materiale in Consegna / Consegnato ──
-  const consegne = [...dated].sort((a, b) =>
-    (dayOf(a.dateNeeded) ?? "").localeCompare(dayOf(b.dateNeeded) ?? "")
-  )
-  const consegneSub = `Orizzonte temporale delle consegne ancora da evadere. Escluse le righe già consegnate o gestite (${[
-    ...delivered,
+  // Righe datate in ordine di consegna + righe senza data in transito (IO/PAR/MIT) in coda.
+  const consegne = [
+    ...[...dated].sort((a, b) =>
+      (toDateOnly(a.dateNeeded) ?? "").localeCompare(toDateOnly(b.dateNeeded) ?? "")
+    ),
+    ...noDateInTransit,
   ]
+  const consegneSub = `Consegne ancora da evadere: righe con data prevista${
+    noDateInTransit.length > 0
+      ? ` + ${noDateInTransit.length} senza data in stato ${DEFAULT_IN_TRANSIT_NODATE.join("/")}`
+      : ""
+  }. Escluse le righe già consegnate o gestite (${[...delivered]
     .sort()
     .join(", ")}).`
 
   const consegnato = rows
     .filter((row) => delivered.has(row.itemStatus))
-    .sort((a, b) => a.rowNumber - b.rowNumber)
+    .sort((a, b) =>
+      // Ordinamento naturale: rowNumber può essere "3a" (figli officina) → "3" < "3a" < "10"
+      String(a.rowNumber).localeCompare(String(b.rowNumber), undefined, {
+        numeric: true,
+      })
+    )
   const consegnatoSub = `${consegnato.length} righe di materiale consegnato o gestito (${[
     ...delivered,
   ]
@@ -360,7 +497,8 @@ export function buildSintesiModel({
         ? [...excludedStates]
         : ["ANN", "SOSP", "RAM", "SOST"],
     },
-    { label: "SPED-MOD", states: ["SPED", "MOD"] },
+    // v7: SPED/MOD eliminati (assorbiti da DISP/RAM); la card mostra il trattamento esterno.
+    { label: "TRATTAMENTO", states: ["MIT"] },
     { label: "ASSEGNATO", states: ["ASS"] },
   ]
   const avanzamento: AvanzCard[] = buckets.map((bucket) => {
@@ -418,7 +556,7 @@ export function buildSintesiModel({
     destSub,
     mancanti,
     mancantiSub,
-    distinta: rows,
+    distinta: distintaRows,
     avanzamento,
     avanzSub,
     feedbackAcquisti: acq.rows,
