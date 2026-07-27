@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Description>Client web React (sorgenti in ../atec-pm-web). Visibile in Visual Studio.</Description>
+  </PropertyGroup>
+</Project>
