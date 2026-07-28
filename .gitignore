@@ -1,3 +1,13 @@
+# ── Fuori dal repo (decisione 27/07/2026, vedi commit a8cf2a2) ──────
+# Sorgenti del client WPF ritirato: 86 MB, in git resterebbero per sempre.
+backups/
+# SPA compilata servita dal Server in Release: 71 MB rigenerabili con
+# `npm run build` in atec-pm-web. Se il deploy in LAN dovesse copiare il repo
+# sul server SENZA ricompilare, togliere questa riga e committare wwwroot.
+ATEC.PM.Server/wwwroot/
+# Copie manuali «prima di toccare» lasciate accanto ai sorgenti.
+*.original
+
 # ── Build .NET ──────────────────────────────────────────────
 [Bb]in/
 [Oo]bj/
