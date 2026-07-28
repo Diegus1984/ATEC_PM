@@ -1055,7 +1055,9 @@ public class ProjectsController : ControllerBase
                 part_number = IF(@UpdateCatalogSnapshot, @PartNumber, part_number),
                 description = IF(@UpdateCatalogSnapshot, @Description, description),
                 unit = IF(@UpdateCatalogSnapshot, @Unit, unit),
-                unit_cost = IF(@UpdateCatalogSnapshot, @UnitCost, unit_cost),
+                -- Il costo arriva anche dagli edit inline (che rimandano quello della riga):
+                -- si scrive solo su richiesta esplicita (snapshot catalogo o prezzo dal dettaglio RDO).
+                unit_cost = IF(@UpdateCatalogSnapshot OR @UpdateUnitCost, @UnitCost, unit_cost),
                 manufacturer = IF(@UpdateCatalogSnapshot, @Manufacturer, manufacturer),
                 atec_code = IF(@UpdateCatalogSnapshot OR LENGTH(@AtecCode) > 0,
                                NULLIF(@AtecCode,''), atec_code),

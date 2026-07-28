@@ -91,6 +91,11 @@ public class BomItemSaveRequest
     // Usato dal picker alternative fornitore / applicazione vincitore RDO.
     public bool UpdateCatalogSnapshot { get; set; }
 
+    // Il costo unitario si aggiorna solo se true: gli edit inline rimandano il costo della riga
+    // invariato e non devono sovrascriverlo (stessa logica di UpdateSupplier). Lo usa il
+    // dettaglio RDO, dove il prezzo battuto sull'offerta è anche il costo della riga distinta.
+    public bool UpdateUnitCost { get; set; }
+
     // Concorrenza ottimistica: se valorizzata e diversa da quella sul server → 409 (modificata da altri). Null = nessun controllo.
     public DateTime? ExpectedUpdatedAt { get; set; }
 }

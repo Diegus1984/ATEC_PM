@@ -199,7 +199,9 @@ export function AcquistiPage() {
       if (!target) throw new Error("Riga non trovata")
       const req = ddpCommercialRowToSaveRequest(data.projectId, target, {
         itemStatus: data.itemStatus ?? target.itemStatus,
-        unitCost: data.unitCost ?? target.unitCost,
+        // Solo se il chiamante lo passa davvero: la presenza dell'override accende
+        // `updateUnitCost` lato server (altrimenti il costo della riga resta quello a DB).
+        unitCost: data.unitCost,
         dateNeeded: data.dateNeeded !== undefined ? data.dateNeeded : target.dateNeeded,
       })
       return updateDdpRow(data.projectId, data.rowId, req)

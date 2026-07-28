@@ -4,6 +4,7 @@ import type { BomItemSaveRequest, DdpRowItem } from "@/lib/api/types"
 export interface DdpCommercialRowOverrides {
   itemStatus?: string
   quantity?: number
+  /** Presente = la PUT aggiorna il costo unitario (`updateUnitCost: true`); assente = resta quello a DB. */
   unitCost?: number
   destination?: string
   destinationSpec?: string
@@ -33,6 +34,8 @@ export function ddpCommercialRowToSaveRequest(
     supplierId: overrides.supplier ? overrides.supplier.id : (row.supplierId ?? null),
     // Il server tocca supplier_id solo se richiesto esplicitamente: gli altri edit non lo azzerano.
     updateSupplier: overrides.supplier !== undefined,
+    // Stessa regola per il costo: senza override il campo viaggia solo come eco della riga.
+    updateUnitCost: overrides.unitCost !== undefined,
     manufacturer: row.manufacturer ?? "",
     itemStatus: overrides.itemStatus ?? row.itemStatus,
     requestedBy: row.requestedBy ?? "",

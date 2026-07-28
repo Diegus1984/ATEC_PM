@@ -186,6 +186,8 @@ export interface BomItemSaveRequest {
   updateSupplier?: boolean
   /** true = aggiorna anche snapshot catalogo (codice, costo, manufacturer, atec…). */
   updateCatalogSnapshot?: boolean
+  /** Il server scrive `unit_cost` solo se true: gli edit inline rimandano il costo invariato. */
+  updateUnitCost?: boolean
   expectedUpdatedAt: string | null
 }
 
