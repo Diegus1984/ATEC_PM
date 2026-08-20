@@ -7,7 +7,7 @@ import {
 } from "@/lib/api/client"
 import type {
   ApiResponse,
-  EmployeeCostLookup,
+  TravelPersonLookup,
   ProjectCalcSheetDto,
   ProjectCalcSheetSaveRequest,
   TravelCalcKind,
@@ -37,8 +37,8 @@ export async function fetchTravelSummary(
 }
 
 /** Nominativi con il costo orario di reparto: scegliendo la persona la tariffa si precompila. */
-export async function fetchTravelPeople(): Promise<EmployeeCostLookup[]> {
-  const response = await apiGet<ApiResponse<EmployeeCostLookup[]>>("/api/travel/people")
+export async function fetchTravelPeople(): Promise<TravelPersonLookup[]> {
+  const response = await apiGet<ApiResponse<TravelPersonLookup[]>>("/api/travel/people")
   return unwrapApi(response)
 }
 

@@ -43,7 +43,7 @@ import {
   updateTravelRow,
 } from "@/lib/api/travel"
 import type {
-  EmployeeCostLookup,
+  TravelPersonLookup,
   TravelCalcKind,
   TravelRowDto,
   TravelStepDto,
@@ -250,7 +250,7 @@ function TravelRow({
 }: {
   projectId: number
   row: TravelRowDto
-  people: EmployeeCostLookup[]
+  people: TravelPersonLookup[]
   grabbed: number | null
   onGrab: (id: number | null) => void
   dragFrom: React.RefObject<number | null>
@@ -717,7 +717,7 @@ export function TravelStepTable({
 }: {
   projectId: number
   step: TravelStepDto
-  people: EmployeeCostLookup[]
+  people: TravelPersonLookup[]
   onChanged: () => void
   onOpenCalc: (rowId: number, kind: TravelCalcKind) => void
   selectedIds: Set<number>

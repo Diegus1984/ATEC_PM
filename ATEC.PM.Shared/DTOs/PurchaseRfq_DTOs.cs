@@ -145,11 +145,16 @@ public class PurchaseRfqOfferPlanRequest
 }
 
 /// <summary>Un fornitore interpellabile per le righe selezionate, con i suoi articoli.</summary>
+/// <summary>
+/// Il piano di interpello: quale fornitore per quali righe. <b>Senza email</b> — l'indirizzo
+/// serve a MANDARE la richiesta d'offerta, e quel percorso ha il suo DTO
+/// (<see cref="PurchaseRfqOfferDto"/>, che il dialogo Acquisti usa per il <c>mailto:</c>).
+/// Qui era una copia che nessuno leggeva: un contatto in meno che gira.
+/// </summary>
 public class OfferPlanSupplier
 {
     public int SupplierId { get; set; }
     public string SupplierName { get; set; } = "";
-    public string SupplierEmail { get; set; } = "";
     public List<OfferPlanItem> Items { get; set; } = new();
 }
 

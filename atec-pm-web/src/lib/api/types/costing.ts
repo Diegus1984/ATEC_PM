@@ -497,6 +497,17 @@ export interface AvailableCostTemplatesDto {
   templates: CostSectionTemplateDto[]
 }
 
+/**
+ * La persona per la tendina della **Trasferta**: nome e sigla di reparto. Niente costo orario,
+ * niente ricarico — quella pagina non li usa, e i costi hanno la loro chiave (`data.costs`)
+ * nelle pagine di costing.
+ */
+export interface TravelPersonLookup {
+  id: number
+  fullName: string
+  departmentCode: string
+}
+
 export interface EmployeeCostLookup {
   id: number
   fullName: string

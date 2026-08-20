@@ -242,14 +242,13 @@ public class PurchaseRfqController : ControllerBase
             {
                 if (!plan.TryGetValue(opt.SupplierId, out var supplier))
                 {
-                    var anag = c.QueryFirstOrDefault<(string Name, string Email)>(@"
-                        SELECT COALESCE(company_name,''), COALESCE(email,'')
-                        FROM suppliers WHERE id = @Id", new { Id = opt.SupplierId });
+                    string anagNome = c.ExecuteScalar<string>(@"
+                        SELECT COALESCE(company_name,'')
+                        FROM suppliers WHERE id = @Id", new { Id = opt.SupplierId }) ?? "";
                     supplier = new OfferPlanSupplier
                     {
                         SupplierId = opt.SupplierId,
-                        SupplierName = anag.Name,
-                        SupplierEmail = anag.Email,
+                        SupplierName = anagNome,
                     };
                     plan[opt.SupplierId] = supplier;
                 }

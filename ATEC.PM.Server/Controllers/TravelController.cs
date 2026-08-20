@@ -497,11 +497,11 @@ public class TravelController : ControllerBase
     public IActionResult People()
     {
         using var c = _db.Open();
-        var rows = c.Query<EmployeeCostLookup>(@"
+        // Solo nome e sigla di reparto: la tendina non mostra costi, e il costo orario dei
+        // reparti ha la sua casa (data.costs) nelle pagine di costing.
+        var rows = c.Query<TravelPersonLookup>(@"
             SELECT e.id AS Id, CONCAT(e.first_name,' ',e.last_name) AS FullName,
-                   COALESCE(MAX(d.code), '') AS DepartmentCode,
-                   COALESCE(MAX(d.hourly_cost), 0) AS HourlyCost,
-                   COALESCE(MAX(d.default_markup), 1.450) AS DefaultMarkup
+                   COALESCE(MAX(d.code), '') AS DepartmentCode
             FROM employees e
             LEFT JOIN employee_departments ed ON ed.employee_id = e.id
             LEFT JOIN departments d ON d.id = ed.department_id
@@ -512,7 +512,7 @@ public class TravelController : ControllerBase
 
         var italian = StringComparer.Create(
             System.Globalization.CultureInfo.GetCultureInfo("it-IT"), ignoreCase: true);
-        return Ok(ApiResponse<List<EmployeeCostLookup>>.Ok(
+        return Ok(ApiResponse<List<TravelPersonLookup>>.Ok(
             rows.OrderBy(r => r.FullName, italian).ToList()));
     }
 

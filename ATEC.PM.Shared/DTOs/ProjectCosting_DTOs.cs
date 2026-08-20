@@ -150,7 +150,24 @@ public class ProjectPricingDto
     public decimal AllowanceMarkup { get; set; } = 1.000m;
 }
 
-// === DIPENDENTE PER COMBO ===
+/// <summary>
+/// La persona per la <b>tendina della Trasferta</b>: nome e sigla di reparto. Niente costo
+/// orario, niente ricarico — la pagina Trasferta non li usa (usa <c>id</c>, <c>fullName</c> e
+/// <c>departmentCode</c>, e basta).
+///
+/// <para>🪤 Prima anche lì viaggiava <see cref="EmployeeCostLookup"/>: il costo orario di ogni
+/// reparto, lo stesso numero che <c>data.costs</c> protegge nelle pagine di costing, usciva da
+/// <c>GET /api/travel/people</c> perché il DTO era condiviso. Un tipo riusato «tanto ce l'ho
+/// già» è lo stesso difetto di un elenco riusato come tendina.</para>
+/// </summary>
+public class TravelPersonLookup
+{
+    public int Id { get; set; }
+    public string FullName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
+}
+
+// === DIPENDENTE PER COMBO (con i costi: lo usano le pagine di costing, dietro data.costs) ===
 public class EmployeeCostLookup
 {
     public int Id { get; set; }
