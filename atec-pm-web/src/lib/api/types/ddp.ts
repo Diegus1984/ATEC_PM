@@ -6,7 +6,8 @@ export interface DdpProjectSummary {
   customerName: string
   ddpType: string // COMMERCIAL | OFFICINA
   totalRows: number
-  totalValue: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  totalValue: number | null
   datedCount: number
   overdueCount: number
   deliveryStart: string | null
@@ -40,7 +41,8 @@ export interface DdpProjectDetail {
   code: string
   customerName: string
   totalRows: number
-  totalValue: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  totalValue: number | null
   datedCount: number
   overdueCount: number
   deliveryStart: string | null
@@ -67,7 +69,8 @@ export interface DdpControlReportRow {
   description: string
   unit: string
   quantity: number
-  unitCost: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  unitCost: number | null
   supplierName: string
   manufacturer: string
   material: string
@@ -90,9 +93,11 @@ export interface DdpControlReportRow {
 export interface DdpDeliveriesDay {
   day: string
   commercialCount: number
-  commercialValue: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  commercialValue: number | null
   officinaCount: number
-  officinaValue: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  officinaValue: number | null
 }
 
 /** Feedback Acquisti (aggregato su tutte le commesse): una riga per stato dell'aggregazione A6. */
@@ -155,8 +160,10 @@ export interface DdpRowItem {
   description: string
   unit: string
   quantity: number
-  unitCost: number
-  totalCost: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  unitCost: number | null
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  totalCost: number | null
   supplierId?: number | null
   supplierName: string
   manufacturer: string
@@ -211,7 +218,8 @@ export interface BomItemSaveRequest {
   description: string
   unit: string
   quantity: number
-  unitCost: number
+  /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
+  unitCost: number | null
   supplierId: number | null
   manufacturer: string
   itemStatus: string

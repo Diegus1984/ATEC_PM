@@ -136,8 +136,8 @@ export function DdpConsegneView() {
           label: formatDateShort(day),
           late: day < today,
           commerciali:
-            metric === "val" ? entry.commercialValue : entry.commercialCount,
-          officine: metric === "val" ? entry.officinaValue : entry.officinaCount,
+            metric === "val" ? (entry.commercialValue ?? 0) : entry.commercialCount,
+          officine: metric === "val" ? (entry.officinaValue ?? 0) : entry.officinaCount,
         }
       }),
     [days, metric, today]
@@ -154,7 +154,7 @@ export function DdpConsegneView() {
     let late = 0
     for (const entry of days) {
       rows += entry.commercialCount + entry.officinaCount
-      value += entry.commercialValue + entry.officinaValue
+      value += (entry.commercialValue ?? 0) + (entry.officinaValue ?? 0)
       if (entry.day.slice(0, 10) < today) late++
     }
     return { rows, value, late }
@@ -194,7 +194,7 @@ export function DdpConsegneView() {
               String(entry.officinaCount),
               euro(entry.officinaValue),
               String(entry.commercialCount + entry.officinaCount),
-              euro(entry.commercialValue + entry.officinaValue),
+              euro((entry.commercialValue ?? 0) + (entry.officinaValue ?? 0)),
               day < today ? "SÌ" : "",
             ]
           }),
@@ -410,7 +410,7 @@ export function DdpConsegneView() {
                           )}
                           {show("totalValue") && (
                             <TableCell className="text-right font-semibold tabular-nums">
-                              {euro(entry.commercialValue + entry.officinaValue)}
+                              {euro((entry.commercialValue ?? 0) + (entry.officinaValue ?? 0))}
                             </TableCell>
                           )}
                         </TableRow>
@@ -428,7 +428,7 @@ export function DdpConsegneView() {
                       {show("commercialValue") && (
                         <TableCell className="text-right tabular-nums">
                           {euro(
-                            days.reduce((sum, entry) => sum + entry.commercialValue, 0)
+                            days.reduce((sum, entry) => sum + (entry.commercialValue ?? 0), 0)
                           )}
                         </TableCell>
                       )}
@@ -439,7 +439,7 @@ export function DdpConsegneView() {
                       )}
                       {show("officinaValue") && (
                         <TableCell className="text-right tabular-nums">
-                          {euro(days.reduce((sum, entry) => sum + entry.officinaValue, 0))}
+                          {euro(days.reduce((sum, entry) => sum + (entry.officinaValue ?? 0), 0))}
                         </TableCell>
                       )}
                       {show("totalCount") && (

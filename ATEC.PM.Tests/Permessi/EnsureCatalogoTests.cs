@@ -59,6 +59,16 @@ public class EnsureCatalogoTests : IClassFixture<SchemaCatalogoFixture>
             "SELECT retired_at FROM auth_features WHERE feature_key = 'data.hourly_cost'");
         Assert.NotNull(ritirataIl);
 
+        // I micro dichiarati a catalogo sono MATERIALIZZATI come chiavi (§12.8.3): senza la
+        // riga, il jolly non li espanderebbe e la scheda admin non li vedrebbe.
+        var microMancanti = PermessiCatalogo.VociPrimarie()
+            .Where(v => v.Micros.Contains("prices"))
+            .Select(v => $"{v.Chiave}.prices")
+            .Where(m => !inTabella.Contains(m) && c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM auth_features WHERE feature_key = @M", new { M = m }) == 0)
+            .ToList();
+        Assert.True(microMancanti.Count == 0, "micro non materializzati: " + string.Join(", ", microMancanti));
+
         // Un secondo giro non ha niente da fare, e su un database appena creato non ci sono
         // orfane: se qui compare qualcosa, una chiave seminata dalle migrazioni manca al catalogo.
         CatalogoPermessiSync.Esito esito = Allinea(c);

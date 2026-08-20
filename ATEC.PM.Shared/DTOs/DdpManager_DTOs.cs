@@ -1,3 +1,5 @@
+using ATEC.PM.Shared;
+
 namespace ATEC.PM.Shared.DTOs;
 
 // Riepilogo DDP aggregato per commessa (pagina "Gestore DDP" nella sezione PM): una entry
@@ -10,7 +12,8 @@ public class DdpProjectSummary
     public string DdpType { get; set; } = "COMMERCIAL";   // "COMMERCIAL" | "OFFICINA"
 
     public int TotalRows { get; set; }          // INSERIMENTI (n° righe)
-    public decimal TotalValue { get; set; }     // TOT. ACQUISTI (somma qty*costo, tutte le righe)
+    [DatoSensibile]
+    public decimal? TotalValue { get; set; }    // TOT. ACQUISTI (somma qty*costo, tutte le righe)
     public int DatedCount { get; set; }          // MAT. CONSEGNA (righe con data prevista, non ancora consegnate)
     public int OverdueCount { get; set; }        // MAT. RITARDO (di quelle, con data < oggi)
 
@@ -30,7 +33,8 @@ public class DdpProjectDetail
     public string CustomerName { get; set; } = "";
 
     public int TotalRows { get; set; }
-    public decimal TotalValue { get; set; }
+    [DatoSensibile]
+    public decimal? TotalValue { get; set; }
     public int DatedCount { get; set; }
     public int OverdueCount { get; set; }
     public DateTime? DeliveryStart { get; set; }
@@ -70,7 +74,8 @@ public class DdpControlReportRow
     public string Description { get; set; } = "";
     public string Unit { get; set; } = "";                // solo commerciale
     public decimal Quantity { get; set; }
-    public decimal UnitCost { get; set; }
+    [DatoSensibile]
+    public decimal? UnitCost { get; set; }
     public string SupplierName { get; set; } = "";
     public string Manufacturer { get; set; } = "";        // solo commerciale
     public string Material { get; set; } = "";            // solo officina
@@ -95,9 +100,11 @@ public class DdpDeliveriesDay
 {
     public DateTime Day { get; set; }
     public int CommercialCount { get; set; }
-    public decimal CommercialValue { get; set; }
+    [DatoSensibile]
+    public decimal? CommercialValue { get; set; }
     public int OfficinaCount { get; set; }
-    public decimal OfficinaValue { get; set; }
+    [DatoSensibile]
+    public decimal? OfficinaValue { get; set; }
 }
 
 // Voce dell'elenco «DDP aggiornate da verificare» della card Gestione Controlli (#114):

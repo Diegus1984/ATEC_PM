@@ -112,7 +112,7 @@ function reportColumns(officina: boolean, withCommessa: boolean): ReportColumn[]
     {
       id: "tot",
       label: "Totale",
-      value: (row) => euro(row.quantity * row.unitCost),
+      value: (row) => euro(row.unitCost == null ? null : row.quantity * row.unitCost),
       numeric: true,
     }
   )
@@ -131,9 +131,9 @@ function sortValue(
     case "qta":
       return row.quantity
     case "cu":
-      return row.unitCost
+      return row.unitCost ?? 0
     case "tot":
-      return row.quantity * row.unitCost
+      return row.quantity * (row.unitCost ?? 0)
     case "dataprev":
       return row.dateNeeded ?? "9999-12-31"
     case "commessa":
@@ -162,7 +162,7 @@ function groupByDay(rows: DdpControlReportRow[], today: string): DayGroup[] {
       groups.set(key, group)
     }
     group.rows.push(row)
-    group.value += row.quantity * row.unitCost
+    group.value += row.quantity * (row.unitCost ?? 0)
   }
   return Array.from(groups.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -201,7 +201,7 @@ function groupByProject(rows: DdpControlReportRow[], today: string): ProjectGrou
       groups.set(row.projectCode, group)
     }
     group.rows.push(row)
-    group.value += row.quantity * row.unitCost
+    group.value += row.quantity * (row.unitCost ?? 0)
     if (row.dateNeeded != null && row.dateNeeded.slice(0, 10) < today) group.overdue++
   }
   return Array.from(groups.values()).sort((a, b) =>
@@ -368,7 +368,7 @@ export function DdpControlReportView({
         if (hasChildren) {
           const itemChildren = parentToChildrenLookup[item.id] ?? []
           unitCost = itemChildren.reduce(
-            (sum, child) => sum + child.unitCost * (child.compositionQty ?? 1),
+            (sum, child) => sum + (child.unitCost ?? 0) * (child.compositionQty ?? 1),
             0
           )
         }

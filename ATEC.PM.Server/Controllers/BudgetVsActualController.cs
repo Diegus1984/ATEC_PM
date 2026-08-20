@@ -350,7 +350,7 @@ public class BudgetVsActualController : ControllerBase
                 ParentItemId = (int?)i.ParentItemId,
                 Description = (string)i.Description,
                 Quantity = (decimal)i.Quantity,
-                UnitCost = (decimal)i.UnitCost,
+                UnitCost = i.UnitCost ?? 0m,
                 MarkupValue = (decimal)i.MarkupValue,
                 ItemType = (string)i.ItemType
             }).ToList());

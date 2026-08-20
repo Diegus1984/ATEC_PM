@@ -121,7 +121,7 @@ function DdpKpiCards({
   onFilter: (filter: KpiFilter) => void
 }) {
   const projectIds = new Set(items.map((item) => item.projectId))
-  const totalValue = items.reduce((sum, item) => sum + item.totalValue, 0)
+  const totalValue = items.reduce((sum, item) => sum + (item.totalValue ?? 0), 0)
   const totalOverdue = items.reduce((sum, item) => sum + item.overdueCount, 0)
 
   const cards = [

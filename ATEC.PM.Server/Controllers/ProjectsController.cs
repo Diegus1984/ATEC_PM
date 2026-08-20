@@ -1416,7 +1416,9 @@ public class ProjectsController : ControllerBase
             SELECT LAST_INSERT_ID()", new
             {
                 req.ProjectId, req.CatalogItemId, req.PartNumber, req.Description, req.Unit, req.Quantity,
-                req.UnitCost, req.SupplierId, req.Manufacturer, req.ItemStatus, req.RequestedBy,
+                // Sensibile (§12.3): null = chi crea non vede i prezzi → costo 0, come una riga nata senza costo.
+                UnitCost = req.UnitCost ?? 0,
+                req.SupplierId, req.Manufacturer, req.ItemStatus, req.RequestedBy,
                 req.DaneaRef, req.DateNeeded, req.Destination, req.DestinationSpec, req.Notes, req.DdpType,
                 req.AtecCode, CreatedBy = createdBy
             });
@@ -1495,7 +1497,9 @@ public class ProjectsController : ControllerBase
                 unit = IF(@UpdateCatalogSnapshot, @Unit, unit),
                 -- Il costo arriva anche dagli edit inline (che rimandano quello della riga):
                 -- si scrive solo su richiesta esplicita (snapshot catalogo o prezzo dal dettaglio RDO).
-                unit_cost = IF(@UpdateCatalogSnapshot OR @UpdateUnitCost, @UnitCost, unit_cost),
+                -- @UnitCost IS NOT NULL: un null (mittente senza il micro prezzi, §12.3)
+                -- non deve MAI sovrascrivere un costo vero, nemmeno a flag alzato.
+                unit_cost = IF((@UpdateCatalogSnapshot OR @UpdateUnitCost) AND @UnitCost IS NOT NULL, @UnitCost, unit_cost),
                 manufacturer = IF(@UpdateCatalogSnapshot, @Manufacturer, manufacturer),
                 atec_code = IF(@UpdateCatalogSnapshot OR LENGTH(@AtecCode) > 0,
                                NULLIF(@AtecCode,''), atec_code),
@@ -1667,7 +1671,9 @@ public class ProjectsController : ControllerBase
                  @DateNeeded, @OrderDate, @DeliveredAt, @Destination, @DestinationSpec, @Notes, @CreatedBy, NOW());
             SELECT LAST_INSERT_ID()", new
             {
-                req.ProjectId, req.PartNumber, req.Description, req.Quantity, req.WorkHours, req.HourlyRate, req.UnitCost,
+                req.ProjectId, req.PartNumber, req.Description, req.Quantity, req.WorkHours, req.HourlyRate,
+                // Sensibile (§12.3): null = chi crea non vede i prezzi → costo 0.
+                UnitCost = req.UnitCost ?? 0,
                 req.Material, req.Treatment, req.SupplierId, req.SupplierName, req.ItemStatus, req.RequestedBy,
                 req.DaneaRef, req.DateNeeded, req.OrderDate, req.DeliveredAt, req.Destination, req.DestinationSpec, req.Notes,
                 CreatedBy = createdBy
@@ -1927,7 +1933,9 @@ public class ProjectsController : ControllerBase
                 work_hours = COALESCE(@WorkHours, work_hours),
                 -- Stessa regola: la tariffa oraria scelta (#87) resta com'è se il chiamante non la manda.
                 hourly_rate = COALESCE(@HourlyRate, hourly_rate),
-                unit_cost = @UnitCost, material = @Material,
+                -- Stessa regola, e in più è un dato SENSIBILE (§12.3): null = costo invariato.
+                -- Un mittente senza il micro prezzi non può cancellare un costo vero.
+                unit_cost = COALESCE(@UnitCost, unit_cost), material = @Material,
                 treatment = @Treatment, supplier_id = @SupplierId, supplier_name = @SupplierName,
                 item_status = @ItemStatus,
                 -- NULL = il chiamante non gestisce il campo → classificazione invariata.
@@ -1952,7 +1960,7 @@ public class ProjectsController : ControllerBase
             DdpItemEvents.Registra(c, DdpItemEvents.Officina, itemId, id,
                 oldStatus, req.ItemStatus, User, log: _logger);
 
-            if (req.UpdateCodexPrice == true && !string.IsNullOrWhiteSpace(req.PartNumber))
+            if (req.UpdateCodexPrice == true && req.UnitCost.HasValue && !string.IsNullOrWhiteSpace(req.PartNumber))
             {
                 var cleanPartNumber = req.PartNumber.Replace(".", "").Trim();
                 c.Execute(

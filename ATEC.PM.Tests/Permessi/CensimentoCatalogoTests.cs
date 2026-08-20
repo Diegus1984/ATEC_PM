@@ -249,6 +249,58 @@ public class CensimentoCatalogoTests
         return usate;
     }
 
+    // ── 5. Dati sensibili: nullable obbligatorio e filtro registrato ─────────────
+
+    /// <summary>
+    /// Regola nullable (§12.8): azzerare un <c>decimal</c> non nullable produrrebbe uno
+    /// 0,00 € FINTO — un dato falso a video, peggio che nascosto. Quindi ogni proprietà
+    /// marcata <c>[DatoSensibile]</c> deve poter essere null.
+    /// </summary>
+    [Fact]
+    public void Ogni_membro_DatoSensibile_e_nullable()
+    {
+        var nonNullable = typeof(DatoSensibileAttribute).Assembly.GetTypes()
+            .SelectMany(t => t.GetProperties())
+            .Where(p => p.GetCustomAttributes(typeof(DatoSensibileAttribute), inherit: true).Length > 0)
+            .Where(p => p.PropertyType.IsValueType && Nullable.GetUnderlyingType(p.PropertyType) == null)
+            .Select(p => $"{p.DeclaringType?.Name}.{p.Name} ({p.PropertyType.Name})")
+            .ToList();
+
+        Assert.True(nonNullable.Count == 0,
+            "Proprietà [DatoSensibile] NON nullable — azzerarle mostrerebbe zeri finti:\n - " +
+            string.Join("\n - ", nonNullable));
+    }
+
+    /// <summary>
+    /// Il filtro dei dati sensibili è UNO e sta in Program.cs: se qualcuno lo togliesse,
+    /// i prezzi uscirebbero a tutti senza nessun errore a video.
+    /// </summary>
+    [Fact]
+    public void Il_filtro_prezzi_e_registrato_in_Program()
+    {
+        string? radice = TrovaRadiceRepo();
+        if (radice == null) return;
+
+        string program = File.ReadAllText(Path.Combine(radice, "ATEC.PM.Server", "Program.cs"));
+        Assert.Contains("PrezziSensibiliFilter", program);
+    }
+
+    /// <summary>
+    /// Se una voce dichiara il micro prices, da qualche parte devono esistere membri marcati
+    /// (e viceversa): una dichiarazione senza dati marcati è morta, dati marcati senza
+    /// nessuna voce dichiarata non vengono mai filtrati.
+    /// </summary>
+    [Fact]
+    public void Dichiarazioni_prices_e_membri_marcati_esistono_insieme()
+    {
+        bool vociConPrices = PermessiCatalogo.VociPrimarie().Any(v => v.Micros.Contains("prices"));
+        bool membriMarcati = typeof(DatoSensibileAttribute).Assembly.GetTypes()
+            .SelectMany(t => t.GetProperties())
+            .Any(p => p.GetCustomAttributes(typeof(DatoSensibileAttribute), inherit: true).Length > 0);
+
+        Assert.Equal(vociConPrices, membriMarcati);
+    }
+
     private static string KindSuggerito(string chiave) => chiave.Split('.')[0] switch
     {
         "nav" => "voce",

@@ -38,7 +38,8 @@ export async function fetchDdpRows(
       row.manufacturer = row.manufacturer ?? ""
       row.material = row.material ?? ""
       row.treatment = row.treatment ?? ""
-      row.totalCost = row.quantity * row.unitCost
+      // Costo nascosto (micro prezzi, §12.3): il totale resta null → a video «—», mai 0 finto.
+      row.totalCost = row.unitCost == null ? null : row.quantity * row.unitCost
     } else {
       row.unit = row.unit ?? ""
       row.manufacturer = row.manufacturer ?? ""

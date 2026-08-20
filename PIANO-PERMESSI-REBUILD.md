@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** in implementazione — **passi 1, 2 e 3 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split fotografico M103 con matrice runtime a zero divergenze, 198/198 test). Passi successivi su richiesta esplicita.  
+**Stato:** in implementazione — **passi 1, 2, 3 e 4 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split M103; micro prezzi M104 + `[DatoSensibile]` + filtro unico, matrici runtime a zero divergenze, 202/202 test). Restano i passi 5-7 (UI matrioska, pagina Master, pulizia) su richiesta esplicita.  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -504,6 +504,13 @@ cerchio nei due versi: endpoint che restituisce membri `[DatoSensibile]` con voc
 endpoint non-DTO (file, export) escono dal filtro e il censimento li elenca come casi da gestire
 a mano.
 
+*Nota d'implementazione (passo 4):* i tipi di ritorno degli endpoint non si risolvono con la
+riflessione statica (`IActionResult` è opaco), quindi la coerenza endpoint↔DTO è garantita **a
+runtime dal filtro** (che risolve le voci dagli attributi dell'endpoint) e presidiata dal
+censimento su tre fronti: proprietà marcate obbligatoriamente nullable, filtro registrato in
+Program.cs, dichiarazioni a catalogo e membri marcati che esistono insieme. L'abbinamento fine
+voce→DTO resta una regola di review (`.cursor/rules/permessi-catalogo-sensitive.mdc`).
+
 **In scrittura il filtro ha un gemello obbligatorio (anti-sovrascrittura).** Chi non ha il micro
 riceve i campi prezzo a `null`: se poi SALVA, quel `null` non deve arrivare al DB — o il
 salvataggio di un utente senza prezzi **cancellerebbe i prezzi veri**. Regola: sugli endpoint di
@@ -565,8 +572,19 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    utenti veri, 0 divergenze** (`project.X ⟺ nav.X` per tutti + endpoint OR coerenti).
    198/198 test (fotografia provata anche su dati pregressi, diniego NO compreso).
    Da qui il caso #77 (albero senza menu) è un gesto admin, non una migrazione.
-4. Semina fotografica dei micro `.prices` (§12.8, falla 1), poi `[DatoSensibile]` + filtro
-   risposta **in lettura e scrittura** (§12.3) + censimento prezzi.
+4. ✅ **FATTO 20/08/2026 (pilota DDP)** — migrazione **M104**: semina fotografica di
+   `<voce>.prices` per le 6 voci della famiglia distinte (DDP Commerciali/Officina, Gestore,
+   Inbox Acquisti, Lavorazioni, Inbox Officina), eredità = la voce stessa: chi vede la voce
+   tiene i suoi numeri, dinieghi compresi. `[DatoSensibile]` sui DTO delle righe
+   (UnitCost/TotalCost/TotalValue/HourlyRate…, tutti nullable), **`PrezziSensibiliFilter`**
+   unico in Program.cs: in lettura azzera (il JSON OMETTE i campi, `euro()` rende «—»), in
+   scrittura **respinge con 403** i membri sensibili valorizzati da chi non ha il micro;
+   i percorsi di scrittura trattano null come «non toccare» (COALESCE/flag). Censimento:
+   nullable obbligatorio, filtro registrato, dichiarazioni⟺membri marcati. **Matrice runtime:
+   219 controlli su 36 utenti + utente con diniego di prova — micro assente, prezzi spariti
+   dal JSON, scrittura respinta.** 202/202 test. Limite noto: nelle viste aggregate del
+   Gestore i totali calcolati a video valgono 0 per chi non vede i prezzi (le celle mostrano
+   «—»); l'estensione ad altre voci sensibili = stessa ricetta, una migrazione di semina per PR.
 5. UI matrioska della scheda persona (rende il catalogo, §12.2).
 6. Pagina Master + Applica/Copia adeguati (origin §3.6, dinieghi §3.7).
 7. Pulizia §6 (gergo vecchio, layer 9 aree; ramo OLD del motore quando NEW è definitivo).

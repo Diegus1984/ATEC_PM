@@ -248,7 +248,8 @@ function todayIso(): string {
 }
 
 function amount(row: DdpRowItem): number {
-  return row.quantity * row.unitCost
+  // Costo nascosto (micro prezzi assente, §12.3): negli aggregati vale 0 — le celle mostrano «—».
+  return row.quantity * (row.unitCost ?? 0)
 }
 
 function fmtDate(value: string | null): string {
@@ -679,11 +680,11 @@ export function buildSintesiModel({
       if (hasChildren) {
         const itemChildren = parentToChildrenLookup[item.id] ?? []
         unitCost = itemChildren.reduce(
-          (sum, child) => sum + child.unitCost * (child.compositionQty ?? 1),
+          (sum, child) => sum + (child.unitCost ?? 0) * (child.compositionQty ?? 1),
           0
         )
       }
-      const totalCost = unitCost * item.quantity
+      const totalCost = (unitCost ?? 0) * item.quantity
 
       return {
         ...item,
@@ -740,7 +741,7 @@ export function buildSintesiModel({
   }).length
   const costoZero = rows.filter(
     (row) =>
-      !(row.unitCost > 0) &&
+      !((row.unitCost ?? 0) > 0) &&
       !costZeroOk.has(row.itemStatus) &&
       !excludedStates.has(row.itemStatus)
   ).length
@@ -879,7 +880,7 @@ export function buildSintesiModel({
     const mDest = !row.destination?.trim()
     // A DB il costo unitario è DECIMAL con default 0: «vuoto» e «zero» non si distinguono.
     // Criterio unico: tutto ciò che non è maggiore di zero è un dato mancante.
-    const mCosto = !(row.unitCost > 0)
+    const mCosto = !((row.unitCost ?? 0) > 0)
     if (!(mStato || mRif || mData || mDest || mCosto)) continue
     const cell = (missing: boolean, label: string): MissingCell => ({
       text: missing ? label : "–",

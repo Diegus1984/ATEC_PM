@@ -1,4 +1,5 @@
 using System;
+using ATEC.PM.Shared;
 
 namespace ATEC.PM.Shared.DTOs;
 
@@ -19,14 +20,18 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
         set { _quantity = value; OnPropertyChanged(nameof(Quantity)); OnPropertyChanged(nameof(TotalCost)); }
     }
 
-    private decimal _unitCost;
-    public decimal UnitCost
+    private decimal? _unitCost;
+    /// <summary>Nullable per la regola dei dati sensibili (§12.3): null = «non lo puoi vedere», mai 0 finto.</summary>
+    [DatoSensibile]
+    public decimal? UnitCost
     {
         get => _unitCost;
         set { _unitCost = value; OnPropertyChanged(nameof(UnitCost)); OnPropertyChanged(nameof(TotalCost)); }
     }
 
-    public decimal TotalCost => Quantity * UnitCost;
+    /// <summary>Calcolata: diventa null da sola quando UnitCost è azzerato dal filtro prezzi.</summary>
+    [DatoSensibile]
+    public decimal? TotalCost => UnitCost == null ? null : Quantity * UnitCost.Value;
 
     public int? SupplierId { get; set; }
     public string SupplierName { get; set; } = "";
@@ -77,7 +82,9 @@ public class BomItemSaveRequest
     public string Description { get; set; } = "";
     public string Unit { get; set; } = "PZ";
     public decimal Quantity { get; set; } = 1;
-    public decimal UnitCost { get; set; }
+    /// <summary>Sensibile anche in INGRESSO: chi non ha il micro prezzi non può scriverlo (§12.3).</summary>
+    [DatoSensibile]
+    public decimal? UnitCost { get; set; }
     public int? SupplierId { get; set; }
     public string Manufacturer { get; set; } = "";
     public string ItemStatus { get; set; } = "VER";

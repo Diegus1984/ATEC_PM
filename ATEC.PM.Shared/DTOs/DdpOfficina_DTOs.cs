@@ -1,4 +1,5 @@
 using System;
+using ATEC.PM.Shared;
 
 namespace ATEC.PM.Shared.DTOs;
 
@@ -55,16 +56,21 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// riga più vecchia della v95. Resta sulla riga perché le tariffe in anagrafica sono più
     /// d'una: senza, riaprendo il particolare non si saprebbe quale è stata scelta.
     /// </summary>
+    [DatoSensibile]
     public decimal? HourlyRate { get; set; }
 
-    private decimal _unitCost;
-    public decimal UnitCost
+    private decimal? _unitCost;
+    /// <summary>Nullable per la regola dei dati sensibili (§12.3): null = «non lo puoi vedere», mai 0 finto.</summary>
+    [DatoSensibile]
+    public decimal? UnitCost
     {
         get => _unitCost;
         set { _unitCost = value; OnPropertyChanged(nameof(UnitCost)); OnPropertyChanged(nameof(TotalCost)); }
     }
 
-    public decimal TotalCost => Quantity * UnitCost;
+    /// <summary>Calcolata: diventa null da sola quando UnitCost è azzerato dal filtro prezzi.</summary>
+    [DatoSensibile]
+    public decimal? TotalCost => UnitCost == null ? null : Quantity * UnitCost.Value;
 
     public string Material { get; set; } = "";     // Materiale (es. ALLUMINIO, C40, INOX...)
     public string Treatment { get; set; } = "";    // Trattamento (es. ANODIZZATO, BRUNITO...)
@@ -135,8 +141,11 @@ public class OfficinaItemSaveRequest
     /// Tariffa oraria scelta per il calcolo (#87). Stessa regola di WorkHours: NULL = il
     /// chiamante non gestisce il campo → tariffa invariata sulla riga.
     /// </summary>
+    [DatoSensibile]
     public decimal? HourlyRate { get; set; }
-    public decimal UnitCost { get; set; }
+    /// <summary>Sensibile e nullable: NULL = costo invariato sulla riga (chi non ha il micro prezzi manda null o viene respinto, §12.3).</summary>
+    [DatoSensibile]
+    public decimal? UnitCost { get; set; }
     public string Material { get; set; } = "";
     public string Treatment { get; set; } = "";
     public int? SupplierId { get; set; }

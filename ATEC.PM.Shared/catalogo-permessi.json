@@ -32,8 +32,8 @@
             { "kind": "sezione-commessa", "chiave": "project.checklist", "label": "Check list", "nota": "Split passo 3: fotografata da nav.checklist (M103); endpoint in OR." },
             { "kind": "sezione-commessa", "chiave": "project.milestones", "label": "Milestone", "nota": "Split passo 3: fotografata da nav.milestones (M103); endpoint in OR." },
             { "kind": "sezione-commessa", "chiave": "project.sal", "label": "SAL / Fatturazione", "nota": "Split passo 3: fotografata da nav.sal (M103); endpoint in OR." },
-            { "kind": "sezione-commessa", "chiave": "project.ddp_commerciale", "label": "DDP Commerciali" },
-            { "kind": "sezione-commessa", "chiave": "project.ddp_officina", "label": "DDP Officina" },
+            { "kind": "sezione-commessa", "chiave": "project.ddp_commerciale", "label": "DDP Commerciali", "micros": ["prices"], "nota": "Micro prezzi dal passo 4 (M104, semina fotografica: chi vede la voce oggi tiene i prezzi)." },
+            { "kind": "sezione-commessa", "chiave": "project.ddp_officina", "label": "DDP Officina", "micros": ["prices"], "nota": "Micro prezzi dal passo 4 (M104, semina fotografica)." },
             { "kind": "sezione-commessa", "chiave": "project.work_requests", "label": "Lavorazioni", "nota": "Split passo 3: fotografata da nav.work_requests (M103); endpoint in OR." },
             { "kind": "sezione-commessa", "chiave": "project.documenti", "label": "Documenti" },
             { "kind": "azione", "chiave": "action.create_project", "label": "Crea commessa", "ritirata": true, "nota": "FANTASMA: seminata solo dal bootstrap dei DB nuovi (DbService), mai usata da codice o client, assente dai DB anziani. Scoperta dal test di idempotenza di EnsureCatalogo il 20/08/2026." },
@@ -87,6 +87,8 @@
           "kind": "voce",
           "chiave": "nav.gestore_ddp",
           "label": "Gestore DDP",
+          "micros": ["prices"],
+          "nota": "Micro prezzi dal passo 4 (M104, semina fotografica): le viste del Gestore aggregano i costi delle distinte.",
           "figli": [
             { "kind": "azione", "chiave": "action.delete_ddp_row", "label": "Elimina righe DDP" }
           ]
@@ -116,8 +118,10 @@
           "kind": "voce",
           "chiave": "nav.work_requests",
           "label": "Lavorazioni Officine",
+          "micros": ["prices"],
+          "nota": "Micro prezzi dal passo 4 (M104): le viste officina portano costi unitari e tariffe.",
           "figli": [
-            { "kind": "azione", "chiave": "nav.officina_inbox", "label": "Inbox Officina (endpoint)", "nota": "Ex pagina Inbox Officina, tolta con la #83: la chiave governa ancora le GET /inbox usate dai flussi officina." }
+            { "kind": "azione", "chiave": "nav.officina_inbox", "label": "Inbox Officina (endpoint)", "micros": ["prices"], "nota": "Ex pagina Inbox Officina, tolta con la #83: la chiave governa ancora le GET /inbox usate dai flussi officina. Micro prezzi dal passo 4." }
           ]
         },
         { "kind": "voce", "chiave": "nav.scadenze", "label": "Scadenze" }
@@ -127,7 +131,7 @@
       "kind": "sezione",
       "label": "Acquisti",
       "figli": [
-        { "kind": "voce", "chiave": "nav.acquisti_inbox", "label": "Inbox Acquisti" }
+        { "kind": "voce", "chiave": "nav.acquisti_inbox", "label": "Inbox Acquisti", "micros": ["prices"], "nota": "Micro prezzi dal passo 4 (M104): l'inbox mostra i costi delle righe in gara e in ordine." }
       ]
     },
     {

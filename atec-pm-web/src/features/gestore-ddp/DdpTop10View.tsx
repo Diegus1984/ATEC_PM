@@ -113,7 +113,7 @@ export function DdpTop10View(props: DdpViewProps) {
                   </TableCell>
                   <TableCell>{row.item.supplierName || "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {euro(row.item.quantity * row.item.unitCost)}
+                    {euro(row.item.unitCost == null ? null : row.item.quantity * row.item.unitCost)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.pctLabel}

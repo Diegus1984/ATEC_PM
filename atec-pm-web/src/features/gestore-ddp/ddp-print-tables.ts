@@ -163,7 +163,7 @@ export function buildPrintTable(key: PrintKey, ctx: PrintTableCtx): ExportTable 
             row.item.description,
             fmtQty(row.item.quantity),
             row.item.supplierName || "—",
-            euro(row.item.quantity * row.item.unitCost),
+            euro(row.item.unitCost == null ? null : row.item.quantity * row.item.unitCost),
             row.pctLabel,
           ]),
           ["", "Subtotale Top 10", "", "", euro(subtotal), pct(subtotal)],

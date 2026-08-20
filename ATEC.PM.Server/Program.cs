@@ -92,7 +92,13 @@ if (OperatingSystem.IsWindows())
     }
 }
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Il filtro unico dei dati sensibili (rebuild permessi §12.3): azzera i prezzi in
+        // uscita e respinge le scritture di prezzi a chi non ha il micro <voce>.prices.
+        // Scatta SOLO sugli endpoint le cui voci di catalogo dichiarano il micro.
+        options.Filters.Add<ATEC.PM.Server.Authorization.PrezziSensibiliFilter>();
+    })
     .AddJsonOptions(options =>
     {
         // CamelCase obbligatorio per il client web (altrimenti name/Name non allineati

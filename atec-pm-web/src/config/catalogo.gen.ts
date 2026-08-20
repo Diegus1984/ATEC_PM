@@ -177,12 +177,18 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
           {
             "kind": "sezione-commessa",
             "chiave": "project.ddp_commerciale",
-            "label": "DDP Commerciali"
+            "label": "DDP Commerciali",
+            "micros": [
+              "prices"
+            ]
           },
           {
             "kind": "sezione-commessa",
             "chiave": "project.ddp_officina",
-            "label": "DDP Officina"
+            "label": "DDP Officina",
+            "micros": [
+              "prices"
+            ]
           },
           {
             "kind": "sezione-commessa",
@@ -312,6 +318,9 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.gestore_ddp",
         "label": "Gestore DDP",
+        "micros": [
+          "prices"
+        ],
         "figli": [
           {
             "kind": "azione",
@@ -373,11 +382,17 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.work_requests",
         "label": "Lavorazioni Officine",
+        "micros": [
+          "prices"
+        ],
         "figli": [
           {
             "kind": "azione",
             "chiave": "nav.officina_inbox",
-            "label": "Inbox Officina (endpoint)"
+            "label": "Inbox Officina (endpoint)",
+            "micros": [
+              "prices"
+            ]
           }
         ]
       },
@@ -396,7 +411,10 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
       {
         "kind": "voce",
         "chiave": "nav.acquisti_inbox",
-        "label": "Inbox Acquisti"
+        "label": "Inbox Acquisti",
+        "micros": [
+          "prices"
+        ]
       }
     ]
   },
