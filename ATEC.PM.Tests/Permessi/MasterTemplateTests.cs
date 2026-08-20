@@ -144,7 +144,7 @@ public class MasterTemplateTests : IClassFixture<SchemaMasterFixture>
             Anteprima = true,
             Classe = "RESP_REPARTO",
         }, changedBy: null);
-        Assert.True(anteprima.Combo > 0);
+        Assert.True(anteprima.Voci > 0);
         Assert.Equal(0, c.ExecuteScalar<int>(
             "SELECT COUNT(*) FROM employee_feature_access WHERE employee_id = @Id AND origin = 'CLASSE'",
             new { Id = persona }));
@@ -156,7 +156,7 @@ public class MasterTemplateTests : IClassFixture<SchemaMasterFixture>
             Anteprima = false,
             Classe = "RESP_REPARTO",
         }, changedBy: null);
-        Assert.Equal(anteprima.Combo, esito.Combo);
+        Assert.Equal(anteprima.Voci, esito.Voci);
         Assert.True(esito.RispettateAMano >= 1);
 
         var pacchettoResp = c.Query<string>(
@@ -199,7 +199,7 @@ public class MasterTemplateTests : IClassFixture<SchemaMasterFixture>
         // 2 voci che arrivano + 1 che se ne va. Il diniego del sorgente NON è un cambio (per il
         // destinatario «non abilitato» resta «non abilitato»), ma la copia lo materializza lo
         // stesso come riga NO: è un'eccezione del clone, e si vede nell'assert qui sotto.
-        Assert.Equal(3, anteprima.Combo);
+        Assert.Equal(3, anteprima.Voci);
         Assert.Equal(1, c.ExecuteScalar<int>(
             "SELECT COUNT(*) FROM employee_feature_access WHERE employee_id = @Id", new { Id = destinatario }));
 

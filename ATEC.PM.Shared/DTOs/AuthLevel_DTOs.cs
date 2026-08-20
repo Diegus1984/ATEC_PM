@@ -48,14 +48,9 @@ public class UpdateAuthFeatureRequest
     public string Behavior { get; set; } = "HIDDEN";
 }
 
-public class CreateAuthFeatureRequest
-{
-    public string FeatureKey { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public string Category { get; set; } = "navigation";
-    public int MinLevel { get; set; }
-    public string Behavior { get; set; } = "HIDDEN";
-}
+// 🧹 `CreateAuthFeatureRequest` è uscito col passo 7 del rebuild: le funzioni si registrano
+// aggiungendo la voce a `catalogo-permessi.json` (EnsureCatalogo le mette in tabella al primo
+// avvio), non da un form — vedi AuthLevelController.
 
 public class AuthFeaturesContextDto
 {

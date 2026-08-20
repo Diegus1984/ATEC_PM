@@ -94,9 +94,7 @@ export function MasterTemplatesPage() {
         displayName: r.featureKey,
         categoria: "",
         stato: r.access,
-        statoClasse: r.access,
         origin: "" as const,
-        areaId: null,
       })),
     [pacchettoQuery.data]
   )
@@ -247,9 +245,9 @@ function ApplicaA({ classe, display }: { classe: string; display: string }) {
         classe,
       })
       notifySuccess(
-        esito.combo === 0
+        esito.voci === 0
           ? "Nessuna modifica: erano già come il template"
-          : `${esito.combo} ${esito.combo === 1 ? "voce aggiornata" : "voci aggiornate"} su ${esito.persone} ${esito.persone === 1 ? "persona" : "persone"}`
+          : `${esito.voci} ${esito.voci === 1 ? "voce aggiornata" : "voci aggiornate"} su ${esito.persone} ${esito.persone === 1 ? "persona" : "persone"}`
       )
       chiudi()
     } catch {
@@ -318,12 +316,12 @@ function ApplicaA({ classe, display }: { classe: string; display: string }) {
           ) : (
             <div className="space-y-3">
               <div className="text-sm">
-                {anteprima.combo === 0 ? (
+                {anteprima.voci === 0 ? (
                   <span>Non cambierebbe niente: sono già come il template.</span>
                 ) : (
                   <span>
-                    <strong>{anteprima.combo}</strong>{" "}
-                    {anteprima.combo === 1 ? "voce cambierebbe" : "voci cambierebbero"} su{" "}
+                    <strong>{anteprima.voci}</strong>{" "}
+                    {anteprima.voci === 1 ? "voce cambierebbe" : "voci cambierebbero"} su{" "}
                     {anteprima.persone} {anteprima.persone === 1 ? "persona" : "persone"}.
                   </span>
                 )}
@@ -375,7 +373,7 @@ function ApplicaA({ classe, display }: { classe: string; display: string }) {
               </Button>
             ) : (
               <Button
-                disabled={applicaMutation.isPending || anteprima.combo === 0}
+                disabled={applicaMutation.isPending || anteprima.voci === 0}
                 onClick={conferma}
               >
                 Applica queste modifiche

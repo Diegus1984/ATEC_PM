@@ -135,9 +135,9 @@ export function SchedaPersonaPage() {
     onSuccess: (esito) => {
       ricarica()
       notifySuccess(
-        esito.combo === 0
+        esito.voci === 0
           ? "Era già come il template"
-          : `${esito.combo} ${esito.combo === 1 ? "funzione riportata" : "funzioni riportate"} al template`
+          : `${esito.voci} ${esito.voci === 1 ? "funzione riportata" : "funzioni riportate"} al template`
       )
     },
     onError: (e) => notifyError(e, "Ritorno al template non riuscito"),
@@ -178,9 +178,9 @@ export function SchedaPersonaPage() {
       ricarica()
       chiudiCopia()
       notifySuccess(
-        esito.combo === 0
+        esito.voci === 0
           ? "Era già identica alla scheda del collega"
-          : `Scheda copiata: ${esito.combo} ${esito.combo === 1 ? "voce cambiata" : "voci cambiate"}`
+          : `Scheda copiata: ${esito.voci} ${esito.voci === 1 ? "voce cambiata" : "voci cambiate"}`
       )
     } catch {
       /* già segnalato */
@@ -209,9 +209,9 @@ export function SchedaPersonaPage() {
       setAnteprima(null)
       ricarica()
       notifySuccess(
-        esito.combo === 0
+        esito.voci === 0
           ? "Nessuna modifica: era già come il template"
-          : `${esito.combo} ${esito.combo === 1 ? "voce aggiornata" : "voci aggiornate"}`
+          : `${esito.voci} ${esito.voci === 1 ? "voce aggiornata" : "voci aggiornate"}`
       )
     } catch {
       /* già segnalato */
@@ -428,12 +428,12 @@ export function SchedaPersonaPage() {
           {anteprima ? (
             <div className="space-y-3">
               <div className="text-sm">
-                {anteprima.combo === 0 ? (
+                {anteprima.voci === 0 ? (
                   <span>Non cambierebbe niente: questa scheda è già come il template.</span>
                 ) : (
                   <span>
-                    <strong>{anteprima.combo}</strong>{" "}
-                    {anteprima.combo === 1 ? "voce cambierebbe" : "voci cambierebbero"}.
+                    <strong>{anteprima.voci}</strong>{" "}
+                    {anteprima.voci === 1 ? "voce cambierebbe" : "voci cambierebbero"}.
                   </span>
                 )}
                 {anteprima.rispettateAMano > 0 ? (
@@ -473,7 +473,7 @@ export function SchedaPersonaPage() {
             </Button>
             <Button
               onClick={confermaApplica}
-              disabled={applicaMutation.isPending || anteprima?.combo === 0}
+              disabled={applicaMutation.isPending || anteprima?.voci === 0}
             >
               Applica queste modifiche
             </Button>
@@ -516,12 +516,12 @@ export function SchedaPersonaPage() {
           ) : (
             <div className="space-y-3">
               <div className="text-sm">
-                {copiaAnteprima.combo === 0 ? (
+                {copiaAnteprima.voci === 0 ? (
                   <span>Le due schede sono già identiche: non cambierebbe niente.</span>
                 ) : (
                   <span>
-                    <strong>{copiaAnteprima.combo}</strong>{" "}
-                    {copiaAnteprima.combo === 1 ? "voce cambierebbe" : "voci cambierebbero"} su
+                    <strong>{copiaAnteprima.voci}</strong>{" "}
+                    {copiaAnteprima.voci === 1 ? "voce cambierebbe" : "voci cambierebbero"} su
                     questa scheda.
                   </span>
                 )}
@@ -560,7 +560,7 @@ export function SchedaPersonaPage() {
               </Button>
             ) : (
               <Button
-                disabled={copiaMutation.isPending || copiaAnteprima.combo === 0}
+                disabled={copiaMutation.isPending || copiaAnteprima.voci === 0}
                 onClick={confermaCopia}
               >
                 Copia queste modifiche

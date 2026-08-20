@@ -54,8 +54,10 @@ const TUTTE = "__tutte__"
  * Vinardi è *Responsabile* in *Acquisti*, non «un Acquisti»: tenerli separati è ciò che evita di
  * inventare una classe per ogni ufficio.
  *
- * La colonna «diverso dalla classe» è la più importante dell'elenco: dice a colpo d'occhio chi è
- * stato configurato apposta e chi è andato alla deriva.
+ * La colonna «a mano» è la più importante dell'elenco: dice a colpo d'occhio su chi qualcuno ha
+ * deciso qualcosa a mano — le eccezioni che «Applica template» rispetta. Ha preso il posto del
+ * vecchio «diverso dalla classe» (§5.9 rebuild), che contava una differenza col template e
+ * cambiava da sola cambiando la gerarchia a una persona, senza che nessuno avesse toccato niente.
  */
 export function PermessiPage() {
   const navigate = useNavigate()
@@ -140,7 +142,7 @@ export function PermessiPage() {
       setSelezione(new Set())
       void queryClient.invalidateQueries({ queryKey: ["permessi"] })
       notifySuccess(
-        `${esito.combo} ${esito.combo === 1 ? "combo aggiornata" : "combo aggiornate"} su ${esito.persone} ${esito.persone === 1 ? "persona" : "persone"}`
+        `${esito.voci} ${esito.voci === 1 ? "voce aggiornata" : "voci aggiornate"} su ${esito.persone} ${esito.persone === 1 ? "persona" : "persone"}`
       )
     } catch {
       /* già segnalato */
@@ -162,7 +164,7 @@ export function PermessiPage() {
               {selezione.size > 0 ? (
                 <Button size="sm" onClick={chiediAnteprima}>
                   <Wand2 />
-                  Applica classe ai selezionati ({selezione.size})
+                  Applica template ai selezionati ({selezione.size})
                 </Button>
               ) : null}
               <Button
@@ -321,14 +323,14 @@ export function PermessiPage() {
       <Dialog open={anteprima != null} onOpenChange={(o) => !o && setAnteprima(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Applica la classe ai selezionati</DialogTitle>
+            <DialogTitle>Applica il template ai selezionati</DialogTitle>
           </DialogHeader>
           {anteprima ? (
             <div className="space-y-3">
               <p className="text-sm">
                 <strong>{anteprima.persone}</strong>{" "}
-                {anteprima.persone === 1 ? "persona" : "persone"}, <strong>{anteprima.combo}</strong>{" "}
-                {anteprima.combo === 1 ? "combo cambiata" : "combo cambiate"}.
+                {anteprima.persone === 1 ? "persona" : "persone"}, <strong>{anteprima.voci}</strong>{" "}
+                {anteprima.voci === 1 ? "voce cambiata" : "voci cambiate"}.
                 {anteprima.rispettateAMano > 0 ? (
                   <span className="text-muted-foreground">
                     {" "}
@@ -368,7 +370,7 @@ export function PermessiPage() {
             </Button>
             <Button
               onClick={conferma}
-              disabled={applicaMutation.isPending || anteprima?.combo === 0}
+              disabled={applicaMutation.isPending || anteprima?.voci === 0}
             >
               Applica queste modifiche
             </Button>

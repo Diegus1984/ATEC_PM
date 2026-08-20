@@ -1,9 +1,8 @@
 namespace ATEC.PM.Shared.DTOs;
 
 /// <summary>
-/// Stato di una combo: <c>NO</c> = non abilitato (nessuna riga), <c>READ</c> = sola lettura,
-/// <c>FULL</c> = lettura e scrittura. Sono le tre voci che l'Excel di Paolo chiama
-/// «Non abilitato / solo lettura / lettura e scrittura».
+/// Stato di una voce: <c>NO</c> = non abilitato (nessuna riga, o un diniego esplicito),
+/// <c>READ</c> = sola lettura, <c>FULL</c> = lettura e scrittura.
 /// </summary>
 public static class StatoCombo
 {
@@ -13,64 +12,21 @@ public static class StatoCombo
 }
 
 /// <summary>
-/// Una delle 9 aree della maschera di Paolo (PIANO-PERMESSI.md §6). Un'area è UNA combo che
-/// può comandare PIÙ chiavi: «DDP Comm. + Officine» ne governa due, «Risorse» ne governa una
-/// in lettura e una in più in scrittura.
+/// Una singola funzione del catalogo, come si vede sulla scheda della persona.
 ///
-/// <para>Le aree stanno sul SERVER e non nel client apposta: sono la stessa cosa che i
-/// pacchetti-classe scrivono, e due elenchi da tenere allineati divergono al primo che si
-/// dimentica — con l'effetto di una combo che dice una cosa e concede l'altra.</para>
+/// <para><b>È lo stato EFFETTIVO</b> (jolly già espanso), non «cosa direbbe la classe»: la
+/// matrioska rende l'albero del catalogo e per ogni chiave chiede due cose sole — a che
+/// livello è, e se qualcuno l'ha decisa a mano (<c>Origin</c>). Il vecchio «diverso dalla
+/// classe» è uscito col rebuild §6: raccontava una differenza al posto di uno stato.</para>
 /// </summary>
-public class AreaPermessoDto
-{
-    public string Id { get; set; } = "";
-    public string Titolo { get; set; } = "";
-
-    /// <summary>Chiavi che la combo scrive a ogni livello (READ e FULL).</summary>
-    public List<string> Chiavi { get; set; } = new();
-
-    /// <summary>
-    /// Chiavi concesse SOLO quando la combo è su «scrittura»: è il caso di
-    /// <c>resources.edit</c>, che è la chiave di modifica del planner e non ha senso in lettura.
-    /// </summary>
-    public List<string> ChiaviSoloScrittura { get; set; } = new();
-
-    /// <summary>
-    /// <c>true</c> se la combo ha solo due stati (no / sì): Commesse, TimeSheet, Chat e
-    /// Documenti non hanno una via di mezzo — o si usano o no.
-    /// </summary>
-    public bool DueStati { get; set; }
-
-    /// <summary>Come si chiama lo stato «acceso» in questa area: «vede elenco», «carica ore»…</summary>
-    public string EtichettaAcceso { get; set; } = "lettura e scrittura";
-
-    /// <summary>Stato attuale della persona su quest'area: NO / READ / FULL.</summary>
-    public string Stato { get; set; } = StatoCombo.No;
-
-    /// <summary>Stato che avrebbe applicando la sua classe. Serve alla colonna «diverso dalla classe».</summary>
-    public string StatoClasse { get; set; } = StatoCombo.No;
-
-    /// <summary>Almeno una delle chiavi è stata decisa a mano (<c>origin = MANO</c>).</summary>
-    public bool AMano { get; set; }
-
-    /// <summary>
-    /// Le chiavi dell'area non sono tutte allo stesso stato (può succedere toccandole una per
-    /// una da «Funzioni avanzate»). La combo mostra il minimo, ma va detto.
-    /// </summary>
-    public bool Incoerente { get; set; }
-}
-
-/// <summary>Una singola funzione del catalogo, come si vede sulla scheda della persona.</summary>
 public class FunzionePermessoDto
 {
     public string FeatureKey { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string Categoria { get; set; } = "navigation";
     public string Stato { get; set; } = StatoCombo.No;
-    public string StatoClasse { get; set; } = StatoCombo.No;
+    /// <summary><c>MANO</c> = eccezione decisa a mano, che «Applica template» rispetta.</summary>
     public string Origin { get; set; } = "";
-    /// <summary>La funzione è governata da una delle 9 aree: sulla scheda si mostra lì, non fra le avanzate.</summary>
-    public string? AreaId { get; set; }
 }
 
 /// <summary>Una riga del registro delle modifiche ai permessi di una persona.</summary>
@@ -86,7 +42,7 @@ public class StoricoPermessoDto
     public DateTime ChangedAt { get; set; }
 }
 
-/// <summary>La scheda permessi di una persona: le 9 aree, il catalogo intero e lo storico.</summary>
+/// <summary>La scheda permessi di una persona: il catalogo intero con lo stato, e lo storico.</summary>
 public class SchedaPermessiDto
 {
     public int EmployeeId { get; set; }
@@ -94,7 +50,7 @@ public class SchedaPermessiDto
     public string Username { get; set; } = "";
     public string Status { get; set; } = "";
 
-    /// <summary>Classe = <c>employees.user_role</c>. Da sola non concede niente: riempie le combo.</summary>
+    /// <summary>Classe = <c>employees.user_role</c>. Da sola non concede niente: sceglie il template.</summary>
     public string Classe { get; set; } = "";
     public string ClasseDisplay { get; set; } = "";
 
@@ -104,12 +60,8 @@ public class SchedaPermessiDto
     /// <summary>Ha la riga jolly <c>*</c>: vede tutto, anche le funzioni che non esistono ancora.</summary>
     public bool Jolly { get; set; }
 
-    public List<AreaPermessoDto> Aree { get; set; } = new();
     public List<FunzionePermessoDto> Funzioni { get; set; } = new();
     public List<StoricoPermessoDto> Storico { get; set; } = new();
-
-    /// <summary>Quante funzioni sono diverse da quello che direbbe la sua classe.</summary>
-    public int DiverseDallaClasse { get; set; }
 }
 
 /// <summary>Riga di elenco della pagina «Permessi»: una persona.</summary>
@@ -122,7 +74,6 @@ public class RigaPermessiDto
     public string ClasseDisplay { get; set; } = "";
     public List<string> Reparti { get; set; } = new();
     public int Funzioni { get; set; }
-    public int DiverseDallaClasse { get; set; }
     /// <summary>Righe decise a mano (<c>origin = MANO</c>): le eccezioni che «Applica template» rispetta (§5.9 rebuild).</summary>
     public int AMano { get; set; }
     public bool Jolly { get; set; }
@@ -139,13 +90,16 @@ public class RigaPermessiDto
     public bool Segnaposto { get; set; }
 }
 
-/// <summary>Cambia una combo (area) o una singola funzione. <c>Stato</c>: NO / READ / FULL.</summary>
+/// <summary>
+/// Cambia UNA voce del catalogo sulla persona. <c>Stato</c>: NO / READ / FULL — e <c>NO</c>
+/// scrive un diniego, non cancella la riga (§3.7: spegnere non è cancellare).
+/// <para>Una chiave alla volta: il vecchio <c>AreaId</c> («una delle 9 aree» che ne comandava
+/// due o tre) è uscito col rebuild §6 — la matrioska accende una sezione mandando l'elenco
+/// delle sue chiavi, e resta un solo modo di scrivere un permesso.</para>
+/// </summary>
 public class ImpostaPermessoRequest
 {
     public int EmployeeId { get; set; }
-    /// <summary>Id dell'area (le 9 combo). Alternativo a <see cref="FeatureKey"/>.</summary>
-    public string? AreaId { get; set; }
-    /// <summary>Chiave singola (sezione «Funzioni avanzate»). Alternativo a <see cref="AreaId"/>.</summary>
     public string? FeatureKey { get; set; }
     public string Stato { get; set; } = StatoCombo.No;
 }
@@ -197,13 +151,14 @@ public class CambioPrevistoDto
     public string A { get; set; } = StatoCombo.No;
 }
 
-/// <summary>Esito di «Applica classe»: quante persone, quante combo, e l'elenco esatto.</summary>
+/// <summary>Esito di «Applica template»: quante persone, quante voci, e l'elenco esatto.</summary>
 public class EsitoApplicaClasseDto
 {
     public int Persone { get; set; }
-    public int Combo { get; set; }
+    /// <summary>Quante voci cambierebbero (o sono cambiate) in tutto.</summary>
+    public int Voci { get; set; }
     public List<CambioPrevistoDto> Cambi { get; set; } = new();
-    /// <summary>Combo lasciate stare perché decise a mano (<c>origin = MANO</c>).</summary>
+    /// <summary>Voci lasciate stare perché decise a mano (<c>origin = MANO</c>).</summary>
     public int RispettateAMano { get; set; }
 }
 
@@ -221,10 +176,10 @@ public class CopiaPermessiRequest
     public bool Anteprima { get; set; }
 }
 
-/// <summary>Riporta una funzione al valore della classe (toglie la decisione a mano).</summary>
+/// <summary>«Torna al template»: toglie la decisione a mano e rimette la voce sotto il pacchetto.</summary>
 public class RiallineaPermessoRequest
 {
     public int EmployeeId { get; set; }
-    /// <summary>Vuoto = riallinea TUTTE le funzioni della persona.</summary>
+    /// <summary>Vuoto = riporta al template TUTTE le voci della persona.</summary>
     public string? FeatureKey { get; set; }
 }

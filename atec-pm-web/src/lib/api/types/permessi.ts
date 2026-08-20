@@ -1,38 +1,21 @@
 /** Tipi della scheda permessi per persona — allineati a ATEC.PM.Shared/DTOs/Permessi_DTOs.cs */
 
-/** `NO` = non abilitato (nessuna riga), `READ` = sola lettura, `FULL` = lettura e scrittura. */
+/** `NO` = non abilitato (nessuna riga, o un diniego), `READ` = sola lettura, `FULL` = piena. */
 export type StatoCombo = "NO" | "READ" | "FULL"
 
-/** Chi ha scritto la riga: il pacchetto della classe, o una mano umana. */
+/** Chi ha scritto la riga: il pacchetto del template, o una mano umana. */
 export type OriginPermesso = "CLASSE" | "MANO" | ""
 
-/** Una delle 9 aree della maschera: una combo che può comandare più chiavi. */
-export interface AreaPermessoDto {
-  id: string
-  titolo: string
-  chiavi: string[]
-  chiaviSoloScrittura: string[]
-  /** Solo due stati (no / sì): Commesse, TimeSheet, Chat, Documenti. */
-  dueStati: boolean
-  /** Come si chiama lo stato «acceso» qui: «vede l'elenco», «carica le ore»… */
-  etichettaAcceso: string
-  stato: StatoCombo
-  /** Cosa direbbe la sua classe: se diverge, la combo è «diversa dalla classe». */
-  statoClasse: StatoCombo
-  aMano: boolean
-  /** Le chiavi dell'area non sono tutte allo stesso stato: la combo mostra il minimo. */
-  incoerente: boolean
-}
-
+/**
+ * Una voce del catalogo sulla scheda di una persona: lo stato EFFETTIVO (jolly già espanso)
+ * e chi l'ha deciso. Il vecchio `statoClasse`/`areaId` è uscito col passo 7 del rebuild (§6).
+ */
 export interface FunzionePermessoDto {
   featureKey: string
   displayName: string
   categoria: string
   stato: StatoCombo
-  statoClasse: StatoCombo
   origin: OriginPermesso
-  /** Se valorizzato, la funzione è già governata da una delle 9 aree. */
-  areaId: string | null
 }
 
 export interface StoricoPermessoDto {
@@ -56,10 +39,8 @@ export interface SchedaPermessiDto {
   reparti: string[]
   /** Ha la riga jolly `*`: vede tutto, comprese le funzioni non ancora inventate. */
   jolly: boolean
-  aree: AreaPermessoDto[]
   funzioni: FunzionePermessoDto[]
   storico: StoricoPermessoDto[]
-  diverseDallaClasse: number
 }
 
 export interface RigaPermessiDto {
@@ -70,7 +51,6 @@ export interface RigaPermessiDto {
   classeDisplay: string
   reparti: string[]
   funzioni: number
-  diverseDallaClasse: number
   /** Righe decise a mano (`origin = MANO`): le eccezioni che «Applica template» rispetta. */
   aMano: number
   jolly: boolean
@@ -109,8 +89,9 @@ export interface CambioPrevistoDto {
 
 export interface EsitoApplicaClasseDto {
   persone: number
-  combo: number
+  /** Quante voci cambierebbero (o sono cambiate) in tutto. */
+  voci: number
   cambi: CambioPrevistoDto[]
-  /** Combo lasciate stare perché decise a mano (`origin = MANO`). */
+  /** Voci lasciate stare perché decise a mano (`origin = MANO`). */
   rispettateAMano: number
 }

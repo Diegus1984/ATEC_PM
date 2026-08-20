@@ -15,7 +15,7 @@ export async function fetchElencoPermessi(): Promise<RigaPermessiDto[]> {
   return unwrapApi(response)
 }
 
-/** La scheda di una persona: 9 aree, catalogo intero, ultime 20 modifiche. */
+/** La scheda di una persona: catalogo intero con lo stato, ultime 20 modifiche. */
 export async function fetchSchedaPermessi(
   employeeId: number
 ): Promise<SchedaPermessiDto> {
@@ -26,22 +26,21 @@ export async function fetchSchedaPermessi(
 }
 
 /**
- * Cambia una combo. Si passa `areaId` (una delle 9 aree, che può comandare due chiavi)
- * OPPURE `featureKey` (una singola funzione avanzata) — mai tutti e due.
- * Quello che si tocca qui diventa `MANO`: «Applica classe» smetterà di sovrascriverlo.
+ * Cambia UNA voce del catalogo sulla persona. Quello che si tocca qui diventa `MANO`:
+ * «Applica template» smetterà di sovrascriverlo finché non si preme «Torna al template».
+ * `NO` scrive un diniego, non cancella la riga (§3.7: spegnere non è cancellare).
  */
 export async function impostaPermesso(request: {
   employeeId: number
-  areaId?: string
-  featureKey?: string
+  featureKey: string
   stato: StatoCombo
 }): Promise<void> {
-  const response = await apiPut<ApiResponse<null>>("/api/permessi/combo", request)
+  const response = await apiPut<ApiResponse<null>>("/api/permessi/voce", request)
   unwrapApi(response)
 }
 
 /**
- * Applica il pacchetto della classe.
+ * Applica il pacchetto del template.
  *
  * ⚠️ Con `anteprima: true` **non scrive niente** e torna l'elenco esatto dei cambi: è quello
  * che l'utente conferma. Chiamarla direttamente con `anteprima: false` senza aver mostrato
@@ -105,7 +104,7 @@ export async function impostaPacchetto(request: {
   unwrapApi(response)
 }
 
-/** Riporta al valore della classe una funzione, o tutte se `featureKey` è omesso. */
+/** «Torna al template» su una voce, o su tutte se `featureKey` è omesso. */
 export async function riallineaAllaClasse(request: {
   employeeId: number
   featureKey?: string

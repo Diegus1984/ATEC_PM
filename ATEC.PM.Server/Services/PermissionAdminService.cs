@@ -12,7 +12,7 @@ namespace ATEC.PM.Server.Services;
 ///
 /// <para><b>Le tre regole che tengono in piedi il tutto</b>, e che non vanno allentate:</para>
 /// <list type="number">
-/// <item><b>«Applica classe» riscrive solo le righe <c>origin = CLASSE</c>.</b> Le combo cambiate
+/// <item><b>«Applica template» riscrive solo le righe <c>origin = CLASSE</c>.</b> Le voci cambiate
 /// a mano restano dove sono. Senza questa regola il gesto da trenta secondi «tutti i tecnici
 /// vedano le Lavorazioni» ri-accenderebbe il Timesheet all'ufficio Acquisti e ridarebbe le
 /// commesse alla Contabilità — in silenzio, perché il piano si regge proprio sulle eccezioni per
@@ -48,43 +48,13 @@ public class PermissionAdminService
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // LE 9 AREE DELLA MASCHERA DI PAOLO (§6)
-    // ══════════════════════════════════════════════════════════════════════════════
-    //
-    // Stanno qui e non nel client perché sono la stessa cosa che i pacchetti-classe scrivono:
-    // due elenchi da tenere allineati divergono al primo che si dimentica, e il risultato è una
-    // combo che dice «lettura» e concede la scrittura.
-    //
-    // Il catalogo del gestionale è molto più largo di queste nove voci (71 chiavi): il resto sta
-    // sotto «Funzioni avanzate», chiuse di default. Non si scaricano quaranta combo su un
-    // tecnico, ma ci devono essere tutte — «non vedo la pagina X» si risponde dalla scheda, non
-    // leggendo il database.
-
-    private sealed record Area(
-        string Id,
-        string Titolo,
-        string[] Chiavi,
-        string[] ChiaviSoloScrittura,
-        bool DueStati,
-        string EtichettaAcceso);
-
-    private static readonly Area[] Aree =
-    {
-        new("commesse",   "Commesse",             new[] { "nav.commesse" },      Array.Empty<string>(), true,  "vede l'elenco"),
-        new("timesheet",  "TimeSheet",            new[] { "nav.timesheet" },     Array.Empty<string>(), true,  "carica le ore"),
-        new("risorse",    "Risorse",              new[] { "nav.risorse" },       new[] { "resources.edit" }, false, "lettura e scrittura"),
-        new("chat",       "Chat",                 new[] { "project.chat" },      Array.Empty<string>(), true,  "la usa"),
-        new("mom",        "Verbali MoM",          new[] { "nav.mom" },           Array.Empty<string>(), false, "lettura e scrittura"),
-        new("milestones", "Milestones",           new[] { "nav.milestones" },    Array.Empty<string>(), false, "lettura e scrittura"),
-        new("ddp",        "DDP Comm. + Officine", new[] { "project.ddp_commerciale", "project.ddp_officina" }, Array.Empty<string>(), false, "lettura e scrittura"),
-        new("lavorazioni","Lavorazioni",          new[] { "nav.work_requests" }, Array.Empty<string>(), false, "lettura e scrittura"),
-        new("documenti",  "Documenti",            new[] { "project.documenti" }, Array.Empty<string>(), true,  "accede e carica i file"),
-    };
-
-    /// <summary>Chiave → area che la governa. Serve a non ripeterla fra le «Funzioni avanzate».</summary>
-    private static readonly Dictionary<string, string> AreaDiChiave =
-        Aree.SelectMany(a => a.Chiavi.Concat(a.ChiaviSoloScrittura).Select(k => (k, a.Id)))
-            .ToDictionary(x => x.k, x => x.Id, StringComparer.OrdinalIgnoreCase);
+    // 🧹 Qui stavano LE 9 AREE (l'elenco fisso «Commesse / TimeSheet / Risorse…», una combo
+    // per più chiavi) e la mappa chiave → area. Sono uscite col passo 7 del rebuild (§6):
+    // la scheda RENDE l'albero del catalogo unico (`catalogo-permessi.json`), quindi una voce
+    // nuova compare da sola e non c'è più un secondo elenco da tenere allineato a mano — che
+    // era esattamente il modo in cui una combo finiva per dire «lettura» e concedere altro.
+    // La scheda accende una sezione mandando le sue chiavi una per una: un solo modo di
+    // scrivere un permesso, e il registro racconta chiave per chiave cos'è successo.
 
     // ══════════════════════════════════════════════════════════════════════════════
     // LETTURA
@@ -132,16 +102,6 @@ public class PermissionAdminService
             .ToDictionary(x => x.FeatureKey, x => x.Access.ToUpperInvariant(), StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Cosa dice la classe su questa funzione: NO / READ / FULL (il jolly vale FULL su tutto).</summary>
-    private static string StatoDaPacchetto(Dictionary<string, string> pacchetto, string featureKey)
-    {
-        if (pacchetto.TryGetValue(featureKey, out string? a))
-            return string.Equals(a, StatoCombo.Read, StringComparison.OrdinalIgnoreCase) ? StatoCombo.Read : StatoCombo.Full;
-        if (pacchetto.TryGetValue(FeatureAccessService.JollyKey, out string? j))
-            return string.Equals(j, StatoCombo.Read, StringComparison.OrdinalIgnoreCase) ? StatoCombo.Read : StatoCombo.Full;
-        return StatoCombo.No;
-    }
-
     /// <summary>
     /// Cosa vede DAVVERO la persona su questa funzione. Deve rispondere come il motore, jolly
     /// compreso: chi ha la riga <c>*</c> vede tutto, anche le funzioni per cui non ha una riga
@@ -166,7 +126,7 @@ public class PermissionAdminService
         return StatoCombo.No;
     }
 
-    /// <summary>Il valore di una riga come stato di combo: <c>NO</c> è un diniego, non un'assenza.</summary>
+    /// <summary>Il valore di una riga come stato di voce: <c>NO</c> è un diniego, non un'assenza.</summary>
     private static string Livello(string access)
     {
         if (FeatureAccessService.Negato(access)) return StatoCombo.No;
@@ -176,41 +136,19 @@ public class PermissionAdminService
     }
 
     /// <summary>
-    /// Come <see cref="StatoDaRighe"/> ma SENZA il jolly: serve a «Applica classe» e
-    /// «Riallinea», che devono ragionare sulle righe vere. Confondere i due significa scrivere
+    /// Come <see cref="StatoDaRighe"/> ma SENZA il jolly: serve a «Applica template» e «Torna
+    /// al template», che devono ragionare sulle righe vere. Confondere i due significa scrivere
     /// settanta righe esplicite a chi ha il jolly, o non accorgersi che una riga c'è.
     /// </summary>
     private static string StatoRigaEsplicita(Dictionary<string, RigaAccesso> righe, string featureKey) =>
         righe.TryGetValue(featureKey, out RigaAccesso? r) ? Livello(r.Access) : StatoCombo.No;
 
-    private static int Peso(string stato) => stato switch
-    {
-        StatoCombo.Full => 2,
-        StatoCombo.Read => 1,
-        _ => 0,
-    };
-
-    private static string DaPeso(int peso) => peso switch { 2 => StatoCombo.Full, 1 => StatoCombo.Read, _ => StatoCombo.No };
-
     /// <summary>
-    /// Lo stato di un'area: il MINIMO delle sue chiavi principali, ma <b>declassato a sola
-    /// lettura se manca una chiave di sola scrittura</b>.
-    ///
-    /// <para>🪤 Trovato a video il 13/08. Senza il secondo pezzo l'area «Risorse» diceva
-    /// «lettura e scrittura» a un tecnico che ha <c>nav.risorse</c> ma NON <c>resources.edit</c>
-    /// — cioè apre il planner e non può toccare niente. La combo dichiarava un permesso che la
-    /// persona non ha: esattamente il genere di bugia a video che questo piano esiste per
-    /// togliere, e per giunta sulla schermata da cui si decidono i permessi degli altri.</para>
+    /// La scheda della persona: per ogni chiave del catalogo lo stato EFFETTIVO (jolly già
+    /// espanso) e chi l'ha deciso. Niente «stato che avrebbe con la sua classe»: la matrioska
+    /// mostra cosa vede la persona e marca le eccezioni a mano, e il confronto col template è
+    /// un gesto («Torna al template»), non una colonna (§6 rebuild).
     /// </summary>
-    private static string StatoArea(Area a, Func<string, string> stato)
-    {
-        int principale = a.Chiavi.Select(k => Peso(stato(k))).Min();
-        if (principale < 2 || a.ChiaviSoloScrittura.Length == 0) return DaPeso(principale);
-
-        bool scriveDavvero = a.ChiaviSoloScrittura.All(k => Peso(stato(k)) == 2);
-        return scriveDavvero ? StatoCombo.Full : StatoCombo.Read;
-    }
-
     public SchedaPermessiDto Scheda(int employeeId)
     {
         using var c = _db.Open();
@@ -218,7 +156,6 @@ public class PermissionAdminService
             ?? throw new KeyNotFoundException("Dipendente non trovato");
 
         var righe = RighePersona(c, employeeId);
-        var pacchetto = PacchettoClasse(c, p.Classe);
         var catalogo = c.Query<AuthFeatureDto>(
             "SELECT feature_key AS FeatureKey, display_name AS DisplayName, category AS Category FROM auth_features ORDER BY category, display_name").ToList();
 
@@ -237,46 +174,19 @@ public class PermissionAdminService
             Jolly = righe.ContainsKey(FeatureAccessService.JollyKey),
         };
 
-        foreach (Area a in Aree)
-        {
-            var stati = a.Chiavi.Select(k => Peso(StatoDaRighe(righe, k))).ToList();
-            scheda.Aree.Add(new AreaPermessoDto
-            {
-                Id = a.Id,
-                Titolo = a.Titolo,
-                Chiavi = a.Chiavi.ToList(),
-                ChiaviSoloScrittura = a.ChiaviSoloScrittura.ToList(),
-                DueStati = a.DueStati,
-                EtichettaAcceso = a.EtichettaAcceso,
-                Stato = StatoArea(a, k => StatoDaRighe(righe, k)),
-                StatoClasse = StatoArea(a, k => StatoDaPacchetto(pacchetto, k)),
-                AMano = a.Chiavi.Concat(a.ChiaviSoloScrittura)
-                    .Any(k => righe.TryGetValue(k, out RigaAccesso? r)
-                              && string.Equals(r.Origin, PermissionChangeService.OriginMano, StringComparison.OrdinalIgnoreCase)),
-                Incoerente = stati.Distinct().Count() > 1,
-            });
-        }
-
-        // Il catalogo intero, per «Funzioni avanzate» e per il conteggio delle differenze.
+        // Il catalogo intero: la matrioska lo incrocia con l'albero di `catalogo-permessi.json`
+        // e ci trova lo stato di ogni chiave, micro compresi.
         foreach (AuthFeatureDto f in catalogo)
         {
-            string stato = StatoDaRighe(righe, f.FeatureKey);
-            string statoClasse = StatoDaPacchetto(pacchetto, f.FeatureKey);
             righe.TryGetValue(f.FeatureKey, out RigaAccesso? r);
-            AreaDiChiave.TryGetValue(f.FeatureKey, out string? areaId);
-
             scheda.Funzioni.Add(new FunzionePermessoDto
             {
                 FeatureKey = f.FeatureKey,
                 DisplayName = f.DisplayName,
                 Categoria = f.Category,
-                Stato = stato,
-                StatoClasse = statoClasse,
+                Stato = StatoDaRighe(righe, f.FeatureKey),
                 Origin = r?.Origin ?? "",
-                AreaId = areaId,
             });
-
-            if (!string.Equals(stato, statoClasse, StringComparison.OrdinalIgnoreCase)) scheda.DiverseDallaClasse++;
         }
 
         scheda.Storico = Storico(c, employeeId, 20);
@@ -333,22 +243,10 @@ public class PermissionAdminService
             .GroupBy(x => x.EmployeeId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Nome).OrderBy(n => n).ToList());
 
-        var catalogo = c.Query<string>("SELECT feature_key FROM auth_features").ToList();
-        var pacchetti = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
         var righe = new List<RigaPermessiDto>();
         foreach (Persona p in persone)
         {
-            if (!pacchetti.TryGetValue(p.Classe, out var pacchetto))
-            {
-                pacchetto = PacchettoClasse(c, p.Classe);
-                pacchetti[p.Classe] = pacchetto;
-            }
-
             var sue = RighePersona(c, p.Id);
-            int diverse = catalogo.Count(k =>
-                !string.Equals(StatoDaRighe(sue, k), StatoDaPacchetto(pacchetto, k), StringComparison.OrdinalIgnoreCase));
-
             righe.Add(new RigaPermessiDto
             {
                 EmployeeId = p.Id,
@@ -362,9 +260,10 @@ public class PermissionAdminService
                 // «71 funzioni» — cioè l'intero catalogo — proprio per la persona che ne vede
                 // quattro. Visto a video il 14/08.
                 Funzioni = sue.Values.Count(r => !FeatureAccessService.Negato(r.Access)),
-                DiverseDallaClasse = diverse,
-                // Le eccezioni decise a mano: il numero che la matrioska mette in vetrina
-                // al posto del vecchio «diverse dalla classe» (§5.9 rebuild).
+                // Le eccezioni decise a mano: il numero che la matrioska mette in vetrina al
+                // posto del vecchio «diverse dalla classe» (§5.9 rebuild). Quello contava una
+                // differenza col template — che cambia da sola cambiando la gerarchia a una
+                // persona — e costava una scansione dell'intero catalogo per ognuna.
                 AMano = sue.Values.Count(r => string.Equals(r.Origin, "MANO", StringComparison.OrdinalIgnoreCase)),
                 Jolly = sue.ContainsKey(FeatureAccessService.JollyKey),
                 Segnaposto = ESegnaposto(p.Username),
@@ -382,7 +281,7 @@ public class PermissionAdminService
     /// che possa amministrare i permessi.
     ///
     /// <para>Il controllo sta QUI, dopo la scrittura e dentro la transazione, e non nei singoli
-    /// endpoint: così vale per tutti i percorsi — combo singola, applica classe, copia da, bulk,
+    /// endpoint: così vale per tutti i percorsi — voce singola, applica template, copia da, bulk,
     /// e la disattivazione in anagrafica — senza doversene ricordare uno per uno. Ed è l'unico
     /// modo di essere esatti: «questa modifica lascia qualcuno?» si può rispondere solo guardando
     /// il risultato, perché a togliere l'ultimo amministratore può essere una combinazione di
@@ -483,7 +382,7 @@ public class PermissionAdminService
         bool nega = string.Equals(stato, StatoCombo.No, StringComparison.OrdinalIgnoreCase);
 
         // «Non abilitato» si scrive in due modi diversi, e la differenza è tutta la Fase D:
-        //  · deciso A MANO  → riga di DINIEGO (access='NO'), che sopravvive a «Applica classe»;
+        //  · deciso A MANO  → riga di DINIEGO (access='NO'), che sopravvive a «Applica template»;
         //  · deciso dalla CLASSE → nessuna riga, perché il pacchetto semplicemente non la dà.
         // Se il diniego a mano fosse un'assenza, la prima applicazione di massa lo cancellerebbe
         // e nessuno se ne accorgerebbe (§4.4: il Timesheet che si riaccende agli Acquisti).
@@ -511,44 +410,20 @@ public class PermissionAdminService
     }
 
     /// <summary>
-    /// Cambia una combo: una delle 9 aree (che può comandare più chiavi) oppure una singola
-    /// funzione dalle «Funzioni avanzate». Quello che si tocca qui diventa <c>MANO</c> e da quel
-    /// momento «Applica classe» non lo sovrascrive più — finché non si preme «Riallinea».
+    /// Cambia UNA voce del catalogo sulla persona. Quello che si tocca qui diventa <c>MANO</c>
+    /// e da quel momento «Applica template» non lo sovrascrive più — finché non si preme
+    /// «Torna al template».
     /// </summary>
     public void Imposta(ImpostaPermessoRequest req, int? changedBy)
     {
         string stato = Normalizza(req.Stato);
+        if (string.IsNullOrWhiteSpace(req.FeatureKey))
+            throw new ArgumentException("Serve FeatureKey");
 
         EseguiConGaranzia<object?>((c, tx, daAvvisare) =>
         {
-            bool cambiato = false;
-
-            if (!string.IsNullOrWhiteSpace(req.AreaId))
-            {
-                Area a = Aree.FirstOrDefault(x => x.Id == req.AreaId)
-                    ?? throw new KeyNotFoundException($"Area '{req.AreaId}' inesistente");
-
-                foreach (string k in a.Chiavi)
-                    cambiato |= ScriviRiga(c, tx, req.EmployeeId, k, stato, PermissionChangeService.OriginMano, changedBy);
-
-                // Le chiavi di sola scrittura (resources.edit) esistono solo a combo piena:
-                // in lettura vanno tolte, o il planner resterebbe modificabile.
-                foreach (string k in a.ChiaviSoloScrittura)
-                {
-                    string statoExtra = string.Equals(stato, StatoCombo.Full, StringComparison.OrdinalIgnoreCase)
-                        ? StatoCombo.Full
-                        : StatoCombo.No;
-                    cambiato |= ScriviRiga(c, tx, req.EmployeeId, k, statoExtra, PermissionChangeService.OriginMano, changedBy);
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(req.FeatureKey))
-            {
-                cambiato = ScriviRiga(c, tx, req.EmployeeId, req.FeatureKey, stato, PermissionChangeService.OriginMano, changedBy);
-            }
-            else
-            {
-                throw new ArgumentException("Serve AreaId oppure FeatureKey");
-            }
+            bool cambiato = ScriviRiga(
+                c, tx, req.EmployeeId, req.FeatureKey, stato, PermissionChangeService.OriginMano, changedBy);
 
             if (cambiato) daAvvisare.Add(req.EmployeeId);
             return null;
@@ -593,7 +468,7 @@ public class PermissionAdminService
     }
 
     /// <summary>
-    /// Il cuore di «Applica classe»: calcola i cambi e, se <paramref name="tx"/> non è null, li
+    /// Il cuore di «Applica template»: calcola i cambi e, se <paramref name="tx"/> non è null, li
     /// scrive. Lo stesso codice fa l'anteprima e l'applicazione, perché un'anteprima calcolata
     /// da un'altra strada è un'anteprima che prima o poi mente.
     /// </summary>
@@ -646,7 +521,7 @@ public class PermissionAdminService
 
                 if (string.Equals(ora, atteso, StringComparison.OrdinalIgnoreCase)) continue;
 
-                esito.Combo++;
+                esito.Voci++;
                 esito.Cambi.Add(new CambioPrevistoDto
                 {
                     EmployeeId = id,
@@ -716,7 +591,7 @@ public class PermissionAdminService
                 string dopo = sua?.Access.ToUpperInvariant() ?? StatoCombo.No;
                 if (!string.Equals(ora, dopo, StringComparison.OrdinalIgnoreCase))
                 {
-                    esito.Combo++;
+                    esito.Voci++;
                     esito.Cambi.Add(new CambioPrevistoDto
                     {
                         EmployeeId = destinatario.Id,
@@ -825,8 +700,8 @@ public class PermissionAdminService
     }
 
     /// <summary>
-    /// Riporta al valore della classe una funzione (o tutte): toglie la decisione a mano e
-    /// rimette la riga sotto il pacchetto. È il gesto esplicito che serve perché una combo
+    /// «Torna al template» su una voce (o su tutte): toglie la decisione a mano e
+    /// rimette la riga sotto il pacchetto. È il gesto esplicito che serve perché una voce
     /// toccata a mano resta <c>MANO</c> per sempre — e a un certo punto qualcuno deve poterla
     /// rimettere a posto senza passare dal database.
     /// </summary>
@@ -855,7 +730,7 @@ public class PermissionAdminService
 
                 if (!string.Equals(ora, atteso, StringComparison.OrdinalIgnoreCase))
                 {
-                    esito.Combo++;
+                    esito.Voci++;
                     esito.Cambi.Add(new CambioPrevistoDto
                     {
                         EmployeeId = p.Id, Nome = p.Nome, FeatureKey = chiave,

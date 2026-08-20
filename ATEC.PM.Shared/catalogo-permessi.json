@@ -23,6 +23,8 @@
           "kind": "voce",
           "chiave": "nav.commesse",
           "label": "Commesse",
+          "soloClient": true,
+          "motivo": "Voce di menu: ProjectsController non usa questa chiave (solo [Authorize]). GET /api/projects è l'elenco commesse di TUTTO il gestionale — lo leggono le combo di MoM, Timesheet, Check list, Chat, Trasferta — quindi metterci il gate chiuderebbe mezze pagine a chi non ha il menu Commesse. Le scritture hanno le loro chiavi (action.edit_project, action.delete_project, sezioni project.*). 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.",
           "figli": [
             { "kind": "sezione-commessa", "chiave": "project.dettagli", "label": "Dashboard Commessa", "soloClient": true, "motivo": "Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize])." },
             { "kind": "sezione-commessa", "chiave": "project.flusso_cassa", "label": "Flusso di Cassa", "soloClient": true, "motivo": "Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize])." },
@@ -71,6 +73,8 @@
           "kind": "voce",
           "chiave": "nav.risorse",
           "label": "Risorse",
+          "soloClient": true,
+          "motivo": "Voce di menu: in ResourcesController la LETTURA del planner è di tutti gli autenticati per scelta (le allocazioni si guardano fra colleghi), e la scrittura ha la sua chiave resources.edit. 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.",
           "figli": [
             { "kind": "azione", "chiave": "resources.edit", "label": "Modifica il planner risorse" }
           ]

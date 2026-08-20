@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 13:14.
+> Fotografia del 20/08/2026 13:45.
 
 ## Chiavi con endpoint
 
@@ -428,21 +428,19 @@
 - `POST /api/projects/{projectId:int}/hours/verify` (ProjectHoursController.Verify)
 
 ### `nav.permessi` — Permessi
-- `DELETE /api/auth-levels/features/{id}` (AuthLevelController.DeleteFeature)
 - `GET /api/auth-levels/migrazione/diff` (AuthLevelController.DiffPermessi)
 - `GET /api/permessi` (PermessiController.Elenco)
 - `GET /api/permessi/{employeeId:int}` (PermessiController.Scheda)
 - `GET /api/permessi/classe/{classe}` (PermessiController.Pacchetto)
 - `GET /api/permessi/classi` (PermessiController.Classi)
-- `POST /api/auth-levels/features` (AuthLevelController.CreateFeature)
 - `POST /api/auth-levels/migrazione/seed` (AuthLevelController.SeedPermessi)
 - `POST /api/permessi/applica-classe` (PermessiController.ApplicaClasse)
 - `POST /api/permessi/copia` (PermessiController.Copia)
 - `POST /api/permessi/riallinea` (PermessiController.Riallinea)
 - `PUT /api/auth-levels/features/{id}` (AuthLevelController.UpdateFeature)
 - `PUT /api/auth-levels/role-features` (AuthLevelController.SetRoleFeature)
-- `PUT /api/permessi/combo` (PermessiController.Imposta)
 - `PUT /api/permessi/pacchetto` (PermessiController.ImpostaPacchetto)
+- `PUT /api/permessi/voce` (PermessiController.Imposta)
 
 ### `nav.preventivi` — Preventivi
 - `DELETE /api/quotes/{id}` (QuotesController.Delete)
@@ -738,8 +736,6 @@
 - `data.bug_reports_all` — ATEC.PM.Server/Controllers/BugReportsController.cs
 - `data.project_drafts` — ATEC.PM.Server/Services/ProjectWriteGuard.cs
 - `data.timesheet_all_phases` — ATEC.PM.Server/Controllers/TimesheetController.cs
-- `nav.commesse` — ATEC.PM.Server/Services/PermissionAdminService.cs
-- `nav.risorse` — ATEC.PM.Server/Services/PermissionAdminService.cs
 - `sal.economics` — ATEC.PM.Server/Controllers/SalController.cs, ATEC.PM.Server/Services/FeatureAccessService.cs
 
 ## Chiavi solo client (motivo dichiarato a catalogo)
@@ -747,8 +743,10 @@
 - `action.sync_project_phases` — Gate solo client (bottone sync fasi): endpoint da censire al passo 3.
 - `nav.codex` — Pagina: le azioni Codex hanno chiavi proprie (manage/recode/assegna Codice ATEC).
 - `nav.codex_composizione` — Pagina: le scritture passano da action.edit_codex_composition.
+- `nav.commesse` — Voce di menu: ProjectsController non usa questa chiave (solo [Authorize]). GET /api/projects è l'elenco commesse di TUTTO il gestionale — lo leggono le combo di MoM, Timesheet, Check list, Chat, Trasferta — quindi metterci il gate chiuderebbe mezze pagine a chi non ha il menu Commesse. Le scritture hanno le loro chiavi (action.edit_project, action.delete_project, sezioni project.*). 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.
 - `nav.dashboard` — Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.
 - `nav.gamma_robot` — Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.
+- `nav.risorse` — Voce di menu: in ResourcesController la LETTURA del planner è di tutti gli autenticati per scelta (le allocazioni si guardano fra colleghi), e la scrittura ha la sua chiave resources.edit. 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.
 - `nav.sal_condizioni` — Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize]).
 - `project.dettagli` — Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize]).
 - `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).

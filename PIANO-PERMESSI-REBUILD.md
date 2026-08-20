@@ -344,19 +344,30 @@ Quando in Principale è aperta la lista voci e **Commesse** è spuntata:
 
 ## 6. Cosa togliere (pulizia, dopo cutover)
 
+> ✅ **Fatto il 20/08/2026** (passo 7 del §12.6), tranne il «secondo passo» qui sotto.
+
 ### Cancellare / spegnere (guscio classe *vecchio*)
-- UX «come la classe» / «Riallinea alla classe» / «Mostra solo quelle diverse»  
-- Semantica Applica che **non** rispetta eccezioni o che confonde CLASSE/MANO all’utente  
-- Layer admin delle «9 aree» se sostituito dalla matrioska menu  
-- Qualsiasi aggiornamento automatico dei grant persona al solo cambio etichetta ruolo  
+- ✅ UX «come la classe» / «Riallinea alla classe» / «Mostra solo quelle diverse» — sparite dal
+  client col passo 5 e ora anche dal contratto: niente `StatoClasse` né `DiverseDallaClasse`
+- ✅ Semantica Applica che **non** rispetta eccezioni o che confonde CLASSE/MANO all’utente
+- ✅ Layer admin delle «9 aree» — sostituito dalla matrioska: via DTO, array e ramo `AreaId`
+- ✅ Qualsiasi aggiornamento automatico dei grant persona al solo cambio etichetta ruolo —
+  verificato: `PUT /api/users/role` cambia `employees.user_role` e **basta**, i grant non si
+  muovono (cambia solo quale template propone «Applica template»)
+- ✅ *(non era in elenco ma è la stessa malattia)* «Nuova funzione» / «Elimina» nel Catalogo
+  funzioni: dal passo 2 `auth_features` è la proiezione di `catalogo-permessi.json`, e un
+  secondo posto da cui registrare chiavi è di nuovo «due elenchi che divergono»
 
 ### Evolvere (non buttare l’idea)
-- Pacchetti per profilo → **template master** (matrioska), applicati solo con gesto esplicito + anteprima + rispetto eccezioni  
-- `origin` / equivalente → solo per marcare eccezione «a mano» (protezione), non per narrare «come la classe» in UI  
+- ✅ Pacchetti per profilo → **template master** (matrioska), applicati solo con gesto esplicito + anteprima + rispetto eccezioni *(passo 6: pagina `/permessi/master`)*
+- ✅ `origin` / equivalente → solo per marcare eccezione «a mano» (protezione), non per narrare «come la classe» in UI  
 
-### Secondo passo (motore VECCHIO, se NEW è definitivo)
+### Secondo passo (motore VECCHIO, se NEW è definitivo) — ⏸️ **NON ancora fatto, di proposito**
 - Ramo OLD in `FeatureAccessService` (livelli + `auth_role_features` runtime)  
 - Interruttore `PermissionsEngine` quando non serve più il rollback  
+- La pagina Catalogo funzioni (matrice funzioni × ruoli, `min_level`, `behavior`) esce **con
+  loro**: finché il rollback esiste è il pannello del motore vecchio, e spegnerla adesso
+  lascerebbe il rollback senza volante. Oggi avvisa in rosso che non comanda più niente.  
 
 ### Non cancellare
 - Grant sulla persona (verità runtime)
@@ -608,7 +619,31 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    (template senza effetti collaterali, override rispettoso delle eccezioni, clone con
    origin). 205/205 test, tsc/eslint/build verdi. Prima di questa pagina un ritocco al
    pacchetto era una migrazione (la #77 fu la M089).
-7. Pulizia §6 (gergo vecchio, layer 9 aree; ramo OLD del motore quando NEW è definitivo).
+7. ✅ **FATTO 20/08/2026** — pulizia §6. **Via il layer «9 aree»**: `AreaPermessoDto`,
+   `SchedaPermessiDto.Aree`, l'array `Aree` + `AreaDiChiave` + `StatoArea` nel servizio e il
+   ramo `AreaId` di `Imposta` (una chiave alla volta: la matrioska accende una sezione
+   mandando le sue chiavi). **Via il «diverso dalla classe»**: `DiverseDallaClasse` (scheda ed
+   elenco) e `FunzionePermessoDto.StatoClasse` — l'elenco mostra «a mano», e in più `Elenco`
+   non scandisce più l'intero catalogo per ogni persona. Gergo nuovo anche nelle stringhe a
+   video e nei nomi: `EsitoApplicaClasseDto.Combo` → `Voci`, `PUT /api/permessi/combo` →
+   `/voce`, «Applica classe» → «Applica template», «Riallineato alla classe» → «Tornato al
+   template». **Catalogo funzioni**: tolti «Nuova funzione» ed «Elimina» (client + endpoint
+   `POST`/`DELETE /api/auth-levels/features` + `CreateAuthFeatureRequest`) — dal passo 2
+   `auth_features` è la proiezione del JSON, quindi creare una chiave lì la lasciava orfana e
+   cancellarne una portava via le righe di `auth_role_features` per poi vederla tornare al
+   riavvio; la pagina resta come specchio del catalogo e pannello del motore vecchio, con
+   l'avviso che dice dove si registrano davvero le funzioni (`min_level`/`behavior` restano
+   editabili: sono le manopole del rollback).
+   🪤 **Il censimento ha trovato un buco vero appena tolte le 9 aree**: `nav.commesse` e
+   `nav.risorse` risultavano «usate» solo perché comparivano come stringhe in quell'array —
+   sul server nessun `[RequireFeature]` le nomina. Marcate `soloClient` col motivo (§12.8.6):
+   `GET /api/projects` è l'elenco commesse di tutto il gestionale (lo leggono MoM, Timesheet,
+   Check list, Chat, Trasferta) e metterci il gate chiuderebbe mezze pagine; la lettura del
+   planner risorse è di tutti per scelta e la scrittura ha già `resources.edit`. 205/205 test,
+   tsc/eslint/build verdi.
+   **Non toccato di proposito**: il ramo OLD di `FeatureAccessService` e l'interruttore
+   `PermissionsEngine` (§6 «secondo passo») — è la strada del rollback e resta finché NEW non
+   è definitivo in produzione.
 
 Ogni passo è deployabile da solo; fino al 5 **non cambia niente per gli utenti**.
 

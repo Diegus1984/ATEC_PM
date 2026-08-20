@@ -130,6 +130,7 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.commesse",
         "label": "Commesse",
+        "soloClient": true,
         "figli": [
           {
             "kind": "sezione-commessa",
@@ -294,6 +295,7 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.risorse",
         "label": "Risorse",
+        "soloClient": true,
         "figli": [
           {
             "kind": "azione",

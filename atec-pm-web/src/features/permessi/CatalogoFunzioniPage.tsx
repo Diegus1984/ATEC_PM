@@ -1,10 +1,8 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Plus, RefreshCw, Search, Trash2, TriangleAlert } from "lucide-react"
+import { RefreshCw, Search, TriangleAlert } from "lucide-react"
 
-import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
-import { RowActionsMenu } from "@/components/shared/row-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,15 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -42,20 +32,13 @@ import {
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import {
-  createAuthFeature,
-  deleteAuthFeature,
   fetchAuthFeatures,
   fetchAuthLevels,
   fetchRoleFeatures,
   setRoleFeature,
   updateAuthFeature,
 } from "@/lib/api/auth-levels"
-import type {
-  AuthFeatureDto,
-  AuthLevelDto,
-  FeatureAccess,
-} from "@/lib/api/types"
-
+import type { AuthFeatureDto, FeatureAccess } from "@/lib/api/types"
 
 const BEHAVIOR_OPTIONS = [
   { value: "HIDDEN", label: "Nascondi" },
@@ -81,17 +64,21 @@ function grantKey(roleName: string, featureKey: string): string {
  * Catalogo delle funzioni — la vecchia matrice funzioni × ruoli.
  *
  * ⚠️ Dalla Fase A **non comanda più i permessi**: scrive in `auth_role_features` e
- * `auth_features.min_level`, che il motore nuovo non legge. Resta come catalogo (quali chiavi
- * esistono, come si chiamano, cosa fa il gestionale a chi non è autorizzato) e come unico posto
- * da cui registrare una funzione nuova. I permessi delle persone si cambiano dalla loro scheda
- * (`PermessiPage` → `SchedaPersonaPage`).
+ * `auth_features.min_level`, che il motore nuovo non legge. Resta come specchio del catalogo
+ * (quali chiavi esistono, come si chiamano) e come pannello del motore VECCHIO, che è la strada
+ * del rollback. I permessi delle persone si cambiano dalla loro scheda (`PermessiPage` →
+ * `SchedaPersonaPage`), i template dalla pagina Master.
+ *
+ * 🧹 Passo 7 del rebuild: **«Nuova funzione» ed «Elimina» sono usciti**. Dal passo 2 la tabella
+ * è la proiezione di `catalogo-permessi.json` e la riallinea `EnsureCatalogo` a ogni avvio: una
+ * chiave creata qui non la usa nessun endpoint (resta orfana e segnalata), una cancellata torna
+ * al riavvio dopo aver portato via le sue righe di `auth_role_features`. Una funzione nuova
+ * nasce nel file, non in un form.
  */
 export function CatalogoFunzioniPage() {
   const queryClient = useQueryClient()
-  const confirm = useConfirm()
   const [search, setSearch] = React.useState("")
   const [features, setFeatures] = React.useState<AuthFeatureDto[]>([])
-  const [addOpen, setAddOpen] = React.useState(false)
 
   const levelsQuery = useQuery({
     queryKey: ["auth-levels"],
@@ -169,12 +156,6 @@ export function CatalogoFunzioniPage() {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteAuthFeature,
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => notifyError(err),
-  })
-
   function patchFeature(id: number, patch: Partial<AuthFeatureDto>) {
     setFeatures((prev) =>
       prev.map((feature) =>
@@ -189,17 +170,6 @@ export function CatalogoFunzioniPage() {
       minLevel: merged.minLevel,
       behavior: merged.behavior,
     })
-  }
-
-  async function handleDelete(feature: AuthFeatureDto) {
-    const ok = await confirm({
-      title: "Elimina funzione",
-      description: `Eliminare la funzione "${feature.displayName}"?`,
-      confirmLabel: "Elimina",
-    })
-    if (ok) {
-      deleteMutation.mutate(feature.id)
-    }
   }
 
   const rows = React.useMemo(() => {
@@ -220,14 +190,6 @@ export function CatalogoFunzioniPage() {
     )
   }, [features, search])
 
-  const categories = React.useMemo(
-    () =>
-      Array.from(new Set(features.map((feature) => feature.category)))
-        .filter(Boolean)
-        .sort(),
-    [features]
-  )
-
   return (
     <div className="space-y-4">
       {isPersonPermissionEngine() ? (
@@ -237,17 +199,28 @@ export function CatalogoFunzioniPage() {
           <AlertDescription>
             I permessi sono passati sulla <strong>persona</strong>: chi vede cosa lo dice una
             riga per dipendente, non più il livello del ruolo. Quello che si salva qui — livello
-            minimo, comportamento, concessioni per ruolo — non ha più effetto su nessuno. La
-            pagina resta consultabile come catalogo delle funzioni; per cambiare i permessi di
-            qualcuno serve la scheda della persona, ancora da fare.
+            minimo, comportamento, concessioni per ruolo — non ha più effetto su nessuno: resta
+            solo come configurazione del motore vecchio. Per cambiare i permessi di qualcuno c'è
+            la <strong>scheda della persona</strong>; per i pacchetti, la pagina{" "}
+            <strong>Master / Template</strong>.
           </AlertDescription>
         </Alert>
       ) : null}
+      <Alert>
+        <TriangleAlert />
+        <AlertTitle>L'elenco delle funzioni si scrive nel catalogo, non qui</AlertTitle>
+        <AlertDescription>
+          Quali funzioni esistono e come si chiamano lo dice{" "}
+          <code>catalogo-permessi.json</code>: il server riallinea questa tabella a ogni avvio.
+          Una funzione nuova si aggiunge lì (i test stampano la voce pronta se un endpoint usa
+          una chiave che non c'è) e compare qui da sola.
+        </AlertDescription>
+      </Alert>
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Permessi</CardTitle>
+              <CardTitle>Catalogo funzioni</CardTitle>
               <CardDescription>
                 Livello minimo e comportamento per ogni funzione ({features.length})
               </CardDescription>
@@ -264,10 +237,6 @@ export function CatalogoFunzioniPage() {
               >
                 <RefreshCw />
                 Aggiorna
-              </Button>
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                <Plus />
-                Nuova funzione
               </Button>
             </div>
           </div>
@@ -345,14 +314,13 @@ export function CatalogoFunzioniPage() {
                     </TableHead>
                   ))}
                   <TableHead className="w-36">Se non autorizzato</TableHead>
-                  <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6 + hierarchyLevels.length + deptRoles.length}
+                      colSpan={5 + hierarchyLevels.length + deptRoles.length}
                       className="h-24 text-center text-muted-foreground"
                     >
                       Nessuna funzione.
@@ -461,22 +429,6 @@ export function CatalogoFunzioniPage() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end">
-                          <RowActionsMenu
-                            actions={[
-                              {
-                                label: "Elimina",
-                                icon: Trash2,
-                                destructive: true,
-                                onClick: () => {
-                                  void handleDelete(feature)
-                                },
-                              },
-                            ]}
-                          />
-                        </div>
-                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -485,145 +437,6 @@ export function CatalogoFunzioniPage() {
           </GridScroller>
         </CardContent>
       </Card>
-
-      <AddFeatureDialog
-        open={addOpen}
-        levels={hierarchyLevels}
-        categories={categories}
-        onClose={() => setAddOpen(false)}
-        onSaved={async () => {
-          setAddOpen(false)
-          await invalidate()
-        }}
-      />
     </div>
-  )
-}
-
-function AddFeatureDialog({
-  open,
-  levels,
-  categories,
-  onClose,
-  onSaved,
-}: {
-  open: boolean
-  levels: AuthLevelDto[]
-  categories: string[]
-  onClose: () => void
-  onSaved: () => Promise<void>
-}) {
-  const [displayName, setDisplayName] = React.useState("")
-  const [featureKey, setFeatureKey] = React.useState("")
-  const [category, setCategory] = React.useState("navigation")
-  const [minLevel, setMinLevel] = React.useState("0")
-  const [error, setError] = React.useState<string | null>(null)
-
-  const categoryOptions = React.useMemo(() => {
-    const base = ["navigation", "action", "financial", "admin", "report"]
-    return Array.from(new Set([...categories, ...base])).sort()
-  }, [categories])
-
-  React.useEffect(() => {
-    if (!open) return
-    setDisplayName("")
-    setFeatureKey("")
-    setCategory(categories[0] ?? "navigation")
-    setMinLevel(String(levels[0]?.levelValue ?? 0))
-    setError(null)
-  }, [open, categories, levels])
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!displayName.trim() || !featureKey.trim()) {
-        throw new Error("Nome e codice interno sono obbligatori.")
-      }
-      await createAuthFeature({
-        featureKey: featureKey.trim().toLowerCase(),
-        displayName: displayName.trim(),
-        category,
-        minLevel: Number(minLevel),
-        behavior: "HIDDEN",
-      })
-    },
-    onSuccess: onSaved,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nuova funzione</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid gap-2">
-            <Label>Nome funzione</Label>
-            <Input
-              value={displayName}
-              autoFocus
-              placeholder="Es. Crea ordine"
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label>Codice interno</Label>
-            <Input
-              value={featureKey}
-              className="font-mono"
-              placeholder="area.nome_funzione — es. nav.mia_pagina"
-              onChange={(event) => setFeatureKey(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Formato: area.nome_funzione (es. nav.mia_pagina, action.crea_ordine).
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Categoria</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Livello minimo</Label>
-              <Select value={minLevel} onValueChange={setMinLevel}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {levels.map((level) => (
-                    <SelectItem key={level.id} value={String(level.levelValue)}>
-                      {level.levelValue} · {level.displayName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={!displayName.trim() || !featureKey.trim() || saveMutation.isPending}
-          >
-            Crea
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

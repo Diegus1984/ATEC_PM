@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
+import { apiGet, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   ApiResponse,
   AuthFeatureDto,
@@ -40,20 +40,12 @@ export async function setRoleFeature(request: {
   unwrapApi(response)
 }
 
-export async function createAuthFeature(request: {
-  featureKey: string
-  displayName: string
-  category: string
-  minLevel: number
-  behavior: string
-}): Promise<void> {
-  const response = await apiPost<ApiResponse<string>>(
-    "/api/auth-levels/features",
-    request
-  )
-  unwrapApi(response)
-}
+// 🧹 `createAuthFeature` / `deleteAuthFeature` sono usciti col passo 7 del rebuild: dal passo 2
+// `auth_features` è la proiezione di `catalogo-permessi.json` (EnsureCatalogo la riallinea a
+// ogni avvio), quindi una funzione si registra aggiungendo la voce al file — non da un form,
+// che creerebbe chiavi che nessun endpoint usa o cancellerebbe righe che tornano al riavvio.
 
+/** Livello minimo e comportamento: manopole del motore VECCHIO (restano per il rollback). */
 export async function updateAuthFeature(
   id: number,
   request: { minLevel: number; behavior: string }
@@ -61,13 +53,6 @@ export async function updateAuthFeature(
   const response = await apiPut<ApiResponse<string>>(
     `/api/auth-levels/features/${id}`,
     request
-  )
-  unwrapApi(response)
-}
-
-export async function deleteAuthFeature(id: number): Promise<void> {
-  const response = await apiDelete<ApiResponse<string>>(
-    `/api/auth-levels/features/${id}`
   )
   unwrapApi(response)
 }

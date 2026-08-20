@@ -57,12 +57,12 @@ public class PermessiController : ControllerBase
         }
     }
 
-    /// <summary>Elenco delle persone attive, con quante funzioni hanno e quante sono diverse dalla classe.</summary>
+    /// <summary>Elenco delle persone attive, con quante funzioni hanno e quante eccezioni a mano.</summary>
     [HttpGet]
     public IActionResult Elenco() =>
         Ok(ApiResponse<List<RigaPermessiDto>>.Ok(_permessi.Elenco()));
 
-    /// <summary>La scheda di una persona: le 9 aree, il catalogo intero e le ultime 20 modifiche.</summary>
+    /// <summary>La scheda di una persona: il catalogo intero con lo stato e le ultime 20 modifiche.</summary>
     [HttpGet("{employeeId:int}")]
     public IActionResult Scheda(int employeeId) =>
         Esegui(() => _permessi.Scheda(employeeId), "");
@@ -87,22 +87,24 @@ public class PermessiController : ControllerBase
             "Template aggiornato: nessun utente cambia finché non lo applichi");
 
     /// <summary>
-    /// Cambia una combo — una delle 9 aree o una singola funzione avanzata. Quello che si tocca
-    /// diventa <c>MANO</c> e «Applica classe» non lo sovrascrive più.
+    /// Cambia UNA voce del catalogo sulla persona. Quello che si tocca diventa <c>MANO</c> e
+    /// «Applica template» non lo sovrascrive più.
+    /// <para>La rotta si chiamava <c>combo</c> quando la scheda era fatta di nove combo: dal
+    /// passo 7 del rebuild è una voce alla volta, e il nome lo dice (§6).</para>
     /// </summary>
-    [HttpPut("combo")]
+    [HttpPut("voce")]
     public IActionResult Imposta([FromBody] ImpostaPermessoRequest req) =>
         Esegui<object?>(() => { _permessi.Imposta(req, UtenteCorrente); return null; }, "Permesso aggiornato");
 
     /// <summary>
-    /// Applica il pacchetto della classe. <b>Con <c>anteprima = true</c> non scrive niente</b> e
+    /// Applica il pacchetto del template. <b>Con <c>anteprima = true</c> non scrive niente</b> e
     /// torna l'elenco esatto di cosa cambierebbe: è quello che si conferma, non il pulsante.
-    /// Le combo decise a mano restano dove sono e vengono contate a parte.
+    /// Le voci decise a mano restano dove sono e vengono contate a parte.
     /// </summary>
     [HttpPost("applica-classe")]
     public IActionResult ApplicaClasse([FromBody] ApplicaClasseRequest req) =>
         Esegui(() => _permessi.ApplicaClasse(req, UtenteCorrente),
-            req.Anteprima ? "" : "Classe applicata");
+            req.Anteprima ? "" : "Template applicato");
 
     /// <summary>
     /// Copia la scheda di un collega — un CLONE, origin compresi (§3.6). Con
@@ -113,8 +115,8 @@ public class PermessiController : ControllerBase
         Esegui(() => _permessi.CopiaDa(req, UtenteCorrente),
             req.Anteprima ? "" : "Scheda copiata");
 
-    /// <summary>Riporta una funzione (o tutte) al valore della classe.</summary>
+    /// <summary>«Torna al template» su una voce, o su tutte se `featureKey` è vuoto.</summary>
     [HttpPost("riallinea")]
     public IActionResult Riallinea([FromBody] RiallineaPermessoRequest req) =>
-        Esegui(() => _permessi.Riallinea(req, UtenteCorrente), "Riallineato alla classe");
+        Esegui(() => _permessi.Riallinea(req, UtenteCorrente), "Tornato al template");
 }

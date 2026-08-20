@@ -274,51 +274,23 @@ public class AuthLevelController : ControllerBase
         return Ok(ApiResponse<string>.Ok("Feature aggiornata"));
     }
 
-    /// <summary>Crea nuova feature</summary>
-    [HttpPost("features")]
-    [Authorize]
-    [RequireFeature("nav.permessi")]
-    public IActionResult CreateFeature([FromBody] CreateAuthFeatureRequest req)
-    {
-        if (string.IsNullOrWhiteSpace(req.FeatureKey) || string.IsNullOrWhiteSpace(req.DisplayName))
-            return BadRequest(ApiResponse<string>.Fail("FeatureKey e DisplayName sono obbligatori"));
-
-        using var c = _db.Open();
-        try
-        {
-            // Registrare una funzione TOGLIE accesso: finché la chiave non è in catalogo il
-            // fallback la lascia aperta a tutti (FeatureAccessService.CanAccess). Il confronto
-            // prima/dopo lo dice riga per riga, invece di scoprirlo dagli utenti.
-            _changes.ApplicaEPropaga(req.FeatureKey, null, UtenteCorrente, () =>
-                c.Execute(
-                    @"INSERT INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                      VALUES (@FeatureKey, @DisplayName, @Category, @MinLevel, @Behavior)", req));
-            return Ok(ApiResponse<string>.Ok("Feature creata"));
-        }
-        catch (MySqlConnector.MySqlException ex) when (ex.Number == 1062)
-        {
-            return Conflict(ApiResponse<string>.Fail($"Feature '{req.FeatureKey}' esiste già"));
-        }
-    }
-
-    /// <summary>Elimina feature</summary>
-    [HttpDelete("features/{id}")]
-    [Authorize]
-    [RequireFeature("nav.permessi")]
-    public IActionResult DeleteFeature(int id)
-    {
-        using var c = _db.Open();
-        string? key = c.ExecuteScalar<string>("SELECT feature_key FROM auth_features WHERE id=@Id", new { Id = id });
-        if (key == null) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
-
-        _changes.ApplicaEPropaga(key, null, UtenteCorrente, () =>
-        {
-            c.Execute("DELETE FROM auth_features WHERE id=@Id", new { Id = id });
-            // Via anche le concessioni per ruolo: resterebbero righe orfane che continuano a
-            // concedere una funzione che non esiste più.
-            c.Execute("DELETE FROM auth_role_features WHERE feature_key=@Key", new { Key = key });
-        });
-
-        return Ok(ApiResponse<string>.Ok("Feature eliminata"));
-    }
+    // ── 🧹 Registrare / eliminare una funzione: NON SI FA PIÙ DA QUI (rebuild §12.6, passo 7) ──
+    //
+    // Dal passo 2 `auth_features` è la PROIEZIONE di `catalogo-permessi.json`: a ogni avvio
+    // `CatalogoPermessiSync.Allinea` registra le chiavi del file, ne riallinea le etichette,
+    // marca le ritirate e segnala le orfane. Con quel meccanismo acceso, i due gesti che
+    // stavano qui non erano più «amministrazione» ma un secondo elenco che litiga col primo:
+    //
+    //   · CREA  → una chiave che non sta nel file non la usa nessun endpoint (nessun
+    //             [RequireFeature] la nomina) e resta orfana per sempre, segnalata a ogni
+    //             avvio: sembra un permesso e non protegge niente;
+    //   · CANCELLA → se la chiave sta nel file torna al riavvio successivo (con min_level 3),
+    //             ma intanto ha portato via le sue righe di `auth_role_features` — cioè la
+    //             configurazione del motore VECCHIO, che è la strada del rollback.
+    //
+    // Una funzione nuova nasce così: si aggiunge la voce a `ATEC.PM.Shared/catalogo-permessi.json`
+    // (il censimento in `ATEC.PM.Tests` stampa lo stub pronto se un `[RequireFeature]` nomina
+    // una chiave che non c'è) e al primo avvio è in tabella. Una che va in pensione si marca
+    // `ritirata` nello stesso file. Restano modificabili di qui `min_level` e `behavior`, che
+    // sono le manopole del motore vecchio e non stanno nel catalogo.
 }
