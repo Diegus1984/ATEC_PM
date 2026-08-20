@@ -647,6 +647,15 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
 
 Ogni passo è deployabile da solo; fino al 5 **non cambia niente per gli utenti**.
 
+> 🚀 **IN PRODUZIONE dal 20/08/2026 ore 14:03** — build `20260820-1403`, schema **v101 → v104**
+> (v102 19 ms, v103 54 ms, v104 65 ms; 104 versioni su 104, 0 rosse, nessun buco), 53,6 s in
+> tutto. Backup prima: `C:\ATEC_Backups\atec_pm_prima_v104_20260820.sql` («Dump completed»).
+> **Le due prove che il piano prometteva, verificate sul DB vero:** la fotografia della v103 ha
+> **0 divergenze** (`project.X` == `nav.X`, accesso E origine, per tutti) e `EnsureCatalogo` ha
+> chiuso con «1 nuove, 0 rinominate, 1 ritirate, 0 ripescate, 52 etichette, **0 orfane**».
+> Rotte provate dal vivo: `PUT /api/permessi/voce` 401 (c'è), `/api/permessi/combo` e
+> `POST`/`DELETE /api/auth-levels/features` 404 (via davvero).
+
 ### 12.7 Perché risponde ai requisiti
 
 - **Si autocompleta**: l'editor suggerisce le chiavi (tipo unione generato) e quelle inventate
