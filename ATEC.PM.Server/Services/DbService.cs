@@ -231,6 +231,7 @@ public class DbService
             EnsureModuleTables(c);
             ApplyVersionedMigrations(c, appliedVersions, _stopOnMigrationError);
             EnsureViews(c);
+            EnsureCatalogo(c);
             LogTableCount(c);
             return;
         }
@@ -1442,6 +1443,7 @@ public class DbService
 
         // Le viste per ultime: nominano tabelle che nascono dalle migrazioni.
         EnsureViews(c);
+        EnsureCatalogo(c);
 
         LogTableCount(c);
     }
@@ -1618,6 +1620,38 @@ public class DbService
                     $"Impossibile allineare la vista v_timesheet_with_section: {ex.Message}. " +
                     "L'avvio è interrotto perché da quella vista escono i costi consuntivi del Bilancio: " +
                     "con una definizione vecchia i numeri sarebbero sbagliati senza nessun errore. " +
+                    "In emergenza, per ripartire subito, impostare Migrations:StopOnError=false in appsettings.json.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Allinea <c>auth_features</c> al catalogo unico dei permessi (rebuild §12, passo 2):
+    /// stesso patto di <see cref="EnsureViews"/> — gira a ogni avvio, in tutti gli ambienti,
+    /// dentro il lock delle migrazioni. Il lavoro vero sta in <see cref="CatalogoPermessiSync"/>.
+    /// </summary>
+    private void EnsureCatalogo(MySqlConnection c)
+    {
+        try
+        {
+            CatalogoPermessiSync.Esito esito = CatalogoPermessiSync.Allinea(c, _logger);
+            if (esito.NienteDaFare)
+                _logger.LogInformation("[InitDatabase] Catalogo permessi già allineato ({Orfane} orfane).", esito.Orfane.Count);
+            else
+                _logger.LogInformation(
+                    "[InitDatabase] Catalogo permessi allineato: {Nuove} nuove, {Rinominate} rinominate, {Ritirate} ritirate, {Ripescate} ripescate, {Etichette} etichette ({Orfane} orfane).",
+                    esito.Nuove, esito.Rinominate, esito.Ritirate, esito.Ripescate, esito.EtichetteAggiornate, esito.Orfane.Count);
+        }
+        catch (Exception ex)
+        {
+            // Un catalogo non allineato non dà errori a nessuno: dà una scheda permessi che
+            // mente e chiavi che il jolly non copre. Quindi l'avvio si ferma, salvo manopola.
+            _logger.LogError(ex, "[InitDatabase] Catalogo permessi NON allineato: {Messaggio}", ex.Message);
+
+            if (_stopOnMigrationError)
+                throw new InvalidOperationException(
+                    $"Impossibile allineare auth_features dal catalogo unico: {ex.Message}. " +
+                    "L'avvio è interrotto perché un catalogo disallineato fa mentire la scheda permessi " +
+                    "e lascia fuori dal jolly le chiavi nuove. " +
                     "In emergenza, per ripartire subito, impostare Migrations:StopOnError=false in appsettings.json.", ex);
         }
     }

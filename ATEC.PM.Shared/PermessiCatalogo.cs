@@ -63,7 +63,10 @@ public static class PermessiCatalogo
     }
 
     /// <summary>Tutte le voci in profondità, con il padre accanto (null per le radici).</summary>
-    public static IEnumerable<(VoceCatalogo Voce, VoceCatalogo? Padre)> Piatte()
+    public static IEnumerable<(VoceCatalogo Voce, VoceCatalogo? Padre)> Piatte() => Piatte(Albero);
+
+    /// <summary>Come <see cref="Piatte()"/>, su un albero passato (serve ai test di EnsureCatalogo).</summary>
+    public static IEnumerable<(VoceCatalogo Voce, VoceCatalogo? Padre)> Piatte(IReadOnlyList<VoceCatalogo> albero)
     {
         IEnumerable<(VoceCatalogo, VoceCatalogo?)> Scendi(VoceCatalogo voce, VoceCatalogo? padre)
         {
@@ -73,7 +76,7 @@ public static class PermessiCatalogo
                     yield return coppia;
         }
 
-        foreach (VoceCatalogo radice in Albero)
+        foreach (VoceCatalogo radice in albero)
             foreach (var coppia in Scendi(radice, null))
                 yield return coppia;
     }
@@ -81,17 +84,23 @@ public static class PermessiCatalogo
     /// <summary>
     /// Le chiavi "primarie" del catalogo (senza i duplicati marcati <c>chiaveCondivisa</c>).
     /// </summary>
-    public static IEnumerable<VoceCatalogo> VociPrimarie() =>
-        Piatte().Select(c => c.Voce).Where(v => v.Chiave != null && !v.ChiaveCondivisa);
+    public static IEnumerable<VoceCatalogo> VociPrimarie() => VociPrimarie(Albero);
+
+    /// <summary>Come <see cref="VociPrimarie()"/>, su un albero passato.</summary>
+    public static IEnumerable<VoceCatalogo> VociPrimarie(IReadOnlyList<VoceCatalogo> albero) =>
+        Piatte(albero).Select(c => c.Voce).Where(v => v.Chiave != null && !v.ChiaveCondivisa);
 
     /// <summary>
     /// Valida il catalogo e restituisce l'elenco degli errori (vuoto = valido).
     /// Stesse regole del generatore TypeScript: i due validatori devono restare allineati.
     /// </summary>
-    public static IReadOnlyList<string> Valida()
+    public static IReadOnlyList<string> Valida() => Valida(Albero);
+
+    /// <summary>Come <see cref="Valida()"/>, su un albero passato.</summary>
+    public static IReadOnlyList<string> Valida(IReadOnlyList<VoceCatalogo> albero)
     {
         var errori = new List<string>();
-        var viste = Piatte().Select(c => c.Voce).ToList();
+        var viste = Piatte(albero).Select(c => c.Voce).ToList();
 
         foreach (VoceCatalogo v in viste)
         {

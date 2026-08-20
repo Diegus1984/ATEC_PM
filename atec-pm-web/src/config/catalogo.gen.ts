@@ -5,6 +5,7 @@
 export type ChiaveCatalogo =
   | "action.app_config"
   | "action.assign_atec_code"
+  | "action.create_project"
   | "action.delete_ddp_row"
   | "action.delete_project"
   | "action.edit_bilancio_settings"
@@ -192,6 +193,12 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
             "kind": "sezione-commessa",
             "chiave": "project.documenti",
             "label": "Documenti"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.create_project",
+            "label": "Crea commessa",
+            "ritirata": true
           },
           {
             "kind": "azione",
@@ -598,6 +605,7 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
 export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "action.app_config",
   "action.assign_atec_code",
+  "action.create_project",
   "action.delete_ddp_row",
   "action.delete_project",
   "action.edit_bilancio_settings",

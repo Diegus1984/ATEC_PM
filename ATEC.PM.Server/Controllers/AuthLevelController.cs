@@ -111,10 +111,12 @@ public class AuthLevelController : ControllerBase
             "SELECT COALESCE((SELECT level_value FROM auth_levels WHERE role_name=@Role), 0)",
             new { Role = role });
 
+        // Le chiavi ritirate (fuori catalogo, rebuild §12.8.10) non escono da qui: né nel
+        // catalogo per il client, né — più sotto — nell'espansione del jolly.
         var features = c.Query<AuthFeatureDto>(
             @"SELECT id AS Id, feature_key AS FeatureKey, display_name AS DisplayName,
                      category AS Category, min_level AS MinLevel, behavior AS Behavior
-              FROM auth_features ORDER BY category, display_name").ToList();
+              FROM auth_features WHERE retired_at IS NULL ORDER BY category, display_name").ToList();
 
         var levels = c.Query<AuthLevelDto>(LevelsSelect).ToList();
 
@@ -157,8 +159,16 @@ public class AuthLevelController : ControllerBase
             }
             else
             {
+                // Le righe esplicite rimaste su una chiave ritirata non devono riaffiorare:
+                // la chiave è fuori catalogo, per il client non esiste (§12.8.10).
+                var ritirate = c.Query<string>(
+                        "SELECT feature_key FROM auth_features WHERE retired_at IS NOT NULL")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
                 grants = righe
-                    .Where(kv => kv.Key != FeatureAccessService.JollyKey && !FeatureAccessService.Negato(kv.Value))
+                    .Where(kv => kv.Key != FeatureAccessService.JollyKey
+                                 && !FeatureAccessService.Negato(kv.Value)
+                                 && !ritirate.Contains(kv.Key))
                     .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
             }
         }

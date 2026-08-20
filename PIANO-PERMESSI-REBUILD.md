@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** in implementazione — **passo 1 FATTO il 20/08/2026** (catalogo unico + generatore TS + censimento, 193/193 test verdi). Passi successivi su richiesta esplicita.  
+**Stato:** in implementazione — **passi 1 e 2 FATTI il 20/08/2026** (catalogo unico + generatore TS + censimento; EnsureCatalogo + M102, 197/197 test verdi). Passi successivi su richiesta esplicita.  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -545,9 +545,17 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    `CensimentoCatalogoTests` (4 garanzie) + artefatto `PERMESSI-MAPPA-ENDPOINT.gen.md`.
    Zero cambi runtime; 193/193 test verdi, build web verde. 9 chiavi marcate soloClient,
    1 ritirata (`data.hourly_cost`), 6 condivise menu/albero marcate per il passo 3.
-2. `EnsureCatalogo` all'avvio (stesso pattern di `EnsureViews`): `auth_features` si allinea dal
-   JSON — registra le chiavi nuove, marca le ritirate. Le migrazioni non registrano più chiavi:
-   restano per i **grant** (chi riceve cosa), che sono decisioni.
+2. ✅ **FATTO 20/08/2026** — `CatalogoPermessiSync.Allinea` chiamato da `InitDatabase` accanto a
+   `EnsureViews` (dentro il lock, avvio fermo se il catalogo è rotto, manopola StopOnError);
+   migrazione **M102** (`auth_features.retired_at`). Registra chiavi nuove a `min_level 3`
+   (rollback al motore vecchio non apre niente), **materializza i micro** come chiavi figlie
+   (§12.8.3), **migra gli alias** una volta sola coi grant al seguito (§12.8.2, log escluso),
+   marca ritirate e ripesca, segnala le orfane senza toccarle (§12.8.10). `/features/my` esclude
+   le ritirate (catalogo, jolly, righe esplicite). 4 test su DB vero (idempotenza compresa);
+   il test di idempotenza ha già scovato una chiave fantasma (`action.create_project`, seminata
+   solo dal bootstrap, mai usata → registrata come ritirata). 197/197 verdi.
+   Le migrazioni non registrano più chiavi: restano per i **grant** (chi riceve cosa), che sono
+   decisioni.
 3. Split delle 5 chiavi condivise (migrazione-fotografia, §12.4) + diff a zero + matrice
    runtime utente × endpoint prima/dopo (§12.8, falla 4).
 4. Semina fotografica dei micro `.prices` (§12.8, falla 1), poi `[DatoSensibile]` + filtro

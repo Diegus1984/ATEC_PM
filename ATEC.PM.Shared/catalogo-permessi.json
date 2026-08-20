@@ -36,6 +36,7 @@
             { "kind": "sezione-commessa", "chiave": "project.ddp_officina", "label": "DDP Officina" },
             { "kind": "sezione-commessa", "chiave": "nav.work_requests", "label": "Lavorazioni", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3." },
             { "kind": "sezione-commessa", "chiave": "project.documenti", "label": "Documenti" },
+            { "kind": "azione", "chiave": "action.create_project", "label": "Crea commessa", "ritirata": true, "nota": "FANTASMA: seminata solo dal bootstrap dei DB nuovi (DbService), mai usata da codice o client, assente dai DB anziani. Scoperta dal test di idempotenza di EnsureCatalogo il 20/08/2026." },
             { "kind": "azione", "chiave": "action.edit_project", "label": "Modifica commessa" },
             { "kind": "azione", "chiave": "action.delete_project", "label": "Elimina commessa" },
             { "kind": "azione", "chiave": "action.project_locked_write", "label": "Scrive su commesse non attive", "nota": "Cancello del ProjectWriteGuard (#88)." },

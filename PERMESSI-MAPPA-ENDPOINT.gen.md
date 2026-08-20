@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 11:29.
+> Fotografia del 20/08/2026 11:57.
 
 ## Chiavi con endpoint
 
@@ -657,6 +657,7 @@
 - `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).
 
 ## Chiavi ritirate
+- `action.create_project` — FANTASMA: seminata solo dal bootstrap dei DB nuovi (DbService), mai usata da codice o client, assente dai DB anziani. Scoperta dal test di idempotenza di EnsureCatalogo il 20/08/2026.
 - `data.hourly_cost` — MORTA: nessun uso nel codice al censimento del 20/08/2026. Resta registrata per le righe storiche; il passo 2 la marca ritirata anche a DB.
 
 ## Chiavi condivise menu/albero (da sdoppiare al passo 3, §12.4)

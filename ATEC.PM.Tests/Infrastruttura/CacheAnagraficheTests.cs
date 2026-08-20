@@ -28,6 +28,11 @@ public class CacheAnagraficheTests
     /// <item><c>DbService.cs</c>: il seed dello schema, stesso motivo.</item>
     /// <item><c>FullBackupService.cs</c>: il ripristino riscrive tutto e chiama
     /// <c>InvalidaTutto()</c>, che non nomina le singole voci.</item>
+    /// <item><c>CatalogoPermessiSync.cs</c>: EnsureCatalogo (rebuild §12, passo 2) gira dentro
+    /// <c>InitDatabase</c>, sotto il lock delle migrazioni, prima che il server risponda a
+    /// chiunque — la cache è ancora vuota, come per le migrazioni. ⚠️ Se un giorno venisse
+    /// chiamata a RUNTIME (es. un endpoint admin «riallinea»), il chiamante deve fare
+    /// <c>Reload()</c>: questa esenzione copre solo l'avvio.</item>
     /// </list>
     /// </summary>
     private static readonly string[] Esenti =
@@ -35,6 +40,7 @@ public class CacheAnagraficheTests
         Path.Combine("ATEC.PM.Server", "Migrations"),
         Path.Combine("ATEC.PM.Server", "Services", "DbService.cs"),
         Path.Combine("ATEC.PM.Server", "Services", "FullBackupService.cs"),
+        Path.Combine("ATEC.PM.Server", "Services", "CatalogoPermessiSync.cs"),
     };
 
     [Fact]
