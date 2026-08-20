@@ -363,6 +363,9 @@ public class PermissionAdminService
                 // quattro. Visto a video il 14/08.
                 Funzioni = sue.Values.Count(r => !FeatureAccessService.Negato(r.Access)),
                 DiverseDallaClasse = diverse,
+                // Le eccezioni decise a mano: il numero che la matrioska mette in vetrina
+                // al posto del vecchio «diverse dalla classe» (§5.9 rebuild).
+                AMano = sue.Values.Count(r => string.Equals(r.Origin, "MANO", StringComparison.OrdinalIgnoreCase)),
                 Jolly = sue.ContainsKey(FeatureAccessService.JollyKey),
                 Segnaposto = ESegnaposto(p.Username),
             });

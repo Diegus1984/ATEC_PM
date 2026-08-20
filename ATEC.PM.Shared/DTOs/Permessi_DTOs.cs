@@ -123,6 +123,8 @@ public class RigaPermessiDto
     public List<string> Reparti { get; set; } = new();
     public int Funzioni { get; set; }
     public int DiverseDallaClasse { get; set; }
+    /// <summary>Righe decise a mano (<c>origin = MANO</c>): le eccezioni che «Applica template» rispetta (§5.9 rebuild).</summary>
+    public int AMano { get; set; }
     public bool Jolly { get; set; }
 
     /// <summary>

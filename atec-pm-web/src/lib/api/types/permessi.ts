@@ -71,6 +71,8 @@ export interface RigaPermessiDto {
   reparti: string[]
   funzioni: number
   diverseDallaClasse: number
+  /** Righe decise a mano (`origin = MANO`): le eccezioni che «Applica template» rispetta. */
+  aMano: number
   jolly: boolean
   /**
    * Utenza segnaposto di reparto (`[ACQ] Generico`…): ha i suoi permessi e resta nell'elenco,

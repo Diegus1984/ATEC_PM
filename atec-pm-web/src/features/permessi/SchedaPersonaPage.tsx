@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, ChevronDown, Copy, RotateCcw, TriangleAlert, Wand2 } from "lucide-react"
+import { ArrowLeft, Copy, RotateCcw, TriangleAlert, Wand2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Collapsible } from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -23,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -31,7 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -50,43 +47,25 @@ import {
   impostaPermesso,
   riallineaAllaClasse,
 } from "@/lib/api/permessi"
-import type {
-  AreaPermessoDto,
-  EsitoApplicaClasseDto,
-  FunzionePermessoDto,
-  StatoCombo,
-} from "@/lib/api/types"
+import type { EsitoApplicaClasseDto, StatoCombo } from "@/lib/api/types"
+import { AnteprimaVideo, MatrioskaEditor } from "./MatrioskaPermessi"
+import { etichettaStato } from "./stato-permesso"
 
 const SCHEDA_KEY = (id: number) => ["permessi", "scheda", id] as const
 const ELENCO_KEY = ["permessi", "elenco"] as const
 
-/** Etichette delle categorie del catalogo, per raggruppare le funzioni avanzate. */
-const CATEGORIE: Record<string, string> = {
-  navigation: "Pagine e voci di menu",
-  project: "Sezioni di commessa",
-  action: "Operazioni",
-  data: "Dati riservati",
-}
-
-function etichettaStato(stato: StatoCombo, area?: AreaPermessoDto): string {
-  if (stato === "NO") return "non abilitato"
-  if (area?.dueStati) return area.etichettaAcceso
-  return stato === "READ" ? "sola lettura" : "lettura e scrittura"
-}
-
 /**
- * Scheda permessi di una persona — PIANO-PERMESSI.md §5, Fase B.
+ * Scheda permessi di una persona — la MATRIOSKA (PIANO-PERMESSI-REBUILD.md §5, passo 5).
  *
- * È l'unica schermata da cui i permessi si scrivono davvero. Fino alla Fase A la pagina
- * «Permessi» modificava la matrice funzioni × ruoli, che il motore nuovo non legge più: da lì in
- * poi, e fino a questa pagina, l'unico modo di cambiare i permessi di qualcuno era il database.
+ * A sinistra «cosa vedrebbe a video» (menu + albero commessa, ricalcolato a ogni modifica);
+ * a destra l'editor, che RENDE l'albero del catalogo unico: sezioni con toggle padre e pill
+ * spenta/parziale/tutta, voci con micro «sola lettura» e «vede prezzi», azioni annidate sotto
+ * la voce che le ospita. Ogni gesto scrive una riga sulla persona (anche il diniego `NO`,
+ * §3.7) marcata «a mano»: «Applica template» la rispetta.
  *
- * Tre cose non sono decorazione e non vanno tolte:
- * 1. **«diverso dalla classe»** in testa, col filtro: è la differenza fra una persona
- *    *configurata* e una *andata alla deriva*, e senza quel numero non si scopre mai.
- * 2. **«Applica classe» passa dall'anteprima**: si conferma l'elenco dei cambi, non il pulsante.
- * 3. **Lo storico in fondo**: dopo il primo incidente la domanda è «chi ha tolto cosa a chi», e
- *    senza registro non ha risposta.
+ * Due cose restano dalla pagina di Fase B, perché non erano decorazione:
+ * 1. **«Applica template» passa dall'anteprima**: si conferma l'elenco dei cambi, non il bottone.
+ * 2. **Lo storico in fondo**: dopo il primo incidente la domanda è «chi ha tolto cosa a chi».
  */
 export function SchedaPersonaPage() {
   const { employeeId } = useParams()
@@ -95,8 +74,6 @@ export function SchedaPersonaPage() {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
 
-  const [soloDiverse, setSoloDiverse] = React.useState(false)
-  const [avanzateAperte, setAvanzateAperte] = React.useState(false)
   const [anteprima, setAnteprima] = React.useState<EsitoApplicaClasseDto | null>(null)
   const [copiaAperta, setCopiaAperta] = React.useState(false)
   const [copiaDa, setCopiaDa] = React.useState<string>("")
@@ -129,9 +106,27 @@ export function SchedaPersonaPage() {
     onError: (e) => notifyError(e, "Permesso non modificato"),
   })
 
+  /** Toggle di sezione: tante chiavi in un gesto solo, un avviso solo alla fine. */
+  const impostaTanteMutation = useMutation({
+    mutationFn: async ({ featureKeys, stato }: { featureKeys: string[]; stato: StatoCombo }) => {
+      for (const featureKey of featureKeys) {
+        await impostaPermesso({ employeeId: id, featureKey, stato })
+      }
+      return featureKeys.length
+    },
+    onSuccess: (quante) => {
+      ricarica()
+      notifySuccess(`${quante} ${quante === 1 ? "voce aggiornata" : "voci aggiornate"}`)
+    },
+    onError: (e) => {
+      ricarica() // a metà strada: la scheda deve mostrare la verità, non l'intenzione
+      notifyError(e, "Sezione non aggiornata del tutto")
+    },
+  })
+
   const applicaMutation = useMutation({
     mutationFn: applicaClasse,
-    onError: (e) => notifyError(e, "Classe non applicata"),
+    onError: (e) => notifyError(e, "Template non applicato"),
   })
 
   const riallineaMutation = useMutation({
@@ -140,11 +135,11 @@ export function SchedaPersonaPage() {
       ricarica()
       notifySuccess(
         esito.combo === 0
-          ? "Era già allineata alla classe"
-          : `${esito.combo} ${esito.combo === 1 ? "funzione riportata" : "funzioni riportate"} al valore della classe`
+          ? "Era già come il template"
+          : `${esito.combo} ${esito.combo === 1 ? "funzione riportata" : "funzioni riportate"} al template`
       )
     },
-    onError: (e) => notifyError(e, "Riallineamento non riuscito"),
+    onError: (e) => notifyError(e, "Ritorno al template non riuscito"),
   })
 
   const copiaMutation = useMutation({
@@ -153,7 +148,7 @@ export function SchedaPersonaPage() {
       ricarica()
       setCopiaAperta(false)
       setCopiaDa("")
-      notifySuccess("Permessi copiati dal collega")
+      notifySuccess("Scheda copiata dal collega")
     },
     onError: (e) => notifyError(e, "Copia non riuscita"),
   })
@@ -181,8 +176,8 @@ export function SchedaPersonaPage() {
       ricarica()
       notifySuccess(
         esito.combo === 0
-          ? "Nessuna modifica: era già come la sua classe"
-          : `${esito.combo} ${esito.combo === 1 ? "combo aggiornata" : "combo aggiornate"}`
+          ? "Nessuna modifica: era già come il template"
+          : `${esito.combo} ${esito.combo === 1 ? "voce aggiornata" : "voci aggiornate"}`
       )
     } catch {
       /* già segnalato */
@@ -204,12 +199,12 @@ export function SchedaPersonaPage() {
     if (ok) impostaMutation.mutate({ employeeId: id, featureKey: "*", stato: "NO" })
   }
 
-  async function riallineaTutto() {
+  async function tornaAlTemplate() {
     const ok = await confirm({
-      title: "Riportare tutto al valore della classe?",
+      title: "Riportare tutta la scheda al template?",
       description:
-        "Le combo decise a mano su questa persona tornano a quelle della sua classe. Le eccezioni messe apposta vanno perse.",
-      confirmLabel: "Riallinea",
+        "Le eccezioni decise a mano su questa persona vengono annullate e la scheda torna al template della sua gerarchia. Le eccezioni messe apposta vanno perse.",
+      confirmLabel: "Torna al template",
     })
     if (ok) riallineaMutation.mutate({ employeeId: id })
   }
@@ -232,22 +227,9 @@ export function SchedaPersonaPage() {
     )
   }
 
-  const areeDaMostrare = soloDiverse
-    ? scheda.aree.filter((a) => a.stato !== a.statoClasse)
-    : scheda.aree
-
-  // Le funzioni già governate da una delle 9 aree non si ripetono fra le avanzate: sarebbero
-  // due comandi per la stessa cosa, e il secondo che si tocca smentisce il primo.
-  const avanzate = scheda.funzioni.filter(
-    (f) => !f.areaId && (!soloDiverse || f.stato !== f.statoClasse)
-  )
-  const perCategoria = avanzate.reduce<Record<string, FunzionePermessoDto[]>>(
-    (acc, f) => {
-      ;(acc[f.categoria] ??= []).push(f)
-      return acc
-    },
-    {}
-  )
+  const eccezioniAMano = scheda.funzioni.filter((f) => f.origin === "MANO").length
+  const pending =
+    impostaMutation.isPending || impostaTanteMutation.isPending || riallineaMutation.isPending
 
   return (
     <div className="space-y-4">
@@ -256,18 +238,16 @@ export function SchedaPersonaPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate("/permessi")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => navigate("/permessi")}>
                   <ArrowLeft />
                   Permessi
                 </Button>
               </div>
               <CardTitle>{scheda.nome}</CardTitle>
               <CardDescription className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{scheda.classeDisplay || "senza classe"}</Badge>
+                {/* Chi è: gerarchia + reparto. L'etichetta indica il template di partenza,
+                    i permessi veri stanno nelle righe qui sotto (§3.4). */}
+                <Badge variant="outline">{scheda.classeDisplay || "senza gerarchia"}</Badge>
                 {scheda.reparti.map((r) => (
                   <Badge key={r} variant="secondary">
                     {r}
@@ -282,15 +262,15 @@ export function SchedaPersonaPage() {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={chiediAnteprima}>
                 <Wand2 />
-                Applica classe
+                Applica template
               </Button>
               <Button variant="outline" size="sm" onClick={() => setCopiaAperta(true)}>
                 <Copy />
-                Copia da…
+                Copia scheda da…
               </Button>
-              <Button variant="outline" size="sm" onClick={riallineaTutto}>
+              <Button variant="outline" size="sm" onClick={tornaAlTemplate}>
                 <RotateCcw />
-                Riallinea alla classe
+                Torna al template
               </Button>
             </div>
           </div>
@@ -309,10 +289,9 @@ export function SchedaPersonaPage() {
                   nasce invisibile a chiunque altro, jolly a parte.
                 </p>
                 <p>
-                  Le combo qui sotto restano usabili: mettendone una su «non abilitato» si scrive
-                  un <strong>diniego</strong> su quella funzione, e la decisione sulla singola
-                  voce vince sul jolly. Per toglierle tutto in un colpo, invece, si toglie il
-                  jolly.
+                  La scheda qui sotto resta usabile: spegnendo una voce si scrive un{" "}
+                  <strong>diniego</strong> su quella funzione, e la decisione sulla singola voce
+                  vince sul jolly. Per toglierle tutto in un colpo, invece, si toglie il jolly.
                 </p>
                 <Button variant="outline" size="sm" onClick={togliJolly}>
                   Togli il jolly
@@ -321,212 +300,43 @@ export function SchedaPersonaPage() {
             </Alert>
           ) : null}
 
-          {/* «diverso dalla classe»: la differenza fra configurato e andato alla deriva. */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-            <div className="text-sm">
-              {scheda.diverseDallaClasse === 0 ? (
-                <span className="text-muted-foreground">
-                  Tutto come la classe «{scheda.classeDisplay}».
-                </span>
-              ) : (
-                <span>
-                  <strong>{scheda.diverseDallaClasse}</strong>{" "}
-                  {scheda.diverseDallaClasse === 1 ? "funzione diversa" : "funzioni diverse"} da
-                  quello che direbbe la classe «{scheda.classeDisplay}».
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="solo-diverse"
-                checked={soloDiverse}
-                onCheckedChange={setSoloDiverse}
-              />
-              <Label htmlFor="solo-diverse" className="text-sm font-normal">
-                Mostra solo quelle diverse
-              </Label>
-            </div>
+          {/* Le eccezioni a mano sono le decisioni prese su QUESTA persona: «Applica template»
+              le rispetta, e questo numero dice quante sono (§5.9). */}
+          <div className="rounded-lg border px-4 py-3 text-sm">
+            {eccezioniAMano === 0 ? (
+              <span className="text-muted-foreground">
+                Nessuna eccezione a mano: la scheda segue il template «{scheda.classeDisplay}».
+              </span>
+            ) : (
+              <span>
+                <strong>{eccezioniAMano}</strong>{" "}
+                {eccezioniAMano === 1 ? "eccezione decisa a mano" : "eccezioni decise a mano"}{" "}
+                (righe col badge «a mano»): «Applica template» non le tocca.
+              </span>
+            )}
           </div>
 
-          {/* Le 9 aree della maschera. */}
-          <GridScroller>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[240px]">Area</TableHead>
-                  <TableHead className="w-[220px]">Permesso</TableHead>
-                  <TableHead>Classe</TableHead>
-                  <TableHead className="w-[120px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {areeDaMostrare.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
-                      Nessuna area diversa dalla classe.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-                {areeDaMostrare.map((area) => (
-                  <TableRow key={area.id}>
-                    <TableCell>
-                      <div className="font-medium">{area.titolo}</div>
-                      {area.incoerente ? (
-                        <div className="text-xs text-destructive">
-                          Le chiavi di quest'area non sono allo stesso livello: qui si vede il
-                          più basso.
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <ComboStato
-                        area={area}
-                        valore={area.stato}
-                        onChange={(stato) =>
-                          impostaMutation.mutate({
-                            employeeId: id,
-                            areaId: area.id,
-                            stato,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {area.stato === area.statoClasse ? (
-                        <span className="text-muted-foreground">come la classe</span>
-                      ) : (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">
-                            classe: {etichettaStato(area.statoClasse, area)}
-                          </Badge>
-                          {area.aMano ? <Badge variant="secondary">a mano</Badge> : null}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {area.stato !== area.statoClasse ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            riallineaMutation.mutate({
-                              employeeId: id,
-                              featureKey: area.chiavi[0],
-                            })
-                          }
-                        >
-                          Riallinea
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </GridScroller>
-        </CardContent>
-      </Card>
-
-      {/* Funzioni avanzate: chiuse di default. Il catalogo è molto più largo delle 9 aree, ma
-          deve esserci tutto — «non vedo la pagina X» si risponde da qui. */}
-      <Card>
-        <CardHeader>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between text-left"
-            onClick={() => setAvanzateAperte((v) => !v)}
-          >
-            <div>
-              <CardTitle>Funzioni avanzate</CardTitle>
-              <CardDescription>
-                Tutto il resto del catalogo ({avanzate.length}) — backup, utenti, Codex, Danea,
-                operazioni riservate.
-              </CardDescription>
+          {/* §5.2: sinistra l'anteprima, destra l'editor matrioska. */}
+          <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
+            <div className="rounded-lg border bg-muted/30 p-3 lg:sticky lg:top-2 lg:self-start">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Cosa vedrebbe a video
+              </div>
+              <AnteprimaVideo funzioni={scheda.funzioni} />
             </div>
-            <ChevronDown
-              className={`size-4 shrink-0 transition-transform duration-(--accordion-duration) ease-(--accordion-ease) ${
-                avanzateAperte ? "rotate-180" : ""
-              }`}
+            <MatrioskaEditor
+              funzioni={scheda.funzioni}
+              pending={pending}
+              onImposta={(featureKey, stato) =>
+                impostaMutation.mutate({ employeeId: id, featureKey, stato })
+              }
+              onImpostaTante={(featureKeys, stato) =>
+                impostaTanteMutation.mutate({ featureKeys, stato })
+              }
+              onRiallinea={(featureKey) => riallineaMutation.mutate({ employeeId: id, featureKey })}
             />
-          </button>
-        </CardHeader>
-        <Collapsible open={avanzateAperte}>
-          <CardContent className="space-y-6">
-              {Object.entries(perCategoria).map(([categoria, funzioni]) => (
-                <div key={categoria} className="space-y-2">
-                  <div className="text-sm font-medium text-muted-foreground">
-                    {CATEGORIE[categoria] ?? categoria}
-                  </div>
-                  <GridScroller>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[280px]">Funzione</TableHead>
-                          <TableHead className="w-[200px]">Permesso</TableHead>
-                          <TableHead>Classe</TableHead>
-                          <TableHead className="w-[120px]" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {funzioni.map((f) => (
-                          <TableRow key={f.featureKey}>
-                            <TableCell>
-                              <div className="font-medium">{f.displayName}</div>
-                              <div className="font-mono text-xs text-muted-foreground">
-                                {f.featureKey}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <ComboStato
-                                valore={f.stato}
-                                        onChange={(stato) =>
-                                  impostaMutation.mutate({
-                                    employeeId: id,
-                                    featureKey: f.featureKey,
-                                    stato,
-                                  })
-                                }
-                              />
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {f.stato === f.statoClasse ? (
-                                <span className="text-muted-foreground">come la classe</span>
-                              ) : (
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline">
-                                    classe: {etichettaStato(f.statoClasse)}
-                                  </Badge>
-                                  {f.origin === "MANO" ? (
-                                    <Badge variant="secondary">a mano</Badge>
-                                  ) : null}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {f.stato !== f.statoClasse ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    riallineaMutation.mutate({
-                                      employeeId: id,
-                                      featureKey: f.featureKey,
-                                    })
-                                  }
-                                >
-                                  Riallinea
-                                </Button>
-                              ) : null}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </GridScroller>
-                </div>
-              ))}
-          </CardContent>
-        </Collapsible>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Storico: la risposta alla prima domanda dopo il primo incidente. */}
@@ -539,9 +349,7 @@ export function SchedaPersonaPage() {
         </CardHeader>
         <CardContent>
           {scheda.storico.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              Nessuna modifica registrata.
-            </div>
+            <div className="text-sm text-muted-foreground">Nessuna modifica registrata.</div>
           ) : (
             <GridScroller>
               <Table>
@@ -557,16 +365,14 @@ export function SchedaPersonaPage() {
                 <TableBody>
                   {scheda.storico.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell className="text-sm">
-                        {formatDateShort(r.changedAt)}
-                      </TableCell>
+                      <TableCell className="text-sm">{formatDateShort(r.changedAt)}</TableCell>
                       <TableCell className="text-sm">{r.displayName}</TableCell>
                       <TableCell className="text-sm">
                         {r.accessBefore ?? "non abilitato"} → {r.accessAfter ?? "non abilitato"}
                       </TableCell>
                       <TableCell>
                         <Badge variant={r.origin === "MANO" ? "secondary" : "outline"}>
-                          {r.origin === "MANO" ? "a mano" : "classe"}
+                          {r.origin === "MANO" ? "a mano" : "template"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{r.changedBy}</TableCell>
@@ -579,29 +385,27 @@ export function SchedaPersonaPage() {
         </CardContent>
       </Card>
 
-      {/* Anteprima di «Applica classe»: si conferma questo elenco, non il pulsante (§4.4). */}
+      {/* Anteprima di «Applica template»: si conferma questo elenco, non il pulsante (§3.5). */}
       <Dialog open={anteprima != null} onOpenChange={(o) => !o && setAnteprima(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Applica la classe «{scheda.classeDisplay}»</DialogTitle>
+            <DialogTitle>Applica il template «{scheda.classeDisplay}»</DialogTitle>
           </DialogHeader>
           {anteprima ? (
             <div className="space-y-3">
               <div className="text-sm">
                 {anteprima.combo === 0 ? (
-                  <span>
-                    Non cambierebbe niente: questa persona è già come la sua classe.
-                  </span>
+                  <span>Non cambierebbe niente: questa scheda è già come il template.</span>
                 ) : (
                   <span>
                     <strong>{anteprima.combo}</strong>{" "}
-                    {anteprima.combo === 1 ? "funzione cambierebbe" : "funzioni cambierebbero"}.
+                    {anteprima.combo === 1 ? "voce cambierebbe" : "voci cambierebbero"}.
                   </span>
                 )}
                 {anteprima.rispettateAMano > 0 ? (
                   <span className="text-muted-foreground">
                     {" "}
-                    {anteprima.rispettateAMano} decise a mano restano dove sono.
+                    {anteprima.rispettateAMano} eccezioni a mano restano dove sono.
                   </span>
                 ) : null}
               </div>
@@ -643,16 +447,16 @@ export function SchedaPersonaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* «Copia da»: copia tutto e marca tutto MANO — «voglio esattamente le sue», non «la sua classe». */}
+      {/* «Copia scheda da»: clona tutto e marca tutto a mano — «voglio esattamente le sue». */}
       <Dialog open={copiaAperta} onOpenChange={setCopiaAperta}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Copia i permessi di un collega</DialogTitle>
+            <DialogTitle>Copia la scheda di un collega</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Arriva esattamente quello che ha lui, e resta marcato «a mano»: applicare una
-              classe in futuro non lo sovrascriverà.
+              Arriva esattamente quello che ha lui, e resta marcato «a mano»: applicare un
+              template in futuro non lo sovrascriverà.
             </p>
             <Select value={copiaDa} onValueChange={setCopiaDa}>
               <SelectTrigger>
@@ -691,32 +495,5 @@ export function SchedaPersonaPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-/** La combo a due o tre stati. Un'area con `dueStati` non ha la via di mezzo. */
-function ComboStato({
-  valore,
-  area,
-  onChange,
-}: {
-  valore: StatoCombo
-  area?: AreaPermessoDto
-  onChange: (stato: StatoCombo) => void
-}) {
-  const stati: StatoCombo[] = area?.dueStati ? ["NO", "FULL"] : ["NO", "READ", "FULL"]
-  return (
-    <Select value={valore} onValueChange={(v) => onChange(v as StatoCombo)}>
-      <SelectTrigger className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {stati.map((s) => (
-          <SelectItem key={s} value={s}>
-            {etichettaStato(s, area)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   )
 }

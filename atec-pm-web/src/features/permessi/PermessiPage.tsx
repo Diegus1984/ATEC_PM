@@ -241,7 +241,7 @@ export function PermessiPage() {
                   <TableHead className="w-[180px]">Classe</TableHead>
                   <TableHead className="w-[220px]">Reparti</TableHead>
                   <TableHead className="w-[110px]">Funzioni</TableHead>
-                  <TableHead className="w-[190px]">Diverso dalla classe</TableHead>
+                  <TableHead className="w-[190px]">Eccezioni a mano</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -293,12 +293,11 @@ export function PermessiPage() {
                     </TableCell>
                     <TableCell className="text-sm">{r.funzioni}</TableCell>
                     <TableCell>
-                      {r.diverseDallaClasse === 0 ? (
+                      {r.aMano === 0 ? (
                         <span className="text-sm text-muted-foreground">—</span>
                       ) : (
-                        <Badge variant="secondary">
-                          {r.diverseDallaClasse}{" "}
-                          {r.diverseDallaClasse === 1 ? "funzione" : "funzioni"}
+                        <Badge variant="secondary" title="Righe decise a mano: «Applica template» le rispetta.">
+                          {r.aMano} a mano
                         </Badge>
                       )}
                     </TableCell>

@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** in implementazione — **passi 1, 2, 3 e 4 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split M103; micro prezzi M104 + `[DatoSensibile]` + filtro unico, matrici runtime a zero divergenze, 202/202 test). Restano i passi 5-7 (UI matrioska, pagina Master, pulizia) su richiesta esplicita.  
+**Stato:** in implementazione — **passi 1-5 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split M103; micro prezzi M104 + filtro unico; **scheda persona = matrioska** con anteprima live, 202/202 test). Restano i passi 6 (pagina Master) e 7 (pulizia) su richiesta esplicita.  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -585,7 +585,18 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    dal JSON, scrittura respinta.** 202/202 test. Limite noto: nelle viste aggregate del
    Gestore i totali calcolati a video valgono 0 per chi non vede i prezzi (le celle mostrano
    «—»); l'estensione ad altre voci sensibili = stessa ricetta, una migrazione di semina per PR.
-5. UI matrioska della scheda persona (rende il catalogo, §12.2).
+5. ✅ **FATTO 20/08/2026** — la scheda persona È la matrioska (`MatrioskaPermessi.tsx` +
+   `SchedaPersonaPage` riscritta): a sinistra «cosa vedrebbe a video» (menu + albero commessa,
+   ricalcolati a ogni modifica), a destra l'editor che **rende l'albero del catalogo** con lo
+   switch sul kind (renderer di default per i kind futuri, §12.2). Sezioni con toggle padre e
+   pill spenta/parziale n/m/tutta; voci con checkbox + micro «sola lettura» e «vede prezzi»
+   (che scrive su `<chiave>.prices`); sezioni-commessa ANNIDATE sotto Commesse; azioni sotto
+   la voce che le ospita; badge «a mano» e «torna al template» per riga. Spento = riga `NO` a
+   mano (§3.7: passa dall'endpoint Imposta esistente). Vecchio layer «9 aree» e «Funzioni
+   avanzate» eliminati; gergo nuovo («Applica template», «Copia scheda da…», «Torna al
+   template»); l'elenco mostra «Eccezioni a mano» (campo `AMano` nuovo) al posto di «diverso
+   dalla classe». API server invariate (Imposta/riallinea/applica/copia di Fase B). tsc,
+   eslint, build e 202/202 test verdi.
 6. Pagina Master + Applica/Copia adeguati (origin §3.6, dinieghi §3.7).
 7. Pulizia §6 (gergo vecchio, layer 9 aree; ramo OLD del motore quando NEW è definitivo).
 
