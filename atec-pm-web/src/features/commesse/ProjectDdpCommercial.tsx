@@ -21,7 +21,7 @@ import {
   fetchDdpStatusTransitions,
 } from "@/lib/api/ddp-config"
 import { fetchDdpRows, updateDdpRow, deleteDdpRow } from "@/lib/api/project-ddp"
-import type { DdpRowItem, SupplierListItem } from "@/lib/api/types"
+import type { DdpRowItem, SupplierLookupItem } from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
@@ -273,7 +273,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       supplier,
     }: {
       row: DdpRowItem
-      supplier: SupplierListItem | null
+      supplier: SupplierLookupItem | null
     }) =>
       updateDdpRow(
         projectId,
@@ -399,7 +399,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   )
 
   const handleSupplierChange = React.useCallback(
-    (row: DdpRowItem, supplier: SupplierListItem | null) => {
+    (row: DdpRowItem, supplier: SupplierLookupItem | null) => {
       if (
         readOnly ||
         (supplier?.id ?? null) === (row.supplierId ?? null) ||

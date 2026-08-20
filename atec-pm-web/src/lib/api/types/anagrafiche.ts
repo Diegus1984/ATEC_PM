@@ -34,6 +34,18 @@ export interface CustomerSaveRequest {
   isActive: boolean
 }
 
+/**
+ * Il fornitore come lo mostra una **combo** (`GET /api/suppliers/lookup`): ragione sociale,
+ * referente (che le combo scrivono come sottotitolo) e flag attivo. Niente email, telefono,
+ * P.IVA o codice fiscale — ed è per questo che l'endpoint resta aperto a tutti.
+ */
+export interface SupplierLookupItem {
+  id: number
+  companyName: string
+  contactName: string
+  isActive: boolean
+}
+
 export interface SupplierListItem {
   id: number
   companyName: string
@@ -65,8 +77,8 @@ export interface CatalogItemListItem {
   category: string
   subcategory: string
   unit: string
-  unitCost: number
-  listPrice: number
+  unitCost: number | null
+  listPrice: number | null
   supplierId: number | null
   supplierName: string
   supplierCode: string

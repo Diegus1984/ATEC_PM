@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 14:33.
+> Fotografia del 20/08/2026 15:32.
 
 ## Chiavi con endpoint
 
@@ -176,6 +176,7 @@
 
 ### `nav.acquisti_inbox` — Inbox Acquisti
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
@@ -265,6 +266,9 @@
 ### `nav.catalogo` — Catalogo Articoli
 - `DELETE /api/catalog/{id}` (CatalogController.Delete)
 - `DELETE /api/material-categories/{id}` (MaterialCategoriesController.Delete)
+- `GET /api/catalog` (CatalogController.GetAll)
+- `GET /api/catalog/{id}` (CatalogController.GetById)
+- `GET /api/catalog/filter-meta` (CatalogController.GetFilterMeta)
 - `PATCH /api/material-categories/{id}/field` (MaterialCategoriesController.UpdateField)
 - `POST /api/catalog` (CatalogController.Create)
 - `POST /api/material-categories` (MaterialCategoriesController.Create)
@@ -294,24 +298,36 @@
 - `POST /api/customers` (CustomersController.Create)
 - `PUT /api/customers/{id}` (CustomersController.Update)
 
+### `nav.codex` — Codex Articoli
+- `GET /api/catalog` (CatalogController.GetAll)
+
+### `nav.codex_composizione` — Composizione Codex
+- `GET /api/catalog` (CatalogController.GetAll)
+
 ### `nav.commesse` — Commesse
 - `GET /api/projects` (ProjectsController.GetAll)
 - `GET /api/projects/{id}` (ProjectsController.GetById)
+- `GET /api/projects/{id}/dashboard` (ProjectsController.GetDashboard)
 - `GET /api/projects/next-code` (ProjectsController.NextCode)
 - `GET /api/projects/tree` (ProjectsController.GetTree)
 
 ### `nav.config_sezioni` — Config. Sezioni di costo
 - `DELETE /api/cost-sections/groups/{id}` (CostSectionsController.DeleteGroup)
 - `DELETE /api/cost-sections/templates/{id}` (CostSectionsController.DeleteTemplate)
+- `DELETE /api/departments/{id}` (DepartmentsController.Delete)
 - `DELETE /api/phases/templates/{id}` (PhasesController.DeleteTemplate)
 - `DELETE /api/phases/templates/{id}/sections/{sectionId}` (PhasesController.RemoveTemplateSection)
 - `DELETE /api/tariff-options/{id}` (TravelTariffsController.Delete)
+- `GET /api/departments` (DepartmentsController.GetAll)
+- `GET /api/departments/{id}` (DepartmentsController.GetById)
 - `PATCH /api/cost-sections/groups/{id}/field` (CostSectionsController.UpdateGroupField)
 - `PATCH /api/cost-sections/templates/{id}/field` (CostSectionsController.UpdateTemplateField)
+- `PATCH /api/departments/{id}/field` (DepartmentsController.UpdateField)
 - `PATCH /api/phases/templates/{id}/field` (PhasesController.UpdateTemplateField)
 - `PATCH /api/phases/templates/{id}/sections/{sectionId}` (PhasesController.UpdateTemplateSection)
 - `POST /api/cost-sections/groups` (CostSectionsController.CreateGroup)
 - `POST /api/cost-sections/templates` (CostSectionsController.CreateTemplate)
+- `POST /api/departments` (DepartmentsController.Create)
 - `POST /api/phases/{phaseId}/promote-to-template` (PhasesController.PromoteToTemplate)
 - `POST /api/phases/templates` (PhasesController.CreateTemplate)
 - `POST /api/phases/templates/{id}/sections` (PhasesController.AddTemplateSection)
@@ -319,6 +335,7 @@
 - `PUT /api/cost-sections/groups/{id}` (CostSectionsController.UpdateGroup)
 - `PUT /api/cost-sections/templates/{id}` (CostSectionsController.UpdateTemplate)
 - `PUT /api/cost-sections/templates/{id}/departments` (CostSectionsController.UpdateTemplateDepartments)
+- `PUT /api/departments/{id}` (DepartmentsController.Update)
 - `PUT /api/tariff-options/{id}` (TravelTariffsController.Update)
 
 ### `nav.danea_migration` — Trasferimento Danea
@@ -351,6 +368,8 @@
 
 ### `nav.fornitori` — Fornitori
 - `DELETE /api/suppliers/{id}` (SuppliersController.Delete)
+- `GET /api/suppliers` (SuppliersController.GetAll)
+- `GET /api/suppliers/{id}` (SuppliersController.GetById)
 - `POST /api/suppliers` (SuppliersController.Create)
 - `PUT /api/suppliers/{id}` (SuppliersController.Update)
 
@@ -563,6 +582,8 @@
 
 ### `nav.utenti` — Utenti
 - `DELETE /api/employees/{id}` (EmployeesController.Delete)
+- `GET /api/employees` (EmployeesController.GetAll)
+- `GET /api/employees/{id}` (EmployeesController.GetById)
 - `GET /api/users` (UsersController.GetAll)
 - `GET /api/users/{id}` (UsersController.GetById)
 - `POST /api/auth/set-credentials` (AuthController.SetCredentials)
@@ -619,6 +640,7 @@
 
 ### `project.ddp_commerciale` — DDP Commerciali
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
@@ -773,7 +795,6 @@
 - ActivityCatalogController: 2 endpoint
 - AuthController: 4 endpoint
 - AuthLevelController: 4 endpoint
-- CatalogController: 3 endpoint
 - CatalogMappingController: 3 endpoint
 - CodexController: 12 endpoint
 - CostSectionsController: 2 endpoint
@@ -784,12 +805,12 @@
 - DdpItemEventsController: 1 endpoint
 - DdpStatusesController: 3 endpoint
 - DdpTreatmentsController: 2 endpoint
-- DepartmentsController: 6 endpoint
-- EmployeesController: 6 endpoint
+- DepartmentsController: 1 endpoint
+- EmployeesController: 4 endpoint
 - GammaRobotController: 5 endpoint
 - MaterialCategoriesController: 1 endpoint
 - NotificationsController: 7 endpoint
 - PhasesController: 14 endpoint
-- ProjectsController: 9 endpoint
-- SuppliersController: 2 endpoint
+- ProjectsController: 8 endpoint
+- SuppliersController: 1 endpoint
 - TravelTariffsController: 1 endpoint

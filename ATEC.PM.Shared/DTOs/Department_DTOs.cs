@@ -2,6 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ATEC.PM.Shared.DTOs;
 
+/// <summary>
+/// Il reparto <b>come lo configura la Configurazione sezioni</b>: dentro ci sono il costo
+/// orario e il ricarico, cioè come si formano i prezzi in azienda. Sta dietro
+/// <c>nav.config_sezioni</c>.
+/// <para>Chi deve solo spuntare dei reparti in una lista usa <see cref="DepartmentLookupDto"/>,
+/// che quei due numeri non li porta.</para>
+/// </summary>
 public class DepartmentDto
 {
     public int Id { get; set; }
@@ -9,6 +16,25 @@ public class DepartmentDto
     public string Name { get; set; } = "";
     public decimal HourlyCost { get; set; }
     public decimal DefaultMarkup { get; set; } = 1.450m;
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+/// <summary>
+/// Il reparto come lo mostra una <b>lista di spunta</b>: sigla, nome, se è attivo e in che
+/// ordine sta. Niente costo orario, niente ricarico.
+///
+/// <para>Serve <c>GET /api/departments/lookup</c>, aperta a tutti gli autenticati: i reparti
+/// si spuntano dalla scheda di un dipendente e dal preventivo, e quelle due pagine dei numeri
+/// non fanno niente. 🪤 Prima esisteva solo l'elenco completo: il costo orario di ogni reparto
+/// — lo stesso numero che <c>data.costs</c> protegge altrove — arrivava a chiunque fosse
+/// autenticato, in due pagine che mostrano solo delle caselline.</para>
+/// </summary>
+public class DepartmentLookupDto
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 }

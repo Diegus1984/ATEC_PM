@@ -15,7 +15,7 @@ import {
 import type {
   OfficinaItem,
   OfficinaItemSaveRequest,
-  SupplierListItem,
+  SupplierLookupItem,
 } from "@/lib/api/types"
 import { notifyError } from "@/lib/toast"
 
@@ -71,7 +71,7 @@ export interface OfficinaRowMutations {
   commitDaneaRef: (item: OfficinaItem, daneaRef: string) => void
   changeOrderDate: (item: OfficinaItem, orderDate: string | null) => void
   changeDeliveredAt: (item: OfficinaItem, deliveredAt: string | null) => void
-  changeSupplier: (item: OfficinaItem, supplier: SupplierListItem | null) => void
+  changeSupplier: (item: OfficinaItem, supplier: SupplierLookupItem | null) => void
   changeTreatment: (item: OfficinaItem, treatment: string) => void
   /** Natura della lavorazione: "Internal" / "External" / "" (non classificata). */
   changeWorkType: (item: OfficinaItem, workType: string) => void
@@ -199,7 +199,7 @@ export function useOfficinaRowMutations(
   )
 
   const changeSupplier = React.useCallback(
-    (item: OfficinaItem, next: SupplierListItem | null) => {
+    (item: OfficinaItem, next: SupplierLookupItem | null) => {
       if ((next?.id ?? null) === (item.supplierId ?? null) || supplier.isPending) {
         return
       }

@@ -18,8 +18,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { fetchSuppliers } from "@/lib/api/suppliers"
-import type { SupplierListItem } from "@/lib/api/types"
+import { fetchSuppliersLookup } from "@/lib/api/suppliers"
+import type { SupplierLookupItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 
 const MAX_RESULTS = 40
@@ -40,14 +40,14 @@ export function DdpSupplierCell({
   supplierName: string
   disabled?: boolean
   /** `null` = rimuovi fornitore. */
-  onSupplierChange: (supplier: SupplierListItem | null) => void
+  onSupplierChange: (supplier: SupplierLookupItem | null) => void
 }) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
 
   const suppliersQuery = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
+    queryKey: ["suppliers", "lookup"],
+    queryFn: fetchSuppliersLookup,
     enabled: open,
   })
 
@@ -57,7 +57,7 @@ export function DdpSupplierCell({
     if (!q) return active.slice(0, MAX_RESULTS)
     return active
       .filter((s) =>
-        [s.companyName, s.contactName, s.vatNumber, s.email]
+        [s.companyName, s.contactName]
           .join(" ")
           .toLowerCase()
           .includes(q)
@@ -70,7 +70,7 @@ export function DdpSupplierCell({
     setSearch("")
   }
 
-  function pick(supplier: SupplierListItem | null) {
+  function pick(supplier: SupplierLookupItem | null) {
     onSupplierChange(supplier)
     closePopover()
   }

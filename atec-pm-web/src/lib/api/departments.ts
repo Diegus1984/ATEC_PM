@@ -2,9 +2,22 @@ import { apiDelete, apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   ApiResponse,
   DepartmentDto,
+  DepartmentLookupDto,
   DepartmentSaveRequest,
 } from "@/lib/api/types"
 
+/**
+ * I reparti per una **lista di spunta**: sigla, nome, attivo, ordine. Aperta a tutti.
+ * `fetchDepartments` invece porta costo orario e ricarico e richiede `nav.config_sezioni`.
+ */
+export async function fetchDepartmentsLookup(): Promise<DepartmentLookupDto[]> {
+  const response = await apiGet<ApiResponse<DepartmentLookupDto[]>>(
+    "/api/departments/lookup"
+  )
+  return unwrapApi(response)
+}
+
+/** I reparti con costo orario e ricarico (Configurazione sezioni). Richiede `nav.config_sezioni`. */
 export async function fetchDepartments(): Promise<DepartmentDto[]> {
   const response = await apiGet<ApiResponse<DepartmentDto[]>>("/api/departments")
   return unwrapApi(response)

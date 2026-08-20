@@ -33,6 +33,7 @@ public class CatalogController : ControllerBase
     };
 
     [HttpGet("filter-meta")]
+    [RequireFeature("nav.catalogo")]
     public IActionResult GetFilterMeta()
     {
         try
@@ -60,7 +61,19 @@ public class CatalogController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<object>.Fail(ex.Message)); }
     }
 
+    /// <summary>
+    /// L'elenco articoli. Le cinque chiavi in OR sono le cinque pagine che lo aprono: la
+    /// pagina Catalogo, il picker dentro la DDP di commessa, quello dell'Inbox Acquisti, la
+    /// mappatura Codex-Danea e la Composizione Codex. Su GET basta il livello READ.
+    ///
+    /// <para><b>La chiave serve anche ad ACCENDERE il filtro prezzi</b>: `PrezziSensibiliFilter`
+    /// ricava i micro dalle chiavi dell'endpoint, quindi finché qui non c'era nessun
+    /// [RequireFeature] i costi marcati [DatoSensibile] uscivano interi lo stesso. Marcarli
+    /// senza mettere la chiave sarebbe stato un cerotto su una porta aperta.</para>
+    /// </summary>
     [HttpGet]
+    [RequireFeature("nav.catalogo", "nav.codex", "nav.codex_composizione",
+                    "nav.acquisti_inbox", "project.ddp_commerciale")]
     public IActionResult GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 0,
@@ -165,6 +178,7 @@ public class CatalogController : ControllerBase
 
 
     [HttpGet("{id}")]
+    [RequireFeature("nav.catalogo")]
     public IActionResult GetById(int id)
     {
         try

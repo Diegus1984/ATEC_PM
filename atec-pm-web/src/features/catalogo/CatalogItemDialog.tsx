@@ -20,7 +20,7 @@ import {
   fetchCatalogItem,
   updateCatalogItem,
 } from "@/lib/api/catalog"
-import { fetchSuppliers } from "@/lib/api/suppliers"
+import { fetchSuppliersLookup } from "@/lib/api/suppliers"
 import { parseDecimal } from "@/lib/format"
 
 const EMPTY = {
@@ -62,8 +62,8 @@ export function CatalogItemDialog({
   }
 
   const suppliersQuery = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
+    queryKey: ["suppliers", "lookup"],
+    queryFn: fetchSuppliersLookup,
     enabled: open,
   })
 

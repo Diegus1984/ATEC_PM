@@ -78,3 +78,16 @@ export interface DepartmentDto {
   sortOrder: number
   isActive: boolean
 }
+
+/**
+ * Il reparto come lo mostra una **lista di spunta** (`GET /api/departments/lookup`): sigla,
+ * nome, attivo, ordine. Niente costo orario, niente ricarico — ed è per questo che l'endpoint
+ * può restare aperto a tutti gli autenticati.
+ */
+export interface DepartmentLookupDto {
+  id: number
+  code: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+}

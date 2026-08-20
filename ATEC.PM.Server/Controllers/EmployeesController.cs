@@ -20,7 +20,16 @@ public class EmployeesController : ControllerBase
         _access = access;
     }
 
+    /// <summary>
+    /// L'elenco dei dipendenti con email, utenza di login e stato: dietro <c>nav.utenti</c>,
+    /// la stessa chiave di <c>GET /api/users</c>, che ritorna gli stessi campi. Due strade allo
+    /// stesso dato con permessi diversi sono la definizione del buco.
+    /// <para>Le TENDINE (<c>real</c>, <c>by-department</c>, <c>by-phase</c>, <c>pm-list</c>)
+    /// restano aperte: ritornano <c>LookupItem</c>, cioè id e nome, e i nomi dei colleghi
+    /// servono in mezzo gestionale.</para>
+    /// </summary>
     [HttpGet]
+    [RequireFeature("nav.utenti")]
     public IActionResult GetAll()
     {
         using var c = _db.Open();
@@ -130,7 +139,10 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
     }
 
+    /// <summary>La scheda di un dipendente (cessati e supplier_id compresi). Stessa chiave
+    /// dell'elenco: lasciarla aperta vorrebbe dire ricostruire l'elenco ciclando gli id.</summary>
     [HttpGet("{id}")]
+    [RequireFeature("nav.utenti")]
     public IActionResult GetById(int id)
     {
         using var c = _db.Open();
@@ -141,8 +153,15 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<EmployeeSaveRequest>.Ok(emp));
     }
 
-    // Anagrafica dipendenti in scrittura: solo a chi ha la funzione «Utenti». Le GET qui sopra
-    // restano aperte a ogni autenticato perché alimentano le tendine di mezzo gestionale.
+    // Anagrafica dipendenti in scrittura: solo a chi ha la funzione «Utenti» — che dal 20/08
+    // protegge anche l'elenco e la scheda qui sopra.
+    //
+    // 🪤 Fin qui il commento diceva che le GET restavano aperte «perché alimentano le tendine
+    // di mezzo gestionale». Non era vero da un pezzo: le tendine sono `real`, `by-department`,
+    // `by-phase` e `pm-list`, che ritornano LookupItem (id + nome) e restano aperte apposta.
+    // GetAll e GetById ritornano email, utenza di login e stato — gli stessi campi che
+    // GET /api/users protegge da sempre con questa chiave. Una frase invecchiata in un
+    // commento aveva tenuto aperta una porta per mesi.
     [HttpPost]
     [Authorize]
     [RequireFeature("nav.utenti")]

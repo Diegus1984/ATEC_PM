@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { updateDdpRow } from "@/lib/api/project-ddp"
-import { fetchSuppliers } from "@/lib/api/suppliers"
+import { fetchSuppliersLookup } from "@/lib/api/suppliers"
 import type {
   DdpDestinationItem,
   DdpRowItem,
@@ -104,8 +104,8 @@ export function DdpRowDialog({
 
   // Anagrafica per la combobox fornitore: caricata solo a dialog aperto.
   const suppliersQuery = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
+    queryKey: ["suppliers", "lookup"],
+    queryFn: fetchSuppliersLookup,
     enabled: open,
   })
 

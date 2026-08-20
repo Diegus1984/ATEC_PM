@@ -8,8 +8,21 @@ public class CatalogItemListItem
     public string Category { get; set; } = "";
     public string Subcategory { get; set; } = "";
     public string Unit { get; set; } = "";
-    public decimal UnitCost { get; set; }
-    public decimal ListPrice { get; set; }
+    /// <summary>
+    /// Costo unitario d'acquisto. <b>Nullable per la regola dei dati sensibili</b> (§12.3):
+    /// null = «non lo puoi vedere», mai uno 0,00 € finto.
+    /// <para>🪤 Fino al 20/08 questo campo scavalcava il micro «vede prezzi» delle DDP: chi
+    /// aveva i costi azzerati nella griglia li rileggeva interi dal picker del Catalogo, che
+    /// sta dentro la stessa sezione di commessa. Il filtro non c'entrava: era spento, perché
+    /// ricava i micro dalle CHIAVI dell'endpoint e l'endpoint non ne aveva nessuna.</para>
+    /// </summary>
+    [DatoSensibile]
+    public decimal? UnitCost { get; set; }
+
+    /// <summary>Prezzo di listino: stessa storia di <see cref="UnitCost"/>.</summary>
+    [DatoSensibile]
+    public decimal? ListPrice { get; set; }
+
     public int? SupplierId { get; set; }
     public string SupplierName { get; set; } = "";
     public string SupplierCode { get; set; } = "";

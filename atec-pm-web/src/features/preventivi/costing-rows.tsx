@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
-import { fetchDepartments } from "@/lib/api/departments"
+import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
   addMaterialItem,
   deleteMaterialItem,
@@ -48,7 +48,7 @@ export function CostSectionCard({
   confirmDelete: () => void
 }) {
   const [addResourceOpen, setAddResourceOpen] = React.useState(false)
-  const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: fetchDepartments })
+  const departmentsQuery = useQuery({ queryKey: ["departments", "lookup"], queryFn: fetchDepartmentsLookup })
   const isDaCliente = section.sectionType === "DA_CLIENTE"
 
   function toggleDept(deptId: number, checked: boolean) {

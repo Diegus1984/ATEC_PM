@@ -8,7 +8,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import type { SupplierListItem } from "@/lib/api/types"
+import type { SupplierLookupItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 
 const MAX_RESULTS = 40
@@ -32,9 +32,9 @@ export function SupplierSearchCombobox({
   placeholder = "Cerca fornitore…",
   loading,
 }: {
-  suppliers: SupplierListItem[]
+  suppliers: SupplierLookupItem[]
   value: string
-  onValueChange: (companyName: string, supplier: SupplierListItem | null) => void
+  onValueChange: (companyName: string, supplier: SupplierLookupItem | null) => void
   disabled?: boolean
   placeholder?: string
   loading?: boolean
@@ -54,7 +54,7 @@ export function SupplierSearchCombobox({
     if (!q) return active.slice(0, MAX_RESULTS)
     return active
       .filter((s) => {
-        const haystack = [s.companyName, s.contactName, s.vatNumber, s.email]
+        const haystack = [s.companyName, s.contactName]
           .join(" ")
           .toLowerCase()
         return haystack.includes(q)
@@ -73,7 +73,7 @@ export function SupplierSearchCombobox({
     return () => document.removeEventListener("mousedown", onPointerDown)
   }, [open])
 
-  function selectSupplier(supplier: SupplierListItem) {
+  function selectSupplier(supplier: SupplierLookupItem) {
     onValueChange(supplier.companyName, supplier)
     setQuery(supplier.companyName)
     setOpen(false)

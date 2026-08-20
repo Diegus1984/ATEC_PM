@@ -52,7 +52,7 @@ public class ElencoCommesseTests
         // (costo consuntivo, materiali, trasferta, totale). Chiudere UNA strada non basta.
         foreach (string metodo in new[] { "GetAll", "GetTree", "GetById", "NextCode", "GetDashboard" })
         {
-            string[] chiavi = ChiaviDi(typeof(ProjectsController), metodo);
+            string[] chiavi = Gate.ChiaviDi(typeof(ProjectsController), metodo);
             Assert.True(chiavi.Contains("nav.commesse"),
                 $"ProjectsController.{metodo} ha perso [RequireFeature(\"nav.commesse\")]: " +
                 "i numeri della commessa (revenue, budget, costo consuntivo) tornerebbero leggibili a chiunque.");
@@ -65,7 +65,7 @@ public class ElencoCommesseTests
         // Non è una dimenticanza: la commessa si sceglie da mezza applicazione, e chiudere
         // questa spegnerebbe SAL, verbali, chat, milestone e lavorazioni a chi la commessa la
         // deve solo nominare. È il prezzo del taglio — e va pagato in un posto solo, qui.
-        Assert.Empty(ChiaviDi(typeof(ProjectsController), "GetLookup"));
+        Assert.Empty(Gate.ChiaviDi(typeof(ProjectsController), "GetLookup"));
     }
 
     [Fact]
@@ -74,26 +74,11 @@ public class ElencoCommesseTests
         foreach (string metodo in new[]
                  { "GetAssignments", "GetServices", "GetOthers", "GetResourceLookups", "GetProjectLookups" })
         {
-            string[] chiavi = ChiaviDi(typeof(ResourcesController), metodo);
+            string[] chiavi = Gate.ChiaviDi(typeof(ResourcesController), metodo);
             Assert.True(chiavi.Contains("nav.risorse"),
                 $"ResourcesController.{metodo} ha perso [RequireFeature(\"nav.risorse\")]: " +
                 "il planner tornerebbe leggibile anche a chi la voce «Risorse» ce l'ha negata. " +
                 "Basta il livello READ, quindi chi ce l'ha in sola lettura non perde niente.");
         }
-    }
-
-    /// <summary>Le chiavi dichiarate dagli attributi di un'azione (vuoto = nessun gate).</summary>
-    private static string[] ChiaviDi(Type controller, string metodo)
-    {
-        MethodInfo azione = controller.GetMethod(metodo, BindingFlags.Public | BindingFlags.Instance)
-            ?? throw new InvalidOperationException(
-                $"{controller.Name}.{metodo} non esiste più: se è stato rinominato, va aggiornato anche questo test.");
-
-        // Le chiavi non sono esposte da una proprietà: stanno in Arguments[0], che è come le
-        // legge anche il censimento (§12.3). Se un domani l'attributo cambia forma, cambiano
-        // insieme — meglio di due modi diversi di leggere la stessa cosa.
-        return azione.GetCustomAttributes<RequireFeatureAttribute>(inherit: true)
-            .SelectMany(a => (string[])a.Arguments![0]!)
-            .ToArray();
     }
 }

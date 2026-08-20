@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { fetchAuthLevels } from "@/lib/api/auth-levels"
-import { fetchDepartments } from "@/lib/api/departments"
+import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
   createEmployee,
   fetchEmployee,
@@ -37,7 +37,7 @@ import {
   setUserRole,
 } from "@/lib/api/users"
 import type {
-  DepartmentDto,
+  DepartmentLookupDto,
   EmployeeCompetenceItem,
   EmployeeDepartmentItem,
 } from "@/lib/api/types"
@@ -110,8 +110,8 @@ export function EmployeeDialog({
   const [error, setError] = React.useState<string | null>(null)
 
   const departmentsQuery = useQuery({
-    queryKey: ["departments"],
-    queryFn: fetchDepartments,
+    queryKey: ["departments", "lookup"],
+    queryFn: fetchDepartmentsLookup,
     enabled: open,
   })
 
@@ -444,7 +444,7 @@ export function EmployeeDialog({
                 <span className="w-16 text-center">Primario</span>
               </div>
               <div className="max-h-44 overflow-y-auto">
-                {activeDepartments.map((dept: DepartmentDto) => {
+                {activeDepartments.map((dept: DepartmentLookupDto) => {
                   const row = deptState[dept.id]
                   return (
                     <div
@@ -495,7 +495,7 @@ export function EmployeeDialog({
               Reparti su cui è tecnicamente abilitato, anche senza appartenenza formale.
             </p>
             <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-md border p-2">
-              {activeDepartments.map((dept: DepartmentDto) => {
+              {activeDepartments.map((dept: DepartmentLookupDto) => {
                 const row = compState[dept.id]
                 return (
                   <div key={dept.id} className="flex items-center gap-2">
