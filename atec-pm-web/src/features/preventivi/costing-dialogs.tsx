@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,13 +14,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   addCostSection,
   addMaterialSection,
@@ -52,7 +46,7 @@ export function AddCostSectionDialog({
   const addMutation = useMutation({
     mutationFn: () => {
       const tpl = templates.find((t) => String(t.id) === templateId)
-      if (!tpl) throw new Error("Seleziona un template.")
+      if (!tpl) throw new Error("Seleziona una sezione di costo.")
       return addCostSection(quoteId, {
         templateId: tpl.id,
         name: tpl.name,
@@ -73,19 +67,18 @@ export function AddCostSectionDialog({
           <DialogTitle>Aggiungi sezione di costo</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2">
-          <Label>Template sezione</Label>
-          <Select value={templateId} onValueChange={setTemplateId}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Seleziona un template" />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.groupName} — {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>Sezione di costo</Label>
+          <LookupCombobox
+            options={templates.map((t) => ({
+              id: String(t.id),
+              name: `${t.groupName} — ${t.name}`,
+            }))}
+            value={templateId || null}
+            onValueChange={(id) => setTemplateId(id ?? "")}
+            placeholder="Seleziona una sezione di costo"
+            searchPlaceholder="Cerca sezione…"
+            emptyText="Nessuna sezione di costo trovata"
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Annulla</Button>
@@ -251,18 +244,21 @@ export function AddResourceDialog({
           {mode === "employee" ? (
             <div className="grid gap-2">
               <Label>Dipendente</Label>
-              <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={employees.length ? "Seleziona" : "Assegna prima i reparti alla sezione"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.fullName} ({e.departmentCode})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LookupCombobox
+                options={employees.map((e) => ({
+                  id: String(e.id),
+                  name: `${e.fullName} (${e.departmentCode})`,
+                }))}
+                value={employeeId || null}
+                onValueChange={(id) => setEmployeeId(id ?? "")}
+                placeholder={
+                  employees.length
+                    ? "Seleziona"
+                    : "Assegna prima i reparti alla sezione"
+                }
+                searchPlaceholder="Cerca dipendente…"
+                emptyText="Nessun dipendente trovato"
+              />
             </div>
           ) : (
             <div className="space-y-3">

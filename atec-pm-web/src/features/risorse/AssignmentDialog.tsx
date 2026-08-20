@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DateField } from "@/components/shared/date-field"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { toDateOnly } from "@/lib/date-iso"
 
 const NONE = "0"
@@ -395,19 +396,15 @@ export function AssignmentDialog({
           {!isFerie && (
             <div className="grid gap-1.5">
               <Label>Commessa</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="— nessuna —" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>— nessuna —</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LookupCombobox
+                options={projects.map((p) => ({ id: String(p.id), name: p.name }))}
+                value={projectId === NONE ? null : projectId}
+                onValueChange={(id) => setProjectId(id ?? NONE)}
+                placeholder="— nessuna —"
+                noneLabel="— nessuna —"
+                searchPlaceholder="Cerca commessa…"
+                emptyText="Nessuna commessa trovata"
+              />
             </div>
           )}
 

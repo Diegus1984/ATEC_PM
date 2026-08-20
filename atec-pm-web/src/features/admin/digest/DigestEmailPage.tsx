@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getSession } from "@/lib/auth/session"
+import { canAccessFeature } from "@/lib/auth/permissions"
 
 const EMPTY_EMAIL: EmailSettingsDto = {
   enabled: false,
@@ -46,23 +46,26 @@ const EMPTY_EMAIL: EmailSettingsDto = {
 }
 
 export function DigestEmailPage() {
-  const isAdmin = getSession()?.user.userRole === "ADMIN"
+  // Permesso della pagina, non livello del ruolo: la funzione si concede alla persona.
+  // Governa anche l'`enabled` delle tre query, così senza permesso non si chiedono
+  // impostazioni che l'API rifiuterebbe comunque con un 403.
+  const canManageDigest = canAccessFeature("nav.digest_email")
   const queryClient = useQueryClient()
 
   const emailQuery = useQuery({
     queryKey: ["digest-email-settings"],
     queryFn: fetchEmailSettings,
-    enabled: isAdmin,
+    enabled: canManageDigest,
   })
   const digestSettingsQuery = useQuery({
     queryKey: ["digest-settings"],
     queryFn: fetchDigestSettings,
-    enabled: isAdmin,
+    enabled: canManageDigest,
   })
   const statusQuery = useQuery({
     queryKey: ["digest-status"],
     queryFn: fetchDigestStatus,
-    enabled: isAdmin,
+    enabled: canManageDigest,
   })
 
   const [emailForm, setEmailForm] = React.useState<EmailSettingsDto>(EMPTY_EMAIL)
@@ -116,12 +119,15 @@ export function DigestEmailPage() {
     },
   })
 
-  if (!isAdmin) {
+  if (!canManageDigest) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Digest email</CardTitle>
-          <CardDescription>Solo gli utenti ADMIN possono configurare questa sezione.</CardDescription>
+          <CardDescription>
+            Non hai il permesso per configurare questa sezione. Chiedi a un amministratore
+            di abilitarti la funzione «Digest Email».
+          </CardDescription>
         </CardHeader>
       </Card>
     )

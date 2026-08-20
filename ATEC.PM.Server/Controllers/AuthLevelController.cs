@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -14,19 +15,76 @@ public class AuthLevelController : ControllerBase
 {
     private readonly DbService _db;
     private readonly FeatureAccessService _access;
-    public AuthLevelController(DbService db, FeatureAccessService access)
+    private readonly PermissionSeedService _seed;
+    private readonly PermissionChangeService _changes;
+    public AuthLevelController(
+        DbService db,
+        FeatureAccessService access,
+        PermissionSeedService seed,
+        PermissionChangeService changes)
     {
         _db = db;
         _access = access;
+        _seed = seed;
+        _changes = changes;
     }
+
+    /// <summary>
+    /// Chi sta facendo la modifica: finisce in <c>employee_feature_access_log.changed_by</c>.
+    /// È l'id, non il nome: <c>Identity.Name</c> porta il NOME COMPLETO (vedi AuthController).
+    /// </summary>
+    private int? UtenteCorrente =>
+        int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out int id) ? id : null;
+
+    // ── Passaggio al modello «permessi sulla persona» (PIANO-PERMESSI.md, Fase A) ────────
+    //
+    // Sono operazioni di migrazione, non di uso quotidiano: stanno dietro `nav.permessi`
+    // (livello 3) e non compaiono in nessuna pagina. Servono a poter rifare seed e confronto
+    // quante volte occorre SENZA un nuovo deploy — il piano chiede di verificare la fotografia
+    // «col diff, non con la fiducia», e un controllo che si può ripetere è l'unico che si fa
+    // davvero.
+
+    /// <summary>
+    /// Confronto fra il motore vecchio e le righe per persona. Deve tornare <b>vuoto</b> prima di
+    /// invertire il fallback: ogni differenza qui è una persona che perderebbe (o guadagnerebbe)
+    /// qualcosa senza che nessuno l'abbia deciso.
+    /// </summary>
+    [HttpGet("migrazione/diff")]
+    [RequireFeature("nav.permessi")]
+    public IActionResult DiffPermessi()
+    {
+        var esito = _seed.Diff();
+        return Ok(ApiResponse<PermissionSeedService.Esito>.Ok(esito,
+            esito.Differenze.Count == 0
+                ? $"Nessuna differenza su {esito.Persone} persone × {esito.Funzioni} funzioni."
+                : $"{esito.Differenze.Count} differenze da guardare prima di procedere."));
+    }
+
+    /// <summary>
+    /// Materializza sulla persona i permessi che ha oggi. Con <c>prova=true</c> non scrive niente
+    /// e dice solo cosa farebbe. Non tocca mai le righe messe a mano (<c>origin = MANO</c>).
+    /// </summary>
+    [HttpPost("migrazione/seed")]
+    [RequireFeature("nav.permessi")]
+    public IActionResult SeedPermessi([FromQuery] bool prova = false)
+    {
+        var esito = _seed.Seed(prova, UtenteCorrente);
+        return Ok(ApiResponse<PermissionSeedService.Esito>.Ok(esito,
+            prova
+                ? $"Prova: scriverebbe {esito.RigheScritte} righe e ne toglierebbe {esito.RigheTolte}."
+                : $"Scritte {esito.RigheScritte} righe, tolte {esito.RigheTolte}, su {esito.Persone} persone."));
+    }
+
+    private const string LevelsSelect =
+        "SELECT id AS Id, level_value AS LevelValue, role_name AS RoleName, display_name AS DisplayName, " +
+        "sort_order AS SortOrder, access_mode AS AccessMode FROM auth_levels ORDER BY sort_order";
 
     /// <summary>Lista livelli autorizzazione</summary>
     [HttpGet]
     public IActionResult GetLevels()
     {
         using var c = _db.Open();
-        var levels = c.Query<AuthLevelDto>(
-            "SELECT id AS Id, level_value AS LevelValue, role_name AS RoleName, display_name AS DisplayName, sort_order AS SortOrder FROM auth_levels ORDER BY sort_order").ToList();
+        var levels = c.Query<AuthLevelDto>(LevelsSelect).ToList();
         return Ok(ApiResponse<List<AuthLevelDto>>.Ok(levels));
     }
 
@@ -45,6 +103,8 @@ public class AuthLevelController : ControllerBase
     public IActionResult GetMyFeatures()
     {
         string role = User.FindFirst(ClaimTypes.Role)?.Value ?? "TECH";
+        // Id del dipendente: `Identity.Name` è il nome completo, non lo username.
+        _ = int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out int employeeId);
 
         using var c = _db.Open();
         int userLevel = c.ExecuteScalar<int>(
@@ -56,29 +116,158 @@ public class AuthLevelController : ControllerBase
                      category AS Category, min_level AS MinLevel, behavior AS Behavior
               FROM auth_features ORDER BY category, display_name").ToList();
 
-        var levels = c.Query<AuthLevelDto>(
-            "SELECT id AS Id, level_value AS LevelValue, role_name AS RoleName, display_name AS DisplayName, sort_order AS SortOrder FROM auth_levels ORDER BY sort_order").ToList();
+        var levels = c.Query<AuthLevelDto>(LevelsSelect).ToList();
 
-        return Ok(ApiResponse<object>.Ok(new { UserLevel = userLevel, Features = features, Levels = levels }));
+        // Contatore di versione dei permessi di QUESTA persona: sale a ogni modifica che la
+        // riguarda (vedi PermissionChangeService). Il client se lo tiene e lo confronta con
+        // quello che arriva dall'hub con "PermissionsChanged", così sa se la risposta che ha
+        // appena riletto è già quella nuova — due modifiche ravvicinate mandano due avvisi.
+        int permissionsVersion = c.ExecuteScalar<int>(
+            "SELECT COALESCE((SELECT permissions_version FROM employees WHERE id=@Id), 0)",
+            new { Id = employeeId });
+
+        // Col motore nuovo la risposta è la stessa di sempre, ma i grant sono quelli della
+        // PERSONA e la modalità è «lista bianca»: il client la conosce già (la usa per la
+        // Contabilità), quindi l'inversione non gli cambia il contratto.
+        //   Il jolly viene ESPANSO qui su tutto il catalogo: il client non sa cosa sia '*', e
+        //   fargliela imparare vorrebbe dire due implementazioni della stessa regola da tenere
+        //   allineate — la prima che diverge apre o chiude una pagina di troppo.
+        Dictionary<string, string> grants;
+        string accessMode;
+        if (_access.IsMotoreNuovoAttivo())
+        {
+            var righe = _access.GetPersonGrants(employeeId);
+            accessMode = "GRANTS";
+
+            // ⚠️ Nel contratto col client «chiave presente = concessa»: le righe di DINIEGO
+            // (access = 'NO') non devono uscire di qui, o il client le leggerebbe come
+            // concessioni — cioè il Timesheet spento a mano all'ufficio Acquisti tornerebbe
+            // visibile nel menu, e la riga che serve a togliere finirebbe per dare.
+            if (righe.TryGetValue(FeatureAccessService.JollyKey, out string? jolly)
+                && !FeatureAccessService.Negato(jolly))
+            {
+                // Jolly espanso su tutto il catalogo, tolto ciò che è negato riga per riga:
+                // la decisione sulla singola funzione è più specifica del «vale tutto».
+                grants = features
+                    .Where(f => !righe.TryGetValue(f.FeatureKey, out string? a) || !FeatureAccessService.Negato(a))
+                    .ToDictionary(
+                        f => f.FeatureKey,
+                        f => righe.TryGetValue(f.FeatureKey, out string? a) ? a : jolly,
+                        StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                grants = righe
+                    .Where(kv => kv.Key != FeatureAccessService.JollyKey && !FeatureAccessService.Negato(kv.Value))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        else
+        {
+            // Reparto Contabilità: la sua lista SOSTITUISCE i permessi del livello (non si somma),
+            // quindi il client va messo in modalità «lista bianca» come per i ruoli di reparto —
+            // altrimenti il menu continua a mostrargli tutto quello che il livello concede.
+            bool contabilita = _access.IsRestrictedToContabilita(employeeId, role);
+            grants = contabilita
+                ? _access.GetContabilitaGrants(role)
+                : _access.GetGrantsForRole(role);
+            accessMode = contabilita || _access.IsGrantsRole(role) ? "GRANTS" : "LEVEL";
+        }
+
+        return Ok(ApiResponse<object>.Ok(new
+        {
+            UserLevel = userLevel,
+            Features = features,
+            Levels = levels,
+            AccessMode = accessMode,
+            Grants = grants,
+            PermissionsVersion = permissionsVersion,
+            // Quale motore ha risposto. Non serve a decidere permessi — quelli sono già in
+            // Grants — ma a dire la verità nella pagina «Permessi»: col motore nuovo acceso la
+            // matrice funzioni × ruoli scrive in `auth_role_features` e `auth_features`, che
+            // nessuno legge più, quindi un salvataggio lì non cambia niente per nessuno e
+            // l'unico modo di scoprirlo era non vedere effetti.
+            PermissionsEngine = _access.IsMotoreNuovoAttivo() ? "NEW" : "LEGACY",
+        }));
+    }
+
+    /// <summary>Tutte le concessioni per ruolo (matrice della pagina «Permessi»).</summary>
+    [HttpGet("role-features")]
+    public IActionResult GetRoleFeatures()
+    {
+        using var c = _db.Open();
+        var grants = c.Query<AuthRoleFeatureDto>(
+            "SELECT role_name AS RoleName, feature_key AS FeatureKey, access AS Access FROM auth_role_features").ToList();
+        return Ok(ApiResponse<List<AuthRoleFeatureDto>>.Ok(grants));
+    }
+
+    /// <summary>Assegna una concessione a un ruolo, o la revoca con Access vuoto.</summary>
+    [HttpPut("role-features")]
+    [Authorize]
+    [RequireFeature("nav.permessi")]
+    public IActionResult SetRoleFeature([FromBody] SetRoleFeatureRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.RoleName) || string.IsNullOrWhiteSpace(req.FeatureKey))
+            return BadRequest(ApiResponse<string>.Fail("RoleName e FeatureKey sono obbligatori"));
+
+        string? access = string.IsNullOrWhiteSpace(req.Access) ? null : req.Access.Trim().ToUpperInvariant();
+        if (access != null && access != FeatureAccessService.AccessRead && access != FeatureAccessService.AccessFull)
+            return BadRequest(ApiResponse<string>.Fail("Access ammette solo READ, FULL o vuoto"));
+
+        using var c = _db.Open();
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_levels WHERE role_name=@Role",
+                new { Role = req.RoleName }) == 0)
+            return NotFound(ApiResponse<string>.Fail($"Ruolo '{req.RoleName}' inesistente"));
+
+        // La concessione si scrive sul RUOLO, ma a cambiare è quello che vedono le PERSONE con
+        // quel ruolo: registro, contatore di versione e avviso real-time vanno su di loro —
+        // e solo su chi cambia davvero (chi aveva già la funzione per livello non si accorge di
+        // niente e non va svegliato). Il Reload della cache lo fa ApplicaEPropaga.
+        _changes.ApplicaEPropaga(req.FeatureKey, req.RoleName, UtenteCorrente, () =>
+        {
+            if (access == null)
+            {
+                c.Execute("DELETE FROM auth_role_features WHERE role_name=@RoleName AND feature_key=@FeatureKey", req);
+            }
+            else
+            {
+                c.Execute(@"INSERT INTO auth_role_features (role_name, feature_key, access)
+                            VALUES (@RoleName, @FeatureKey, @Access)
+                            ON DUPLICATE KEY UPDATE access = VALUES(access)",
+                    new { req.RoleName, req.FeatureKey, Access = access });
+            }
+        });
+
+        return Ok(ApiResponse<string>.Ok(access == null ? "Concessione rimossa" : "Concessione aggiornata"));
     }
 
     /// <summary>Aggiorna livello minimo o behavior di una feature</summary>
     [HttpPut("features/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.permessi")]
     public IActionResult UpdateFeature(int id, [FromBody] UpdateAuthFeatureRequest req)
     {
         using var c = _db.Open();
-        int affected = c.Execute(
-            "UPDATE auth_features SET min_level=@MinLevel, behavior=@Behavior WHERE id=@Id",
-            new { req.MinLevel, req.Behavior, Id = id });
-        if (affected == 0) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
-        _access.Reload(); // invalida la cache dell'enforcement server-side
+
+        // La chiave serve prima della scrittura, per sapere su quale funzione confrontare il
+        // prima e il dopo. Si guadagna anche un 404 onesto: col vecchio `affected == 0` un
+        // salvataggio che non cambiava nulla (stessi valori) rispondeva «Feature non trovata».
+        string? key = c.ExecuteScalar<string>("SELECT feature_key FROM auth_features WHERE id=@Id", new { Id = id });
+        if (key == null) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
+
+        // Alzare o abbassare il livello minimo cambia chi vede quella pagina: chi la perde (o la
+        // guadagna) va registrato e avvisato, non lasciato con il menu di prima fino all'F5.
+        _changes.ApplicaEPropaga(key, null, UtenteCorrente, () =>
+            c.Execute("UPDATE auth_features SET min_level=@MinLevel, behavior=@Behavior WHERE id=@Id",
+                new { req.MinLevel, req.Behavior, Id = id }));
+
         return Ok(ApiResponse<string>.Ok("Feature aggiornata"));
     }
 
     /// <summary>Crea nuova feature</summary>
     [HttpPost("features")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.permessi")]
     public IActionResult CreateFeature([FromBody] CreateAuthFeatureRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.FeatureKey) || string.IsNullOrWhiteSpace(req.DisplayName))
@@ -87,10 +276,13 @@ public class AuthLevelController : ControllerBase
         using var c = _db.Open();
         try
         {
-            c.Execute(
-                @"INSERT INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                  VALUES (@FeatureKey, @DisplayName, @Category, @MinLevel, @Behavior)", req);
-            _access.Reload(); // invalida la cache dell'enforcement server-side
+            // Registrare una funzione TOGLIE accesso: finché la chiave non è in catalogo il
+            // fallback la lascia aperta a tutti (FeatureAccessService.CanAccess). Il confronto
+            // prima/dopo lo dice riga per riga, invece di scoprirlo dagli utenti.
+            _changes.ApplicaEPropaga(req.FeatureKey, null, UtenteCorrente, () =>
+                c.Execute(
+                    @"INSERT INTO auth_features (feature_key, display_name, category, min_level, behavior)
+                      VALUES (@FeatureKey, @DisplayName, @Category, @MinLevel, @Behavior)", req));
             return Ok(ApiResponse<string>.Ok("Feature creata"));
         }
         catch (MySqlConnector.MySqlException ex) when (ex.Number == 1062)
@@ -101,13 +293,22 @@ public class AuthLevelController : ControllerBase
 
     /// <summary>Elimina feature</summary>
     [HttpDelete("features/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.permessi")]
     public IActionResult DeleteFeature(int id)
     {
         using var c = _db.Open();
-        int affected = c.Execute("DELETE FROM auth_features WHERE id=@Id", new { Id = id });
-        if (affected == 0) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
-        _access.Reload(); // invalida la cache dell'enforcement server-side
+        string? key = c.ExecuteScalar<string>("SELECT feature_key FROM auth_features WHERE id=@Id", new { Id = id });
+        if (key == null) return NotFound(ApiResponse<string>.Fail("Feature non trovata"));
+
+        _changes.ApplicaEPropaga(key, null, UtenteCorrente, () =>
+        {
+            c.Execute("DELETE FROM auth_features WHERE id=@Id", new { Id = id });
+            // Via anche le concessioni per ruolo: resterebbero righe orfane che continuano a
+            // concedere una funzione che non esiste più.
+            c.Execute("DELETE FROM auth_role_features WHERE feature_key=@Key", new { Key = key });
+        });
+
         return Ok(ApiResponse<string>.Ok("Feature eliminata"));
     }
 }

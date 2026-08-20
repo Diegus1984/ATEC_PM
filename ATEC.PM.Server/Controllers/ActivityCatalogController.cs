@@ -4,6 +4,7 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Data;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -11,6 +12,8 @@ namespace ATEC.PM.Server.Controllers;
 // È l'elenco da cui si precaricano le milestone alla creazione di una commessa (copia PER VALORE:
 // le milestone non referenziano il catalogo, quindi modifiche/cancellazioni qui NON toccano le
 // commesse già create). Le voci hanno id stabile; l'ordine è gestito da sort_order.
+// Catalogo attività: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.anagrafica_attivita».
 [ApiController]
 [Route("api/activity-catalog")]
 [Authorize]
@@ -42,6 +45,7 @@ public class ActivityCatalogController : ControllerBase
         return Ok(ApiResponse<List<ActivityCatalogItem>>.Ok(rows));
     }
 
+    [RequireFeature("nav.anagrafica_attivita")]
     [HttpPost]
     public IActionResult Create([FromBody] ActivityCatalogSaveRequest req)
     {
@@ -75,6 +79,7 @@ public class ActivityCatalogController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Voce creata"));
     }
 
+    [RequireFeature("nav.anagrafica_attivita")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] ActivityCatalogSaveRequest req)
     {
@@ -100,6 +105,7 @@ public class ActivityCatalogController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
+    [RequireFeature("nav.anagrafica_attivita")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {
@@ -109,6 +115,7 @@ public class ActivityCatalogController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Eliminata"));
     }
 
+    [RequireFeature("nav.anagrafica_attivita")]
     [HttpPost("reorder")]
     public IActionResult Reorder([FromBody] ActivityCatalogReorderRequest req)
     {
@@ -123,6 +130,7 @@ public class ActivityCatalogController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Ordine aggiornato"));
     }
 
+    [RequireFeature("nav.anagrafica_attivita")]
     [HttpPost("reset")]
     public IActionResult Reset()
     {

@@ -43,11 +43,14 @@ export function CustomerDialog({
   customerId,
   onClose,
   onSaved,
+  readOnly = false,
 }: {
   open: boolean
   customerId: number | "new" | null
   onClose: () => void
   onSaved: () => Promise<void>
+  /** Anagrafica concessa in sola lettura: campi bloccati e nessun salvataggio. */
+  readOnly?: boolean
 }) {
   const isNew = customerId === "new"
   const editId = typeof customerId === "number" ? customerId : null
@@ -135,7 +138,13 @@ export function CustomerDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isNew ? "Nuovo cliente" : "Modifica cliente"}</DialogTitle>
+          <DialogTitle>
+            {readOnly
+              ? "Scheda cliente"
+              : isNew
+                ? "Nuovo cliente"
+                : "Modifica cliente"}
+          </DialogTitle>
           <DialogDescription>
             Anagrafica, contatti e dati fiscali del cliente.
           </DialogDescription>
@@ -146,6 +155,7 @@ export function CustomerDialog({
             <Label>Ragione sociale</Label>
             <Input
               value={form.companyName}
+              disabled={readOnly}
               autoFocus
               onChange={(event) => set("companyName", event.target.value)}
             />
@@ -156,6 +166,7 @@ export function CustomerDialog({
               <Label>Referente</Label>
               <Input
                 value={form.contactName}
+                disabled={readOnly}
                 onChange={(event) => set("contactName", event.target.value)}
               />
             </div>
@@ -163,6 +174,7 @@ export function CustomerDialog({
               <Label>Indirizzo</Label>
               <Input
                 value={form.address}
+                disabled={readOnly}
                 onChange={(event) => set("address", event.target.value)}
               />
             </div>
@@ -174,6 +186,7 @@ export function CustomerDialog({
               <Input
                 type="email"
                 value={form.email}
+                disabled={readOnly}
                 onChange={(event) => set("email", event.target.value)}
               />
             </div>
@@ -181,6 +194,7 @@ export function CustomerDialog({
               <Label>PEC</Label>
               <Input
                 value={form.pec}
+                disabled={readOnly}
                 onChange={(event) => set("pec", event.target.value)}
               />
             </div>
@@ -191,6 +205,7 @@ export function CustomerDialog({
               <Label>Telefono</Label>
               <Input
                 value={form.phone}
+                disabled={readOnly}
                 onChange={(event) => set("phone", event.target.value)}
               />
             </div>
@@ -198,6 +213,7 @@ export function CustomerDialog({
               <Label>Cellulare</Label>
               <Input
                 value={form.cell}
+                disabled={readOnly}
                 onChange={(event) => set("cell", event.target.value)}
               />
             </div>
@@ -208,6 +224,7 @@ export function CustomerDialog({
               <Label>P. IVA</Label>
               <Input
                 value={form.vatNumber}
+                disabled={readOnly}
                 onChange={(event) => set("vatNumber", event.target.value)}
               />
             </div>
@@ -215,6 +232,7 @@ export function CustomerDialog({
               <Label>Cod. fiscale</Label>
               <Input
                 value={form.fiscalCode}
+                disabled={readOnly}
                 onChange={(event) => set("fiscalCode", event.target.value)}
               />
             </div>
@@ -222,6 +240,7 @@ export function CustomerDialog({
               <Label>Cod. SDI</Label>
               <Input
                 value={form.sdiCode}
+                disabled={readOnly}
                 onChange={(event) => set("sdiCode", event.target.value)}
               />
             </div>
@@ -231,6 +250,7 @@ export function CustomerDialog({
             <Label>Termini di pagamento</Label>
             <Input
               value={form.paymentTerms}
+              disabled={readOnly}
               onChange={(event) => set("paymentTerms", event.target.value)}
             />
           </div>
@@ -239,6 +259,7 @@ export function CustomerDialog({
             <Label>Note</Label>
             <Textarea
               value={form.notes}
+              disabled={readOnly}
               rows={3}
               onChange={(event) => set("notes", event.target.value)}
             />
@@ -247,6 +268,7 @@ export function CustomerDialog({
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={form.isActive}
+              disabled={readOnly}
               onCheckedChange={(value) => set("isActive", !!value)}
             />
             Cliente attivo
@@ -257,14 +279,16 @@ export function CustomerDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Annulla
+            {readOnly ? "Chiudi" : "Annulla"}
           </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={!form.companyName.trim() || saveMutation.isPending}
-          >
-            {saveMutation.isPending ? "Salvataggio…" : "Salva"}
-          </Button>
+          {readOnly ? null : (
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={!form.companyName.trim() || saveMutation.isPending}
+            >
+              {saveMutation.isPending ? "Salvataggio…" : "Salva"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

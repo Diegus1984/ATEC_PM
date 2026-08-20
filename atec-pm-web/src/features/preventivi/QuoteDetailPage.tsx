@@ -32,7 +32,7 @@ import {
   updateQuoteItemField,
 } from "@/lib/api/quotes"
 import type { QuoteDto, QuoteItemDto, QuoteSaveDto } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
+import { canAccessFeature } from "@/lib/auth/permissions"
 import { notifyError } from "@/lib/toast"
 import { formatDateShort } from "@/lib/date-iso"
 
@@ -42,7 +42,7 @@ import { CostingTree } from "./CostingTree"
 import { RtfEditDialog } from "./RtfEditDialog"
 import { quoteStatusLabel, quoteStatusMeta } from "./quote-status"
 import { quoteTypeLabel } from "./quote-type"
-import { fmt2, parseDecimal } from "@/lib/format"
+import { euro, parseDecimal } from "@/lib/format"
 
 interface ProductGroup {
   parent: QuoteItemDto
@@ -93,8 +93,9 @@ export function QuoteDetailPage() {
 
   const quoteId = Number.parseInt(params.id ?? "0", 10)
   const readOnly = searchParams.get("readonly") === "1"
-  const role = getSession()?.user.userRole ?? ""
-  const canSeeCosts = role === "ADMIN" || role === "PM"
+  // L'albero dei costi MOSTRA un dato economico: qui basta la lettura, non la scrittura
+  // (chi lo vede in sola lettura deve comunque vederlo, a modificarlo pensa l'API).
+  const canSeeCosts = canAccessFeature("data.costs")
 
   const quoteQuery = useQuery({
     queryKey: ["quote", quoteId],
@@ -284,7 +285,7 @@ export function QuoteDetailPage() {
               <CostingTree quoteId={quoteId} readOnly={readOnly} />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Dati economici riservati (PM/ADMIN).
+                Non hai il permesso di vedere i dati economici.
               </p>
             )}
             <AutoIncludesPanel
@@ -670,17 +671,17 @@ function ServiceTotals({
         <span className="text-sm text-muted-foreground">%</span>
       </div>
       <div className="w-72 space-y-1 text-sm">
-        <Row label="TOTALE" value={`${fmt2(quote.subtotal)} €`} />
-        <Row label="TOTALE IVA" value={`${fmt2(quote.vatTotal)} €`} />
-        <Row label="SCONTO" value={discountAmount > 0 ? `-${fmt2(discountAmount)} €` : "0,00 €"} color="#DC2626" />
+        <Row label="TOTALE" value={euro(quote.subtotal)} />
+        <Row label="TOTALE IVA" value={euro(quote.vatTotal)} />
+        <Row label="SCONTO" value={discountAmount > 0 ? `-${euro(discountAmount)}` : "0,00 €"} color="#DC2626" />
         <div className="border-t pt-1">
-          <Row label="TOTALE IMPONIBILE" value={`${fmt2(quote.total)} €`} strong />
+          <Row label="TOTALE IMPONIBILE" value={euro(quote.total)} strong />
         </div>
-        <Row label="TOTALE IVA INCLUSA" value={`${fmt2(quote.totalWithVat)} €`} />
+        <Row label="TOTALE IVA INCLUSA" value={euro(quote.totalWithVat)} />
         <div className="border-t pt-1">
-          <Row label="TOTALE COSTI AZIENDALI" value={`${fmt2(quote.costTotal)} €`} strong color="#2563EB" />
+          <Row label="TOTALE COSTI AZIENDALI" value={euro(quote.costTotal)} strong color="#2563EB" />
         </div>
-        <Row label="UTILE" value={`${fmt2(quote.profit)} €`} strong color="#2563EB" />
+        <Row label="UTILE" value={euro(quote.profit)} strong color="#2563EB" />
       </div>
     </div>
   )
@@ -732,7 +733,7 @@ function ServiceProductCard({
           onChange={(e) => setName(e.target.value)}
           onBlur={() => name !== group.parent.name && onRenameProduct(name)}
         />
-        {total > 0 ? <span className="font-bold tabular-nums">{fmt2(total)}€</span> : null}
+        {total > 0 ? <span className="font-bold tabular-nums">{euro(total)}</span> : null}
         {!readOnly ? (
           <>
             <Button variant="ghost" size="icon-sm" title="Aggiungi variante" onClick={onAddVariant}>
@@ -846,34 +847,34 @@ function VariantRow({
       <Input
         value={name}
         readOnly={readOnly}
-        className="h-7 border-transparent bg-transparent text-xs focus-visible:border-input"
+        className="h-7 border-transparent bg-transparent text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
         onChange={(e) => setName(e.target.value)}
         onBlur={() => save()}
       />
       <Input
         value={qty}
         readOnly={readOnly}
-        className="h-7 text-right text-xs"
+        className="h-7 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
         onChange={(e) => setQty(e.target.value)}
         onBlur={() => save()}
       />
       <Input
         value={cost}
         readOnly={readOnly}
-        className="h-7 text-right text-xs"
+        className="h-7 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
         onChange={(e) => setCost(e.target.value)}
         onBlur={() => save()}
       />
-      <span className="text-right text-xs text-muted-foreground tabular-nums">{fmt2(costTot)}</span>
+      <span className="text-right text-xs text-muted-foreground tabular-nums">{euro(costTot)}</span>
       <Input
         value={markup}
         readOnly={readOnly}
-        className="h-7 text-center text-xs"
+        className="h-7 border-transparent bg-transparent text-center text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
         onChange={(e) => setMarkup(e.target.value)}
         onBlur={() => save()}
       />
       <span className="text-right text-xs font-semibold tabular-nums text-[#059669]">
-        {active ? `${fmt2(variant.lineTotal)}€` : "—"}
+        {active ? euro(variant.lineTotal) : "—"}
       </span>
       {!readOnly ? (
         <Button

@@ -6,6 +6,7 @@ using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Hubs;
 using System.Security.Claims;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -249,10 +250,11 @@ public class CodexController : ControllerBase
     // Colonna codice_nuovo: di proprietà di ATEC PM (il sync remoto non la tocca),
     // compilata SOLO a mano. Formato = solo cifre come il codice attuale (il punto di
     // display viene rimosso), unicità contro ENTRAMBE le colonne (mai un nuovo uguale
-    // a un vecchio esistente). Ruoli: ADMIN, PM, RESP_REPARTO.
+    // a un vecchio esistente). Chi può ricodificare: chiave «action.recode_codex».
 
     [HttpPut("{id}/new-code")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult SetNewCode(int id, [FromBody] CodexNewCodeSaveRequest req)
     {
         string raw = (req.NewCode ?? "").Replace(".", "").Trim();
@@ -311,7 +313,8 @@ public class CodexController : ControllerBase
     // che ricodificano in parallelo NON ricevono mai lo stesso codice. La prenotazione
     // (TTL 10 min) si libera al salvataggio o con /api/codex/release/{id}.
     [HttpPost("new-code/reserve")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult ReserveNewCode([FromBody] CodexNewCodeReserveRequest req)
     {
         string fam = new string((req.Family ?? "").Where(char.IsDigit).ToArray());
@@ -338,7 +341,8 @@ public class CodexController : ControllerBase
     // selezionate senza codice nuovo e ritorna l'anteprima vecchio→nuovo+descrizione
     // che l'operatore conferma nel form (bulk-commit) o annulla (bulk-release).
     [HttpPost("new-code/bulk-reserve")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult BulkReserveNewCodes([FromBody] CodexBulkAssignRequest req)
     {
         string fam = new string((req.Family ?? "").Where(char.IsDigit).ToArray());
@@ -375,7 +379,8 @@ public class CodexController : ControllerBase
     // prenotati sulle righe. Ogni voce viene verificata contro la sua prenotazione;
     // righe nel frattempo ricodificate da altri vengono saltate.
     [HttpPost("new-code/bulk-commit")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult BulkCommitNewCodes([FromBody] CodexBulkCommitRequest req)
     {
         var items = req.Items ?? new List<CodexBulkReserveItem>();
@@ -422,7 +427,8 @@ public class CodexController : ControllerBase
 
     // Annulla del form: libera in blocco le prenotazioni dell'anteprima.
     [HttpPost("new-code/bulk-release")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult BulkReleaseNewCodes([FromBody] CodexBulkReleaseRequest req)
     {
         var ids = (req.ReservationIds ?? new List<int>()).Where(i => i > 0).Distinct().ToList();
@@ -438,7 +444,8 @@ public class CodexController : ControllerBase
     // Reset MASSIVO del codice nuovo (l'operatore ha sbagliato la qualifica):
     // le righe selezionate tornano "non ricodificate".
     [HttpPost("new-code/bulk-remove")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.recode_codex")]
     public IActionResult BulkRemoveNewCodes([FromBody] CodexBulkRemoveRequest req)
     {
         var ids = (req.Ids ?? new List<int>()).Where(i => i > 0).Distinct().ToList();
@@ -470,7 +477,11 @@ public class CodexController : ControllerBase
 
     // ── SYNC ────────────────────────────────────────────────
 
+    // Fino alla Fase E il divieto stava SOLO nel client (pagina Codex, `isAdminLevel`):
+    // l'API era aperta a ogni autenticato. Togliere il controllo dalla pagina senza dare
+    // la chiave qui non lo avrebbe sostituito, lo avrebbe cancellato.
     [HttpPost("sync")]
+    [RequireFeature("action.manage_codex")]
     public IActionResult StartSync()
     {
         if (CodexSyncService.IsSyncing)
@@ -504,7 +515,13 @@ public class CodexController : ControllerBase
         return Ok(ApiResponse<List<CodexPrefix>>.Ok(prefixes));
     }
 
+    // Prenota / rilascia / conferma NON sono roba della sola pagina Codex: lo stesso
+    // pannello «Nuovo codice Codex» si apre anche dal dialog Codice ATEC (Catalogo,
+    // Inbox Acquisti, DDP Commerciale) e dal picker della distinta officina. Chiudere
+    // qui con la sola `action.manage_codex` toglierebbe a quei due il pulsante che oggi
+    // funziona: le chiavi vanno quindi in OR (via d'uscita), una per porta d'ingresso.
     [HttpPost("reserve")]
+    [RequireFeature("action.manage_codex", "action.assign_atec_code", "project.ddp_officina")]
     public IActionResult ReserveCode([FromBody] CodexReserveRequest req)
     {
         try
@@ -524,7 +541,12 @@ public class CodexController : ControllerBase
         }
     }
 
+    // Il rilascio ha una porta in più delle altre due: lo chiama anche il dialog della
+    // RICODIFICA quando l'operatore annulla, e quello è governato da `action.recode_codex`.
+    // Senza la sua chiave qui la prenotazione resterebbe appesa fino alla scadenza (10 min),
+    // bruciando un progressivo del giorno per ogni annullamento.
     [HttpPost("release/{reservationId}")]
+    [RequireFeature("action.manage_codex", "action.assign_atec_code", "project.ddp_officina", "action.recode_codex")]
     public IActionResult ReleaseReservation(int reservationId)
     {
         try
@@ -539,6 +561,7 @@ public class CodexController : ControllerBase
     }
 
     [HttpPost("confirm")]
+    [RequireFeature("action.manage_codex", "action.assign_atec_code", "project.ddp_officina")]
     public IActionResult ConfirmReservation([FromBody] CodexConfirmRequest req)
     {
         try
@@ -554,8 +577,11 @@ public class CodexController : ControllerBase
     }
 
     // ── MODIFICA / ELIMINA ────────────────────────────────────
+    // Una sola porta: la pagina Codex, dove la riga si apre in modifica e si elimina.
+    // Prima della Fase E il freno era il solo `isAdminLevel()` del client.
 
     [HttpPut("{id}")]
+    [RequireFeature("action.manage_codex")]
     public IActionResult Update(int id, [FromBody] CodexUpdateRequest req)
     {
         using var c = _db.Open();
@@ -566,6 +592,7 @@ public class CodexController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [RequireFeature("action.manage_codex")]
     public IActionResult Delete(int id)
     {
         using var c = _db.Open();
@@ -584,6 +611,10 @@ public class CodexController : ControllerBase
     }
 
     // ── COMPOSIZIONE ────────────────────────────────────────
+    // Le SCRITTURE hanno una porta sola, la pagina «Composizione Codex», dove fino alla
+    // Fase E il freno era il solo `isAdminLevel()` del client: senza la chiave qui,
+    // toglierlo di là avrebbe cancellato il controllo invece di spostarlo. Le GET restano
+    // aperte di proposito — l'albero lo legge anche il picker della distinta officina.
 
     private const string CompositionSelectSql = @"
         SELECT cc.id AS Id, cc.parent_codex_id AS ParentCodexId,
@@ -659,6 +690,7 @@ public class CodexController : ControllerBase
     }
 
     [HttpPost("compositions")]
+    [RequireFeature("action.edit_codex_composition")]
     public IActionResult AddComposition([FromBody] AddCompositionRequest req, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();
@@ -741,6 +773,7 @@ public class CodexController : ControllerBase
     /// "0 = non toccare": i client inviano solo il campo che vogliono cambiare.
     /// </summary>
     [HttpPut("compositions/{id}")]
+    [RequireFeature("action.edit_codex_composition")]
     public IActionResult UpdateComposition(int id, [FromBody] UpdateCompositionRequest req, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();
@@ -758,6 +791,7 @@ public class CodexController : ControllerBase
     }
 
     [HttpDelete("compositions/{id}")]
+    [RequireFeature("action.edit_codex_composition")]
     public IActionResult DeleteComposition(int id, [FromQuery] string? conn = null)
     {
         using var c = _db.Open();

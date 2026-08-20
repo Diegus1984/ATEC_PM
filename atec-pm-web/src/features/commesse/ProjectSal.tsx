@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   createSalRow,
   fetchPaymentStatesActive,
@@ -22,7 +23,7 @@ import {
   seedSalTemplate,
 } from "@/lib/api/sal"
 import type { SalHeaderSaveRequest } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
+import { canAccessFeature, canWriteFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 import { useGlobalSalHub, useSalHub } from "@/lib/signalr/use-sal-hub"
 import { notifyError } from "@/lib/toast"
@@ -42,6 +43,7 @@ import {
   type DropHint,
   type SalColId,
 } from "./sal-sheet-shared"
+import { printSalSheet } from "./sal-sheet-print"
 import { SalSheetToolbar } from "./sal-sheet-toolbar"
 import {
   salIsPagata,
@@ -62,11 +64,15 @@ export function ProjectSal({
   const queryClient = useQueryClient()
   const confirm = useConfirm()
 
-  const session = getSession()
-  const role = session?.user.userRole
-  const isAdmin = role === "ADMIN"
-  const isPm = role === "PM"
-  const canSeeEconomics = isAdmin || isPm
+  // Foglio SAL di una commessa CHIUSA: resta modificabile solo a chi ha la chiave
+  // `action.sal_edit_closed` (prima era il livello ADMIN). È una scrittura, quindi
+  // `canWriteFeature`; alimenta il prop `isAdmin` di `sal-row` (che sblocca le righe).
+  const canEditClosedSal = canWriteFeature("action.sal_edit_closed")
+  // Importi visibili con la funzione `sal.economics` (livello 2: PM/ADMIN come prima).
+  const canSeeEconomics = canAccessFeature("sal.economics")
+  // Funzione concessa in sola lettura (tecnico del reparto Contabilità): il foglio si
+  // consulta ma non si tocca. A respingere davvero le scritture è l'API.
+  const readOnly = !canWriteFeature("nav.sal")
 
   const queryKey = React.useMemo(() => ["sal", "project", projectId], [projectId])
   const query = useQuery({
@@ -332,17 +338,26 @@ export function ProjectSal({
           seedDisabled={rows.length > 0}
           onRefresh={() => void query.refetch()}
           isFetching={query.isFetching}
+          onPrintPdf={
+            bundle
+              ? () =>
+                  printSalSheet(bundle, {
+                    projectCode: projectCode || `P${projectId}`,
+                    projectTitle,
+                    canSeeEconomics,
+                  })
+              : undefined
+          }
+          readOnly={readOnly}
         />
 
         <CardContent className="p-3">
-          {rows.length > 0 && totalPerc !== 100 && (
-            <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50/50 text-amber-800 text-xs flex items-center justify-between font-medium">
+          {rows.length > 0 && Math.floor(totalPerc) > 100 && (
+            <div className="mb-3 px-3 py-2.5 rounded-lg border border-red-700 bg-red-600 text-white text-xs flex items-center justify-between font-semibold shadow-sm">
               <span>
-                ⚠️ Attenzione: il totale delle percentuali degli step SAL è{" "}
-                <strong>{fmtSalPct(totalPerc)}%</strong>.
-                {totalPerc < 100
-                  ? ` Mancano ancora ${fmtSalPct(100 - totalPerc)}% per completare la pianificazione (residuo da pianificare).`
-                  : ` Supera il 100% di ${fmtSalPct(totalPerc - 100)}%.`}
+                🚨 <strong>ATTENZIONE:</strong> il totale delle percentuali degli step SAL è{" "}
+                <span className="text-yellow-300 underline font-extrabold">{fmtSalPct(totalPerc)}%</span>. Supera il 100% di{" "}
+                <span className="text-yellow-300 underline font-extrabold">{fmtSalPct(totalPerc - 100)}%</span>.
               </span>
             </div>
           )}
@@ -354,11 +369,11 @@ export function ProjectSal({
             </p>
           ) : null}
 
-          {/* Tabella larga v10: scroller orizzontale esterno + thead sticky
-              (pattern: [&>div]:overflow-visible neutralizza lo scroller interno shadcn). */}
-          <div className="overflow-x-auto rounded-lg border [&>div]:overflow-visible">
+          {/* Tabella larga v10: scroller standard (righe dentro la griglia,
+              intestazione ferma, barra orizzontale in alto). */}
+          <GridScroller className="rounded-lg border">
             <Table className="border-separate border-spacing-y-1.5">
-              <TableHeader className="sticky top-0 z-20 bg-muted/40">
+              <TableHeader className="bg-muted/40">
                 <SalSheetHead showCol={showCol} canSeeEconomics={canSeeEconomics} />
               </TableHeader>
               <TableBody>
@@ -384,7 +399,6 @@ export function ProjectSal({
                       isDropOver={dropHint?.id === row.id}
                       dropHint={dropHint}
                       importo={importo}
-                      todayIso={todayIso}
                       activeConditions={conditionsQuery.data ?? []}
                       sapCausali={sapCausaliQuery.data ?? []}
                       paymentStates={paymentStates}
@@ -399,13 +413,15 @@ export function ProjectSal({
                       handleReorder={handleReorder}
                       clearDrag={clearDrag}
                       canSeeEconomics={canSeeEconomics}
-                      isAdmin={isAdmin}
+                      isAdmin={canEditClosedSal}
+                      isProjectClosed={header?.isProjectClosed ?? false}
+                      readOnly={readOnly}
                       showCol={showCol}
                     />
                   )
                 })}
 
-                {canSeeEconomics && (
+                {canSeeEconomics && !readOnly && (
                   <NewSalRowComponent
                     projectId={projectId}
                     onMutated={invalidate}
@@ -482,7 +498,7 @@ export function ProjectSal({
                 </TableFooter>
               )}
             </Table>
-          </div>
+          </GridScroller>
         </CardContent>
       </Card>
     </div>

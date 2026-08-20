@@ -1,0 +1,82 @@
+[
+  {
+    "id": "b01-intro",
+    "sub": "Bilancio commessa",
+    "say": "Benvenuto. In questo tutorial vediamo il Bilancio della commessa: la pagina che risponde a una sola domanda, ma la più importante di tutte. Su questa commessa ci stiamo guadagnando o ci stiamo rimettendo? Lavoriamo su una commessa dimostrativa, con numeri inventati."
+  },
+  {
+    "id": "b02-dove",
+    "sub": "Due strade per arrivarci",
+    "say": "Ci si arriva da due parti. Dentro la commessa, dove la scheda si chiama Preventivo vs Consuntivo, ed è dove siamo adesso. Oppure dalla voce Bilancio nel menu di sinistra, che mette in fila tutte le commesse aperte. Il contenuto è lo stesso: cambia solo se stai guardando una commessa sola o tutte insieme."
+  },
+  {
+    "id": "b03-mappa",
+    "sub": "Sei sezioni, dall'alto in basso",
+    "say": "La pagina è fatta di sei fasce blu, e vanno lette in ordine. Impegno Risorse, cioè le ore. Materiali. Ordine Commessa, cioè quanto ci ha ordinato il cliente. Conto Economico, il riassunto. Riepilogo Costi, voce per voce. E Scheda Prezzi, come si è arrivati al prezzo. Ogni fascia si apre e si chiude cliccando sul titolo."
+  },
+  {
+    "id": "b04-tre-colonne",
+    "sub": "Preventivato, Assegnato, Consuntivo",
+    "say": "Partiamo dalle ore. Questa riga contiene i tre numeri che tornano ovunque nel modulo. Preventivato è quello che avevamo previsto. Assegnato è quello che è stato pianificato sulle persone. Consuntivo è quello che è stato davvero registrato a timesheet. Qui il preventivo diceva millecentootto ore, il consuntivo ne conta millequattrocentosettantacinque."
+  },
+  {
+    "id": "b05-delta",
+    "sub": "Il delta che diventa rosso",
+    "say": "Ed ecco il primo segnale. La differenza fra consuntivo e preventivo è di più trecentosessantasette ore, e il sistema la scrive in rosso perché abbiamo sforato. Se avessimo speso meno del previsto sarebbe verde. Questo delta compare a ogni livello: sul totale, su ogni gruppo e su ogni singola sezione, così si capisce subito dove sono finite le ore in più."
+  },
+  {
+    "id": "b06-gruppi",
+    "sub": "Dove sono finite le ore",
+    "say": "Aprendo un gruppo si scende nel dettaglio: prima le sezioni di costo, e dentro ognuna le fasi con le loro ore. È qui che si risponde alla domanda «dove abbiamo sforato». Nel nostro caso il montaggio e l'installazione in cantiere hanno preso molte più ore del previsto."
+  },
+  {
+    "id": "b07-ordine",
+    "sub": "Ordine Commessa",
+    "say": "Scendiamo all'ordine del cliente. Non è un campo unico: è una tabella, e ogni riga è una posizione dell'ordine, con il suo numero e il suo importo. Serve perché il cliente spesso ordina a posizioni separate, magari in momenti diversi. Il Totale Ordine è semplicemente la somma di queste righe: qui settantamila euro."
+  },
+  {
+    "id": "b08-delta-ordine",
+    "sub": "Costi di Vendita e Margine di Sicurezza",
+    "say": "Sotto la tabella trovi due numeri che vanno letti insieme. Il Totale Costi di Vendita è quanto varrebbe la commessa secondo il preventivo, cioè settantaquattromilacinquecentocinquantuno euro. Il Margine di Sicurezza è la differenza fra l'ordine e quel valore: qui è meno quattromilacinquecentocinquantuno euro, scritto in rosso. Vuol dire che abbiamo venduto sotto il valore calcolato dal preventivo. Non è un errore, capita in trattativa, ma è bene saperlo prima di cominciare a spendere."
+  },
+  {
+    "id": "b09-conto-economico",
+    "sub": "Conto Economico",
+    "say": "Il Conto Economico è il riassunto di tutto, in sei riquadri. Prezzo offerta finale, Totale Ordine, Totale Costi preventivati, Consuntivo Costi, e le due redditività. Se ne devi guardare solo due, guarda gli ultimi due."
+  },
+  {
+    "id": "b10-costi",
+    "sub": "Preventivati contro consuntivati",
+    "say": "Confrontiamo i due riquadri dei costi. Avevamo previsto cinquantaduemilaseicentosettantadue euro, ne abbiamo spesi cinquantaseimilatrecentosessantacinque. Circa tremilasettecento euro in più del previsto."
+  },
+  {
+    "id": "b11-redditivita",
+    "sub": "Teorica ed effettiva",
+    "say": "E qui arriva il punto. La Redditività Teorica usa i costi che avevamo previsto: quasi venticinque per cento, un margine sano. La Redditività Effettiva usa i costi che abbiamo davvero sostenuto: poco meno del venti per cento. Stessa commessa, stesso ordine: la differenza fra i due numeri è tutta nello sforo delle ore e nella trasferta."
+  },
+  {
+    "id": "b12-formule",
+    "sub": "Da dove esce ogni numero",
+    "say": "Se un numero non ti torna, non devi fidarti sulla parola. Passando il mouse su un riquadro compare la formula con cui è stato calcolato, con i valori veri della commessa. Ogni riquadro del Conto Economico ce l'ha. È il modo più veloce per capire se un dato è sbagliato oppure se è la realtà a essere sgradevole."
+  },
+  {
+    "id": "b13-riepilogo",
+    "sub": "Riepilogo Costi",
+    "say": "Sotto, il Riepilogo Costi spacca la spesa in quattro voci, con preventivo e consuntivo affiancati: Risorse Atec, materiali commerciali, lavorazioni delle officine e spese di trasferta. Qui si legge la storia per intero: le risorse sono in linea, ma la trasferta era preventivata a quattromila euro e ne sono stati spesi ottomilanovecento. È lì che se n'è andato il margine. Una voce vuota, con il trattino, significa non compilata: è diverso da zero euro."
+  },
+  {
+    "id": "b14-scheda-prezzi",
+    "sub": "Scheda Prezzi",
+    "say": "L'ultima fascia mostra come si costruisce il prezzo, passo per passo. Si parte dal Totale Costi di Vendita, si aggiunge una percentuale per gli imprevisti, e si ottiene il prezzo di offerta. Poi si aggiunge il margine di trattativa e si arriva al prezzo finale. Le due percentuali si modificano qui, e tutta la catena si ricalcola."
+  },
+  {
+    "id": "b15-cross",
+    "sub": "Tutte le commesse insieme",
+    "say": "Torniamo alla pagina Bilancio del menu. Qui c'è una scheda per commessa con le due redditività, e le commesse che stanno sotto la soglia diventano rosse. La soglia è impostata al venti per cento e la cambia solo un amministratore. Il filtro «sotto soglia» ti lascia vedere solo quelle da tenere d'occhio: è il punto da cui partire il lunedì mattina."
+  },
+  {
+    "id": "b16-fine",
+    "sub": "Da ricordare",
+    "say": "Tre cose per chiudere. La prima: la redditività effettiva vale solo se le ore sono registrate, quindi un timesheet compilato male produce un bilancio che mente. La seconda: se un numero ti sembra sbagliato, passaci sopra il mouse e leggi la formula prima di segnalarlo. La terza: il bilancio è condiviso, quello che modifichi lo vedono tutti in tempo reale. Grazie per l'attenzione."
+  }
+]

@@ -7,7 +7,6 @@ import type {
   SalCondition,
   SalConditionSaveRequest,
   SalEconomics,
-  SalProspettoCheck,
   SalProspettoRow,
   SalSummary,
 } from "@/lib/api/types"
@@ -325,22 +324,6 @@ export async function fetchSalProspetto(): Promise<SalProspettoRow[]> {
 
 export async function fetchSalSummary(): Promise<SalSummary[]> {
   const response = await apiGet<ApiResponse<SalSummary[]>>("/api/sal/summary")
-  return unwrapApi(response)
-}
-
-/** Stato del controllo periodico del prospetto (ultima conferma + scadenza 15 gg). */
-export async function fetchSalProspettoCheck(): Promise<SalProspettoCheck> {
-  const response = await apiGet<ApiResponse<SalProspettoCheck>>(
-    "/api/sal/prospetto/check"
-  )
-  return unwrapApi(response)
-}
-
-/** Registra la conferma del controllo periodico del prospetto; ritorna lo stato aggiornato. */
-export async function confirmSalProspettoCheck(): Promise<SalProspettoCheck> {
-  const response = await apiPost<ApiResponse<SalProspettoCheck>>(
-    "/api/sal/prospetto/check"
-  )
   return unwrapApi(response)
 }
 

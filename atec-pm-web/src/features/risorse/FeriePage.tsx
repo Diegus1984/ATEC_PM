@@ -10,7 +10,7 @@ import {
   fetchResourceLookups,
 } from "@/lib/api/resource-planner"
 import type { LookupItem, ResAssignmentDto } from "@/lib/api/types"
-import { canAccessFeature } from "@/lib/auth/permissions"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { useResourcePlannerHub } from "@/lib/signalr/use-resource-planner-hub"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -88,7 +88,9 @@ function fmtDate(iso: string): string {
 
 export function FeriePage() {
   const navigate = useNavigate()
-  const canEdit = canAccessFeature("resources.edit")
+  // `canWriteFeature` e non `canAccessFeature`: con la funzione concessa in sola lettura
+  // le ferie si leggono ma non si assegnano né si cancellano.
+  const canEdit = canWriteFeature("resources.edit")
 
   const [resources, setResources] = React.useState<LookupItem[]>([])
   const [ferie, setFerie] = React.useState<ResAssignmentDto[]>([])

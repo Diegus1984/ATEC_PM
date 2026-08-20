@@ -99,6 +99,13 @@
        --accordion-ease     : curva (easing) del movimento                */
   --accordion-duration: 600ms;
   --accordion-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Griglie dati ────────────────────────────────────────────────────
+     Altezza massima dello scroller di OGNI griglia (componente
+     <GridScroller>): oltre questa altezza le righe scorrono DENTRO la
+     griglia, con l'intestazione ferma in alto. Punto unico da cui pescano
+     tutte le tabelle dell'app.                                          */
+  --grid-max-h: 65vh;
 }
 
 @layer base {
@@ -144,6 +151,101 @@
   .accordion-content {
     transition-duration: 1ms;
   }
+}
+
+/* ── Griglie dati: scroller interno + intestazione fissa (<GridScroller>) ──
+   Regola di prodotto: in ogni griglia le righe scorrono DENTRO la griglia
+   (fino a --grid-max-h) mentre l'intestazione resta ferma in alto.
+   Le regole stanno in `:where()` così hanno specificità ZERO: qualunque
+   classe Tailwind sul singolo <th> o sullo scroller (es. `max-h-[40vh]`,
+   `bg-*`) le sovrascrive senza bisogno di `!important`.                   */
+:where(.grid-scroll-area) {
+  max-height: var(--grid-max-h);
+}
+
+:where(.grid-sticky-head thead) {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Sfondo pieno obbligatorio: sotto l'intestazione scorrono le righe.
+   Il box-shadow rimpiazza il bordo inferiore, che con la tabella in
+   `border-collapse` sparirebbe durante lo scorrimento. */
+:where(.grid-sticky-head thead th) {
+  background-color: var(--muted);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* Il <Table> shadcn ha un contenitore con overflow-x proprio: va
+   neutralizzato, altrimenti l'intestazione fissa e la barra orizzontale in
+   alto non funzionano (due scroller annidati). */
+:where(.grid-scroller [data-slot="table-container"]) {
+  overflow: visible;
+}
+
+/* In stampa la griglia non è più una finestra: niente altezza massima e niente
+   scorrimento, altrimenti sul foglio finirebbero solo le righe a video. */
+@media print {
+  .grid-scroller {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .grid-sticky-head thead {
+    position: static;
+  }
+}
+
+/* ── Griglie con barra orizzontale IN ALTO (GridScroller topScrollbar) ──
+   Lo scroller della tabella resta scorrevole (anche con trackpad e tastiera), ma la
+   sua barra orizzontale viene nascosta: quella "vera" è la finta barra sopra la
+   griglia, sincronizzata in JS. La verticale resta visibile e va ridichiarata,
+   perché dopo la prima regola ::-webkit-scrollbar WebKit passa alle barre custom. */
+.grid-scroller-no-hbar {
+  scrollbar-width: thin; /* Firefox: niente selettivo per asse, resta sottile */
+}
+.grid-scroller-no-hbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.grid-scroller-no-hbar::-webkit-scrollbar:horizontal {
+  height: 0;
+}
+.grid-scroller-no-hbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.grid-scroller-no-hbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+.grid-scroller-no-hbar::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ── Elenchi delle tendine di ricerca: la barra di scorrimento SI VEDE ──
+   `CommandList` di shadcn nasce con l'utility `no-scrollbar` (barra nascosta):
+   su una tendina lunga — commesse, clienti, dipendenti — l'elenco sembrava
+   finito lì e non c'era niente da trascinare (segnalazione #59). Barra sottile,
+   stesso aspetto di quella delle griglie. Le regole stanno FUORI da `@layer`,
+   così vincono su `no-scrollbar` che Tailwind mette nel layer `utilities`. */
+.scrollbar-visible {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+.scrollbar-visible::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+.scrollbar-visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
 }
 
 .dark {

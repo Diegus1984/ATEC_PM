@@ -112,7 +112,9 @@ export async function login(request: LoginRequest): Promise<AuthSession> {
   try {
     await loadAuthFeatures()
   } catch {
-    // Permessi opzionali: menu fallback permissivo
+    // Il login è comunque riuscito: non lo si annulla perché i permessi non sono arrivati.
+    // Il fallimento resta segnato nello stato dei permessi, e `AuthBootstrap` ritenta al
+    // primo ingresso nella shell; se va male anche lì, l'utente vede l'avviso «Riprova».
   }
 
   return nextSession

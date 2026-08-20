@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,11 +12,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchGammaComponents, fetchGammaUsage } from "@/lib/api/gamma-robot"
 import type { GammaComponentDto } from "@/lib/api/types"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
 import { formatEuro } from "./helpers"
+
+/** Colonne opzionali del magazzino componenti (Codice e Nome sono l'identità della riga). */
+const MAGAZZINO_COLUMNS: { id: string; label: string }[] = [
+  { id: "categoria", label: "Categoria" },
+  { id: "robot", label: "Robot" },
+  { id: "vb", label: "VB €" },
+]
+const MAGAZZINO_COLUMNS_DEFAULT = Object.fromEntries(
+  MAGAZZINO_COLUMNS.map((column) => [column.id, true])
+)
 
 export function MagazzinoTab({
   onOpenProduct,
@@ -24,6 +37,19 @@ export function MagazzinoTab({
 }) {
   const [search, setSearch] = React.useState("")
   const [selected, setSelected] = React.useState<GammaComponentDto | null>(null)
+
+  const [visible, setVisible] = usePersistedColumnVisibility(
+    "gamma-magazzino-columns-v1",
+    MAGAZZINO_COLUMNS_DEFAULT
+  )
+  const show = (id: string) => visible[id] ?? true
+  const columnToggles = MAGAZZINO_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: show(id),
+    onToggle: (value: boolean) =>
+      setVisible((prev) => ({ ...prev, [id]: value })),
+  }))
 
   const componentsQuery = useQuery({
     queryKey: ["gamma-robot", "components"],
@@ -51,15 +77,16 @@ export function MagazzinoTab({
   return (
     <div className="grid min-h-[520px] grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
       <div className="flex flex-col rounded-lg border">
-        <div className="border-b p-2">
+        <div className="flex items-center gap-2 border-b p-2">
           <Input
             placeholder="Cerca codice / nome / categoria…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-8"
           />
+          <ColumnsMenu columns={columnToggles} />
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+        <GridScroller fill>
           {componentsQuery.isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Caricamento…</p>
           ) : (
@@ -68,9 +95,15 @@ export function MagazzinoTab({
                 <TableRow>
                   <TableHead className="w-[110px]">Codice</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead className="w-[90px]">Categoria</TableHead>
-                  <TableHead className="w-[70px] text-right">Robot</TableHead>
-                  <TableHead className="w-[90px] text-right">VB €</TableHead>
+                  {show("categoria") && (
+                    <TableHead className="w-[90px]">Categoria</TableHead>
+                  )}
+                  {show("robot") && (
+                    <TableHead className="w-[70px] text-right">Robot</TableHead>
+                  )}
+                  {show("vb") && (
+                    <TableHead className="w-[90px] text-right">VB €</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -88,21 +121,27 @@ export function MagazzinoTab({
                       {c.code}
                     </TableCell>
                     <TableCell className="text-sm">{c.name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.categoria ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {c.robotCount}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {c.prezzoVb != null ? formatEuro(c.prezzoVb) : "—"}
-                    </TableCell>
+                    {show("categoria") && (
+                      <TableCell className="text-xs text-muted-foreground">
+                        {c.categoria ?? "—"}
+                      </TableCell>
+                    )}
+                    {show("robot") && (
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {c.robotCount}
+                      </TableCell>
+                    )}
+                    {show("vb") && (
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {c.prezzoVb != null ? formatEuro(c.prezzoVb) : "—"}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
-        </div>
+        </GridScroller>
         <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
           {components.length} componenti
           {"  ·  doppio click = scheda prodotto"}
@@ -120,7 +159,7 @@ export function MagazzinoTab({
               : "Seleziona un componente a sinistra."}
           </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+        <GridScroller fill>
           {!selected ? (
             <p className="p-6 text-sm text-muted-foreground">
               Nessun componente selezionato.
@@ -173,7 +212,7 @@ export function MagazzinoTab({
               </TableBody>
             </Table>
           )}
-        </div>
+        </GridScroller>
       </div>
     </div>
   )

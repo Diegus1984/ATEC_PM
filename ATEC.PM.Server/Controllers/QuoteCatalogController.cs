@@ -5,12 +5,15 @@ using Serilog;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/quote-catalog")]
 [Authorize]
+// Catalogo preventivi (listini e prezzi): stessa chiave della voce di menu.
+[RequireFeature("nav.cat_preventivi")]
 public class QuoteCatalogController : ControllerBase
 {
     private readonly QuoteDbService _qdb;

@@ -1,4 +1,4 @@
-import { ChevronDown, Columns3 } from "lucide-react"
+import { ChevronDown, Columns3, type LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -26,11 +26,15 @@ export interface ColumnToggle {
  * custom (Codex) e tabelle dashboard — il pannello si adatta SEMPRE alla voce
  * più larga (`w-auto`) con spazio per la spunta, senza andare a capo. Le pagine
  * passano solo la lista `columns` (id, label, checked, onToggle). Vedi BLOCKS-RULES.md.
+ *
+ * Stesso pezzo anche per filtri a spunte (es. stati delle Segnalazioni): si cambia
+ * solo etichetta e icona, la scelta resta quella dell'utente.
  */
 export function ColumnsMenu({
   columns,
   triggerLabel = "Colonne",
   menuLabel = "Mostra colonne",
+  icon: Icon = Columns3,
   align = "end",
   className,
   onToggleAll,
@@ -38,6 +42,8 @@ export function ColumnsMenu({
   columns: ColumnToggle[]
   triggerLabel?: string
   menuLabel?: string
+  /** Icona a sinistra dell'etichetta (default: colonne). */
+  icon?: LucideIcon
   align?: "start" | "center" | "end"
   className?: string
   /** Handler batch opzionale per «Seleziona/Deseleziona tutti». */
@@ -67,7 +73,7 @@ export function ColumnsMenu({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className={cn("justify-between gap-2", className)}>
           <span className="flex items-center gap-1.5">
-            <Columns3 className="size-4" />
+            <Icon className="size-4" />
             {triggerLabel}
           </span>
           <ChevronDown className="size-4 opacity-50" />

@@ -86,17 +86,43 @@ function CommandInput({
   )
 }
 
+/**
+ * Segnalazione #59 — l'elenco di una tendina di ricerca non si riusciva a scorrere.
+ * Due cause distinte, entrambe corrette qui perché valgono per TUTTE le combo
+ * (commesse, clienti, fornitori, dipendenti, multi-select):
+ *
+ * 1. `no-scrollbar` (utility di shadcn) nascondeva la barra: l'elenco sembrava
+ *    finito e non c'era niente da trascinare → `scrollbar-visible` (index.css).
+ * 2. Dentro un Dialog la rotellina era ANNULLATA: Radix blocca lo scorrimento con
+ *    `react-remove-scroll`, che ascolta `wheel` su `document` e fa `preventDefault`
+ *    su tutto ciò che non sta dentro il contenuto del dialogo. La tendina vive in
+ *    un portale su `document.body`, quindi finiva sempre fra i "fuori". Fermando
+ *    qui la propagazione l'evento non arriva a quel listener e lo scorrimento
+ *    nativo torna a funzionare; `overscroll-contain` evita che a fine elenco
+ *    prosegua la pagina sotto. (Le `Select` di Radix non hanno il problema: sono
+ *    `modal` e si portano dietro il proprio blocco di scorrimento.)
+ */
 function CommandList({
   className,
+  onWheel,
+  onTouchMove,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
+        "scrollbar-visible max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto overscroll-contain outline-none",
         className
       )}
+      onWheel={(event) => {
+        event.stopPropagation()
+        onWheel?.(event)
+      }}
+      onTouchMove={(event) => {
+        event.stopPropagation()
+        onTouchMove?.(event)
+      }}
       {...props}
     />
   )

@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
+// Trattamenti DDP: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.ddp_destinazioni».
 [ApiController]
 [Route("api/ddp-treatments")]
 [Authorize]
@@ -38,6 +41,7 @@ public class DdpTreatmentsController : ControllerBase
         return Ok(ApiResponse<List<DdpTreatmentItem>>.Ok(rows));
     }
 
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpPost]
     public IActionResult Create([FromBody] DdpTreatmentSaveRequest req)
     {
@@ -69,6 +73,7 @@ public class DdpTreatmentsController : ControllerBase
         return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] DdpTreatmentSaveRequest req)
     {
@@ -92,6 +97,7 @@ public class DdpTreatmentsController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useCopyText } from "@/components/shared/copy-text"
 
 /** Mostra le credenziali temporanee dopo un reset, con copia negli appunti. */
 export function ResetCredentialsDialog({
@@ -21,6 +22,7 @@ export function ResetCredentialsDialog({
   onClose: () => void
 }) {
   const [copied, setCopied] = React.useState(false)
+  const copiaTesto = useCopyText()
 
   React.useEffect(() => {
     if (login) {
@@ -32,12 +34,10 @@ export function ResetCredentialsDialog({
     if (!login) {
       return
     }
-    try {
-      await navigator.clipboard.writeText(login)
-      setCopied(true)
-    } catch {
-      // Clipboard non disponibile (contesto non sicuro): l'utente copia a mano.
-    }
+    // In HTTP gli appunti non sono scrivibili da script: l'hook apre il dialogo con il
+    // testo selezionato invece di far finta di aver copiato (prima falliva in silenzio).
+    await copiaTesto(login, "Credenziali temporanee")
+    setCopied(true)
   }
 
   return (

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, RefreshCw, Trash2, UserPlus } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { notifyError } from "@/lib/toast"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { Badge } from "@/components/ui/badge"
@@ -18,13 +20,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { fetchCostSectionTemplates } from "@/lib/api/cost-sections"
 import {
@@ -39,6 +34,9 @@ import {
   updateAssignmentHours,
 } from "@/lib/api/phases"
 import type { PhaseAssignmentDto, PhaseListItem } from "@/lib/api/types"
+import { cn } from "@/lib/utils"
+
+import { bvaPhaseHoursClass } from "./bva-shared"
 
 const NO_SECTION = "__none__"
 const SENZA_SEZIONE = "Senza sezione di costo"
@@ -75,7 +73,11 @@ export function HoursInput({
       inputMode="decimal"
       value={text}
       disabled={disabled}
-      className="h-8 w-20 text-right tabular-nums"
+      className={cn(
+        // Campo piatto a riposo: il bordo compare al passaggio/focus (pattern foglio SAL).
+        "h-8 w-20 text-right border-transparent bg-transparent shadow-none hover:border-input focus:border-input focus:bg-background",
+        bvaPhaseHoursClass
+      )}
       onChange={(event) => setText(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {
@@ -147,21 +149,14 @@ export function AddTechDialog({
         <div className="space-y-4">
           <div className="grid gap-2">
             <Label>Tecnico</Label>
-            <Select
-              value={employeeId != null ? String(employeeId) : ""}
-              onValueChange={(value) => setEmployeeId(Number(value))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Seleziona tecnico…" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={String(emp.id)}>
-                    {emp.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LookupCombobox
+              options={employees.map((emp) => ({ id: emp.id, name: emp.name }))}
+              value={employeeId}
+              onValueChange={setEmployeeId}
+              placeholder="Seleziona tecnico…"
+              searchPlaceholder="Cerca tecnico…"
+              emptyText="Nessun tecnico trovato"
+            />
           </div>
           <div className="grid gap-2">
             <Label>Ore pianificate</Label>
@@ -189,20 +184,30 @@ export function AddTechDialog({
   )
 }
 
+/**
+ * Importa fasi dall'anagrafica. Si sceglie una **coppia fase + sezione**: la stessa fase
+ * compare una volta per ogni sezione a cui è agganciata, e importarla in due sezioni crea due
+ * righe distinte — è così che le ore di «Call Cliente» in PM restano separate da quelle in
+ * Progettazione. Vedi PIANO-FASI-MULTISEZIONE.md.
+ */
 export function ImportPhasesDialog({
   projectId,
   open,
-  existingTemplateIds,
+  existingPhaseKeys,
+  sectionFilterId,
   onClose,
   onImported,
 }: {
   projectId: number
   open: boolean
-  existingTemplateIds: Set<number>
+  /** Chiavi `templateId:sectionId` già presenti in commessa. */
+  existingPhaseKeys: Set<string>
+  /** Aperto da dentro una sezione: mostra solo le fasi di quella sezione. */
+  sectionFilterId?: number | null
   onClose: () => void
   onImported: () => void
 }) {
-  const [selected, setSelected] = React.useState<Set<number>>(new Set())
+  const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
@@ -218,13 +223,49 @@ export function ImportPhasesDialog({
     enabled: open,
   })
 
-  const available = (templatesQuery.data ?? []).filter(
-    (t) => !existingTemplateIds.has(t.id)
-  )
+  const available = React.useMemo(() => {
+    const rows: {
+      key: string
+      templateId: number
+      sectionId: number | null
+      name: string
+      sectionLabel: string
+    }[] = []
+    for (const template of templatesQuery.data ?? []) {
+      // Una fase senza sezioni non è importabile: le sue ore non si saprebbero attribuire.
+      for (const link of template.sections) {
+        if (sectionFilterId != null && link.sectionId !== sectionFilterId) {
+          continue
+        }
+        rows.push({
+          key: `${template.id}:${link.sectionId}`,
+          templateId: template.id,
+          sectionId: link.sectionId,
+          name: template.name,
+          sectionLabel: link.groupName
+            ? `${link.groupName} · ${link.sectionName}`
+            : link.sectionName,
+        })
+      }
+    }
+    return rows
+      .filter((row) => !existingPhaseKeys.has(row.key))
+      .sort(
+        (a, b) =>
+          a.sectionLabel.localeCompare(b.sectionLabel, "it") ||
+          a.name.localeCompare(b.name, "it")
+      )
+  }, [templatesQuery.data, existingPhaseKeys, sectionFilterId])
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      bulkCreatePhases({ projectId, templateIds: [...selected] }),
+      bulkCreatePhases({
+        projectId,
+        templateIds: [],
+        items: available
+          .filter((row) => selected.has(row.key))
+          .map((row) => ({ templateId: row.templateId, sectionId: row.sectionId })),
+      }),
     onSuccess: () => onImported(),
     onError: (err: Error) => setError(err.message),
   })
@@ -233,39 +274,38 @@ export function ImportPhasesDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Importa fasi da template</DialogTitle>
+          <DialogTitle>Importa fasi dettaglio commessa</DialogTitle>
           <DialogDescription>
-            Seleziona i template di fase da aggiungere alla commessa.
+            Ogni riga è una fase in una sezione di costo: la stessa fase si può importare in
+            più sezioni, e ogni sezione tiene le sue ore.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           {available.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nessun template disponibile (tutti già presenti in commessa).
+              Nessuna fase disponibile (tutte già presenti in commessa).
             </p>
           ) : (
-            available.map((t) => (
+            available.map((row) => (
               <label
-                key={t.id}
+                key={row.key}
                 className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
               >
                 <Checkbox
-                  checked={selected.has(t.id)}
+                  checked={selected.has(row.key)}
                   onCheckedChange={(value) =>
                     setSelected((prev) => {
                       const next = new Set(prev)
-                      if (value) next.add(t.id)
-                      else next.delete(t.id)
+                      if (value) next.add(row.key)
+                      else next.delete(row.key)
                       return next
                     })
                   }
                 />
-                <span className="flex-1">{t.name}</span>
-                {t.costSectionName ? (
-                  <span className="text-xs text-muted-foreground">
-                    {t.costSectionName}
-                  </span>
-                ) : null}
+                <span className="flex-1">{row.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {row.sectionLabel}
+                </span>
               </label>
             ))
           )}
@@ -338,7 +378,28 @@ export function NewLocalPhaseDialog({
     onError: (err: Error) => setError(err.message),
   })
 
-  const sections = sectionsQuery.data ?? []
+  /**
+   * Segnalazione #42: l'elenco deve essere quello dell'anagrafica, non un altro.
+   * Le sezioni disattivate (es. «Ore Viaggio») spariscono — resta visibile solo
+   * quella eventualmente preselezionata, altrimenti la si perderebbe dal dialogo.
+   * L'etichetta porta il gruppo e il marchio cliente: sono le stesse voci, con lo
+   * stesso nome, delle tabelle di Impegno Risorse.
+   */
+  const sections = React.useMemo(() => {
+    const all = sectionsQuery.data ?? []
+    return all.filter((s) => s.isActive || s.id === presetSectionId)
+  }, [sectionsQuery.data, presetSectionId])
+
+  const sectionOptions = React.useMemo(
+    () =>
+      sections.map((s) => ({
+        id: String(s.id),
+        name: `${s.groupName ? `${s.groupName} · ` : ""}${s.name}${
+          s.sectionType === "DA_CLIENTE" ? " (cliente)" : ""
+        }`,
+      })),
+    [sections]
+  )
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -360,19 +421,15 @@ export function NewLocalPhaseDialog({
           </div>
           <div className="grid gap-2">
             <Label>Sezione di costo</Label>
-            <Select value={sectionId} onValueChange={setSectionId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SECTION}>(nessuna)</SelectItem>
-                {sections.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LookupCombobox
+              options={sectionOptions}
+              value={sectionId === NO_SECTION ? null : sectionId}
+              onValueChange={(id) => setSectionId(id ?? NO_SECTION)}
+              placeholder="(nessuna)"
+              noneLabel="(nessuna)"
+              searchPlaceholder="Cerca sezione…"
+              emptyText="Nessuna sezione trovata"
+            />
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
@@ -409,7 +466,7 @@ export function AssignmentRow({
     <div className="flex items-center gap-3 px-3 py-1.5 text-sm">
       <span className="flex-1 truncate">{assignment.employeeName}</span>
       <HoursInput value={assignment.plannedHours} onSave={onSaveHours} />
-      <span className="w-24 text-right text-xs text-muted-foreground tabular-nums">
+      <span className={cn("w-24 text-right text-xs", bvaPhaseHoursClass)}>
         {assignment.hoursWorked.toFixed(1)} h lav. ({progress}%)
       </span>
       <Button
@@ -438,6 +495,11 @@ export function ProjectPhaseAssignments({
   )
   const [importOpen, setImportOpen] = React.useState(false)
   const [newLocalOpen, setNewLocalOpen] = React.useState(false)
+
+  // Vedi il commento gemello in SectionPhases.tsx: «Importa fasi» è ristretta dalla
+  // segnalazione #51 e ora la governa la chiave `action.import_project_phases` sulla
+  // persona. Nascosta, non cancellata: serve ancora come rete di scampo.
+  const canImportPhases = canWriteFeature("action.import_project_phases")
 
   const phasesQuery = useQuery({
     queryKey: ["project-phases", projectId],
@@ -493,8 +555,13 @@ export function ProjectPhaseAssignments({
     () => phasesQuery.data ?? [],
     [phasesQuery.data]
   )
-  const existingTemplateIds = new Set(
-    phases.filter((p) => !p.isLocal).map((p) => p.phaseTemplateId)
+  // Chiavi (fase, sezione) già in commessa. **Non** i soli id di fase: la stessa fase può stare
+  // in più sezioni, e ragionando per id una volta importata «Call Cliente» in Program Manager
+  // non la si sarebbe più potuta aggiungere a Progettazione.
+  const existingPhaseKeys = new Set(
+    phases
+      .filter((p) => !p.isLocal)
+      .map((p) => `${p.phaseTemplateId}:${p.costSectionTemplateId ?? ""}`)
   )
 
   // Raggruppa per sezione di costo.
@@ -514,14 +581,16 @@ export function ProjectPhaseAssignments({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
         <h3 className="text-sm font-semibold">Fasi e assegnazioni</h3>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setImportOpen(true)}
-          >
-            <Plus />
-            Importa fasi
-          </Button>
+          {canImportPhases ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+            >
+              <Plus />
+              Importa fasi
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
@@ -546,7 +615,9 @@ export function ProjectPhaseAssignments({
           <Skeleton className="h-32 w-full" />
         ) : phases.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nessuna fase in commessa. Usa «Importa fasi» o «Fase locale».
+            {canImportPhases
+              ? "Nessuna fase in commessa. Usa «Importa fasi» o «Fase locale»."
+              : "Nessuna fase in commessa. Usa «Fase locale»."}
           </p>
         ) : (
           grouped.map(([sectionName, sectionPhases]) => (
@@ -571,9 +642,12 @@ export function ProjectPhaseAssignments({
                       ) : null}
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground tabular-nums">
+                      <span className={cn("text-xs", bvaPhaseHoursClass)}>
                         {phase.budgetHours.toFixed(1)} h prev. ·{" "}
                         {phase.hoursWorked.toFixed(1)} h lav.
+                        {phase.budgetHours > 0
+                          ? ` · ${Math.round((phase.hoursWorked / phase.budgetHours) * 100)}%`
+                          : " · 0%"}
                       </span>
                       <RowActionsMenu
                         size="icon-sm"
@@ -631,16 +705,18 @@ export function ProjectPhaseAssignments({
           invalidate()
         }}
       />
-      <ImportPhasesDialog
-        projectId={projectId}
-        open={importOpen}
-        existingTemplateIds={existingTemplateIds}
-        onClose={() => setImportOpen(false)}
-        onImported={() => {
-          setImportOpen(false)
-          invalidate()
-        }}
-      />
+      {canImportPhases ? (
+        <ImportPhasesDialog
+          projectId={projectId}
+          open={importOpen}
+          existingPhaseKeys={existingPhaseKeys}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false)
+            invalidate()
+          }}
+        />
+      ) : null}
       <NewLocalPhaseDialog
         projectId={projectId}
         open={newLocalOpen}

@@ -5,6 +5,7 @@ import {
   GripVertical,
   Pencil,
   Plus,
+  Star,
   Trash2,
   Unlink,
   X,
@@ -34,6 +35,20 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   createCostSectionGroup,
   createCostSectionTemplate,
   deleteCostSectionGroup,
@@ -41,16 +56,19 @@ import {
   updateSectionDepartments,
 } from "@/lib/api/cost-sections"
 import {
+  addPhaseToSection,
   createPhaseTemplate,
   deletePhaseTemplate,
-  patchPhaseTemplateField,
-  unlinkPhaseFromSection,
+  removePhaseFromSection,
+  reorderSectionPhases,
+  updatePhaseSectionLink,
 } from "@/lib/api/phases"
 import type {
   CostSectionGroupDto,
   CostSectionTemplateDto,
   DepartmentDto,
   PhaseTemplateDto,
+  PhaseTemplateSectionLink,
 } from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -65,6 +83,32 @@ import {
 const DRAG_DEPT = "application/x-atec-dept"
 const DRAG_PHASE = "application/x-atec-phase"
 const DRAG_PHASE_REORDER = "application/x-atec-phase-reorder"
+
+/** Il legame di una fase con una sezione: `undefined` se la fase non è in quella sezione. */
+function linkOf(
+  phase: PhaseTemplateDto,
+  sectionId: number
+): PhaseTemplateSectionLink | undefined {
+  return phase.sections.find((link) => link.sectionId === sectionId)
+}
+
+/**
+ * Le fasi di una sezione, **nell'ordine del legame**. L'ordine è per sezione: la stessa fase
+ * può stare terza in Program Manager e prima in Progettazione.
+ */
+function sectionPhasesOf(
+  phases: PhaseTemplateDto[],
+  sectionId: number
+): PhaseTemplateDto[] {
+  return phases
+    .filter((phase) => linkOf(phase, sectionId) != null)
+    .slice()
+    .sort(
+      (a, b) =>
+        (linkOf(a, sectionId)?.sortOrder ?? 0) - (linkOf(b, sectionId)?.sortOrder ?? 0) ||
+        a.name.localeCompare(b.name, "it")
+    )
+}
 
 interface CostSectionsTreePanelProps {
   groups: CostSectionGroupDto[]
@@ -98,10 +142,28 @@ export function CostSectionsTreePanel({
     React.useState<CostSectionGroupDto | null>(null)
   const [addPhaseSection, setAddPhaseSection] =
     React.useState<CostSectionTemplateDto | null>(null)
+  const [addPhaseDockOpen, setAddPhaseDockOpen] = React.useState(false)
 
   const refreshMutation = useMutation({ mutationFn: onRefresh })
 
   const sortedGroups = groups.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+
+  /**
+   * Fasi agganciate a NESSUNA sezione. Nel modello multi-sezione vuol dire una cosa precisa:
+   * **non entreranno in nessuna commessa**, né da sole né dal picker. E se qualcuno ci imputa
+   * ore da una fase locale omonima, quelle ore non si sanno attribuire né a «in sede» né a
+   * «da cliente», quindi restano fuori dalla ripartizione del Bilancio.
+   */
+  const orphanPhases = React.useMemo(
+    () =>
+      phases
+        .filter((phase) => phase.sections.length === 0)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "it")),
+    [phases]
+  )
+
+  const linkedPhaseCount = phases.length - orphanPhases.length
 
   async function handleAddDepartmentToSection(
     section: CostSectionTemplateDto,
@@ -110,11 +172,15 @@ export function CostSectionsTreePanel({
     if (section.departmentIds.includes(departmentId)) {
       return
     }
-    await updateSectionDepartments(section.id, [
-      ...section.departmentIds,
-      departmentId,
-    ])
-    await refreshMutation.mutateAsync()
+    try {
+      await updateSectionDepartments(section.id, [
+        ...section.departmentIds,
+        departmentId,
+      ])
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
   async function handleRemoveDepartment(
@@ -128,13 +194,21 @@ export function CostSectionsTreePanel({
       confirmLabel: "Rimuovi",
     })
     if (!ok) return
-    await updateSectionDepartments(
-      section.id,
-      section.departmentIds.filter((id) => id !== departmentId)
-    )
-    await refreshMutation.mutateAsync()
+    try {
+      await updateSectionDepartments(
+        section.id,
+        section.departmentIds.filter((id) => id !== departmentId)
+      )
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
+  /**
+   * Riordina DENTRO una sezione: l'ordine è del legame, quindi spostare «Call Cliente» in
+   * Program Manager non tocca la sua posizione in Progettazione.
+   */
   async function handleReorderPhase(
     movedPhaseId: number,
     targetPhase: PhaseTemplateDto,
@@ -145,91 +219,170 @@ export function CostSectionsTreePanel({
       return
     }
 
-    const sectionPhases = phases
-      .filter((phase) => phase.costSectionTemplateId === sectionId)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-
-    const withoutMoved = sectionPhases.filter((phase) => phase.id !== movedPhase.id)
+    const ordered = sectionPhasesOf(phases, sectionId)
+    const withoutMoved = ordered.filter((phase) => phase.id !== movedPhase.id)
     const targetIndex = withoutMoved.findIndex((phase) => phase.id === targetPhase.id)
     withoutMoved.splice(targetIndex < 0 ? 0 : targetIndex, 0, movedPhase)
 
-    for (let index = 0; index < withoutMoved.length; index++) {
-      const newSort = index + 1
-      const phase = withoutMoved[index]
-      if (phase.sortOrder !== newSort) {
-        await patchPhaseTemplateField(phase.id, {
-          field: "sort_order",
-          value: String(newSort),
-        })
-      }
+    try {
+      await reorderSectionPhases(
+        sectionId,
+        withoutMoved.map((phase) => phase.id)
+      )
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
     }
-
-    await refreshMutation.mutateAsync()
   }
 
+  /** Drop dal dock: **aggiunge** la fase alla sezione, non la toglie dalle altre. */
   async function handleLinkPhaseById(
     phaseId: number,
     section: CostSectionTemplateDto
   ) {
-    await patchPhaseTemplateField(phaseId, {
-      field: "cost_section_template_id",
-      value: String(section.id),
-    })
-    await refreshMutation.mutateAsync()
+    try {
+      await addPhaseToSection(phaseId, section.id)
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
+  }
+
+  async function handleToggleSectionDefault(
+    phase: PhaseTemplateDto,
+    sectionId: number,
+    isDefault: boolean
+  ) {
+    try {
+      await updatePhaseSectionLink(phase.id, sectionId, { isDefault })
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
   async function handleDeleteGroup(group: CostSectionGroupDto) {
+    const sectionCount = templates.filter(
+      (template) => template.groupId === group.id
+    ).length
+    if (sectionCount > 0) {
+      notifyError(
+        `Impossibile eliminare «${group.name}»: contiene ancora ${sectionCount} sezion${
+          sectionCount === 1 ? "e" : "i"
+        }. Eliminale prima.`
+      )
+      return
+    }
     const ok = await confirm({
       title: "Elimina gruppo",
-      description: `Eliminare il gruppo "${group.name}" e le sue sezioni?`,
+      description: `Eliminare il gruppo "${group.name}"? (deve essere vuoto)`,
       confirmLabel: "Elimina",
     })
     if (!ok) {
       return
     }
-    await deleteCostSectionGroup(group.id)
-    await refreshMutation.mutateAsync()
+    try {
+      await deleteCostSectionGroup(group.id)
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
   async function handleDeleteSection(section: CostSectionTemplateDto) {
+    // Con fasi dentro il server rifiuta: dirlo prima, invece di far confermare un'azione che
+    // non può riuscire (è la stessa scelta fatta per il gruppo non vuoto).
+    const phaseCount = sectionPhasesOf(phases, section.id).length
+    if (phaseCount > 0) {
+      notifyError(
+        `Impossibile eliminare «${section.name}»: ha ancora ${phaseCount} fas${
+          phaseCount === 1 ? "e" : "i"
+        }. Toglile dalla sezione, oppure disattiva la sezione invece di cancellarla.`
+      )
+      return
+    }
     const ok = await confirm({
-      title: "Elimina sezione",
-      description: `Eliminare la sezione "${section.name}"?`,
+      title: "Elimina sezione di costo",
+      description: `Eliminare la sezione "${section.name}"? Se è usata in commesse o preventivi, l'operazione verrà rifiutata.`,
       confirmLabel: "Elimina",
     })
     if (!ok) {
       return
     }
-    await deleteCostSectionTemplate(section.id)
-    await refreshMutation.mutateAsync()
+    try {
+      await deleteCostSectionTemplate(section.id)
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
   async function handleDeletePhase(phase: PhaseTemplateDto) {
     const ok = await confirm({
-      title: "Elimina fase",
-      description: `Eliminare la fase "${phase.name}"?`,
+      title: "Elimina fase dettaglio commessa",
+      description:
+        phase.sections.length > 1
+          ? `Eliminare «${phase.name}» dall'anagrafica? Sparisce da tutte e ${phase.sections.length} le sezioni in cui è. Per toglierla da una sola, usa «Togli da questa sezione». Sulle commesse già create resta come fase locale.`
+          : `Eliminare la fase "${phase.name}"? Sulle commesse già create la fase resta come locale (senza template).`,
       confirmLabel: "Elimina",
     })
     if (!ok) {
       return
     }
-    await deletePhaseTemplate(phase.id)
-    await refreshMutation.mutateAsync()
+    try {
+      await deletePhaseTemplate(phase.id)
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
-  async function handleUnlinkPhase(phase: PhaseTemplateDto) {
-    await unlinkPhaseFromSection(phase.id)
-    await refreshMutation.mutateAsync()
+  /**
+   * Toglie la fase da UNA sezione: resta viva in anagrafica e nelle altre sezioni, e le
+   * commesse già create non cambiano (la sezione è scritta sulla riga della fase di commessa).
+   */
+  async function handleRemoveFromSection(
+    phase: PhaseTemplateDto,
+    section: CostSectionTemplateDto
+  ) {
+    const stillIn = phase.sections.length - 1
+    const ok = await confirm({
+      title: "Togli dalla sezione",
+      description:
+        stillIn > 0
+          ? `Togliere «${phase.name}» da «${section.name}»? Resta nelle altre ${stillIn} sezion${stillIn === 1 ? "e" : "i"}.`
+          : `Togliere «${phase.name}» da «${section.name}»? Resta in anagrafica ma senza sezioni: non entrerà in nessuna commessa nuova.`,
+      confirmLabel: "Togli",
+    })
+    if (!ok) {
+      return
+    }
+    try {
+      await removePhaseFromSection(phase.id, section.id)
+      await refreshMutation.mutateAsync()
+    } catch (err) {
+      notifyError(err as Error)
+    }
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <>
+    {/* Altezza ereditata dalla card: il dock fasi sta fermo, scorre solo l'albero. */}
+    <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
+      <PhasesDockPanel
+        phases={phases}
+        onEditPhase={setEditPhase}
+        onDeletePhase={handleDeletePhase}
+        onAddPhase={() => setAddPhaseDockOpen(true)}
+      />
+
+      <div className="flex min-h-0 min-w-0 flex-col gap-3">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {groups.length} gruppi — {templates.length} sezioni —{" "}
-          {phases.filter((phase) => phase.costSectionTemplateId != null).length}{" "}
-          fasi collegate
+          {groups.length} gruppi (a) — {templates.length} sezioni (b) —{" "}
+          <span className={cn(orphanPhases.length > 0 && "font-medium text-amber-700 dark:text-amber-400")}>
+            {linkedPhaseCount} di {phases.length} fasi (d) collegate
+          </span>
         </p>
         <Button size="sm" variant="outline" onClick={() => setAddGroupOpen(true)}>
           <Plus />
@@ -237,7 +390,9 @@ export function CostSectionsTreePanel({
         </Button>
       </div>
 
-      <div className="space-y-2">
+      {/* L'unico scroller della pagina: i gruppi scorrono qui dentro, i dock restano fermi.
+          `pr-1` lascia respiro fra la barra di scorrimento e le righe. */}
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {sortedGroups.map((group) => {
           const groupSections = templates
             .filter((template) => template.groupId === group.id)
@@ -280,7 +435,7 @@ export function CostSectionsTreePanel({
                       onClick: () => setEditGroup(group),
                     },
                     {
-                      label: "Nuova sezione",
+                      label: "Nuova sezione di costo",
                       icon: Plus,
                       onClick: () => setAddSectionGroup(group),
                     },
@@ -307,9 +462,7 @@ export function CostSectionsTreePanel({
                         key={section.id}
                         section={section}
                         departments={departments}
-                        phases={phases.filter(
-                          (phase) => phase.costSectionTemplateId === section.id
-                        )}
+                        phases={sectionPhasesOf(phases, section.id)}
                         dropHighlight={dropHighlight}
                         onDropHighlight={setDropHighlight}
                         onAddDepartment={handleAddDepartmentToSection}
@@ -321,7 +474,8 @@ export function CostSectionsTreePanel({
                         onDeleteSection={() => handleDeleteSection(section)}
                         onEditPhase={setEditPhase}
                         onDeletePhase={handleDeletePhase}
-                        onUnlinkPhase={handleUnlinkPhase}
+                        onRemoveFromSection={handleRemoveFromSection}
+                        onToggleSectionDefault={handleToggleSectionDefault}
                       />
                     ))
                   )}
@@ -331,6 +485,8 @@ export function CostSectionsTreePanel({
           )
         })}
       </div>
+      </div>
+    </div>
 
       <EditGroupDialog
         open={editGroup !== null}
@@ -400,9 +556,10 @@ export function CostSectionsTreePanel({
         title={
           addPhaseSection
             ? `Nuova fase per "${addPhaseSection.name}"`
-            : "Nuova fase"
+            : "Nuova fase dettaglio commessa"
         }
-        label="Nome fase"
+        label="Nome fase dettaglio commessa"
+        description="La stessa fase può poi essere agganciata ad altre sezioni trascinandola dal dock: non serve ricrearla con un altro nome."
         onClose={() => setAddPhaseSection(null)}
         onConfirm={async (name) => {
           if (!addPhaseSection) {
@@ -417,18 +574,39 @@ export function CostSectionsTreePanel({
           const maxSort = phases.length
             ? Math.max(...phases.map((phase) => phase.sortOrder)) + 1
             : 1
+          // Nasce dentro una sezione → nasce anche sulle commesse nuove. Si spegne dalla riga.
           await createPhaseTemplate({
             name,
-            category: addPhaseSection.name,
             costSectionTemplateId: addPhaseSection.id,
             sortOrder: maxSort,
-            isDefault: false,
+            isDefault: true,
           })
           setAddPhaseSection(null)
           await refreshMutation.mutateAsync()
         }}
       />
-    </div>
+
+      <PromptDialog
+        open={addPhaseDockOpen}
+        title="Nuova fase dettaglio commessa"
+        label="Nome fase"
+        description="La fase compare nel dock senza sezione (b). Trascinala su tutte le sezioni in cui serve: è sempre la stessa fase."
+        onClose={() => setAddPhaseDockOpen(false)}
+        onConfirm={async (name) => {
+          const maxSort = phases.length
+            ? Math.max(...phases.map((phase) => phase.sortOrder)) + 1
+            : 1
+          await createPhaseTemplate({
+            name,
+            costSectionTemplateId: null,
+            sortOrder: maxSort,
+            isDefault: false,
+          })
+          setAddPhaseDockOpen(false)
+          await refreshMutation.mutateAsync()
+        }}
+      />
+    </>
   )
 }
 
@@ -447,11 +625,13 @@ function SectionNode({
   onDeleteSection,
   onEditPhase,
   onDeletePhase,
-  onUnlinkPhase,
+  onRemoveFromSection,
+  onToggleSectionDefault,
 }: {
   section: CostSectionTemplateDto
-  departments: DepartmentDto[]
+  /** Già filtrate e ordinate per questa sezione (`sectionPhasesOf`). */
   phases: PhaseTemplateDto[]
+  departments: DepartmentDto[]
   dropHighlight: string | null
   onDropHighlight: (key: string | null) => void
   onAddDepartment: (
@@ -473,7 +653,15 @@ function SectionNode({
   onDeleteSection: () => void
   onEditPhase: (phase: PhaseTemplateDto) => void
   onDeletePhase: (phase: PhaseTemplateDto) => void
-  onUnlinkPhase: (phase: PhaseTemplateDto) => void
+  onRemoveFromSection: (
+    phase: PhaseTemplateDto,
+    section: CostSectionTemplateDto
+  ) => void
+  onToggleSectionDefault: (
+    phase: PhaseTemplateDto,
+    sectionId: number,
+    isDefault: boolean
+  ) => void
 }) {
   const sectionKey = `section-${section.id}`
   const typeColor = section.sectionType === "DA_CLIENTE" ? "#D97706" : "#059669"
@@ -483,10 +671,6 @@ function SectionNode({
   const sectionDepartments = section.departmentIds
     .map((id) => departments.find((dept) => dept.id === id))
     .filter((dept): dept is DepartmentDto => dept != null)
-
-  const sortedPhases = phases
-    .slice()
-    .sort((a, b) => a.category.localeCompare(b.category) || a.sortOrder - b.sortOrder)
 
   function handleSectionDragOver(event: React.DragEvent) {
     if (
@@ -518,6 +702,7 @@ function SectionNode({
     <div
       className={cn(
         "rounded-md border bg-card p-2",
+        !section.isActive && "opacity-55",
         dropHighlight === sectionKey && "ring-2 ring-primary/40"
       )}
       onDragOver={handleSectionDragOver}
@@ -533,14 +718,19 @@ function SectionNode({
         >
           {typeLabel}
         </Badge>
+        {!section.isActive ? (
+          <Badge variant="secondary" className="text-[10px]">
+            Disattiva
+          </Badge>
+        ) : null}
         <div className="ml-auto">
           <RowActionsMenu
             size="icon-sm"
             actions={[
-              { label: "Modifica sezione", icon: Pencil, onClick: onEditSection },
-              { label: "Nuova fase", icon: Plus, onClick: onAddPhase },
+              { label: "Modifica sezione di costo", icon: Pencil, onClick: onEditSection },
+              { label: "Nuova fase dettaglio commessa", icon: Plus, onClick: onAddPhase },
               {
-                label: "Elimina sezione",
+                label: "Elimina sezione di costo",
                 icon: Trash2,
                 destructive: true,
                 separatorBefore: true,
@@ -581,12 +771,12 @@ function SectionNode({
         </p>
       )}
 
-      {sortedPhases.length > 0 ? (
+      {phases.length > 0 ? (
         <div className="mt-2 space-y-1 rounded-md bg-amber-50/50 p-2 dark:bg-amber-950/20">
           <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-            Fasi template ({sortedPhases.length})
+            Fasi dettaglio commessa ({phases.length})
           </p>
-          {sortedPhases.map((phase) => (
+          {phases.map((phase) => (
             <PhaseRow
               key={phase.id}
               phase={phase}
@@ -596,12 +786,214 @@ function SectionNode({
               onReorder={onReorderPhase}
               onEdit={() => onEditPhase(phase)}
               onDelete={() => onDeletePhase(phase)}
-              onUnlink={() => onUnlinkPhase(phase)}
+              onRemoveFromSection={() => onRemoveFromSection(phase, section)}
+              onToggleDefault={(next) =>
+                onToggleSectionDefault(phase, section.id, next)
+              }
             />
           ))}
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Dock (d): la libreria delle fasi, sempre in elenco. Trascina una riga su una sezione (b)
+ * per **aggiungerla** lì — la fase resta anche nelle sezioni in cui è già, non si sposta.
+ * È il punto di tutto: «Call Cliente» è una fase sola che vive sotto PM e sotto Progettazione.
+ */
+function PhasesDockPanel({
+  phases,
+  onEditPhase,
+  onDeletePhase,
+  onAddPhase,
+}: {
+  phases: PhaseTemplateDto[]
+  onEditPhase: (phase: PhaseTemplateDto) => void
+  onDeletePhase: (phase: PhaseTemplateDto) => Promise<void>
+  onAddPhase: () => void
+}) {
+  const [filter, setFilter] = React.useState("")
+
+  const rows = React.useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    // Ordine dell'ANAGRAFICA (`sortOrder`), non alfabetico: la lista è stata importata in un
+    // ordine ragionato — grosso modo il flusso del lavoro, dalla gestione commessa al
+    // post-vendita — e cercare una fase è più veloce se sta dove uno se l'aspetta. Per il nome
+    // c'è il filtro qui sopra. Le fasi senza sezione si riconoscono dal badge ambra, non
+    // dalla posizione: portarle in cima spezzerebbe di nuovo l'ordine.
+    const sorted = phases
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "it"))
+    if (!q) return sorted
+    return sorted.filter((phase) => {
+      const hay = [
+        phase.name,
+        ...phase.sections.map((link) => `${link.groupName} ${link.sectionName}`),
+      ]
+        .join(" ")
+        .toLowerCase()
+      return hay.includes(q)
+    })
+  }, [phases, filter])
+
+  const orphanCount = phases.filter((phase) => phase.sections.length === 0).length
+
+  // Alto quanto la card (che è alta quanto lo schermo): il dock è l'elenco su cui si lavora,
+  // e ogni riga in meno è una fase da cercare col filtro. Non si muove mai — a scorrere è
+  // l'albero al centro — quindi il punto da cui si trascina una fase è sempre dov'era.
+  return (
+    <aside className="flex h-full min-h-0 flex-col rounded-lg border bg-card shadow-xs">
+      <div className="shrink-0 space-y-2 border-b p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Fasi dettaglio (d)</p>
+            <p className="text-xs text-muted-foreground">
+              {filter.trim()
+                ? `${rows.length} di ${phases.length} visibili`
+                : `${phases.length} fasi · sempre in elenco`}
+              {orphanCount > 0 ? (
+                <span className="font-medium text-amber-700 dark:text-amber-400">
+                  {" "}
+                  · {orphanCount} senza sezione (b)
+                </span>
+              ) : null}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={onAddPhase}
+          >
+            <Plus />
+            Nuova
+          </Button>
+        </div>
+        <Input
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder="Cerca fase…"
+          className="h-8"
+          aria-label="Filtra fasi"
+        />
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Trascina la stessa fase su tutte le sezioni (b) in cui serve: si aggiunge, non
+          si sposta. Ferma il cursore su una riga per vedere dov'è già.
+        </p>
+      </div>
+      {/*
+        Tooltip a 10 secondi, e ogni riga se li fa tutti (`skipDelayDuration={0}`, altrimenti
+        dopo il primo Radix apre gli altri all'istante). Qui dentro il cursore ci passa sopra
+        di continuo per trascinare: comparendo subito copriva le righe vicine proprio mentre
+        si mira. Così esce solo se lo si lascia fermo apposta.
+      */}
+      <TooltipProvider delayDuration={10000} skipDelayDuration={0}>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {rows.length === 0 ? (
+          <p className="p-3 text-xs text-muted-foreground">
+            {filter.trim() ? "Nessuna fase corrisponde alla ricerca." : "Nessuna fase."}
+          </p>
+        ) : (
+          <Table className="text-xs">
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableRow>
+                <TableHead className="h-8 w-6 px-1" />
+                <TableHead className="h-8">Fase</TableHead>
+                <TableHead className="h-8 w-8 px-1" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((phase) => {
+                const assignmentLabel =
+                  phase.sections.length > 0
+                    ? `In ${phase.sections.length} sezion${
+                        phase.sections.length === 1 ? "e" : "i"
+                      }:\n${phase.sections
+                        .map(
+                          (link) =>
+                            `• ${link.groupName ? `${link.groupName} · ` : ""}${link.sectionName}${
+                              link.isDefault ? " (default)" : ""
+                            }`
+                        )
+                        .join("\n")}`
+                    : "In nessuna sezione (b): non entrerà in nessuna commessa"
+                return (
+                  <TableRow
+                    key={phase.id}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(DRAG_PHASE, String(phase.id))
+                      event.dataTransfer.effectAllowed = "copy"
+                    }}
+                    onDoubleClick={() => onEditPhase(phase)}
+                    className="cursor-grab bg-background hover:bg-muted/40 active:cursor-grabbing"
+                  >
+                    <TableCell className="bg-background px-1">
+                      <GripVertical className="size-3.5 text-muted-foreground" />
+                    </TableCell>
+                    <TableCell className="bg-background whitespace-normal">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="min-w-0">
+                            <div className="font-medium leading-snug">{phase.name}</div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                              {phase.sections.length === 0 ? (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-500 text-[9px] text-amber-700 dark:text-amber-400"
+                                >
+                                  senza sezione
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-[9px]">
+                                  {phase.sections.length} sezion
+                                  {phase.sections.length === 1 ? "e" : "i"}
+                                </Badge>
+                              )}
+                              {phase.isDefault ? (
+                                <Badge variant="outline" className="text-[9px]">
+                                  Default
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs whitespace-pre-line">
+                          {assignmentLabel}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell className="bg-background px-1">
+                      <RowActionsMenu
+                        size="icon-sm"
+                        actions={[
+                          {
+                            label: "Rinomina fase",
+                            icon: Pencil,
+                            onClick: () => onEditPhase(phase),
+                          },
+                          {
+                            label: "Elimina dall'anagrafica",
+                            icon: Trash2,
+                            destructive: true,
+                            separatorBefore: true,
+                            onClick: () => void onDeletePhase(phase),
+                          },
+                        ]}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+      </TooltipProvider>
+    </aside>
   )
 }
 
@@ -613,7 +1005,8 @@ function PhaseRow({
   onReorder,
   onEdit,
   onDelete,
-  onUnlink,
+  onRemoveFromSection,
+  onToggleDefault,
 }: {
   phase: PhaseTemplateDto
   section: CostSectionTemplateDto
@@ -626,9 +1019,17 @@ function PhaseRow({
   ) => Promise<void>
   onEdit: () => void
   onDelete: () => void
-  onUnlink: () => void
+  onRemoveFromSection: () => void
+  onToggleDefault: (isDefault: boolean) => void
 }) {
   const phaseKey = `phase-${phase.id}`
+  const link = linkOf(phase, section.id)
+  const isDefaultHere = link?.isDefault ?? false
+  // Le ALTRE sezioni in cui vive la stessa fase: è l'informazione che dice «questa non è una
+  // copia, è la stessa fase» — senza, tre righe uguali in tre sezioni sembrano un doppione.
+  const otherSections = phase.sections.filter(
+    (other) => other.sectionId !== section.id
+  )
 
   function handleDragStart(event: React.DragEvent) {
     event.dataTransfer.setData(
@@ -674,14 +1075,50 @@ function PhaseRow({
     >
       <GripVertical className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="flex-1 text-sm">{phase.name}</span>
-      <span className="text-[10px] text-muted-foreground">{phase.category}</span>
+      {isDefaultHere ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-[10px]">
+              Default
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            Nasce da sola su ogni commessa nuova, in questa sezione
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+      {otherSections.length > 0 ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary" className="text-[10px]">
+              +{otherSections.length}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs whitespace-pre-line">
+            {`Stessa fase, anche in:\n${otherSections
+              .map((other) => `• ${other.sectionName}`)
+              .join("\n")}`}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
       <RowActionsMenu
         size="icon-sm"
         actions={[
-          { label: "Modifica fase", icon: Pencil, onClick: onEdit },
-          { label: "Scollega dalla sezione", icon: Unlink, onClick: onUnlink },
+          { label: "Rinomina fase", icon: Pencil, onClick: onEdit },
           {
-            label: "Elimina fase",
+            label: isDefaultHere
+              ? "Non farla nascere da sola qui"
+              : "Falla nascere da sola qui",
+            icon: Star,
+            onClick: () => onToggleDefault(!isDefaultHere),
+          },
+          {
+            label: "Togli da questa sezione",
+            icon: Unlink,
+            onClick: onRemoveFromSection,
+          },
+          {
+            label: "Elimina dall'anagrafica",
             icon: Trash2,
             destructive: true,
             separatorBefore: true,
@@ -786,7 +1223,7 @@ function AddSectionPrompt({
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Nome sezione</Label>
+            <Label>Nome sezione di costo</Label>
             <Input
               value={name}
               autoFocus
@@ -795,7 +1232,7 @@ function AddSectionPrompt({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Tipo sezione</Label>
+              <Label>Tipo sezione di costo</Label>
               <Select value={sectionType} onValueChange={setSectionType}>
                 <SelectTrigger className="w-full">
                   <SelectValue />

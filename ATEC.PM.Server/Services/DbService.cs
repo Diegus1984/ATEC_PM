@@ -1,7 +1,13 @@
+﻿using ATEC.PM.Server.Migrations;
 using ATEC.PM.Server.Data;
 using MySqlConnector;
 using Dapper;
 using Microsoft.Extensions.Logging;
+// Gli attrezzi che questo file condivide con le migrazioni (la vista del timesheet, le sezioni
+// delle fasi, AddColumnIfMissing…): stanno in Migrations/AiutiMigrazione.cs perché una classe
+// di migrazione non vede i membri privati di DbService, e una seconda copia qui sarebbe la
+// trappola che ha lasciato in produzione una vista diversa da quella di sviluppo (v69).
+using static ATEC.PM.Server.Migrations.AiutiMigrazione;
 
 namespace ATEC.PM.Server.Services;
 
@@ -10,10 +16,26 @@ public class DbService
     private readonly string _cs;
     private readonly ILogger<DbService> _logger;
 
+    /// <summary>
+    /// Se una migrazione fallisce, l'avvio si ferma (default). Portare a false in
+    /// <c>appsettings.json</c> (<c>Migrations:StopOnError</c>) solo per rimettere in piedi il
+    /// server in emergenza: si torna al comportamento vecchio, dove un errore era un warning e
+    /// l'applicazione proseguiva con lo schema incompleto.
+    /// </summary>
+    private readonly bool _stopOnMigrationError;
+
+    /// <summary>
+    /// Quanti secondi aspettare il lock delle migrazioni prima di rinunciare
+    /// (<c>Migrations:LockTimeoutSeconds</c>). Vedi <see cref="PrendiIlLockDelleMigrazioni"/>.
+    /// </summary>
+    private readonly int _lockTimeoutSeconds;
+
     public DbService(IConfiguration config, ILogger<DbService> logger)
     {
         _cs = config.GetConnectionString("Default")!;
         _logger = logger;
+        _stopOnMigrationError = config.GetValue("Migrations:StopOnError", true);
+        _lockTimeoutSeconds = config.GetValue("Migrations:LockTimeoutSeconds", 30);
     }
 
     public MySqlConnection Open()
@@ -50,6 +72,29 @@ public class DbService
         return null;
     }
 
+    /// <summary>
+    /// Il database risponde? Una <c>SELECT 1</c>, niente di più: è la sonda dietro
+    /// <c>/api/health/ready</c>, quella su cui gli script di aggiornamento decidono se il server
+    /// è tornato su davvero o se serve il rollback.
+    /// <para>Sta qui, e non dentro l'endpoint, per poterla provare nei test in tutti e due i casi
+    /// — database raggiungibile e non — senza dover spegnere il MySQL di chi sviluppa.</para>
+    /// </summary>
+    /// <returns>null se tutto a posto, altrimenti il messaggio dell'errore.</returns>
+    public async Task<string?> ProvaDatabaseAsync()
+    {
+        try
+        {
+            await using MySqlConnection c = new(_cs);
+            await c.OpenAsync();
+            await c.ExecuteScalarAsync<int>("SELECT 1");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
     public string GetConfig(string key, string defaultValue = "")
     {
         using var c = Open();
@@ -57,41 +102,141 @@ public class DbService
             "SELECT config_value FROM app_config WHERE config_key=@Key", new { Key = key }) ?? defaultValue;
     }
 
-    private void EnsureDatabaseExists()
+    /// <summary>
+    /// Connessione al SERVER MySQL senza selezionare il database: è l'unica che funziona
+    /// quando il database non esiste ancora (Open() fallirebbe con l'errore 1049).
+    /// </summary>
+    private MySqlConnection OpenServer()
     {
-        var csb = new MySqlConnectionStringBuilder(_cs);
-        string dbName = csb.Database;
-        csb.Database = "";
-
-        using var conn = new MySqlConnection(csb.ConnectionString);
+        var csb = new MySqlConnectionStringBuilder(_cs) { Database = "" };
+        var conn = new MySqlConnection(csb.ConnectionString);
         conn.Open();
-        conn.Execute($"CREATE DATABASE IF NOT EXISTS `{dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        Console.WriteLine($"[DB] Database '{dbName}' verificato/creato.");
+        return conn;
     }
 
+    /// <summary>
+    /// Attende che il server MySQL risponda (backoff, utile in Docker/servizio Windows al boot)
+    /// e crea il database se manca. DEVE essere la PRIMA cosa fatta all'avvio, prima di
+    /// qualunque Open(): al primo avvio su una macchina nuova il database non esiste e ogni
+    /// tentativo di connessione con Database=... fallirebbe.
+    /// </summary>
+    /// <returns>true se il database è stato creato adesso (primo avvio).</returns>
+    public bool EnsureDatabaseExists(int maxRetries = 5)
+    {
+        string dbName = new MySqlConnectionStringBuilder(_cs).Database;
+        if (string.IsNullOrWhiteSpace(dbName))
+            throw new InvalidOperationException(
+                "ConnectionStrings:Default non specifica il database: impossibile crearlo/verificarlo.");
+
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using MySqlConnection conn = OpenServer();
+
+                bool exists = conn.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = @Db",
+                    new { Db = dbName }) > 0;
+
+                if (exists)
+                {
+                    _logger.LogInformation("[DB] Database '{Db}' presente (tentativo {Attempt}/{Max})",
+                        dbName, attempt, maxRetries);
+                    return false;
+                }
+
+                try
+                {
+                    conn.Execute($"CREATE DATABASE `{dbName.Replace("`", "``")}` " +
+                                 "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+                }
+                catch (Exception createEx)
+                {
+                    // Utente senza permesso CREATE ma con privilegi solo sul proprio schema:
+                    // information_schema può non mostrarlo. Se la connessione diretta funziona
+                    // il database c'è davvero e si prosegue; altrimenti l'errore è fatale.
+                    using (MySqlConnection probe = new(_cs)) { probe.Open(); }
+                    _logger.LogWarning("[DB] CREATE DATABASE non riuscita ({Message}) ma il database '{Db}' è raggiungibile: proseguo.",
+                        createEx.Message, dbName);
+                    return false;
+                }
+
+                _logger.LogWarning("[DB] Database '{Db}' non esisteva: creato ora (primo avvio).", dbName);
+                return true;
+            }
+            catch (Exception ex) when (attempt < maxRetries)
+            {
+                int waitMs = attempt * 2000;
+                _logger.LogWarning("[DB] Server MySQL non raggiungibile (tentativo {Attempt}/{Max}): {Message}. Riprovo tra {Wait}ms...",
+                    attempt, maxRetries, ex.Message, waitMs);
+                Thread.Sleep(waitMs);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Porta il database allo schema di questa build: lo crea se non c'è, applica le migrazioni
+    /// mancanti, riallinea le viste.
+    /// <para><b>Sotto lock (blocco A2, 15/08/2026).</b> Tutto il lavoro sullo schema sta dentro
+    /// un lock esclusivo di MySQL: due processi che migrano lo stesso database insieme farebbero
+    /// girare la stessa migrazione due volte, e il DDL di MySQL non è transazionale — non c'è
+    /// nessun rollback a rimettere le cose a posto. Non è teorico: il servizio Windows può
+    /// riavviarsi mentre una migrazione è in corso, e durante un aggiornamento la vecchia
+    /// istanza e la nuova possono sovrapporsi per qualche secondo.</para>
+    /// </summary>
     public void InitDatabase(bool productionMode = false)
     {
         _logger.LogInformation("[InitDatabase] Avvio verifica/creazione schema (mode={Mode})...",
             productionMode ? "PRODUCTION" : "DEVELOPMENT");
         EnsureDatabaseExists();
+
+        // UNA connessione sola per tutto il lavoro: il lock di MySQL appartiene alla SESSIONE,
+        // quindi prenderlo su una connessione e lavorare su un'altra non proteggerebbe niente.
         using var c = Open();
+
+        // L'acquisizione sta DENTRO il try: se solleva a metà — il driver che uccide la query
+        // proprio mentre MySQL concede il lock — il rilascio deve girare lo stesso. Rilasciare un
+        // lock che non si ha non fa niente; lasciarne uno appeso a una connessione tornata nel
+        // pool bloccherebbe ogni avvio successivo.
+        try
+        {
+            PrendiIlLockDelleMigrazioni(c);
+            CostruisciOAggiornaSchema(c, productionMode);
+        }
+        finally
+        {
+            RilasciaIlLockDelleMigrazioni(c);
+        }
+    }
+
+    private void CostruisciOAggiornaSchema(MySqlConnection c, bool productionMode)
+    {
+        // Database appena creato (o svuotato a mano): non c'è nulla su cui migrare, serve lo
+        // schema completo. Vale ANCHE in produzione, dove il percorso normale applica solo le
+        // migrazioni versionate: senza questo, il primo avvio lascerebbe il database vuoto.
+        bool freshDatabase = !TableExists(c, "employees");
 
         EnsureSchemaMigrationsTable(c);
 
-        if (productionMode)
+        if (productionMode && !freshDatabase)
         {
-            int currentVersion = GetSchemaVersion(c);
-            _logger.LogInformation("[InitDatabase] Schema versione corrente: {Version}", currentVersion);
-            ApplyVersionedMigrations(c, currentVersion);
+            _logger.LogInformation("[InitDatabase] Schema versione corrente: {Version}", GetSchemaVersion(c));
 
-            // Modulo Preventivi/Catalogo
-            new QuoteDbService(this).ApplyMigrations(c);
+            HashSet<int> appliedVersions = GetAppliedVersions(c);
+            BackfillLegacyVersions(c, appliedVersions, databasePopolato: true);
 
-            int prodTableCount = c.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()");
-            _logger.LogInformation("[InitDatabase] Schema verificato: {TableCount} tabelle presenti", prodTableCount);
+            // Tabelle dei moduli PRIMA delle migrazioni: sono CREATE TABLE IF NOT EXISTS puri
+            // (nessun seed di dati), quindi sicuri anche in produzione. Senza questa chiamata un
+            // modulo nuovo senza migrazione dedicata resterebbe per sempre senza tabelle qui.
+            EnsureModuleTables(c);
+            ApplyVersionedMigrations(c, appliedVersions, _stopOnMigrationError);
+            EnsureViews(c);
+            LogTableCount(c);
             return;
         }
+
+        if (productionMode)
+            _logger.LogWarning("[InitDatabase] Database vuoto in PRODUCTION: eseguo la creazione completa dello schema (bootstrap primo avvio).");
 
         // ══════════════════════════════════════════════════════════
         // LIVELLO 0 — Tabelle senza dipendenze
@@ -176,6 +321,9 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS tariff_options (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tariff_type VARCHAR(30) NOT NULL,
+            -- Nome della tariffa (#87, v95): «Meccanica», «Stampa 3D», «Carpenteria»…
+            -- Vuoto = tariffa che si legge dal solo importo (com'erano tutte prima).
+            label VARCHAR(100) NOT NULL DEFAULT '',
             value DECIMAL(10,3) NOT NULL,
             UNIQUE KEY UQ_TariffVal (tariff_type, value)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -201,24 +349,30 @@ public class DbService
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Seed delle causali DDP reali (matrice stati v7, 20/07/2026). INSERT IGNORE su status_key:
-        // idempotente, NON sovrascrive le modifiche fatte dall'utente. I gruppi condividono il colore.
-        // Gli stati legacy CON/COS/SPED/MOD sono stati assorbiti (v7): CON/COS/SPED→DISP, MOD→RAM
-        // (migrazione v39 sui DB esistenti; qui non vengono più seedati).
+        // Seed delle causali DDP reali. INSERT IGNORE su status_key: idempotente, NON sovrascrive
+        // le modifiche fatte dall'utente. I gruppi condividono il colore.
+        // L'ordine è quello del FLUSSO DI LAVORO chiesto nella segnalazione #54 (08/08/2026):
+        // offerta → ordine → arrivo → magazzino → eccezioni; i tre stati fuori dalla lista della
+        // DDP Officine (RAM, CHEK, VER) stanno in coda. CON e COS sono tornati stati veri: la v39
+        // li aveva assorbiti dentro DISP, ma in officina «consegnato» (comprato fuori) e
+        // «costruito» (fatto in casa) sono due cose diverse — vedi migrazione v75.
         c.Execute(@"INSERT IGNORE INTO ddp_statuses (status_key, label, color_bg, color_fg, sort_order) VALUES
-            ('ANN',  'ANNULLATO',                                       '#000000', '#FFFFFF', 1),
-            ('SOSP', 'SOSPESO',                                         '#000000', '#FFFFFF', 2),
-            ('RAM',  'RIMESSO A MAGAZZINO',                             '#000000', '#FFFFFF', 3),
-            ('SOST', 'SOSTITUITO',                                      '#000000', '#FFFFFF', 4),
-            ('DISP', 'DISPONIBILE / CONSEGNATO',                        '#00B050', '#FFFFFF', 7),
-            ('DC',   'DA COSTRUIRE',                                    '#006400', '#FFFFFF', 8),
-            ('DO',   'DA ORDINARE',                                     '#FF0000', '#FFFFFF', 9),
-            ('ASS',  'ASSEGNATO AL MONTATORE',                          '#B4B4B4', '#000000', 10),
-            ('CHEK', 'MAT. CHE NECESSITA CONTROLLO TECNICO/COMMERCIALE','#8B008B', '#FFFFFF', 11),
-            ('IO',   'IN ORDINE',                                       '#FFFF00', '#000000', 12),
-            ('PAR',  'PARZIALMENTE CONSEGNATO o COSTRUITO',             '#7030A0', '#FFFFFF', 13),
-            ('RO',   'RICHIESTA OFFERTA',                               '#FFC000', '#000000', 14),
-            ('VER',  'VERIFICARE SE DISPONIBILE A MAG',                 '#00B0F0', '#FFFFFF', 15)");
+            ('RO',   'RICHIESTA OFFERTA',                               '#FFC000', '#000000', 1),
+            ('DO',   'DA ORDINARE',                                     '#FF0000', '#FFFFFF', 2),
+            ('DC',   'DA COSTRUIRE',                                    '#006400', '#FFFFFF', 3),
+            ('IO',   'IN ORDINE',                                       '#FFFF00', '#000000', 4),
+            ('PAR',  'PARZIALMENTE CONSEGNATO o COSTRUITO',             '#7030A0', '#FFFFFF', 5),
+            ('CON',  'CONSEGNATO',                                      '#00B050', '#FFFFFF', 6),
+            ('COS',  'COSTRUITO',                                       '#2E7D32', '#FFFFFF', 7),
+            ('DISP', 'DISPONIBILE / CONSEGNATO',                        '#00B050', '#FFFFFF', 8),
+            ('MIT',  'MATERIALE IN TRATTAMENTO',                        '#7FC1B0', '#000000', 9),
+            ('ANN',  'ANNULLATO',                                       '#000000', '#FFFFFF', 10),
+            ('SOSP', 'SOSPESO',                                         '#000000', '#FFFFFF', 11),
+            ('SOST', 'SOSTITUITO',                                      '#000000', '#FFFFFF', 12),
+            ('ASS',  'ASSEGNATO AL MONTATORE',                          '#B4B4B4', '#000000', 13),
+            ('RAM',  'RIMESSO A MAGAZZINO',                             '#000000', '#FFFFFF', 14),
+            ('CHEK', 'MAT. CHE NECESSITA CONTROLLO TECNICO/COMMERCIALE','#8B008B', '#FFFFFF', 15),
+            ('VER',  'VERIFICARE SE DISPONIBILE A MAG',                 '#00B0F0', '#FFFFFF', 16)");
 
         // Matrice degli avanzamenti di stato (riga = stato corrente, colonna = stato selezionabile).
         // Un record (from,to) = transizione ammessa; il record sentinella (from,'') marca uno stato
@@ -252,12 +406,8 @@ public class DbService
             ('VERNICIATO', 40, 1),
             ('SABBIATO', 50, 1)");
 
-        // Backfill: i trattamenti già digitati a mano sulle righe officina entrano in
-        // anagrafica (UNIQUE(name) case-insensitive dedupa via INSERT IGNORE)
-        c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active)
-            SELECT DISTINCT TRIM(treatment), 100, 1
-            FROM ddp_officina_items
-            WHERE TRIM(COALESCE(treatment, '')) <> ''");
+        // NB: il backfill dei trattamenti già digitati sulle righe officina sta più in basso,
+        // dopo la CREATE di ddp_officina_items (qui la tabella non esiste ancora su un DB nuovo).
 
         // Aggregazioni di stato DDP (matrice Stati × Aggregazioni, editabile da "Aggregazioni DDP").
         // kind: SET=unione stati · ALL=tutti (conteggio per stato) · DATED=stati+data prev. · SUBGROUPS=7 card.
@@ -292,6 +442,8 @@ public class DbService
         c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_groups (
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
+            bg_color VARCHAR(10) NOT NULL DEFAULT '#3B82F6',
+            text_color VARCHAR(10) NOT NULL DEFAULT '#FFFFFF',
             sort_order INT NOT NULL DEFAULT 0,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -391,10 +543,20 @@ public class DbService
             message VARCHAR(500) NOT NULL DEFAULT '',
             reference_type VARCHAR(20) NOT NULL DEFAULT '',
             reference_id INT NOT NULL DEFAULT 0,
+            -- Giornata a cui l'avviso si riferisce, quando il riferimento da solo non basta a
+            -- dire di cosa si parla: le anomalie ore sono (persona, giorno lavorato), e senza
+            -- questa colonna la stessa giornata rinasceva a ogni giro mentre due giornate
+            -- diverse della stessa persona si cancellavano a vicenda (BUG-014, v93).
+            -- Resta NULL per tutti gli altri avvisi, che deduplicano per riferimento e basta.
+            reference_date DATE NULL,
             project_id INT NULL,
             created_by INT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_type (notification_type),
+            -- Il dedup («l'ho già segnalata oggi?») cerca per tipo + riferimento + giorno: il
+            -- solo notification_type non selezionava niente, perché dentro un controllo è
+            -- uguale per tutte le righe. Allineato alla v91 (E2): un database nuovo nasce già
+            -- con l'assetto giusto invece di farsi correggere dalla migrazione un attimo dopo.
+            INDEX ix_notif_dedup (notification_type, reference_type, reference_id, created_at),
             INDEX idx_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -426,6 +588,16 @@ public class DbService
             FOREIGN KEY (cost_section_template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Legami fase ↔ sezione di costo (v73). Una fase dell'anagrafica sta su PIÙ sezioni:
+        // «Call Cliente» sotto Program Manager e sotto Progettazione insieme, e in commessa
+        // nasce una volta per sezione. Prima serviva creare tre fasi con lo stesso nome — da lì
+        // vengono i doppioni («Programmazione PLC» / «Programmazione Plc»).
+        // `sort_order` e `is_default` stanno QUI e non su phase_templates: l'ordine dentro PM
+        // non è quello dentro Progettazione, e la fase può nascere da sola in una sezione sola.
+        // CASCADE su entrambi i lati: cancellare una fase o una sezione porta via i legami.
+        // Vedi PIANO-FASI-MULTISEZIONE.md.
+        c.Execute(PhaseTemplateSectionsDdl);
+
         // ══════════════════════════════════════════════════════════
         // LIVELLO 3 — projects
         // ══════════════════════════════════════════════════════════
@@ -443,8 +615,10 @@ public class DbService
             budget_total DECIMAL(12,2) DEFAULT 0,
             budget_hours_total DECIMAL(8,1) DEFAULT 0,
             revenue DECIMAL(12,2) DEFAULT 0,
+            sale_total DECIMAL(14,2) NULL,
             actual_travel_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             status VARCHAR(20) DEFAULT 'DRAFT',
+            in_dashboard TINYINT(1) NOT NULL DEFAULT 1,
             priority VARCHAR(20) DEFAULT 'MEDIUM',
             server_path VARCHAR(500) DEFAULT '',
             notes TEXT,
@@ -459,10 +633,131 @@ public class DbService
         // ══════════════════════════════════════════════════════════
         // Tabelle offer_* rimosse (legacy — sostituite da quote_*)
 
+        // Righe dell'ordine cliente (Bilancio commessa): un ordine può essere spezzato in
+        // N posizioni. `projects.revenue` resta la fonte per SAL/dashboard/cash flow ed è
+        // tenuta allineata dal server a COALESCE(SUM(amount),0) ad ogni scrittura.
+        // Stessa definizione della migrazione v61.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_order_lines (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            order_ref VARCHAR(100) NOT NULL DEFAULT '',
+            order_position VARCHAR(10) NOT NULL DEFAULT '',
+            amount DECIMAL(14,2) NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            row_version INT NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_pol_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_pol_project (project_id, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Fogli di calcolo a righe («finestra di calcolo» del Riepilogo Costi, blocco 5).
+        // Un foglio per (commessa, calc_key): il dettaglio del calcolo, che prima si perdeva
+        // perché a video restava solo il totale digitato. row_version = token di concorrenza
+        // dell'INTERO foglio: la conferma riscrive tutte le righe in una volta sola.
+        // Stessa definizione della migrazione v62.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_calc_sheets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            calc_key VARCHAR(40) NOT NULL,
+            row_version INT NOT NULL DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_by INT NULL,
+            UNIQUE KEY uk_calc_sheet (project_id, calc_key),
+            CONSTRAINT fk_pcs_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // `multiplier` = terzo fattore facoltativo della riga (calcolatrice Auto del blocco 6:
+        // Km × Rimborso × Numero Tratte). NULL vale 1: le righe che non lo usano non cambiano.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_calc_rows (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sheet_id INT NOT NULL,
+            group_key VARCHAR(20) NOT NULL DEFAULT '',
+            description VARCHAR(500) NOT NULL DEFAULT '',
+            quantity DECIMAL(12,3) NULL,
+            unit_cost DECIMAL(14,4) NULL,
+            multiplier DECIMAL(12,3) NULL,
+            amount DECIMAL(14,2) NULL,
+            amount_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.450,
+            linked_source VARCHAR(60) NOT NULL DEFAULT '',
+            sort_order INT NOT NULL DEFAULT 0,
+            CONSTRAINT fk_pcr_sheet FOREIGN KEY (sheet_id) REFERENCES project_calc_sheets(id) ON DELETE CASCADE,
+            INDEX idx_pcr_sheet (sheet_id, group_key, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ── TRASFERTA (blocco 6) ──────────────────────────────────
+        // Una commessa ha N step; ogni step ha N righe-persona. Il DETTAGLIO delle quattro
+        // calcolatrici (ore, vitto, indennità, auto) NON sta qui: vive nei fogli del blocco 5,
+        // con la chiave che porta l'id della riga (`trasferta.ore:{rowId}`, …).
+        c.Execute(@"CREATE TABLE IF NOT EXISTS travel_steps (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            -- Lo step nato dal Timesheet È una fase di commessa (#37/#52, v79); NULL = step
+            -- aperto a mano, come si faceva prima.
+            project_phase_id INT NULL,
+            description VARCHAR(300) NOT NULL DEFAULT '',
+            sort_order INT NOT NULL DEFAULT 0,
+            row_version INT NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_ts_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_ts_project (project_id, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // employee_id + person_name: il nominativo si sceglie dall'anagrafica ma resta scritto
+        // sulla riga, così una trasferta di due anni fa si legge anche se il dipendente non c'è più.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS travel_step_rows (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            step_id INT NOT NULL,
+            employee_id INT NULL,
+            person_name VARCHAR(200) NOT NULL DEFAULT '',
+            -- Righe derivate dal Timesheet (#37/#52, v79): il giorno al posto di inizio/fine,
+            -- la provenienza, i giorni imputati (il valore della giornata sulla prima riga:
+            -- 0,5 fino a 4 ore scaricate, 1 oltre — #98, v98) e il segnale «le ore dietro
+            -- non ci sono più». Vedi migrazioni v79 e v98 per il perché.
+            work_date DATE NULL,
+            source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+            travel_days DECIMAL(3,1) NULL,
+            hours_missing TINYINT(1) NOT NULL DEFAULT 0,
+            start_date DATE NULL,
+            end_date DATE NULL,
+            exclude_sat TINYINT(1) NOT NULL DEFAULT 0,
+            exclude_sun TINYINT(1) NOT NULL DEFAULT 0,
+            hours DECIMAL(10,2) NULL,
+            hourly_rate DECIMAL(10,3) NULL,
+            nights INT NULL,
+            night_price DECIMAL(12,2) NULL,
+            meal_cost DECIMAL(12,2) NULL,
+            allowance_cost DECIMAL(12,2) NULL,
+            car_cost DECIMAL(12,2) NULL,
+            transport_cost DECIMAL(12,2) NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            row_version INT NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_tsr_step FOREIGN KEY (step_id) REFERENCES travel_steps(id) ON DELETE CASCADE,
+            INDEX idx_tsr_step (step_id, sort_order),
+            -- Rende la rigenerazione ripetibile senza doppioni. Le righe manuali hanno
+            -- work_date NULL e in MySQL i NULL non collidono: restano fuori dal vincolo.
+            UNIQUE KEY uq_tsr_derivata (step_id, employee_id, work_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // phase_template_id è NULL-able: le fasi LOCALI (is_local=1, create da PhasesController)
+        // non nascono da un template. name/category/cost_section_template_id sono lo snapshot
+        // denormalizzato del template (le GET fanno COALESCE tra riga e template).
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_phases (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
-            phase_template_id INT NOT NULL,
+            phase_template_id INT NULL,
+            name VARCHAR(100) NULL,
+            category VARCHAR(50) NULL,
+            cost_section_template_id INT NULL,
+            is_local TINYINT(1) NOT NULL DEFAULT 0,
+            -- Fase «spenta» (segnalazione #51): sparisce dall'elenco del Bilancio e non
+            -- accetta ore nuove dal Timesheet. NON esclude nulla dai conti: le ore già
+            -- imputate continuano a contare, ed è una scelta esplicita — vedi v78.
+            is_off TINYINT(1) NOT NULL DEFAULT 0,
             department_id INT NULL,
             custom_name VARCHAR(200) DEFAULT '',
             budget_hours DECIMAL(8,1) DEFAULT 0,
@@ -471,6 +766,8 @@ public class DbService
             progress_pct INT DEFAULT 0,
             sort_order INT DEFAULT 0,
             notes TEXT,
+            start_date DATE NULL,
+            end_date DATE NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (phase_template_id) REFERENCES phase_templates(id),
@@ -543,6 +840,7 @@ public class DbService
             has_attachment BOOLEAN DEFAULT FALSE,
             attachment_name VARCHAR(300) DEFAULT '',
             attachment_path VARCHAR(500) DEFAULT '',
+            reply_to_message_id INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES project_chats(id) ON DELETE CASCADE,
             FOREIGN KEY (employee_id) REFERENCES employees(id),
@@ -574,11 +872,13 @@ public class DbService
             ddp_type VARCHAR(20) DEFAULT 'COMMERCIAL',
             atec_code VARCHAR(15) NULL,
             notes TEXT,
+            created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
             FOREIGN KEY (catalog_item_id) REFERENCES catalog_items(id) ON DELETE SET NULL,
+            FOREIGN KEY (created_by) REFERENCES employees(id) ON DELETE SET NULL,
             INDEX idx_bom_project (project_id),
             INDEX IX_BomItems_AtecCode (atec_code)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -596,26 +896,50 @@ public class DbService
             description VARCHAR(300) DEFAULT '',
             quantity DECIMAL(10,3) DEFAULT 0,
             quantity_produced DECIMAL(10,3) NOT NULL DEFAULT 0,
+            -- Ore di lavorazione (officine interne): × tariffa oraria = costo unitario.
+            -- NULL = non imputate, che è diverso da zero ore. Vedi migrazione v77.
+            work_hours DECIMAL(10,2) NULL,
+            -- Tariffa oraria con cui è stato fatto quel conto (#87, v95): le tariffe in
+            -- anagrafica sono più d'una (meccanica, carpenteria, stampa 3D) e senza questa
+            -- colonna non si saprebbe quale è stata scelta. NULL = costo scritto a mano.
+            hourly_rate DECIMAL(10,2) NULL,
             material VARCHAR(200) DEFAULT '',
             treatment VARCHAR(200) DEFAULT '',
             supplier_name VARCHAR(200) DEFAULT '',
             unit_cost DECIMAL(10,2) DEFAULT 0,
             item_status VARCHAR(20) DEFAULT 'DO',
+            work_type VARCHAR(20) NOT NULL DEFAULT '',
             requested_by VARCHAR(100) DEFAULT '',
             danea_ref VARCHAR(100) DEFAULT '',
             date_needed DATE,
             order_date DATE NULL,
+            -- «Consegnato il» editabile (#82); prima solo dalla cronistoria.
+            delivered_at DATE NULL,
             destination VARCHAR(200) DEFAULT '',
             destination_spec VARCHAR(200) DEFAULT '',
             notes TEXT,
+            -- Note di gestione della lavorazione (#83): sono di chi produce, non dell'ufficio
+            -- tecnico che compila `notes` nella distinta. Due campi apposta, vedi v92.
+            workshop_notes TEXT NULL,
+            is_ultra_critical TINYINT(1) NOT NULL DEFAULT 0,
             parent_officina_item_id INT NULL,
             composition_qty DECIMAL(10,3) NULL,
+            created_by INT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (parent_officina_item_id) REFERENCES ddp_officina_items(id) ON DELETE SET NULL,
+            FOREIGN KEY (created_by) REFERENCES employees(id) ON DELETE SET NULL,
             INDEX idx_ddpoff_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Backfill: i trattamenti già digitati a mano sulle righe officina entrano in
+        // anagrafica ddp_treatments (UNIQUE(name) case-insensitive dedupa via INSERT IGNORE).
+        // Deve stare DOPO la CREATE qui sopra: su un database nuovo la tabella non esiste ancora.
+        c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active)
+            SELECT DISTINCT TRIM(treatment), 100, 1
+            FROM ddp_officina_items
+            WHERE TRIM(COALESCE(treatment, '')) <> ''");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS documents (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -661,6 +985,9 @@ public class DbService
             is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
             contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
             margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            contingency_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            margin_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            is_shadowed TINYINT(1) NOT NULL DEFAULT 0,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (template_id) REFERENCES cost_section_templates(id) ON DELETE SET NULL,
             INDEX idx_pcs_project (project_id, is_enabled),
@@ -697,6 +1024,33 @@ public class DbService
             INDEX idx_pcr_section (section_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Trasferta a righe della sezione di preventivo (segnalazione #33, migrazione v68).
+        // Prende il posto dei 7 campi trasferta di project_cost_resources, che però NON si
+        // cancellano: li usa ancora il Commerciale e li interroga la guardia anti-cancellazione
+        // delle tariffe. Tipi identici a travel_step_rows, di proposito: stesse formule, stessi
+        // componenti. Il dettaglio delle 3 calcolatrici sta nei fogli del blocco 5, con la
+        // chiave che porta l'id della riga (`preventivo.vitto:{rowId}`, …).
+        // resource_id è FACOLTATIVO: la riga può essere una voce scritta a mano.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS project_cost_travel_rows (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            section_id INT NOT NULL,
+            resource_id INT NULL,
+            person_name VARCHAR(200) NOT NULL DEFAULT '',
+            nights INT NULL,
+            night_price DECIMAL(12,2) NULL,
+            meal_cost DECIMAL(12,2) NULL,
+            allowance_cost DECIMAL(12,2) NULL,
+            car_cost DECIMAL(12,2) NULL,
+            transport_cost DECIMAL(12,2) NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            row_version INT NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_pctr_section  FOREIGN KEY (section_id)  REFERENCES project_cost_sections(id) ON DELETE CASCADE,
+            CONSTRAINT fk_pctr_resource FOREIGN KEY (resource_id) REFERENCES project_cost_resources(id) ON DELETE SET NULL,
+            INDEX idx_pctr_section (section_id, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         c.Execute(@"CREATE TABLE IF NOT EXISTS project_material_sections (
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
@@ -721,6 +1075,11 @@ public class DbService
             markup_value DECIMAL(5,3) NOT NULL DEFAULT 1.300,
             item_type VARCHAR(20) NOT NULL DEFAULT 'MATERIAL',
             sort_order INT NOT NULL DEFAULT 0,
+            contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0,
+            contingency_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            margin_pinned TINYINT(1) NOT NULL DEFAULT 0,
+            is_shadowed TINYINT(1) NOT NULL DEFAULT 0,
             FOREIGN KEY (section_id) REFERENCES project_material_sections(id) ON DELETE CASCADE,
             FOREIGN KEY (parent_item_id) REFERENCES project_material_items(id) ON DELETE CASCADE,
             INDEX idx_pmi_section (section_id)
@@ -731,8 +1090,13 @@ public class DbService
             project_id INT NOT NULL UNIQUE,
             contingency_pct DECIMAL(7,4) NOT NULL DEFAULT 0.1300,
             negotiation_margin_pct DECIMAL(7,4) NOT NULL DEFAULT 0.0500,
+            -- travel_markup: colonna DORMIENTE dal 06/08/2026. Il K di ricarico delle
+            -- trasferte è stato rimosso dai calcoli (#34) ma la colonna resta a 1,000 così
+            -- riaccenderlo è una riga di codice e i DTO del Commerciale non si rompono.
             travel_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
             allowance_markup DECIMAL(5,3) NOT NULL DEFAULT 1.000,
+            -- Prezzo offerta finale imputato a mano (#35). NULL = si mostra il calcolato.
+            final_price_override DECIMAL(14,2) NULL,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -766,7 +1130,26 @@ public class DbService
             FOREIGN KEY (employee_id) REFERENCES employees(id),
             FOREIGN KEY (project_phase_id) REFERENCES project_phases(id),
             INDEX idx_te_phase_date (project_phase_id, work_date),
-            INDEX idx_te_employee (employee_id)
+            -- (employee_id, work_date) e non il solo employee_id: le tre query del Timesheet
+            -- filtrano la persona E l'intervallo di giorni. ix_te_work_date serve invece agli
+            -- aggregati globali (home, anomalie), dove la persona non filtra. Allineati alla
+            -- v91 (E2): un database nuovo nasce già con l'assetto giusto.
+            INDEX ix_te_employee_date (employee_id, work_date),
+            INDEX ix_te_work_date (work_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // «Extra Lavoro» (segnalazione #39): tabella LATERALE alle ore, non una colonna.
+        // Presenza della riga = il PM l'ha spostata su Extra Lavoro; `counts_in_project`
+        // = se quelle ore pesano ancora sui costi della commessa (0 = no, è il default).
+        // Sta qui, prima della vista, perché `v_timesheet_with_section` la legge.
+        c.Execute(@"CREATE TABLE IF NOT EXISTS timesheet_extra_work (
+            entry_id INT NOT NULL PRIMARY KEY,
+            counts_in_project TINYINT(1) NOT NULL DEFAULT 0,
+            moved_by INT NULL,
+            moved_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            note VARCHAR(300) NOT NULL DEFAULT '',
+            CONSTRAINT fk_tew_entry FOREIGN KEY (entry_id)
+                REFERENCES timesheet_entries(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // ══════════════════════════════════════════════════════════
@@ -886,12 +1269,17 @@ public class DbService
         // SISTEMA PERMESSI A LIVELLI (stile VisiWin7)
         // ══════════════════════════════════════════════════════════
 
+        // NB: `level_value` NON è più UNIQUE (migrazione v59). La tabella elenca i RUOLI, e
+        // un ruolo di reparto (access_mode = 'GRANTS') può stare sullo stesso rango di un
+        // altro: l'AMM parte da 0 come un tecnico ma vede solo ciò che gli è concesso in
+        // auth_role_features. Unico per definizione resta il nome del ruolo.
         c.Execute(@"CREATE TABLE IF NOT EXISTS auth_levels (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            level_value INT NOT NULL UNIQUE,
+            level_value INT NOT NULL,
             role_name VARCHAR(30) NOT NULL UNIQUE,
             display_name VARCHAR(50) NOT NULL,
-            sort_order INT DEFAULT 0
+            sort_order INT DEFAULT 0,
+            access_mode VARCHAR(10) NOT NULL DEFAULT 'LEVEL'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS auth_features (
@@ -903,6 +1291,18 @@ public class DbService
             behavior VARCHAR(20) DEFAULT 'HIDDEN'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Concessioni per RUOLO: la scala dei livelli è lineare e non sa descrivere un
+        // reparto (l'amministrazione ha bisogno del SAL, che sta al livello dei PM, ma non
+        // di MoM/DDP/Check list). Qui si elencano le funzioni concesse a un singolo ruolo,
+        // in sola lettura ('READ') o piene ('FULL').
+        c.Execute(@"CREATE TABLE IF NOT EXISTS auth_role_features (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            role_name VARCHAR(30) NOT NULL,
+            feature_key VARCHAR(100) NOT NULL,
+            access VARCHAR(10) NOT NULL DEFAULT 'FULL',
+            UNIQUE KEY uk_role_feature (role_name, feature_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // ══════════════════════════════════════════════════════════
         // SEED DATA
         // ══════════════════════════════════════════════════════════
@@ -910,13 +1310,33 @@ public class DbService
         // Seed livelli autorizzazione
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_levels") == 0)
         {
-            c.Execute(@"INSERT INTO auth_levels (level_value, role_name, display_name, sort_order) VALUES
-                (0, 'TECH',          'Tecnico',          0),
-                (1, 'RESP_REPARTO',  'Resp. Reparto',    1),
-                (2, 'PM',            'Project Manager',  2),
-                (3, 'ADMIN',         'Amministratore',   3),
-                (4, 'DEVELOPER',     'Developer',        4)");
+            // ADMIN è il livello più alto: il vecchio DEVELOPER (4) è stato tolto il
+            // 31/07/2026 (migrazione v57) perché non era assegnabile a nessuno.
+            c.Execute(@"INSERT INTO auth_levels (level_value, role_name, display_name, sort_order, access_mode) VALUES
+                (0, 'TECH',          'Tecnico',          0, 'LEVEL'),
+                (1, 'RESP_REPARTO',  'Resp. Reparto',    1, 'LEVEL'),
+                (2, 'PM',            'Project Manager',  2, 'LEVEL'),
+                (3, 'ADMIN',         'Amministratore',   3, 'LEVEL'),
+                (0, 'AMM',           'Amministrazione',  4, 'GRANTS')");
             Console.WriteLine("[DB] Seed auth_levels completato.");
+        }
+
+        // Concessioni dell'ufficio amministrazione (ruolo a lista bianca: vede SOLO queste).
+        //
+        // 🪤 La condizione guarda ANCHE che il ruolo esista ancora: 'AMM' è stato eliminato da
+        // auth_levels con la v66 (la Contabilità è gestita per REPARTO dal 04/08/2026), e la v82
+        // ne ha ripulito le concessioni rimaste orfane. Senza il secondo controllo la tabella
+        // svuotata riattivava questo seed al riavvio successivo e il ruolo morto tornava a
+        // popolarla — successo davvero in sviluppo il 13/08/2026, subito dopo la v82.
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_role_features") == 0
+            && c.ExecuteScalar<int>("SELECT COUNT(*) FROM auth_levels WHERE role_name = 'AMM'") > 0)
+        {
+            c.Execute(@"INSERT INTO auth_role_features (role_name, feature_key, access) VALUES
+                ('AMM', 'nav.bug_reports', 'FULL'),
+                ('AMM', 'nav.sal',         'FULL'),
+                ('AMM', 'sal.economics',   'FULL'),
+                ('AMM', 'nav.clienti',     'READ')");
+            Console.WriteLine("[DB] Seed auth_role_features completato.");
         }
 
         // Seed feature con livello minimo
@@ -935,7 +1355,23 @@ public class DbService
                 ('nav.codex_composizione','Composizione Codex',      'navigation', 1, 'HIDDEN'),
                 ('nav.utenti',            'Utenti',                  'navigation', 3, 'HIDDEN'),
                 ('nav.config_sezioni',    'Configurazione Sezioni',  'navigation', 3, 'HIDDEN'),
-                ('nav.ddp_destinazioni',  'Destinazioni DDP',        'navigation', 1, 'HIDDEN'),
+                ('nav.ddp_destinazioni',  'Conf. DDP',               'navigation', 2, 'HIDDEN'),
+                ('nav.ddp_aggregazioni',  'Aggregazioni DDP',        'navigation', 2, 'HIDDEN'),
+                ('nav.mom',               'Verbali e Note MoM',      'navigation', 2, 'HIDDEN'),
+                ('nav.gestore_ddp',       'Gestore DDP',             'navigation', 2, 'HIDDEN'),
+                ('nav.checklist',         'Check list',              'navigation', 2, 'HIDDEN'),
+                ('nav.milestones',        'Milestones',              'navigation', 2, 'HIDDEN'),
+                ('nav.work_requests',     'Lavorazioni',             'navigation', 2, 'HIDDEN'),
+                ('nav.sal',               'SAL / Fatturazione',      'navigation', 2, 'HIDDEN'),
+                ('nav.bilancio',          'Bilancio Commessa',       'navigation', 2, 'HIDDEN'),
+                ('nav.ore_commessa',      'Ore Commessa',            'navigation', 2, 'HIDDEN'),
+                ('sal.economics',         'SAL — Dati economici',    'data',       2, 'HIDDEN'),
+                ('project.dettagli',      'Commessa — Dettagli',     'project',    2, 'HIDDEN'),
+                ('project.flusso_cassa',  'Commessa — Flusso di Cassa','project',  2, 'HIDDEN'),
+                ('project.chat',          'Commessa — Chat',         'project',    0, 'HIDDEN'),
+                ('project.ddp_commerciale','Commessa — DDP Commerciali','project', 0, 'HIDDEN'),
+                ('project.ddp_officina',  'Commessa — DDP Officina', 'project',    0, 'HIDDEN'),
+                ('project.documenti',     'Commessa — Documenti',    'project',    0, 'HIDDEN'),
                 ('nav.project_templates', 'Template Commesse',       'navigation', 2, 'HIDDEN'),
                 ('nav.backup',            'Backup DB',               'navigation', 3, 'HIDDEN'),
                 ('nav.permessi',          'Gestione Permessi',       'navigation', 3, 'HIDDEN'),
@@ -956,11 +1392,14 @@ public class DbService
         // Seed tariffe trasferta predefinite
         if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM tariff_options") == 0)
         {
-            c.Execute(@"INSERT INTO tariff_options (tariff_type, value) VALUES
-                ('COST_PER_KM', 0.900), ('COST_PER_KM', 1.100),
-                ('DAILY_FOOD', 25.000), ('DAILY_FOOD', 50.000), ('DAILY_FOOD', 80.000),
-                ('DAILY_HOTEL', 80.000), ('DAILY_HOTEL', 100.000), ('DAILY_HOTEL', 120.000),
-                ('DAILY_ALLOWANCE', 20.000), ('DAILY_ALLOWANCE', 40.000), ('DAILY_ALLOWANCE', 60.000)");
+            c.Execute(@"INSERT INTO tariff_options (tariff_type, label, value) VALUES
+                ('COST_PER_KM', '', 0.900), ('COST_PER_KM', '', 1.100),
+                ('DAILY_FOOD', '', 25.000), ('DAILY_FOOD', '', 50.000), ('DAILY_FOOD', '', 80.000),
+                ('DAILY_HOTEL', '', 80.000), ('DAILY_HOTEL', '', 100.000), ('DAILY_HOTEL', '', 120.000),
+                ('DAILY_ALLOWANCE', '', 20.000), ('DAILY_ALLOWANCE', '', 40.000), ('DAILY_ALLOWANCE', '', 60.000),
+                -- Officine interne (#87): tre lavorazioni, tre costi orari.
+                ('HOURLY_RATE', 'Stampa 3D', 20.000), ('HOURLY_RATE', 'Carpenteria', 35.000),
+                ('HOURLY_RATE', 'Meccanica', 50.000)");
             Console.WriteLine("[DB] Seed tariff_options completato.");
         }
 
@@ -979,44 +1418,46 @@ public class DbService
             Console.WriteLine("[DB] Utente admin di default creato con bcrypt (user: admin / pwd: admin)");
         }
 
-        // ══════════════════════════════════════════════════════════
-        // MIGRAZIONI su tabelle esistenti
-        // ══════════════════════════════════════════════════════════
-try
-        {
-            c.Execute(@"CREATE OR REPLACE VIEW v_timesheet_with_section AS
-                SELECT
-                    te.id              AS entry_id,
-                    te.employee_id,
-                    te.project_phase_id,
-                    te.work_date,
-                    te.hours,
-                    te.entry_type,
-                    pp.project_id,
-                    COALESCE(NULLIF(pp.custom_name,''), pt.name) AS phase_name,
-                    pt.cost_section_template_id,
-                    CONCAT(emp.first_name, ' ', emp.last_name) AS employee_name,
-                    COALESCE(d.hourly_cost, 0) AS hourly_cost
-                FROM timesheet_entries te
-                JOIN project_phases pp   ON pp.id = te.project_phase_id
-                JOIN phase_templates pt  ON pt.id = pp.phase_template_id
-                JOIN employees emp       ON emp.id = te.employee_id
-                LEFT JOIN (
-                    SELECT employee_id, MIN(department_id) AS department_id
-                    FROM employee_departments
-                    GROUP BY employee_id
-                ) ed ON ed.employee_id = emp.id
-                LEFT JOIN departments d  ON d.id = ed.department_id");
-            Console.WriteLine("[DB Migration] View v_timesheet_with_section creata/aggiornata.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DB Migration] Warning view: {ex.Message}");
-        }
+        // (Qui la vista v_timesheet_with_section veniva creata a metà del bootstrap, con l'errore
+        // ingoiato da un try/catch: in sviluppo, su database nuovo, scriveva un warning e tirava
+        // avanti. Adesso la fa EnsureViews, in fondo e in tutti gli ambienti — vedi lì il perché.)
 
-        // Modulo Preventivi/Catalogo
-        new QuoteDbService(this).InitTables(c);
-        new QuoteDbService(this).ApplyMigrations(c);
+        // Tabelle di tutti i moduli (idempotenti, nessun dato)
+        EnsureModuleTables(c);
+
+        // Seed anagrafiche SAL (idempotenti: solo a tabella vuota)
+        SalDbService.SeedConditions(c, _logger);
+        SalDbService.SeedSapCausali(c, _logger);
+        SalDbService.SeedPaymentStates(c, _logger);
+
+        // Migrazioni versionate (dopo le CREATE TABLE idempotenti).
+        //
+        // Su un database APPENA CREATO le migrazioni girano su uno schema che le contiene già
+        // (l'ha appena scritto il bootstrap qui sopra): passano a vuoto, e se una inciampa non
+        // significa che lo schema sia rotto. Lì si resta tolleranti come prima. Su un database
+        // esistente, invece, un fallimento è un problema vero e ferma l'avvio.
+        HashSet<int> applied = GetAppliedVersions(c);
+        BackfillLegacyVersions(c, applied, databasePopolato: !freshDatabase);
+        ApplyVersionedMigrations(c, applied, _stopOnMigrationError && !freshDatabase);
+
+        // Le viste per ultime: nominano tabelle che nascono dalle migrazioni.
+        EnsureViews(c);
+
+        LogTableCount(c);
+    }
+
+    /// <summary>
+    /// CREATE TABLE IF NOT EXISTS di tutti i moduli, più le ALTER guidate che ciascuno si porta
+    /// dietro. Solo DDL: nessun seed di dati, quindi è sicura ad ogni avvio anche in produzione
+    /// (non fa riapparire righe cancellate dall'utente). Chiamata da entrambi i percorsi di
+    /// InitDatabase, così un modulo nuovo non può più esistere in sviluppo e mancare in produzione.
+    /// </summary>
+    private void EnsureModuleTables(MySqlConnection c)
+    {
+        // Modulo Preventivi/Catalogo (ApplyMigrations crea anche le tabelle costing/materiali)
+        QuoteDbService quoteDb = new(this);
+        quoteDb.InitTables(c);
+        quoteDb.ApplyMigrations(c);
 
         // Modulo Gamma Robot (distinta schede/componenti per robot+quadro)
         new GammaRobotDbService(this).InitTables(c);
@@ -1027,1634 +1468,447 @@ try
         // Modulo Check list / Attività (attività per commessa reale o gruppo generico)
         new CheckListDbService(this).InitTables(c);
 
+        // Modulo Segnalazioni (bug e migliorie sul gestionale, con allegati)
+        new BugReportsDbService(this).InitTables(c);
+
         // Moduli Anagrafica attività (catalogo globale) + Milestone (pianificazione per-commessa)
-        new MilestonesDbService(this).InitTables(c);
+        MilestonesDbService.InitTables(c, _logger);
 
         // Modulo Gestione Risorse (allocazioni op/flex/ferie su dipendenti)
         new ResourcesDbService(this).InitTables(c);
 
-        // Modulo SAL / Fatturazione a stati d'avanzamento (tabelle + seed anagrafiche, idempotenti)
-        SalDbService salDb = new SalDbService(this);
-        salDb.InitTables(c);
-        salDb.SeedConditions(c);
-        salDb.SeedSapCausali(c);
-        salDb.SeedPaymentStates(c);
+        // Modulo SAL / Fatturazione a stati d'avanzamento
+        SalDbService.InitTables(c, _logger);
 
         // Modulo Lavorazioni meccaniche (work requests, griglia per commessa + pannello globale)
         EnsureWorkRequestsTable(c);
+    }
 
-        // Migrazioni versionati (dopo CREATE TABLE idempotente in dev)
-        int devVersion = GetSchemaVersion(c);
-        ApplyVersionedMigrations(c, devVersion);
+    // ══════════════════════════════════════════════════════════════
+    // IL LOCK DELLE MIGRAZIONI (blocco A2)
+    // ══════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// Quanto si aspetta il turno prima di rinunciare.
+    /// <para><b>Perché trenta secondi e non sessanta</b> (che è il numero scritto nel piano):
+    /// aspettare non serve quasi mai a niente. Se il lucchetto è in mano a qualcun altro, quel
+    /// qualcuno sta migrando e ci metterà il tempo che ci mette — molto più di un minuto se la
+    /// migrazione è grossa. Rinunciare presto è meglio: il servizio Windows si riavvia da solo
+    /// dopo 5 secondi e ritenta, mentre ogni secondo passato in coda è un secondo tolto alla
+    /// pazienza dello script di aggiornamento, che oltre la sua soglia torna alla versione
+    /// precedente.</para>
+    /// <para>Si cambia da <c>appsettings.json</c> (<c>Migrations:LockTimeoutSeconds</c>) — che sul
+    /// server è protetto dagli aggiornamenti.</para>
+    /// </summary>
+    private int LockTimeoutSeconds => Math.Max(1, _lockTimeoutSeconds);
+
+    /// <summary>
+    /// Il nome del lock <b>contiene il database</b>: <c>GET_LOCK</c> è un lucchetto di tutto il
+    /// SERVER MySQL, non dello schema. Con un nome fisso, il database di prova di un test e
+    /// quello di lavoro si bloccherebbero a vicenda sulla stessa macchina — e i test, che ne
+    /// creano uno per volta e girano in parallelo, si metterebbero in coda tutti dietro allo
+    /// stesso lucchetto.
+    /// </summary>
+    public static string NomeLockMigrazioni(string database)
+    {
+        string nome = $"atec_pm_migrate:{database}";
+        // MySQL rifiuta i nomi oltre 64 caratteri (dalla 5.7 è un errore, non un troncamento).
+        return nome.Length <= 64 ? nome : nome[..64];
+    }
+
+    private string NomeDelLock() => NomeLockMigrazioni(new MySqlConnectionStringBuilder(_cs).Database);
+
+    /// <summary>
+    /// Prende il lock esclusivo sullo schema. Se non ci riesce <b>l'avvio si interrompe</b>: chi
+    /// ce l'ha in mano sta migrando lo stesso database, e partire in due vorrebbe dire far girare
+    /// la stessa migrazione due volte su uno schema che non sa tornare indietro.
+    /// </summary>
+    private void PrendiIlLockDelleMigrazioni(MySqlConnection c)
+    {
+        string nome = NomeDelLock();
+
+        // GET_LOCK: 1 = preso, 0 = scaduto il tempo (ce l'ha un altro), NULL = errore.
+        //
+        // 🪤 commandTimeout OBBLIGATORIO. Il driver ha un suo tempo massimo per comando (30
+        // secondi, default di MySqlConnector): con un'attesa più lunga sarebbe LUI a interrompere
+        // la query, e al posto del messaggio qui sotto («un altro processo sta migrando») uscirebbe
+        // un generico timeout di connessione, che manda a cercare il guasto nella rete.
+        int? esito = c.ExecuteScalar<int?>("SELECT GET_LOCK(@Nome, @Secondi)",
+            new { Nome = nome, Secondi = LockTimeoutSeconds },
+            commandTimeout: LockTimeoutSeconds + 15);
+
+        if (esito == 1)
+        {
+            _logger.LogInformation("[Migrations] Lock '{Nome}' acquisito.", nome);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Un altro processo sta già aggiornando lo schema di questo database (lock '{nome}' " +
+            $"non ottenuto entro {LockTimeoutSeconds}s" +
+            (esito == null ? ", il server MySQL ha risposto NULL" : "") + "). " +
+            "L'avvio è interrotto apposta: due processi che migrano insieme farebbero girare la stessa " +
+            "migrazione due volte, e il DDL di MySQL non torna indietro. Verificare che non ci sia una " +
+            "seconda istanza del servizio AtecPmServer viva, poi riavviare.");
+    }
+
+    /// <summary>
+    /// Rilascia il lock. <b>Serve davvero</b>: con il pooling acceso (nessuna stringa di
+    /// connessione lo disattiva) la <c>Dispose</c> non chiude la sessione MySQL, la restituisce
+    /// al pool — quindi non si può contare sulla «fine della sessione» per liberare il lucchetto.
+    /// <para>Non solleva mai: se il rilascio fallisce, l'avvio è comunque andato a buon fine e
+    /// far fallire il server a quel punto sarebbe peggio del problema. Il lock resterebbe preso
+    /// finché il pool non ricicla quella sessione (il reset della connessione libera i lock
+    /// nominali) o finché non scade per inattività — nel frattempo un ripristino da backup si
+    /// fermerebbe dicendolo, che è il comportamento voluto.</para>
+    /// </summary>
+    private void RilasciaIlLockDelleMigrazioni(MySqlConnection c)
+    {
+        try
+        {
+            int? esito = c.ExecuteScalar<int?>("SELECT RELEASE_LOCK(@Nome)", new { Nome = NomeDelLock() });
+
+            // 1 = rilasciato. 0 = ce l'ha un'altra sessione (non dovrebbe mai capitare).
+            // NULL = non esisteva: normale se l'acquisizione era fallita, ed è il motivo per cui
+            // questo metodo si può chiamare sempre, anche dal finally di un avvio andato male.
+            if (esito == 0)
+                _logger.LogWarning("[Migrations] Il lock risulta in mano a un'altra sessione: non l'ho rilasciato io.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[Migrations] Rilascio del lock non riuscito: {Messaggio}", ex.Message);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // LE VISTE (blocco A2)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Riallinea le viste alla loro definizione di oggi. Gira a <b>ogni avvio, in tutti gli
+    /// ambienti</b>, e <b>dopo</b> le migrazioni.
+    ///
+    /// <para><b>Perché a ogni avvio.</b> Una vista non ha stato da conservare: <c>CREATE OR
+    /// REPLACE</c> la riscrive e basta. Finché è stata una migrazione a crearla, la definizione
+    /// in produzione era quella del giorno in cui quella migrazione era passata — ed è così che
+    /// per mesi il consuntivo del Bilancio ha girato su una vista con una JOIN INNER che buttava
+    /// via le ore delle fasi locali, mentre in sviluppo ne girava un'altra (v69). Adesso la
+    /// definizione buona arriva ad ogni riavvio, dovunque.</para>
+    ///
+    /// <para><b>Perché dopo le migrazioni.</b> La vista nomina tabelle e colonne che nascono
+    /// dalle migrazioni (<c>timesheet_extra_work</c> è della v80): su un database indietro,
+    /// crearla prima fallirebbe con «Table doesn't exist».</para>
+    /// </summary>
+    private void EnsureViews(MySqlConnection c)
+    {
+        try
+        {
+            c.Execute(TimesheetSectionViewSql);
+            _logger.LogInformation("[InitDatabase] Viste riallineate (v_timesheet_with_section).");
+        }
+        catch (Exception ex)
+        {
+            // Non è un dettaglio estetico: da questa vista escono i costi consuntivi del Bilancio.
+            // Una vista vecchia o assente non dà errore a nessuno — dà numeri sbagliati, che è
+            // peggio. Quindi l'avvio si ferma, salvo la manopola d'emergenza.
+            _logger.LogError(ex, "[InitDatabase] Vista v_timesheet_with_section NON allineata: {Messaggio}", ex.Message);
+
+            if (_stopOnMigrationError)
+                throw new InvalidOperationException(
+                    $"Impossibile allineare la vista v_timesheet_with_section: {ex.Message}. " +
+                    "L'avvio è interrotto perché da quella vista escono i costi consuntivi del Bilancio: " +
+                    "con una definizione vecchia i numeri sarebbero sbagliati senza nessun errore. " +
+                    "In emergenza, per ripartire subito, impostare Migrations:StopOnError=false in appsettings.json.", ex);
+        }
+    }
+
+    private void LogTableCount(MySqlConnection c)
+    {
         int tableCount = c.ExecuteScalar<int>(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()");
         _logger.LogInformation("[InitDatabase] Schema verificato: {TableCount} tabelle presenti", tableCount);
+    }
+
+    private static bool TableExists(MySqlConnection c, string tableName)
+    {
+        return c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = @Table", new { Table = tableName }) > 0;
     }
 
     // ══════════════════════════════════════════════════════════════
     // SCHEMA VERSIONING
     // ══════════════════════════════════════════════════════════════
 
-    private const int LatestSchemaVersion = 51;
+    // Qui stava `LatestSchemaVersion`, la costante da alzare a mano ad ogni migrazione nuova.
+    // Non esiste più: le migrazioni sono classi in Migrations/, il MigrationRunner le scopre
+    // dall'assembly e la versione più alta la ricava da loro. È la trappola costata la v66 in
+    // produzione (alzata in sviluppo, dimenticata al deploy), e adesso non c'è più niente da
+    // ricordarsi: aggiungere una migrazione vuol dire creare un file.
 
     /// <summary>
-    /// Tabella del modulo Lavorazioni meccaniche (project_work_requests) — idempotente.
-    /// Chiamata sia dal percorso dev (InitDatabase) sia dalla migrazione v20 (produzione).
-    /// Le offerte RDO sono denormalizzate in JSON nella colonna `rfqs` (max 4 per riga);
-    /// i timestamp delivered_at/treatment_confirmed_at/created_at sono Unix millis (BIGINT).
-    /// `row_version` è il concurrency token (pattern MoM/Check list): la PUT lo confronta
-    /// e ogni scrittura lo incrementa.
+    /// Ultima versione esistente quando è stata cambiata la regola delle migrazioni (14/08/2026:
+    /// da <c>MAX(version)</c> all'insieme delle versioni registrate). <see cref="BackfillLegacyVersions"/>
+    /// sana i buchi solo fino a qui: sotto questa soglia un buco è l'eredità ambigua della vecchia
+    /// regola e va timbrato; sopra, è una migrazione fallita davvero e va ritentata.
+    /// <b>Non va più alzata</b> — alzarla rimetterebbe in circolo il difetto che A0 ha chiuso.
     /// </summary>
-    private static void EnsureWorkRequestsTable(MySqlConnection c)
-    {
-        c.Execute(@"CREATE TABLE IF NOT EXISTS project_work_requests (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id INT NOT NULL,
-            request_date DATE NULL,
-            description TEXT NULL,
-            type VARCHAR(20) NOT NULL DEFAULT '',
-            priority TINYINT NOT NULL DEFAULT 2,
-            availability_date DATE NULL,
-            notes TEXT NULL,
-            is_ultra_critical TINYINT(1) NOT NULL DEFAULT 0,
-            is_delivered TINYINT(1) NOT NULL DEFAULT 0,
-            delivered_at BIGINT NULL,
-            is_staging TINYINT(1) NOT NULL DEFAULT 0,
-            rfqs TEXT NULL,
-            po_supplier VARCHAR(200) NOT NULL DEFAULT '',
-            po_number VARCHAR(100) NOT NULL DEFAULT '',
-            po_date DATE NULL,
-            has_treatment TINYINT(1) NOT NULL DEFAULT 0,
-            treatment_date DATE NULL,
-            treatment_notes TEXT NULL,
-            is_treatment_confirmed TINYINT(1) NOT NULL DEFAULT 0,
-            treatment_confirmed_at BIGINT NULL,
-            row_version INT NOT NULL DEFAULT 0,
-            created_at BIGINT NOT NULL DEFAULT 0,
-            ddp_officina_item_id INT NULL,
-            CONSTRAINT fk_pwr_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            CONSTRAINT fk_pwr_ddp_officina FOREIGN KEY (ddp_officina_item_id)
-                REFERENCES ddp_officina_items(id) ON DELETE SET NULL,
-            UNIQUE KEY uq_pwr_ddp_officina (ddp_officina_item_id),
-            KEY idx_pwr_project (project_id),
-            KEY idx_pwr_staging (is_staging),
-            KEY idx_pwr_delivered (is_delivered)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    private const int LegacyCutoffVersion = 87;
 
-        // Installazioni dove la tabella è nata senza row_version (v20 già applicata): ALTER idempotente.
-        int hasRowVersion = c.ExecuteScalar<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'project_work_requests' AND COLUMN_NAME = 'row_version'");
-        if (hasRowVersion == 0)
-            c.Execute("ALTER TABLE project_work_requests ADD COLUMN row_version INT NOT NULL DEFAULT 0 AFTER treatment_confirmed_at");
-    }
-
-    private static void EnsureSchemaMigrationsTable(MySqlConnection c)
+    /// <summary>
+    /// Il registro delle migrazioni.
+    /// <para><b>`success`, `error_text`, `duration_ms` (blocco A2, 15/08/2026)</b>: una migrazione
+    /// che fallisce lascia la sua riga con <c>success = 0</c> e il messaggio dell'errore. Prima
+    /// l'unica traccia era una riga in un log che si ruota dopo 30 giorni: chi apriva il registro
+    /// il giorno dopo vedeva solo un buco, senza sapere se quella versione fosse mai partita.
+    /// Adesso il perché resta scritto accanto alla versione, e la durata dice quali migrazioni
+    /// stanno diventando lente sul database vero.</para>
+    /// <para>⚠️ <c>success = 0</c> vuol dire <b>non applicata</b>: chiunque legga questa tabella
+    /// per sapere cosa è già stato fatto deve filtrare (<see cref="GetAppliedVersions"/>).</para>
+    /// </summary>
+    /// <summary>
+    /// Crea (e completa, se nata vecchia) la tabella <c>schema_migrations</c>. È <c>public</c>
+    /// perché i test del <see cref="Migrations.MigrationRunner"/> hanno bisogno di questa
+    /// tabella e <b>solo</b> di questa: costruire le altre 119 per provare il runner costava
+    /// 5 secondi a test.
+    /// </summary>
+    public static void EnsureSchemaMigrationsTable(MySqlConnection c)
     {
         c.Execute(@"CREATE TABLE IF NOT EXISTS schema_migrations (
             version INT NOT NULL PRIMARY KEY,
             description VARCHAR(200) NOT NULL DEFAULT '',
-            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            success TINYINT(1) NOT NULL DEFAULT 1,
+            error_text TEXT NULL,
+            duration_ms INT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // CREATE TABLE IF NOT EXISTS non tocca una tabella che esiste già: su un database nato con
+        // una versione più vecchia dell'applicazione le colonne potrebbero mancare, e allora OGNI
+        // registrazione fallirebbe («Unknown column») — cioè nessuna migrazione risulterebbe mai
+        // applicata. Costa cinque query all'avvio e toglie di mezzo un modo intero di rompersi.
+        //
+        // Queste colonne NON possono essere aggiunte da una migrazione: sarebbe un cerchio —
+        // la migrazione che aggiunge la colonna dovrebbe registrarsi in una colonna che ancora
+        // non c'è. Vanno qui, prima di tutto.
+        //
+        // `success` nasce a 1: le righe scritte prima del 15/08/2026 sono migrazioni riuscite
+        // (allora una fallita non lasciava riga per niente), e devono restare tali.
+        AddColumnIfMissing(c, "schema_migrations", "description", "VARCHAR(200) NOT NULL DEFAULT ''");
+        AddColumnIfMissing(c, "schema_migrations", "applied_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        AddColumnIfMissing(c, "schema_migrations", "success", "TINYINT(1) NOT NULL DEFAULT 1");
+        AddColumnIfMissing(c, "schema_migrations", "error_text", "TEXT NULL");
+        AddColumnIfMissing(c, "schema_migrations", "duration_ms", "INT NULL");
     }
 
     private static int GetSchemaVersion(MySqlConnection c)
     {
-        return c.ExecuteScalar<int>("SELECT COALESCE(MAX(version), 0) FROM schema_migrations");
+        return c.ExecuteScalar<int>("SELECT COALESCE(MAX(version), 0) FROM schema_migrations WHERE success = 1");
     }
 
-    private void ApplyVersionedMigrations(MySqlConnection c, int currentVersion)
+    /// <summary>
+    /// Le versioni <b>applicate davvero</b>. È l'unica fonte di verità su cosa è già stato fatto:
+    /// <see cref="GetSchemaVersion"/> resta solo per i messaggi di log.
+    /// <para><c>WHERE success = 1</c>: una migrazione fallita lascia la sua riga (con l'errore
+    /// dentro), ma <b>non</b> è applicata. Senza questo filtro il fallimento verrebbe letto come
+    /// una riuscita e la migrazione non sarebbe mai più ritentata — cioè esattamente il difetto
+    /// che A0 ha chiuso, rientrato dalla finestra.</para>
+    /// </summary>
+    private static HashSet<int> GetAppliedVersions(MySqlConnection c) =>
+        c.Query<int>("SELECT version FROM schema_migrations WHERE success = 1").ToHashSet();
+
+    /// <summary>
+    /// Le versioni che hanno una riga, riuscite o no. Serve al backfill per <b>non</b> timbrare
+    /// come «eredità storica» una versione che ha invece un fallimento registrato.
+    /// </summary>
+    private static HashSet<int> GetRegisteredVersions(MySqlConnection c) =>
+        c.Query<int>("SELECT version FROM schema_migrations").ToHashSet();
+
+    /// <summary>
+    /// Sana <b>una volta sola</b> i buchi lasciati dalla vecchia regola <c>MAX(version)</c>.
+    /// <para>
+    /// Su un database già in esercizio, una versione mancante sotto il massimo è <b>ambigua</b>: può
+    /// essere una migrazione fallita davvero, oppure una che ha lavorato senza registrarsi. Il
+    /// codice non ha modo di distinguerle, ed è per questo che qui non si riesegue nulla: con la
+    /// regola vecchia quelle versioni erano comunque considerate superate, e rilanciarle adesso
+    /// sarebbe la cosa pericolosa. La v75, per dire, fa <c>DELETE FROM ddp_status_transitions WHERE
+    /// ddp_type='OFFICINA'</c> e riscrive la matrice: rieseguirla oggi cancellerebbe le modifiche
+    /// fatte a mano da «Conf. DDP» dopo l'08/08.
+    /// </para>
+    /// <para>
+    /// Quindi: le versioni mancanti <b>sotto il massimo</b> vengono marcate come applicate, con una
+    /// descrizione che dice a chiare lettere che sono state assunte, non eseguite. Da lì in avanti
+    /// vale la regola nuova, e un fallimento non può più sparire. Il log elenca le versioni sanate:
+    /// è l'unico posto dove si può leggere che su quel database qualcosa, in passato, potrebbe non
+    /// essere passato — vanno verificate a mano.
+    /// </para>
+    /// </summary>
+    /// <param name="databasePopolato">
+    /// true quando il database contiene già dati veri (non è il bootstrap di uno vuoto). Serve a
+    /// riconoscere il caso del <b>registro azzerato</b>: <c>FullBackupService.RipristinaDatabase</c>
+    /// fa TRUNCATE di tutte le tabelle, <c>schema_migrations</c> compresa, e ingoia i fallimenti di
+    /// riga. Un ripristino andato storto a metà lascia quindi dati veri e registro vuoto: senza
+    /// questo controllo partirebbero tutte e 87 le migrazioni su dati di produzione — la v22
+    /// riporterebbe a 22% le righe SAL messe a IVA vuota, la v26 farebbe risorgere lavorazioni
+    /// cancellate, la v55 duplicherebbe la cronistoria. Meglio non partire e farsi chiamare.
+    /// </param>
+    /// <returns>Le versioni sanate (vuoto: nessun buco, il caso normale).</returns>
+    private List<int> BackfillLegacyVersions(MySqlConnection c, HashSet<int> applied, bool databasePopolato)
     {
-        if (currentVersion >= LatestSchemaVersion)
+        List<int> sanate = new();
+
+        // Tutte le righe, riuscite o fallite. Il registro è «perso» solo se non c'è NESSUNA riga:
+        // un database con soli fallimenti registrati ha un registro sano che racconta un guasto,
+        // e fermarsi dicendogli «la tabella è vuota» manderebbe a cercare nel posto sbagliato.
+        HashSet<int> conRiga = GetRegisteredVersions(c);
+
+        if (conRiga.Count == 0)
         {
-            _logger.LogInformation("[Migrations] Schema aggiornato (v{Version})", currentVersion);
+            // Database mai migrato: le migrazioni devono girare davvero.
+            if (!databasePopolato) return sanate;
+
+            throw new InvalidOperationException(
+                "schema_migrations è vuota ma il database contiene già dati: registro delle migrazioni perso " +
+                "(tipicamente un ripristino da backup interrotto a metà). L'avvio è interrotto perché rieseguire " +
+                "le migrazioni su dati veri li rovinerebbe. Ripristinare di nuovo il backup completo, oppure — se " +
+                "lo schema è notoriamente aggiornato — ripopolare schema_migrations con le versioni 1..N prima di riavviare.");
+        }
+
+        // Un registro fatto di sole migrazioni fallite non ha niente da sanare: le versioni sono
+        // già tutte registrate e verranno ritentate dal runner.
+        if (applied.Count == 0) return sanate;
+
+        // Il backfill vale SOLO per le versioni storiche: una migrazione FUTURA che fallisce (con
+        // StopOnError=false) e viene scavalcata da una successiva non deve essere timbrata come
+        // applicata al riavvio dopo — sarebbe esattamente il difetto che A0 chiude, tornato dalla
+        // finestra. Da qui in avanti un buco resta un buco, e la migrazione viene ritentata.
+        //
+        // E non è un buco la versione che ha una riga con success = 0: quello è un fallimento
+        // REGISTRATO, di cui si conosce data ed errore. Timbrarlo come «eredità della vecchia
+        // regola» cancellerebbe un guasto noto e certificherebbe applicata una migrazione che si
+        // sa non esserlo.
+        int max = Math.Min(applied.Max(), LegacyCutoffVersion);
+        for (int v = 1; v < max; v++)
+            if (!applied.Contains(v) && !conRiga.Contains(v)) sanate.Add(v);
+
+        if (sanate.Count == 0) return sanate;
+
+        foreach (int v in sanate)
+        {
+            c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (@V, @D)",
+                new { V = v, D = "backfill 14/08/2026: versione assunta applicata dalla vecchia regola MAX(version), non eseguita ora" });
+            applied.Add(v);
+        }
+
+        _logger.LogWarning(
+            "[Migrations] Sanate {Count} versioni mancanti sotto v{Max}: {Elenco}. " +
+            "Erano considerate superate dalla vecchia regola MAX(version) e NON sono state rieseguite " +
+            "(rilanciarle potrebbe sovrascrivere dati). Verificare a mano che il loro effetto sia presente.",
+            sanate.Count, max, string.Join(", ", sanate.Select(v => "v" + v)));
+
+        return sanate;
+    }
+
+    /// <summary>
+    /// Applica le migrazioni che <b>non risultano registrate</b> in <c>schema_migrations</c>.
+    /// <para>
+    /// <b>Perché un insieme e non più <c>MAX(version)</c>.</b> Fino al 14/08/2026 il cancello di
+    /// ogni blocco era <c>currentVersion &lt; N</c> con <c>currentVersion = MAX(version)</c>, e ogni
+    /// blocco ingoiava le proprie eccezioni con un warning. Bastava che la vN fallisse e la vN+1
+    /// riuscisse — cosa che accade se si corregge una migrazione mentre se ne aggiunge un'altra —
+    /// perché <c>MAX</c> salisse oltre la vN e quella <b>non venisse più ritentata</b>: schema a
+    /// metà, e come unica traccia un warning in un log che si ruota dopo 30 giorni.
+    /// Non è teorico: la v75 (08/08 14:48, «Illegal mix of collations») e la v80 (08/08 23:11,
+    /// «Unknown column») sono fallite davvero. Si sono salvate solo perché nessuna migrazione
+    /// successiva è passata nei minuti in cui erano rotte.
+    /// </para>
+    /// <para>
+    /// Ora ogni versione è pendente finché <b>la sua riga</b> non è in <c>schema_migrations</c>, e
+    /// un fallimento ferma l'avvio invece di lasciar proseguire il server con lo schema incompleto.
+    /// </para>
+    /// <para>
+    /// <b>Le migrazioni non stanno più qui dentro</b> (blocco A1, 15/08/2026): sono una classe per
+    /// versione in <c>Migrations/</c>, che il <see cref="MigrationRunner"/> scopre dall'assembly.
+    /// Questo metodo si limita a contare cosa manca, a lanciarlo e a controllare che dopo non
+    /// resti nessun buco.
+    /// </para>
+    /// </summary>
+    /// <param name="applied">Versioni già registrate, comprese quelle sanate da
+    /// <see cref="BackfillLegacyVersions"/>.</param>
+    /// <param name="stopOnError">false solo sul bootstrap di un database vuoto, dove le migrazioni
+    /// girano su uno schema che le contiene già e un loro inciampo non significa nulla.</param>
+    private void ApplyVersionedMigrations(MySqlConnection c, HashSet<int> applied, bool stopOnError)
+    {
+        // Il runner scopre le migrazioni dall'assembly: aggiungerne una vuol dire creare un
+        // file in Migrations/, non alzare una costante qui.
+        MigrationRunner runner = new(_logger);
+
+        // Zero migrazioni trovate non è mai una situazione normale: vorrebbe dire che la
+        // riflessione non vede le classi (pubblicazione con trimming, assembly sbagliato). Senza
+        // questo controllo il metodo scriverebbe «schema aggiornato» e proseguirebbe su un
+        // database dove NON è stato applicato niente — il silenzio più pericoloso possibile.
+        if (runner.Migrazioni.Count == 0)
+            throw new InvalidOperationException(
+                "Nessuna migrazione trovata nell'assembly del server: le classi di Migrations/ non " +
+                "sono raggiungibili per riflessione. L'avvio è interrotto perché lo schema " +
+                "risulterebbe aggiornato senza che sia stato applicato niente.");
+
+        int obiettivo = runner.VersioneMassima;
+
+        int pendenti = 0;
+        for (int v = 1; v <= obiettivo; v++)
+            if (!applied.Contains(v)) pendenti++;
+
+        if (pendenti == 0)
+        {
+            _logger.LogInformation("[Migrations] Schema aggiornato (v{Version}, tutte le {Count} versioni registrate)",
+                obiettivo, obiettivo);
             return;
         }
 
-        // v1: aggiunge project_material_items.is_active (allineamento quote)
-        if (currentVersion < 1)
+        _logger.LogInformation("[Migrations] {Pendenti} migrazioni da applicare (schema a v{Version}, obiettivo v{Target})",
+            pendenti, applied.Count == 0 ? 0 : applied.Max(), obiettivo);
+
+        EsitoMigrazioni esito = runner.Applica(c, applied, stopOnError);
+
+        // Controllo di chiusura: una migrazione che ha lavorato ma non risulta registrata
+        // tornerebbe a girare ad OGNI avvio, per sempre, senza che nessuno se ne accorga (con la
+        // vecchia regola MAX lo copriva la versione successiva). Qui si vede subito.
+        //
+        // Le facoltative fallite (le pulizie) sono l'unica assenza ammessa: hanno già il loro
+        // warning e la riga con success = 0, e per costruzione non devono fermare l'avvio.
+        HashSet<int> dopo = GetAppliedVersions(c);
+        List<int> mancanti = new();
+        for (int v = 1; v <= obiettivo; v++)
+            if (!dopo.Contains(v) && !esito.FacoltativeFallite.Contains(v)) mancanti.Add(v);
+
+        if (esito.FacoltativeFallite.Count > 0)
+            _logger.LogWarning(
+                "[Migrations] {Count} pulizie facoltative non riuscite ({Elenco}): il gestionale funziona lo stesso, " +
+                "si ritentano al prossimo riavvio. Il motivo è in schema_migrations.error_text.",
+                esito.FacoltativeFallite.Count,
+                string.Join(", ", esito.FacoltativeFallite.Select(v => "v" + v)));
+
+        if (mancanti.Count > 0)
         {
-            try
-            {
-                bool hasColumn = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'project_material_items'
-                      AND column_name = 'is_active'") > 0;
+            string elenco = string.Join(", ", mancanti.Select(v => "v" + v));
 
-                if (!hasColumn)
-                {
-                    c.Execute("ALTER TABLE project_material_items ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE");
-                    _logger.LogInformation("[Migration v1] Aggiunta colonna project_material_items.is_active");
-                }
+            // Il log PRIMA del throw: come servizio Windows l'eccezione dell'avvio non arriva a
+            // nessuna console, e senza questa riga il motivo resterebbe invisibile in C:\ATEC_PM\Logs.
+            _logger.LogError("[Migrations] Versioni non registrate dopo l'esecuzione: {Elenco}", elenco);
 
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (1, 'project_material_items.is_active')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v1] Errore (non bloccante): {Message}", ex.Message);
-            }
+            if (stopOnError)
+                throw new InvalidOperationException(
+                    $"Migrazioni non registrate dopo l'esecuzione: {elenco}. Lo schema NON è allineato: " +
+                    "la migrazione corrispondente non risulta applicata. Il motivo del fallimento è scritto " +
+                    "in schema_migrations (colonne success ed error_text): " +
+                    "SELECT version, description, success, error_text, duration_ms FROM schema_migrations WHERE success = 0; " +
+                    "Correggere la migrazione (o registrare la riga a mano se l'effetto è già presente) e riavviare.");
+
+            _logger.LogWarning("[Migrations] Gireranno di nuovo al prossimo avvio (StopOnError=false).");
+            return;
         }
 
-        // v2: rimuove feature keys orfane (nav.preventivi_nuovo, nav.offerte)
-        if (currentVersion < 2)
-        {
-            try
-            {
-                c.Execute("DELETE FROM auth_features WHERE feature_key IN ('nav.preventivi_nuovo', 'nav.offerte')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (2, 'cleanup orphan feature keys')");
-                _logger.LogInformation("[Migration v2] Rimosse feature keys orfane");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v2] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v3: aggiunge feature key nav.project_templates
-        if (currentVersion < 3)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.project_templates', 'Template Commesse', 'navigation', 2, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (3, 'nav.project_templates feature key')");
-                _logger.LogInformation("[Migration v3] Aggiunta feature key nav.project_templates");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v3] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v4: feature key resources.edit (gating scrittura allocazioni risorse: RESP_REPARTO+ )
-        if (currentVersion < 4)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('resources.edit', 'Modifica Allocazioni Risorse', 'action', 1, 'DISABLED')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (4, 'resources.edit feature key')");
-                _logger.LogInformation("[Migration v4] Aggiunta feature key resources.edit");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v4] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v5: bom_items.updated_at — concorrenza ottimistica della distinta DDP (real-time + anti lost-update)
-        if (currentVersion < 5)
-        {
-            try
-            {
-                bool hasColumn = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'bom_items'
-                      AND column_name = 'updated_at'") > 0;
-
-                if (!hasColumn)
-                {
-                    c.Execute("ALTER TABLE bom_items ADD COLUMN updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP");
-                    _logger.LogInformation("[Migration v5] Aggiunta colonna bom_items.updated_at");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (5, 'bom_items.updated_at')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v5] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v6: causali DDP reali — rimuove le 12 chiavi generiche seedate in precedenza (TO_ORDER, ecc.).
-        // Il seed con le 17 causali reali gira ad ogni avvio (INSERT IGNORE) nella creazione tabelle.
-        if (currentVersion < 6)
-        {
-            try
-            {
-                c.Execute(@"DELETE FROM ddp_statuses WHERE status_key IN
-                    ('TO_ORDER','ORDERED','DELIVERED','PARTIAL','TO_BUILD','RFQ',
-                     'TO_CHECK','CANCELLED','ASSIGNED','SHIPPED','TECH_CHECK','TO_MODULA')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (6, 'ddp_statuses causali reali')");
-                _logger.LogInformation("[Migration v6] Rimosse le causali DDP generiche (sostituite dal set reale)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v6] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v7: seed aggregazioni di stato DDP (matrice dall'Excel V53.1). Una sola volta: dopo, le modifiche
-        // dell'utente persistono (NON ri-seedato ad ogni avvio, a differenza di un INSERT IGNORE nella creazione tabelle).
-        if (currentVersion < 7)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO ddp_aggregations (code, name, description, kind, sort_order) VALUES
-                    ('A1','Conteggio per stato','Tutti gli stati conteggiati singolarmente (base di tutte le viste)','ALL',1),
-                    ('A2','Materiale Consegnato','CON+COS+DISP+ASS+MOD','SET',2),
-                    ('A3','Mat. Par. Cons.','Parzialmente consegnato/costruito (PAR)','SET',3),
-                    ('A4','Materiale in Consegna','Righe con Data prev. e stato NON consegnato (finestra/ritardo)','DATED',4),
-                    ('A5','Stati Avanzamento (7 card)','VER · CHEK · DO · RO · IO · DDP Stop(ANN+SOSP+RAM+SOST) · Sped-Mod(SPED+MOD)','SUBGROUPS',5),
-                    ('A6','Feedback Acquisti','VER+CHEK+DO+RO+PAR','SET',6),
-                    ('A7','Feedback Magazzino','CON+COS+DISP+PAR+MOD','SET',7),
-                    ('A8','Esclusione Dati Mancanti','Stati esclusi dall analisi di completezza','SET',8)");
-
-                var seed = new Dictionary<string, string[]>
-                {
-                    ["A1"] = new[] { "VER", "DISP", "RO", "DO", "IO", "PAR", "CON", "COS", "ASS", "CHEK", "SPED", "MOD", "ANN", "RAM", "SOSP", "SOST", "ND" },
-                    ["A2"] = new[] { "CON", "COS", "DISP", "ASS", "MOD" },
-                    ["A3"] = new[] { "PAR" },
-                    ["A4"] = new[] { "VER", "RO", "DO", "IO", "PAR", "CHEK", "SPED", "ANN", "RAM", "SOSP", "SOST", "ND" },
-                    ["A5"] = new[] { "VER", "CHEK", "DO", "RO", "IO", "ANN", "SOSP", "RAM", "SOST", "SPED", "MOD" },
-                    ["A6"] = new[] { "VER", "CHEK", "DO", "RO", "PAR" },
-                    ["A7"] = new[] { "CON", "COS", "DISP", "PAR", "MOD" },
-                    ["A8"] = new[] { "ANN", "SOSP", "RAM", "SOST", "DO", "CHEK", "IO", "RO" }
-                };
-                foreach (KeyValuePair<string, string[]> kv in seed)
-                {
-                    int aggId = c.ExecuteScalar<int>("SELECT id FROM ddp_aggregations WHERE code=@C", new { C = kv.Key });
-                    foreach (string st in kv.Value)
-                        c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A,@S)",
-                            new { A = aggId, S = st });
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (7, 'ddp aggregazioni stato')");
-                _logger.LogInformation("[Migration v7] Seed aggregazioni di stato DDP (A1-A8)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v7] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v8: tabella dedicata DDP Officina (particolari meccanici, vedi commento CREATE TABLE in InitDatabase).
-        if (currentVersion < 8)
-        {
-            try
-            {
-                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_officina_items (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    project_id INT NOT NULL,
-                    part_number VARCHAR(100) DEFAULT '',
-                    description VARCHAR(300) DEFAULT '',
-                    quantity DECIMAL(10,3) DEFAULT 0,
-                    material VARCHAR(200) DEFAULT '',
-                    treatment VARCHAR(200) DEFAULT '',
-                    supplier_name VARCHAR(200) DEFAULT '',
-                    unit_cost DECIMAL(10,2) DEFAULT 0,
-                    item_status VARCHAR(20) DEFAULT 'DO',
-                    requested_by VARCHAR(100) DEFAULT '',
-                    danea_ref VARCHAR(100) DEFAULT '',
-                    date_needed DATE,
-                    destination VARCHAR(200) DEFAULT '',
-                    notes TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-                    INDEX idx_ddpoff_project (project_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (8, 'ddp_officina_items')");
-                _logger.LogInformation("[Migration v8] Creata tabella ddp_officina_items (distinta officina)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v8] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v9: sync Codex non distruttivo. remote_id diventa NULL-able (NULL = codice generato
-        // localmente, non ancora presente sul Codex remoto) e UNIQUE, così CodexSyncService può fare
-        // upsert per remote_id invece di DELETE+reinsert: gli id locali restano stabili tra i sync e
-        // le FK ON DELETE CASCADE di codex_compositions/codex_item_references non svuotano più
-        // composizioni e riferimenti a ogni sincronizzazione.
-        if (currentVersion < 9)
-        {
-            try
-            {
-                // Dedup difensivo per remote_id prima dell'indice UNIQUE (esclusi i codici locali,
-                // che condividono remote_id=0 e NON sono duplicati). La DELETE con self-join è O(n²)
-                // senza indice su remote_id e col timeout default (30s) andava in timeout già a ~18k
-                // righe: si esegue solo se servono davvero dedup, e con timeout esteso.
-                int dupGroups = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM (
-                        SELECT remote_id FROM codex_items
-                        WHERE remote_id <> 0
-                        GROUP BY remote_id HAVING COUNT(*) > 1) d");
-                if (dupGroups > 0)
-                    c.Execute(@"DELETE ci FROM codex_items ci
-                        JOIN codex_items keep ON keep.remote_id = ci.remote_id AND keep.id < ci.id
-                        WHERE ci.remote_id <> 0", commandTimeout: 600);
-
-                c.Execute("ALTER TABLE codex_items MODIFY remote_id INT NULL", commandTimeout: 600);
-                c.Execute("UPDATE codex_items SET remote_id = NULL WHERE remote_id = 0", commandTimeout: 600);
-
-                bool hasIndex = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.statistics
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'codex_items'
-                      AND index_name = 'uq_codex_remote_id'") > 0;
-                if (!hasIndex)
-                    c.Execute("ALTER TABLE codex_items ADD UNIQUE KEY uq_codex_remote_id (remote_id)", commandTimeout: 600);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (9, 'codex_items.remote_id NULL + UNIQUE (sync upsert)')");
-                _logger.LogInformation("[Migration v9] codex_items.remote_id NULL-able + UNIQUE: il sync Codex ora fa upsert");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v9] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v10: allinea codex_compositions allo schema usato da CodexController (figli da catalogo):
-        // child_codex_id NULL-able + colonna child_catalog_id, che mancavano nel CREATE TABLE
-        // (un DB nato da zero rompeva l'Editor Composizione). FK verso catalog_items aggiunta qui
-        // perché in InitDatabase catalog_items viene creata dopo codex_compositions.
-        if (currentVersion < 10)
-        {
-            try
-            {
-                bool childNullable = c.ExecuteScalar<string>(@"
-                    SELECT IS_NULLABLE FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'codex_compositions'
-                      AND column_name = 'child_codex_id'") == "YES";
-                if (!childNullable)
-                    c.Execute("ALTER TABLE codex_compositions MODIFY child_codex_id INT NULL");
-
-                bool hasCatalogCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'codex_compositions'
-                      AND column_name = 'child_catalog_id'") > 0;
-                if (!hasCatalogCol)
-                    c.Execute(@"ALTER TABLE codex_compositions
-                        ADD COLUMN child_catalog_id INT NULL AFTER child_codex_id,
-                        ADD INDEX idx_cc_catalog (child_catalog_id)");
-
-                bool hasFk = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.table_constraints
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'codex_compositions'
-                      AND constraint_name = 'fk_cc_catalog'") > 0;
-                if (!hasFk)
-                {
-                    // Pulizia orfani prima della FK (DB esistenti con colonna aggiunta a mano)
-                    c.Execute(@"DELETE FROM codex_compositions
-                        WHERE child_catalog_id IS NOT NULL
-                          AND child_catalog_id NOT IN (SELECT id FROM catalog_items)");
-                    c.Execute(@"ALTER TABLE codex_compositions
-                        ADD CONSTRAINT fk_cc_catalog FOREIGN KEY (child_catalog_id)
-                        REFERENCES catalog_items(id) ON DELETE CASCADE");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (10, 'codex_compositions.child_catalog_id + child_codex_id NULL')");
-                _logger.LogInformation("[Migration v10] codex_compositions allineata (child_catalog_id, child_codex_id NULL-able)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v10] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v11: feature key nav.digest_email (voce di menu "Digest Email" — solo ADMIN)
-        if (currentVersion < 11)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.digest_email', 'Digest Email', 'navigation', 3, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (11, 'nav.digest_email feature key')");
-                _logger.LogInformation("[Migration v11] Aggiunta feature key nav.digest_email");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v11] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v12: Feedback Acquisti (nota + nascosto per DDP+stato) e Feedback Magazzino (nascosto per riga).
-        // Stati tracciati = aggregazioni A6 (acquisti) / A7 (magazzino), già seedate in ddp_aggregations.
-        if (currentVersion < 12)
-        {
-            try
-            {
-                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_feedback_acquisti (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    project_id INT NOT NULL,
-                    ddp_type VARCHAR(20) NOT NULL,
-                    status_key VARCHAR(20) NOT NULL,
-                    note TEXT,
-                    hidden TINYINT(1) NOT NULL DEFAULT 0,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY uq_ddp_feedback_acquisti (project_id, ddp_type, status_key),
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-                c.Execute(@"CREATE TABLE IF NOT EXISTS ddp_feedback_magazzino_hidden (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    project_id INT NOT NULL,
-                    ddp_type VARCHAR(20) NOT NULL,
-                    item_id INT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE KEY uq_ddp_feedback_magazzino (project_id, ddp_type, item_id),
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (12, 'ddp_feedback_acquisti + ddp_feedback_magazzino_hidden')");
-                _logger.LogInformation("[Migration v12] Create tabelle ddp_feedback_acquisti e ddp_feedback_magazzino_hidden");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v12] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v13: specifica destinazione sulle righe DDP + seed elenco standard destinazioni (demo V1).
-        if (currentVersion < 13)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bom_items' AND COLUMN_NAME = 'destination_spec'") == 0)
-                {
-                    c.Execute("ALTER TABLE bom_items ADD COLUMN destination_spec VARCHAR(200) NOT NULL DEFAULT '' AFTER destination");
-                    _logger.LogInformation("[Migration v13] Aggiunta colonna bom_items.destination_spec");
-                }
-
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ddp_officina_items' AND COLUMN_NAME = 'destination_spec'") == 0)
-                {
-                    c.Execute("ALTER TABLE ddp_officina_items ADD COLUMN destination_spec VARCHAR(200) NOT NULL DEFAULT '' AFTER destination");
-                    _logger.LogInformation("[Migration v13] Aggiunta colonna ddp_officina_items.destination_spec");
-                }
-
-                c.Execute("DELETE FROM ddp_destinations WHERE name IN ('DEMO', 'DUE', 'TRE')");
-
-                for (int i = 0; i < DdpDestinationSeed.Names.Length; i++)
-                {
-                    string name = DdpDestinationSeed.Names[i];
-                    c.Execute(@"
-                        INSERT INTO ddp_destinations (name, sort_order, is_active)
-                        SELECT @Name, 0, TRUE
-                        WHERE NOT EXISTS (SELECT 1 FROM ddp_destinations WHERE name = @Name)",
-                        new { Name = name });
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (13, 'ddp destination_spec + seed destinazioni standard')");
-                _logger.LogInformation("[Migration v13] destination_spec + {Count} destinazioni standard seedate",
-                    DdpDestinationSeed.Names.Length);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v13] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v14: aggregazione A9 «Escluso da totale/conteggi» (membri default ANN/SOSP/RAM/SOST).
-        // Gli stati membri di A9 non contano nei totali € né nei conteggi di scadenza. Configurabile
-        // dall'admin in «Aggregazioni DDP» come le altre. Idempotente (INSERT IGNORE), non sovrascrive
-        // eventuali membri già modificati.
-        if (currentVersion < 14)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO ddp_aggregations (code, name, description, kind, sort_order) VALUES
-                    ('A9','Escluso da totale/conteggi','Stati esclusi dai totali € e dai conteggi (annullato, sospeso, ecc.)','SET',9)");
-
-                int a9Id = c.ExecuteScalar<int>("SELECT id FROM ddp_aggregations WHERE code='A9'");
-                foreach (string st in new[] { "ANN", "SOSP", "RAM", "SOST" })
-                    c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A,@S)",
-                        new { A = a9Id, S = st });
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (14, 'ddp aggregazione A9 (escluso da totale)')");
-                _logger.LogInformation("[Migration v14] Aggregazione A9 (escluso da totale/conteggi) + membri default");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v14] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v15: moduli "Anagrafica attività" (catalogo globale activity_catalog) + "Milestone"
-        // (pianificazione per-commessa project_milestones). Crea le tabelle (idempotente), seeda il
-        // catalogo standard una-tantum e registra la feature key di navigazione della nuova pagina.
-        if (currentVersion < 15)
-        {
-            try
-            {
-                var milestones = new MilestonesDbService(this);
-                milestones.InitTables(c);
-                milestones.SeedCatalog(c);
-
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.anagrafica_attivita', 'Anagrafica Attività', 'navigation', 2, 'HIDDEN')");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (15, 'activity_catalog + project_milestones + nav.anagrafica_attivita')");
-                _logger.LogInformation("[Migration v15] Tabelle activity_catalog + project_milestones, seed catalogo, feature key nav.anagrafica_attivita");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v15] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v16: modulo "SAL / Fatturazione" (sal_conditions + project_sal + sal_rows) + anagrafica condizioni.
-        if (currentVersion < 16)
-        {
-            try
-            {
-                var sal = new SalDbService(this);
-                sal.InitTables(c);
-                sal.SeedConditions(c);
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.sal_condizioni', 'Condizioni Pagamento SAL', 'navigation', 2, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (16, 'sal_conditions + project_sal + sal_rows + nav.sal_condizioni')");
-                _logger.LogInformation("[Migration v16] Tabelle SAL + seed condizioni + feature key nav.sal_condizioni");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v16] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v17: feature key per la pagina PM SAL globale
-        if (currentVersion < 17)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.sal', 'SAL / Fatturazione', 'navigation', 2, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (17, 'nav.sal feature key')");
-                _logger.LogInformation("[Migration v17] feature key nav.sal");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v17] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v18: blocco righe pagate + audit fields + indici
-        if (currentVersion < 18)
-        {
-            try
-            {
-                // Verifica se la colonna paid_by esiste già in sal_rows
-                bool hasPaidBy = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'sal_rows'
-                      AND column_name = 'paid_by'") > 0;
-                if (!hasPaidBy)
-                {
-                    c.Execute("ALTER TABLE sal_rows ADD COLUMN paid_by INT NULL, ADD COLUMN paid_at DATETIME NULL");
-                    _logger.LogInformation("[Migration v18] Aggiunte colonne paid_by e paid_at a sal_rows");
-                }
-
-                // Verifica se l'indice idx_salrow_stato_data esiste
-                bool hasIndex = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.statistics
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'sal_rows'
-                      AND index_name = 'idx_salrow_stato_data'") > 0;
-                if (!hasIndex)
-                {
-                    c.Execute("ALTER TABLE sal_rows ADD INDEX idx_salrow_stato_data (stato, data_fatt)");
-                    _logger.LogInformation("[Migration v18] Aggiunto indice idx_salrow_stato_data a sal_rows");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (18, 'sal_rows paid_by + paid_at + index')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v18] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v19: feature key nav.scadenze
-        if (currentVersion < 19)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.scadenze', 'Scadenze', 'navigation', 2, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (19, 'nav.scadenze feature key')");
-                _logger.LogInformation("[Migration v19] Aggiunta feature key nav.scadenze");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v19] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v20: tabella Lavorazioni meccaniche (project_work_requests) — modulo Gestione Lavorazioni
-        if (currentVersion < 20)
-        {
-            try
-            {
-                EnsureWorkRequestsTable(c);
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (20, 'Tabella project_work_requests (modulo Lavorazioni)')");
-                _logger.LogInformation("[Migration v20] Creata tabella project_work_requests");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v20] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v21: SAL v10 — campi fatturazione/incasso su sal_rows, PO/riferimento offerta su project_sal,
-        // anagrafiche causali Conto SAP e stati pagamento, storico controlli periodici del prospetto.
-        // Le righe legacy con stato='pagata' diventano stato='emessa' + pagamento='Pagata'
-        // (paid_by/paid_at restano come audit dell'incasso).
-        if (currentVersion < 21)
-        {
-            try
-            {
-                // Tabelle nuove (sal_sap_causali, sal_payment_states, sal_prospetto_checks);
-                // no-op sulle tabelle SAL già esistenti (CREATE TABLE IF NOT EXISTS).
-                var sal = new SalDbService(this);
-                sal.InitTables(c);
-
-                // Nuove colonne sal_rows, una per volta con check di esistenza; la catena AFTER
-                // replica l'ordine del CREATE TABLE (tra 'stato' e 'sort_order').
-                (string Column, string Definition)[] salRowColumns = new (string, string)[]
-                {
-                    ("iva_perc",       "INT NULL AFTER stato"),
-                    ("gg_saldo",       "INT NULL AFTER iva_perc"),
-                    ("n_fatt",         "VARCHAR(50) NOT NULL DEFAULT '' AFTER gg_saldo"),
-                    ("conto_sap",      "VARCHAR(200) NOT NULL DEFAULT '' AFTER n_fatt"),
-                    ("pagamento",      "VARCHAR(100) NOT NULL DEFAULT '' AFTER conto_sap"),
-                    ("data_pagamento", "DATE NULL AFTER pagamento"),
-                    ("note",           "VARCHAR(2000) NOT NULL DEFAULT '' AFTER data_pagamento")
-                };
-                foreach ((string Column, string Definition) col in salRowColumns)
-                {
-                    bool hasColumn = c.ExecuteScalar<int>(@"
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_schema = DATABASE()
-                          AND table_name = 'sal_rows'
-                          AND column_name = @Column", new { col.Column }) > 0;
-                    if (!hasColumn)
-                    {
-                        c.Execute($"ALTER TABLE sal_rows ADD COLUMN {col.Column} {col.Definition}");
-                        _logger.LogInformation("[Migration v21] Aggiunta colonna sal_rows.{Column}", col.Column);
-                    }
-                }
-
-                // Indice per warning incasso / prospetto (pagamento + data fattura)
-                bool hasIndex = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.statistics
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'sal_rows'
-                      AND index_name = 'idx_salrow_pag_saldo'") > 0;
-                if (!hasIndex)
-                {
-                    c.Execute("ALTER TABLE sal_rows ADD INDEX idx_salrow_pag_saldo (pagamento, data_fatt)");
-                    _logger.LogInformation("[Migration v21] Aggiunto indice idx_salrow_pag_saldo a sal_rows");
-                }
-
-                // Header esteso project_sal: PO - Ordine cliente + Riferimento Offerta ATEC
-                (string Column, string Definition)[] headerColumns = new (string, string)[]
-                {
-                    ("po",          "VARCHAR(150) NOT NULL DEFAULT '' AFTER valore"),
-                    ("rif_offerta", "VARCHAR(200) NOT NULL DEFAULT '' AFTER po")
-                };
-                foreach ((string Column, string Definition) col in headerColumns)
-                {
-                    bool hasColumn = c.ExecuteScalar<int>(@"
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_schema = DATABASE()
-                          AND table_name = 'project_sal'
-                          AND column_name = @Column", new { col.Column }) > 0;
-                    if (!hasColumn)
-                    {
-                        c.Execute($"ALTER TABLE project_sal ADD COLUMN {col.Column} {col.Definition}");
-                        _logger.LogInformation("[Migration v21] Aggiunta colonna project_sal.{Column}", col.Column);
-                    }
-                }
-
-                // Seed anagrafiche (idempotenti: solo se tabella vuota)
-                sal.SeedSapCausali(c);
-                sal.SeedPaymentStates(c);
-
-                // Migrazione dati: lo stato legacy 'pagata' si sdoppia in fatturazione 'emessa'
-                // + pagamento 'Pagata' (idempotente: al secondo giro non resta nessuna 'pagata').
-                int migratedRows = c.Execute("UPDATE sal_rows SET pagamento='Pagata', stato='emessa' WHERE stato='pagata'");
-                if (migratedRows > 0)
-                    _logger.LogInformation("[Migration v21] {Count} righe sal_rows migrate da stato 'pagata' a emessa + Pagata", migratedRows);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (21, 'SAL v10: campi fatturazione/incasso su sal_rows, po/rif_offerta su project_sal, anagrafiche causali SAP e stati pagamento, controlli prospetto')");
-                _logger.LogInformation("[Migration v21] Schema SAL v10 applicato (colonne, indice, anagrafiche, migrazione stato pagata)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v21] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        if (currentVersion < 22)
-        {
-            try
-            {
-                // Regola di business SAL: le righe senza %IVA (legacy, pre-v10) valgono 22%
-                // come nel prototipo; le righe nuove nascono già a 22 (default in CreateRow).
-                int fixedRows = c.Execute("UPDATE sal_rows SET iva_perc = 22 WHERE iva_perc IS NULL");
-                if (fixedRows > 0)
-                    _logger.LogInformation("[Migration v22] {Count} righe sal_rows legacy portate a IVA 22%", fixedRows);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (22, 'SAL v10: default IVA 22% sulle righe legacy senza %IVA')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v22] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v23: SAL — colori configurabili sugli stati pagamento (sal_payment_states).
-        // color_bg/color_fg VARCHAR(9) NULL (#RRGGBB o #RRGGBBAA): NULL = stato neutro senza tinta.
-        // Priorità colore riga nel foglio: colore del pagamento selezionato > giallo 'emessa' > nessuno.
-        // I colori sono pura estetica: la semantica (lock, incasso, warning, bucket Cash Flow)
-        // resta cablata sulle etichette di sistema 'Pagata'/'Parzialmente Pagata'.
-        if (currentVersion < 23)
-        {
-            try
-            {
-                // Nuove colonne colore, una per volta con check di esistenza (pattern v21)
-                (string Column, string Definition)[] colorColumns = new (string, string)[]
-                {
-                    ("color_bg", "VARCHAR(9) NULL AFTER is_active"),
-                    ("color_fg", "VARCHAR(9) NULL AFTER color_bg")
-                };
-                foreach ((string Column, string Definition) col in colorColumns)
-                {
-                    bool hasColumn = c.ExecuteScalar<int>(@"
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_schema = DATABASE()
-                          AND table_name = 'sal_payment_states'
-                          AND column_name = @Column", new { col.Column }) > 0;
-                    if (!hasColumn)
-                    {
-                        c.Execute($"ALTER TABLE sal_payment_states ADD COLUMN {col.Column} {col.Definition}");
-                        _logger.LogInformation("[Migration v23] Aggiunta colonna sal_payment_states.{Column}", col.Column);
-                    }
-                }
-
-                // Seed colori di default delle voci di sistema SOLO se ancora NULL (idempotente,
-                // non sovrascrive eventuali personalizzazioni): Pagata = verde pastello (parità con
-                // l'attuale riga emerald del foglio v10), Parzialmente Pagata = rosso pastello.
-                int seeded = c.Execute(@"UPDATE sal_payment_states
-                    SET color_bg='#D1FAE5', color_fg='#065F46'
-                    WHERE LOWER(label)='pagata' AND color_bg IS NULL");
-                seeded += c.Execute(@"UPDATE sal_payment_states
-                    SET color_bg='#FEE2E2', color_fg='#991B1B'
-                    WHERE LOWER(label)='parzialmente pagata' AND color_bg IS NULL");
-                if (seeded > 0)
-                    _logger.LogInformation("[Migration v23] Colori di default impostati su {Count} stati pagamento di sistema", seeded);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (23, 'SAL: colori configurabili stati pagamento')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v23] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        if (currentVersion < 24)
-        {
-            try
-            {
-                // Regola di business SAL: GG saldo nullo (legacy) → 0 giorni (stesso giorno fattura).
-                int fixedRows = c.Execute("UPDATE sal_rows SET gg_saldo = 0 WHERE gg_saldo IS NULL");
-                if (fixedRows > 0)
-                    _logger.LogInformation("[Migration v24] {Count} righe sal_rows legacy portate a GG saldo 0", fixedRows);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (24, 'SAL: default GG saldo 0 sulle righe legacy senza valore')");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v24] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v25: stato MIT (Materiale in trattamento, tipico Officina) — presente nella legenda
-        // DDP di ATEC ma assente dal seed storico. INSERT IGNORE: chi lo ha già creato/ritoccato
-        // da Conf. DDP non viene toccato. MIT entra in A1 (conteggio per stato) e A4 (in consegna).
-        if (currentVersion < 25)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO ddp_statuses (status_key, label, color_bg, color_fg, sort_order)
-                    VALUES ('MIT', 'MATERIALE IN TRATTAMENTO', '#7FC1B0', '#000000', 18)");
-
-                foreach (string aggCode in new[] { "A1", "A4" })
-                {
-                    int aggId = c.ExecuteScalar<int>("SELECT COALESCE(MAX(id), 0) FROM ddp_aggregations WHERE code=@C", new { C = aggCode });
-                    if (aggId > 0)
-                        c.Execute("INSERT IGNORE INTO ddp_aggregation_states (aggregation_id, status_key) VALUES (@A, 'MIT')", new { A = aggId });
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (25, 'ddp: stato MIT + membership aggregazioni A1/A4')");
-                _logger.LogInformation("[Migration v25] Stato MIT seedato in ddp_statuses + aggregazioni A1/A4");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v25] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v26: lavorazioni alimentate dalla DDP Officina — colonna di collegamento
-        // ddp_officina_item_id (UNIQUE: una lavorazione per riga) + backfill bozze in
-        // staging per tutte le righe officina esistenti non ancora collegate.
-        if (currentVersion < 26)
-        {
-            try
-            {
-                int hasCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'project_work_requests'
-                      AND COLUMN_NAME = 'ddp_officina_item_id'");
-                if (hasCol == 0)
-                {
-                    c.Execute(@"ALTER TABLE project_work_requests
-                        ADD COLUMN ddp_officina_item_id INT NULL,
-                        ADD UNIQUE KEY uq_pwr_ddp_officina (ddp_officina_item_id),
-                        ADD CONSTRAINT fk_pwr_ddp_officina FOREIGN KEY (ddp_officina_item_id)
-                            REFERENCES ddp_officina_items(id) ON DELETE SET NULL");
-                }
-
-                List<int> orphans = c.Query<int>(@"
-                    SELECT o.id FROM ddp_officina_items o
-                    LEFT JOIN project_work_requests wr ON wr.ddp_officina_item_id = o.id
-                    WHERE wr.id IS NULL").ToList();
-                foreach (int itemId in orphans)
-                    WorkRequestDdpSync.Upsert(c, itemId);
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (26, 'lavorazioni: link ddp_officina_item_id + backfill bozze da DDP Officina')");
-                _logger.LogInformation("[Migration v26] Link lavorazioni-DDP Officina + {Count} bozze generate", orphans.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v26] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v27: quantità sulle composizioni Codex — una riga per componente con colonna
-        // quantity, invece di N righe duplicate (quantità 4 = 4 insert identici).
-        // Collassa i duplicati esistenti (stesso padre + stesso figlio) sommando le
-        // occorrenze sulla riga con id minimo ed eliminando le altre.
-        if (currentVersion < 27)
-        {
-            try
-            {
-                int hasCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'codex_compositions'
-                      AND COLUMN_NAME = 'quantity'");
-                if (hasCol == 0)
-                {
-                    c.Execute("ALTER TABLE codex_compositions ADD COLUMN quantity INT NOT NULL DEFAULT 1");
-                }
-
-                c.Execute(@"
-                    UPDATE codex_compositions cc
-                    JOIN (
-                        SELECT MIN(id) AS keep_id, SUM(quantity) AS qty
-                        FROM codex_compositions
-                        GROUP BY parent_codex_id, child_codex_id, child_catalog_id
-                        HAVING COUNT(*) > 1
-                    ) g ON cc.id = g.keep_id
-                    SET cc.quantity = g.qty");
-
-                // <=> = uguaglianza NULL-safe: uno tra child_codex_id e child_catalog_id è sempre NULL.
-                int deleted = c.Execute(@"
-                    DELETE cc FROM codex_compositions cc
-                    JOIN (
-                        SELECT MIN(id) AS keep_id, parent_codex_id, child_codex_id, child_catalog_id
-                        FROM codex_compositions
-                        GROUP BY parent_codex_id, child_codex_id, child_catalog_id
-                        HAVING COUNT(*) > 1
-                    ) g ON cc.parent_codex_id = g.parent_codex_id
-                       AND cc.child_codex_id <=> g.child_codex_id
-                       AND cc.child_catalog_id <=> g.child_catalog_id
-                       AND cc.id <> g.keep_id");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (27, 'codex_compositions: colonna quantity + collasso righe duplicate')");
-                _logger.LogInformation("[Migration v27] Colonna quantity su codex_compositions, {Deleted} righe duplicate collassate", deleted);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v27] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v28: «comanda il padre» — i componenti importati dalla composizione Codex in DDP
-        // Officina restano collegati alla riga del padre (parent_officina_item_id) con la
-        // quantità unitaria di composizione (composition_qty): al cambio Qtà del padre i
-        // figli seguono con delta = composition_qty × ΔQtà. FK ON DELETE SET NULL: eliminato
-        // il padre, i figli restano come righe libere (scollegati).
-        if (currentVersion < 28)
-        {
-            try
-            {
-                int hasCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'ddp_officina_items'
-                      AND COLUMN_NAME = 'parent_officina_item_id'");
-                if (hasCol == 0)
-                {
-                    c.Execute(@"ALTER TABLE ddp_officina_items
-                        ADD COLUMN parent_officina_item_id INT NULL AFTER notes,
-                        ADD COLUMN composition_qty DECIMAL(10,3) NULL AFTER parent_officina_item_id,
-                        ADD CONSTRAINT fk_ddpoff_parent FOREIGN KEY (parent_officina_item_id)
-                            REFERENCES ddp_officina_items(id) ON DELETE SET NULL");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (28, 'ddp_officina_items: parent_officina_item_id + composition_qty (comanda il padre)')");
-                _logger.LogInformation("[Migration v28] Colonne parent_officina_item_id/composition_qty su ddp_officina_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v28] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v29: aggiunge supplier_id a ddp_officina_items per supportare la scelta del fornitore da anagrafica
-        if (currentVersion < 29)
-        {
-            try
-            {
-                int hasCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'ddp_officina_items'
-                      AND COLUMN_NAME = 'supplier_id'");
-                if (hasCol == 0)
-                {
-                    c.Execute(@"ALTER TABLE ddp_officina_items
-                        ADD COLUMN supplier_id INT NULL AFTER treatment,
-                        ADD CONSTRAINT fk_ddpoff_supplier FOREIGN KEY (supplier_id)
-                            REFERENCES suppliers(id) ON DELETE SET NULL");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (29, 'ddp_officina_items: colonna supplier_id per fornitore da anagrafica')");
-                _logger.LogInformation("[Migration v29] Colonna supplier_id su ddp_officina_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v29] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v30: aggiunge tabella ddp_treatments per i trattamenti gestiti da anagrafica
-        if (currentVersion < 30)
-        {
-            try
-            {
-                c.Execute(@"
-                    CREATE TABLE IF NOT EXISTS ddp_treatments (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        name VARCHAR(200) NOT NULL UNIQUE,
-                        sort_order INT NOT NULL DEFAULT 0,
-                        is_active TINYINT(1) NOT NULL DEFAULT 1,
-                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
-
-                c.Execute(@"
-                    INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active) VALUES
-                    ('ANODIZZATO', 10, 1),
-                    ('BRUNITO', 20, 1),
-                    ('ZINCATO', 30, 1),
-                    ('VERNICIATO', 40, 1),
-                    ('SABBIATO', 50, 1);");
-
-                // Backfill dei trattamenti già digitati a mano sulle righe officina
-                c.Execute(@"INSERT IGNORE INTO ddp_treatments (name, sort_order, is_active)
-                    SELECT DISTINCT TRIM(treatment), 100, 1
-                    FROM ddp_officina_items
-                    WHERE TRIM(COALESCE(treatment, '')) <> ''");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (30, 'ddp_treatments: tabella e seed iniziale trattamenti')");
-                _logger.LogInformation("[Migration v30] Tabella ddp_treatments creata e popolata");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v30] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v31: Lavorazioni = solo particolari a disegno (prefisso Codex 101).
-        // Rimuove le bozze staging nate da righe DDP Officina con altri prefissi
-        // (201/301/401/501/…); le promosse restano (nascoste dalle GET).
-        if (currentVersion < 31)
-        {
-            try
-            {
-                int deleted = c.Execute(@"
-                    DELETE wr FROM project_work_requests wr
-                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
-                    WHERE wr.is_staging = 1
-                      AND REPLACE(REPLACE(COALESCE(o.part_number, ''), '.', ''), ' ', '') NOT LIKE '101%'");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (31, 'lavorazioni: elimina staging non-101 da DDP Officina')");
-                _logger.LogInformation("[Migration v31] Eliminate {Count} bozze lavorazioni non-101", deleted);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v31] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v32: bozze lavorazioni — tipo Interna/Esterna one-shot dallo stato DDP Officina.
-        // DO/RO/IO → External; DC/COS → Internal (+ fornitore ATEC). Solo se type è ancora vuoto.
-        if (currentVersion < 32)
-        {
-            try
-            {
-                int updatedExt = c.Execute(@"
-                    UPDATE project_work_requests wr
-                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
-                    SET wr.type = 'External',
-                        wr.row_version = wr.row_version + 1
-                    WHERE wr.is_staging = 1
-                      AND TRIM(COALESCE(wr.type, '')) = ''
-                      AND UPPER(TRIM(COALESCE(o.item_status, ''))) IN ('DO', 'RO', 'IO')");
-
-                int updatedInt = c.Execute(@"
-                    UPDATE project_work_requests wr
-                    JOIN ddp_officina_items o ON o.id = wr.ddp_officina_item_id
-                    SET wr.type = 'Internal',
-                        wr.po_supplier = 'ATEC',
-                        wr.po_number = '',
-                        wr.row_version = wr.row_version + 1
-                    WHERE wr.is_staging = 1
-                      AND TRIM(COALESCE(wr.type, '')) = ''
-                      AND UPPER(TRIM(COALESCE(o.item_status, ''))) IN ('DC', 'COS')");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (32, 'lavorazioni: tipo Internal/External one-shot da stato DDP')");
-                _logger.LogInformation(
-                    "[Migration v32] Tipo bozze: {Ext} External, {Int} Internal",
-                    updatedExt, updatedInt);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v32] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v33: commessa di sistema INTERNA — contenitore per lavorazioni generiche
-        // (bozze staging non legate a una commessa reale). customer_id/pm_id sono NOT NULL.
-        if (currentVersion < 33)
-        {
-            try
-            {
-                int exists = c.ExecuteScalar<int>(
-                    "SELECT COUNT(*) FROM projects WHERE code = @Code",
-                    new { Code = ATEC.PM.Shared.SystemProjects.InternaCode });
-                if (exists == 0)
-                {
-                    // Cliente di sistema (vat univoco) — riusa se già presente da un run precedente.
-                    const string systemVat = "__SYSTEM_INTERNA__";
-                    int customerId = c.ExecuteScalar<int>(
-                        "SELECT COALESCE(MAX(id), 0) FROM customers WHERE vat_number = @Vat",
-                        new { Vat = systemVat });
-                    if (customerId == 0)
-                    {
-                        customerId = c.ExecuteScalar<int>(@"
-                            INSERT INTO customers (company_name, vat_number, notes, is_active)
-                            VALUES (@Name, @Vat, @Notes, 1);
-                            SELECT LAST_INSERT_ID()", new
-                        {
-                            Name = "ATEC — Sistema",
-                            Vat = systemVat,
-                            Notes = ATEC.PM.Shared.SystemProjects.InternaNotes,
-                        });
-                    }
-
-                    int pmId = c.ExecuteScalar<int>(
-                        "SELECT COALESCE(MIN(id), 0) FROM employees WHERE status = 'ACTIVE'");
-                    if (pmId == 0)
-                        pmId = c.ExecuteScalar<int>("SELECT COALESCE(MIN(id), 0) FROM employees");
-                    if (pmId == 0)
-                        throw new InvalidOperationException(
-                            "Impossibile creare progetto INTERNA: nessun employee in anagrafica.");
-
-                    c.Execute(@"
-                        INSERT INTO projects
-                            (code, title, customer_id, pm_id, description, status, priority, notes)
-                        VALUES
-                            (@Code, @Title, @CustomerId, @PmId, @Description, 'ACTIVE', 'MEDIUM', @Notes)",
-                        new
-                        {
-                            Code = ATEC.PM.Shared.SystemProjects.InternaCode,
-                            Title = ATEC.PM.Shared.SystemProjects.InternaTitle,
-                            CustomerId = customerId,
-                            PmId = pmId,
-                            Description = ATEC.PM.Shared.SystemProjects.InternaTitle,
-                            Notes = ATEC.PM.Shared.SystemProjects.InternaNotes,
-                        });
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (33, 'progetto sistema INTERNA per lavorazioni generiche')");
-                _logger.LogInformation("[Migration v33] Progetto sistema INTERNA assicurato");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v33] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v34: data ordine su DDP Officina (valorizzata in automatico al passaggio a IO).
-        if (currentVersion < 34)
-        {
-            try
-            {
-                int hasCol = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'ddp_officina_items'
-                      AND COLUMN_NAME = 'order_date'");
-                if (hasCol == 0)
-                {
-                    c.Execute(@"ALTER TABLE ddp_officina_items
-                        ADD COLUMN order_date DATE NULL AFTER date_needed");
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (34, 'ddp_officina_items: order_date (data In Ordine)')");
-                _logger.LogInformation("[Migration v34] Colonna order_date su ddp_officina_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v34] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v35: priorità default P2 (più bassa) sulle lavorazioni senza priorità.
-        if (currentVersion < 35)
-        {
-            try
-            {
-                c.Execute(@"UPDATE project_work_requests SET priority = 2 WHERE priority IS NULL");
-                try
-                {
-                    c.Execute(@"ALTER TABLE project_work_requests
-                        MODIFY COLUMN priority TINYINT NOT NULL DEFAULT 2");
-                }
-                catch (Exception alterEx)
-                {
-                    _logger.LogWarning("[Migration v35] ALTER priority default: {Message}", alterEx.Message);
-                }
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (35, 'work_requests: default priority P2')");
-                _logger.LogInformation("[Migration v35] Priorità default P2 su project_work_requests");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v35] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v36: feature key navigazione Gamma Robot (allineata a Preventivi, min_level 2)
-        if (currentVersion < 36)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.gamma_robot', 'Gamma Robot', 'navigation', 2, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (36, 'nav.gamma_robot feature key')");
-                _logger.LogInformation("[Migration v36] feature key nav.gamma_robot");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v36] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v37: inbox Officina (Responsabile) — visibile da RESP_REPARTO in su
-        if (currentVersion < 37)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.officina_inbox', 'Officina — Inbox', 'navigation', 1, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (37, 'nav.officina_inbox feature key')");
-                _logger.LogInformation("[Migration v37] feature key nav.officina_inbox");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v37] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v38: pezzi prodotti su distinta Officina (RESP / inbox)
-        if (currentVersion < 38)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'ddp_officina_items'
-                      AND COLUMN_NAME = 'quantity_produced'") == 0)
-                {
-                    c.Execute(@"ALTER TABLE ddp_officina_items
-                        ADD COLUMN quantity_produced DECIMAL(10,3) NOT NULL DEFAULT 0
-                        AFTER quantity");
-                }
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (38, 'ddp_officina_items: quantity_produced')");
-                _logger.LogInformation("[Migration v38] Colonna quantity_produced su ddp_officina_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v38] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v39: matrice degli avanzamenti di stato DDP v7 (MATRICE_STATI_DDP_V7 + relazione tecnica
-        // DDP-MATRICE-STATI del 20/07/2026). Tre interventi:
-        //  1) consolidamento stati legacy sulle righe: CON/COS/SPED → DISP, MOD → RAM
-        //     (bom_items + ddp_officina_items) + disattivazione dei 4 stati + etichetta DISP v7;
-        //  2) pulizia ddp_aggregation_states dalle chiavi legacy (le righe non le porteranno più);
-        //  3) seed one-shot della matrice transizioni (l'editor in Conf. DDP la modifica liberamente).
-        if (currentVersion < 39)
-        {
-            try
-            {
-                int remapped = 0;
-                remapped += c.Execute("UPDATE bom_items SET item_status='DISP', updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) IN ('CON','COS','SPED')");
-                remapped += c.Execute("UPDATE bom_items SET item_status='RAM',  updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) = 'MOD'");
-                remapped += c.Execute("UPDATE ddp_officina_items SET item_status='DISP', updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) IN ('CON','COS','SPED')");
-                remapped += c.Execute("UPDATE ddp_officina_items SET item_status='RAM',  updated_at=NOW() WHERE UPPER(TRIM(COALESCE(item_status,''))) = 'MOD'");
-
-                c.Execute("UPDATE ddp_statuses SET is_active=FALSE WHERE status_key IN ('CON','COS','SPED','MOD')");
-                c.Execute("UPDATE ddp_statuses SET label='DISPONIBILE / CONSEGNATO' WHERE status_key='DISP' AND label='DISPONIBILE'");
-
-                c.Execute("DELETE FROM ddp_aggregation_states WHERE status_key IN ('CON','COS','SPED','MOD')");
-
-                // Matrice v7: riga INIZIO (nessuno stato) non è memorizzata → finestra completa.
-                // ('ANN','') e ('SOST','') = terminali governati senza uscite.
-                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (from_key, to_key) VALUES
-                    ('VER','CHEK'),('VER','RO'),('VER','DO'),('VER','IO'),('VER','DC'),('VER','DISP'),('VER','SOSP'),('VER','ANN'),('VER','SOST'),
-                    ('CHEK','RO'),('CHEK','DO'),('CHEK','IO'),('CHEK','DC'),('CHEK','DISP'),('CHEK','SOSP'),('CHEK','ANN'),('CHEK','SOST'),
-                    ('RO','CHEK'),('RO','DO'),('RO','IO'),('RO','DC'),('RO','SOSP'),('RO','ANN'),('RO','SOST'),
-                    ('DO','IO'),('DO','SOSP'),('DO','ANN'),('DO','SOST'),
-                    ('IO','DC'),('IO','MIT'),('IO','PAR'),('IO','DISP'),('IO','RAM'),('IO','ASS'),('IO','SOSP'),('IO','ANN'),('IO','SOST'),
-                    ('DC','MIT'),('DC','PAR'),('DC','DISP'),('DC','RAM'),('DC','ASS'),('DC','SOSP'),('DC','ANN'),('DC','SOST'),
-                    ('MIT','PAR'),('MIT','DISP'),('MIT','RAM'),('MIT','ASS'),('MIT','SOSP'),('MIT','ANN'),('MIT','SOST'),
-                    ('PAR','DISP'),('PAR','RAM'),('PAR','ASS'),('PAR','SOSP'),('PAR','ANN'),('PAR','SOST'),
-                    ('DISP','MIT'),('DISP','PAR'),('DISP','RAM'),('DISP','ASS'),('DISP','SOSP'),('DISP','ANN'),('DISP','SOST'),
-                    ('RAM','VER'),('RAM','CHEK'),('RAM','DISP'),('RAM','SOSP'),('RAM','ANN'),('RAM','SOST'),
-                    ('ASS','RAM'),('ASS','SOSP'),('ASS','ANN'),('ASS','SOST'),
-                    ('SOSP','VER'),('SOSP','CHEK'),('SOSP','RO'),('SOSP','DO'),('SOSP','IO'),('SOSP','DC'),('SOSP','MIT'),('SOSP','PAR'),('SOSP','DISP'),('SOSP','ASS'),('SOSP','ANN'),('SOSP','SOST'),
-                    ('ANN',''),
-                    ('SOST','')");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (39, 'matrice stati DDP v7: transizioni + consolidamento CON/COS/SPED/MOD')");
-                _logger.LogInformation("[Migration v39] Matrice stati DDP v7 seedata; {Remapped} righe rimappate (CON/COS/SPED→DISP, MOD→RAM)", remapped);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v39] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v40: matrice transizioni PER TIPO di distinta (regola 20/07/2026: nella DDP commerciale
-        // DC non deve esistere — il materiale commerciale si acquista e basta — mentre in officina sì,
-        // incluso DO→DC per dirottare alla produzione interna un pezzo "da ordinare").
-        // ddp_type ∈ {COMMERCIAL, OFFICINA}; la matrice v39 (senza tipo) viene duplicata nei due tipi.
-        // Nuova riga speciale from_key='INIZIO' = finestra di partenza per le righe senza stato
-        // (COMMERCIAL senza DC); se assente, fallback permissivo come per gli altri stati.
-        if (currentVersion < 40)
-        {
-            try
-            {
-                bool hasType = c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'ddp_status_transitions'
-                      AND COLUMN_NAME = 'ddp_type'") > 0;
-                if (!hasType)
-                {
-                    c.Execute("ALTER TABLE ddp_status_transitions ADD COLUMN ddp_type VARCHAR(20) NOT NULL DEFAULT '' FIRST");
-                    c.Execute("ALTER TABLE ddp_status_transitions DROP PRIMARY KEY, ADD PRIMARY KEY (ddp_type, from_key, to_key)");
-                }
-
-                // Duplica la matrice "senza tipo" (v39 o pre-esistente) nei due tipi, poi la rimuove.
-                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
-                            SELECT 'COMMERCIAL', from_key, to_key FROM ddp_status_transitions WHERE ddp_type = ''");
-                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
-                            SELECT 'OFFICINA', from_key, to_key FROM ddp_status_transitions WHERE ddp_type = ''");
-                c.Execute("DELETE FROM ddp_status_transitions WHERE ddp_type = ''");
-
-                // Divergenze: commerciale senza DC (né in ingresso né in uscita); officina apre DO→DC.
-                c.Execute("DELETE FROM ddp_status_transitions WHERE ddp_type = 'COMMERCIAL' AND (from_key = 'DC' OR to_key = 'DC')");
-                c.Execute("INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key) VALUES ('OFFICINA','DO','DC')");
-
-                // Finestra di partenza (riga INIZIO dell'Excel): tutti gli stati attivi,
-                // meno DC sulla commerciale.
-                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
-                            SELECT 'COMMERCIAL', 'INIZIO', status_key FROM ddp_statuses
-                            WHERE is_active = TRUE AND status_key <> 'DC'");
-                c.Execute(@"INSERT IGNORE INTO ddp_status_transitions (ddp_type, from_key, to_key)
-                            SELECT 'OFFICINA', 'INIZIO', status_key FROM ddp_statuses
-                            WHERE is_active = TRUE");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (40, 'matrice transizioni per tipo DDP + finestra INIZIO (commerciale senza DC)')");
-                _logger.LogInformation("[Migration v40] Matrice transizioni sdoppiata per tipo (COMMERCIAL senza DC, OFFICINA con DO→DC) + righe INIZIO");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v40] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v41: ampliamento Codex — colonna codice_nuovo (nuova codifica, vedi commento CREATE TABLE).
-        // Solo schema: nessuna conversione automatica, la ricodifica dei 201xxx è manuale (decisione 21/07/2026).
-        if (currentVersion < 41)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'codex_items'
-                      AND COLUMN_NAME = 'codice_nuovo'") == 0)
-                {
-                    c.Execute("ALTER TABLE codex_items ADD COLUMN codice_nuovo VARCHAR(15) NULL AFTER codice", commandTimeout: 600);
-                    c.Execute("ALTER TABLE codex_items ADD UNIQUE KEY uq_codex_codice_nuovo (codice_nuovo)", commandTimeout: 600);
-                }
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (41, 'codex_items: colonna codice_nuovo (nuova codifica manuale)')");
-                _logger.LogInformation("[Migration v41] Colonna codice_nuovo su codex_items (nuova codifica)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v41] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v42: mapping Danea ↔ codice ATEC (piano Acquisti, 21/07/2026). Sul catalogo (specchio
-        // degli articoli Danea): atec_code = Extra1 dell'articolo (convenzione: SOLO codici nuovi
-        // della nuova codifica Codex) + codex_item_id = risoluzione verso la riga Codex.
-        if (currentVersion < 42)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'catalog_items'
-                      AND COLUMN_NAME = 'atec_code'") == 0)
-                {
-                    c.Execute("ALTER TABLE catalog_items ADD COLUMN atec_code VARCHAR(15) NULL AFTER easyfatt_id", commandTimeout: 600);
-                    c.Execute("ALTER TABLE catalog_items ADD COLUMN codex_item_id INT NULL AFTER atec_code", commandTimeout: 600);
-                    c.Execute("ALTER TABLE catalog_items ADD INDEX IX_CatalogItems_AtecCode (atec_code)", commandTimeout: 600);
-                }
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (42, 'catalog_items: atec_code + codex_item_id (mapping Danea Extra1)')");
-                _logger.LogInformation("[Migration v42] Colonne atec_code/codex_item_id su catalog_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v42] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v43: snapshot codice ATEC sulle righe distinta commerciale (piano Acquisti Fase 2).
-        if (currentVersion < 43)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'bom_items'
-                      AND COLUMN_NAME = 'atec_code'") == 0)
-                {
-                    c.Execute("ALTER TABLE bom_items ADD COLUMN atec_code VARCHAR(15) NULL AFTER ddp_type", commandTimeout: 600);
-                    c.Execute("ALTER TABLE bom_items ADD INDEX IX_BomItems_AtecCode (atec_code)", commandTimeout: 600);
-                }
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (43, 'bom_items: atec_code (snapshot codice ATEC in distinta)')");
-                _logger.LogInformation("[Migration v43] Colonna atec_code su bom_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v43] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v44: ciclo RDO Acquisti (testata + righe BOM + offerte fornitori).
-        if (currentVersion < 44)
-        {
-            try
-            {
-                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfqs (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    atec_code VARCHAR(15) NOT NULL,
-                    description VARCHAR(300) NOT NULL DEFAULT '',
-                    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
-                    notes TEXT,
-                    created_by INT NULL,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    sent_at DATETIME NULL,
-                    closed_at DATETIME NULL,
-                    updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX IX_PurchaseRfqs_Atec (atec_code),
-                    INDEX IX_PurchaseRfqs_Status (status)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfq_items (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    rfq_id INT NOT NULL,
-                    bom_item_id INT NOT NULL,
-                    project_id INT NOT NULL,
-                    quantity DECIMAL(10,3) NOT NULL DEFAULT 0,
-                    FOREIGN KEY (rfq_id) REFERENCES purchase_rfqs(id) ON DELETE CASCADE,
-                    FOREIGN KEY (bom_item_id) REFERENCES bom_items(id) ON DELETE CASCADE,
-                    UNIQUE KEY uq_rfq_bom (rfq_id, bom_item_id),
-                    INDEX IX_PurchaseRfqItems_Bom (bom_item_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                c.Execute(@"CREATE TABLE IF NOT EXISTS purchase_rfq_offers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    rfq_id INT NOT NULL,
-                    supplier_id INT NOT NULL,
-                    catalog_item_id INT NULL,
-                    unit_price DECIMAL(12,2) NULL,
-                    valid_until DATE NULL,
-                    notes TEXT,
-                    email_sent_at DATETIME NULL,
-                    is_winner TINYINT(1) NOT NULL DEFAULT 0,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (rfq_id) REFERENCES purchase_rfqs(id) ON DELETE CASCADE,
-                    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
-                    UNIQUE KEY uq_rfq_supplier (rfq_id, supplier_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (44, 'purchase_rfqs + items + offers (ciclo RDO Acquisti)')");
-                _logger.LogInformation("[Migration v44] Tabelle purchase_rfq* (ciclo RDO)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v44] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v45: feature key nav inbox Acquisti.
-        if (currentVersion < 45)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.acquisti_inbox', 'Acquisti — Inbox', 'navigation', 1, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (45, 'nav.acquisti_inbox feature key')");
-                _logger.LogInformation("[Migration v45] feature key nav.acquisti_inbox");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v45] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v46: invariante «codice ATEC = codice_nuovo, sempre» — gli articoli NATI nelle
-        // famiglie nuove (201/211/221, generatore locale ⇒ remote_id NULL) ricevono
-        // codice_nuovo = codice, così mapping Danea / orfani / ricerche non hanno bisogno
-        // di predicati sul formato. Da qui in poi ci pensa ConfirmReservation.
-        if (currentVersion < 46)
-        {
-            try
-            {
-                c.Execute(@"
-                    UPDATE codex_items
-                    SET codice_nuovo = codice
-                    WHERE remote_id IS NULL
-                      AND (codice_nuovo IS NULL OR codice_nuovo = '')
-                      AND codice REGEXP '^(201|211|221)[0-9]{9}$'");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (46, 'codex_items: codice_nuovo = codice per gli articoli nati nelle famiglie nuove')");
-                _logger.LogInformation("[Migration v46] codice_nuovo allineato per gli articoli nati nelle famiglie nuove");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v46] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v47: righe distinta nate col fornitore vuoto perché il catalogo era monco
-        // (bug sync fornitori IDAnag, fixato 22/07/2026): ricopia il fornitore
-        // dell'articolo di catalogo SOLO dove in riga manca. One-shot, idempotente.
-        if (currentVersion < 47)
-        {
-            try
-            {
-                int n = c.Execute(@"
-                    UPDATE bom_items b
-                    JOIN catalog_items ci ON ci.id = b.catalog_item_id
-                    SET b.supplier_id = ci.supplier_id
-                    WHERE b.supplier_id IS NULL AND ci.supplier_id IS NOT NULL", commandTimeout: 600);
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (47, 'bom_items: backfill supplier_id dal catalogo (righe pre-fix sync fornitori)')");
-                _logger.LogInformation("[Migration v47] Fornitore ricopiato dal catalogo su {Count} righe distinta", n);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v47] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v48: feature key nav pagina Trasferimento catalogo Danea (migrazione Atec_PM).
-        if (currentVersion < 48)
-        {
-            try
-            {
-                c.Execute(@"INSERT IGNORE INTO auth_features (feature_key, display_name, category, min_level, behavior)
-                    VALUES ('nav.danea_migration', 'Trasferimento Danea', 'navigation', 1, 'HIDDEN')");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (48, 'nav.danea_migration feature key')");
-                _logger.LogInformation("[Migration v48] feature key nav.danea_migration");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v48] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v49: default stato nuove righe DDP commerciale = VER (verificare magazzino).
-        // Solo bom_items: la officina resta su DO.
-        if (currentVersion < 49)
-        {
-            try
-            {
-                c.Execute("ALTER TABLE bom_items ALTER item_status SET DEFAULT 'VER'");
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (49, 'bom_items: default item_status VER (DDP commerciale)')");
-                _logger.LogInformation("[Migration v49] bom_items.item_status DEFAULT → VER");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v49] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v50: tracciamento ordine fornitore Danea generato dalla RDO (strada B, 22/07/2026).
-        if (currentVersion < 50)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'purchase_rfqs'
-                      AND COLUMN_NAME = 'danea_order_iddoc'") == 0)
-                {
-                    c.Execute(@"ALTER TABLE purchase_rfqs
-                        ADD COLUMN danea_order_iddoc INT NULL AFTER closed_at,
-                        ADD COLUMN danea_order_num INT NULL AFTER danea_order_iddoc");
-                }
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (50, 'purchase_rfqs: riferimento ordine fornitore Danea (iddoc + numero)')");
-                _logger.LogInformation("[Migration v50] Colonne ordine Danea su purchase_rfqs");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v50] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        // v51: riferimento ordine Danea sulla singola riga distinta commerciale — la generazione
-        // ordine dalla RDO scrive danea_ref (numero) + danea_order_iddoc (chiave per il popup
-        // di rendering dell'ordine). Colonna presente anche nel CREATE TABLE (ramo dev).
-        if (currentVersion < 51)
-        {
-            try
-            {
-                if (c.ExecuteScalar<int>(@"
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'bom_items'
-                      AND COLUMN_NAME = 'danea_order_iddoc'") == 0)
-                {
-                    c.Execute(@"ALTER TABLE bom_items
-                        ADD COLUMN danea_order_iddoc INT NULL AFTER danea_ref");
-                }
-
-                // Backfill delle RDO già evase: il riferimento risale dalle righe RDO.
-                c.Execute(@"
-                    UPDATE bom_items b
-                    JOIN purchase_rfq_items i ON i.bom_item_id = b.id
-                    JOIN purchase_rfqs r ON r.id = i.rfq_id
-                    SET b.danea_order_iddoc = r.danea_order_iddoc,
-                        b.danea_ref = CASE WHEN COALESCE(b.danea_ref,'') = ''
-                                           THEN CAST(r.danea_order_num AS CHAR)
-                                           ELSE b.danea_ref END
-                    WHERE r.danea_order_iddoc IS NOT NULL");
-
-                c.Execute("INSERT IGNORE INTO schema_migrations (version, description) VALUES (51, 'bom_items: riferimento ordine Danea di riga (danea_order_iddoc + backfill danea_ref)')");
-                _logger.LogInformation("[Migration v51] Colonna danea_order_iddoc su bom_items");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("[Migration v51] Errore (non bloccante): {Message}", ex.Message);
-            }
-        }
-
-        _logger.LogInformation("[Migrations] Migrazioni applicate fino a v{Version}", LatestSchemaVersion);
+        _logger.LogInformation("[Migrations] Migrazioni applicate fino a v{Version}", obiettivo);
     }
 }

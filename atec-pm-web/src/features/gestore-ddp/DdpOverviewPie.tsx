@@ -15,19 +15,23 @@ import {
 } from "./ddp-sintesi-logic"
 import { DdpPieSliceLabel } from "./ddp-pie-slice-label"
 
-/** Stati «DDP STOP» (nero in legenda ATEC). */
+/**
+ * Fallback degli stati «DDP STOP» (aggregazione A9), usato solo quando il chiamante
+ * non passa l'insieme vero: gli stati veri arrivano da «Aggregazioni DDP».
+ */
 export const DDP_STOP_STATES = ["ANN", "SOSP", "RAM", "SOST"] as const
 
 /** Verde acceso in seed DB (materiale concluso/disponibile). */
-// Matrice stati v7: DISP (chiusura positiva) assorbe i vecchi CON/COS.
-export const DDP_BRIGHT_GREEN_STATES = ["DISP"] as const
+// Dalla v75 (segnalazione #54) le chiusure positive sono tre: DISP sul commerciale,
+// CON e COS in officina (comprato fuori / costruito in casa).
+export const DDP_BRIGHT_GREEN_STATES = ["DISP", "CON", "COS"] as const
 
 export interface DdpHealthBuckets {
   total: number
-  /** Consegnato / gestito (A2 default: CON, COS, DISP, ASS, MOD). */
+  /** Consegnato / gestito: stati dell'aggregazione A2. */
   delivered: number
   deliveredPct: string
-  /** Stop (ANN, SOSP, RAM, SOST). */
+  /** Stop / escluso dai conteggi: stati dell'aggregazione A9. */
   stop: number
   stopPct: string
   /** Tutto il resto: ancora in lavorazione (DO, IO, RO, VER, …). */
@@ -42,18 +46,26 @@ function pct(count: number, total: number): string {
   })}%`
 }
 
+/** Elenco leggibile di stati per i sottotitoli delle pillole. */
+function joinStates(states: Set<string>): string {
+  return [...states].sort().join(", ") || "—"
+}
+
+/**
+ * Ripartisce le fette in consegnato / in lavorazione / stop.
+ * Gli insiemi arrivano **sempre dal chiamante** (aggregazioni A2 e A9 configurabili):
+ * qui non si cablano elenchi di stati, che cambiano con la matrice stati.
+ */
 export function computeDdpHealthBuckets(
   bars: BarRow[],
-  total: number
+  total: number,
+  sets: { delivered: Set<string>; stop: Set<string> }
 ): DdpHealthBuckets {
-  const deliveredSet = new Set(DEFAULT_DELIVERED)
-  const stopSet = new Set<string>(DDP_STOP_STATES)
-
   let delivered = 0
   let stop = 0
   for (const bar of bars) {
-    if (deliveredSet.has(bar.key)) delivered += bar.count
-    else if (stopSet.has(bar.key)) stop += bar.count
+    if (sets.delivered.has(bar.key)) delivered += bar.count
+    else if (sets.stop.has(bar.key)) stop += bar.count
   }
   const inProgress = Math.max(0, total - delivered - stop)
 
@@ -79,21 +91,44 @@ export function DdpOverviewPie({
   variant = "commercial",
   title,
   description,
+  delivered,
+  stop,
+  onOpenStatus,
+  onOpenDelivered,
+  onOpenStop,
+  onOpenInProgress,
 }: {
   bars: BarRow[]
   className?: string
   variant?: "commercial" | "officina"
   title?: string
   description?: React.ReactNode
+  /** Stati «consegnato/gestito» (A2). Omesso ⇒ fallback cablato. */
+  delivered?: Set<string>
+  /** Stati «stop/escluso» (A9). Omesso ⇒ fallback cablato. */
+  stop?: Set<string>
+  /** Click su una fetta → drill-down allo stato. */
+  onOpenStatus?: (status: string) => void
+  onOpenDelivered?: () => void
+  onOpenStop?: () => void
+  onOpenInProgress?: () => void
 }) {
   const total = React.useMemo(
     () => bars.reduce((sum, bar) => sum + bar.count, 0),
     [bars]
   )
 
+  const sets = React.useMemo(
+    () => ({
+      delivered: delivered ?? new Set<string>(DEFAULT_DELIVERED),
+      stop: stop ?? new Set<string>(DDP_STOP_STATES),
+    }),
+    [delivered, stop]
+  )
+
   const health = React.useMemo(
-    () => computeDdpHealthBuckets(bars, total),
-    [bars, total]
+    () => computeDdpHealthBuckets(bars, total, sets),
+    [bars, total, sets]
   )
 
   const chartConfig = React.useMemo(() => {
@@ -150,7 +185,7 @@ export function DdpOverviewPie({
         <p className="mt-0.5 text-xs text-muted-foreground">
           {description ?? (
             <>
-              Ogni fetta è un codice stato (colori da Conf. DDP). Obietivo a
+              Ogni fetta è un codice stato (colori da Conf. DDP). Obiettivo a
               commessa chiusa: tutto{" "}
               <span className="font-medium text-foreground">
                 consegnato/gestito
@@ -202,6 +237,15 @@ export function DdpOverviewPie({
               stroke="var(--background)"
               label={DdpPieSliceLabel}
               labelLine={false}
+              className={onOpenStatus ? "cursor-pointer outline-none" : undefined}
+              onClick={
+                onOpenStatus
+                  ? (_data, index) => {
+                      const row = chartData[index]
+                      if (row?.key) onOpenStatus(row.key)
+                    }
+                  : undefined
+              }
             >
               {chartData.map((entry) => (
                 <Cell key={entry.id} fill={entry.fill} />
@@ -216,8 +260,9 @@ export function DdpOverviewPie({
               label="Consegnato / gestito"
               count={health.delivered}
               pct={health.deliveredPct}
-              hint="CON, COS, DISP, ASS, MOD"
+              hint={joinStates(sets.delivered)}
               tone="success"
+              onOpen={onOpenDelivered}
             />
             <HealthPill
               label="In lavorazione"
@@ -225,13 +270,15 @@ export function DdpOverviewPie({
               pct={health.inProgressPct}
               hint="DO, IO, RO, VER, …"
               tone={health.inProgress > 0 ? "warning" : "muted"}
+              onOpen={onOpenInProgress}
             />
             <HealthPill
               label="Stop / escluso"
               count={health.stop}
               pct={health.stopPct}
-              hint="ANN, SOSP, RAM, SOST"
+              hint={joinStates(sets.stop)}
               tone="neutral"
+              onOpen={onOpenStop}
             />
           </div>
 
@@ -270,12 +317,14 @@ function HealthPill({
   pct,
   hint,
   tone,
+  onOpen,
 }: {
   label: string
   count: number
   pct: string
   hint: string
   tone: "success" | "warning" | "muted" | "neutral"
+  onOpen?: () => void
 }) {
   const toneClass =
     tone === "success"
@@ -284,8 +333,8 @@ function HealthPill({
         ? "border-amber-200/80 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/30"
         : "border-border bg-muted/30"
 
-  return (
-    <div className={cn("rounded-lg border px-3 py-2", toneClass)}>
+  const body = (
+    <>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -296,6 +345,24 @@ function HealthPill({
         </span>
       </div>
       <div className="mt-0.5 text-[10px] text-muted-foreground">{hint}</div>
-    </div>
+    </>
+  )
+
+  if (!onOpen) {
+    return <div className={cn("rounded-lg border px-3 py-2", toneClass)}>{body}</div>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Apri le righe in Avanzamento"
+      className={cn(
+        "rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40",
+        toneClass
+      )}
+    >
+      {body}
+    </button>
   )
 }

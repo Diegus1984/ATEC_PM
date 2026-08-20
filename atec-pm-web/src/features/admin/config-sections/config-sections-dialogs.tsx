@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,6 +12,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { patchCostSectionGroupField, patchCostSectionTemplateField } from "@/lib/api/cost-sections"
 import { createDepartment, updateDepartment } from "@/lib/api/departments"
@@ -225,16 +233,20 @@ export function EditSectionDialog({
   onSaved: () => Promise<void>
 }) {
   const [name, setName] = React.useState("")
+  const [sectionType, setSectionType] = React.useState("IN_SEDE")
   const [sortOrder, setSortOrder] = React.useState("0")
   const [isDefault, setIsDefault] = React.useState(false)
   const [isDefaultQuote, setIsDefaultQuote] = React.useState(false)
+  const [isActive, setIsActive] = React.useState(true)
 
   React.useEffect(() => {
     if (!open || !section) return
     setName(section.name)
+    setSectionType(section.sectionType || "IN_SEDE")
     setSortOrder(String(section.sortOrder))
     setIsDefault(section.isDefault)
     setIsDefaultQuote(section.isDefaultQuote)
+    setIsActive(section.isActive)
   }, [open, section])
 
   const saveMutation = useMutation({
@@ -244,6 +256,12 @@ export function EditSectionDialog({
         await patchCostSectionTemplateField(section.id, {
           field: "name",
           value: name.trim(),
+        })
+      }
+      if (sectionType !== section.sectionType) {
+        await patchCostSectionTemplateField(section.id, {
+          field: "section_type",
+          value: sectionType,
         })
       }
       if (isDefault !== section.isDefault) {
@@ -256,6 +274,12 @@ export function EditSectionDialog({
         await patchCostSectionTemplateField(section.id, {
           field: "is_default_quote",
           value: isDefaultQuote ? "1" : "0",
+        })
+      }
+      if (isActive !== section.isActive) {
+        await patchCostSectionTemplateField(section.id, {
+          field: "is_active",
+          value: isActive ? "1" : "0",
         })
       }
       if (Number(sortOrder) !== section.sortOrder) {
@@ -281,13 +305,27 @@ export function EditSectionDialog({
             <Label>Nome</Label>
             <Input value={name} onChange={(event) => setName(event.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label>Ordine</Label>
-            <Input
-              type="number"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={sectionType} onValueChange={setSectionType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="IN_SEDE">In sede</SelectItem>
+                  <SelectItem value="DA_CLIENTE">Da cliente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Ordine</Label>
+              <Input
+                type="number"
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+              />
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <Switch
@@ -304,6 +342,14 @@ export function EditSectionDialog({
               onCheckedChange={setIsDefaultQuote}
             />
             Default preventivo
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              size="sm"
+              checked={isActive}
+              onCheckedChange={setIsActive}
+            />
+            Attiva (se spenta non viene proposta su nuovi preventivi/commesse)
           </label>
         </div>
         <DialogFooter>
@@ -334,12 +380,10 @@ export function EditPhaseDialog({
   onSaved: () => Promise<void>
 }) {
   const [name, setName] = React.useState("")
-  const [category, setCategory] = React.useState("")
 
   React.useEffect(() => {
     if (!open || !phase) return
     setName(phase.name)
-    setCategory(phase.category)
   }, [open, phase])
 
   const saveMutation = useMutation({
@@ -348,36 +392,51 @@ export function EditPhaseDialog({
       if (name.trim() !== phase.name) {
         await patchPhaseTemplateField(phase.id, { field: "name", value: name.trim() })
       }
-      if (category.trim() !== phase.category) {
-        await patchPhaseTemplateField(phase.id, {
-          field: "category",
-          value: category.trim(),
-        })
-      }
     },
     onSuccess: onSaved,
   })
 
   if (!phase) return null
 
+  // Il nome è tutto ciò che appartiene alla FASE. Sezione, ordine e «nasce da sola» sono del
+  // legame con la singola sezione — si toccano dalla riga della fase dentro la sezione, perché
+  // la stessa fase può nascere da sola in Program Manager e non in Progettazione.
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Modifica fase template</DialogTitle>
+          <DialogTitle>Rinomina fase dettaglio commessa</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Nome fase</Label>
             <Input value={name} onChange={(event) => setName(event.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label>Categoria</Label>
-            <Input
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            />
-          </div>
+          {phase.sections.length > 0 ? (
+            <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+              <p className="text-xs font-medium">
+                In {phase.sections.length} sezion
+                {phase.sections.length === 1 ? "e" : "i"}
+              </p>
+              <ul className="space-y-0.5 text-xs text-muted-foreground">
+                {phase.sections.map((link) => (
+                  <li key={link.sectionId}>
+                    {link.groupName ? `${link.groupName} · ` : ""}
+                    {link.sectionName}
+                    {link.isDefault ? " — nasce da sola" : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground">
+                Rinominarla la rinomina ovunque: è la stessa fase.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Questa fase non è in nessuna sezione: non entrerà in nessuna commessa.
+              Trascinala su una sezione dal dock.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -474,10 +533,7 @@ export function DepartmentDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Costo orario (€)</Label>
-              <Input
-                value={hourlyCost}
-                onChange={(event) => setHourlyCost(event.target.value)}
-              />
+              <MoneyInput value={hourlyCost} onChange={setHourlyCost} />
             </div>
             <div className="space-y-2">
               <Label>K ricarico</Label>

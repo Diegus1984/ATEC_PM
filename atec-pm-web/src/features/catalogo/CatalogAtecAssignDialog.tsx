@@ -19,6 +19,7 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   assignCatalogMapping,
   assignCatalogMappingFromBom,
@@ -260,7 +261,7 @@ export function CatalogAtecAssignDialog({
           </div>
 
           {searchTerm.length >= 2 ? (
-            <div className="max-h-56 overflow-y-auto rounded-md border">
+            <GridScroller className="rounded-md border" scrollerClassName="max-h-56">
               <Table>
                 <TableBody>
                   {searchQuery.isFetching && results.length === 0 ? (
@@ -318,7 +319,7 @@ export function CatalogAtecAssignDialog({
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </GridScroller>
           ) : null}
 
           {/* Codice generico al volo: famiglia → prenotazione → descrizione → crea e associa. */}

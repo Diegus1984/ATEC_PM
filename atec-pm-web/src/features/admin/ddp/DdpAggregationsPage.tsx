@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchDdpAggregations,
   fetchDdpStatuses,
@@ -130,6 +131,7 @@ export function DdpAggregationsPage() {
             <p className="text-sm text-muted-foreground">{message}</p>
           ) : null}
 
+          <GridScroller className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -170,8 +172,9 @@ export function DdpAggregationsPage() {
               ))}
             </TableBody>
           </Table>
+          </GridScroller>
 
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -218,7 +221,7 @@ export function DdpAggregationsPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
         </CardContent>
       </Card>
     </div>

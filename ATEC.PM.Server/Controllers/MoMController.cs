@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -7,22 +7,28 @@ using MySqlConnector;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Hubs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 // API del modulo MoM (verbali di riunione): verbale → action item.
-// Editing aperto a tutti gli utenti autenticati (strumento operativo, non solo ADMIN).
+// Editing aperto a chiunque raggiunga il livello della feature (strumento operativo, non solo ADMIN).
 [ApiController]
 [Route("api/mom")]
 [Authorize]
+// Verbali e Note MoM: stessa chiave della voce di menu e del tab commessa.
+[RequireFeature("nav.mom")]
 public class MoMController : ControllerBase
 {
     private readonly MoMDbService _mdb;
     private readonly IHubContext<ProjectHub> _hub;
-    public MoMController(MoMDbService mdb, IHubContext<ProjectHub> hub)
+    private readonly ProjectWriteGuard _guard;
+
+    public MoMController(MoMDbService mdb, IHubContext<ProjectHub> hub, ProjectWriteGuard guard)
     {
         _mdb = mdb;
         _hub = hub;
+        _guard = guard;
     }
 
     // Id dipendente dal token (claim NameIdentifier): proprietario delle note rapide.
@@ -68,7 +74,8 @@ public class MoMController : ControllerBase
                         ) x) AS PeriodEnd
                 FROM mom_records m
                 LEFT JOIN projects p ON p.id = m.project_id
-                " + (projectId.HasValue ? "WHERE m.project_id = @ProjectId" : "") + @"
+                WHERE (m.project_id IS NULL OR TRUE" + _guard.FiltroBozzeSql(User) + @")
+                " + (projectId.HasValue ? "AND m.project_id = @ProjectId" : "") + @"
                 ORDER BY (m.meeting_date IS NULL), m.meeting_date DESC, m.id DESC",
                 new { ProjectId = projectId }).ToList();
             return Ok(ApiResponse<List<MoMListDto>>.Ok(rows));
@@ -80,6 +87,7 @@ public class MoMController : ControllerBase
     // DETTAGLIO VERBALE (header + action item)
     // ═══════════════════════════════════════════════════════
 
+    [RequireProjectVisible(Tabella = "mom_records")]
     [HttpGet("{id}")]
     public IActionResult GetDetail(int id)
     {
@@ -128,6 +136,7 @@ public class MoMController : ControllerBase
     // CRUD VERBALE
     // ═══════════════════════════════════════════════════════
 
+    [RequireProjectWritable]
     [HttpPost("")]
     public IActionResult Create([FromBody] MoMSaveRequest req)
     {
@@ -153,6 +162,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Tabella = "mom_records")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] MoMSaveRequest req)
     {
@@ -199,6 +209,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Tabella = "mom_records")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {
@@ -220,6 +231,7 @@ public class MoMController : ControllerBase
 
     // Nota v9: righe vuote ammesse (foglio stile Excel, «+ Nuova riga» crea una
     // riga da compilare) — nessun campo obbligatorio.
+    [RequireProjectWritable(Tabella = "mom_records", ChiaveRotta = "momId")]
     [HttpPost("{momId}/items")]
     public IActionResult AddItem(int momId, [FromBody] MoMActionItemSaveRequest req)
     {
@@ -253,6 +265,7 @@ public class MoMController : ControllerBase
     // I client legacy (WPF) non inviano RowVersion → nessun controllo, comportamento invariato.
     public const string ConflictMessage = "CONFLITTO: riga modificata da un altro utente";
 
+    [RequireProjectWritable(Sql = "SELECT m.project_id FROM mom_action_items i JOIN mom_records m ON m.id = i.mom_id WHERE i.id = @Id")]
     [HttpPut("items/{id}")]
     public IActionResult UpdateItem(int id, [FromBody] MoMActionItemSaveRequest req)
     {
@@ -283,6 +296,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Sql = "SELECT m.project_id FROM mom_action_items i JOIN mom_records m ON m.id = i.mom_id WHERE i.id = @Id")]
     [HttpDelete("items/{id}")]
     public IActionResult DeleteItem(int id)
     {
@@ -301,6 +315,7 @@ public class MoMController : ControllerBase
 
     // Ordine manuale del foglio (drag&drop v9): riceve TUTTI gli id nell'ordine voluto
     // e riscrive sort_order. Gli id non appartenenti alla MoM vengono ignorati.
+    [RequireProjectWritable(Tabella = "mom_records", ChiaveRotta = "momId")]
     [HttpPost("{momId}/items/reorder")]
     public IActionResult ReorderItems(int momId, [FromBody] MoMReorderRequest req)
     {
@@ -339,6 +354,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<List<MoMNoteDto>>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali (mom_notes.employee_id): non appartengono a nessuna commessa")]
     [HttpPost("notes")]
     public IActionResult AddNote([FromBody] MoMNoteSaveRequest req)
     {
@@ -355,6 +371,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali (mom_notes.employee_id): non appartengono a nessuna commessa")]
     [HttpPut("notes/{id}")]
     public IActionResult UpdateNote(int id, [FromBody] MoMNoteSaveRequest req)
     {
@@ -371,6 +388,7 @@ public class MoMController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali (mom_notes.employee_id): non appartengono a nessuna commessa")]
     [HttpDelete("notes/{id}")]
     public IActionResult DeleteNote(int id)
     {
@@ -388,6 +406,7 @@ public class MoMController : ControllerBase
     // Assegna la nota alla MoM di destinazione (comportamento v9): il testo va nel
     // campo Azione della prima riga vuota, altrimenti in una nuova riga in fondo.
     // La nota assegnata viene rimossa dallo staging. Ritorna l'id della MoM.
+    [ScritturaControllataAMano("La commessa e quella della MoM di destinazione, letta dalla nota dentro l'azione")]
     [HttpPost("notes/{id}/assign")]
     public IActionResult AssignNote(int id)
     {
@@ -406,6 +425,13 @@ public class MoMController : ControllerBase
             int momExists = c.ExecuteScalar<int>(
                 "SELECT COUNT(*) FROM mom_records WHERE id=@Id", new { Id = momId });
             if (momExists == 0) return Ok(ApiResponse<int>.Fail("MoM di destinazione non trovata"));
+
+            // #88: la nota è personale, ma appoggiarla su un verbale scrive dentro la commessa
+            // di quel verbale — ed è lì che il cancello deve guardare, non sulla nota.
+            int commessaDelVerbale = c.ExecuteScalar<int?>(
+                "SELECT COALESCE(project_id, 0) FROM mom_records WHERE id=@Id", new { Id = momId }) ?? 0;
+            string? blocco = _guard.MotivoDelBlocco(c, commessaDelVerbale, User);
+            if (blocco != null) return StatusCode(403, ApiResponse<int>.Fail(blocco));
 
             string text = note.Note.Trim();
             int? emptyId = c.ExecuteScalar<int?>(@"
@@ -498,11 +524,11 @@ public class MoMController : ControllerBase
         try
         {
             using var c = _mdb.Open();
-            var rows = c.Query<MoMProjectLookupDto>(@"
+            var rows = c.Query<MoMProjectLookupDto>($@"
                 SELECT id AS Id, code AS Code, title AS Title
                 FROM projects
-                WHERE status <> 'CANCELLED'
-                ORDER BY code DESC").ToList();
+                WHERE status <> 'CANCELLED'{_guard.FiltroBozzeSql(User, "projects")}
+                ORDER BY {ProjectSorting.OrderBy("")}").ToList();
             return Ok(ApiResponse<List<MoMProjectLookupDto>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<MoMProjectLookupDto>>.Fail($"Errore: {ex.Message}")); }

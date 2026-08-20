@@ -1,3 +1,14 @@
+/**
+ * CATALOGO VOCI del menu laterale — file catalogo dei permessi insieme a
+ * `features/commesse/commessa-sections.ts` (sezioni dell'albero commessa).
+ *
+ * DATI SENSIBILI (prezzi/costi/margini) — regola PIANO-PERMESSI-REBUILD.md §4:
+ * se una voce espone importi, la sensibilità si dichiara A CATALOGO nello stesso PR,
+ * non si «scopre» a runtime cercando € a video. Oggi (motore v87) gli importi sono
+ * governati dalle chiavi globali data.costs / data.revenue / sal.economics; col
+ * catalogo unico del rebuild la voce dichiarerà `sensitive: ["prices"]`.
+ * Dettagli: .cursor/rules/permessi-catalogo-sensitive.mdc
+ */
 import type { LucideIcon } from "lucide-react"
 import {
   AlarmClock,
@@ -6,22 +17,26 @@ import {
   BookOpen,
   Bot,
   BriefcaseBusiness,
+  Bug,
   CalendarClock,
   ClipboardList,
+  Clock,
   Cog,
   Database,
   FileStack,
-  Factory,
   FileText,
   FolderKanban,
   LayoutDashboard,
   ListChecks,
   Mail,
+  MessageCircle,
   Milestone,
   NotebookPen,
   Package,
+  Plane,
   ReceiptText,
   Puzzle,
+  Scale,
   Shield,
   ShoppingCart,
   Truck,
@@ -45,6 +60,8 @@ export interface NavGroupConfig {
   id: string
   label: string
   items: NavItemConfig[]
+  /** Gruppo ancorato in fondo alla sidebar (sopra la scheda utente). */
+  pinBottom?: boolean
 }
 
 export const NAV_GROUPS: NavGroupConfig[] = [
@@ -77,6 +94,19 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         featureKey: "nav.timesheet",
         icon: CalendarClock,
         status: "live",
+      },
+      {
+        // Voce di tutti: la chiave `project.chat` è concessa a chiunque entri nel
+        // gestionale (migrazione v88, #78). Il pallino rosso accanto alla voce conta i
+        // messaggi non letti di tutte le conversazioni.
+        id: "chat",
+        label: "Chat",
+        path: "/chat",
+        featureKey: "project.chat",
+        icon: MessageCircle,
+        status: "live",
+        description:
+          "Tutte le chat di cui fai parte, divise per commessa, altra attività e senza commessa: pallino arancione sulle conversazioni con messaggi da leggere, «@» per tirare dentro un collega.",
       },
       {
         id: "risorse",
@@ -152,27 +182,47 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         icon: ReceiptText,
         status: "live",
         description:
-          "Piani di fatturazione SAL di tutte le commesse + prospetto delle ipotesi di fatturazione aperte.",
+          "Piani di fatturazione SAL di tutte le commesse + prospetto delle ipotesi di fatturazione aperte (vista rapida «Prospetto SAL»): semaforo scadenze, ordinamento ed export.",
       },
       {
-        id: "sal-prospetto",
-        label: "Prospetto SAL",
-        path: "/sal/prospetto",
-        featureKey: "nav.sal",
-        icon: CalendarClock,
+        id: "trasferta",
+        label: "Trasferta",
+        path: "/trasferta",
+        featureKey: "nav.trasferta",
+        icon: Plane,
         status: "live",
         description:
-          "Tutte le ipotesi di fatturazione aperte e le fatture emesse non incassate, con semaforo scadenze, controllo periodico, ordinamento ed export.",
+          "Trasferte di tutte le commesse: card con Giorni/Costo Ore Trasferta/Spese Trasferta, step collassabili con la griglia riga-persona a 14 colonne, le 4 calcolatrici (ore, vitto, indennità, auto) e il Riepilogo Trasferta. Le spese confluiscono nella voce «Spese Trasferta» del Bilancio.",
+      },
+      {
+        id: "ore-commessa",
+        label: "Ore Commessa",
+        path: "/ore-commessa",
+        featureKey: "nav.ore_commessa",
+        icon: Clock,
+        status: "live",
+        description:
+          "Tutte le ore imputate su una commessa, riga per riga (persona, giorno, fase, sezione, costo). Il PM può spostarne una parte sulla causale «Extra Lavoro», che le toglie dai costi della commessa, e rimetterle dentro una per una per misurarne il peso sulla redditività.",
+      },
+      {
+        id: "bilancio",
+        label: "Bilancio",
+        path: "/bilancio",
+        featureKey: "nav.bilancio",
+        icon: Scale,
+        status: "live",
+        description:
+          "Redditività a consuntivo di tutte le commesse: una card per commessa con Consuntivo Redditività in € e in %, rossa sotto la soglia impostata, e ingresso al conto economico completo.",
       },
       {
         id: "work-requests",
-        label: "Lavorazioni",
+        label: "Lavorazioni Officine",
         path: "/work-requests",
         featureKey: "nav.work_requests",
         icon: Wrench,
         status: "live",
         description:
-          "Pianifica, coordina e monitora le lavorazioni meccaniche interne ed esterne (Bozze, Per Commessa, Priorità, Consegne, Trattamenti).",
+          "Le righe della DDP Officina di tutte le commesse nelle quattro viste dell'officina (Interne, Esterne, Urgenze, Trattamenti), più le righe inserite a mano. Data richiesta, note e urgenza si scrivono qui; tutto il resto segue la distinta.",
       },
       {
         id: "scadenze",
@@ -186,22 +236,9 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       },
     ],
   },
-  {
-    id: "officina",
-    label: "Officina",
-    items: [
-      {
-        id: "officina-inbox",
-        label: "Inbox Officina",
-        path: "/officina",
-        featureKey: "nav.officina_inbox",
-        icon: Factory,
-        status: "live",
-        description:
-          "Coda operativa DDP Officina cross-commessa: da fare, ritardi, in ordine, interna, trattamenti e per commessa.",
-      },
-    ],
-  },
+  // Il gruppo «Officina» con la Inbox è stato tolto con la segnalazione #83: quella coda è
+  // diventata la pagina «Lavorazioni Officine» nel gruppo PM, che fa le stesse cose divise
+  // per come si lavora davvero (interne, esterne, urgenze, trattamenti).
   {
     id: "acquisti",
     label: "Acquisti",
@@ -346,7 +383,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     items: [
       {
         id: "config-sezioni",
-        label: "Config. Sezioni",
+        label: "Config. Sezioni di costo",
         path: "/config-sezioni",
         featureKey: "nav.config_sezioni",
         icon: Cog,
@@ -418,11 +455,45 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       },
     ],
   },
+  {
+    // Ancorato in fondo alla sidebar: è assistenza, non lavoro quotidiano.
+    id: "supporto",
+    label: "Supporto",
+    pinBottom: true,
+    items: [
+      {
+        id: "bug-reports",
+        label: "Segnalazioni",
+        path: "/segnalazioni",
+        featureKey: "nav.bug_reports",
+        icon: Bug,
+        status: "live",
+        description:
+          "Bug e richieste di miglioramento su ATEC PM, con allegati (screenshot): ognuno vede e gestisce le proprie (#93, elenco completo solo a chi ha la vista), l'ADMIN cambia stato e risponde. Notifica agli ADMIN a ogni nuova segnalazione.",
+      },
+    ],
+  },
 ]
 
 export const ALL_NAV_ITEMS: NavItemConfig[] = NAV_GROUPS.flatMap(
   (group) => group.items
 )
+
+/**
+ * Prima voce di menu visibile all'utente, esclusa la Dashboard. È la home di ripiego dei
+ * ruoli di reparto (es. AMM), che la Dashboard non la vedono: senza questo, entrando in
+ * «/» si troverebbero l'«Accesso negato» al posto della pagina iniziale.
+ *
+ * I gruppi ancorati in fondo (Supporto) restano fuori: sono pagine di assistenza, non la
+ * pagina di lavoro con cui si apre la giornata. Per l'AMM la home è quindi SAL / Fatturazione.
+ */
+export function firstAccessibleNavPath(
+  canAccess: (featureKey: string) => boolean
+): string | undefined {
+  return NAV_GROUPS.filter((group) => !group.pinBottom)
+    .flatMap((group) => group.items)
+    .find((item) => item.path !== "/" && canAccess(item.featureKey))?.path
+}
 
 export function findNavItemByPath(path: string): NavItemConfig | undefined {
   if (path === "/") {

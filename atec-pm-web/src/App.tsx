@@ -5,6 +5,7 @@ import { AppRoutes } from "@/app/AppRoutes"
 import { AppShell } from "@/app/AppShell"
 import { AuthBootstrap } from "@/app/AuthBootstrap"
 import { ConfirmProvider } from "@/components/shared/confirm"
+import { CopyTextProvider } from "@/components/shared/copy-text"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { LoginPage } from "@/features/auth/LoginPage"
@@ -31,6 +32,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={0}>
         <ConfirmProvider>
+          <CopyTextProvider>
           <BrowserRouter>
             <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -46,6 +48,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
+          </CopyTextProvider>
         </ConfirmProvider>
         <Toaster closeButton position="bottom-right" richColors />
       </TooltipProvider>

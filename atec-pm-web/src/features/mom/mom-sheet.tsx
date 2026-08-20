@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react"
 
-import { DateField } from "@/components/shared/date-field"
+import { DateField, ReadonlyDateField } from "@/components/shared/date-field"
 import {
   MultiSelectCombo,
   type MultiSelectOption,
@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { Textarea } from "@/components/ui/textarea"
 import { isoToDate } from "@/lib/date-iso"
 import type { MoMActionItem } from "@/lib/api/types"
@@ -41,11 +42,14 @@ import { cn } from "@/lib/utils"
 
 import {
   MOM_PRIORITY_META,
+  isOverdue,
   momRowClass,
   canReorderRows,
+  responsibleNamesOf,
   type SheetSort,
   type SheetSortField,
 } from "./mom-detail-shared"
+import { MOM_CONDITION_STYLE } from "./mom-palette"
 
 // ─────────────────────────────────────────────────────────────
 // Foglio MoM editabile (prototipo Gestione_MoM_v9): tabella a
@@ -62,14 +66,21 @@ interface SheetColumn {
   className: string
 }
 
+// Campi Attività / Descrizione / Azione: larghezza fissa di 40 caratteri con
+// riporto automatico a capo (il testo manda a capo e alza la riga, non allarga
+// la colonna). `40ch` è lo spazio del testo: si aggiungono padding e bordi
+// della textarea, e per la colonna anche il padding della cella.
+const TEXT_FIELD_WIDTH_CLS = "w-[calc(40ch_+_1rem_+_2px)]"
+const TEXT_COL_WIDTH_CLS = "w-[calc(40ch_+_2rem_+_2px)]"
+
 const SHEET_COLS: SheetColumn[] = [
-  { key: "attivita", label: "Attività", className: "min-w-[8rem]" },
-  { key: "descrizione", label: "Descrizione", className: "min-w-[8rem]" },
-  { key: "azione", label: "Azione", className: "min-w-[10rem]" },
+  { key: "attivita", label: "Attività", className: TEXT_COL_WIDTH_CLS },
+  { key: "descrizione", label: "Descrizione", className: TEXT_COL_WIDTH_CLS },
+  { key: "azione", label: "Azione", className: TEXT_COL_WIDTH_CLS },
   { key: "priorita", label: "Priorità", className: "w-36" },
   { key: "responsabili", label: "Responsabile", className: "w-px" },
   { key: "dataCheck", label: "Data check avanz.", className: "w-52" },
-  { key: "dataClose", label: "Data close", className: "w-52" },
+  { key: "dataClose", label: "Data chiusura", className: "w-52" },
 ]
 
 const TEXT_CELL_CLS = "whitespace-normal py-1.5 align-top"
@@ -102,19 +113,38 @@ function SortableHead({
   )
 }
 
-function MomPrioritySelect({
-  value,
+/**
+ * Colonna Priorità: mostra la priorità P1–P3 finché la riga è aperta, e al suo
+ * posto lo stato scelto (Stand by / Close) appena viene selezionato — dal menu
+ * Azioni o da qui. Tornando su una priorità la riga si riapre; il valore
+ * P1–P3 impostato resta memorizzato anche mentre è in stand by o chiusa.
+ */
+function MomPriorityStatusSelect({
+  priorita,
+  status,
   onChange,
 }: {
-  value: number
-  onChange: (priority: number) => void
+  priorita: number
+  status: string
+  onChange: (patch: { priorita?: number; status: string }) => void
 }) {
+  const value =
+    status === "CLOSED" || status === "STANDBY" ? status : String(priorita)
+
   return (
-    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+    <Select
+      value={value}
+      onValueChange={(v) =>
+        v === "CLOSED" || v === "STANDBY"
+          ? onChange({ status: v })
+          : onChange({ priorita: Number(v), status: "OPEN" })
+      }
+    >
       <SelectTrigger
         size="sm"
-        aria-label="Priorità"
-        className="h-8 min-w-[8.5rem] gap-1.5 border-input bg-background px-2 font-normal shadow-none"
+        aria-label="Priorità / stato"
+        // Campo piatto a riposo, aspetto da input solo all'interazione (pattern foglio SAL/DDP).
+        className="h-8 min-w-[8.5rem] gap-1.5 border-transparent bg-transparent px-2 font-normal shadow-none hover:border-input focus-visible:border-input focus-visible:bg-background"
       >
         <SelectValue />
       </SelectTrigger>
@@ -132,8 +162,103 @@ function MomPrioritySelect({
             </span>
           </SelectItem>
         ))}
+        {(["standby", "close"] as const).map((key) => (
+          <SelectItem
+            key={key}
+            value={key === "standby" ? "STANDBY" : "CLOSED"}
+            textValue={MOM_CONDITION_STYLE[key].label}
+          >
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "size-2 shrink-0 rounded-full",
+                  MOM_CONDITION_STYLE[key].dotClass
+                )}
+              />
+              <span className="font-semibold">
+                {MOM_CONDITION_STYLE[key].label}
+              </span>
+            </span>
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
+  )
+}
+
+/**
+ * Colonna Priorità in sola lettura: stessa informazione della tendina (la priorità,
+ * oppure lo stato che la sostituisce), senza il controllo che la farebbe cambiare.
+ */
+function MomPriorityStatusText({
+  priorita,
+  status,
+}: {
+  priorita: number
+  status: string
+}) {
+  const condition =
+    status === "CLOSED"
+      ? MOM_CONDITION_STYLE.close
+      : status === "STANDBY"
+        ? MOM_CONDITION_STYLE.standby
+        : null
+  const meta =
+    MOM_PRIORITY_META.find((p) => p.value === priorita) ?? MOM_PRIORITY_META[1]
+
+  return (
+    <span className="inline-flex h-8 items-center gap-2 px-2 text-sm">
+      <span
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          condition ? condition.dotClass : meta.dot
+        )}
+      />
+      {condition ? (
+        <span className="font-semibold">{condition.label}</span>
+      ) : (
+        <>
+          <span className="font-mono text-xs font-semibold">{meta.code}</span>
+          <span className="text-muted-foreground">{meta.name}</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Cella di testo in sola lettura: stesso ingombro della textarea (larghezza a 40
+ * caratteri e riporto a capo), ma è testo — non un campo digitabile. È il punto
+ * chiave della sola lettura: se restasse una textarea l'utente scriverebbe e il
+ * salvataggio automatico tornerebbe 403 buttando via quanto scritto.
+ */
+function SheetReadText({ value }: { value: string | null }) {
+  const text = value?.trim() ? value : null
+  return (
+    <div
+      className={cn(
+        "box-border min-h-8 whitespace-pre-wrap break-words px-2 py-1 text-sm leading-5",
+        TEXT_FIELD_WIDTH_CLS
+      )}
+    >
+      {text ?? <span className="text-muted-foreground">—</span>}
+    </div>
+  )
+}
+
+/** Responsabili in sola lettura: un nome per riga, come li impila la combo. */
+function SheetReadNames({ names }: { names: string[] }) {
+  if (names.length === 0) {
+    return <span className="px-2 text-sm text-muted-foreground">—</span>
+  }
+  return (
+    <span className="flex min-h-8 flex-col items-start gap-0.5 px-2 py-1.5 text-left text-sm leading-5">
+      {names.map((name, index) => (
+        <span key={`${name}-${index}`} className="whitespace-nowrap">
+          {name}
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -167,7 +292,8 @@ const GrowTextarea = React.forwardRef<
       value={value}
       spellCheck={false}
       className={cn(
-        "field-sizing-content box-border min-h-8 w-auto min-w-[6rem] max-w-full resize-none overflow-hidden px-2 py-1 text-sm leading-5 shadow-none",
+        "box-border min-h-8 max-w-full resize-none overflow-hidden px-2 py-1 text-sm leading-5 shadow-none",
+        TEXT_FIELD_WIDTH_CLS,
         "whitespace-pre-wrap break-words",
         focused
           ? "border-input bg-background focus-visible:ring-1 focus-visible:ring-ring/40"
@@ -209,6 +335,8 @@ export interface MoMSheetProps {
   displayRows: MoMActionItem[]
   /** Tutte le righe (per le definizioni autocomplete). */
   allRows: MoMActionItem[]
+  /** Data odierna ISO: decide quali righe sono scadute (colore viola). */
+  today: string
   sort: SheetSort
   poolFor: (item: MoMActionItem) => MultiSelectOption[]
   focusRequest: SheetFocusRequest | null
@@ -226,6 +354,12 @@ export interface MoMSheetProps {
   ) => void | Promise<void>
   onDelete: (item: MoMActionItem) => void
   onReorder: (dragId: number, targetId: number, after: boolean) => boolean
+  /**
+   * Funzione concessa in sola lettura: il foglio si consulta e si ordina, ma le
+   * celle diventano testo e spariscono riga nuova, riordino, menu azioni e
+   * selezione (serve solo a eliminare).
+   */
+  readOnly?: boolean
   emptyMessage?: string
   selectedRowIds: ReadonlySet<number>
   onToggleRowSelected: (id: number, selected: boolean) => void
@@ -289,6 +423,7 @@ function SheetNewRow({
 export function MoMSheet({
   displayRows,
   allRows,
+  today,
   sort,
   poolFor,
   focusRequest,
@@ -299,6 +434,7 @@ export function MoMSheet({
   onAddRow,
   onDelete,
   onReorder,
+  readOnly = false,
   emptyMessage = "Nessuna azione in questa vista.",
   selectedRowIds,
   onToggleRowSelected,
@@ -458,31 +594,33 @@ export function MoMSheet({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <div
-          ref={wrapRef}
-          className="max-h-[72vh] overflow-auto"
-          onDragOver={handleWrapDragOver}
-        >
+      <GridScroller
+        className="rounded-lg border bg-card"
+        scrollerClassName="max-h-[72vh]"
+        scrollerRef={wrapRef}
+        onDragOver={handleWrapDragOver}
+      >
           <Table className="w-max min-w-full table-auto border-separate border-spacing-y-1.5">
-            <TableHeader className="sticky top-0 z-10 bg-muted/40">
+            <TableHeader className="bg-muted/40">
               <TableRow>
                 <TableHead className="w-7 print:hidden" />
                 <TableHead className="w-10 px-0 text-center print:hidden">
-                  <Checkbox
-                    checked={
-                      allVisibleSelected
-                        ? true
-                        : someVisibleSelected
-                          ? "indeterminate"
-                          : false
-                    }
-                    onCheckedChange={(value) =>
-                      onToggleAllRowsSelected(value === true)
-                    }
-                    aria-label="Seleziona tutte le righe visibili"
-                    disabled={displayRows.length === 0}
-                  />
+                  {readOnly ? null : (
+                    <Checkbox
+                      checked={
+                        allVisibleSelected
+                          ? true
+                          : someVisibleSelected
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(value) =>
+                        onToggleAllRowsSelected(value === true)
+                      }
+                      aria-label="Seleziona tutte le righe visibili"
+                      disabled={displayRows.length === 0}
+                    />
+                  )}
                 </TableHead>
                 <TableHead className="w-10 text-center">#</TableHead>
                 {SHEET_COLS.map((col) => (
@@ -512,10 +650,10 @@ export function MoMSheet({
                 <TableRow
                   key={item.id}
                   data-row-id={item.id}
-                  draggable={grabId === item.id}
+                  draggable={!readOnly && grabId === item.id}
                   className={cn(
                     "border-0 transition-colors",
-                    momRowClass(item),
+                    momRowClass({ ...item, isOverdue: isOverdue(item, today) }),
                     draggingId === item.id && "opacity-50",
                     dropHint?.id === item.id &&
                       dropHint.valid &&
@@ -566,28 +704,32 @@ export function MoMSheet({
                   }}
                 >
                   <TableCell className="py-1.5 align-top print:hidden">
-                    <span
-                      role="button"
-                      aria-label="Trascina per riordinare la riga"
-                      title="Trascina per riordinare la riga"
-                      className="inline-flex size-7 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
-                      onMouseDown={() => setGrabId(item.id)}
-                      onMouseUp={() => setGrabId(null)}
-                    >
-                      <GripVertical className="size-3.5" />
-                    </span>
+                    {readOnly ? null : (
+                      <span
+                        role="button"
+                        aria-label="Trascina per riordinare la riga"
+                        title="Trascina per riordinare la riga"
+                        className="inline-flex size-7 cursor-grab items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                        onMouseDown={() => setGrabId(item.id)}
+                        onMouseUp={() => setGrabId(null)}
+                      >
+                        <GripVertical className="size-3.5" />
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell
                     className="py-1.5 align-top print:hidden"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Checkbox
-                      checked={selectedRowIds.has(item.id)}
-                      onCheckedChange={(value) =>
-                        onToggleRowSelected(item.id, value === true)
-                      }
-                      aria-label={`Seleziona riga ${index + 1}`}
-                    />
+                    {readOnly ? null : (
+                      <Checkbox
+                        checked={selectedRowIds.has(item.id)}
+                        onCheckedChange={(value) =>
+                          onToggleRowSelected(item.id, value === true)
+                        }
+                        aria-label={`Seleziona riga ${index + 1}`}
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="text-center align-top font-mono text-xs text-muted-foreground">
                     {index + 1}
@@ -595,170 +737,216 @@ export function MoMSheet({
 
                   {(["attivita", "descrizione"] as const).map((field) => (
                     <TableCell key={field} className={TEXT_CELL_CLS}>
-                      <GrowTextarea
-                        data-row={item.id}
-                        data-field={field}
-                        value={item[field] ?? ""}
-                        onChange={(event) => {
-                          onPatch(item, { [field]: event.target.value })
-                          acOpen(event.target, item, field)
-                        }}
-                        onFocus={(event) => acOpen(event.target, item, field)}
-                        onBlur={() => {
-                          window.setTimeout(() => {
-                            if (acRef.current?.rowId === item.id) setAc(null)
-                          }, 150)
-                          onFlush(item)
-                        }}
-                        onKeyDown={acKeyDown}
-                      />
+                      {readOnly ? (
+                        <SheetReadText value={item[field]} />
+                      ) : (
+                        <GrowTextarea
+                          data-row={item.id}
+                          data-field={field}
+                          value={item[field] ?? ""}
+                          onChange={(event) => {
+                            onPatch(item, { [field]: event.target.value })
+                            acOpen(event.target, item, field)
+                          }}
+                          onFocus={(event) => acOpen(event.target, item, field)}
+                          onBlur={() => {
+                            window.setTimeout(() => {
+                              if (acRef.current?.rowId === item.id) setAc(null)
+                            }, 150)
+                            onFlush(item)
+                          }}
+                          onKeyDown={acKeyDown}
+                        />
+                      )}
                     </TableCell>
                   ))}
 
                   <TableCell className={TEXT_CELL_CLS}>
-                    <GrowTextarea
-                      data-row={item.id}
-                      data-field="azione"
-                      value={item.azione ?? ""}
-                      onChange={(event) => onPatch(item, { azione: event.target.value })}
-                      onBlur={() => onFlush(item)}
-                    />
+                    {readOnly ? (
+                      <SheetReadText value={item.azione} />
+                    ) : (
+                      <GrowTextarea
+                        data-row={item.id}
+                        data-field="azione"
+                        value={item.azione ?? ""}
+                        onChange={(event) =>
+                          onPatch(item, { azione: event.target.value })
+                        }
+                        onBlur={() => onFlush(item)}
+                      />
+                    )}
                   </TableCell>
 
                   <TableCell className="py-1.5 align-top">
-                    <MomPrioritySelect
-                      value={item.priorita}
-                      onChange={(priorita) =>
-                        onPatch(item, { priorita }, { immediate: true })
-                      }
-                    />
+                    {readOnly ? (
+                      <MomPriorityStatusText
+                        priorita={item.priorita}
+                        status={item.status}
+                      />
+                    ) : (
+                      <MomPriorityStatusSelect
+                        priorita={item.priorita}
+                        status={item.status}
+                        onChange={(patch) =>
+                          onPatch(item, patch, { immediate: true })
+                        }
+                      />
+                    )}
                   </TableCell>
 
                   <TableCell className={RESP_CELL_CLS}>
-                    <MultiSelectCombo
-                      options={poolFor(item)}
-                      selectedIds={item.responsibleIds}
-                      onChange={(ids) =>
-                        onPatch(
-                          item,
-                          {
-                            responsibleIds: ids,
-                            resp1Id: ids[0] ?? null,
-                            resp2Id: ids[1] ?? null,
-                            resp3Id: ids[2] ?? null,
-                          },
-                          { immediate: true }
-                        )
-                      }
-                      placeholder="—"
-                      size="sm"
-                      stackLabel
-                      className="min-h-8 shadow-none"
-                    />
-                  </TableCell>
-
-                  <TableCell className="py-1.5 align-top">
-                    <DateField
-                      value={item.dataCheck}
-                      onChange={(value) => {
-                        const patch: Partial<MoMActionItem> = { dataCheck: value }
-                        if (!value) {
-                          patch.dataClose = null
-                        } else {
-                          const end = item.dataClose?.slice(0, 10) ?? null
-                          if (!end || end < value) patch.dataClose = value
+                    {readOnly ? (
+                      <SheetReadNames names={responsibleNamesOf(item)} />
+                    ) : (
+                      <MultiSelectCombo
+                        options={poolFor(item)}
+                        selectedIds={item.responsibleIds}
+                        onChange={(ids) =>
+                          onPatch(
+                            item,
+                            {
+                              responsibleIds: ids,
+                              resp1Id: ids[0] ?? null,
+                              resp2Id: ids[1] ?? null,
+                              resp3Id: ids[2] ?? null,
+                            },
+                            { immediate: true }
+                          )
                         }
-                        onPatch(item, patch, { immediate: true })
-                      }}
-                      size="sm"
-                      placeholder="—"
-                      className="h-8 w-full min-w-0 shadow-none"
-                    />
+                        placeholder="—"
+                        size="sm"
+                        stackLabel
+                        className="min-h-8 border-transparent bg-transparent shadow-none hover:border-input focus-visible:border-input focus-visible:bg-background"
+                      />
+                    )}
                   </TableCell>
 
                   <TableCell className="py-1.5 align-top">
-                    <DateField
-                      value={item.dataClose}
-                      onChange={(value) =>
-                        onPatch(item, { dataClose: value }, { immediate: true })
-                      }
-                      size="sm"
-                      placeholder="—"
-                      className="h-8 w-full min-w-0 shadow-none"
-                      disabled={!item.dataCheck}
-                      disableBefore={isoToDate(item.dataCheck)}
-                    />
+                    {readOnly ? (
+                      <ReadonlyDateField
+                        value={item.dataCheck}
+                        size="sm"
+                        placeholder="—"
+                        className="h-8 w-full min-w-0 shadow-none"
+                      />
+                    ) : (
+                      <DateField
+                        value={item.dataCheck}
+                        onChange={(value) => {
+                          const patch: Partial<MoMActionItem> = { dataCheck: value }
+                          if (!value) {
+                            patch.dataClose = null
+                          } else {
+                            const end = item.dataClose?.slice(0, 10) ?? null
+                            if (!end || end < value) patch.dataClose = value
+                          }
+                          onPatch(item, patch, { immediate: true })
+                        }}
+                        size="sm"
+                        placeholder="—"
+                        className="h-8 w-full min-w-0 border-transparent bg-transparent shadow-none hover:border-input focus-visible:border-input focus-visible:bg-background"
+                      />
+                    )}
+                  </TableCell>
+
+                  <TableCell className="py-1.5 align-top">
+                    {readOnly ? (
+                      <ReadonlyDateField
+                        value={item.dataClose}
+                        size="sm"
+                        placeholder="—"
+                        className="h-8 w-full min-w-0 shadow-none"
+                      />
+                    ) : (
+                      <DateField
+                        value={item.dataClose}
+                        onChange={(value) =>
+                          onPatch(item, { dataClose: value }, { immediate: true })
+                        }
+                        size="sm"
+                        placeholder="—"
+                        className="h-8 w-full min-w-0 border-transparent bg-transparent shadow-none hover:border-input focus-visible:border-input focus-visible:bg-background"
+                        disabled={!item.dataCheck}
+                        disableBefore={isoToDate(item.dataCheck)}
+                      />
+                    )}
                   </TableCell>
 
                   <TableCell className="py-1.5 align-top print:hidden">
                     <div className="flex items-center justify-end">
-                      <RowActionsMenu
-                        size="icon-sm"
-                        triggerClassName="size-7"
-                        actions={[
-                          {
-                            label:
-                              item.status === "CLOSED"
-                                ? "Riapri riga"
-                                : "Segna come chiusa",
-                            icon: CircleCheck,
-                            onClick: () =>
-                              onPatch(
-                                item,
-                                {
-                                  status:
-                                    item.status === "CLOSED" ? "OPEN" : "CLOSED",
-                                },
-                                { immediate: true }
-                              ),
-                          },
-                          {
-                            label: item.isCritical
-                              ? "Rimuovi massima priorità"
-                              : "Massima priorità",
-                            icon: Flag,
-                            onClick: () =>
-                              onPatch(
-                                item,
-                                { isCritical: !item.isCritical },
-                                { immediate: true }
-                              ),
-                          },
-                          {
-                            label:
-                              item.status === "STANDBY"
-                                ? "Togli stand by"
-                                : "Stand by",
-                            icon: Pause,
-                            onClick: () =>
-                              onPatch(
-                                item,
-                                {
-                                  status:
-                                    item.status === "STANDBY" ? "OPEN" : "STANDBY",
-                                },
-                                { immediate: true }
-                              ),
-                          },
-                          {
-                            label: "Elimina riga",
-                            icon: Trash2,
-                            destructive: true,
-                            separatorBefore: true,
-                            onClick: () => onDelete(item),
-                          },
-                        ]}
-                      />
+                      {readOnly ? null : (
+                        <RowActionsMenu
+                          size="icon-sm"
+                          triggerClassName="size-7"
+                          actions={[
+                            {
+                              label:
+                                item.status === "CLOSED"
+                                  ? "Riapri riga"
+                                  : "Chiusa",
+                              icon: CircleCheck,
+                              onClick: () =>
+                                onPatch(
+                                  item,
+                                  {
+                                    status:
+                                      item.status === "CLOSED"
+                                        ? "OPEN"
+                                        : "CLOSED",
+                                  },
+                                  { immediate: true }
+                                ),
+                            },
+                            {
+                              label: item.isCritical
+                                ? "Rimuovi massima priorità"
+                                : "Massima priorità",
+                              icon: Flag,
+                              onClick: () =>
+                                onPatch(
+                                  item,
+                                  { isCritical: !item.isCritical },
+                                  { immediate: true }
+                                ),
+                            },
+                            {
+                              label:
+                                item.status === "STANDBY"
+                                  ? "Togli stand by"
+                                  : "Stand by",
+                              icon: Pause,
+                              onClick: () =>
+                                onPatch(
+                                  item,
+                                  {
+                                    status:
+                                      item.status === "STANDBY"
+                                        ? "OPEN"
+                                        : "STANDBY",
+                                  },
+                                  { immediate: true }
+                                ),
+                            },
+                            {
+                              label: "Elimina riga",
+                              icon: Trash2,
+                              destructive: true,
+                              separatorBefore: true,
+                              onClick: () => onDelete(item),
+                            },
+                          ]}
+                        />
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
                 ))
               )}
-              <SheetNewRow onAddRow={onAddRow} />
+              {/* Riga «Nuova attività…»: è un comando di scrittura, in sola lettura sparisce. */}
+              {readOnly ? null : <SheetNewRow onAddRow={onAddRow} />}
             </TableBody>
           </Table>
-        </div>
-      </div>
+      </GridScroller>
 
       <p className="text-xs text-muted-foreground">
         {displayRows.length} {displayRows.length === 1 ? "riga" : "righe"}

@@ -1,7 +1,13 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { type ColumnDef, type SortingState } from "@tanstack/react-table"
-import { ArrowUpDown, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  ArrowUpDown,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
@@ -32,12 +38,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { deleteMoM, fetchMoMList, updateMoM } from "@/lib/api/mom"
+import { fetchProjects } from "@/lib/api/projects"
 import { formatDateShort } from "@/lib/date-iso"
 import { getSession } from "@/lib/auth/session"
 import { useMoMHub } from "@/lib/signalr/use-mom-hub"
 import type { MoMListItem, MoMSaveRequest } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 
+import { MoMClosedProgress } from "./mom-closed-progress"
+import { MOM_CONDITION_STYLE } from "./mom-palette"
 import { MoMVerbaleDialog } from "./MoMVerbaleDialog"
 import { MoMSidebar, type MoMView } from "./MoMSidebar"
 
@@ -132,16 +141,11 @@ function SortHeader({
 }
 
 function PriorityPill({ value, variant }: { value: number; variant: "p1" | "p2" | "p3" }) {
-  const styles = {
-    p1: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300",
-    p2: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
-    p3: "bg-muted text-muted-foreground",
-  }
   return (
     <span
       className={cn(
         "inline-flex min-w-6 justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-        styles[variant]
+        MOM_CONDITION_STYLE[variant].pillClass
       )}
     >
       {value}
@@ -168,6 +172,13 @@ export function MoMPage() {
   const query = useQuery({
     queryKey: ["mom-list"],
     queryFn: () => fetchMoMList(),
+  })
+
+  // Elenco commesse APERTE per la barra laterale: ognuna ha la sua voce anche
+  // prima del primo verbale (una commessa appena creata si trova subito).
+  const projectsQuery = useQuery({
+    queryKey: ["mom-projects"],
+    queryFn: () => fetchProjects({ page: 1, pageSize: 500 }),
   })
 
   // Realtime: la lista si aggiorna quando un altro utente modifica i verbali.
@@ -493,6 +504,7 @@ export function MoMPage() {
           view={view}
           onViewChange={setView}
           items={query.data ?? []}
+          projects={projectsQuery.data?.items ?? []}
         />
 
         <main className="min-w-0 flex-1 overflow-y-auto p-4">
@@ -638,6 +650,14 @@ function MoMVerbaleCard({
               {item.itemsCount}
               {item.openCount > 0 ? ` (${item.openCount} aperte)` : ""}
             </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Avanzamento</span>
+            <MoMClosedProgress
+              itemsCount={item.itemsCount}
+              openCount={item.openCount}
+              className="max-w-[65%] flex-1"
+            />
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground">Ripartizione priorità</span>

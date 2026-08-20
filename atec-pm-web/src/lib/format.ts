@@ -20,6 +20,17 @@ export function euro(value: number | null | undefined): string {
   return `${negativo ? "-" : ""}${raggruppati},${decimali} €`
 }
 
+/**
+ * Percentuale all'italiana con 2 decimali e simbolo attaccato: `18.42` → `"18,42%"`,
+ * `-3.1` → `"-3,10%"`. Nullish o NaN → `"—"`: una percentuale non calcolabile non è «0%».
+ */
+export function percent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) {
+    return "—"
+  }
+  return `${value.toFixed(2).replace(".", ",")}%`
+}
+
 /** Numero con 2 decimali all'italiana, senza simbolo (per input e celle calcolate). */
 export function fmt2(value: number): string {
   return value.toLocaleString("it-IT", {
@@ -28,9 +39,19 @@ export function fmt2(value: number): string {
   })
 }
 
-/** Parsing numerico tollerante alla virgola decimale. Vuoto o non numerico → 0. */
+/**
+ * Parsing numerico tollerante al formato italiano. Vuoto o non numerico → 0.
+ * Se c'è la virgola, i punti sono separatori delle migliaia (`1.234,50` → 1234.5);
+ * senza virgola il punto resta decimale (`1234.5` → 1234.5), come da sempre.
+ * Ignora spazi ed eventuale simbolo €, così incollare un importo formattato funziona.
+ */
 export function parseDecimal(value: string | null | undefined): number {
-  const n = Number((value ?? "").replace(",", "."))
+  const raw = (value ?? "").replace(/[\s€]/g, "")
+  if (!raw) return 0
+  const normalized = raw.includes(",")
+    ? raw.replace(/\./g, "").replace(",", ".")
+    : raw
+  const n = Number(normalized)
   return Number.isFinite(n) ? n : 0
 }
 

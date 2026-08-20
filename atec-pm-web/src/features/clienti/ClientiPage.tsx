@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { deleteCustomer, fetchCustomers } from "@/lib/api/customers"
 import type { CustomerListItem } from "@/lib/api/types"
+import { canWriteFeature } from "@/lib/auth/permissions"
 
 import { CustomerDialog } from "./CustomerDialog"
 import { dash } from "@/lib/format"
@@ -60,6 +61,10 @@ export function ClientiPage() {
   const [dialogCustomer, setDialogCustomer] = React.useState<
     number | "new" | null
   >(null)
+
+  // Anagrafica concessa in sola lettura a qualche ruolo (es. amministrazione): la scheda
+  // si apre e si consulta, ma niente «Aggiungi», niente modifiche. L'API rifiuta comunque.
+  const canEdit = canWriteFeature("nav.clienti")
 
   const query = useQuery({
     queryKey: ["customers"],
@@ -188,32 +193,33 @@ export function ClientiPage() {
         id: "actions",
         enableHiding: false,
         enableSorting: false,
-        cell: ({ row }) => (
-          <div className="flex justify-end">
-            <RowActionsMenu
-              label={row.original.companyName}
-              actions={[
-                {
-                  label: "Modifica",
-                  icon: Pencil,
-                  onClick: () => setDialogCustomer(row.original.id),
-                },
-                {
-                  label: "Disattiva",
-                  icon: Trash2,
-                  destructive: true,
-                  separatorBefore: true,
-                  onClick: () => {
-                    void handleDelete(row.original)
+        cell: ({ row }) =>
+          canEdit ? (
+            <div className="flex justify-end">
+              <RowActionsMenu
+                label={row.original.companyName}
+                actions={[
+                  {
+                    label: "Modifica",
+                    icon: Pencil,
+                    onClick: () => setDialogCustomer(row.original.id),
                   },
-                },
-              ]}
-            />
-          </div>
-        ),
+                  {
+                    label: "Disattiva",
+                    icon: Trash2,
+                    destructive: true,
+                    separatorBefore: true,
+                    onClick: () => {
+                      void handleDelete(row.original)
+                    },
+                  },
+                ]}
+              />
+            </div>
+          ) : null,
       },
     ],
-    [handleDelete]
+    [canEdit, handleDelete]
   )
 
   return (
@@ -236,16 +242,19 @@ export function ClientiPage() {
         getRowId={(row) => String(row.id)}
         onRowDoubleClick={(row) => setDialogCustomer(row.id)}
         toolbarActions={
-          <Button size="sm" onClick={() => setDialogCustomer("new")}>
-            <Plus />
-            Aggiungi cliente
-          </Button>
+          canEdit ? (
+            <Button size="sm" onClick={() => setDialogCustomer("new")}>
+              <Plus />
+              Aggiungi cliente
+            </Button>
+          ) : null
         }
       />
 
       <CustomerDialog
         open={dialogCustomer !== null}
         customerId={dialogCustomer}
+        readOnly={!canEdit}
         onClose={() => setDialogCustomer(null)}
         onSaved={async () => {
           setDialogCustomer(null)

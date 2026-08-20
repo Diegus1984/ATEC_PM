@@ -42,6 +42,11 @@ export interface MilestoneSummary {
   late: number
   current: number
   done: number
+  /** Media avanzamento (0 le righe senza valore), arrotondata — stessa semantica di avgAvanz client. */
+  avgAvanz: number | null
+  /** Periodo min/max fondendo data_inizio e data_fine — stessa semantica di periodo() client. */
+  periodStart: string | null
+  periodEnd: string | null
 }
 
 export interface MilestoneSaveRequest {

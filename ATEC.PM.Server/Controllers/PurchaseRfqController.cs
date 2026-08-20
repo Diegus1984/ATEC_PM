@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Hubs;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -14,7 +15,8 @@ namespace ATEC.PM.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/purchase-rfqs")]
-[Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+[Authorize]
+[RequireFeature("nav.acquisti_inbox")]
 public class PurchaseRfqController : ControllerBase
 {
     private readonly DbService _db;
@@ -22,19 +24,24 @@ public class PurchaseRfqController : ControllerBase
     private readonly IHubContext<ProjectHub> _hub;
     private readonly NotificationService _notif;
     private readonly DaneaOrderService _daneaOrder;
+    private readonly AnagraficheCache _cache;
 
     public PurchaseRfqController(DbService db, EmailService email, IHubContext<ProjectHub> hub,
-        NotificationService notif, DaneaOrderService daneaOrder)
+        NotificationService notif, DaneaOrderService daneaOrder, AnagraficheCache cache)
     {
         _db = db;
         _email = email;
         _hub = hub;
         _notif = notif;
         _daneaOrder = daneaOrder;
+        _cache = cache;
     }
 
     private int CurrentEmployeeId =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
+
+    /// <summary>Firma dell'ultima modifica alla riga di distinta (#114), null se il token non ha dipendente.</summary>
+    private int? Firma() => CurrentEmployeeId > 0 ? CurrentEmployeeId : null;
 
     // Real-time best-effort per la lista RDO (gruppo "tutte le commesse" dell'hub).
     private void NotifyRfqChange(int rfqId, string action) =>
@@ -89,6 +96,7 @@ public class PurchaseRfqController : ControllerBase
         return Ok(ApiResponse<PurchaseRfqDetail>.Ok(detail));
     }
 
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost]
     public IActionResult Create([FromBody] PurchaseRfqCreateRequest req)
     {
@@ -200,6 +208,7 @@ public class PurchaseRfqController : ControllerBase
     /// interpellabile (quello della riga + gli equivalenti trovati col codice ATEC)
     /// gli articoli che può quotare. Righe già in RDO vive sono escluse.
     /// </summary>
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("offer-plan")]
     public IActionResult OfferPlan([FromBody] PurchaseRfqOfferPlanRequest req)
     {
@@ -271,6 +280,7 @@ public class PurchaseRfqController : ControllerBase
     /// commessa × codice ATEC, o per riga se senza codice) con le offerte dei
     /// fornitori selezionati. Ritorna le offerte pronte per la mailto.
     /// </summary>
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("request-offers")]
     public IActionResult RequestOffers([FromBody] PurchaseRfqRequestOffersRequest req)
     {
@@ -460,6 +470,7 @@ public class PurchaseRfqController : ControllerBase
     /// avanzate a SENT. Nessuna email parte dal server (la compone il client mail
     /// dell'utente); qui resta la traccia di CHI è stato contattato e quando.
     /// </summary>
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("mark-emailed")]
     public IActionResult MarkEmailed([FromBody] PurchaseRfqMarkEmailedRequest req)
     {
@@ -480,6 +491,7 @@ public class PurchaseRfqController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Richiesta offerta registrata"));
     }
 
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("{id}/send")]
     public IActionResult Send(int id)
     {
@@ -526,6 +538,7 @@ public class PurchaseRfqController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, $"Email accodate: {sent}/{detail.Offers.Count}"));
     }
 
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPut("{id}/offers/{offerId}")]
     public IActionResult SaveOffer(int id, int offerId, [FromBody] PurchaseRfqOfferSaveRequest req)
     {
@@ -553,6 +566,7 @@ public class PurchaseRfqController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Offerta aggiornata"));
     }
 
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("{id}/select-winner")]
     public IActionResult SelectWinner(int id, [FromBody] PurchaseRfqSelectWinnerRequest req)
     {
@@ -583,11 +597,16 @@ public class PurchaseRfqController : ControllerBase
 
         string targetStatus = string.IsNullOrWhiteSpace(req.TargetStatus) ? "RO" : req.TargetStatus.Trim().ToUpperInvariant();
 
-        // Snapshot catalogo se presente.
-        string partNumber = offer.CatalogCode;
+        // Snapshot catalogo dell'offerta vincente. ATTENZIONE: l'oggetto della RDO
+        // (detail.Description) è il TITOLO DELLA GARA, non la descrizione dell'articolo:
+        // non deve mai finire nella riga di distinta, altrimenti in Inbox Acquisti tutte le
+        // righe della stessa RDO diventano «Richiesta offerta — Commessa X» e non si sa più
+        // cosa si è comprato. Senza articolo di catalogo la riga tiene la sua identità.
+        string partNumber = offer.CatalogCode ?? "";
         string manufacturer = "";
         string unit = "PZ";
-        string description = detail.Description;
+        string description = "";
+        bool hasCatalog = false;
         if (offer.CatalogItemId.HasValue)
         {
             var cat = c.QueryFirstOrDefault<(string Code, string Desc, string Unit, string Manufacturer)>(@"
@@ -595,8 +614,9 @@ public class PurchaseRfqController : ControllerBase
                 FROM catalog_items WHERE id = @Id", new { Id = offer.CatalogItemId.Value });
             if (cat != default)
             {
+                hasCatalog = true;
                 partNumber = cat.Code;
-                description = string.IsNullOrEmpty(cat.Desc) ? description : cat.Desc;
+                description = cat.Desc;
                 unit = string.IsNullOrEmpty(cat.Unit) ? unit : cat.Unit;
                 manufacturer = cat.Manufacturer;
             }
@@ -611,8 +631,7 @@ public class PurchaseRfqController : ControllerBase
         {
             string? oldStatus = c.ExecuteScalar<string?>(
                 "SELECT item_status FROM bom_items WHERE id = @Id", new { Id = item.BomItemId });
-            string? transitionError = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeCommercial, oldStatus, targetStatus);
+            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, oldStatus, targetStatus, _cache);
             string applyStatus = transitionError == null ? targetStatus : (oldStatus ?? "DO");
 
             if (applyStatus != oldStatus)
@@ -622,21 +641,29 @@ public class PurchaseRfqController : ControllerBase
                     : (item.ProjectCode, 1, oldStatus ?? "", item.BomItemId);
             }
 
+            // Prezzo aggiudicato, fornitore e stato si applicano sempre; l'identità della riga
+            // (codice, descrizione, UM, produttore, articolo) solo se l'offerta porta davvero
+            // un articolo di catalogo — e mai con valori vuoti.
             c.Execute(@"
                 UPDATE bom_items SET
-                    catalog_item_id = @CatId,
-                    part_number = @Part,
-                    description = @Desc,
-                    unit = @Unit,
+                    catalog_item_id = IF(@HasCatalog, @CatId, catalog_item_id),
+                    part_number = IF(LENGTH(@Part) > 0, @Part, part_number),
+                    description = IF(LENGTH(@Desc) > 0, @Desc, description),
+                    unit = IF(@HasCatalog, @Unit, unit),
                     unit_cost = @Price,
                     supplier_id = @SuppId,
-                    manufacturer = @Mfr,
-                    atec_code = @Atec,
+                    manufacturer = IF(@HasCatalog, @Mfr, manufacturer),
+                    atec_code = IF(LENGTH(@Atec) > 0, @Atec, atec_code),
                     item_status = @Status,
-                    updated_at = NOW()
+                    updated_at = NOW(),
+                    -- Firma dell'ultima modifica (#114): l'aggiudicazione cambia la riga di
+                    -- distinta, e la card della Dashboard deve sapere chi è stato.
+                    updated_by = @UpdatedBy
                 WHERE id = @BomId AND project_id = @ProjId",
                 new
                 {
+                    UpdatedBy = Firma(),
+                    HasCatalog = hasCatalog,
                     CatId = offer.CatalogItemId,
                     Part = partNumber,
                     Desc = description,
@@ -649,6 +676,9 @@ public class PurchaseRfqController : ControllerBase
                     BomId = item.BomItemId,
                     ProjId = item.ProjectId,
                 });
+
+            DdpItemEvents.Registra(c, DdpItemEvents.Commerciale, item.BomItemId, item.ProjectId,
+                oldStatus, applyStatus, User, note: "aggiudicazione offerta");
 
             var payload = new DdpChange
             {
@@ -699,6 +729,7 @@ public class PurchaseRfqController : ControllerBase
     // Danea (Atec_PM) via DaneaOrderService — testata+righe+IVA+movimento InArrivo.
     // Una riga d'ordine per RDO: articolo Danea del vincitore, qtà = somma fabbisogni,
     // prezzo = offerta vincente. REGOLA AZIENDALE: 1 ordine = 1 fornitore + 1 commessa.
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("{id}/create-danea-order")]
     public IActionResult CreateDaneaOrder(int id, [FromBody] PurchaseRfqCreateOrderRequest req)
     {
@@ -713,6 +744,7 @@ public class PurchaseRfqController : ControllerBase
 
     // Accorpamento multi-RDO: più RDO chiuse dello STESSO fornitore vincitore e della
     // STESSA commessa in un unico ordine Danea multi-riga (una riga per RDO).
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("create-danea-order-multi")]
     public IActionResult CreateDaneaOrderMulti([FromBody] PurchaseRfqCreateOrderMultiRequest req)
     {
@@ -820,7 +852,7 @@ public class PurchaseRfqController : ControllerBase
             string? oldStatus = c.ExecuteScalar<string?>(
                 "SELECT item_status FROM bom_items WHERE id = @Id", new { Id = item.BomItemId });
             bool advance = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeCommercial, oldStatus, "IO") == null;
+                c, DdpTransitionService.TypeCommercial, oldStatus, "IO", _cache) == null;
             rowUpdates.Add((item.BomItemId, item.ProjectId, advance));
         }
 
@@ -844,9 +876,25 @@ public class PurchaseRfqController : ControllerBase
                                 date_ordered = CURDATE(),
                                 date_needed = COALESCE(@Expected, date_needed),
                                 item_status = 'IO',
-                                updated_at = NOW()
+                                updated_at = NOW(), updated_by = @UpdatedBy
                             WHERE id = @Id",
-                    new { Ref = order.Num.ToString(), order.IdDoc, Expected = expectedDate, Id = bomItemId }, tx);
+                    new { Ref = order.Num.ToString(), order.IdDoc, Expected = expectedDate, Id = bomItemId, UpdatedBy = Firma() }, tx);
+
+                // Cronistoria: «ordinato il» nasce qui, con il numero dell'ordine Danea.
+                int projectIdRiga = c.ExecuteScalar<int>(
+                    "SELECT project_id FROM bom_items WHERE id = @Id", new { Id = bomItemId }, tx);
+                c.Execute(@"
+                    INSERT INTO ddp_item_events
+                        (item_type, item_id, project_id, from_status, to_status,
+                         changed_at, changed_by_name, origin, note)
+                    VALUES ('COMMERCIAL', @ItemId, @ProjectId, NULL, 'IO', NOW(), @Utente, 'SISTEMA', @Note)",
+                    new
+                    {
+                        ItemId = bomItemId,
+                        ProjectId = projectIdRiga,
+                        Utente = User.Identity?.Name ?? "",
+                        Note = $"ordine Danea n. {order.Num}"
+                    }, tx);
             }
             tx.Commit();
         }
@@ -877,6 +925,7 @@ public class PurchaseRfqController : ControllerBase
         return (order, null);
     }
 
+    [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
     [HttpPost("{id}/cancel")]
     public IActionResult Cancel(int id)
     {
@@ -910,7 +959,7 @@ public class PurchaseRfqController : ControllerBase
         if (head.AtecCode.Length > 0)
             head.AtecCode = CodexListItem.FormatCodice(head.AtecCode);
 
-        head.Items = c.Query<PurchaseRfqItemDto>(@"
+        head.Items = c.Query<PurchaseRfqItemDto>($@"
             SELECT i.id, i.rfq_id AS RfqId, i.bom_item_id AS BomItemId, i.project_id AS ProjectId,
                    COALESCE(p.code,'') AS ProjectCode, i.quantity AS Quantity,
                    COALESCE(b.part_number,'') AS PartNumber,
@@ -924,7 +973,7 @@ public class PurchaseRfqController : ControllerBase
             JOIN projects p ON p.id = i.project_id
             JOIN bom_items b ON b.id = i.bom_item_id
             WHERE i.rfq_id = @Id
-            ORDER BY p.code, i.id", new { Id = id }).ToList();
+            ORDER BY {ProjectSorting.OrderBy("p")}, i.id", new { Id = id }).ToList();
 
         head.Offers = c.Query<PurchaseRfqOfferDto>(@"
             SELECT o.id, o.rfq_id AS RfqId, o.supplier_id AS SupplierId,

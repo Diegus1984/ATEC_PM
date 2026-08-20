@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { Plus, X } from "lucide-react"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/shared/RichTextEditor"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -29,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   createProduct,
   fetchProduct,
@@ -36,7 +38,7 @@ import {
 } from "@/lib/api/quote-catalog"
 import type { QuoteProductSaveDto } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
-import { fmt2, parseDecimal } from "@/lib/format"
+import { euro, parseDecimal } from "@/lib/format"
 
 interface VariantRow {
   id: number
@@ -283,7 +285,7 @@ export function QuoteProductDialog({
             <p className="text-xs text-muted-foreground">
               Prezzo cliente = costo × K (es. 1.000 € × 1,3 = 1.300 €)
             </p>
-            <div className="rounded-md border">
+            <GridScroller className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -319,12 +321,13 @@ export function QuoteProductDialog({
                           />
                         </TableCell>
                         <TableCell>
-                          <UnitField
-                            unit="€"
+                          {/* Niente UnitField qui: il simbolo € lo mette già MoneyInput
+                              dentro al valore formattato. */}
+                          <MoneyInput
+                            className="h-8"
                             value={row.costPrice}
-                            inputMode="decimal"
-                            onChange={(event) =>
-                              setVariant(index, { costPrice: event.target.value })
+                            onChange={(value) =>
+                              setVariant(index, { costPrice: value })
                             }
                           />
                         </TableCell>
@@ -340,7 +343,7 @@ export function QuoteProductDialog({
                           />
                         </TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">
-                          {fmt2(sell)} €
+                          {euro(sell)}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -373,7 +376,7 @@ export function QuoteProductDialog({
                   ) : null}
                 </TableBody>
               </Table>
-            </div>
+            </GridScroller>
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}

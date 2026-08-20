@@ -19,6 +19,8 @@ export function commessaSectionForReference(referenceType: string): string {
       return "details"
     case "SAL_ROW":
       return "sal"
+    case "CHAT":
+      return "chat"
     default:
       return "details"
   }
@@ -38,6 +40,9 @@ export function getNotificationHref(
     if (type === "TIMESHEET_ANOMALY") {
       return "/timesheet"
     }
+    if (type === "BUG_REPORT" || type === "BUG_RESOLVED" || ref === "BUG_REPORT") {
+      return "/segnalazioni"
+    }
     // Attività di gruppi generici / azioni di verbali di riunione: pagine standalone.
     if (ref === "CHECKLIST") {
       return "/checklist"
@@ -56,6 +61,10 @@ export function getNotificationHref(
     (ref === "BOM" || ref === "BOM_OFFICINA" || ref === "PHASE")
   ) {
     params.set("item", String(notification.referenceId))
+  }
+
+  if (ref === "CHAT" && notification.referenceId > 0) {
+    params.set("chat", String(notification.referenceId))
   }
 
   const query = params.toString()

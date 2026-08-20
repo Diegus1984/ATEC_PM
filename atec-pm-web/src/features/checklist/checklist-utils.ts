@@ -1,4 +1,8 @@
-import type { ChecklistItem, ChecklistItemSaveRequest } from "@/lib/api/types"
+import type {
+  ChecklistGroup,
+  ChecklistItem,
+  ChecklistItemSaveRequest,
+} from "@/lib/api/types"
 import { dateToIso, isoToDate } from "@/lib/date-iso"
 
 // Logica pura del modulo Check list (separata dai componenti per l'HMR fast-refresh).
@@ -59,6 +63,23 @@ export function containerPriorityDots(
   }
 
   return dots
+}
+
+// Lettura data e ordinamento dei codici commessa: spostati in `lib/project-code`
+// perché servono anche fuori dalla Check list (stessa separazione nel MoM).
+// Codici liberi come `INTERNA` o `SERVICE _ SANGRATO` restano senza data.
+export { compareProjectCodes, isCommessaCode, projectCodeDate } from "@/lib/project-code"
+
+/** true se un altro gruppo (≠ `excludeId`) ha già questo nome (confronto senza maiuscole). */
+export function groupNameExists(
+  groups: ChecklistGroup[],
+  name: string,
+  excludeId?: number
+): boolean {
+  const normalized = name.trim().toLowerCase()
+  return groups.some(
+    (g) => g.id !== excludeId && g.name.trim().toLowerCase() === normalized
+  )
 }
 
 /** Container di destinazione di un'attività: commessa (projectId) o gruppo (groupId). */

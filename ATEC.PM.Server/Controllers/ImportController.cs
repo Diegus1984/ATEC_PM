@@ -5,12 +5,14 @@ using Dapper;
 using System.Data;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/import")]
-[Authorize(Roles = "ADMIN,PM")]
+[Authorize]
+[RequireFeature("action.import_easyfatt")]
 public class ImportController : ControllerBase
 {
     private readonly IConfiguration _config;

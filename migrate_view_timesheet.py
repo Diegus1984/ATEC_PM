@@ -1,5 +1,12 @@
 """Aggiorna v_timesheet_with_section per supportare fasi locali
-(project_phases con phase_template_id NULL + name/category/cost_section_template_id snapshot)."""
+(project_phases con phase_template_id NULL + name/category/cost_section_template_id snapshot).
+
+SUPERATO dalla migrazione v69: la definizione buona vive ora in
+ATEC.PM.Server/Services/DbService.cs (costante `TimesheetSectionViewSql`) e la applicano da sole
+sia InitDatabase sia ApplyVersionedMigrations. Questo script resta solo come storia: era l'unico
+posto dove esisteva la versione corretta, e non essendo mai stato lanciato in produzione lì la
+vista è rimasta per mesi con l'INNER JOIN che scartava le fasi locali. Non modificarlo: se serve
+cambiare la vista, si cambia la costante."""
 import sys, pymysql
 sys.stdout.reconfigure(encoding="utf-8")
 

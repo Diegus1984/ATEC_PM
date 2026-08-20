@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ATEC.PM.Tests</RootNamespace>
+    <!-- Gli avvisi del progetto Server non sono responsabilità dei test. -->
+    <NoWarn>$(NoWarn);CA1416;CS8601;CS8602</NoWarn>
+  </PropertyGroup>
+
+  <!-- Xunit disponibile in tutti i file senza ripetere la using. -->
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ATEC.PM.Server\ATEC.PM.Server.csproj" />
+    <ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -3,7 +3,14 @@
 // useMemo del chiamante, altrimenti le celle si rimontano a ogni render).
 
 import type { ColumnDef } from "@tanstack/react-table"
-import { Ban, ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react"
+import {
+  Ban,
+  ChevronDown,
+  ChevronRight,
+  History,
+  Pencil,
+  Trash2,
+} from "lucide-react"
 
 import { RowActionsMenu, type RowAction } from "@/components/shared/row-actions"
 import type {
@@ -25,11 +32,13 @@ import { DdpQuantityStepper } from "./DdpQuantityStepper"
 import { DdpStatusMenu } from "./DdpStatusMenu"
 import { DdpSupplierCell } from "./DdpSupplierCell"
 import { DdpTreatmentCell } from "./DdpTreatmentCell"
+import { DdpWorkTypeCell } from "./DdpWorkTypeCell"
+import { workTypeLabel } from "./ddp-work-type"
 import { DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { DDP_STATUS_TO_ORDER } from "./ddp-constants"
 import { OfficinaProducedCell } from "./OfficinaProducedCell"
 import type { OfficinaRowMutations } from "./use-officina-row-mutations"
-import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
+import { formatDateOrDash, formatDateShort, toDateOnly } from "@/lib/date-iso"
 
 export function buildOfficinaColumns({
   statuses,
@@ -46,6 +55,7 @@ export function buildOfficinaColumns({
   onAnnul,
   onDelete,
   onQuantityAdjust,
+  onStoria,
 }: {
   statuses: DdpStatusItem[]
   statusMap: Map<string, DdpStatusItem>
@@ -61,6 +71,8 @@ export function buildOfficinaColumns({
   onAnnul: (item: OfficinaItem) => void
   onDelete: (item: OfficinaItem) => void
   onQuantityAdjust: (item: OfficinaItem, delta: 1 | -1) => void
+  /** Apre la cronistoria dei passaggi di stato della riga. */
+  onStoria: (item: OfficinaItem) => void
 }): ColumnDef<OfficinaItem>[] {
   const { pending } = mutations
 
@@ -84,17 +96,39 @@ export function buildOfficinaColumns({
       },
     },
     {
+      accessorKey: "requestedBy",
+      header: "Inserito da",
+      // Lo compila da solo il picker Codex col nome di chi è collegato; resta
+      // correggibile a mano come nell'Excel (segnalazione #61).
+      cell: ({ row }) => (
+        <DdpInlineTextCell
+          value={row.original.requestedBy ?? ""}
+          disabled={pending.requestedBy}
+          placeholder="—"
+          onCommit={(value) => mutations.commitRequestedBy(row.original, value)}
+        />
+      ),
+    },
+    {
       accessorKey: "createdAt",
-      header: "Data",
+      header: "Data inserimento",
       enableColumnFilter: false,
+      // Non si scrive a mano: è il momento in cui la riga è nata, registrato dal server.
       cell: ({ row }) => (
         <span className="whitespace-nowrap">{formatDateOrDash(row.original.createdAt)}</span>
       ),
     },
     {
-      accessorKey: "requestedBy",
-      header: "Rich.",
-      cell: ({ row }) => row.original.requestedBy || "—",
+      // «Creata da» è l'AUTORE VERO, scritto dal server a chi era collegato: serve quando
+      // «Inserito da» qui sopra è stato corretto a mano e non dice più chi ha creato la riga.
+      // Nasce NASCOSTA (il menu «Colonne» la riaccende): la griglia ha già venti colonne.
+      accessorKey: "createdByName",
+      header: "Creata da",
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap opacity-80">
+          {row.original.createdByName || "—"}
+        </span>
+      ),
     },
     {
       accessorKey: "partNumber",
@@ -141,7 +175,7 @@ export function buildOfficinaColumns({
       header: "Descrizione",
       cell: ({ row }) => (
         <span
-          className="block max-w-[240px] truncate"
+          className="block max-w-[240px] whitespace-normal break-words"
           title={row.original.description}
         >
           {row.original.description || "—"}
@@ -237,6 +271,23 @@ export function buildOfficinaColumns({
       ),
     },
     {
+      // accessorFn sulla ETICHETTA, non sul valore grezzo: filtro di colonna e ricerca
+      // globale devono trovare «Esterna», che è quello che si legge nella cella
+      // (il valore a DB è 'External'). Stessa scelta della colonna «Stato».
+      id: "workType",
+      accessorFn: (r) => workTypeLabel(r.workType),
+      header: "Tipo",
+      cell: ({ row }) => (
+        <DdpWorkTypeCell
+          workType={row.original.workType ?? ""}
+          disabled={pending.workType}
+          onWorkTypeChange={(workType) =>
+            mutations.changeWorkType(row.original, workType)
+          }
+        />
+      ),
+    },
+    {
       accessorKey: "supplierName",
       header: "Fornitore",
       cell: ({ row }) => (
@@ -275,26 +326,41 @@ export function buildOfficinaColumns({
       },
     },
     {
+      accessorKey: "dateNeeded",
+      // «Necessario» → «Data Richiesta» (segnalazione #58): stessa data, il nome è quello
+      // che usa Paolo compilando.
+      //
+      // Dalla #83 si legge e basta: la data la decide chi programma il lavoro, dalla pagina
+      // «Lavorazioni Officine», e da lì si riporta qui. Due punti in cui scriverla
+      // significa che vince l'ultimo che salva — e il server, dalla v92, la ignora
+      // comunque in questa PUT: lasciarla scrivibile mostrerebbe una modifica che poi
+      // non c'è più al primo refresh.
+      header: "Data Richiesta",
+      enableColumnFilter: false,
+      cell: ({ row }) => (
+        <span
+          className="text-sm tabular-nums"
+          title="Si imposta da Lavorazioni Officine"
+        >
+          {row.original.dateNeeded
+            ? formatDateShort(toDateOnly(row.original.dateNeeded))
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      // Segnalazione #58: la colonna esisteva già come «N° Ordine» ma nasceva NASCOSTA, e da
+      // nascosta non c'era — è il numero dell'ordine Danea con cui si affida la lavorazione a
+      // un'officina esterna. Rinominata «Rif. Danea» e spostata dopo la data, dove la cerca chi
+      // compila. La visibilità di partenza sta in ProjectDdpOfficina (chiave `…-v2`).
       accessorKey: "daneaRef",
-      header: "N° Ordine",
+      header: "Rif. Danea",
       cell: ({ row }) => (
         <DdpInlineTextCell
           value={row.original.daneaRef ?? ""}
           disabled={pending.daneaRef}
           placeholder="—"
           onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
-        />
-      ),
-    },
-    {
-      accessorKey: "dateNeeded",
-      header: "Necessario",
-      enableColumnFilter: false,
-      cell: ({ row }) => (
-        <DdpInlineDateCell
-          value={toDateOnly(row.original.dateNeeded)}
-          disabled={pending.dateNeeded}
-          onChange={(value) => mutations.changeDateNeeded(row.original, value)}
         />
       ),
     },
@@ -307,6 +373,19 @@ export function buildOfficinaColumns({
           value={toDateOnly(row.original.orderDate)}
           disabled={pending.orderDate}
           onChange={(value) => mutations.changeOrderDate(row.original, value)}
+        />
+      ),
+    },
+    {
+      // Segnalazione #82: non più sola cronistoria — stesso picker delle altre due date.
+      accessorKey: "deliveredAt",
+      header: "Consegnato il",
+      enableColumnFilter: false,
+      cell: ({ row }) => (
+        <DdpInlineDateCell
+          value={toDateOnly(row.original.deliveredAt)}
+          disabled={pending.deliveredAt}
+          onChange={(value) => mutations.changeDeliveredAt(row.original, value)}
         />
       ),
     },
@@ -346,6 +425,7 @@ export function buildOfficinaColumns({
           value={row.original.notes ?? ""}
           disabled={pending.notes}
           placeholder="—"
+          multiline
           onCommit={(value) => mutations.commitNotes(row.original, value)}
         />
       ),
@@ -363,6 +443,11 @@ export function buildOfficinaColumns({
             label: "Modifica",
             icon: Pencil,
             onClick: () => onEdit(item),
+          },
+          {
+            label: "Cronistoria",
+            icon: History,
+            onClick: () => onStoria(item),
           },
         ]
         if (item.itemStatus !== DDP_STATUS_CANCELLED) {

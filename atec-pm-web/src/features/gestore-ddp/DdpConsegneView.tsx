@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Printer } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -20,14 +21,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { fetchDdpDeliveriesByDay } from "@/lib/api/ddp-manager"
 import { dateToIso, formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
 import { printDdpTables } from "./ddp-export"
+
+// Colonne della tabella giorni. «Data» è la chiave di riga e resta sempre visibile.
+const CONSEGNE_COLUMNS: { id: string; label: string }[] = [
+  { id: "weekday", label: "Giorno" },
+  { id: "commercialCount", label: "Righe Comm." },
+  { id: "commercialValue", label: "Valore Comm." },
+  { id: "officinaCount", label: "Righe Off." },
+  { id: "officinaValue", label: "Valore Off." },
+  { id: "totalCount", label: "Righe Tot." },
+  { id: "totalValue", label: "Valore Tot." },
+]
+const CONSEGNE_COLUMNS_DEFAULT = Object.fromEntries(
+  CONSEGNE_COLUMNS.map((column) => [column.id, true])
+)
 
 // Palette di serie validata (dataviz: croma/contrasto/CVD ok in light e dark).
 const COLOR_COMMERCIALI = "#4A86C6"
@@ -81,6 +98,19 @@ function DayTick({
 
 export function DdpConsegneView() {
   const [metric, setMetric] = React.useState<Metric>("val")
+
+  const [visible, setVisible] = usePersistedColumnVisibility(
+    "ddp-consegne-columns-v1",
+    CONSEGNE_COLUMNS_DEFAULT
+  )
+  const show = (id: string) => visible[id] ?? true
+  const columnToggles = CONSEGNE_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: show(id),
+    onToggle: (value: boolean) =>
+      setVisible((prev) => ({ ...prev, [id]: value })),
+  }))
 
   // staleTime 0: i dati arrivano dalle distinte modificate altrove e l'hub esclude
   // l'autore della modifica — al rientro nella vista si rilegge sempre dal server.
@@ -189,6 +219,7 @@ export function DdpConsegneView() {
             <TabsTrigger value="n">Numero righe</TabsTrigger>
           </TabsList>
         </Tabs>
+        <ColumnsMenu columns={columnToggles} />
         <Button variant="outline" size="sm" onClick={print} disabled={days.length === 0}>
           <Printer className="mr-1.5 size-4" />
           Stampa PDF
@@ -306,18 +337,30 @@ export function DdpConsegneView() {
 
           <Card>
             <CardContent className="pt-4">
-              <div className="overflow-x-auto">
+              <GridScroller>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
-                      <TableHead>Giorno</TableHead>
-                      <TableHead className="text-right">Righe Comm.</TableHead>
-                      <TableHead className="text-right">Valore Comm.</TableHead>
-                      <TableHead className="text-right">Righe Off.</TableHead>
-                      <TableHead className="text-right">Valore Off.</TableHead>
-                      <TableHead className="text-right">Righe Tot.</TableHead>
-                      <TableHead className="text-right">Valore Tot.</TableHead>
+                      {show("weekday") && <TableHead>Giorno</TableHead>}
+                      {show("commercialCount") && (
+                        <TableHead className="text-right">Righe Comm.</TableHead>
+                      )}
+                      {show("commercialValue") && (
+                        <TableHead className="text-right">Valore Comm.</TableHead>
+                      )}
+                      {show("officinaCount") && (
+                        <TableHead className="text-right">Righe Off.</TableHead>
+                      )}
+                      {show("officinaValue") && (
+                        <TableHead className="text-right">Valore Off.</TableHead>
+                      )}
+                      {show("totalCount") && (
+                        <TableHead className="text-right">Righe Tot.</TableHead>
+                      )}
+                      {show("totalValue") && (
+                        <TableHead className="text-right">Valore Tot.</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -337,54 +380,80 @@ export function DdpConsegneView() {
                           >
                             {formatDateShort(day)}
                           </TableCell>
-                          <TableCell className="capitalize">{weekday(day)}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {entry.commercialCount}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {euro(entry.commercialValue)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {entry.officinaCount}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {euro(entry.officinaValue)}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
-                            {entry.commercialCount + entry.officinaCount}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
-                            {euro(entry.commercialValue + entry.officinaValue)}
-                          </TableCell>
+                          {show("weekday") && (
+                            <TableCell className="capitalize">{weekday(day)}</TableCell>
+                          )}
+                          {show("commercialCount") && (
+                            <TableCell className="text-right tabular-nums">
+                              {entry.commercialCount}
+                            </TableCell>
+                          )}
+                          {show("commercialValue") && (
+                            <TableCell className="text-right tabular-nums">
+                              {euro(entry.commercialValue)}
+                            </TableCell>
+                          )}
+                          {show("officinaCount") && (
+                            <TableCell className="text-right tabular-nums">
+                              {entry.officinaCount}
+                            </TableCell>
+                          )}
+                          {show("officinaValue") && (
+                            <TableCell className="text-right tabular-nums">
+                              {euro(entry.officinaValue)}
+                            </TableCell>
+                          )}
+                          {show("totalCount") && (
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              {entry.commercialCount + entry.officinaCount}
+                            </TableCell>
+                          )}
+                          {show("totalValue") && (
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              {euro(entry.commercialValue + entry.officinaValue)}
+                            </TableCell>
+                          )}
                         </TableRow>
                       )
                     })}
                   </TableBody>
                   <TableFooter>
                     <TableRow>
-                      <TableCell colSpan={2}>Totale</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {days.reduce((sum, entry) => sum + entry.commercialCount, 0)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {euro(
-                          days.reduce((sum, entry) => sum + entry.commercialValue, 0)
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {days.reduce((sum, entry) => sum + entry.officinaCount, 0)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {euro(days.reduce((sum, entry) => sum + entry.officinaValue, 0))}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{totals.rows}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {euro(totals.value)}
-                      </TableCell>
+                      <TableCell colSpan={show("weekday") ? 2 : 1}>Totale</TableCell>
+                      {show("commercialCount") && (
+                        <TableCell className="text-right tabular-nums">
+                          {days.reduce((sum, entry) => sum + entry.commercialCount, 0)}
+                        </TableCell>
+                      )}
+                      {show("commercialValue") && (
+                        <TableCell className="text-right tabular-nums">
+                          {euro(
+                            days.reduce((sum, entry) => sum + entry.commercialValue, 0)
+                          )}
+                        </TableCell>
+                      )}
+                      {show("officinaCount") && (
+                        <TableCell className="text-right tabular-nums">
+                          {days.reduce((sum, entry) => sum + entry.officinaCount, 0)}
+                        </TableCell>
+                      )}
+                      {show("officinaValue") && (
+                        <TableCell className="text-right tabular-nums">
+                          {euro(days.reduce((sum, entry) => sum + entry.officinaValue, 0))}
+                        </TableCell>
+                      )}
+                      {show("totalCount") && (
+                        <TableCell className="text-right tabular-nums">{totals.rows}</TableCell>
+                      )}
+                      {show("totalValue") && (
+                        <TableCell className="text-right tabular-nums">
+                          {euro(totals.value)}
+                        </TableCell>
+                      )}
                     </TableRow>
                   </TableFooter>
                 </Table>
-              </div>
+              </GridScroller>
             </CardContent>
           </Card>
         </>

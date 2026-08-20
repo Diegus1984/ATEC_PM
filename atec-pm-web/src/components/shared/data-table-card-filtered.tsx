@@ -11,8 +11,12 @@ import {
 import { FilterX, RefreshCw, Search } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { renderColumnDef } from "@/components/shared/render-column-def"
-import type { DataTableCardProps } from "@/components/shared/data-table-card"
+import {
+  GRID_LINES_CLASS,
+  type DataTableCardProps,
+} from "@/components/shared/data-table-card"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import "@/components/shared/data-table-column-meta"
 import { Button } from "@/components/ui/button"
@@ -87,6 +91,10 @@ export function DataTableCardFiltered<TData>({
   externalFiltersActive = false,
   onClearExternalFilters,
   visibilityStorageKey,
+  scrollAreaClassName,
+  stickyHeader = true,
+  topScrollbar = true,
+  gridLines = false,
 }: DataTableCardFilteredProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(defaultSorting)
 
@@ -250,8 +258,13 @@ export function DataTableCardFiltered<TData>({
 
           {aboveTable ? <div className="overflow-x-auto">{aboveTable}</div> : null}
 
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
+          <GridScroller
+            className="rounded-lg border"
+            scrollerClassName={scrollAreaClassName}
+            stickyHeader={stickyHeader}
+            topScrollbar={topScrollbar}
+          >
+            <Table className={cn(gridLines && GRID_LINES_CLASS)}>
               <TableHeader className="bg-muted/50">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <React.Fragment key={headerGroup.id}>
@@ -359,7 +372,7 @@ export function DataTableCardFiltered<TData>({
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>

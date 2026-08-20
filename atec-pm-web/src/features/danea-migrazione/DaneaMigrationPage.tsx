@@ -4,6 +4,7 @@ import { ArrowRightLeft, Check, Image as ImageIcon, Search, TriangleAlert } from
 
 import { ColumnFilterCombobox } from "@/components/shared/column-filter-combobox"
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { useConfirm } from "@/components/shared/confirm"
 import { ServerPagination } from "@/components/shared/server-pagination"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchDaneaMigrationStatus,
   fetchDaneaOldArticles,
@@ -37,6 +39,7 @@ import {
 import { euro } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
 const PAGE_SIZE = 50
 const MAX_BATCH = 500
@@ -46,6 +49,32 @@ function uniqueSorted(values: Iterable<string>): string[] {
     a.localeCompare(b, "it", { sensitivity: "base" })
   )
 }
+
+/**
+ * Colonne della griglia articoli del vecchio archivio: `filter` è il parametro del
+ * filtro di colonna (null = colonna senza filtro). Menu «Colonne»: BLOCKS-RULES.md.
+ */
+const DANEA_COLUMNS: {
+  id: string
+  label: string
+  filter: string | null
+  headClass?: string
+}[] = [
+  { id: "codArticolo", label: "Codice", filter: "codArticolo" },
+  { id: "descrizione", label: "Descrizione", filter: "descrizione" },
+  { id: "categoria", label: "Categoria", filter: "categoria" },
+  { id: "sottocategoria", label: "Sottocategoria", filter: "sottocategoria" },
+  { id: "udm", label: "UM", filter: null },
+  { id: "fornitore", label: "Fornitore", filter: "fornitore" },
+  { id: "produttore", label: "Produttore", filter: "produttore" },
+  { id: "prezzoForn", label: "€ Forn.", filter: null, headClass: "text-right" },
+  { id: "extra1", label: "Cod. ATEC", filter: "extra1" },
+  { id: "hasImage", label: "Img", filter: null, headClass: "text-center" },
+  { id: "stato", label: "Stato", filter: null },
+]
+const DANEA_COLUMNS_DEFAULT = Object.fromEntries(
+  DANEA_COLUMNS.map((column) => [column.id, true])
+)
 
 /**
  * F2 migrazione Danea: trasferimento selettivo degli articoli dal vecchio archivio
@@ -66,6 +95,20 @@ export function DaneaMigrationPage() {
   /** Selezione multi-pagina: id articolo → codice (per il riepilogo). */
   const [selected, setSelected] = React.useState<Map<number, string>>(new Map())
   const [report, setReport] = React.useState<DaneaTransferReport | null>(null)
+
+  const [visible, setVisible] = usePersistedColumnVisibility(
+    "danea-migrazione-columns-v1",
+    DANEA_COLUMNS_DEFAULT
+  )
+  const show = (id: string) => visible[id] ?? true
+  const visibleColumns = DANEA_COLUMNS.filter((column) => show(column.id))
+  const columnToggles = DANEA_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: show(id),
+    onToggle: (value: boolean) =>
+      setVisible((prev) => ({ ...prev, [id]: value })),
+  }))
 
   const setColumnFilter = React.useCallback((param: string, value: string) => {
     setColumnFilters((prev) => {
@@ -225,6 +268,7 @@ export function DaneaMigrationPage() {
                   onChange={(e) => setSearchInput(e.target.value)}
                 />
               </div>
+              <ColumnsMenu columns={columnToggles} />
               <Button
                 variant={onlyMissing ? "default" : "outline"}
                 size="sm"
@@ -246,7 +290,7 @@ export function DaneaMigrationPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="overflow-x-auto rounded-md border">
+          <GridScroller className="rounded-md border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
@@ -258,34 +302,16 @@ export function DaneaMigrationPage() {
                       aria-label="Seleziona pagina"
                     />
                   </TableHead>
-                  <TableHead>Codice</TableHead>
-                  <TableHead>Descrizione</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Sottocategoria</TableHead>
-                  <TableHead>UM</TableHead>
-                  <TableHead>Fornitore</TableHead>
-                  <TableHead>Produttore</TableHead>
-                  <TableHead className="text-right">€ Forn.</TableHead>
-                  <TableHead>Cod. ATEC</TableHead>
-                  <TableHead className="text-center">Img</TableHead>
-                  <TableHead>Stato</TableHead>
+                  {visibleColumns.map((column) => (
+                    <TableHead key={column.id} className={column.headClass}>
+                      {column.label}
+                    </TableHead>
+                  ))}
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
                   <TableHead />
-                  {[
-                    "codArticolo",
-                    "descrizione",
-                    "categoria",
-                    "sottocategoria",
-                    null, // UM
-                    "fornitore",
-                    "produttore",
-                    null, // € Forn.
-                    "extra1",
-                    null, // Img
-                    null, // Stato
-                  ].map((param, i) => (
-                    <TableHead key={i} className="h-auto px-2 py-2 align-middle">
+                  {visibleColumns.map(({ id, filter: param }) => (
+                    <TableHead key={id} className="h-auto px-2 py-2 align-middle">
                       {param === "categoria" ? (
                         <ColumnFilterCombobox
                           value={columnFilters.categoria ?? ""}
@@ -339,19 +365,19 @@ export function DaneaMigrationPage() {
               <TableBody>
                 {listQuery.isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-16 text-center text-muted-foreground">
+                    <TableCell colSpan={visibleColumns.length + 1} className="h-16 text-center text-muted-foreground">
                       Caricamento dal vecchio archivio…
                     </TableCell>
                   </TableRow>
                 ) : listQuery.error ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-16 text-center text-destructive">
+                    <TableCell colSpan={visibleColumns.length + 1} className="h-16 text-center text-destructive">
                       {(listQuery.error as Error).message}
                     </TableCell>
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-16 text-center text-muted-foreground">
+                    <TableCell colSpan={visibleColumns.length + 1} className="h-16 text-center text-muted-foreground">
                       {onlyMissing && !search
                         ? "Niente da trasferire: catalogo completo."
                         : "Nessun articolo corrisponde."}
@@ -371,50 +397,75 @@ export function DaneaMigrationPage() {
                           aria-label={`Seleziona ${item.codArticolo}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{item.codArticolo}</TableCell>
-                      <TableCell className="max-w-[280px] truncate" title={item.descrizione}>
-                        {item.descrizione || "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[140px] truncate" title={item.categoria}>
-                        {item.categoria || "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[140px] truncate" title={item.sottocategoria}>
-                        {item.sottocategoria || "—"}
-                      </TableCell>
-                      <TableCell>{item.udm || "—"}</TableCell>
-                      <TableCell className="max-w-[160px] truncate">
-                        {item.fornitore || "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[140px] truncate" title={item.produttore}>
-                        {item.produttore || "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {euro(item.prezzoForn)}
-                      </TableCell>
-                      <TableCell className="tabular-nums">{item.extra1 || "—"}</TableCell>
-                      <TableCell className="text-center">
-                        {item.hasImage ? (
-                          <ImageIcon className="mx-auto size-4 text-muted-foreground" />
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {item.transferred ? (
-                          <Badge variant="secondary" className="gap-1">
-                            <Check className="size-3" />
-                            In Atec_PM
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Da trasferire</span>
-                        )}
-                      </TableCell>
+                      {show("codArticolo") && (
+                        <TableCell className="font-medium">{item.codArticolo}</TableCell>
+                      )}
+                      {show("descrizione") && (
+                        <TableCell className="max-w-[280px] truncate" title={item.descrizione}>
+                          {item.descrizione || "—"}
+                        </TableCell>
+                      )}
+                      {show("categoria") && (
+                        <TableCell className="max-w-[140px] truncate" title={item.categoria}>
+                          {item.categoria || "—"}
+                        </TableCell>
+                      )}
+                      {show("sottocategoria") && (
+                        <TableCell
+                          className="max-w-[140px] truncate"
+                          title={item.sottocategoria}
+                        >
+                          {item.sottocategoria || "—"}
+                        </TableCell>
+                      )}
+                      {show("udm") && <TableCell>{item.udm || "—"}</TableCell>}
+                      {show("fornitore") && (
+                        <TableCell className="max-w-[160px] truncate">
+                          {item.fornitore || "—"}
+                        </TableCell>
+                      )}
+                      {show("produttore") && (
+                        <TableCell className="max-w-[140px] truncate" title={item.produttore}>
+                          {item.produttore || "—"}
+                        </TableCell>
+                      )}
+                      {show("prezzoForn") && (
+                        <TableCell className="text-right tabular-nums">
+                          {euro(item.prezzoForn)}
+                        </TableCell>
+                      )}
+                      {show("extra1") && (
+                        <TableCell className="tabular-nums">{item.extra1 || "—"}</TableCell>
+                      )}
+                      {show("hasImage") && (
+                        <TableCell className="text-center">
+                          {item.hasImage ? (
+                            <ImageIcon className="mx-auto size-4 text-muted-foreground" />
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                      )}
+                      {show("stato") && (
+                        <TableCell>
+                          {item.transferred ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <Check className="size-3" />
+                              In Atec_PM
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Da trasferire
+                            </span>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <ServerPagination
             page={page}

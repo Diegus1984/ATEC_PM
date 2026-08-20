@@ -23,16 +23,27 @@ public static class DdpTransitionService
     /// <summary>
     /// Null se la transizione è ammessa, altrimenti il messaggio d'errore da mostrare all'utente.
     /// </summary>
-    public static string? Validate(IDbConnection c, string ddpType, string? fromStatus, string? toStatus)
+    /// <param name="cache">
+    /// Se c'è, la matrice (poche decine di righe) viene letta una volta sola e tenuta in memoria
+    /// finché qualcuno non la modifica da «Conf. DDP». Serve dove questo controllo gira <b>una
+    /// volta per riga</b>: aggiudicare una RDO da 200 righe faceva 200 letture identiche.
+    /// Ometterla non è un errore: si rilegge dal database.
+    /// </param>
+    public static string? Validate(IDbConnection c, string ddpType, string? fromStatus, string? toStatus,
+        AnagraficheCache? cache = null)
     {
         string from = (fromStatus ?? "").Trim().ToUpperInvariant();
         string to = (toStatus ?? "").Trim().ToUpperInvariant();
         if (to.Length == 0 || from == to) return null;
 
         string lookup = from.Length == 0 ? StartKey : from;
-        var rows = c.Query<string>(
-            "SELECT to_key FROM ddp_status_transitions WHERE ddp_type = @Type AND from_key = @From",
-            new { Type = ddpType, From = lookup }).ToList();
+        List<string> rows = cache == null
+            ? LeggiDestinazioni(c, ddpType, lookup)
+            : cache.Leggi(Anagrafica.TransizioniDdp, () => LeggiMatrice(c))
+                   .TryGetValue(ChiaveMatrice(ddpType, lookup), out List<string>? dalCache)
+                        ? dalCache
+                        : new List<string>();
+
         if (rows.Count == 0) return null;   // (tipo, stato) non governato dalla matrice
 
         var allowed = rows.Where(k => !string.IsNullOrEmpty(k)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -44,4 +55,19 @@ public static class DdpTransitionService
             ? $"Lo stato {DdpStatusMap.ToLabel(from)} è terminale: nessun avanzamento ammesso."
             : $"Transizione non ammessa dalla matrice stati: {DdpStatusMap.ToLabel(from)} → {DdpStatusMap.ToLabel(to)}.";
     }
+
+    private static string ChiaveMatrice(string ddpType, string fromKey) =>
+        $"{ddpType.ToUpperInvariant()}|{fromKey.ToUpperInvariant()}";
+
+    private static List<string> LeggiDestinazioni(IDbConnection c, string ddpType, string fromKey) =>
+        c.Query<string>(
+            "SELECT to_key FROM ddp_status_transitions WHERE ddp_type = @Type AND from_key = @From",
+            new { Type = ddpType, From = fromKey }).ToList();
+
+    /// <summary>Tutta la matrice in un colpo: "TIPO|DA" → stati raggiungibili.</summary>
+    private static IReadOnlyDictionary<string, List<string>> LeggiMatrice(IDbConnection c) =>
+        c.Query<(string DdpType, string FromKey, string ToKey)>(
+            "SELECT ddp_type AS DdpType, from_key AS FromKey, to_key AS ToKey FROM ddp_status_transitions")
+        .GroupBy(r => ChiaveMatrice(r.DdpType, r.FromKey))
+        .ToDictionary(g => g.Key, g => g.Select(r => r.ToKey).ToList(), StringComparer.OrdinalIgnoreCase);
 }

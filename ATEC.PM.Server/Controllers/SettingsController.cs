@@ -2,17 +2,19 @@ using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 /// <summary>
-/// Configurazione applicativa modificabile solo da ADMIN. Oggi: SMTP per il digest email del
-/// piano risorse. I valori vivono in res_settings (chiavi email.*), con fallback su
-/// appsettings.json alla prima configurazione. La password non viene mai restituita in chiaro.
+/// Configurazione applicativa riservata a chi ha la funzione «Digest Email». Oggi: SMTP per il
+/// digest email del piano risorse. I valori vivono in res_settings (chiavi email.*), con fallback
+/// su appsettings.json alla prima configurazione. La password non viene mai restituita in chiaro.
 /// </summary>
 [ApiController]
 [Route("api/settings")]
-[Authorize(Roles = "ADMIN")]
+[Authorize]
+[RequireFeature("nav.digest_email")]
 public class SettingsController : ControllerBase
 {
     private readonly EmailService _email;

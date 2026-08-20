@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Check, ChevronDown } from "lucide-react"
 
+import { ReadonlyDateField } from "@/components/shared/date-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -98,6 +99,7 @@ export function AnagraficaSelect({
   showManage,
   disabled,
   onAdd,
+  dataCol,
 }: {
   value: string
   options: SalCondition[]
@@ -106,6 +108,7 @@ export function AnagraficaSelect({
   showManage: boolean
   disabled?: boolean
   onAdd?: (label: string) => Promise<string>
+  dataCol?: string
 }) {
   const [open, setOpen] = React.useState(false)
   const [newValue, setNewValue] = React.useState("")
@@ -170,6 +173,7 @@ export function AnagraficaSelect({
           aria-expanded={open}
           className="h-10 w-full justify-between shadow-none bg-white dark:bg-zinc-950 border-zinc-200 px-2 font-normal text-sm text-foreground [&>span]:line-clamp-1 disabled:opacity-50"
           disabled={disabled}
+          data-sal-col={dataCol}
         >
           <span className="truncate">{currentLabel || emptyLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-1" />
@@ -245,4 +249,113 @@ export function AnagraficaSelect({
       </PopoverContent>
     </Popover>
   )
+}
+
+/**
+ * Chip PIATTO per i numeri in sola lettura del foglio SAL: a riposo la riga non deve
+ * avere contrasti (niente casette bianche) — bordo e sfondo da input compaiono solo
+ * sul campo in modifica.
+ */
+export function SalViewChip({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-8 min-w-10 items-center justify-center rounded-md bg-transparent px-2 text-sm",
+        className
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Vista a tutta larghezza, PIATTA (sfondo trasparente): si fonde con la riga. */
+export function SalViewBox({
+  children,
+  className,
+  empty,
+  wrap,
+}: {
+  children: React.ReactNode
+  className?: string
+  empty?: boolean
+  wrap?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-10 min-w-0 items-center rounded-md bg-transparent px-2 text-sm",
+        wrap ? "h-auto py-2 items-start" : "h-10",
+        empty && "text-muted-foreground",
+        className
+      )}
+    >
+      <span className={cn("min-w-0", wrap ? "whitespace-normal" : "truncate")}>
+        {empty ? "—" : children}
+      </span>
+    </div>
+  )
+}
+
+/** Percentuale: chip del valore + «%» fuori, come nel prototipo. */
+export function SalViewPercent({ value }: { value: string }) {
+  const empty = value.trim() === ""
+  return (
+    <div className="flex h-10 items-center gap-1.5">
+      <SalViewChip>{empty ? "—" : value}</SalViewChip>
+      <span className="text-sm">%</span>
+    </div>
+  )
+}
+
+export function SalViewSelect({
+  label,
+  emptyLabel = "—",
+}: {
+  label: string
+  emptyLabel?: string
+}) {
+  const empty = label.trim() === ""
+  return (
+    <div className="flex h-10 w-full min-w-0 items-center justify-between gap-1 rounded-md bg-transparent px-2 text-sm">
+      <span className={cn("truncate", empty && "text-muted-foreground")}>
+        {empty ? emptyLabel : label}
+      </span>
+      <ChevronDown className="size-4 shrink-0 opacity-40" />
+    </div>
+  )
+}
+
+export function SalViewDate({
+  value,
+  className,
+}: {
+  value: string | null | undefined
+  className?: string
+}) {
+  return (
+    <ReadonlyDateField
+      value={value ?? null}
+      size="sm"
+      stackedWeekday
+      className={cn(
+        // Testo di riga UNIFORME: dentro il foglio niente giorno festivo rosso né
+        // grigi attenuati — la data prende il colore corrente come tutto il resto.
+        "rounded-md border-0 bg-transparent shadow-none [&_span]:text-current!",
+        className
+      )}
+    />
+  )
+}
+
+export function salStatoFattLabel(stato: string): string {
+  if (stato === "daEmettere") return "Da emettere"
+  if (stato === "emessa") return "Emessa"
+  return stato?.trim() || ""
 }

@@ -28,6 +28,7 @@ import type { AcquistiInboxItem, PurchaseRfqListItem } from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 import { notifyError, notifyInfo } from "@/lib/toast"
+import { useDeferredItemOrder } from "@/lib/use-deferred-item-order"
 import { cn } from "@/lib/utils"
 
 import { buildAcquistiColumns } from "./acquisti-columns"
@@ -39,6 +40,7 @@ import {
   isToBuy,
   isVisible,
   normalizeAtec,
+  sortAcquistiByProjectAndAction,
   statusOf,
 } from "./acquisti-shared"
 import { CreateRfqDialog } from "./CreateRfqDialog"
@@ -50,6 +52,12 @@ export function AcquistiPage() {
 
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<Set<string>>(new Set())
+  /**
+   * Le righe sono ordinate per «Prossimo Passo», che cambia appena si tocca lo stato
+   * o si aggancia una RDO: senza questo l'articolo salterebbe in un altro punto della
+   * card al primo refetch. L'ordine si ricalcola solo con «Aggiorna» o cambiando filtri.
+   */
+  const [layoutEpoch, setLayoutEpoch] = React.useState(0)
 
   // Dialogs
   const [assignDialogItem, setAssignDialogItem] = React.useState<AcquistiInboxItem | null>(
@@ -181,9 +189,18 @@ export function AcquistiPage() {
     return map
   }, [rfqs])
 
+  // Ordine congelato: `buildProjectGroups` riceve le righe già in fila e non le
+  // riordina più (i gruppi-commessa restano ordinati per codice).
+  const filtersKey = `${[...selectedStatusKeys].sort().join(",")}|${searchQuery.trim()}`
+  const orderedItems = useDeferredItemOrder(
+    visibleItems,
+    sortAcquistiByProjectAndAction,
+    layoutEpoch,
+    filtersKey
+  )
   const groupsByProject = React.useMemo(
-    () => buildProjectGroups(visibleItems, rfqsByProject),
-    [visibleItems, rfqsByProject]
+    () => buildProjectGroups(orderedItems, rfqsByProject, { keepItemOrder: true }),
+    [orderedItems, rfqsByProject]
   )
 
   // ── Scritture ─────────────────────────────────────────────────
@@ -303,9 +320,13 @@ export function AcquistiPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => refetch()}
+              onClick={() => {
+                setLayoutEpoch((n) => n + 1)
+                void refetch()
+              }}
               disabled={isRefetching}
               className="gap-2"
+              title="Ricarica i dati e rimette le righe in ordine di Prossimo Passo"
             >
               <RefreshCw className={cn("h-4 w-4", isRefetching && "animate-spin")} />
               Aggiorna

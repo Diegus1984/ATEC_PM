@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,21 +15,20 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { num } from "@/features/commesse/preventivo-dialogs"
-import { updateActualTravelCost, updateProjectRevenue } from "@/lib/api/project-bva"
+import {
+  updateActualTravelCost,
+  updateFinalPriceOverride,
+} from "@/lib/api/project-bva"
 import { updateProjectPricing } from "@/lib/api/project-costing"
 import type {
   BvaEconomicSummary,
   BvaPricingDto,
   ProjectPricingDto,
 } from "@/lib/api/types"
-import { euro } from "@/lib/format"
+import { euro, percent as pct } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
 
 import { Kpi } from "./bva-shared"
-
-function pct(value: number): string {
-  return `${value.toFixed(1)}%`
-}
 
 /** Dialog di modifica di un singolo valore economico (order price / trasferta). */
 function EconomicEditDialog({
@@ -36,6 +36,7 @@ function EconomicEditDialog({
   title,
   label,
   initialValue,
+  emptyHint,
   onClose,
   onSave,
 }: {
@@ -43,8 +44,15 @@ function EconomicEditDialog({
   title: string
   label: string
   initialValue: number
+  /**
+   * Se c'è, il campo può essere svuotato e `onSave` riceve `null`. Serve al «Prezzo offerta
+   * finale» (#35), dove svuotare significa «torna al valore calcolato dalla Scheda Prezzi»:
+   * senza questa via d'uscita, chi imputa un prezzo a mano una volta non può più tornare
+   * indietro se non scrivendo a memoria il numero che c'era prima.
+   */
+  emptyHint?: string
   onClose: () => void
-  onSave: (value: number) => Promise<void>
+  onSave: (value: number | null) => Promise<void>
 }) {
   const [text, setText] = React.useState(String(initialValue))
   const [error, setError] = React.useState<string | null>(null)
@@ -62,7 +70,19 @@ function EconomicEditDialog({
 
   async function handleSave() {
     if (saving) return
-    const parsed = Number(text.replace(",", "."))
+    const trimmed = text.trim()
+    if (trimmed === "" && emptyHint) {
+      setSaving(true)
+      try {
+        await onSave(null)
+      } catch (err) {
+        setError((err as Error).message)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    const parsed = Number(trimmed.replace(",", "."))
     if (!Number.isFinite(parsed) || parsed < 0) {
       setError("Inserisci un importo valido (≥ 0).")
       return
@@ -85,17 +105,20 @@ function EconomicEditDialog({
         </DialogHeader>
         <div className="grid gap-2">
           <Label>{label}</Label>
-          <Input
-            inputMode="decimal"
+          <MoneyInput
             value={text}
             autoFocus
             disabled={saving}
-            onChange={(event) => setText(event.target.value)}
+            onChange={setText}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !saving) void handleSave()
             }}
           />
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : emptyHint ? (
+            <p className="text-xs text-muted-foreground">{emptyHint}</p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -110,6 +133,203 @@ function EconomicEditDialog({
   )
 }
 
+/**
+ * I sei riquadri del Conto Economico.
+ *
+ * Segnalazione #35 (riquadri + tooltip) e #45 (tooltip sintetici: solo titolo, formula
+ * e cifre — niente commenti). Una sola funzione perché Dashboard e Bilancio devono
+ * dire la stessa cosa sugli stessi numeri.
+ */
+export interface EconomicKpiSource {
+  finalOfferPrice: number
+  /** true = imputato a mano dal PM, non derivato dalla Scheda Prezzi. */
+  finalOfferPriceIsManual?: boolean
+  orderPrice: number
+  saleTotal: number | null
+  orderDelta: number | null
+  budgetCost: number
+  budgetResourceCost: number
+  budgetMaterialCost: number
+  budgetWorkshopCost: number
+  budgetTravelCost: number
+  actualTotalCost: number
+  actualResourceCost: number
+  actualMaterialCost: number
+  actualWorkshopCost: number
+  actualTravelCost: number
+  actualTravelFromPlan: boolean
+  budgetProfitability: number
+  budgetProfitabilityPct: number
+  profitability: number
+  profitabilityPct: number
+}
+
+interface EconomicKpi {
+  label: string
+  value: string
+  hint?: string
+  accent?: string
+  explain: React.ReactNode
+}
+
+/** Rosso sotto zero, verde sopra: vale per entrambe le redditività. */
+function profitAccentOf(pctValue: number): string {
+  return pctValue < 0 ? "text-destructive" : "text-emerald-600"
+}
+
+/**
+ * Popup del Conto Economico (#45): titolo · formula · cifre. Niente commenti,
+ * domande o ipotesi — solo da dove esce il numero (stile degli allegati di Paolo).
+ */
+function CalcExplain({
+  title,
+  formula,
+  calc,
+}: {
+  title: string
+  formula: string
+  calc: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1 text-left">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+        {title}
+      </p>
+      <p className="text-muted-foreground">{formula}</p>
+      <p className="font-medium tabular-nums text-blue-700">{calc}</p>
+    </div>
+  )
+}
+
+export function economicKpis(e: EconomicKpiSource): EconomicKpi[] {
+  const hasOrder = e.orderPrice > 0
+
+  const costiPrevParts = [
+    `risorse ${euro(e.budgetResourceCost)}`,
+    `materiali ${euro(e.budgetMaterialCost)}`,
+    ...(e.budgetWorkshopCost !== 0
+      ? [`officine ${euro(e.budgetWorkshopCost)}`]
+      : []),
+    `trasferta ${euro(e.budgetTravelCost)}`,
+  ]
+  const costiConsParts = [
+    `risorse ${euro(e.actualResourceCost)}`,
+    `materiali ${euro(e.actualMaterialCost)}`,
+    `officine ${euro(e.actualWorkshopCost)}`,
+    `trasferta ${euro(e.actualTravelCost)}`,
+  ]
+
+  return [
+    {
+      label: "Prezzo offerta finale",
+      value: euro(e.finalOfferPrice),
+      hint: e.finalOfferPriceIsManual ? "imputato a mano" : "dalla Scheda Prezzi",
+      explain: e.finalOfferPriceIsManual ? (
+        <CalcExplain
+          title="Prezzo offerta finale"
+          formula="Imputato a mano"
+          calc={euro(e.finalOfferPrice)}
+        />
+      ) : (
+        <CalcExplain
+          title="Prezzo offerta finale"
+          formula="Scheda Prezzi · ultima riga"
+          calc={euro(e.finalOfferPrice)}
+        />
+      ),
+    },
+    {
+      label: "Totale Ordine",
+      value: euro(e.orderPrice),
+      hint:
+        e.saleTotal != null
+          ? `Vendita ${euro(e.saleTotal)} · Margine ${euro(e.orderDelta)}`
+          : "dalla tabella Ordine Commessa",
+      explain: (
+        <CalcExplain
+          title="Totale Ordine"
+          formula="Somma righe · Ordine Commessa"
+          calc={euro(e.orderPrice)}
+        />
+      ),
+    },
+    {
+      label: "Totale Costi",
+      value: euro(e.budgetCost),
+      explain: (
+        <CalcExplain
+          title="Calcolo Totale Costi · preventivati"
+          formula={costiPrevParts.join(" + ")}
+          calc={`= ${euro(e.budgetCost)}`}
+        />
+      ),
+    },
+    {
+      label: "Consuntivo Costi",
+      value: euro(e.actualTotalCost),
+      explain: (
+        <CalcExplain
+          title="Calcolo Consuntivo Costi"
+          formula={costiConsParts.join(" + ")}
+          calc={`= ${euro(e.actualTotalCost)}`}
+        />
+      ),
+    },
+    {
+      label: "Redditività Teorica Commessa",
+      value: hasOrder
+        ? `${euro(e.budgetProfitability)} · ${pct(e.budgetProfitabilityPct)}`
+        : "—",
+      accent: hasOrder ? profitAccentOf(e.budgetProfitabilityPct) : undefined,
+      explain: hasOrder ? (
+        <div className="space-y-3">
+          <CalcExplain
+            title="Calcolo Redditività · costi preventivati"
+            formula="Totale Ordine – Totale Costi"
+            calc={`${euro(e.orderPrice)} − ${euro(e.budgetCost)} = ${euro(e.budgetProfitability)}`}
+          />
+          <CalcExplain
+            title="Calcolo % Redditività · costi preventivati"
+            formula="(Totale Ordine − Totale Costi) ÷ Totale Ordine × 100"
+            calc={`(${euro(e.orderPrice)} − ${euro(e.budgetCost)}) ÷ ${euro(e.orderPrice)} × 100 = ${pct(e.budgetProfitabilityPct)}`}
+          />
+        </div>
+      ) : (
+        <CalcExplain
+          title="Redditività teorica"
+          formula="Totale Ordine mancante"
+          calc="—"
+        />
+      ),
+    },
+    {
+      label: "Redditività Effettiva Commessa",
+      value: hasOrder ? `${euro(e.profitability)} · ${pct(e.profitabilityPct)}` : "—",
+      accent: hasOrder ? profitAccentOf(e.profitabilityPct) : undefined,
+      explain: hasOrder ? (
+        <div className="space-y-3">
+          <CalcExplain
+            title="Calcolo Redditività · costi consuntivati"
+            formula="Totale Ordine – Totale Costi"
+            calc={`${euro(e.orderPrice)} − ${euro(e.actualTotalCost)} = ${euro(e.profitability)}`}
+          />
+          <CalcExplain
+            title="Calcolo % Redditività · costi consuntivati"
+            formula="(Totale Ordine − Totale Costi) ÷ Totale Ordine × 100"
+            calc={`(${euro(e.orderPrice)} − ${euro(e.actualTotalCost)}) ÷ ${euro(e.orderPrice)} × 100 = ${pct(e.profitabilityPct)}`}
+          />
+        </div>
+      ) : (
+        <CalcExplain
+          title="Redditività effettiva"
+          formula="Totale Ordine mancante"
+          calc="—"
+        />
+      ),
+    },
+  ]
+}
+
 export function EconomicSummary({
   economic,
   projectId,
@@ -119,63 +339,43 @@ export function EconomicSummary({
   projectId: number
   onSaved: () => void
 }) {
-  const [editing, setEditing] = React.useState<"order" | "travel" | null>(null)
-  const profitAccent =
-    economic.profitabilityPct < 0 ? "text-destructive" : "text-emerald-600"
+  const [editing, setEditing] = React.useState<"travel" | "offer" | null>(null)
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          label="Prezzo offerta finale"
-          value={euro(economic.finalOfferPrice)}
-        />
-        <Kpi
-          label="Order price"
-          value={euro(economic.orderPrice)}
-          onEdit={() => setEditing("order")}
-        />
-        <Kpi
-          label="Budget costi"
-          value={euro(economic.budgetCost)}
-          hint={`Risorse ${euro(economic.budgetResourceCost)} · Mat. ${euro(
-            economic.budgetMaterialCost
-          )} · Trasf. ${euro(economic.budgetTravelCost)}`}
-        />
-        <Kpi
-          label="Consuntivo costi"
-          value={euro(economic.actualTotalCost)}
-          hint={`Risorse ${euro(economic.actualResourceCost)} · Mat. ${euro(
-            economic.actualMaterialCost
-          )} · Trasf. ${euro(economic.actualTravelCost)}`}
-          onEdit={() => setEditing("travel")}
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          label="Redditività"
-          value={pct(economic.profitabilityPct)}
-          accent={profitAccent}
-        />
-        <Kpi label="Avanzamento" value={`${economic.progressPct}%`} />
-        <Kpi label="Tecnici attivi" value={String(economic.activeTechnicians)} />
-        <Kpi
-          label="Fasi completate"
-          value={`${economic.completedPhases}/${economic.totalPhases}`}
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {economicKpis(economic).map((kpi) => (
+          <Kpi
+            key={kpi.label}
+            label={kpi.label}
+            value={kpi.value}
+            hint={kpi.hint}
+            accent={kpi.accent}
+            explain={kpi.explain}
+            onEdit={
+              kpi.label === "Prezzo offerta finale"
+                ? () => setEditing("offer")
+                : kpi.label === "Consuntivo Costi" && !economic.actualTravelFromPlan
+                  ? () => setEditing("travel")
+                  : undefined
+            }
+          />
+        ))}
       </div>
 
       <EconomicEditDialog
-        open={editing === "order"}
-        title="Order price"
-        label="Prezzo d'ordine (€)"
-        initialValue={economic.orderPrice}
+        open={editing === "offer"}
+        title="Prezzo offerta finale"
+        label="Prezzo concordato con il cliente (€)"
+        initialValue={economic.finalOfferPrice}
+        emptyHint="Lascia il campo vuoto per tornare al prezzo calcolato dalla Scheda Prezzi."
         onClose={() => setEditing(null)}
         onSave={async (value) => {
-          await updateProjectRevenue(projectId, value)
+          await updateFinalPriceOverride(projectId, value)
           setEditing(null)
           onSaved()
         }}
       />
+
       <EconomicEditDialog
         open={editing === "travel"}
         title="Trasferta a consuntivo"
@@ -183,7 +383,9 @@ export function EconomicSummary({
         initialValue={economic.actualTravelCost}
         onClose={() => setEditing(null)}
         onSave={async (value) => {
-          await updateActualTravelCost(projectId, value)
+          // Questo dialogo non ha `emptyHint`, quindi `value` è sempre un numero: il ?? 0
+          // è solo per il tipo, non un caso raggiungibile.
+          await updateActualTravelCost(projectId, value ?? 0)
           setEditing(null)
           onSaved()
         }}
@@ -214,7 +416,10 @@ export function PricingBlock({
   }, [pricing.contingencyPct, pricing.negotiationPct])
 
   const saveMutation = useMutation({
-    mutationFn: (patch: { contingencyPct?: number; negotiationMarginPct?: number }) => {
+    mutationFn: (patch: {
+      contingencyPct?: number
+      negotiationMarginPct?: number
+    }) => {
       if (!costingPricing) return Promise.resolve()
       return updateProjectPricing(projectId, {
         ...costingPricing,
@@ -229,7 +434,11 @@ export function PricingBlock({
     <div className="space-y-4">
       <div className="text-sm tabular-nums">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-          <span>Costo netto {euro(pricing.netCost)}</span>
+          {/* Segnalazione #36: «Costo netto» si chiama «Totale Costi di Vendita».
+              È lo stesso importo della voce omonima dell'Ordine Commessa (somma
+              delle colonne Vendita), non un costo netto: il nome vecchio si leggeva
+              come il contrario di quello che è. */}
+          <span>Totale Costi di Vendita {euro(pricing.netCost)}</span>
           <span>→ + Contingency {euro(pricing.contingencyAmount)}</span>
           <span className="text-foreground">
             = Offerta {euro(pricing.offerPrice)}
@@ -241,8 +450,12 @@ export function PricingBlock({
         </div>
       </div>
 
+      {/* Il campo «K trasferta» stava qui, come terza colonna. Rimosso il 06/08/2026 su
+          decisione di Paolo (#34): le trasferte non si ricaricano più, restano a costo
+          netto. La colonna `project_pricing.travel_markup` esiste ancora, forzata a 1: se
+          il ricarico serve di nuovo, si rimette questo campo e si toglie il vincolo. */}
       {canEditBudget && (
-        <div className="grid gap-4 sm:grid-cols-2 max-w-xl rounded-md border p-3 bg-muted/10">
+        <div className="grid gap-4 sm:grid-cols-2 max-w-2xl rounded-md border p-3 bg-muted/10">
           <div className="space-y-1.5">
             <Label className="text-xs">Imprevisti / contingency (%)</Label>
             <Input

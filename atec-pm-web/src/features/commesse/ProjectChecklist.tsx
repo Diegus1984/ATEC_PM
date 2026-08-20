@@ -6,6 +6,8 @@ import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { Button } from "@/components/ui/button"
 import { ChecklistSummaryCharts } from "@/features/checklist/ChecklistSummaryCharts"
 import {
+  ChecklistColumnsMenu,
+  ChecklistColumnsProvider,
   ChecklistContainerCard,
   ChecklistTable,
 } from "@/features/checklist/checklist-shared"
@@ -28,6 +30,7 @@ export function ProjectChecklist({ projectId }: { projectId: number }) {
   const [priorityFilter, setPriorityFilter] =
     React.useState<ChecklistPriorityFilter>("all")
   const [dueFilter, setDueFilter] = React.useState<ChecklistDueFilter>("all")
+  const [layoutEpoch, setLayoutEpoch] = React.useState(0)
 
   const query = useQuery({
     queryKey,
@@ -45,6 +48,11 @@ export function ProjectChecklist({ projectId }: { projectId: number }) {
     () => filterChecklistItems(items, priorityFilter, dueFilter),
     [items, priorityFilter, dueFilter]
   )
+
+  const handleRefresh = React.useCallback(() => {
+    setLayoutEpoch((n) => n + 1)
+    void query.refetch()
+  }, [query])
 
   const statusPills =
     items.length > 0 ? (
@@ -68,17 +76,22 @@ export function ProjectChecklist({ projectId }: { projectId: number }) {
     ) : null
 
   return (
+    <ChecklistColumnsProvider>
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           size="sm"
-          onClick={() => query.refetch()}
+          onClick={handleRefresh}
           disabled={query.isFetching}
+          title="Riordina le righe secondo priorità e scadenze aggiornate"
         >
           <RefreshCw className={query.isFetching ? "animate-spin" : ""} />
           Aggiorna
         </Button>
+        <div className="ml-auto">
+          <ChecklistColumnsMenu />
+        </div>
       </div>
 
       {query.isLoading ? (
@@ -128,11 +141,12 @@ export function ProjectChecklist({ projectId }: { projectId: number }) {
               items={filteredItems}
               container={{ projectId }}
               onMutated={invalidate}
-              stickyHeader
+              layoutEpoch={layoutEpoch}
             />
           </ChecklistContainerCard>
         </>
       )}
     </div>
+    </ChecklistColumnsProvider>
   )
 }

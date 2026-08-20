@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -96,11 +97,11 @@ export function AddLocalVariantDialog({
           <div className="grid grid-cols-3 gap-3">
             <div className="grid gap-2">
               <Label>Prezzo vendita €</Label>
-              <Input inputMode="decimal" value={price} className="text-right" onChange={(e) => setPrice(e.target.value)} />
+              <MoneyInput value={price} onChange={setPrice} />
             </div>
             <div className="grid gap-2">
               <Label>Costo aziendale €</Label>
-              <Input inputMode="decimal" value={cost} className="text-right" onChange={(e) => setCost(e.target.value)} />
+              <MoneyInput value={cost} onChange={setCost} />
             </div>
             <div className="grid gap-2">
               <Label>Qtà</Label>

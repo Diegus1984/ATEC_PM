@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -10,13 +11,27 @@ namespace ATEC.PM.Server.Controllers;
 /// Inbox DDP commerciale cross-commessa (Acquisti).
 /// Scritture restano su ProjectsController (/api/projects/{id}/ddp/...).
 /// </summary>
+/// <remarks>
+/// La chiave è quella della PAGINA che lo usa (Inbox Acquisti), non quella della sezione
+/// «DDP Commerciali» della commessa: questo controller espone una sola GET cross-commessa e
+/// il suo unico chiamante è <c>/acquisti</c> — la sezione di commessa non lo tocca mai.
+/// Stessa chiave già usata da <c>DaneaOrdersController</c>, l'altro controller di quella pagina.
+/// (segnalazione #63, Fase 1)
+/// </remarks>
 [ApiController]
 [Route("api/ddp-commercial")]
 [Authorize]
+[RequireFeature("nav.acquisti_inbox")]
 public class DdpCommercialController : ControllerBase
 {
     private readonly DbService _db;
-    public DdpCommercialController(DbService db) => _db = db;
+    private readonly ProjectWriteGuard _guard;
+
+    public DdpCommercialController(DbService db, ProjectWriteGuard guard)
+    {
+        _db = db;
+        _guard = guard;
+    }
 
     /// <summary>
     /// Elenco flat di tutte le righe commerciali (commesse non cancellate).
@@ -28,7 +43,7 @@ public class DdpCommercialController : ControllerBase
         try
         {
             using var c = _db.Open();
-            var rows = c.Query<AcquistiInboxItem>(@"
+            var rows = c.Query<AcquistiInboxItem>($@"
                 SELECT b.id AS Id, b.project_id AS ProjectId,
                        b.catalog_item_id AS CatalogItemId,
                        COALESCE(b.part_number,'') AS PartNumber,
@@ -58,6 +73,13 @@ public class DdpCommercialController : ControllerBase
                         JOIN purchase_rfqs pr ON pr.id = pri.rfq_id
                         WHERE pri.bom_item_id = b.id AND pr.status <> 'CANCELLED'
                         ORDER BY pri.rfq_id DESC LIMIT 1) AS ActiveRfqStatus,
+                       -- Oggetto della RDO: è il titolo della GARA, non la descrizione
+                       -- dell'articolo. Va mostrato a parte (icona + tooltip), mai al posto
+                       -- della descrizione della riga.
+                       (SELECT COALESCE(pr.description,'') FROM purchase_rfq_items pri
+                        JOIN purchase_rfqs pr ON pr.id = pri.rfq_id
+                        WHERE pri.bom_item_id = b.id AND pr.status <> 'CANCELLED'
+                        ORDER BY pri.rfq_id DESC LIMIT 1) AS ActiveRfqSubject,
                        b.date_needed AS DateNeeded,
                        COALESCE(b.destination,'') AS Destination,
                        COALESCE(b.destination_spec,'') AS DestinationSpec,
@@ -67,6 +89,8 @@ public class DdpCommercialController : ControllerBase
                        -- dell'articolo Danea (catalog_items.atec_code): appena l'associazione
                        -- esiste, TUTTE le righe di quell'articolo la mostrano senza backfill.
                        COALESCE(NULLIF(b.atec_code,''), ci.atec_code, '') AS AtecCode,
+                       b.created_by AS CreatedById,
+                       COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
                        b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,
                        COALESCE(p.code,'') AS ProjectCode,
                        COALESCE(p.title,'') AS ProjectTitle,
@@ -80,8 +104,9 @@ public class DdpCommercialController : ControllerBase
                 LEFT JOIN customers cu ON cu.id = p.customer_id
                 LEFT JOIN suppliers s ON s.id = b.supplier_id
                 LEFT JOIN catalog_items ci ON ci.id = b.catalog_item_id
+                LEFT JOIN employees e ON e.id = b.created_by
                 WHERE b.ddp_type = 'COMMERCIAL'
-                  AND COALESCE(p.status,'') <> 'CANCELLED'
+                  AND COALESCE(p.status,'') <> 'CANCELLED'{_guard.FiltroBozzeSql(User)}
                   AND (@ProjectId IS NULL OR b.project_id = @ProjectId)
                 ORDER BY
                   CASE WHEN b.date_needed IS NULL THEN 1 ELSE 0 END,

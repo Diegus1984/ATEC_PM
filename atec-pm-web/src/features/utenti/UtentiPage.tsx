@@ -39,6 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
   RESP_REPARTO: "RESP",
   PM: "PM",
   ADMIN: "ADMIN",
+  AMM: "AMM",
 }
 
 function initials(fullName: string): string {

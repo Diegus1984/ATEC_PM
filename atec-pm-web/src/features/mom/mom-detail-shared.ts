@@ -1,6 +1,8 @@
 import type { MoMActionItem, MoMActionItemSaveRequest } from "@/lib/api/types"
 import { toDateOnly } from "@/lib/date-iso"
 
+import { MOM_CONDITION_STYLE, momConditionKey } from "./mom-palette"
+
 export interface HeaderState {
   id: number
   tipo: string
@@ -14,38 +16,39 @@ export interface HeaderState {
 
 export type FilterKey = "tutte" | "aperte" | "critiche" | "scadute" | "mie"
 
-// Priorità MoM 1–3 (v9), stile allineato alla check list.
+// Priorità MoM 1–3 (v9), colori dalla matrice (vedi `mom-palette`).
 export const MOM_PRIORITY_META = [
-  { value: 1, code: "P1", name: "Alta", dot: "bg-red-500" },
-  { value: 2, code: "P2", name: "Media", dot: "bg-amber-500" },
-  { value: 3, code: "P3", name: "Bassa", dot: "bg-teal-500" },
+  {
+    value: 1,
+    code: "P1",
+    name: "Alta",
+    dot: MOM_CONDITION_STYLE.p1.dotClass,
+  },
+  {
+    value: 2,
+    code: "P2",
+    name: "Media",
+    dot: MOM_CONDITION_STYLE.p2.dotClass,
+  },
+  {
+    value: 3,
+    code: "P3",
+    name: "Bassa",
+    dot: MOM_CONDITION_STYLE.p3.dotClass,
+  },
 ] as const
 
-const MOM_PRIORITY_ROW_CLASS: Record<number, string> = {
-  1: "bg-red-50/35 hover:bg-red-50/55 shadow-[inset_0_0_0_1px_theme(colors.red.200),inset_3px_0_0_0_theme(colors.red.300)]",
-  2: "bg-amber-50/35 hover:bg-amber-50/55 shadow-[inset_0_0_0_1px_theme(colors.amber.200),inset_3px_0_0_0_theme(colors.amber.300)]",
-  3: "bg-teal-50/35 hover:bg-teal-50/55 shadow-[inset_0_0_0_1px_theme(colors.teal.200),inset_3px_0_0_0_theme(colors.teal.300)]",
-}
-
-const MOM_ROW_CRITICAL_CLASS =
-  "bg-red-50/85 hover:bg-red-50 shadow-[inset_0_0_0_1px_theme(colors.red.300),inset_4px_0_0_0_theme(colors.red.500)]"
-
-const MOM_ROW_STANDBY_CLASS =
-  "bg-amber-50/50 hover:bg-amber-50/70 shadow-[inset_0_0_0_1px_theme(colors.amber.200),inset_3px_0_0_0_theme(colors.amber.400)]"
-
-const MOM_ROW_CLOSED_CLASS =
-  "bg-emerald-50/35 hover:bg-emerald-50/55 shadow-[inset_0_0_0_1px_theme(colors.emerald.200),inset_3px_0_0_0_theme(colors.emerald.300)]"
-
-/** Sfondo riga del foglio MoM — stesso linguaggio visivo della check list. */
+/**
+ * Sfondo riga del foglio MoM secondo la matrice colori (tinte pastello):
+ * Close → Stand by → Scadute → Max priorità → P1/P2/P3.
+ */
 export function momRowClass(item: {
   priorita: number
   status: string
   isCritical: boolean
+  isOverdue?: boolean
 }): string {
-  if (item.status === "CLOSED") return MOM_ROW_CLOSED_CLASS
-  if (item.isCritical) return MOM_ROW_CRITICAL_CLASS
-  if (item.status === "STANDBY") return MOM_ROW_STANDBY_CLASS
-  return MOM_PRIORITY_ROW_CLASS[item.priorita] ?? MOM_PRIORITY_ROW_CLASS[2]
+  return MOM_CONDITION_STYLE[momConditionKey(item)].rowClass
 }
 
 // Colonne ordinabili del foglio (v9): campo → etichetta. `field: null` = ordine

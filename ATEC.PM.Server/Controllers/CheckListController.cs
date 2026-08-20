@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -7,23 +7,28 @@ using MySqlConnector;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Hubs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 // API del modulo Check list / Attività: attività (item) per commessa reale o gruppo generico.
-// Editing aperto a tutti gli utenti autenticati (strumento operativo, non solo ADMIN).
+// Editing aperto a chiunque raggiunga il livello della feature (strumento operativo, non solo ADMIN).
 [ApiController]
 [Route("api/checklist")]
 [Authorize]
+// Modulo Check list: stessa chiave della voce di menu e del tab commessa.
+[RequireFeature("nav.checklist")]
 public class CheckListController : ControllerBase
 {
     private readonly CheckListDbService _cdb;
     private readonly IHubContext<ProjectHub> _hub;
+    private readonly ProjectWriteGuard _guard;
 
-    public CheckListController(CheckListDbService cdb, IHubContext<ProjectHub> hub)
+    public CheckListController(CheckListDbService cdb, IHubContext<ProjectHub> hub, ProjectWriteGuard guard)
     {
         _cdb = cdb;
         _hub = hub;
+        _guard = guard;
     }
 
     // Id dipendente dal token (claim NameIdentifier): proprietario dell'inbox "Fissa attività".
@@ -81,11 +86,14 @@ public class CheckListController : ControllerBase
             foreach (ChecklistGroupDto g in groups)
                 g.Items = groupItems.Where(i => i.GroupId == g.Id).ToList();
 
-            List<ChecklistProjectDto> projects = c.Query<ChecklistProjectDto>(@"
-                SELECT DISTINCT p.id AS ProjectId, p.code AS Code, p.title AS Title
+            List<ChecklistProjectDto> projects = c.Query<ChecklistProjectDto>($@"
+                SELECT DISTINCT p.id AS ProjectId, p.code AS Code, p.title AS Title,
+                       COALESCE(cu.company_name, '') AS CustomerName
                 FROM projects p
                 INNER JOIN checklist_items i ON i.project_id = p.id
-                ORDER BY p.code DESC").ToList();
+                LEFT JOIN customers cu ON cu.id = p.customer_id
+                WHERE 1=1{_guard.FiltroBozzeSql(User)}
+                ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
 
             List<ChecklistItemDto> projectItems = c.Query<ChecklistItemDto>(
                 ItemSelect + " WHERE i.project_id IS NOT NULL ORDER BY i.sort_order, i.id").ToList();
@@ -98,6 +106,7 @@ public class CheckListController : ControllerBase
     }
 
     // Attività di una singola commessa (tab "Check list" nel dettaglio commessa).
+    [RequireProjectVisible]
     [HttpGet("project/{projectId}")]
     public IActionResult GetProjectItems(int projectId)
     {
@@ -116,6 +125,7 @@ public class CheckListController : ControllerBase
     // CRUD ATTIVITÀ
     // ═══════════════════════════════════════════════════════
 
+    [RequireProjectWritable]
     [HttpPost("items")]
     public IActionResult AddItem([FromBody] ChecklistItemSaveRequest req)
     {
@@ -157,6 +167,7 @@ public class CheckListController : ControllerBase
 
     // Concorrenza ottimistica: se il client invia RowVersion e la riga nel frattempo è
     // cambiata, l'update NON viene applicato e si risponde con errore riconoscibile.
+    [RequireProjectWritable(Tabella = "checklist_items")]
     [HttpPut("items/{id}")]
     public IActionResult UpdateItem(int id, [FromBody] ChecklistItemSaveRequest req)
     {
@@ -200,6 +211,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Tabella = "checklist_items")]
     [HttpDelete("items/{id}")]
     public IActionResult DeleteItem(int id)
     {
@@ -220,6 +232,7 @@ public class CheckListController : ControllerBase
     // GRUPPI GENERICI (DIREZIONE, VARIE, custom)
     // ═══════════════════════════════════════════════════════
 
+    [RequireProjectWritable]
     [HttpPost("groups")]
     public IActionResult AddGroup([FromBody] ChecklistGroupSaveRequest req)
     {
@@ -246,6 +259,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Tabella = "checklist_groups")]
     [HttpPut("groups/{id}")]
     public IActionResult UpdateGroup(int id, [FromBody] ChecklistGroupSaveRequest req)
     {
@@ -276,6 +290,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [RequireProjectWritable(Tabella = "checklist_groups")]
     [HttpDelete("groups/{id}")]
     public IActionResult DeleteGroup(int id)
     {
@@ -311,6 +326,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<List<ChecklistInboxDto>>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali dell'utente (checklist_inbox): non appartengono a nessuna commessa")]
     [HttpPost("inbox")]
     public IActionResult AddInbox([FromBody] ChecklistInboxSaveRequest req)
     {
@@ -330,6 +346,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali dell'utente (checklist_inbox): non appartengono a nessuna commessa")]
     [HttpPut("inbox/{id}")]
     public IActionResult UpdateInbox(int id, [FromBody] ChecklistInboxSaveRequest req)
     {
@@ -346,6 +363,7 @@ public class CheckListController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
 
+    [ScritturaNonDiCommessa("Appunti personali dell'utente (checklist_inbox): non appartengono a nessuna commessa")]
     [HttpDelete("inbox/{id}")]
     public IActionResult DeleteInbox(int id)
     {
@@ -362,6 +380,7 @@ public class CheckListController : ControllerBase
 
     // Assegna la nota a una commessa (ProjectId) o a un gruppo generico (GroupId): il testo
     // diventa una nuova attività (priorità 0=Critica, come nel prototipo). La nota viene rimossa.
+    [RequireProjectWritable]
     [HttpPost("inbox/{id}/assign")]
     public IActionResult AssignInbox(int id, [FromBody] ChecklistAssignRequest req)
     {
@@ -415,11 +434,14 @@ public class CheckListController : ControllerBase
         try
         {
             using var c = _cdb.Open();
-            var rows = c.Query<ChecklistProjectLookupDto>(@"
+            // Solo commesse APERTE (le chiuse si accumulano negli anni): è la lista che
+            // popola sia le combo sia la barra laterale della Check list, dove ogni commessa
+            // aperta ha la sua tabella dedicata anche prima di avere attività.
+            var rows = c.Query<ChecklistProjectLookupDto>($@"
                 SELECT id AS Id, code AS Code, title AS Title
                 FROM projects
-                WHERE status <> 'CANCELLED'
-                ORDER BY code DESC").ToList();
+                WHERE status NOT IN {ProjectSorting.ClosedStatusesSql}{_guard.FiltroBozzeSql(User, "projects")}
+                ORDER BY {ProjectSorting.OrderBy("")}").ToList();
             return Ok(ApiResponse<List<ChecklistProjectLookupDto>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<ChecklistProjectLookupDto>>.Fail($"Errore: {ex.Message}")); }

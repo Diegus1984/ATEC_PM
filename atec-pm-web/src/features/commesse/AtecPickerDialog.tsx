@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchCatalogByAtec, fetchCatalogByCodex } from "@/lib/api/catalog"
 import { fetchCodex } from "@/lib/api/codex"
 import { createDdpRow } from "@/lib/api/project-ddp"
@@ -148,7 +149,7 @@ export function AtecPickerDialog({
         </div>
 
         <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
-          <div className="overflow-auto rounded-lg border">
+          <GridScroller fill className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
@@ -187,7 +188,7 @@ export function AtecPickerDialog({
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <div className="flex min-h-0 flex-col gap-2 overflow-auto rounded-lg border p-2">
             {!selected ? (
@@ -221,6 +222,7 @@ export function AtecPickerDialog({
                     Solo ATEC (da definire)
                   </Button>
                 </div>
+                <GridScroller className="rounded-md border">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -274,6 +276,7 @@ export function AtecPickerDialog({
                     )}
                   </TableBody>
                 </Table>
+                </GridScroller>
               </>
             )}
           </div>

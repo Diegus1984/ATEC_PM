@@ -2,8 +2,9 @@ import { apiDelete, apiGet, apiPost, unwrapApi } from "@/lib/api/client"
 import { getSession } from "@/lib/auth/session"
 import type {
   ApiResponse,
+  ChatInboxBadge,
   ChatListItem,
-  ChatMessage,
+  ChatMessagesPage,
   ChatParticipant,
 } from "@/lib/api/types"
 
@@ -44,9 +45,28 @@ export async function fetchChats(projectId: number): Promise<ChatListItem[]> {
   return unwrapApi(r)
 }
 
-export async function fetchChatMessages(chatId: number): Promise<ChatMessage[]> {
-  const r = await apiGet<ApiResponse<ChatMessage[]>>(
-    `/api/chat/${chatId}/messages`
+/**
+ * Chat in cui sono dentro, di qualsiasi commessa (e senza commessa). `limit` alto per la
+ * pagina «Chat» del menu, che le vuole tutte; la campanella si tiene il valore di default.
+ */
+export async function fetchChatInbox(limit?: number): Promise<ChatListItem[]> {
+  const query = limit ? `?limit=${limit}` : ""
+  const r = await apiGet<ApiResponse<ChatListItem[]>>(`/api/chat/inbox${query}`)
+  return unwrapApi(r)
+}
+
+export async function fetchChatInboxBadge(): Promise<number> {
+  const r = await apiGet<ApiResponse<ChatInboxBadge>>("/api/chat/inbox/badge")
+  return unwrapApi(r).unreadCount
+}
+
+export async function fetchChatMessages(
+  chatId: number,
+  beforeId = 0,
+  limit = 50
+): Promise<ChatMessagesPage> {
+  const r = await apiGet<ApiResponse<ChatMessagesPage>>(
+    `/api/chat/${chatId}/messages?beforeId=${beforeId}&limit=${limit}`
   )
   return unwrapApi(r)
 }
@@ -61,7 +81,8 @@ export async function fetchChatParticipants(
 }
 
 export async function createChat(req: {
-  projectId: number
+  /** null = voce «— Nessuna —» della tendina commessa/attività. */
+  projectId: number | null
   title: string
   participantIds: number[]
 }): Promise<number> {
@@ -71,11 +92,13 @@ export async function createChat(req: {
 
 export async function sendChatMessage(
   chatId: number,
-  message: string
+  message: string,
+  replyToMessageId?: number | null
 ): Promise<number> {
   const r = await apiPost<ApiResponse<number>>(`/api/chat/${chatId}/messages`, {
     chatId,
     message,
+    replyToMessageId: replyToMessageId ?? null,
   })
   return unwrapApi(r)
 }
@@ -83,7 +106,8 @@ export async function sendChatMessage(
 export async function sendChatMessageWithAttachment(
   chatId: number,
   file: File,
-  message?: string
+  message?: string,
+  replyToMessageId?: number | null
 ): Promise<number> {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error("File troppo grande (max 20 MB).")
@@ -97,6 +121,7 @@ export async function sendChatMessageWithAttachment(
       message: message?.trim() || `📎 ${file.name}`,
       fileName: file.name,
       fileData,
+      replyToMessageId: replyToMessageId ?? null,
     }
   )
   return unwrapApi(r)
@@ -135,6 +160,11 @@ export async function deleteChatMessage(messageId: number): Promise<void> {
 
 export async function deleteChat(chatId: number): Promise<void> {
   const r = await apiDelete<ApiResponse<boolean>>(`/api/chat/${chatId}`)
+  unwrapApi(r)
+}
+
+export async function leaveChat(chatId: number): Promise<void> {
+  const r = await apiPost<ApiResponse<boolean>>(`/api/chat/${chatId}/leave`, {})
   unwrapApi(r)
 }
 

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { fetchProduct } from "@/lib/api/quote-catalog"
-import { getSession } from "@/lib/auth/session"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { notifyError } from "@/lib/toast"
 
 import { ComposizioneTab } from "./ComposizioneTab"
@@ -18,7 +18,11 @@ import { MagazzinoTab } from "./MagazzinoTab"
 import { PerRobotTab } from "./PerRobotTab"
 
 export function GammaRobotPage() {
-  const isAdmin = (getSession()?.user.userRole ?? "").toUpperCase() === "ADMIN"
+  // Era l'ultimo punto del gestionale che decideva sul NOME del ruolo
+  // (`userRole === "ADMIN"`): un elenco di nomi lascia fuori qualunque ruolo aggiunto
+  // dopo, ed è così che il vecchio DEVELOPER — che stava SOPRA l'ADMIN — si ritrovava
+  // trattato da tecnico. Ora è una chiave sulla persona.
+  const canEditComposition = canWriteFeature("action.edit_gamma_robot")
 
   const [productDialog, setProductDialog] = React.useState<{
     open: boolean
@@ -72,7 +76,7 @@ export function GammaRobotPage() {
             </TabsContent>
             <TabsContent value="composizione" className="mt-4">
               <ComposizioneTab
-                isAdmin={isAdmin}
+                isAdmin={canEditComposition}
                 onOpenProduct={(id) => void openProduct(id)}
               />
             </TabsContent>

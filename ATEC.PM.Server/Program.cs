@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,9 @@ using ATEC.PM.Server.Services;
 using ATEC.PM.Server;
 using ATEC.PM.Server.Controllers;
 using ATEC.PM.Server.Hubs;
+using ATEC.PM.Server.Middleware;
+using ATEC.PM.Shared.DTOs;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Serilog;
 
 
@@ -28,7 +32,18 @@ if (args.Contains("--cleanup-base64-images"))
     return;
 }
 
-WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+// Come servizio Windows la directory corrente è C:\Windows\System32: senza forzare la
+// content root sulla cartella del programma, appsettings.json e wwwroot non verrebbero
+// trovati. ContentRootPath va passato QUI (CreateBuilder legge subito la configurazione):
+// impostarlo dopo, con UseWindowsService(), sarebbe troppo tardi.
+WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default
+});
+
+// Ciclo di vita da servizio Windows (no-op quando si avvia normalmente da console/VS).
+builder.Host.UseWindowsService();
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -41,6 +56,12 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 Log.Information("Ambiente: {Env}", builder.Environment.EnvironmentName);
+
+// L'avviso va dato all'avvio, dove si legge: se la lista delle origini manca, l'API resta
+// aperta a qualunque sito e nessuno se ne accorgerebbe mai.
+if (builder.Configuration.GetSection("Security:AllowedOrigins").Get<string[]>() is not { Length: > 0 })
+    Log.Warning("[CORS] Security:AllowedOrigins non configurato: l'API accetta richieste da QUALUNQUE origine. " +
+                "Impostare la lista in appsettings.json (es. http://192.168.2.150:5150).");
 
 builder.Host.UseSerilog();
 
@@ -82,9 +103,41 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 
+// Validazione dei DTO: la risposta deve parlare la lingua di tutte le altre.
+//
+// Di suo ASP.NET, quando un [Required]/[Range] non è soddisfatto, risponde 400 con un
+// `ProblemDetails` — un formato che il client web NON sa leggere: cerca { success, message },
+// non trova né l'uno né l'altro e mostra un errore generico (o niente). Qui la stessa
+// informazione esce come ApiResponse.Fail con l'elenco dei campi, così l'utente legge cosa
+// deve correggere invece di «errore imprevisto».
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context => RispostaValidazione.Crea(context.ModelState);
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddCors(o => o.AddPolicy("All", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// CORS: lista chiusa di origini, non «chiunque».
+//
+// In produzione il client è servito dallo STESSO host dell'API, quindi le sue chiamate sono
+// same-origin e il CORS non le riguarda nemmeno: a usarlo davvero è solo il dev server Vite
+// (localhost:5173 → localhost:5150). Aprire a tutti non serviva a niente e lasciava che
+// qualunque pagina web, aperta da un PC in azienda, parlasse con il gestionale usando il token
+// di chi la sta guardando.
+//
+// Se `Security:AllowedOrigins` non è configurato si resta al comportamento di prima (tutti),
+// con un avviso nel log: meglio un avviso che un gestionale che smette di funzionare per una
+// chiave dimenticata in un file di configurazione che gli aggiornamenti non sovrascrivono.
+string[] originiAmmesse = builder.Configuration.GetSection("Security:AllowedOrigins").Get<string[]>()
+                          ?? Array.Empty<string>();
+
+builder.Services.AddCors(o => o.AddPolicy("All", p =>
+{
+    if (originiAmmesse.Length > 0)
+        p.WithOrigins(originiAmmesse).AllowAnyMethod().AllowAnyHeader();
+    else
+        p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+}));
 
 // Compressione risposte JSON (gzip + brotli) per client web
 builder.Services.AddResponseCompression(options =>
@@ -138,6 +191,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     context.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            // Chi non è più in forza deve uscire SUBITO, non alla scadenza del token: il token
+            // dura 8 ore e fin qui `status` si guardava solo al login (AuthController), quindi
+            // un cessato continuava a lavorare per mezza giornata — il gesto «se ne va» del
+            // PIANO-PERMESSI (§4.3, §8) non buttava fuori nessuno.
+            //
+            // Il controllo sta QUI perché è l'unico punto attraversato da ogni richiesta
+            // autenticata, hub SignalR compresi, e perché fallire qui dà 401 (il client torna
+            // al login) e non un 403 che sembrerebbe un problema di permessi.
+            // Costo: una lettura da cache in memoria (30 s), non una query per richiesta —
+            // vedi FeatureAccessService.IsUtenteAttivo.
+            OnTokenValidated = context =>
+            {
+                FeatureAccessService access = context.HttpContext.RequestServices
+                    .GetRequiredService<FeatureAccessService>();
+                string? idClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                // Token senza id della persona: non si può nemmeno sapere di chi si tratta.
+                if (!int.TryParse(idClaim, out int employeeId) || !access.IsUtenteAttivo(employeeId))
+                    context.Fail("Utenza non più attiva.");
+
+                return Task.CompletedTask;
             }
         };
     });
@@ -154,11 +229,22 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddSingleton<DbService>();
+
+// Le anagrafiche tenute in memoria (blocco E4). Singleton: la cache è del processo, e il
+// gestionale gira in UNA sola istanza (servizio Windows AtecPmServer).
+builder.Services.AddSingleton<AnagraficheCache>();
 builder.Services.AddSingleton<FeatureAccessService>();
+// Cancello delle scritture su commessa non attiva (#88): sa la regola, non la applica da sé —
+// la applicano `[RequireProjectWritable]` e le poche azioni che lo chiamano a mano.
+builder.Services.AddSingleton<ProjectWriteGuard>();
+builder.Services.AddSingleton<PermissionChangeService>();
+builder.Services.AddSingleton<PermissionSeedService>();
+builder.Services.AddSingleton<PermissionAdminService>();
 builder.Services.AddSingleton<QuoteDbService>();
 builder.Services.AddSingleton<GammaRobotDbService>();
 builder.Services.AddSingleton<MoMDbService>();
 builder.Services.AddSingleton<CheckListDbService>();
+builder.Services.AddSingleton<BugReportsDbService>();
 builder.Services.AddSingleton<ResourcesDbService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<QuotePdfService>();
@@ -189,6 +275,7 @@ builder.Services.AddSingleton<DaneaOrderService>();
 if (svcDaneaSync)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
 
+builder.Services.AddSingleton<FullBackupService>();
 builder.Services.AddScoped<BackupController>();
 if (svcBackup)
     builder.Services.AddHostedService<BackupBackgroundService>();
@@ -208,10 +295,26 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// PRIMO della catena, prima di tutto il resto: da qui in giù qualunque eccezione non gestita
+// diventa una risposta JSON nel contratto ApiResponse invece della pagina HTML di errore di
+// ASP.NET, che il client web riceverebbe dove si aspetta { success, data, message }.
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+// Blocco E1 — misurare prima di correggere: una riga di log per ogni richiesta oltre i 500 ms
+// (soglia in Diagnostics:SlowRequestMs, 0 per spegnere). Sta QUI, subito dentro il middleware
+// degli errori, per due motivi: più in alto misurerebbe anche il proprio guscio; più in basso
+// perderebbe compressione, file statici e autenticazione — cioè pezzi di ciò che l'utente aspetta.
+app.UseMiddleware<RichiesteLenteMiddleware>();
+
 app.UseCors("All");
 app.UseResponseCompression();
 
-if (!app.Environment.IsDevelopment())
+// In LAN il server gira in HTTP puro (nessun certificato sulla macchina aziendale):
+// con Security:RequireHttps=false il redirect a HTTPS va spento, altrimenti ogni
+// richiesta verrebbe rimbalzata su una porta che non esiste.
+bool requireHttps = !app.Environment.IsDevelopment()
+    && app.Configuration.GetValue("Security:RequireHttps", true);
+if (requireHttps)
 {
     app.UseHttpsRedirection();
     app.UseHsts();
@@ -226,17 +329,98 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads/cms"
 });
 
-// Client web React (atec-pm-web) — stesso host dell'API
+// Client web React (atec-pm-web) — stesso host dell'API.
+// Due file NON devono mai finire in cache:
+//  • index.html — è l'unico con nome fisso e contiene i riferimenti agli asset con hash.
+//    Se resta in cache, dopo un aggiornamento il browser continua a chiedere il bundle
+//    vecchio finché non si fa Ctrl+F5.
+//  • version.json — è il file che le schede già aperte interrogano ogni minuto per
+//    accorgersi che è stata pubblicata una nuova versione (barra «Aggiorna adesso»).
+//    Servito dalla cache, l'avviso non comparirebbe mai.
+// JS/CSS invece hanno l'hash nel nome, quindi restano cacheabili a vita.
+static void NoCacheForShellFiles(Microsoft.AspNetCore.StaticFiles.StaticFileResponseContext ctx)
+{
+    bool alwaysFresh =
+        ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
+        ctx.File.Name.Equals("version.json", StringComparison.OrdinalIgnoreCase);
+    if (!alwaysFresh) return;
+    ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+    ctx.Context.Response.Headers.Pragma = "no-cache";
+    ctx.Context.Response.Headers.Expires = "0";
+}
+
+var spaFileOptions = new StaticFileOptions { OnPrepareResponse = NoCacheForShellFiles };
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(spaFileOptions);
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Sonda di stato senza login: la usano gli script di installazione/aggiornamento
+// (e chiunque voglia sapere se il servizio è vivo) senza doversi autenticare.
+//
+// ⚠️ Questa dice SOLO «il processo risponde». Non guarda il database: serve a sapere che
+// Kestrel è in piedi. Per «il gestionale funziona davvero» c'è /api/health/ready qui sotto.
+app.MapGet("/api/health", () => Results.Ok(new
+{
+    status = "ok",
+    environment = app.Environment.EnvironmentName,
+    version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(),
+    utc = DateTime.UtcNow
+})).AllowAnonymous();
+
+// Sonda VERA: il database risponde? Fino al 14/08/2026 gli script di deploy si fidavano di
+// /api/health, che dice «ok» anche con MySQL spento — cioè un aggiornamento che rompe la
+// connessione al database veniva dichiarato riuscito e il rollback automatico non scattava.
+//
+// 503 (e non 500) quando il database non c'è: è il codice che significa «sono vivo ma non
+// posso servire», ed è quello che gli script sanno leggere.
+//
+// 🪤 NON aggiungere qui i percorsi di rete (Backup:Path, cartella documenti su share): uno
+// share momentaneamente giù farebbe fallire l'aggiornamento con il database perfettamente
+// sano, cioè un rollback per il motivo sbagliato. Se un domani serve sorvegliarli, un
+// endpoint separato che gli script NON interrogano.
+app.MapGet("/api/health/ready", async (DbService db, ILogger<Program> log) =>
+{
+    string? errore = await db.ProvaDatabaseAsync();
+
+    if (errore == null)
+        return Results.Ok(new
+        {
+            status = "ready",
+            database = "ok",
+            environment = app.Environment.EnvironmentName,
+            utc = DateTime.UtcNow
+        });
+
+    log.LogError("[Health] Database non raggiungibile: {Messaggio}", errore);
+    return Results.Json(new
+    {
+        status = "degraded",
+        database = "ko",
+        message = errore,
+        utc = DateTime.UtcNow
+    }, statusCode: StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
+
 app.MapHub<ResourcePlannerHub>("/hubs/resource-planner");
 app.MapHub<ProjectHub>("/hubs/project");
 app.MapHub<CodexHub>("/hubs/codex");
-app.MapFallbackToFile("index.html");
+// Un endpoint /api inesistente deve rispondere 404 JSON, non la SPA: con il solo
+// catch-all sotto, una chiamata sbagliata tornava 200 con l'HTML di index.html —
+// il client la leggeva come riuscita e, nei test dei permessi, un endpoint scritto
+// male sembrava "aperto a tutti". Questo fallback è più specifico e vince su quello
+// generico. Vale solo per le rotte NON gestite dai controller.
+app.MapFallback("/api/{**path}", (HttpContext ctx) =>
+        Results.NotFound(ApiResponse<string>.Fail($"Endpoint non trovato: {ctx.Request.Path}")))
+    .AllowAnonymous();
+
+// AllowAnonymous obbligatorio: il catch-all della SPA è un endpoint e senza questo
+// ricade nella policy globale "serve un utente autenticato", quindi il browser si
+// prende un 401 al posto della pagina e non riesce nemmeno ad arrivare al login.
+// (In sviluppo non si vede: lì la pagina la serve Vite.)
+app.MapFallbackToFile("index.html", spaFileOptions).AllowAnonymous();
 try
 {
     string envName = app.Environment.EnvironmentName;
@@ -244,23 +428,13 @@ try
 
     DbService db = app.Services.GetRequiredService<DbService>();
 
-    // Retry connessione DB con backoff (utile in Docker/compose)
-    int maxRetries = 5;
-    for (int attempt = 1; attempt <= maxRetries; attempt++)
-    {
-        try
-        {
-            using var testConn = db.Open();
-            Console.WriteLine($"[Startup] Connessione DB verificata (tentativo {attempt}/{maxRetries})");
-            break;
-        }
-        catch (Exception connEx) when (attempt < maxRetries)
-        {
-            int waitMs = attempt * 2000;
-            Console.WriteLine($"[Startup] DB non raggiungibile (tentativo {attempt}/{maxRetries}): {connEx.Message}. Riprovo tra {waitMs}ms...");
-            Thread.Sleep(waitMs);
-        }
-    }
+    // Attesa del server MySQL con backoff (utile in Docker/servizio Windows al boot) e
+    // creazione del database se manca. Si connette SENZA database perché al primo avvio
+    // non esiste ancora: un test con db.Open() qui fallirebbe con «Unknown database».
+    bool dbCreated = db.EnsureDatabaseExists();
+    Console.WriteLine(dbCreated
+        ? "[Startup] Database non presente: creato ora (primo avvio)"
+        : "[Startup] Connessione DB verificata");
 
     bool isProduction = !app.Environment.IsDevelopment();
     db.InitDatabase(productionMode: isProduction);
@@ -268,10 +442,23 @@ try
 }
 catch (Exception ex)
 {
+    // Serilog e NON Console.WriteLine: come servizio Windows stdout non va da nessuna parte, e
+    // questo è l'unico punto in cui si legge PERCHÉ il servizio non è partito. Da quando una
+    // migrazione fallita interrompe l'avvio (Migrations:StopOnError), è il messaggio che serve
+    // a chi in azienda vede solo un servizio che non parte. CloseAndFlush obbligatorio: senza,
+    // il processo esce prima che il file di log sia scritto.
+    Log.Fatal(ex, "[Startup] Avvio interrotto: {Message}", ex.Message);
     Console.WriteLine($"[ERRORE InitDatabase] {ex.Message}");
     Console.WriteLine(ex.StackTrace);
-    Console.WriteLine("Premi un tasto per uscire...");
-    Console.ReadKey();
+    Log.CloseAndFlush();
+
+    // La pausa ha senso solo con una console vera: come servizio Windows stdin è chiuso
+    // e Console.ReadKey() solleverebbe un'eccezione mascherando l'errore originale.
+    if (Environment.UserInteractive && !Console.IsInputRedirected)
+    {
+        Console.WriteLine("Premi un tasto per uscire...");
+        Console.ReadKey();
+    }
     return;
 }
 

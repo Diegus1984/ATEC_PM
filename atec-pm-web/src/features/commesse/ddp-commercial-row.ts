@@ -12,6 +12,8 @@ export interface DdpCommercialRowOverrides {
   /** Presente (anche `null` = data rimossa) = la PUT aggiorna la data prevista. */
   dateNeeded?: string | null
   notes?: string
+  /** «Inserito da» (#61): presente = la PUT riscrive l'autore della riga. */
+  requestedBy?: string
   /** Presente = la PUT aggiorna il fornitore (`updateSupplier: true`); `id: null` = nessun fornitore. */
   supplier?: { id: number | null }
 }
@@ -38,7 +40,7 @@ export function ddpCommercialRowToSaveRequest(
     updateUnitCost: overrides.unitCost !== undefined,
     manufacturer: row.manufacturer ?? "",
     itemStatus: overrides.itemStatus ?? row.itemStatus,
-    requestedBy: row.requestedBy ?? "",
+    requestedBy: overrides.requestedBy ?? row.requestedBy ?? "",
     daneaRef: overrides.daneaRef ?? row.daneaRef ?? "",
     dateNeeded:
       overrides.dateNeeded !== undefined ? overrides.dateNeeded : row.dateNeeded,

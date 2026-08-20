@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, Users, X } from "lucide-react"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import { notifyError } from "@/lib/toast"
 import {
@@ -9,13 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { fetchMoMEmployees } from "@/lib/api/mom"
 import {
   addChatParticipant,
@@ -28,19 +22,30 @@ export function ChatParticipantsPopover({
   chatId,
   projectId,
   participantCount,
+  open: openControlled,
+  onOpenChange: onOpenChangeControlled,
 }: {
   chatId: number
-  projectId: number
+  /** null per le chat senza commessa: non c'è una lista di commessa da rinfrescare. */
+  projectId: number | null
   participantCount: number
+  /** Apertura controllata (es. dal menu contestuale della lista). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = React.useState(false)
+  const [openUncontrolled, setOpenUncontrolled] = React.useState(false)
+  const open = openControlled ?? openUncontrolled
+  const setOpen = onOpenChangeControlled ?? setOpenUncontrolled
   const [addId, setAddId] = React.useState<string>("")
 
+  // Caricata anche a pannello chiuso: è la stessa chiave che usa la conversazione, quindi non
+  // costa una richiesta in più e il numero sul pulsante è quello vero — non la fotografia
+  // presa dall'elenco di sinistra, che arrivava con un giro di ritardo (#78).
   const participantsQuery = useQuery({
     queryKey: ["project-chat-participants", chatId],
     queryFn: () => fetchChatParticipants(chatId),
-    enabled: open && chatId > 0,
+    enabled: chatId > 0,
   })
 
   const employeesQuery = useQuery({
@@ -49,30 +54,33 @@ export function ChatParticipantsPopover({
     enabled: open,
   })
 
+  async function refreshLists() {
+    await queryClient.invalidateQueries({
+      queryKey: ["project-chat-participants", chatId],
+    })
+    await queryClient.invalidateQueries({ queryKey: ["chat-inbox"] })
+    if (projectId != null) {
+      await queryClient.invalidateQueries({ queryKey: ["project-chats", projectId] })
+    }
+  }
+
   const addMutation = useMutation({
     mutationFn: (employeeId: number) => addChatParticipant(chatId, employeeId),
     onSuccess: async () => {
       setAddId("")
-      await queryClient.invalidateQueries({
-        queryKey: ["project-chat-participants", chatId],
-      })
-      await queryClient.invalidateQueries({ queryKey: ["project-chats", projectId] })
+      await refreshLists()
     },
     onError: (err: Error) => notifyError(err),
   })
 
   const removeMutation = useMutation({
     mutationFn: (employeeId: number) => removeChatParticipant(chatId, employeeId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["project-chat-participants", chatId],
-      })
-      await queryClient.invalidateQueries({ queryKey: ["project-chats", projectId] })
-    },
+    onSuccess: () => refreshLists(),
     onError: (err: Error) => notifyError(err),
   })
 
   const participants = participantsQuery.data ?? []
+  const shownCount = participantsQuery.data ? participants.length : participantCount
   const currentId = getSession()?.user.employeeId
   const participantIds = new Set(participants.map((p) => p.employeeId))
   const availableToAdd = (employeesQuery.data ?? []).filter(
@@ -84,10 +92,22 @@ export function ChatParticipantsPopover({
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground">
           <Users className="size-3.5" />
-          {participantCount} partecipanti
+          {shownCount} partecipanti
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-3">
+      <PopoverContent
+        align="end"
+        className="w-72 p-3"
+        // La combo «Aggiungi…» è un popover annidato: senza questa guardia il
+        // click (o il focus sulla ricerca) verrebbe letto come "fuori" e
+        // chiuderebbe il pannello partecipanti.
+        onInteractOutside={(event) => {
+          const target = event.target as HTMLElement | null
+          if (target?.closest("[data-slot=popover-content]")) {
+            event.preventDefault()
+          }
+        }}
+      >
         <p className="mb-2 text-sm font-medium">Partecipanti</p>
         <ul className="max-h-40 space-y-1 overflow-y-auto">
           {participantsQuery.isLoading ? (
@@ -122,18 +142,18 @@ export function ChatParticipantsPopover({
         </ul>
 
         <div className="mt-3 flex items-center gap-2 border-t pt-3">
-          <Select value={addId} onValueChange={setAddId}>
-            <SelectTrigger className="h-8 flex-1 text-xs">
-              <SelectValue placeholder="Aggiungi…" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableToAdd.map((e) => (
-                <SelectItem key={e.id} value={String(e.id)}>
-                  {e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LookupCombobox
+            options={availableToAdd.map((e) => ({
+              id: String(e.id),
+              name: e.name,
+            }))}
+            value={addId || null}
+            onValueChange={(id) => setAddId(id ?? "")}
+            placeholder="Aggiungi…"
+            searchPlaceholder="Cerca dipendente…"
+            emptyText="Nessun dipendente disponibile"
+            className="h-8 flex-1 text-xs"
+          />
           <Button
             type="button"
             size="icon-sm"

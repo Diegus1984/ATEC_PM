@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   Tooltip,
   TooltipContent,
@@ -233,7 +234,7 @@ export function SalOptionListPanel({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <GridScroller className="rounded-lg border bg-card">
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
@@ -330,7 +331,7 @@ export function SalOptionListPanel({
             ) : null}
           </TableBody>
         </Table>
-      </div>
+      </GridScroller>
 
       {withColors && api.saveColors ? (
         <OptionColorsDialog

@@ -13,6 +13,8 @@ export interface AcquistiInboxItem extends DdpRowItem {
   /** RDO viva che contiene la riga (link «in gara — RDO #x» nel pannello). */
   activeRfqId: number | null
   activeRfqStatus: string
+  /** Oggetto della RDO (titolo della gara): si mostra come icona + tooltip, mai al posto della descrizione. */
+  activeRfqSubject: string
 }
 
 export interface PurchaseRfqListItem {

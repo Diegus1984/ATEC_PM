@@ -11,6 +11,7 @@ import {
 import { RefreshCw, Search } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { renderColumnDef } from "@/components/shared/render-column-def"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { Button } from "@/components/ui/button"
@@ -61,7 +62,44 @@ export interface DataTableCardProps<TData> {
   rowClassName?: (row: TData) => string | undefined
   /** Chiave localStorage per salvare la visibilità delle colonne. Se non fornita, viene generata dal titolo. */
   visibilityStorageKey?: string
+  /**
+   * Classi dello scroller della griglia, per cambiarne l'altezza rispetto al
+   * default `--grid-max-h` (es. `max-h-[40vh]`).
+   */
+  scrollAreaClassName?: string
+  /** Intestazione fissa mentre le righe scorrono. Default `true`. */
+  stickyHeader?: boolean
+  /** Barra di scorrimento orizzontale SOPRA la griglia invece che sotto. Default `true`. */
+  topScrollbar?: boolean
+  /** Renderizzatore opzionale per il contenuto di una riga espansa (sotto la riga principale). */
+  renderExpandedRow?: (row: TData) => React.ReactNode
+  /**
+   * Righe di separazione verticali **e** orizzontali, come un foglio di calcolo.
+   * Default `false`: si accende sulle griglie da compilare cella per cella (le DDP),
+   * dove seguire la riga giusta su venti colonne a occhio nudo è la fatica vera.
+   */
+  gridLines?: boolean
 }
+
+/**
+ * Reticolo della griglia (segnalazione #58, 10/08/2026 — «righe di separazione sia per
+ * colonne che per righe» nelle DDP).
+ * <p>
+ * Il colore è <b>currentColor</b>, non un grigio fisso, ed è l'unica scelta che regge qui:
+ * le righe delle DDP hanno lo sfondo dello stato (inline, dallo stesso valore in tema chiaro
+ * e scuro), quindi una tinta fissa sparirebbe su metà degli stati. Prendendo il colore del
+ * testo della riga — scelto apposta per contrastare con quello sfondo — la linea si vede su
+ * tutti.
+ * <p>
+ * L'ultimo `border-b` riaccende la linea orizzontale che le righe colorate spengono
+ * (`rowStyle && "border-b-0"`): il selettore discendente vince sulla classe della riga.
+ */
+const GRID_LINES_CLASS =
+  "[&_th]:border-r [&_th]:border-current/20 [&_th:last-child]:border-r-0 " +
+  "[&_td]:border-r [&_td]:border-current/20 [&_td:last-child]:border-r-0 " +
+  "[&_tbody_tr]:border-b [&_tbody_tr]:border-current/20"
+
+export { GRID_LINES_CLASS }
 
 /**
  * DataTable standard ATEC PM (pattern dashboard-01): header `bg-muted/50`,
@@ -92,6 +130,11 @@ export function DataTableCard<TData>({
   aboveTable,
   rowClassName,
   visibilityStorageKey,
+  scrollAreaClassName,
+  stickyHeader = true,
+  topScrollbar = true,
+  renderExpandedRow,
+  gridLines = false,
 }: DataTableCardProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(defaultSorting)
 
@@ -214,8 +257,13 @@ export function DataTableCard<TData>({
 
           {aboveTable ? <div className="overflow-x-auto">{aboveTable}</div> : null}
 
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
+          <GridScroller
+            className="rounded-lg border"
+            scrollerClassName={scrollAreaClassName}
+            stickyHeader={stickyHeader}
+            topScrollbar={topScrollbar}
+          >
+            <Table className={cn(gridLines && GRID_LINES_CLASS)}>
               <TableHeader className="bg-muted/50">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
@@ -252,34 +300,48 @@ export function DataTableCard<TData>({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
-                      className={cn(
-                        onRowDoubleClick && "cursor-pointer",
-                        rowClassName?.(row.original)
-                      )}
-                      onDoubleClick={
-                        onRowDoubleClick
-                          ? () => onRowDoubleClick(row.original)
-                          : undefined
-                      }
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {renderColumnDef(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
+                  table.getRowModel().rows.map((row) => {
+                    const expandedContent = renderExpandedRow?.(row.original)
+                    return (
+                      <React.Fragment key={row.id}>
+                        <TableRow
+                          data-state={row.getIsSelected() && "selected"}
+                          className={cn(
+                            onRowDoubleClick && "cursor-pointer",
+                            rowClassName?.(row.original)
                           )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
+                          onDoubleClick={
+                            onRowDoubleClick
+                              ? () => onRowDoubleClick(row.original)
+                              : undefined
+                          }
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {renderColumnDef(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                        {expandedContent ? (
+                          <TableRow className="bg-muted/10 hover:bg-muted/10 border-b">
+                            <TableCell
+                              colSpan={table.getVisibleLeafColumns().length}
+                              className="p-3 bg-zinc-50/70"
+                            >
+                              {expandedContent}
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </React.Fragment>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>

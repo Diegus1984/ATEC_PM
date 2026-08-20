@@ -367,7 +367,14 @@ public class QuoteCostingController : ControllerBase
     public IActionResult UpdateMaterialItemDistribution(int quoteId, int id, [FromBody] SectionDistributionDto req)
     {
         using var c = _db.Open();
-        c.Execute(@"UPDATE quote_material_items SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed WHERE id=@Id", new { ContPct = req.ContingencyPct, MargPct = req.MarginPct, ContPin = req.ContingencyPinned, MargPin = req.MarginPinned, Shadowed = req.IsShadowed, Id = id });
+        // 🔒 BUG-015: senza il vincolo sulla sezione, l'id nel percorso decideva tutto e il
+        // `quoteId` della rotta non veniva nemmeno guardato — si modificavano le righe di un
+        // preventivo altrui passandone gli id. La sezione singola, qui sopra, il filtro ce
+        // l'aveva già: era una dimenticanza, non una scelta.
+        c.Execute(@"UPDATE quote_material_items SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed
+                    WHERE id=@Id
+                      AND section_id IN (SELECT id FROM quote_material_sections WHERE quote_id=@quoteId)",
+            new { ContPct = req.ContingencyPct, MargPct = req.MarginPct, ContPin = req.ContingencyPinned, MargPin = req.MarginPinned, Shadowed = req.IsShadowed, Id = id, quoteId });
         return Ok(ApiResponse<string>.Ok("", "Distribuzione materiale aggiornata"));
     }
 

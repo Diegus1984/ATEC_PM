@@ -31,6 +31,9 @@ public class MilestoneSummaryDto
     public int Late { get; set; }
     public int Current { get; set; }
     public int Done { get; set; }
+    public int? AvgAvanz { get; set; }          // media avanzamento (0 le righe senza valore), arrotondata — come avgAvanz client
+    public DateTime? PeriodStart { get; set; }  // min fondendo data_inizio e data_fine — come periodo() client
+    public DateTime? PeriodEnd { get; set; }    // max fondendo data_inizio e data_fine
 }
 
 public class MilestoneSaveRequest
@@ -56,4 +59,26 @@ public class MilestoneReorderRequest
 public class MilestoneSeedRequest
 {
     public List<int> CatalogIds { get; set; } = new();
+}
+
+// ══════════════════════════════════════════════════════════
+// VISTE SALVATE del Gantt («Vista Interna» / «Vista Cliente»)
+// ══════════════════════════════════════════════════════════
+// La composizione di un Gantt (colonne spente, righe spente, intervallo date, timeline
+// on/off) sta LATO SERVER e non in localStorage: il Gantt ridotto che si manda al cliente
+// deve essere lo stesso per tutti e non deve morire col browser di chi l'ha composto.
+// `Payload` è opaco per il server — lo interpreta solo il client — così aggiungere una
+// voce alla composizione non richiede una migrazione.
+
+public class MilestoneGanttViewDto
+{
+    public string Name { get; set; } = "";
+    public string Payload { get; set; } = "";
+    public DateTime UpdatedAt { get; set; }
+    public string UpdatedByName { get; set; } = "";
+}
+
+public class MilestoneGanttViewSaveRequest
+{
+    public string Payload { get; set; } = "";
 }

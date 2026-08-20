@@ -7,16 +7,16 @@ import {
   FileSpreadsheet,
   FileText,
   FileType,
-  Pause,
   Plus,
   Printer,
+  RefreshCw,
   Trash2,
 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { notifyError } from "@/lib/toast"
-import { DateField } from "@/components/shared/date-field"
+import { DateField, ReadonlyDateField } from "@/components/shared/date-field"
 import { type MultiSelectOption } from "@/components/shared/multi-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,8 +37,10 @@ import {
   updateMoM,
   updateMoMItem,
 } from "@/lib/api/mom"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 import { useMoMHub } from "@/lib/signalr/use-mom-hub"
+import { cn } from "@/lib/utils"
 import type {
   LookupItem,
   MoMActionItem,
@@ -52,6 +54,8 @@ import {
   exportMoMWord,
   printMoM,
 } from "./mom-export"
+import { MoMClosedProgress } from "./mom-closed-progress"
+import { MOM_CONDITION_STYLE } from "./mom-palette"
 import { MoMSheet, type SheetFocusRequest } from "./mom-sheet"
 import {
   type FilterKey,
@@ -66,6 +70,7 @@ import {
   reorderWithinBucket,
   todayIso,
 } from "./mom-detail-shared"
+import { useDeferredItemOrder } from "@/lib/use-deferred-item-order"
 
 // Riga nuova: priorità 3 (bassa) di default, nessun campo obbligatorio oltre al testo inserito.
 function blankRowRequest(
@@ -95,6 +100,15 @@ export function MoMDetailPage() {
   const confirm = useConfirm()
   const momId = Number(params.id)
   const myId = getSession()?.user.employeeId ?? null
+  /**
+   * Funzione concessa in sola lettura: il verbale si apre, si legge e si esporta,
+   * ma non si tocca. Qui non basta togliere i pulsanti: il foglio salva da solo
+   * mentre si scrive, quindi in sola lettura le celle diventano testo e l'autosave
+   * non parte proprio (vedi `patchRow` ed `enqueueSave`). Senza quelle guardie
+   * l'utente digiterebbe, la PUT tornerebbe 403 e il testo andrebbe perso in
+   * silenzio al primo ricaricamento.
+   */
+  const readOnly = !canWriteFeature("nav.mom")
 
   const [header, setHeader] = React.useState<HeaderState | null>(null)
   const [revisions, setRevisions] = React.useState<MoMRevision[]>([])
@@ -111,6 +125,16 @@ export function MoMDetailPage() {
   const [selectedRowIds, setSelectedRowIds] = React.useState<Set<number>>(
     () => new Set()
   )
+  /** «Aggiorna» riordina le righe; le modifiche a priorità/data non spostano subito. */
+  const [layoutEpoch, setLayoutEpoch] = React.useState(0)
+  /**
+   * Righe appena aggiunte: restano in fondo al foglio finché non si preme
+   * «Aggiorna» o non si riordina a mano (segnalazione #47). Serve nel caso in cui
+   * era attivo un ordinamento per colonna: l'aggiunta lo disattiva e senza questo
+   * elenco il riordino conseguente rimetterebbe la riga nuova a metà tabella,
+   * dentro la sua fascia di priorità, invece che sotto a tutte.
+   */
+  const pinnedNewIdsRef = React.useRef<Set<number>>(new Set())
 
   const today = todayIso()
   const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -129,6 +153,8 @@ export function MoMDetailPage() {
   const saveQueue = React.useRef<Promise<void>>(Promise.resolve())
   const inFlightRef = React.useRef(0)
   const pendingRemoteRef = React.useRef(false)
+  /** Finestra in cui ignorare l'echo SignalR delle proprie scritture. */
+  const ignoreRemoteUntilRef = React.useRef(0)
 
   const applyDetail = React.useCallback(
     (detail: Awaited<ReturnType<typeof fetchMoMDetail>>) => {
@@ -143,6 +169,9 @@ export function MoMDetailPage() {
         rev: detail.rev,
       })
       setRevisions(detail.revisions)
+      // Solo i valori: l'ordine a video resta congelato fino ad «Aggiorna»
+      // (segnalazione #43). Se qui si bumpasse layoutEpoch, ogni autosave — e il
+      // proprio echo SignalR — riposizionerebbe le righe come prima della Check List.
       setRows(detail.items)
     },
     []
@@ -171,6 +200,10 @@ export function MoMDetailPage() {
         ])
         if (cancelled) return
         applyDetail(detail)
+        pinnedNewIdsRef.current.clear()
+        // Primo caricamento: applica subito l'ordine di default (useDeferredItemOrder
+        // con orderIds vuoto lo farebbe già; l'epoch serve se si riapre lo stesso MoM).
+        setLayoutEpoch((n) => n + 1)
         setEmployees(emps)
         setWildcards(wilds)
       } catch (err) {
@@ -243,6 +276,10 @@ export function MoMDetailPage() {
 
   const enqueueSave = React.useCallback(
     (id: number) => {
+      // Guardia sulla CODA, non solo sull'interfaccia: qui passa ogni salvataggio
+      // (debounce, flush al blur, patch immediate). In sola lettura la coda resta
+      // ferma, così non parte nessuna PUT destinata a tornare 403.
+      if (readOnly) return
       inFlightRef.current += 1
       saveQueue.current = saveQueue.current.then(async () => {
         const row = rowsRef.current.find((r) => r.id === id)
@@ -253,6 +290,9 @@ export function MoMDetailPage() {
         setStatus("Salvataggio…")
         try {
           await updateMoMItem(id, buildSaveRequest(row))
+          // Il server notifica anche noi: senza questa finestra il reload
+          // riscriverebbe le righe a ogni autosave (priorità/data comprese).
+          ignoreRemoteUntilRef.current = Date.now() + 1500
           setRows((prev) =>
             prev.map((r) =>
               r.id === id ? { ...r, rowVersion: row.rowVersion + 1 } : r
@@ -274,7 +314,7 @@ export function MoMDetailPage() {
         }
       })
     },
-    [maybeRemoteRefresh, reload]
+    [maybeRemoteRefresh, readOnly, reload]
   )
 
   const scheduleSave = React.useCallback(
@@ -303,6 +343,9 @@ export function MoMDetailPage() {
       patch: Partial<MoMActionItem>,
       opts?: { immediate?: boolean }
     ) => {
+      // In sola lettura la riga non cambia nemmeno a video: se la aggiornassimo qui
+      // l'utente vedrebbe la modifica «presa» mentre in banca dati non arriva nulla.
+      if (readOnly) return
       // Cambio responsabili: risolve subito i nomi per la visualizzazione/export.
       if (patch.responsibleIds) {
         patch.responsibleNames = patch.responsibleIds.map(
@@ -317,7 +360,7 @@ export function MoMDetailPage() {
       )
       scheduleSave(item.id, opts?.immediate === true)
     },
-    [globalNameById, scheduleSave]
+    [globalNameById, readOnly, scheduleSave]
   )
 
   const flushRow = React.useCallback(
@@ -337,6 +380,8 @@ export function MoMDetailPage() {
     React.useCallback(
       (change) => {
         if (change.momId !== momId) return
+        // Echo delle proprie scritture: i valori locali sono già aggiornati.
+        if (Date.now() < ignoreRemoteUntilRef.current) return
         pendingRemoteRef.current = true
         maybeRemoteRefresh()
       },
@@ -351,11 +396,12 @@ export function MoMDetailPage() {
       focusField: "attivita" | "descrizione" | "azione" = "attivita",
       opts?: { attivita?: string }
     ) => {
-      if (adding || !header) return
+      if (adding || !header || readOnly) return
       const attivita = opts?.attivita?.trim() ?? ""
       setAdding(true)
       try {
         const newId = await addMoMItem(momId, blankRowRequest(attivita))
+        ignoreRemoteUntilRef.current = Date.now() + 1500
         const maxSort = rowsRef.current.reduce(
           (max, r) => Math.max(max, r.sortOrder),
           -1
@@ -382,6 +428,7 @@ export function MoMDetailPage() {
           responsibleNames: [],
           responsibleIds: [],
         }
+        pinnedNewIdsRef.current.add(newId)
         setRows((prev) => [...prev, newRow])
         setFilter("tutte")
         if (!attivita) {
@@ -404,11 +451,12 @@ export function MoMDetailPage() {
         setAdding(false)
       }
     },
-    [adding, header, momId]
+    [adding, header, momId, readOnly]
   )
 
   const deleteRow = React.useCallback(
     async (item: MoMActionItem) => {
+      if (readOnly) return
       const ok = await confirm({
         title: "Eliminare la riga",
         description: "La riga selezionata verrà rimossa dalla MoM.",
@@ -417,6 +465,7 @@ export function MoMDetailPage() {
       if (!ok) return
       try {
         await deleteMoMItem(item.id)
+        ignoreRemoteUntilRef.current = Date.now() + 1500
         setRows((prev) => prev.filter((row) => row.id !== item.id))
         setSelectedRowIds((prev) => {
           if (!prev.has(item.id)) return prev
@@ -429,12 +478,12 @@ export function MoMDetailPage() {
         notifyError(err)
       }
     },
-    [confirm]
+    [confirm, readOnly]
   )
 
   const deleteSelectedRows = React.useCallback(async () => {
     const ids = [...selectedRowIds]
-    if (ids.length === 0) return
+    if (ids.length === 0 || readOnly) return
     const ok = await confirm({
       title: ids.length === 1 ? "Eliminare la riga" : `Eliminare ${ids.length} righe`,
       description:
@@ -446,6 +495,7 @@ export function MoMDetailPage() {
     if (!ok) return
     try {
       await Promise.all(ids.map((id) => deleteMoMItem(id)))
+      ignoreRemoteUntilRef.current = Date.now() + 1500
       setRows((prev) => prev.filter((row) => !selectedRowIds.has(row.id)))
       setSelectedRowIds(new Set())
       setStatus(
@@ -455,10 +505,12 @@ export function MoMDetailPage() {
       notifyError(err)
       void reload()
     }
-  }, [selectedRowIds, confirm, reload])
+  }, [selectedRowIds, confirm, readOnly, reload])
 
   const handleReorder = React.useCallback(
     (dragId: number, targetId: number, after: boolean): boolean => {
+      // Il riordino scrive (`reorderMoMItems`): in sola lettura non si sposta nulla.
+      if (readOnly) return false
       const renumbered = reorderWithinBucket(
         rowsRef.current,
         dragId,
@@ -472,6 +524,9 @@ export function MoMDetailPage() {
         return false
       }
       setRows(renumbered)
+      // Riordino esplicito dell'utente: le righe nuove perdono il posto fisso in fondo.
+      pinnedNewIdsRef.current.clear()
+      setLayoutEpoch((n) => n + 1)
       setSort((prev) => {
         setStatus(
           prev.field != null
@@ -480,6 +535,7 @@ export function MoMDetailPage() {
         )
         return { field: null, dir: 1 }
       })
+      ignoreRemoteUntilRef.current = Date.now() + 1500
       reorderMoMItems(momId, renumbered.map((row) => row.id)).catch(
         (err: Error) => {
           notifyError(err)
@@ -488,14 +544,15 @@ export function MoMDetailPage() {
       )
       return true
     },
-    [momId, reload]
+    [momId, readOnly, reload]
   )
 
   // ── Data riunione: cambio con conferma → nuova revisione (v9) ──
 
   const changeMeetingDate = React.useCallback(
     async (value: string | null) => {
-      if (!header) return
+      // Cambiare la data riunione crea una revisione: è una scrittura a tutti gli effetti.
+      if (!header || readOnly) return
       const prevDay = header.meetingDate ? header.meetingDate.slice(0, 10) : null
       if (prevDay && value && prevDay !== value) {
         const ok = await confirm({
@@ -537,15 +594,42 @@ export function MoMDetailPage() {
         notifyError(err)
       }
     },
-    [header, confirm]
+    [header, confirm, readOnly]
   )
 
-  // ── Vista ──────────────────────────────────────────────────
+  // ── Vista: ordine congelato fino ad «Aggiorna» / click colonna / drag ──
 
-  const displayRows = React.useMemo(() => {
-    const filtered = rows.filter((row) => matchesFilter(row, filter, myId, today))
-    return orderRows(filtered, sort)
-  }, [rows, filter, myId, today, sort])
+  const sortItems = React.useCallback(
+    (list: MoMActionItem[]) => {
+      const pinned = pinnedNewIdsRef.current
+      if (pinned.size === 0) return orderRows(list, sort)
+      const fresh = list.filter((row) => pinned.has(row.id))
+      if (fresh.length === 0) return orderRows(list, sort)
+      const rest = list.filter((row) => !pinned.has(row.id))
+      return [...orderRows(rest, sort), ...fresh]
+    },
+    [sort]
+  )
+  const sortResortKey =
+    sort.field == null ? "manual" : `${sort.field}:${sort.dir}`
+  const orderedRows = useDeferredItemOrder(
+    rows,
+    sortItems,
+    layoutEpoch,
+    sortResortKey
+  )
+  const displayRows = React.useMemo(
+    () =>
+      orderedRows.filter((row) => matchesFilter(row, filter, myId, today)),
+    [orderedRows, filter, myId, today]
+  )
+
+  const handleRefreshLayout = React.useCallback(() => {
+    // Solo «Aggiorna» rimette in gioco le righe nuove tenute in fondo.
+    pinnedNewIdsRef.current.clear()
+    setLayoutEpoch((n) => n + 1)
+    setStatus("Ordine aggiornato secondo priorità e date.")
+  }, [])
 
   React.useEffect(() => {
     setSelectedRowIds(new Set())
@@ -589,7 +673,6 @@ export function MoMDetailPage() {
       critiche,
       scadute,
       standby,
-      pct: total > 0 ? Math.round((closed / total) * 100) : 0,
     }
   }, [rows, today])
 
@@ -598,7 +681,9 @@ export function MoMDetailPage() {
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "n" && (event.ctrlKey || event.metaKey)) {
+      // Ctrl+N aggiunge una riga: in sola lettura la scorciatoia resta muta
+      // (l'Escape per tornare indietro invece serve sempre).
+      if (event.key === "n" && (event.ctrlKey || event.metaKey) && !readOnly) {
         event.preventDefault()
         void addRowRef.current("attivita")
         return
@@ -612,7 +697,7 @@ export function MoMDetailPage() {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [navigate])
+  }, [navigate, readOnly])
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Caricamento…</p>
@@ -667,18 +752,35 @@ export function MoMDetailPage() {
             <span className="text-xs font-semibold text-muted-foreground">
               Riunione
             </span>
-            <DateField
-              value={header.meetingDate}
-              onChange={(value) => void changeMeetingDate(value)}
-              size="sm"
-              className="w-52 bg-background"
-            />
+            {readOnly ? (
+              <ReadonlyDateField
+                value={header.meetingDate}
+                size="sm"
+                className="w-52 bg-background"
+              />
+            ) : (
+              <DateField
+                value={header.meetingDate}
+                onChange={(value) => void changeMeetingDate(value)}
+                size="sm"
+                className="w-52 bg-background"
+              />
+            )}
             <Badge title={revTooltip} className="font-bold">
               Rev. {header.rev}
             </Badge>
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshLayout}
+            title="Riordina le righe secondo priorità, stato e date aggiornate"
+          >
+            <RefreshCw />
+            Aggiorna
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -717,7 +819,7 @@ export function MoMDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {selectedRowIds.size > 0 ? (
+          {!readOnly && selectedRowIds.size > 0 ? (
             <Button
               variant="destructive"
               size="sm"
@@ -727,24 +829,41 @@ export function MoMDetailPage() {
               Elimina ({selectedRowIds.size})
             </Button>
           ) : null}
-          <Button size="sm" onClick={() => void addRow()} disabled={adding}>
-            <Plus />
-            Nuova riga
-          </Button>
+          {!readOnly && (
+            <Button size="sm" onClick={() => void addRow()} disabled={adding}>
+              <Plus />
+              Nuova riga
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md bg-muted/50 px-4 py-2.5">
         <span className="inline-flex items-center gap-1.5 text-sm">
-          <span className="size-2 rounded-full bg-red-500" />
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              MOM_CONDITION_STYLE.critical.dotClass
+            )}
+          />
           {summary.critiche} critiche
         </span>
         <span className="inline-flex items-center gap-1.5 text-sm">
-          <span className="size-2 rounded-full bg-amber-500" />
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              MOM_CONDITION_STYLE.overdue.dotClass
+            )}
+          />
           {summary.scadute} scadute
         </span>
         <span className="inline-flex items-center gap-1.5 text-sm">
-          <Pause className="size-3.5 text-muted-foreground" />
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              MOM_CONDITION_STYLE.standby.dotClass
+            )}
+          />
           {summary.standby} stand-by
         </span>
         <span className="inline-flex items-center gap-1.5 text-sm">
@@ -752,20 +871,15 @@ export function MoMDetailPage() {
           {summary.daFare} da fare
         </span>
         <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-          <CircleCheck className="size-4 text-emerald-600" />
+          <CircleCheck className="size-4 text-green-600" />
           {summary.closed} chiuse
         </span>
-        <div className="flex min-w-32 flex-1 items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background">
-            <div
-              className="h-full rounded-full bg-emerald-500"
-              style={{ width: `${summary.pct}%` }}
-            />
-          </div>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {summary.pct}% chiuse
-          </span>
-        </div>
+        <MoMClosedProgress
+          itemsCount={summary.total}
+          openCount={summary.daFare}
+          className="min-w-32 flex-1"
+          trackClassName="bg-background"
+        />
       </div>
 
       <ToggleGroup
@@ -786,6 +900,7 @@ export function MoMDetailPage() {
       <MoMSheet
         displayRows={displayRows}
         allRows={rows}
+        today={today}
         sort={sort}
         poolFor={poolFor}
         focusRequest={focusReq}
@@ -796,9 +911,12 @@ export function MoMDetailPage() {
         onAddRow={(field, opts) => void addRow(field, opts)}
         onDelete={(item) => void deleteRow(item)}
         onReorder={handleReorder}
+        readOnly={readOnly}
         emptyMessage={
           filter === "tutte"
-            ? "Aggiungi la prima riga con «Nuova attività…» in fondo (o Ctrl+N)."
+            ? readOnly
+              ? "Nessuna azione in questo verbale."
+              : "Aggiungi la prima riga con «Nuova attività…» in fondo (o Ctrl+N)."
             : "Nessuna azione per questo filtro."
         }
         selectedRowIds={selectedRowIds}

@@ -1,19 +1,12 @@
 import * as React from "react"
+import { Link, useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Plus, RefreshCw, Search, Trash2 } from "lucide-react"
+import { BookOpen, RefreshCw, Search, Wand2 } from "lucide-react"
 
-import { useConfirm } from "@/components/shared/confirm"
-import { notifyError } from "@/lib/toast"
-import { RowActionsMenu } from "@/components/shared/row-actions"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -21,8 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -38,130 +37,115 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  createAuthFeature,
-  deleteAuthFeature,
-  fetchAuthFeatures,
-  fetchAuthLevels,
-  updateAuthFeature,
-} from "@/lib/api/auth-levels"
-import type { AuthFeatureDto, AuthLevelDto } from "@/lib/api/types"
+import { notifyError, notifySuccess } from "@/lib/toast"
+import { applicaClasse, fetchElencoPermessi } from "@/lib/api/permessi"
+import type { EsitoApplicaClasseDto } from "@/lib/api/types"
 
+const TUTTE = "__tutte__"
 
-const BEHAVIOR_OPTIONS = [
-  { value: "HIDDEN", label: "Nascondi" },
-  { value: "DISABLED", label: "Disabilita" },
-  { value: "ALERT", label: "Avvisa" },
-]
-
+/**
+ * Pagina «Permessi» — l'elenco delle persone (PIANO-PERMESSI.md §5).
+ *
+ * Una riga = una persona. Da qui si entra nella sua scheda, che è l'unico posto da cui i
+ * permessi si scrivono davvero.
+ *
+ * I due filtri sono **classe** e **reparto**, e sono due cose diverse: il reparto dice dove uno
+ * lavora (anagrafica) e non concede niente, la classe dice che autorità ha nel gestionale.
+ * Vinardi è *Responsabile* in *Acquisti*, non «un Acquisti»: tenerli separati è ciò che evita di
+ * inventare una classe per ogni ufficio.
+ *
+ * La colonna «diverso dalla classe» è la più importante dell'elenco: dice a colpo d'occhio chi è
+ * stato configurato apposta e chi è andato alla deriva.
+ */
 export function PermessiPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const confirm = useConfirm()
-  const [search, setSearch] = React.useState("")
-  const [features, setFeatures] = React.useState<AuthFeatureDto[]>([])
-  const [addOpen, setAddOpen] = React.useState(false)
+  const [cerca, setCerca] = React.useState("")
+  const [classe, setClasse] = React.useState(TUTTE)
+  const [reparto, setReparto] = React.useState(TUTTE)
+  const [selezione, setSelezione] = React.useState<Set<number>>(new Set())
+  const [anteprima, setAnteprima] = React.useState<EsitoApplicaClasseDto | null>(null)
 
-  const levelsQuery = useQuery({
-    queryKey: ["auth-levels"],
-    queryFn: fetchAuthLevels,
+  const elencoQuery = useQuery({
+    queryKey: ["permessi", "elenco"],
+    queryFn: fetchElencoPermessi,
   })
 
-  const featuresQuery = useQuery({
-    queryKey: ["auth-features"],
-    queryFn: fetchAuthFeatures,
+  const applicaMutation = useMutation({
+    mutationFn: applicaClasse,
+    onError: (e) => notifyError(e, "Classe non applicata"),
   })
 
-  React.useEffect(() => {
-    if (featuresQuery.data) {
-      setFeatures(featuresQuery.data)
-    }
-  }, [featuresQuery.data])
+  // `?? []` creerebbe un array nuovo a ogni render, e i due useMemo qui sotto si
+  // ricalcolerebbero sempre: la lista vuota va tenuta stabile.
+  const righe = React.useMemo(() => elencoQuery.data ?? [], [elencoQuery.data])
 
-  const levels = React.useMemo(
+  const classi = React.useMemo(
     () =>
-      (levelsQuery.data ?? [])
-        .slice()
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    [levelsQuery.data]
+      Array.from(
+        new Map(righe.map((r) => [r.classe, r.classeDisplay || r.classe])).entries()
+      ).sort((a, b) => a[1].localeCompare(b[1])),
+    [righe]
   )
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["auth-features"] })
+  const reparti = React.useMemo(
+    () => Array.from(new Set(righe.flatMap((r) => r.reparti))).sort(),
+    [righe]
+  )
 
-  const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      minLevel,
-      behavior,
-    }: {
-      id: number
-      minLevel: number
-      behavior: string
-    }) => updateAuthFeature(id, { minLevel, behavior }),
-    onError: (err: Error) => {
-      notifyError(err)
-      void invalidate()
-    },
+  const filtrate = righe.filter((r) => {
+    const testo = cerca.trim().toLowerCase()
+    if (testo && !`${r.nome} ${r.username}`.toLowerCase().includes(testo)) return false
+    if (classe !== TUTTE && r.classe !== classe) return false
+    if (reparto !== TUTTE && !r.reparti.includes(reparto)) return false
+    return true
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteAuthFeature,
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => notifyError(err),
-  })
+  const tutteSelezionate = filtrate.length > 0 && filtrate.every((r) => selezione.has(r.employeeId))
 
-  function patchFeature(id: number, patch: Partial<AuthFeatureDto>) {
-    setFeatures((prev) =>
-      prev.map((feature) =>
-        feature.id === id ? { ...feature, ...patch } : feature
-      )
-    )
-    const target = features.find((feature) => feature.id === id)
-    if (!target) return
-    const merged = { ...target, ...patch }
-    updateMutation.mutate({
-      id,
-      minLevel: merged.minLevel,
-      behavior: merged.behavior,
+  function commuta(employeeId: number) {
+    setSelezione((prec) => {
+      const succ = new Set(prec)
+      if (succ.has(employeeId)) succ.delete(employeeId)
+      else succ.add(employeeId)
+      return succ
     })
   }
 
-  async function handleDelete(feature: AuthFeatureDto) {
-    const ok = await confirm({
-      title: "Elimina funzione",
-      description: `Eliminare la funzione "${feature.displayName}"?`,
-      confirmLabel: "Elimina",
-    })
-    if (ok) {
-      deleteMutation.mutate(feature.id)
+  /**
+   * ⚠️ **Non applica: chiede l'anteprima.** È la regola §4.4 del piano — un timbro di massa può
+   * cancellare in silenzio le eccezioni messe apposta sulle singole persone, quindi quello che
+   * si conferma è l'elenco dei cambi, non il pulsante.
+   */
+  async function chiediAnteprima() {
+    try {
+      setAnteprima(
+        await applicaMutation.mutateAsync({
+          employeeIds: Array.from(selezione),
+          anteprima: true,
+        })
+      )
+    } catch {
+      /* già segnalato da onError */
     }
   }
 
-  const rows = React.useMemo(() => {
-    const term = search.trim().toLowerCase()
-    const sorted = features
-      .slice()
-      .sort(
-        (a, b) =>
-          a.category.localeCompare(b.category) ||
-          a.displayName.localeCompare(b.displayName)
+  async function conferma() {
+    try {
+      const esito = await applicaMutation.mutateAsync({
+        employeeIds: Array.from(selezione),
+        anteprima: false,
+      })
+      setAnteprima(null)
+      setSelezione(new Set())
+      void queryClient.invalidateQueries({ queryKey: ["permessi"] })
+      notifySuccess(
+        `${esito.combo} ${esito.combo === 1 ? "combo aggiornata" : "combo aggiornate"} su ${esito.persone} ${esito.persone === 1 ? "persona" : "persone"}`
       )
-    if (!term) return sorted
-    return sorted.filter((feature) =>
-      [feature.displayName, feature.category, feature.featureKey]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    )
-  }, [features, search])
-
-  const categories = React.useMemo(
-    () =>
-      Array.from(new Set(features.map((feature) => feature.category)))
-        .filter(Boolean)
-        .sort(),
-    [features]
-  )
+    } catch {
+      /* già segnalato */
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -171,319 +155,221 @@ export function PermessiPage() {
             <div>
               <CardTitle>Permessi</CardTitle>
               <CardDescription>
-                Livello minimo e comportamento per ogni funzione ({features.length})
+                Chi vede cosa, persona per persona ({filtrate.length} di {righe.length})
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              {selezione.size > 0 ? (
+                <Button size="sm" onClick={chiediAnteprima}>
+                  <Wand2 />
+                  Applica classe ai selezionati ({selezione.size})
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void levelsQuery.refetch()
-                  void featuresQuery.refetch()
-                }}
+                onClick={() => void elencoQuery.refetch()}
               >
                 <RefreshCw />
                 Aggiorna
               </Button>
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                <Plus />
-                Nuova funzione
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/permessi/catalogo">
+                  <BookOpen />
+                  Catalogo funzioni
+                </Link>
               </Button>
             </div>
           </div>
         </CardHeader>
+
         <CardContent className="space-y-4">
-          {/* Legenda livelli */}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>Gerarchia ruoli:</span>
-            {levels.map((level) => (
-              <Badge key={level.id} variant="outline">
-                {level.levelValue} · {level.displayName}
-              </Badge>
-            ))}
-            <span>— ✓ = accesso consentito</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Cerca per nome o utenza…"
+                value={cerca}
+                onChange={(e) => setCerca(e.target.value)}
+              />
+            </div>
+            <Select value={classe} onValueChange={setClasse}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Classe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TUTTE}>Tutte le classi</SelectItem>
+                {classi.map(([valore, etichetta]) => (
+                  <SelectItem key={valore} value={valore}>
+                    {etichetta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={reparto} onValueChange={setReparto}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Reparto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TUTTE}>Tutti i reparti</SelectItem>
+                {reparti.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input
-              value={search}
-              placeholder="Cerca funzione, categoria, codice…"
-              className="pl-8"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-
-          {featuresQuery.isLoading || levelsQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Caricamento…</p>
-          ) : null}
-          {featuresQuery.isError ? (
-            <p className="text-sm text-destructive">
-              {(featuresQuery.error as Error).message}
-            </p>
-          ) : null}
-
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Funzione</TableHead>
-                  <TableHead>Codice</TableHead>
-                  <TableHead className="w-40">Livello minimo</TableHead>
-                  {levels.map((level) => (
-                    <TableHead
-                      key={level.id}
-                      className="w-14 text-center"
-                      title={level.displayName}
-                    >
-                      {level.displayName}
-                    </TableHead>
-                  ))}
-                  <TableHead className="w-36">Se non autorizzato</TableHead>
-                  <TableHead className="w-12" />
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={tutteSelezionate}
+                      onCheckedChange={(v) =>
+                        setSelezione(
+                          v ? new Set(filtrate.map((r) => r.employeeId)) : new Set()
+                        )
+                      }
+                      aria-label="Seleziona tutti"
+                    />
+                  </TableHead>
+                  <TableHead>Persona</TableHead>
+                  <TableHead className="w-[180px]">Classe</TableHead>
+                  <TableHead className="w-[220px]">Reparti</TableHead>
+                  <TableHead className="w-[110px]">Funzioni</TableHead>
+                  <TableHead className="w-[190px]">Diverso dalla classe</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.length === 0 ? (
+                {elencoQuery.isLoading ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={6 + levels.length}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      Nessuna funzione.
+                    <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                      Caricamento…
                     </TableCell>
                   </TableRow>
-                ) : (
-                  rows.map((feature) => (
-                    <TableRow key={feature.id}>
-                      <TableCell>
-                        <Badge variant="secondary">{feature.category}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {feature.displayName}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {feature.featureKey}
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={String(feature.minLevel)}
-                          onValueChange={(value) =>
-                            patchFeature(feature.id, {
-                              minLevel: Number(value),
-                            })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {levels.map((level) => (
-                              <SelectItem
-                                key={level.id}
-                                value={String(level.levelValue)}
-                              >
-                                {level.levelValue} · {level.displayName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      {levels.map((level) => (
-                        <TableCell key={level.id} className="text-center">
-                          {level.levelValue >= feature.minLevel ? (
-                            <span className="font-semibold text-emerald-600">
-                              ✓
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/40">·</span>
-                          )}
-                        </TableCell>
-                      ))}
-                      <TableCell>
-                        <Select
-                          value={feature.behavior}
-                          onValueChange={(value) =>
-                            patchFeature(feature.id, { behavior: value })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {BEHAVIOR_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end">
-                          <RowActionsMenu
-                            actions={[
-                              {
-                                label: "Elimina",
-                                icon: Trash2,
-                                destructive: true,
-                                onClick: () => {
-                                  void handleDelete(feature)
-                                },
-                              },
-                            ]}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ) : null}
+                {!elencoQuery.isLoading && filtrate.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-sm text-muted-foreground">
+                      Nessuna persona con questi filtri.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {filtrate.map((r) => (
+                  <TableRow
+                    key={r.employeeId}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/permessi/persona/${r.employeeId}`)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selezione.has(r.employeeId)}
+                        onCheckedChange={() => commuta(r.employeeId)}
+                        aria-label={`Seleziona ${r.nome}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{r.nome}</div>
+                      <div className="text-xs text-muted-foreground">{r.username}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge variant="outline">{r.classeDisplay || r.classe}</Badge>
+                        {r.jolly ? <Badge>vede tutto</Badge> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {r.reparti.map((d) => (
+                          <Badge key={d} variant="secondary">
+                            {d}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{r.funzioni}</TableCell>
+                    <TableCell>
+                      {r.diverseDallaClasse === 0 ? (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      ) : (
+                        <Badge variant="secondary">
+                          {r.diverseDallaClasse}{" "}
+                          {r.diverseDallaClasse === 1 ? "funzione" : "funzioni"}
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
         </CardContent>
       </Card>
 
-      <AddFeatureDialog
-        open={addOpen}
-        levels={levels}
-        categories={categories}
-        onClose={() => setAddOpen(false)}
-        onSaved={async () => {
-          setAddOpen(false)
-          await invalidate()
-        }}
-      />
+      {/* L'anteprima obbligatoria (§4.4): si conferma questo elenco, non il pulsante. Senza,
+          un'applicazione di massa cancellerebbe in silenzio le eccezioni per persona — il
+          Timesheet spento agli Acquisti, le commesse chiuse alla Contabilità. */}
+      <Dialog open={anteprima != null} onOpenChange={(o) => !o && setAnteprima(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Applica la classe ai selezionati</DialogTitle>
+          </DialogHeader>
+          {anteprima ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                <strong>{anteprima.persone}</strong>{" "}
+                {anteprima.persone === 1 ? "persona" : "persone"}, <strong>{anteprima.combo}</strong>{" "}
+                {anteprima.combo === 1 ? "combo cambiata" : "combo cambiate"}.
+                {anteprima.rispettateAMano > 0 ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    {anteprima.rispettateAMano} decise a mano restano dove sono.
+                  </span>
+                ) : null}
+              </p>
+              {anteprima.cambi.length > 0 ? (
+                <GridScroller>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[200px]">Persona</TableHead>
+                        <TableHead>Funzione</TableHead>
+                        <TableHead className="w-[150px]">Da → a</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {anteprima.cambi.map((cambio) => (
+                        <TableRow key={`${cambio.employeeId}-${cambio.featureKey}`}>
+                          <TableCell className="text-sm">{cambio.nome}</TableCell>
+                          <TableCell className="text-sm">{cambio.displayName}</TableCell>
+                          <TableCell className="text-sm">
+                            {cambio.da} → {cambio.a}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </GridScroller>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnteprima(null)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={conferma}
+              disabled={applicaMutation.isPending || anteprima?.combo === 0}
+            >
+              Applica queste modifiche
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
-}
-
-function AddFeatureDialog({
-  open,
-  levels,
-  categories,
-  onClose,
-  onSaved,
-}: {
-  open: boolean
-  levels: AuthLevelDto[]
-  categories: string[]
-  onClose: () => void
-  onSaved: () => Promise<void>
-}) {
-  const [displayName, setDisplayName] = React.useState("")
-  const [featureKey, setFeatureKey] = React.useState("")
-  const [category, setCategory] = React.useState("navigation")
-  const [minLevel, setMinLevel] = React.useState("0")
-  const [error, setError] = React.useState<string | null>(null)
-
-  const categoryOptions = React.useMemo(() => {
-    const base = ["navigation", "action", "financial", "admin", "report"]
-    return Array.from(new Set([...categories, ...base])).sort()
-  }, [categories])
-
-  React.useEffect(() => {
-    if (!open) return
-    setDisplayName("")
-    setFeatureKey("")
-    setCategory(categories[0] ?? "navigation")
-    setMinLevel(String(levels[0]?.levelValue ?? 0))
-    setError(null)
-  }, [open, categories, levels])
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!displayName.trim() || !featureKey.trim()) {
-        throw new Error("Nome e codice interno sono obbligatori.")
-      }
-      await createAuthFeature({
-        featureKey: featureKey.trim().toLowerCase(),
-        displayName: displayName.trim(),
-        category,
-        minLevel: Number(minLevel),
-        behavior: "HIDDEN",
-      })
-    },
-    onSuccess: onSaved,
-    onError: (err: Error) => setError(err.message),
-  })
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nuova funzione</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid gap-2">
-            <Label>Nome funzione</Label>
-            <Input
-              value={displayName}
-              autoFocus
-              placeholder="Es. Crea ordine"
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label>Codice interno</Label>
-            <Input
-              value={featureKey}
-              className="font-mono"
-              placeholder="area.nome_funzione — es. nav.mia_pagina"
-              onChange={(event) => setFeatureKey(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Formato: area.nome_funzione (es. nav.mia_pagina, action.crea_ordine).
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Categoria</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categoryOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Livello minimo</Label>
-              <Select value={minLevel} onValueChange={setMinLevel}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {levels.map((level) => (
-                    <SelectItem key={level.id} value={String(level.levelValue)}>
-                      {level.levelValue} · {level.displayName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={!displayName.trim() || !featureKey.trim() || saveMutation.isPending}
-          >
-            Crea
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

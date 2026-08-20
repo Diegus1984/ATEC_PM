@@ -12,6 +12,13 @@ public static class SystemProjects
 
     public const string InternaNotes = "[SYSTEM] Commessa contenitore lavorazioni generiche";
 
+    /// <summary>
+    /// Partita IVA fittizia del cliente tecnico «ATEC — Sistema», che esiste solo perché
+    /// la commessa INTERNA ha bisogno di un cliente. Non è un cliente vero: va tenuto
+    /// fuori dall'anagrafica.
+    /// </summary>
+    public const string SystemCustomerVat = "__SYSTEM_INTERNA__";
+
     public static bool IsSystemCode(string? code) =>
         string.Equals(code?.Trim(), InternaCode, StringComparison.OrdinalIgnoreCase);
 }

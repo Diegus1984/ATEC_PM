@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchCodex } from "@/lib/api/codex"
 import { fetchCompositionChildren } from "@/lib/api/codex-compositions"
 import {
@@ -370,12 +371,9 @@ export function CodexPickerDialog({
           />
         ) : null}
 
-        <div
-          className="min-h-0 flex-1 overflow-auto rounded-lg border [&>div]:overflow-visible"
-          onScroll={handleScroll}
-        >
+        <GridScroller fill className="rounded-lg border" onScroll={handleScroll}>
           <Table>
-            <TableHeader className="sticky top-0 z-20 bg-muted [&_th]:bg-muted">
+            <TableHeader>
 
               <TableRow className="hover:bg-transparent">
                 {COLUMNS.map((column) => (
@@ -475,7 +473,7 @@ export function CodexPickerDialog({
               Caricamento…
             </p>
           ) : null}
-        </div>
+        </GridScroller>
 
         <DialogFooter className="sm:justify-between">
           <div className="flex flex-1 items-center gap-3 text-sm">

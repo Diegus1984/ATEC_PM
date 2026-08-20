@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -6,24 +6,29 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Hubs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 // Milestone di commessa (project_milestones): pianificazione a righe con date, avanzamento, note.
-// Editing aperto a tutti gli autenticati (strumento operativo). Realtime sul gruppo project-{id}.
+// Editing aperto a chiunque raggiunga il livello della feature (strumento operativo). Realtime sul gruppo project-{id}.
 // Le colonne settimana (W.Inizio/W.Fine/W.Tot) e lo stato/colore sono derivati lato client: qui NON esistono.
 [ApiController]
 [Route("api/milestones")]
 [Authorize]
+// Milestone: stessa chiave della voce di menu e del tab commessa.
+[RequireFeature("nav.milestones")]
 public class MilestonesController : ControllerBase
 {
     private readonly DbService _db;
     private readonly IHubContext<ProjectHub> _hub;
+    private readonly ProjectWriteGuard _guard;
 
-    public MilestonesController(DbService db, IHubContext<ProjectHub> hub)
+    public MilestonesController(DbService db, IHubContext<ProjectHub> hub, ProjectWriteGuard guard)
     {
         _db = db;
         _hub = hub;
+        _guard = guard;
     }
 
     private int CurrentEmployeeId =>
@@ -43,6 +48,7 @@ public class MilestonesController : ControllerBase
                sort_order AS SortOrder, row_version AS RowVersion, source_catalog_id AS SourceCatalogId
         FROM project_milestones";
 
+    [RequireProjectVisible]
     [HttpGet]
     [HttpGet("/api/projects/{projectId}/milestones")]
     public IActionResult GetForProject([FromQuery] int projectId)
@@ -66,11 +72,13 @@ public class MilestonesController : ControllerBase
     // milestone ATTIVA (spento=0), con i conteggi di stato. Gli stati rispecchiano la logica client
     // di milestone-utils.msStatus (precedenza done → late → current), calcolati qui in SQL con
     // CURDATE() così la sidebar non deve caricare tutte le milestone (il contenuto card resta lazy).
+    // AvgAvanz e PeriodStart/PeriodEnd replicano avgAvanz/periodo client (milestone-utils): media
+    // con 0 sulle righe senza valore, periodo = min/max FONDENDO data_inizio e data_fine.
     [HttpGet("summary")]
     public IActionResult GetSummary()
     {
         using var c = _db.Open();
-        var rows = c.Query<MilestoneSummaryDto>(@"
+        var rows = c.Query<MilestoneSummaryDto>($@"
             SELECT p.id AS ProjectId, p.code AS Code, p.title AS Title,
                    COUNT(*) AS Active,
                    COALESCE(SUM(m.avanzamento = 100), 0) AS Done,
@@ -80,16 +88,22 @@ public class MilestonesController : ControllerBase
                                 AND NOT (m.data_fine IS NOT NULL AND m.data_fine < CURDATE())
                                 AND ((m.data_inizio IS NOT NULL AND m.data_fine IS NOT NULL
                                       AND m.data_inizio <= CURDATE() AND CURDATE() <= m.data_fine)
-                                     OR m.data_inizio = CURDATE())), 0) AS Current
+                                     OR m.data_inizio = CURDATE())), 0) AS Current,
+                   ROUND(AVG(COALESCE(m.avanzamento, 0))) AS AvgAvanz,
+                   LEAST(COALESCE(MIN(m.data_inizio), MIN(m.data_fine)),
+                         COALESCE(MIN(m.data_fine), MIN(m.data_inizio))) AS PeriodStart,
+                   GREATEST(COALESCE(MAX(m.data_fine), MAX(m.data_inizio)),
+                            COALESCE(MAX(m.data_inizio), MAX(m.data_fine))) AS PeriodEnd
             FROM project_milestones m
             JOIN projects p ON p.id = m.project_id
-            WHERE m.spento = 0
+            WHERE m.spento = 0{_guard.FiltroBozzeSql(User)}
             GROUP BY p.id, p.code, p.title
             HAVING COUNT(*) > 0
-            ORDER BY p.code").ToList();
+            ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
         return Ok(ApiResponse<List<MilestoneSummaryDto>>.Ok(rows));
     }
 
+    [RequireProjectWritable]
     [HttpPost]
     public IActionResult Create([FromQuery] int projectId, [FromBody] MilestoneSaveRequest req)
     {
@@ -126,6 +140,7 @@ public class MilestonesController : ControllerBase
 
     // Concorrenza ottimistica: se il client invia RowVersion e la riga è cambiata nel frattempo,
     // l'update NON viene applicato e si risponde con un errore riconoscibile.
+    [RequireProjectWritable(Tabella = "project_milestones")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] MilestoneSaveRequest req)
     {
@@ -158,6 +173,7 @@ public class MilestonesController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Milestone aggiornata"));
     }
 
+    [RequireProjectWritable(Tabella = "project_milestones")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {
@@ -170,6 +186,7 @@ public class MilestonesController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Milestone eliminata"));
     }
 
+    [RequireProjectWritable]
     [HttpPost("reorder")]
     public IActionResult Reorder([FromQuery] int projectId, [FromBody] MilestoneReorderRequest req)
     {
@@ -183,8 +200,69 @@ public class MilestonesController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Ordine aggiornato"));
     }
 
+    // ── Viste salvate del Gantt ────────────────────────────────────────────────
+    // Composizione della vista (colonne/righe spente, intervallo, timeline) per commessa.
+    // Sta qui e non in localStorage perché è una scelta condivisa: il «Gantt cliente» deve
+    // essere lo stesso per tutti. Il payload è opaco lato server.
+
+    [RequireProjectVisible]
+    [HttpGet("project/{projectId}/views")]
+    public IActionResult GetViews(int projectId)
+    {
+        using var c = _db.Open();
+        var views = c.Query<MilestoneGanttViewDto>(@"
+            SELECT v.name AS Name, v.payload AS Payload, v.updated_at AS UpdatedAt,
+                   COALESCE(CONCAT(e.first_name,' ',e.last_name), '') AS UpdatedByName
+            FROM milestone_gantt_views v
+            LEFT JOIN employees e ON e.id = v.updated_by
+            WHERE v.project_id = @Pid
+            ORDER BY v.name", new { Pid = projectId }).ToList();
+        return Ok(ApiResponse<List<MilestoneGanttViewDto>>.Ok(views));
+    }
+
+    [RequireProjectWritable]
+    [HttpPut("project/{projectId}/views/{name}")]
+    public IActionResult SaveView(int projectId, string name, [FromBody] MilestoneGanttViewSaveRequest req)
+    {
+        string viewName = (name ?? "").Trim();
+        if (viewName.Length == 0) return Ok(ApiResponse<bool>.Fail("Nome vista mancante"));
+        if (string.IsNullOrWhiteSpace(req?.Payload)) return Ok(ApiResponse<bool>.Fail("Composizione mancante"));
+
+        using var c = _db.Open();
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM projects WHERE id=@Id", new { Id = projectId }) == 0)
+            return Ok(ApiResponse<bool>.Fail("Commessa non trovata"));
+
+        c.Execute(@"
+            INSERT INTO milestone_gantt_views (project_id, name, payload, updated_by)
+            VALUES (@Pid, @Name, @Payload, @By)
+            ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_by = VALUES(updated_by)",
+            new
+            {
+                Pid = projectId,
+                Name = Truncate(viewName, 60),
+                req.Payload,
+                By = CurrentEmployeeId > 0 ? CurrentEmployeeId : (int?)null
+            });
+
+        NotifyChanged("view-saved", projectId);
+        return Ok(ApiResponse<bool>.Ok(true, $"Vista «{viewName}» salvata"));
+    }
+
+    [RequireProjectWritable]
+    [HttpDelete("project/{projectId}/views/{name}")]
+    public IActionResult DeleteView(int projectId, string name)
+    {
+        using var c = _db.Open();
+        int n = c.Execute("DELETE FROM milestone_gantt_views WHERE project_id=@Pid AND name=@Name",
+            new { Pid = projectId, Name = (name ?? "").Trim() });
+        if (n == 0) return Ok(ApiResponse<bool>.Fail("Vista non trovata"));
+        NotifyChanged("view-deleted", projectId);
+        return Ok(ApiResponse<bool>.Ok(true, "Vista eliminata"));
+    }
+
     // Precarico: copia (snapshot) le voci di catalogo scelte come milestone della commessa.
     // COPIA PER VALORE: si copia solo la descrizione; source_catalog_id è solo traccia inerte.
+    [RequireProjectWritable]
     [HttpPost("project/{projectId}/seed-from-catalog")]
     [HttpPost("/api/projects/{projectId}/milestones/preload")]
     public IActionResult SeedFromCatalog(int projectId, [FromBody] MilestoneSeedRequest req)
@@ -226,6 +304,8 @@ public class MilestonesController : ControllerBase
         NotifyChanged("seed", projectId);
         return Ok(ApiResponse<int>.Ok(count, $"{count} milestone precaricate"));
     }
+
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
     private static int? ClampAvanz(int? a) => a == null ? null : (a < 0 ? 0 : (a > 100 ? 100 : a));
 }

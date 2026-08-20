@@ -1,13 +1,15 @@
 // ── Testata del foglio SAL: dati commessa, avanzamento incasso, comandi ────
 
-import { RefreshCw } from "lucide-react"
+import { Printer, RefreshCw } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import { CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { SalIncassoProgress } from "@/features/sal/SalIncassoProgress"
 import type { SalHeaderSaveRequest } from "@/lib/api/types"
+import { parseDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { Stat } from "./sal-sheet-fields"
@@ -31,6 +33,8 @@ export function SalSheetToolbar({
   seedDisabled,
   onRefresh,
   isFetching,
+  onPrintPdf,
+  readOnly = false,
 }: {
   projectCode?: string
   projectTitle?: string
@@ -55,6 +59,9 @@ export function SalSheetToolbar({
   seedDisabled: boolean
   onRefresh: () => void
   isFetching: boolean
+  onPrintPdf?: () => void
+  /** Funzione concessa in sola consultazione: testata bloccata e niente precarico modello. */
+  readOnly?: boolean
 }) {
   return (
     <CardHeader className="flex flex-row flex-wrap items-center gap-6 border-b bg-muted/30 py-3">
@@ -78,7 +85,7 @@ export function SalSheetToolbar({
             Cliente
           </label>
           <div
-            className="flex h-8 w-56 items-center rounded-md border border-input bg-muted/40 px-2.5 text-sm font-medium text-foreground truncate"
+            className="flex h-8 min-w-44 max-w-[32rem] w-auto items-center rounded-md border border-input bg-muted/40 px-2.5 text-sm font-medium text-foreground whitespace-nowrap"
             title={customerName}
           >
             {customerName}
@@ -90,13 +97,15 @@ export function SalSheetToolbar({
           </label>
           <Input
             value={po}
+            size={Math.max((po || "").length + 3, 16)}
             onChange={(e) => setPo(e.target.value)}
             onBlur={() => onSaveHeader({ po })}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur()
             }}
             placeholder="PO cliente..."
-            className="h-8 w-40 shadow-none"
+            className="h-8 min-w-40 max-w-[32rem] [field-sizing:content] shadow-none"
+            disabled={readOnly}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -105,13 +114,15 @@ export function SalSheetToolbar({
           </label>
           <Input
             value={rifOfferta}
+            size={Math.max((rifOfferta || "").length + 3, 18)}
             onChange={(e) => setRifOfferta(e.target.value)}
             onBlur={() => onSaveHeader({ rifOfferta })}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur()
             }}
             placeholder="Offerta ATEC..."
-            className="h-8 w-44 shadow-none"
+            className="h-8 min-w-44 max-w-[32rem] [field-sizing:content] shadow-none"
+            disabled={readOnly}
           />
         </div>
         {canSeeEconomics && (
@@ -119,18 +130,18 @@ export function SalSheetToolbar({
             <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
               Importo Ordine (€)
             </label>
-            <Input
-              type="number"
+            <MoneyInput
               value={valore}
-              onChange={(e) => setValore(e.target.value)}
-              onBlur={() =>
-                onSaveHeader({ valore: valore === "" ? null : Number(valore) })
+              size={Math.max((valore || "").length + 5, 16)}
+              onChange={setValore}
+              onCommit={() =>
+                onSaveHeader({
+                  valore: valore.trim() === "" ? null : parseDecimal(valore),
+                })
               }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur()
-              }}
               placeholder="Valore (€)..."
-              className="h-8 w-40 text-sm text-right shadow-none"
+              className="h-8 min-w-40 max-w-[28rem] [field-sizing:content] text-sm shadow-none"
+              disabled={readOnly}
             />
           </div>
         )}
@@ -142,7 +153,7 @@ export function SalSheetToolbar({
 
       <div className="ml-auto flex items-center gap-2">
         <ColumnsMenu columns={columnToggles} />
-        {canSeeEconomics && (
+        {canSeeEconomics && !readOnly && (
           <Button
             variant="outline"
             size="sm"
@@ -153,6 +164,17 @@ export function SalSheetToolbar({
             Precarica modello standard
           </Button>
         )}
+        {onPrintPdf ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onPrintPdf}
+            title="Stampa PDF del SAL di questa commessa"
+          >
+            <Printer className="size-3.5 mr-1.5" />
+            Stampa PDF
+          </Button>
+        ) : null}
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={isFetching}>
           <RefreshCw className={cn("size-3.5 mr-1.5", isFetching && "animate-spin")} />
           Aggiorna

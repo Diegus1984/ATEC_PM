@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
@@ -12,6 +12,12 @@ namespace ATEC.PM.Server.Controllers;
 [Authorize]
 // Dati economici (ricavi/incassi): visibili solo da livello PM in su (feature data.revenue).
 [RequireFeature("data.revenue")]
+// #88: ogni scrittura di questo controller riguarda UNA commessa (l'id sta nella rotta),
+// quindi il cancello si mette una volta sola sulla classe: una commessa in bozza, in
+// stand-by o chiusa si consulta ma non si modifica, salvo il permesso di scavalco.
+[RequireProjectWritable]
+// #88: e una bozza non si VEDE proprio, letture comprese — 404 come se non esistesse.
+[RequireProjectVisible]
 public class CashFlowController : ControllerBase
 {
     private readonly DbService _db;

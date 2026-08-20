@@ -20,12 +20,36 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  /* Il Gantt vive dentro card che crescono con il contenuto: senza un tetto d'altezza
+     questo box non diventa mai un viewport di scroll — verticalmente non scrolla e la
+     barra orizzontale finisce in fondo a tutte le righe, fuori dallo schermo. Con il
+     max-height le due barre restano dentro la card e la testata sticky funziona. */
+  max-height: 70vh;
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--g-line);
   border-radius: 8px;
   background: #fff;
   position: relative;
+}
+/* Barre sempre visibili (non solo all'hover) su WebKit: il Gantt si naviga a mano. */
+.m-gantt-scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.m-gantt-scroll::-webkit-scrollbar-track {
+  background: #f4f4f5;
+}
+.m-gantt-scroll::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border: 3px solid #f4f4f5;
+  border-radius: 6px;
+}
+.m-gantt-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+.m-gantt-scroll::-webkit-scrollbar-corner {
+  background: #f4f4f5;
 }
 .m-gantt {
   position: relative;
@@ -42,6 +66,39 @@
   top: 0;
   z-index: 5;
 }
+/* Seconda barra orizzontale, subito sotto la riga dei titoli (#72): quella in fondo
+   alla tabella resta, ma si raggiunge solo scorrendo tutte le righe.
+   `top` e `width` arrivano in linea da MilestoneGantt (altezza della testata e
+   larghezza visibile): con `left: 0` la barra resta incollata al bordo sinistro
+   mentre il contenuto scorre sotto. */
+.m-hbar {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  height: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #f4f4f5;
+  border-bottom: 1px solid var(--g-line);
+}
+.m-hbar-space {
+  height: 1px;
+}
+.m-hbar::-webkit-scrollbar {
+  height: 12px;
+}
+.m-hbar::-webkit-scrollbar-track {
+  background: #f4f4f5;
+}
+.m-hbar::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border: 3px solid #f4f4f5;
+  border-radius: 6px;
+}
+.m-hbar::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
 .m-corner {
   width: var(--m-name-w, 280px);
   min-width: var(--m-name-w, 280px);
@@ -222,70 +279,29 @@
 .m-bar {
   position: absolute;
   border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
   overflow: hidden;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   user-select: none;
   border: 1px solid transparent;
   z-index: 2;
 }
 
-.m-bar-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  transition: width 0.2s ease;
-}
-
-.m-bar-label {
-  position: relative;
-  z-index: 2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 0.35rem;
-}
-
-/* Stati delle barre */
+/* Stati: rettangolo pieno (niente testo né riempimento % sulla barra). */
 .m-bar.status-done {
-  background-color: #f0fdfa; /* teal-50 */
-  border-color: #99f6e4;     /* teal-200 */
-  color: #115e59;            /* teal-800 per leggibilità */
-}
-.m-bar.status-done .m-bar-fill {
   background-color: #5eead4; /* teal-300 */
+  border-color: #2dd4bf;     /* teal-400 */
 }
-
 .m-bar.status-current {
-  background-color: #eff6ff; /* blue-50 */
-  border-color: #bfdbfe;     /* blue-200 */
-  color: #1e40af;            /* blue-800 */
-}
-.m-bar.status-current .m-bar-fill {
   background-color: #93c5fd; /* blue-300 */
+  border-color: #60a5fa;     /* blue-400 */
 }
-
 .m-bar.status-late {
-  background-color: #fef2f2; /* red-50 */
-  border-color: #fecaca;     /* red-200 */
-  color: #991b1b;            /* red-800 */
-}
-.m-bar.status-late .m-bar-fill {
   background-color: #fca5a5; /* red-300 */
+  border-color: #f87171;     /* red-400 */
 }
-
 .m-bar.status-none {
-  background-color: #fafafa; /* neutral-50 */
-  border-color: #e5e5e5;     /* neutral-200 */
-  color: #404040;            /* neutral-700 */
-}
-.m-bar.status-none .m-bar-fill {
   background-color: #d4d4d4; /* neutral-300 */
+  border-color: #a3a3a3;     /* neutral-400 */
 }
 
 /* Evidenziazione (hl) per urgenza */
@@ -321,9 +337,15 @@
   body.printing-gantt .m-planner-root {
     height: auto !important;
   }
+  /* La barra finta (#72) è un aiuto da schermo: in stampa sarebbe una striscia grigia. */
+  body.printing-gantt .m-hbar {
+    display: none !important;
+  }
   body.printing-gantt .m-gantt-scroll {
     overflow: visible !important;
     height: auto !important;
+    /* Il tetto d'altezza serve solo a schermo: in stampa taglierebbe le righe. */
+    max-height: none !important;
     border: none !important;
   }
   body.printing-gantt * {

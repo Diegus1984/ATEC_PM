@@ -76,11 +76,35 @@ export function salAlertState(
 }
 
 /**
+ * Testo leggibile per uno sfondo dato: nero sui fondi chiari, bianco sui pieni
+ * (regola di Diego 17/08: «background rosso pieno → testo bianco, il resto nero»).
+ * Accetta #rgb/#rrggbb; colore non interpretabile → undefined (testo di tema).
+ */
+export function salTestoSuFondo(colorBg: string): string | undefined {
+  const hex = colorBg.trim().replace(/^#/, "")
+  const full =
+    hex.length === 3
+      ? hex.split("").map((c) => c + c).join("")
+      : hex.length === 6
+        ? hex
+        : null
+  if (!full || !/^[0-9a-fA-F]{6}$/.test(full)) return undefined
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  // Luminanza percepita (Rec. 601): sotto la metà lo sfondo è "pieno" → bianco.
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance < 0.55 ? "#ffffff" : "#18181b"
+}
+
+/**
  * Stile inline della riga SAL dal colore CONFIGURATO in anagrafica per lo stato
  * pagamento selezionato (match per etichetta, case-insensitive — l'identità
  * degli stati è la label, parità v10). Ritorna undefined se il valore è vuoto,
  * lo stato non è (più) in anagrafica o non ha colore configurato (colorBg null):
  * in quel caso valgono le classi cablate di fallback di salRowClass.
+ * Il testo della riga NON usa il colorFg dell'anagrafica (il verde di «Pagata»
+ * colorava tutta la riga): si calcola dallo sfondo con salTestoSuFondo.
  * Pura estetica: la semantica (lock, incasso, warning, bucket Cash Flow) resta
  * cablata SOLO sulle etichette «Pagata»/«Parzialmente Pagata».
  */
@@ -92,7 +116,7 @@ export function salPagamentoStyle(
   if (!label) return undefined
   const state = states.find((s) => s.label.trim().toLowerCase() === label)
   if (!state?.colorBg) return undefined
-  return { backgroundColor: state.colorBg, color: state.colorFg ?? undefined }
+  return { backgroundColor: state.colorBg, color: salTestoSuFondo(state.colorBg) }
 }
 
 /**

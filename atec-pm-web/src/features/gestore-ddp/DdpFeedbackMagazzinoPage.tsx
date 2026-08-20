@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, EyeOff, RotateCcw } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   Tooltip,
   TooltipContent,
@@ -26,8 +28,36 @@ import {
 import { fetchDdpStatuses } from "@/lib/api/ddp-config"
 import type { DdpFeedbackMagazzinoGroup, DdpStatusItem } from "@/lib/api/types"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
+
+/**
+ * Colonne della griglia (unione DDP Commerciale + Officina): «Materiale/Trattamento»
+ * esistono solo in Officina, «UM/Produttore» solo in Commerciale — il menu le elenca
+ * tutte, ogni card mostra quelle che le competono. Standard menu «Colonne»: vedi
+ * BLOCKS-RULES.md.
+ */
+const MAG_COLUMNS: { id: string; label: string }[] = [
+  // Stesso nome delle DDP di commessa (segnalazione #61).
+  { id: "requestedBy", label: "Inserito da" },
+  { id: "description", label: "Descrizione" },
+  { id: "quantity", label: "Q.tà" },
+  { id: "material", label: "Materiale (Officina)" },
+  { id: "treatment", label: "Trattamento (Officina)" },
+  { id: "unit", label: "UM (Commerciale)" },
+  { id: "supplier", label: "Fornitore" },
+  { id: "manufacturer", label: "Produttore (Commerciale)" },
+  { id: "status", label: "Stato" },
+  { id: "daneaRef", label: "Rif. Danea" },
+  { id: "destination", label: "Destinazione" },
+  { id: "destinationSpec", label: "Specifica" },
+  { id: "notes", label: "Note" },
+]
+const MAG_COLUMNS_DEFAULT = Object.fromEntries(
+  MAG_COLUMNS.map((column) => [column.id, true])
+)
+const MAG_COLUMNS_STORAGE_KEY = "ddp-feedback-magazzino-columns-v1"
 
 function StatusBadge({
   statusKey,
@@ -53,13 +83,23 @@ function StatusBadge({
 function DdpGroupCard({
   group,
   statusDefs,
+  visible,
   onRefresh,
 }: {
   group: DdpFeedbackMagazzinoGroup
   statusDefs: Map<string, DdpStatusItem>
+  visible: Record<string, boolean>
   onRefresh: () => void
 }) {
   const officina = group.ddpType === "OFFICINA"
+  // Colonna mostrata solo se accesa nel menu E pertinente al tipo di DDP.
+  const show = (id: string) => {
+    if (!visible[id]) return false
+    if (id === "material" || id === "treatment") return officina
+    if (id === "unit" || id === "manufacturer") return !officina
+    return true
+  }
+  const visibleCount = MAG_COLUMNS.filter((column) => show(column.id)).length
   const hiddenCount = group.rows.filter((row) => row.hidden).length
   const shownCount = group.rows.length - hiddenCount
 
@@ -102,27 +142,25 @@ function DdpGroupCard({
         )}
       </CardHeader>
       <CardContent>
+        <GridScroller className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Rich.</TableHead>
-              <TableHead>Descrizione</TableHead>
-              <TableHead className="text-right">Q.tà</TableHead>
-              {officina ? (
-                <>
-                  <TableHead>Materiale</TableHead>
-                  <TableHead>Trattamento</TableHead>
-                </>
-              ) : (
-                <TableHead>UM</TableHead>
+              {show("requestedBy") && <TableHead>Inserito da</TableHead>}
+              {show("description") && <TableHead>Descrizione</TableHead>}
+              {show("quantity") && (
+                <TableHead className="text-right">Q.tà</TableHead>
               )}
-              <TableHead>Fornitore</TableHead>
-              {!officina && <TableHead>Produttore</TableHead>}
-              <TableHead>Stato</TableHead>
-              <TableHead>Rif. Danea</TableHead>
-              <TableHead>Destinazione</TableHead>
-              <TableHead>Specifica</TableHead>
-              <TableHead>Note</TableHead>
+              {show("material") && <TableHead>Materiale</TableHead>}
+              {show("treatment") && <TableHead>Trattamento</TableHead>}
+              {show("unit") && <TableHead>UM</TableHead>}
+              {show("supplier") && <TableHead>Fornitore</TableHead>}
+              {show("manufacturer") && <TableHead>Produttore</TableHead>}
+              {show("status") && <TableHead>Stato</TableHead>}
+              {show("daneaRef") && <TableHead>Rif. Danea</TableHead>}
+              {show("destination") && <TableHead>Destinazione</TableHead>}
+              {show("destinationSpec") && <TableHead>Specifica</TableHead>}
+              {show("notes") && <TableHead>Note</TableHead>}
               <TableHead className="w-9" />
             </TableRow>
           </TableHeader>
@@ -130,7 +168,7 @@ function DdpGroupCard({
             {group.rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={12}
+                  colSpan={visibleCount + 1}
                   className="text-center text-sm text-muted-foreground"
                 >
                   Nessuna riga negli stati di magazzino.
@@ -142,37 +180,54 @@ function DdpGroupCard({
                   key={row.itemId}
                   className={cn(row.hidden && "opacity-50")}
                 >
-                  <TableCell>{row.requestedBy || "—"}</TableCell>
-                  <TableCell className="max-w-[240px] truncate">
-                    {row.description}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {row.quantity}
-                  </TableCell>
-                  {officina ? (
-                    <>
-                      <TableCell>{row.material || "—"}</TableCell>
-                      <TableCell>{row.treatment || "—"}</TableCell>
-                    </>
-                  ) : (
-                    <TableCell>{row.unit || "—"}</TableCell>
+                  {show("requestedBy") && (
+                    <TableCell>{row.requestedBy || "—"}</TableCell>
                   )}
-                  <TableCell>{row.supplierName || "—"}</TableCell>
-                  {!officina && (
+                  {show("description") && (
+                    <TableCell className="max-w-[240px] whitespace-normal break-words">
+                      {row.description}
+                    </TableCell>
+                  )}
+                  {show("quantity") && (
+                    <TableCell className="text-right tabular-nums">
+                      {row.quantity}
+                    </TableCell>
+                  )}
+                  {show("material") && (
+                    <TableCell>{row.material || "—"}</TableCell>
+                  )}
+                  {show("treatment") && (
+                    <TableCell>{row.treatment || "—"}</TableCell>
+                  )}
+                  {show("unit") && <TableCell>{row.unit || "—"}</TableCell>}
+                  {show("supplier") && (
+                    <TableCell>{row.supplierName || "—"}</TableCell>
+                  )}
+                  {show("manufacturer") && (
                     <TableCell>{row.manufacturer || "—"}</TableCell>
                   )}
-                  <TableCell>
-                    <StatusBadge
-                      statusKey={row.itemStatus}
-                      statusDefs={statusDefs}
-                    />
-                  </TableCell>
-                  <TableCell>{row.daneaRef || "—"}</TableCell>
-                  <TableCell>{row.destination || "—"}</TableCell>
-                  <TableCell>{row.destinationSpec || "—"}</TableCell>
-                  <TableCell className="max-w-[160px] truncate">
-                    {row.notes || "—"}
-                  </TableCell>
+                  {show("status") && (
+                    <TableCell>
+                      <StatusBadge
+                        statusKey={row.itemStatus}
+                        statusDefs={statusDefs}
+                      />
+                    </TableCell>
+                  )}
+                  {show("daneaRef") && (
+                    <TableCell>{row.daneaRef || "—"}</TableCell>
+                  )}
+                  {show("destination") && (
+                    <TableCell>{row.destination || "—"}</TableCell>
+                  )}
+                  {show("destinationSpec") && (
+                    <TableCell>{row.destinationSpec || "—"}</TableCell>
+                  )}
+                  {show("notes") && (
+                    <TableCell className="max-w-[160px] whitespace-normal break-words">
+                      {row.notes || "—"}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -197,6 +252,7 @@ function DdpGroupCard({
             )}
           </TableBody>
         </Table>
+        </GridScroller>
       </CardContent>
     </Card>
   )
@@ -204,6 +260,18 @@ function DdpGroupCard({
 
 export function DdpFeedbackMagazzinoPage() {
   const navigate = useNavigate()
+
+  const [visible, setVisible] = usePersistedColumnVisibility(
+    MAG_COLUMNS_STORAGE_KEY,
+    MAG_COLUMNS_DEFAULT
+  )
+  const columnToggles = MAG_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: visible[id] ?? true,
+    onToggle: (value: boolean) =>
+      setVisible((prev) => ({ ...prev, [id]: value })),
+  }))
 
   const query = useQuery({
     queryKey: ["ddp-feedback-magazzino"],
@@ -263,6 +331,9 @@ export function DdpFeedbackMagazzinoPage() {
             commessa. Nascondi le righe già gestite.
           </p>
         </div>
+        <div className="ml-auto">
+          <ColumnsMenu columns={columnToggles} />
+        </div>
       </div>
 
       {query.isLoading ? (
@@ -291,6 +362,7 @@ export function DdpFeedbackMagazzinoPage() {
                     key={`${item.projectId}-${item.ddpType}`}
                     group={item}
                     statusDefs={statusDefs}
+                    visible={visible}
                     onRefresh={() => void query.refetch()}
                   />
                 ))}

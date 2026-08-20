@@ -29,6 +29,16 @@ public class TimesheetPhaseOption
 {
     public int PhaseId { get; set; }
     public string Display { get; set; } = "";
+
+    // Sezione di costo della fase (segnalazione #42): è quella che decide se le ore
+    // finiscono IN SEDE o DA CLIENTE nel Bilancio. Vuota se la fase non è collegata.
+    public string CostSectionName { get; set; } = "";
+    /// <summary>IN_SEDE / DA_CLIENTE.</summary>
+    public string CostSectionType { get; set; } = "";
+    public string CostSectionGroup { get; set; } = "";
+    /// <summary>Colore del gruppo dall'anagrafica sezioni (#105), es. "#2563EB".</summary>
+    public string CostSectionGroupColor { get; set; } = "";
+    public int CostSectionSort { get; set; }
 }
 
 public class TimesheetSummaryRow

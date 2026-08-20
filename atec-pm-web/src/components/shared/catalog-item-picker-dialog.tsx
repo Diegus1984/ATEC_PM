@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchCatalogItems } from "@/lib/api/catalog"
 import type { CatalogItemListItem } from "@/lib/api/types"
 import { euro } from "@/lib/format"
@@ -179,12 +180,9 @@ export function CatalogItemPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          className="min-h-0 flex-1 overflow-auto rounded-lg border [&>div]:overflow-visible"
-          onScroll={handleScroll}
-        >
+        <GridScroller fill className="rounded-lg border" onScroll={handleScroll}>
           <Table>
-            <TableHeader className="sticky top-0 z-20 bg-muted [&_th]:bg-muted">
+            <TableHeader>
               <TableRow className="hover:bg-transparent">
                 {COLUMNS.map((column) => (
                   <TableHead
@@ -269,7 +267,7 @@ export function CatalogItemPickerDialog({
           {query.isFetchingNextPage ? (
             <p className="py-2 text-center text-sm text-muted-foreground">Caricamento…</p>
           ) : null}
-        </div>
+        </GridScroller>
 
         <DialogFooter className="sm:justify-between">
           <span className="text-sm text-muted-foreground">

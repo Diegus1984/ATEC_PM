@@ -17,11 +17,25 @@ public static class ProtectedConfigHelper
     // ENCRYPTION DPAPI (stessa logica del tuo SettingsManager VB)
     // ============================================================
 
+    /// <summary>
+    /// Ambito DPAPI da usare per cifrare. Di default CurrentUser (come sempre, sui PC di
+    /// sviluppo). Sul server aziendale il programma gira come SERVIZIO Windows e i servizi
+    /// non caricano il profilo utente: senza profilo la chiave DPAPI CurrentUser non è
+    /// disponibile e i segreti non sarebbero né cifrabili né leggibili. Lì l'installatore
+    /// imposta la variabile d'ambiente ATECPM_PROTECT_MACHINE=1 e si usa LocalMachine
+    /// (il file resta protetto dalle ACL della cartella, accessibile solo ad Administrators
+    /// e all'account del servizio).
+    /// </summary>
+    private static DataProtectionScope ProtectScope =>
+        Environment.GetEnvironmentVariable("ATECPM_PROTECT_MACHINE") == "1"
+            ? DataProtectionScope.LocalMachine
+            : DataProtectionScope.CurrentUser;
+
     public static string Encrypt(string plainText)
     {
         if (string.IsNullOrEmpty(plainText)) return "";
         byte[] data = Encoding.UTF8.GetBytes(plainText);
-        byte[] encrypted = ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
+        byte[] encrypted = ProtectedData.Protect(data, null, ProtectScope);
         return Convert.ToBase64String(encrypted);
     }
 
@@ -29,8 +43,21 @@ public static class ProtectedConfigHelper
     {
         if (string.IsNullOrEmpty(encryptedBase64)) return "";
         byte[] encrypted = Convert.FromBase64String(encryptedBase64);
-        byte[] data = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
-        return Encoding.UTF8.GetString(data);
+
+        // Si prova prima l'ambito configurato, poi l'altro: così un file cifrato con lo
+        // scope "vecchio" (es. segreti generati a mano prima di installare il servizio)
+        // resta leggibile invece di rendere il server inavviabile.
+        try
+        {
+            return Encoding.UTF8.GetString(ProtectedData.Unprotect(encrypted, null, ProtectScope));
+        }
+        catch (CryptographicException)
+        {
+            DataProtectionScope fallback = ProtectScope == DataProtectionScope.CurrentUser
+                ? DataProtectionScope.LocalMachine
+                : DataProtectionScope.CurrentUser;
+            return Encoding.UTF8.GetString(ProtectedData.Unprotect(encrypted, null, fallback));
+        }
     }
 
     // ============================================================
@@ -110,8 +137,16 @@ public static class ProtectedConfigHelper
                 {
                     if (prop.Name == "ConnectionStrings")
                     {
+                        // Si maschera SOLO "Default" (l'unica cifrata): le altre connessioni
+                        // — Codex in primis — vanno riscritte così come sono, altrimenti al
+                        // primo avvio spariscono dal file e la sincronizzazione si spegne
+                        // con "Connection string non configurata".
                         writer.WriteStartObject("ConnectionStrings");
-                        writer.WriteString("Default", "ENCRYPTED");
+                        foreach (JsonProperty conn in prop.Value.EnumerateObject())
+                        {
+                            if (conn.NameEquals("Default")) writer.WriteString("Default", "ENCRYPTED");
+                            else conn.WriteTo(writer);
+                        }
                         writer.WriteEndObject();
                     }
                     else if (prop.Name == "Jwt")

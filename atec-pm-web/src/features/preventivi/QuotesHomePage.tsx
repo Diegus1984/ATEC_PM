@@ -53,6 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   changeQuoteStatus,
   deleteQuote,
@@ -74,7 +75,7 @@ import {
   quoteStatusMeta,
 } from "./quote-status"
 import { quoteTypeBadge, quoteTypeLabel } from "./quote-type"
-import { fmt2 } from "@/lib/format"
+import { euro } from "@/lib/format"
 
 const VIEW_PREF_KEY = "QuotesHomePage.ViewMode"
 const COLUMN_STORAGE_KEY = "atec_pm_quotes_columns"
@@ -718,7 +719,7 @@ export function QuotesHomePage() {
             <code className="font-mono">*abc</code> finisce con
           </p>
 
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
@@ -778,7 +779,7 @@ export function QuotesHomePage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           {quotesQuery.hasNextPage ? (
             <div className="text-center">
@@ -795,8 +796,8 @@ export function QuotesHomePage() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
             <span>
-              {shownCount} preventivi · Valore: {fmt2(totalValue)}€ · Utile:{" "}
-              {fmt2(totalProfit)}€
+              {shownCount} preventivi · Valore: {euro(totalValue)} · Utile:{" "}
+              {euro(totalProfit)}
             </span>
             <span>{visibleColumns.length} colonne visibili</span>
           </div>
@@ -951,13 +952,13 @@ function QuoteRow({
       case "total":
         return (
           <TableCell key={col.key} className="text-right font-semibold tabular-nums">
-            {fmt2(q.total)}€
+            {euro(q.total)}
           </TableCell>
         )
       case "profit":
         return (
           <TableCell key={col.key} className="text-right font-bold tabular-nums text-[#16A34A]">
-            {fmt2(q.profit)}€
+            {euro(q.profit)}
           </TableCell>
         )
       case "status":
@@ -1096,13 +1097,13 @@ function QuoteSubRow({
       case "total":
         return (
           <TableCell key={col.key} className="text-right tabular-nums">
-            {fmt2(quote.total)}€
+            {euro(quote.total)}
           </TableCell>
         )
       case "profit":
         return (
           <TableCell key={col.key} className="text-right tabular-nums text-[#16A34A]">
-            {fmt2(quote.profit)}€
+            {euro(quote.profit)}
           </TableCell>
         )
       case "status":

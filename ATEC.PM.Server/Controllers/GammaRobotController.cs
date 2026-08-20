@@ -4,6 +4,7 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -156,13 +157,17 @@ public class GammaRobotController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════
-    // EDITOR — scrittura (solo ADMIN). Consultazione resta aperta a tutti.
+    // EDITOR — scrittura riservata a chi ha `action.edit_gamma_robot`.
+    // Consultazione (le GET qui sopra) resta aperta a tutti gli autenticati.
+    // NB: si usa una chiave dedicata e non `nav.gamma_robot`, che è registrata a livello 2 e
+    // quindi in mano anche ai PM: la distinta Gamma resta a chi la teneva prima.
     // ═══════════════════════════════════════════════════════
 
     // ── ROBOT (anagrafica modello) ──────────────────────────
 
     [HttpPost("robots")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult CreateRobot([FromBody] GammaRobotSaveRequest req)
     {
         try
@@ -185,7 +190,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpPut("robots/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult UpdateRobot(int id, [FromBody] GammaRobotSaveRequest req)
     {
         try
@@ -207,7 +213,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpDelete("robots/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult DeleteRobot(int id)
     {
         try
@@ -226,7 +233,8 @@ public class GammaRobotController : ControllerBase
     // ── QUADRO (configurazione di un robot) ─────────────────
 
     [HttpPost("robots/{robotId}/quadri")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult CreateQuadro(int robotId, [FromBody] GammaQuadroSaveRequest req)
     {
         try
@@ -246,7 +254,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpPut("quadri/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult UpdateQuadro(int id, [FromBody] GammaQuadroSaveRequest req)
     {
         try
@@ -265,7 +274,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpDelete("quadri/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult DeleteQuadro(int id)
     {
         try
@@ -282,7 +292,8 @@ public class GammaRobotController : ControllerBase
     // ── DISTINTA (righe componente del quadro) ──────────────
 
     [HttpPost("distinta")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult AddDistinta([FromBody] GammaDistintaAddRequest req)
     {
         try
@@ -331,7 +342,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpPut("distinta/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult UpdateDistinta(int id, [FromBody] GammaDistintaUpdateRequest req)
     {
         try
@@ -354,7 +366,8 @@ public class GammaRobotController : ControllerBase
     }
 
     [HttpDelete("distinta/{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("action.edit_gamma_robot")]
     public IActionResult DeleteDistinta(int id)
     {
         try

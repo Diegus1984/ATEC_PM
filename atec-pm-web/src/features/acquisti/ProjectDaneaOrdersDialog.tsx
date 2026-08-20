@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { createPurchaseRfqDaneaOrderMulti } from "@/lib/api/purchase-rfqs"
 import type { PurchaseRfqListItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
@@ -107,7 +108,7 @@ export function ProjectDaneaOrdersDialog({
             «Vincitore»: il gruppo comparirà qui.
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <GridScroller fill className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -144,7 +145,7 @@ export function ProjectDaneaOrdersDialog({
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
         )}
 
         <DialogFooter className="items-center sm:justify-between">

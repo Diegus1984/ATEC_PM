@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   deleteCatalogItem,
   fetchCatalogFilterMeta,
@@ -45,12 +46,11 @@ import {
 } from "@/lib/api/catalog"
 import { fetchDaneaSyncStatus, runDaneaSync } from "@/lib/api/danea-sync"
 import type { CatalogItemListItem } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
 import { euro, dash } from "@/lib/format"
 import { notifyInfo } from "@/lib/toast"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { useDebounced } from "@/lib/use-debounced"
 
-import { canRecodeCodex } from "@/features/codex/codex-roles"
 import { CatalogAtecAssignDialog } from "./CatalogAtecAssignDialog"
 import { CatalogItemDialog } from "./CatalogItemDialog"
 
@@ -183,7 +183,10 @@ export function CatalogoPage() {
   const [atecState, setAtecState] = React.useState<
     "" | "missing" | "done" | "orphans"
   >("")
-  const canMapAtec = canRecodeCodex(getSession()?.user.userRole)
+  // Qui si assegna (o si toglie) il Codice ATEC all'articolo Danea: è la chiave del Codice
+  // ATEC, non quella della ricodifica Codex — due permessi distinti, anche se prima li
+  // decideva lo stesso livello di ruolo.
+  const canMapAtec = canWriteFeature("action.assign_atec_code")
 
   const setColumnFilter = React.useCallback((param: string, value: string) => {
     setColumnFilters((prev) => {
@@ -441,7 +444,7 @@ export function CatalogoPage() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
@@ -587,7 +590,7 @@ export function CatalogoPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <ServerPagination
             page={page}

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using ATEC.PM.Server.Services;
 using FirebirdSql.Data.FirebirdClient;
 using Dapper;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -52,11 +53,12 @@ public class DaneaSyncController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════
-    // ESPLORA DATABASE DANEA (Firebird) — solo ADMIN/PM
+    // ESPLORA DATABASE DANEA (Firebird) — chiave «data.danea_explore»
     // ═══════════════════════════════════════════════
 
     [HttpGet("explore/tables")]
-    [Authorize(Roles = "ADMIN,PM")]
+    [Authorize]
+    [RequireFeature("data.danea_explore")]
     public IActionResult GetTables()
     {
         List<string> tables = AllowedExploreTables.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
@@ -64,7 +66,8 @@ public class DaneaSyncController : ControllerBase
     }
 
     [HttpGet("explore/tables/{tableName}/columns")]
-    [Authorize(Roles = "ADMIN,PM")]
+    [Authorize]
+    [RequireFeature("data.danea_explore")]
     public async Task<IActionResult> GetColumns(string tableName)
     {
         if (!TryValidateTableName(tableName, out string safeTable))
@@ -129,7 +132,8 @@ public class DaneaSyncController : ControllerBase
     }
 
     [HttpGet("explore/tables/{tableName}/search")]
-    [Authorize(Roles = "ADMIN,PM")]
+    [Authorize]
+    [RequireFeature("data.danea_explore")]
     public async Task<IActionResult> SearchData(string tableName, [FromQuery] string column = "", [FromQuery] string q = "", [FromQuery] int limit = 50)
     {
         if (!TryValidateTableName(tableName, out string safeTable))
@@ -175,7 +179,8 @@ public class DaneaSyncController : ControllerBase
     }
 
     [HttpGet("explore/tables/{tableName}/data")]
-    [Authorize(Roles = "ADMIN,PM")]
+    [Authorize]
+    [RequireFeature("data.danea_explore")]
     public async Task<IActionResult> GetData(string tableName, [FromQuery] int limit = 20)
     {
         if (!TryValidateTableName(tableName, out string safeTable))

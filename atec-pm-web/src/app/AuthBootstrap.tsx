@@ -22,7 +22,9 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
       try {
         await loadAuthFeatures()
       } catch {
-        // Menu permissivo se permessi non disponibili
+        // L'errore è già registrato nello stato dei permessi («error»): si prosegue apposta
+        // fino alla shell, dove l'utente trova l'avviso col «Riprova». Fermarsi qui, o
+        // rimandarlo al login, gli toglierebbe l'unica cosa utile da fare.
       } finally {
         if (!cancelled) {
           setReady(true)

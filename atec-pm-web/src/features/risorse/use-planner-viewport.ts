@@ -128,7 +128,10 @@ export function usePlannerViewport({
       document.body.classList.add("printing-gantt")
       const style = document.createElement("style")
       style.id = "gantt-print-page"
-      style.textContent = "@page { size: A4 landscape; margin: 1cm; }"
+      // margin: 0 → Chromium/Edge non stampano data/URL di sistema (come printHtml).
+      // I mm utili restano sul contenuto via CSS di .printing-gantt.
+      style.textContent =
+        "@page { size: A4 landscape; margin: 0 } body.printing-gantt main { padding: 10mm 12mm !important; }"
       document.head.appendChild(style)
       window.print() // blocca finché il dialogo di stampa è aperto (Chromium)
     } finally {

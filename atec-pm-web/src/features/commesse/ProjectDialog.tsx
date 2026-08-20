@@ -1,7 +1,10 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
+import { Settings2 } from "lucide-react"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { DateField } from "@/components/shared/date-field"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -28,22 +31,22 @@ import {
   fetchPmLookup,
   fetchProject,
   fetchProjectNextCode,
+  promoteProjectToCommessa,
   updateProject,
 } from "@/lib/api/projects"
 import { fetchActiveActivityCatalog } from "@/lib/api/activity-catalog"
 import { seedMilestonesFromCatalog } from "@/lib/api/milestones"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { dateToIso, isoToDate, toDateOnly } from "@/lib/date-iso"
 import { parseDecimal } from "@/lib/format"
+import { ActivityCatalogDialog } from "@/features/admin/activity-catalog/ActivityCatalogDialog"
+import {
+  allowedProjectStatuses,
+  PROJECT_STATUS_META,
+} from "@/features/commesse/project-status"
+import { cn } from "@/lib/utils"
 
-const NO_SELECTION = "__none__"
-
-const STATUS_OPTIONS = [
-  { value: "DRAFT", label: "Bozza" },
-  { value: "ACTIVE", label: "Attiva" },
-  { value: "ON_HOLD", label: "In pausa" },
-  { value: "COMPLETED", label: "Completata" },
-  { value: "CANCELLED", label: "Annullata" },
-] as const
+const STATUS_OPTIONS = PROJECT_STATUS_META
 
 const PRIORITY_OPTIONS = [
   { value: "LOW", label: "Bassa" },
@@ -51,15 +54,6 @@ const PRIORITY_OPTIONS = [
   { value: "HIGH", label: "Alta" },
   { value: "CRITICAL", label: "Critica" },
 ] as const
-
-/** Transizioni di stato consentite a partire dallo stato corrente (come WPF). */
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  DRAFT: ["DRAFT", "ACTIVE", "CANCELLED"],
-  ACTIVE: ["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"],
-  ON_HOLD: ["ON_HOLD", "ACTIVE", "CANCELLED"],
-  COMPLETED: ["COMPLETED"],
-  CANCELLED: ["CANCELLED"],
-}
 
 const EMPTY = {
   code: "",
@@ -84,23 +78,41 @@ type FormState = typeof EMPTY
 export function ProjectDialog({
   open,
   projectId,
+  promoteFromId = null,
   onClose,
   onSaved,
+  onPromoted,
 }: {
   open: boolean
   projectId: number | "new" | null
+  /**
+   * #89: promozione di un'Altra Attività a commessa. Il dialog si apre precompilato
+   * dall'attività (con `projectId` null), l'utente rivede i dati e conferma: il server
+   * genera il codice definitivo e conserva quello vecchio nelle note.
+   */
+  promoteFromId?: number | null
   onClose: () => void
-  onSaved: () => Promise<void>
+  /** `newProjectId` valorizzato solo in creazione: serve al chiamante per portarcisi. */
+  onSaved: (newProjectId?: number) => Promise<void>
+  /** Solo promozione: riceve il codice commessa assegnato dal server. */
+  onPromoted?: (newCode: string) => void
 }) {
+  const isPromote = typeof promoteFromId === "number"
   const isNew = projectId === "new"
   const editId = typeof projectId === "number" ? projectId : null
 
   const [form, setForm] = React.useState<FormState>(EMPTY)
   const [error, setError] = React.useState<string | null>(null)
   const [originalStatus, setOriginalStatus] = React.useState<string | null>(null)
+  // Codice dell'attività prima della promozione: serve al testo del dialog.
+  const [promoteOldCode, setPromoteOldCode] = React.useState("")
   const [linkedQuoteId, setLinkedQuoteId] = React.useState(0)
   // Precarico attività standard: voci del catalogo da materializzare come milestone alla creazione.
   const [preloadIds, setPreloadIds] = React.useState<Set<number>>(new Set())
+  const [catalogOpen, setCatalogOpen] = React.useState(false)
+  // `canWriteFeature`: da qui si CREANO voci nell'anagrafica attività, quindi la sola lettura
+  // non basta — altrimenti il pulsante resta attivo e a dire di no è solo l'API.
+  const canManageCatalog = canWriteFeature("nav.anagrafica_attivita")
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -143,6 +155,54 @@ export function ProjectDialog({
       return
     }
     setError(null)
+    setPromoteOldCode("")
+
+    if (isPromote) {
+      // Promozione: anagrafica dell'attività + anteprima del codice di oggi. Il codice
+      // definitivo lo genera comunque il server al salvataggio (progressivo in transazione).
+      // Azzeramento SINCRONO prima del fetch: senza, il form terrebbe i dati dell'attività
+      // promossa un attimo prima e — a fetch fallito o lento — si potrebbero salvare
+      // quei dati sull'attività sbagliata (canSave resta spento finché EMPTY non si riempie).
+      setForm(EMPTY)
+      setOriginalStatus(null)
+      setLinkedQuoteId(0)
+      let cancelled = false
+      void Promise.all([
+        fetchProject(promoteFromId),
+        fetchProjectNextCode().catch(() => ""),
+      ])
+        .then(([data, nextCode]) => {
+          if (cancelled) return
+          setForm({
+            code: nextCode || "(assegnato al salvataggio)",
+            title: data.title,
+            customerId: data.customerId || null,
+            pmId: data.pmId || null,
+            startDate: toDateOnly(data.startDate),
+            endDatePlanned: toDateOnly(data.endDatePlanned),
+            revenue: String(data.revenue ?? 0),
+            budgetTotal: String(data.budgetTotal ?? 0),
+            budgetHoursTotal: String(data.budgetHoursTotal ?? 0),
+            status: data.status || "DRAFT",
+            priority: data.priority || "MEDIUM",
+            description: data.description,
+            serverPath: data.serverPath,
+            notes: data.notes,
+            // L'attività esiste già: fasi/milestone eventuali sono agganciate per id,
+            // ricrearle qui le duplicherebbe.
+            createDefaultPhases: false,
+          })
+          setPromoteOldCode(data.code)
+          setOriginalStatus(data.status || "DRAFT")
+          setLinkedQuoteId(data.linkedQuoteId || 0)
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setError(err.message)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
 
     if (isNew || editId == null) {
       setForm({ ...EMPTY, startDate: dateToIso(new Date()) })
@@ -192,13 +252,34 @@ export function ProjectDialog({
     return () => {
       cancelled = true
     }
-  }, [open, isNew, editId])
+  }, [open, isNew, editId, isPromote, promoteFromId])
 
-  // All'apertura in creazione, pre-seleziona TUTTE le voci attive del catalogo (come nel prototipo).
+  // Voci del catalogo già viste: distingue «voce nuova» da «voce che l'utente ha deselezionato».
+  const knownCatalogIds = React.useRef<Set<number>>(new Set())
+
   React.useEffect(() => {
-    if (open && isNew && catalogQuery.data) {
-      setPreloadIds(new Set(catalogQuery.data.map((v) => v.id)))
+    if (!open) {
+      knownCatalogIds.current = new Set()
+      setPreloadIds(new Set())
     }
+  }, [open])
+
+  // Prima apertura: TUTTE le voci attive pre-selezionate (come nel prototipo — il catalogo
+  // è ancora sconosciuto, quindi ogni voce è «nuova»). Al ritorno dall'anagrafica attività
+  // la stessa regola fa il round-trip: la scelta fatta finora resta, le voci aggiunte lì
+  // arrivano già spuntate e quelle eliminate o disattivate escono dalla selezione da sole.
+  React.useEffect(() => {
+    if (!open || !isNew || !catalogQuery.data) return
+    const items = catalogQuery.data
+    const known = knownCatalogIds.current
+    setPreloadIds((prev) => {
+      const next = new Set<number>()
+      for (const item of items) {
+        if (prev.has(item.id) || !known.has(item.id)) next.add(item.id)
+      }
+      return next
+    })
+    knownCatalogIds.current = new Set(items.map((item) => item.id))
   }, [open, isNew, catalogQuery.data])
 
   const saveMutation = useMutation({
@@ -235,31 +316,46 @@ export function ProjectDialog({
         createDefaultPhases: form.createDefaultPhases,
         linkedQuoteId,
       }
+      if (isPromote) {
+        // La promozione è un UPDATE sulla stessa riga: il codice lo genera il server,
+        // qui viaggia solo l'anagrafica rivista dall'utente.
+        const promotedCode = await promoteProjectToCommessa(promoteFromId, payload)
+        return { promotedCode }
+      }
       if (editId != null) {
         await updateProject(editId, payload)
-      } else {
-        const newId = await createProject(payload)
-        // Precarico milestone standard dal catalogo (copia snapshot). Best-effort: non blocca la creazione.
-        if (preloadIds.size > 0) {
-          try {
-            await seedMilestonesFromCatalog(newId, [...preloadIds])
-          } catch {
-            /* la commessa è comunque creata */
-          }
+        return {}
+      }
+      const newId = await createProject(payload)
+      // Precarico milestone standard dal catalogo (copia snapshot). Best-effort: non blocca la creazione.
+      if (preloadIds.size > 0) {
+        try {
+          await seedMilestonesFromCatalog(newId, [...preloadIds])
+        } catch {
+          /* la commessa è comunque creata */
         }
       }
+      return { newId }
     },
-    onSuccess: async () => {
-      await onSaved()
+    onSuccess: async (result: { newId?: number; promotedCode?: string }) => {
+      if (result.promotedCode) {
+        onPromoted?.(result.promotedCode)
+      }
+      await onSaved(result.newId)
     },
     onError: (err: Error) => setError(err.message),
   })
 
   const quoteLocked = linkedQuoteId > 0
-  const allowedStatuses =
-    originalStatus != null
-      ? (STATUS_TRANSITIONS[originalStatus] ?? STATUS_OPTIONS.map((s) => s.value))
-      : STATUS_OPTIONS.map((s) => s.value)
+  // #89: chi «Opera su commesse sospese o chiuse» cambia stato liberamente dal dialog,
+  // riaprire una Completata compreso (stessa regola della colonna Stato in Dashboard).
+  const canOverrideStatus = canWriteFeature("action.project_locked_write")
+  const allowedStatuses = allowedProjectStatuses(originalStatus, canOverrideStatus)
+  // «Annullata» non è uno stato da tendina: è il soft delete, che ha il suo percorso
+  // (Elimina, con conferma). Resta visibile solo se la commessa è GIÀ annullata.
+  const statusOptions = STATUS_OPTIONS.filter(
+    (option) => option.value !== "CANCELLED" || form.status === "CANCELLED"
+  )
 
   const customers = customersQuery.data ?? []
   const pms = pmQuery.data ?? []
@@ -277,10 +373,18 @@ export function ProjectDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {isNew ? "Nuova commessa" : "Modifica commessa"}
+            {isPromote
+              ? "Promuovi a commessa"
+              : isNew
+                ? "Nuova commessa"
+                : "Modifica commessa"}
           </DialogTitle>
           <DialogDescription>
-            Anagrafica commessa: cliente, responsabile, tempi ed economics.
+            {isPromote
+              ? `«${promoteOldCode || "…"}» diventa una commessa a tutti gli effetti: ` +
+                "controlla i dati e conferma. Il nome attuale resta scritto nelle note; " +
+                "il codice definitivo lo assegna il server al salvataggio."
+              : "Anagrafica commessa: cliente, responsabile, tempi ed economics."}
           </DialogDescription>
         </DialogHeader>
 
@@ -290,7 +394,14 @@ export function ProjectDialog({
               <Label>Codice</Label>
               <Input
                 value={form.code}
-                autoFocus
+                autoFocus={!isPromote}
+                maxLength={isPromote ? undefined : 20}
+                disabled={isPromote}
+                title={
+                  isPromote
+                    ? "Anteprima: il codice definitivo lo genera il server al salvataggio"
+                    : undefined
+                }
                 onChange={(event) => set("code", event.target.value)}
               />
             </div>
@@ -306,45 +417,28 @@ export function ProjectDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Cliente</Label>
-              <Select
-                value={
-                  form.customerId != null ? String(form.customerId) : NO_SELECTION
-                }
-                onValueChange={(value) =>
-                  set("customerId", value === NO_SELECTION ? null : Number(value))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleziona cliente…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={String(customer.id)}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Anagrafica lunga: combo con ricerca, non una Select da scorrere. */}
+              <LookupCombobox
+                options={customers}
+                value={form.customerId}
+                onValueChange={(id) => set("customerId", id)}
+                placeholder="Seleziona cliente…"
+                searchPlaceholder="Cerca cliente…"
+                emptyText="Nessun cliente trovato"
+                loading={customersQuery.isLoading}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Project Manager</Label>
-              <Select
-                value={form.pmId != null ? String(form.pmId) : NO_SELECTION}
-                onValueChange={(value) =>
-                  set("pmId", value === NO_SELECTION ? null : Number(value))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleziona PM…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pms.map((pm) => (
-                    <SelectItem key={pm.id} value={String(pm.id)}>
-                      {pm.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LookupCombobox
+                options={pms}
+                value={form.pmId}
+                onValueChange={(id) => set("pmId", id)}
+                placeholder="Seleziona PM…"
+                searchPlaceholder="Cerca PM…"
+                emptyText="Nessun PM trovato"
+                loading={pmQuery.isLoading}
+              />
             </div>
           </div>
 
@@ -373,20 +467,18 @@ export function ProjectDialog({
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>Ricavo (€)</Label>
-              <Input
-                inputMode="decimal"
+              <MoneyInput
                 value={form.revenue}
                 disabled={quoteLocked}
-                onChange={(event) => set("revenue", event.target.value)}
+                onChange={(value) => set("revenue", value)}
               />
             </div>
             <div className="grid gap-2">
               <Label>Budget (€)</Label>
-              <Input
-                inputMode="decimal"
+              <MoneyInput
                 value={form.budgetTotal}
                 disabled={quoteLocked}
-                onChange={(event) => set("budgetTotal", event.target.value)}
+                onChange={(value) => set("budgetTotal", value)}
               />
             </div>
             <div className="grid gap-2">
@@ -411,15 +503,19 @@ export function ProjectDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      disabled={!allowedStatuses.includes(option.value)}
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                  {statusOptions.map((option) => {
+                    const StatusIcon = option.icon
+                    return (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        disabled={!allowedStatuses.includes(option.value)}
+                      >
+                        <StatusIcon className={cn("size-4", option.className)} />
+                        {option.label}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -457,6 +553,12 @@ export function ProjectDialog({
             <Input
               value={form.serverPath}
               placeholder="Cartella documenti sul server (opzionale)"
+              disabled={isPromote}
+              title={
+                isPromote
+                  ? "Il percorso resta quello attuale: si cambia dopo, da «Modifica commessa»"
+                  : undefined
+              }
               onChange={(event) => set("serverPath", event.target.value)}
             />
           </div>
@@ -491,7 +593,7 @@ export function ProjectDialog({
                     ({preloadIds.size} selezionate)
                   </span>
                 </Label>
-                <div className="flex gap-3 text-xs">
+                <div className="flex items-center gap-3 text-xs">
                   <button
                     type="button"
                     className="font-medium text-primary hover:underline"
@@ -510,6 +612,21 @@ export function ProjectDialog({
                   >
                     Nessuna
                   </button>
+                  {canManageCatalog ? (
+                    <>
+                      <span className="h-3 w-px bg-border" />
+                      {/* Manca una voce? Si aggiunge qui senza abbandonare la commessa
+                          che si sta creando: al rientro la selezione si riallinea. */}
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                        onClick={() => setCatalogOpen(true)}
+                      >
+                        <Settings2 className="size-3.5" />
+                        Gestisci anagrafica attività
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -554,9 +671,20 @@ export function ProjectDialog({
             Annulla
           </Button>
           <Button onClick={() => saveMutation.mutate()} disabled={!canSave}>
-            {saveMutation.isPending ? "Salvataggio…" : "Salva"}
+            {saveMutation.isPending
+              ? "Salvataggio…"
+              : isPromote
+                ? "Promuovi"
+                : "Salva"}
           </Button>
         </DialogFooter>
+
+        {/* Round-trip: alla chiusura `catalogQuery` si è già invalidata da sola, e
+            l'effetto sul catalogo riallinea la selezione. */}
+        <ActivityCatalogDialog
+          open={catalogOpen}
+          onClose={() => setCatalogOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   )

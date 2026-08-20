@@ -610,8 +610,8 @@
 
 /* ---- Stampa grafica del Gantt ----
    Attiva SOLO con body.printing-gantt (impostato da printGantt()), per non interferire
-   con altre stampe dell'app. L'orientamento @page A4 landscape viene iniettato via JS
-   nello stesso momento (un @page statico qui varrebbe per tutte le stampe). Adattato
+   con altre stampe dell'app. L'orientamento @page A4 landscape + margin:0 (niente
+   diciture browser) viene iniettato via JS nello stesso momento. Adattato
    al layout shadcn (sidebar/header dell'AppShell) invece delle classi Blazor originali. */
 @media print {
   body.printing-gantt [data-slot="sidebar"],

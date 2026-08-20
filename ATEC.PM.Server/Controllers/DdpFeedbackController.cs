@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Hubs;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -14,15 +15,24 @@ namespace ATEC.PM.Server.Controllers;
 [ApiController]
 [Route("api/ddp-feedback")]
 [Authorize]
+// Pagine feedback: sotto-pagine del Gestore DDP, stessa chiave.
+[RequireFeature("nav.gestore_ddp")]
+// #88: anche qui si scrive sempre su UNA commessa (note, righe nascoste, righe spente:
+// sono dati suoi, non preferenze personali), quindi vale lo stesso cancello delle altre
+// scritture di commessa — in stand-by o chiusa si guarda e basta.
+[RequireProjectWritable]
 public class DdpFeedbackController : ControllerBase
 {
     private readonly DbService _db;
     private readonly IHubContext<ProjectHub> _hub;
 
-    public DdpFeedbackController(DbService db, IHubContext<ProjectHub> hub)
+    private readonly ProjectWriteGuard _guard;
+
+    public DdpFeedbackController(DbService db, IHubContext<ProjectHub> hub, ProjectWriteGuard guard)
     {
         _db = db;
         _hub = hub;
+        _guard = guard;
     }
 
     private void NotifyDdpChange(int projectId, string ddpType)
@@ -45,19 +55,22 @@ public class DdpFeedbackController : ControllerBase
     }
 
     // Universo delle DDP esistenti (commessa + tipo), come in Gestore DDP.
-    private static List<(int ProjectId, string Code, string CustomerName, string DdpType)> LoadDdpUniverse(System.Data.IDbConnection c)
+    // #88: per-utente, non piu static — le DDP di una commessa in bozza si vedono solo con la chiave.
+    private List<(int ProjectId, string Code, string CustomerName, string DdpType)> LoadDdpUniverse(System.Data.IDbConnection c)
     {
-        return c.Query<(int, string, string, string)>(@"
+        string filtroBozze = _guard.FiltroBozzeSql(User);
+        return c.Query<(int, string, string, string)>($@"
             SELECT DISTINCT b.project_id, p.code, COALESCE(cu.company_name, ''), 'COMMERCIAL'
             FROM bom_items b
             JOIN projects p ON p.id = b.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            WHERE b.ddp_type = 'COMMERCIAL'
+            WHERE b.ddp_type = 'COMMERCIAL'{filtroBozze}
             UNION
             SELECT DISTINCT o.project_id, p.code, COALESCE(cu.company_name, ''), 'OFFICINA'
             FROM ddp_officina_items o
             JOIN projects p ON p.id = o.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
+            WHERE 1=1{filtroBozze}
             ORDER BY 2 DESC, 4").ToList();
     }
 
@@ -199,21 +212,31 @@ public class DdpFeedbackController : ControllerBase
 
             var rows = c.Query<DdpFeedbackMagazzinoRow2>(@"
                 SELECT b.project_id AS ProjectId, 'COMMERCIAL' AS DdpType, b.id AS ItemId,
-                       b.requested_by AS RequestedBy, b.description AS Description, b.quantity AS Quantity,
+                       b.requested_by AS RequestedBy,
+                       b.created_by AS CreatedById,
+                       COALESCE(CONCAT(eb.first_name, ' ', eb.last_name), '') AS CreatedByName,
+                       b.created_at AS CreatedAt,
+                       b.description AS Description, b.quantity AS Quantity,
                        b.unit AS Unit, '' AS Material, '' AS Treatment,
                        COALESCE(su.company_name, '') AS SupplierName, b.manufacturer AS Manufacturer,
                        b.item_status AS ItemStatus, b.danea_ref AS DaneaRef, b.destination AS Destination,
                        b.destination_spec AS DestinationSpec, b.notes AS Notes
                 FROM bom_items b
                 LEFT JOIN suppliers su ON su.id = b.supplier_id
+                LEFT JOIN employees eb ON eb.id = b.created_by
                 WHERE b.ddp_type = 'COMMERCIAL' AND b.item_status IN @States
                 UNION ALL
                 SELECT o.project_id, 'OFFICINA', o.id,
-                       o.requested_by, o.description, o.quantity,
+                       o.requested_by,
+                       o.created_by AS CreatedById,
+                       COALESCE(CONCAT(eo.first_name, ' ', eo.last_name), '') AS CreatedByName,
+                       o.created_at AS CreatedAt,
+                       o.description, o.quantity,
                        '' , o.material, o.treatment,
                        o.supplier_name, '',
                        o.item_status, o.danea_ref, o.destination, o.destination_spec, o.notes
                 FROM ddp_officina_items o
+                LEFT JOIN employees eo ON eo.id = o.created_by
                 WHERE o.item_status IN @States
                 ORDER BY ItemId", new { States = states }).ToList();
 
@@ -234,6 +257,9 @@ public class DdpFeedbackController : ControllerBase
                     {
                         ItemId = r.ItemId,
                         RequestedBy = r.RequestedBy,
+                        CreatedById = r.CreatedById,
+                        CreatedByName = r.CreatedByName,
+                        CreatedAt = r.CreatedAt,
                         Description = r.Description,
                         Quantity = r.Quantity,
                         Unit = r.Unit,
@@ -319,6 +345,9 @@ public class DdpFeedbackController : ControllerBase
         public string DdpType { get; set; } = "";
         public int ItemId { get; set; }
         public string RequestedBy { get; set; } = "";
+        public int? CreatedById { get; set; }
+        public string CreatedByName { get; set; } = "";
+        public DateTime? CreatedAt { get; set; }
         public string Description { get; set; } = "";
         public decimal Quantity { get; set; }
         public string Unit { get; set; } = "";

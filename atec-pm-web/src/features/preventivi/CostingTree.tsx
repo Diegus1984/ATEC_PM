@@ -78,7 +78,7 @@ export function CostingTree({ quoteId, readOnly }: { quoteId: number; readOnly: 
           {!readOnly ? (
             <Button size="sm" variant="outline" onClick={() => setAddSectionOpen(true)}>
               <Plus className="size-4" />
-              Aggiungi sezione
+              Aggiungi sezione di costo
             </Button>
           ) : null}
         </div>
@@ -99,8 +99,8 @@ export function CostingTree({ quoteId, readOnly }: { quoteId: number; readOnly: 
                   onChanged={invalidate}
                   confirmDelete={async () => {
                     const ok = await confirm({
-                      title: "Elimina sezione",
-                      description: `Eliminare la sezione "${section.name}"?`,
+                      title: "Elimina sezione di costo",
+                      description: `Eliminare la sezione di costo "${section.name}"?`,
                       confirmLabel: "Elimina",
                       destructive: true,
                     })
@@ -142,7 +142,7 @@ export function CostingTree({ quoteId, readOnly }: { quoteId: number; readOnly: 
                 confirmDelete={async () => {
                   const ok = await confirm({
                     title: "Elimina sezione materiali",
-                    description: `Eliminare la sezione "${section.name}"?`,
+                    description: `Eliminare la sezione materiali "${section.name}"?`,
                     confirmLabel: "Elimina",
                     destructive: true,
                   })

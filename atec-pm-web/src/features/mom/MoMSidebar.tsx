@@ -3,6 +3,15 @@ import { Flame, List, Star, Users } from "lucide-react"
 
 import { PmSidebar, type PmContainer, type PmQuickView } from "@/components/shared/pm-sidebar"
 import type { MoMListItem } from "@/lib/api/types"
+import {
+  ALTRE_ATTIVITA_SECTION_LABEL,
+  COMMESSE_SECTION_LABEL,
+  compareProjectCodes,
+  isCommessaCode,
+} from "@/lib/project-code"
+
+
+import { MOM_CONDITION_STYLE } from "./mom-palette"
 
 export type MoMView =
   | { kind: "all" }
@@ -16,6 +25,9 @@ interface MoMSidebarProps {
   view: MoMView
   onViewChange: (view: MoMView) => void
   items: MoMListItem[]
+  /** Commesse aperte: compaiono anche senza verbali, così una commessa appena
+   *  creata ha subito la sua voce (a conteggio 0) pronta per il primo verbale. */
+  projects: { code: string; title: string }[]
 }
 
 type CommessaData = {
@@ -27,7 +39,7 @@ type CommessaData = {
   dots: { dotClass: string; label: string }[]
 }
 
-export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
+export function MoMSidebar({ view, onViewChange, items, projects }: MoMSidebarProps) {
   // Conteggi per le viste rapide
   const totalOpenActions = items.reduce((sum, item) => sum + item.openCount, 0)
   const totalP1Actions = items.reduce((sum, item) => sum + item.p1Count, 0)
@@ -104,14 +116,23 @@ export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
       }
     }
 
+    // Commesse aperte ancora senza verbali: entrano in lista a conteggio 0.
+    for (const p of projects) {
+      if (!p.code || map.has(p.code)) continue
+      map.set(p.code, { code: p.code, title: p.title, count: 0, p1: 0, p2: 0, p3: 0 })
+    }
+
     const projectsList: CommessaData[] = Array.from(map.values())
-      .sort((a, b) => a.code.localeCompare(b.code, "it"))
+      .sort((a, b) => compareProjectCodes(a.code, b.code))
       .map((p) => {
         const display = p.title ? `${p.code} — ${p.title}` : p.code
         const dots: { dotClass: string; label: string }[] = []
-        if (p.p1 > 0) dots.push({ dotClass: "bg-red-500", label: `${p.p1} Alta` })
-        if (p.p2 > 0) dots.push({ dotClass: "bg-amber-500", label: `${p.p2} Media` })
-        if (p.p3 > 0) dots.push({ dotClass: "bg-teal-500", label: `${p.p3} Bassa` })
+        if (p.p1 > 0)
+          dots.push({ dotClass: MOM_CONDITION_STYLE.p1.dotClass, label: `${p.p1} Alta` })
+        if (p.p2 > 0)
+          dots.push({ dotClass: MOM_CONDITION_STYLE.p2.dotClass, label: `${p.p2} Media` })
+        if (p.p3 > 0)
+          dots.push({ dotClass: MOM_CONDITION_STYLE.p3.dotClass, label: `${p.p3} Bassa` })
 
         return {
           key: `project-${p.code}`,
@@ -124,9 +145,21 @@ export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
       })
 
     const riunioniDots: { dotClass: string; label: string }[] = []
-    if (riunioniP1 > 0) riunioniDots.push({ dotClass: "bg-red-500", label: `${riunioniP1} Alta` })
-    if (riunioniP2 > 0) riunioniDots.push({ dotClass: "bg-amber-500", label: `${riunioniP2} Media` })
-    if (riunioniP3 > 0) riunioniDots.push({ dotClass: "bg-teal-500", label: `${riunioniP3} Bassa` })
+    if (riunioniP1 > 0)
+      riunioniDots.push({
+        dotClass: MOM_CONDITION_STYLE.p1.dotClass,
+        label: `${riunioniP1} Alta`,
+      })
+    if (riunioniP2 > 0)
+      riunioniDots.push({
+        dotClass: MOM_CONDITION_STYLE.p2.dotClass,
+        label: `${riunioniP2} Media`,
+      })
+    if (riunioniP3 > 0)
+      riunioniDots.push({
+        dotClass: MOM_CONDITION_STYLE.p3.dotClass,
+        label: `${riunioniP3} Bassa`,
+      })
 
     const list: CommessaData[] = [...projectsList]
 
@@ -142,7 +175,7 @@ export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
     }
 
     return list
-  }, [items])
+  }, [items, projects])
 
   const isContainerSelected = (c: CommessaData) => {
     if (c.kind === "riunioni" && view.kind === "riunioni") return true
@@ -158,7 +191,7 @@ export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
     }
   }
 
-  const containers: PmContainer[] = commesseData.map((c) => ({
+  const toContainer = (c: CommessaData): PmContainer => ({
     key: c.key,
     selected: isContainerSelected(c),
     onClick: () => selectContainer(c),
@@ -169,15 +202,47 @@ export function MoMSidebar({ view, onViewChange, items }: MoMSidebarProps) {
       c.kind === "riunioni" ? (
         <Users className="size-4 text-muted-foreground" />
       ) : undefined,
-  }))
+  })
+
+  // #79: Commesse (codice C+data) / Altre Attività (codice libero) / Riunioni (non-project).
+  const projectContainers: PmContainer[] = commesseData
+    .filter((c) => c.kind === "project" && isCommessaCode(c.code))
+    .map(toContainer)
+
+  const altreContainers: PmContainer[] = commesseData
+    .filter((c) => c.kind === "project" && !isCommessaCode(c.code))
+    .sort((a, b) => a.label.localeCompare(b.label, "it"))
+    .map(toContainer)
+
+  const riunioniContainers: PmContainer[] = commesseData
+    .filter((c) => c.kind !== "project")
+    .sort((a, b) => a.label.localeCompare(b.label, "it"))
+    .map(toContainer)
 
   return (
     <PmSidebar
       storageKey="mom"
       quickViews={quickViews}
-      containers={containers}
-      containersLabel="Commesse / Riunioni"
-      emptyLabel="Nessun verbale"
+      sections={[
+        {
+          key: "projects",
+          label: COMMESSE_SECTION_LABEL,
+          containers: projectContainers,
+          emptyLabel: "Nessuna commessa",
+        },
+        {
+          key: "altre",
+          label: ALTRE_ATTIVITA_SECTION_LABEL,
+          containers: altreContainers,
+          emptyLabel: "Nessuna altra attività",
+        },
+        {
+          key: "riunioni",
+          label: "Riunioni",
+          containers: riunioniContainers,
+          emptyLabel: "Nessuna riunione",
+        },
+      ]}
     />
   )
 }

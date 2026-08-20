@@ -3,6 +3,14 @@ import { isoToDate } from "@/lib/date-iso"
 import { WEEKDAYS_SHORT, isRedDay } from "@/lib/it-holidays"
 import { printHtml, escapeHtml } from "@/lib/print-template"
 
+import { isOverdue, todayIso } from "./mom-detail-shared"
+import {
+  MOM_CONDITION_STYLE,
+  momConditionKey,
+  priorityConditionKey,
+  type MoMConditionKey,
+} from "./mom-palette"
+
 // Web equivalent dell'export del prototipo Gestione_MoM_v9: Stampa (A4 landscape,
 // righe colorate per stato, giorno della settimana sotto le date, revisione in
 // testata), Excel (.xls HTML-table), Word (.doc HTML) e CSV (separatore ';').
@@ -15,18 +23,21 @@ export interface MoMExportArgs {
   items: MoMActionItem[]
 }
 
-function statoLabel(item: MoMActionItem): string {
-  if (item.status === "CLOSED") return "Chiusa"
-  if (item.isCritical) return "Max priorità"
-  if (item.status === "STANDBY") return "Stand by"
-  return "Aperta"
+/** Condizione della riga secondo la matrice colori (vedi `mom-palette`). */
+function conditionOf(item: MoMActionItem): MoMConditionKey {
+  return momConditionKey({ ...item, isOverdue: isOverdue(item, todayIso()) })
 }
 
+function statoLabel(item: MoMActionItem): string {
+  const key = conditionOf(item)
+  return key === "p1" || key === "p2" || key === "p3"
+    ? "Aperta"
+    : MOM_CONDITION_STYLE[key].label
+}
+
+/** Sfondo riga di stampa/export: stesse tinte pastello del foglio. */
 function rowBgHex(item: MoMActionItem): string | null {
-  if (item.status === "CLOSED") return "#C6EFCE"
-  if (item.isCritical) return "#F6C7C7"
-  if (item.status === "STANDBY") return "#FCF1C2"
-  return null
+  return MOM_CONDITION_STYLE[conditionOf(item)].hex
 }
 
 function responsibleText(item: MoMActionItem): string {
@@ -78,9 +89,19 @@ const HEADERS = [
   "Priorità",
   "Responsabili",
   "Data check avanz.",
-  "Data close",
+  "Data chiusura",
   "Stato",
 ]
+
+/**
+ * Contenuto della colonna Priorità: la priorità P1–P3, oppure lo stato scelto
+ * (Stand by / Close) quando è impostato — come nel foglio a video.
+ */
+function priorityCellKey(item: MoMActionItem): MoMConditionKey {
+  if (item.status === "CLOSED") return "close"
+  if (item.status === "STANDBY") return "standby"
+  return priorityConditionKey(item.priorita)
+}
 
 function rowCells(item: MoMActionItem, index: number): string[] {
   return [
@@ -88,7 +109,7 @@ function rowCells(item: MoMActionItem, index: number): string[] {
     item.attivita,
     item.descrizione ?? "",
     item.azione ?? "",
-    String(item.priorita),
+    MOM_CONDITION_STYLE[priorityCellKey(item)].label,
     responsibleText(item),
     formatDate(item.dataCheck),
     formatDate(item.dataClose),
@@ -96,32 +117,35 @@ function rowCells(item: MoMActionItem, index: number): string[] {
   ]
 }
 
-const PRI_HEX: Record<number, { bg: string; ink: string }> = {
-  1: { bg: "#FFD0D6", ink: "#9C0006" },
-  2: { bg: "#FFEDB0", ink: "#8A5A00" },
-  3: { bg: "#C9EFD2", ink: "#0B6B2E" },
-}
+/**
+ * Attività, Descrizione e Azione (colonne 1–3) sono campi da 40 caratteri con
+ * riporto automatico a capo: in stampa mantengono la stessa larghezza del
+ * foglio a video invece di allargarsi con il testo.
+ */
+const TEXT_COL_INDEXES = new Set([1, 2, 3])
+const TEXT_COL_STYLE = ";width:40ch;max-width:40ch"
 
 function buildTable(items: MoMActionItem[], withDow: boolean): string {
   const head = HEADERS.map(
-    (header) =>
-      `<th style="background:#CFE3F6;color:#2F6098;border:0.5px solid #A9C3DE;padding:4px 6px;font-weight:bold;text-align:left">${escapeHtml(
-        header
-      )}</th>`
+    (header, index) =>
+      `<th style="background:#CFE3F6;color:#2F6098;border:0.5px solid #A9C3DE;padding:4px 6px;font-weight:bold;text-align:left${
+        TEXT_COL_INDEXES.has(index) ? TEXT_COL_STYLE : ""
+      }">${escapeHtml(header)}</th>`
   ).join("")
 
   const body = items
     .map((item, index) => {
       const bg = rowBgHex(item)
       const style = bg ? ` style="background:${bg}"` : ""
-      const pri = PRI_HEX[item.priorita] ?? PRI_HEX[2]
+      const pri = MOM_CONDITION_STYLE[priorityCellKey(item)]
       const cells = rowCells(item, index)
         .map((cell, cellIndex) => {
           let cellStyle =
             "border:0.5px solid #ccc;padding:3px 6px;vertical-align:top;white-space:pre-wrap"
           let html = escapeHtml(cell)
+          if (TEXT_COL_INDEXES.has(cellIndex)) cellStyle += TEXT_COL_STYLE
           if (cellIndex === 4)
-            cellStyle += `;background:${pri.bg};color:${pri.ink};text-align:center;font-weight:bold`
+            cellStyle += `;background:${pri.hex};color:${pri.inkHex};text-align:center;font-weight:bold`
           if (withDow && cellIndex === 6) html = dowCellHtml(item.dataCheck)
           if (withDow && cellIndex === 7) html = dowCellHtml(item.dataClose)
           return `<td style="${cellStyle}">${html}</td>`

@@ -11,8 +11,10 @@ using ATEC.PM.Server.Hubs;
 namespace ATEC.PM.Server.Controllers;
 
 // API del modulo Gestione Risorse: allocazioni (op/flex/ferie) su dipendenti, con conflitti.
-// Lettura: tutti gli autenticati. Scrittura: gating per livello via [RequireFeature("resources.edit")]
-// (PM/RESP_REPARTO/ADMIN). Le modifiche registrano autore+timestamp (audit collaborazione multi-utente)
+// Lettura: tutti gli autenticati. Scrittura: gating per chiave sulla persona con
+// [RequireFeature("resources.edit")] (seminata a RESP_REPARTO/PM/ADMIN), che copre anche il digest
+// manuale; la configurazione del digest ha la sua, [RequireFeature("nav.digest_email")].
+// Le modifiche registrano autore+timestamp (audit collaborazione multi-utente)
 // e vengono notificate in real-time agli altri client via ResourcePlannerHub.
 [ApiController]
 [Route("api/resource-planner")]
@@ -339,9 +341,10 @@ public class ResourcesController : ControllerBase
             using var c = _rdb.Open();
             // Solo commesse ATTIVE: seguono la filiera offerta-accettata → conversione-in-commessa,
             // quindi rappresentano già il lavoro reale in corso (bozze/completate/sospese escluse).
-            var rows = c.Query<LookupItem>(@"
+            var rows = c.Query<LookupItem>($@"
                 SELECT id AS Id, CONCAT_WS(' — ', code, title) AS Name
-                FROM projects WHERE status = 'ACTIVE' ORDER BY code DESC").ToList();
+                FROM projects WHERE status = 'ACTIVE'
+                ORDER BY {ProjectSorting.OrderBy("")}").ToList();
             return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
         }
         catch (Exception ex) { return Ok(ApiResponse<List<LookupItem>>.Fail($"Errore: {ex.Message}")); }
@@ -362,7 +365,8 @@ public class ResourcesController : ControllerBase
 
     // Anteprima completa (nessun invio, nessuna nuova istantanea).
     [HttpGet("digest/preview")]
-    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    [Authorize]
+    [RequireFeature("resources.edit")]
     public IActionResult PreviewDigest()
     {
         try { return Ok(ApiResponse<DigestPreviewDto>.Ok(_notify.PreviewDigest())); }
@@ -371,7 +375,8 @@ public class ResourcesController : ControllerBase
 
     // Anteprima selettiva per il dialog "Notifica subito" (una riga spuntabile per modifica).
     [HttpGet("digest/preview-selective")]
-    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    [Authorize]
+    [RequireFeature("resources.edit")]
     public IActionResult PreviewSelective()
     {
         try { return Ok(ApiResponse<SelectivePreviewDto>.Ok(_notify.BuildSelectivePreview())); }
@@ -381,7 +386,8 @@ public class ResourcesController : ControllerBase
     // Esecuzione digest immediata ("Esegui ora"): non tocca digest_last_run, il giro
     // automatico del giorno resta indipendente.
     [HttpPost("digest/run-now")]
-    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    [Authorize]
+    [RequireFeature("resources.edit")]
     public IActionResult RunDigestNow()
     {
         try { return Ok(ApiResponse<NotifySendResultDto>.Ok(_notify.SendDigest("manuale"))); }
@@ -390,7 +396,8 @@ public class ResourcesController : ControllerBase
 
     // Invio selettivo dal dialog "Notifica subito": solo le variazioni scelte.
     [HttpPost("digest/send-selected")]
-    [Authorize(Roles = "RESP_REPARTO,PM,ADMIN")]
+    [Authorize]
+    [RequireFeature("resources.edit")]
     public IActionResult SendSelected([FromBody] SendSelectedRequest req)
     {
         try
@@ -403,7 +410,8 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpGet("digest/settings")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.digest_email")]
     public IActionResult GetDigestSettings()
     {
         try { return Ok(ApiResponse<PlanDigestSettingsDto>.Ok(_notify.GetSettings())); }
@@ -411,7 +419,8 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpPut("digest/settings")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.digest_email")]
     public IActionResult SaveDigestSettings([FromBody] PlanDigestSettingsDto dto)
     {
         try
@@ -423,7 +432,8 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpGet("digest/status")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.digest_email")]
     public IActionResult GetDigestStatus()
     {
         try { return Ok(ApiResponse<DigestStatusDto>.Ok(_notify.GetStatus())); }

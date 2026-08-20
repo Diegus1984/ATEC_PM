@@ -3,8 +3,11 @@ import { euro } from "@/lib/format"
 
 export const COMMERCIAL_SINTESI_HEADERS = [
   "#",
-  "Data",
-  "Rich.",
+  // «Rich.» / «Data» → «Inserito da» / «Data inserimento» (segnalazione #61): stessi nomi
+  // e stesso ordine delle DDP Excel e delle due griglie di commessa. Lo scambio riguarda
+  // solo le posizioni 1 e 2, quindi DUE_DATE_CELL_INDEX resta valido.
+  "Inserito da",
+  "Data inserimento",
   "Codice",
   "Descrizione",
   "Qtà",
@@ -23,8 +26,8 @@ export const COMMERCIAL_SINTESI_HEADERS = [
 
 export const OFFICINA_SINTESI_HEADERS = [
   "#",
-  "Data",
-  "Rich.",
+  "Inserito da",
+  "Data inserimento",
   "Codice",
   "Descrizione",
   "Qtà",
@@ -33,7 +36,9 @@ export const OFFICINA_SINTESI_HEADERS = [
   "Fornitore",
   "Stato",
   "Rif. Danea",
-  "Necessario",
+  // «Necessario» → «Data Richiesta» (segnalazione #58): stesso nome della DDP Officina di
+  // commessa e della Inbox. Vale anche per stampe ed export, che escono da qui.
+  "Data Richiesta",
   "Destinazione",
   "Specifica",
   "Note",
@@ -55,33 +60,36 @@ export function fmtQty(value: number): string {
   return value.toLocaleString("it-IT", { maximumFractionDigits: 2 })
 }
 
-export function isOverdueDate(value: string | null): boolean {
+/**
+ * In ritardo = consegna prevista PRIMA di oggi (una prevista oggi non è in ritardo).
+ * `today` arriva dal modello: un solo orologio per KPI, celle e stampe.
+ */
+export function isOverdueDate(value: string | null, today: string): boolean {
   if (!value) return false
-  const today = new Date()
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(today.getDate()).padStart(2, "0")}`
-  return value.slice(0, 10) < todayIso
+  return value.slice(0, 10) < today
 }
+
+/**
+ * Indice della colonna «Data prev.» / «Data Richiesta» (uguale nei due layout): è la cella che
+ * va colorata di rosso quando la consegna è in ritardo. Il ritardo si segnala con una
+ * **classe sulla cella**, non con un prefisso nel testo — altrimenti finisce negli export.
+ */
+export const DUE_DATE_CELL_INDEX = 11
 
 export function ddpRowToSintesiCells(
   row: DdpRowItem,
   officina: boolean,
   statoLabel: (key: string) => string,
-  options?: { markOverdue?: boolean }
+  /** Formato date: 4 cifre per stampe ed export (default), gg/mm/aa a video. */
+  formatDate: (value: string | null) => string = fmtDate
 ): string[] {
-  const dateText = fmtDate(row.dateNeeded)
-  const dateCol =
-    options?.markOverdue && isOverdueDate(row.dateNeeded)
-      ? `⚠ ${dateText}`
-      : dateText
+  const dateCol = formatDate(row.dateNeeded)
 
   if (officina) {
     return [
       String(row.rowNumber),
-      fmtDate(row.createdAt),
       row.requestedBy,
+      formatDate(row.createdAt),
       row.partNumber,
       row.description,
       fmtQty(row.quantity),
@@ -101,8 +109,8 @@ export function ddpRowToSintesiCells(
 
   return [
     String(row.rowNumber),
-    fmtDate(row.createdAt),
     row.requestedBy,
+    formatDate(row.createdAt),
     row.partNumber,
     row.description,
     fmtQty(row.quantity),

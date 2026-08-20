@@ -1,3 +1,4 @@
+import { recordLastError } from "@/lib/api/last-error"
 import type { ApiResponse } from "@/lib/api/types"
 
 const buildTimeBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? ""
@@ -58,7 +59,11 @@ function parseJson<T>(text: string): T | null {
   }
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handleResponse<T>(
+  response: Response,
+  method = "GET",
+  path = ""
+): Promise<T> {
   const text = await response.text()
 
   if (response.status === 401 && tokenProvider()) {
@@ -68,7 +73,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const payload = parseJson<ApiResponse<unknown>>(text)
-    throw new ApiError(payload?.message || response.statusText, response.status)
+    const errorMsg = payload?.message || response.statusText
+    recordLastError({
+      method,
+      url: path,
+      status: response.status,
+      message: errorMsg,
+    })
+    throw new ApiError(errorMsg, response.status)
   }
 
   const payload = parseJson<T>(text)
@@ -91,7 +103,7 @@ export async function apiGet<T>(path: string): Promise<T> {
     headers,
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "GET", path)
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
@@ -109,7 +121,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "POST", path)
 }
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
@@ -127,7 +139,7 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "PATCH", path)
 }
 
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
@@ -145,7 +157,7 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "PUT", path)
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
@@ -160,7 +172,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
     headers,
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "DELETE", path)
 }
 
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
@@ -176,7 +188,7 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
     body: formData,
   })
 
-  return handleResponse<T>(response)
+  return handleResponse<T>(response, "POST", path)
 }
 
 /** GET autenticato che ritorna un Blob (PDF, Excel, immagini): per anteprima/download. */
@@ -204,11 +216,19 @@ export function buildApiUrl(path: string): string {
   return buildUrl(path)
 }
 
-/** Estrae Data da ApiResponse se Success, altrimenti lancia. */
+/**
+ * Estrae `data` da ApiResponse se `success`, altrimenti lancia.
+ *
+ * Il server serializza con WhenWritingNull: quando `data` è null la proprietà
+ * sparisce dal JSON. Gli endpoint «void» (es. PUT /api/permessi/combo) rispondono
+ * `{ success: true, message: "…" }` senza `data` — è un successo, non un errore.
+ * Prima `data === undefined` faceva scattare un falso «Operazione non riuscita»
+ * / toast «Permesso non modificato» anche se il DB era già aggiornato.
+ */
 export function unwrapApi<T>(response: ApiResponse<T>): T {
-  if (!response.success || response.data === undefined) {
+  if (!response.success) {
     throw new ApiError(response.message || "Operazione non riuscita", 400)
   }
 
-  return response.data
+  return response.data as T
 }

@@ -33,6 +33,8 @@ export interface ChecklistProject {
   projectId: number
   code: string
   title: string
+  /** Cliente della commessa (riga a sé nella colonna "Commessa / Gruppo"). */
+  customerName: string
   display: string
   items: ChecklistItem[]
 }

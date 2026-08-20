@@ -12,6 +12,12 @@ import { notifyError } from "@/lib/toast"
 import { salGgSaldoValue } from "./sal-utils"
 import { salRowPayload } from "./sal-sheet-shared"
 
+function formatSalPercInput(n: number | null | undefined): string {
+  if (n == null || isNaN(n)) return ""
+  const rounded = Math.round(n * 10) / 10
+  return String(rounded)
+}
+
 export function useSalRowEditing({
   row,
   index,
@@ -24,11 +30,9 @@ export function useSalRowEditing({
   onConfirm: ReturnType<typeof useConfirm>
 }) {
   const [stepText, setStepText] = React.useState(row.step)
-  // == null (e non ===): se il server omette il campo, row.perc è undefined e
-  // String(undefined) mostrerebbe "undefined" nell'input.
-  const [percText, setPercText] = React.useState(
-    row.perc == null ? "" : String(row.perc)
-  )
+  // == null (e non ===): se il server omette il campo, row.perc è undefined.
+  // formatSalPercInput approssima ad 1 decimale post virgola (es. 39.535 -> 39.5).
+  const [percText, setPercText] = React.useState(formatSalPercInput(row.perc))
   const [ivaText, setIvaText] = React.useState(
     row.ivaPerc === null ? "" : String(row.ivaPerc)
   )
@@ -41,7 +45,7 @@ export function useSalRowEditing({
   }, [row.step])
 
   React.useEffect(() => {
-    setPercText(row.perc == null ? "" : String(row.perc))
+    setPercText(formatSalPercInput(row.perc))
   }, [row.perc])
 
   React.useEffect(() => {
@@ -84,12 +88,12 @@ export function useSalRowEditing({
     }
     let n = parseFloat(val.replace(",", "."))
     if (isNaN(n)) {
-      setPercText(row.perc == null ? "" : String(row.perc))
+      setPercText(formatSalPercInput(row.perc))
       return
     }
-    n = Math.max(0, Math.min(100, n))
+    n = Math.round(Math.max(0, Math.min(100, n)) * 10) / 10
     if (n !== row.perc) void patch({ perc: n })
-    else setPercText(String(n))
+    else setPercText(formatSalPercInput(n))
   }
 
   const commitIva = () => {

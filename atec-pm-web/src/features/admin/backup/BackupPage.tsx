@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   deleteBackup,
   downloadBackup,
@@ -27,18 +28,24 @@ import {
   restoreBackup,
   runBackupNow,
 } from "@/lib/api/backup"
+import { canAccessFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
+
+import { FullBackupCard } from "./FullBackupCard"
 
 export function BackupPage() {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const session = getSession()
-  const isAdmin = session?.user.userRole === "ADMIN"
+  // Permesso della pagina, non livello del ruolo: la funzione si concede alla persona.
+  // Governa anche l'`enabled` della query, così senza permesso non si chiede nemmeno
+  // l'elenco dei backup (l'API risponderebbe 403 e la pagina mostrerebbe un errore rosso).
+  const canManageBackup = canAccessFeature("nav.backup")
 
   const query = useQuery({
     queryKey: ["backup-list"],
     queryFn: fetchBackupList,
-    enabled: isAdmin,
+    enabled: canManageBackup,
   })
 
   const backupMutation = useMutation({
@@ -62,13 +69,14 @@ export function BackupPage() {
     },
   })
 
-  if (!isAdmin) {
+  if (!canManageBackup) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Backup database</CardTitle>
           <CardDescription>
-            Solo gli utenti ADMIN possono gestire i backup.
+            Non hai il permesso per gestire i backup. Chiedi a un amministratore di
+            abilitarti la funzione «Backup DB».
           </CardDescription>
         </CardHeader>
       </Card>
@@ -161,6 +169,7 @@ export function BackupPage() {
           ) : null}
 
           {query.data ? (
+            <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -232,9 +241,12 @@ export function BackupPage() {
                 )}
               </TableBody>
             </Table>
+            </GridScroller>
           ) : null}
         </CardContent>
       </Card>
+
+      <FullBackupCard />
     </div>
   )
 }

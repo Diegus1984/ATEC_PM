@@ -91,6 +91,42 @@ export async function createLocalPhase(
   return unwrapApi(response)
 }
 
+/**
+ * Spegne o riaccende una fase di commessa (segnalazione #51).
+ * Spenta = sparisce dall'elenco del Bilancio e dalla tendina del Timesheet, ma le ore già
+ * imputate **continuano a contare** nei costi: nasconde, non esclude. Sempre reversibile.
+ */
+export async function setProjectPhaseOff(
+  phaseId: number,
+  isOff: boolean
+): Promise<void> {
+  const response = await apiPatch<ApiResponse<boolean>>(
+    `/api/phases/${phaseId}/off`,
+    isOff
+  )
+  unwrapApi(response)
+}
+
+/**
+ * Chiude o riapre una fase (#106).
+ *
+ * «Avanzamento Commessa» conta le fasi in `COMPLETED`, ma nessuna schermata del
+ * client scriveva mai quello stato: la percentuale era ferma a 0% su qualunque
+ * commessa. Da qui il PM la chiude a mano, che è l'unico modo per sapere se una
+ * fase è finita — le ore lavorate non lo dicono.
+ */
+export async function setProjectPhaseStatus(
+  phaseId: number,
+  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"
+): Promise<void> {
+  const body: FieldUpdateRequest = { field: "status", value: status }
+  const response = await apiPatch<ApiResponse<boolean>>(
+    `/api/phases/${phaseId}/field`,
+    body
+  )
+  unwrapApi(response)
+}
+
 /** Rimuove una fase dalla commessa (solo se senza ore registrate). */
 export async function deleteProjectPhase(phaseId: number): Promise<void> {
   const response = await apiDelete<ApiResponse<boolean>>(
@@ -134,40 +170,55 @@ export async function deletePhaseTemplate(id: number): Promise<void> {
   unwrapApi(response)
 }
 
-export async function linkPhaseToSection(
+// ── Legami fase ↔ sezione di costo ─────────────────────────────────────────
+// Una fase dell'anagrafica sta su PIÙ sezioni e in commessa nasce una volta per sezione:
+// agganciare non è più «spostare». Ordine e «nasce da sola» sono del legame, non della fase.
+// Vedi PIANO-FASI-MULTISEZIONE.md.
+
+/** Aggancia la fase a una sezione in più (non la toglie da quelle in cui è già). */
+export async function addPhaseToSection(
+  phaseId: number,
+  sectionId: number,
+  isDefault = false
+): Promise<void> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    `/api/phases/templates/${phaseId}/sections`,
+    { sectionId, isDefault }
+  )
+  unwrapApi(response)
+}
+
+/** Toglie la fase da UNA sezione. Le commesse già create non cambiano. */
+export async function removePhaseFromSection(
   phaseId: number,
   sectionId: number
 ): Promise<void> {
-  await patchPhaseTemplateField(phaseId, {
-    field: "cost_section_template_id",
-    value: String(sectionId),
-  })
+  const response = await apiDelete<ApiResponse<boolean>>(
+    `/api/phases/templates/${phaseId}/sections/${sectionId}`
+  )
+  unwrapApi(response)
 }
 
-export async function unlinkPhaseFromSection(phaseId: number): Promise<void> {
-  await patchPhaseTemplateField(phaseId, {
-    field: "cost_section_template_id",
-    value: null,
-  })
+export async function updatePhaseSectionLink(
+  phaseId: number,
+  sectionId: number,
+  patch: { sortOrder?: number; isDefault?: boolean }
+): Promise<void> {
+  const response = await apiPatch<ApiResponse<boolean>>(
+    `/api/phases/templates/${phaseId}/sections/${sectionId}`,
+    patch
+  )
+  unwrapApi(response)
 }
 
+/** Riscrive l'ordine delle fasi DENTRO una sezione (le altre sezioni non si toccano). */
 export async function reorderSectionPhases(
   sectionId: number,
-  phases: PhaseTemplateDto[]
+  orderedPhaseIds: number[]
 ): Promise<void> {
-  const sectionPhases = phases
-    .filter((phase) => phase.costSectionTemplateId === sectionId)
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-
-  for (let index = 0; index < sectionPhases.length; index++) {
-    const newSort = index + 1
-    const phase = sectionPhases[index]
-    if (phase.sortOrder !== newSort) {
-      await patchPhaseTemplateField(phase.id, {
-        field: "sort_order",
-        value: String(newSort),
-      })
-    }
+  for (let index = 0; index < orderedPhaseIds.length; index++) {
+    await updatePhaseSectionLink(orderedPhaseIds[index], sectionId, {
+      sortOrder: index + 1,
+    })
   }
 }

@@ -1,3 +1,4 @@
+﻿using System.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -5,31 +6,57 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Hubs;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/projects")]
 [Authorize]
+// #88: ogni scrittura di questo controller riguarda UNA commessa (l'id sta nella rotta),
+// quindi il cancello si mette una volta sola sulla classe: una commessa in bozza, in
+// stand-by o chiusa si consulta ma non si modifica, salvo il permesso di scavalco.
+[RequireProjectWritable]
+// #88: e una bozza non si VEDE proprio, letture comprese — 404 come se non esistesse.
+[RequireProjectVisible]
 public class ProjectsController : ControllerBase
 {
+    /// <summary>
+    /// Stati che rendono una commessa "chiusa": non è più lavoro in corso e per default
+    /// sparisce dalle liste (l'eliminazione commessa è un soft delete → CANCELLED).
+    /// </summary>
+    private const string ClosedStatusesSql = ProjectSorting.ClosedStatusesSql;
+
+    /// <summary>
+    /// Ordinamento standard degli elenchi commesse (chiuse in fondo). La regola sta in
+    /// <see cref="ProjectSorting"/>: la usano anche Bilancio, Dashboard, SAL, Check list,
+    /// MoM, Milestones, Trasferta e Risorse. Vedi lì il perché.
+    /// </summary>
+    private static readonly string ProjectOrderBySql = ProjectSorting.OrderBy("p", "p.status");
+
     private readonly DbService _db;
     private readonly NotificationService _notif;
     private readonly ProjectTemplateCopyService _templateCopy;
     private readonly ILogger<ProjectsController> _logger;
     private readonly IHubContext<ProjectHub> _hub;
+    private readonly AnagraficheCache _cache;
+    private readonly ProjectWriteGuard _guard;
     public ProjectsController(
         DbService db,
         NotificationService notif,
         ProjectTemplateCopyService templateCopy,
         ILogger<ProjectsController> logger,
-        IHubContext<ProjectHub> hub)
+        IHubContext<ProjectHub> hub,
+        AnagraficheCache cache,
+        ProjectWriteGuard guard)
     {
         _db = db;
         _notif = notif;
         _templateCopy = templateCopy;
         _logger = logger;
         _hub = hub;
+        _cache = cache;
+        _guard = guard;
     }
 
     // Notifica real-time: chi guarda QUESTA commessa (gruppo "project-{id}") + il Gestore DDP (gruppo globale
@@ -71,32 +98,96 @@ public class ProjectsController : ControllerBase
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
+    /// <summary>
+    /// I parametri di una UPDATE più la firma di chi sta scrivendo (<c>@UpdatedBy</c>, #114).
+    /// L'oggetto della richiesta non ha un campo per l'autore — e non deve averlo: lo decide il
+    /// token, non il client. Token senza dipendente → NULL, cioè modifica senza firma.
+    /// </summary>
+    private DynamicParameters ConFirma(object req)
+    {
+        var parametri = new DynamicParameters(req);
+        int me = GetCurrentEmployeeId();
+        parametri.Add("UpdatedBy", me > 0 ? me : (int?)null);
+        return parametri;
+    }
+
+    /// <summary>
+    /// Elenco commesse paginato.
+    /// <para>
+    /// Di default ritorna solo le commesse <b>aperte</b> (DRAFT · ACTIVE · ON_HOLD): le
+    /// COMPLETED/CANCELLED si accumulano negli anni e sommergerebbero le liste (l'eliminazione
+    /// è un soft delete → CANCELLED, quindi senza filtro resterebbero visibili anche quelle
+    /// "eliminate"). Con <paramref name="includeClosed"/>=true torna tutto.
+    /// <paramref name="includeId"/> forza l'inclusione di una singola commessa anche se chiusa
+    /// (serve al deep-link: la commessa aperta a destra deve esistere nell'albero a sinistra).
+    /// </para>
+    /// </summary>
     [HttpGet]
-    public IActionResult GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 0, [FromQuery] string? search = null)
+    public IActionResult GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 0,
+        [FromQuery] string? search = null, [FromQuery] bool includeClosed = false,
+        [FromQuery] int includeId = 0)
     {
         try
         {
             (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
 
             string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
-            string searchClause = term == null
+
+            var conditions = new List<string>();
+            if (term != null)
+            {
+                conditions.Add(@"(p.code LIKE @Term OR p.title LIKE @Term OR cu.company_name LIKE @Term
+                    OR CONCAT(e.first_name,' ',e.last_name) LIKE @Term)");
+            }
+            if (!includeClosed)
+            {
+                conditions.Add(includeId > 0
+                    ? $"(p.status NOT IN {ClosedStatusesSql} OR p.id = @IncludeId)"
+                    : $"p.status NOT IN {ClosedStatusesSql}");
+            }
+            // #88: le bozze si vedono solo con la chiave. Il filtro vince anche su includeClosed
+            // e includeId: quelle due porte servono al deep-link sulle commesse chiuse, non a
+            // far comparire una bozza a chi non deve saperne l'esistenza.
+            string filtroBozze = _guard.FiltroBozzeSql(User);
+            if (filtroBozze.Length > 0)
+                conditions.Add(filtroBozze[" AND ".Length..]);
+            string whereClause = conditions.Count == 0
                 ? ""
-                : @" WHERE (p.code LIKE @Term OR p.title LIKE @Term OR cu.company_name LIKE @Term
-                    OR CONCAT(e.first_name,' ',e.last_name) LIKE @Term)";
-            object countParams = term == null ? new { } : new { Term = $"%{term}%" };
-            object listParams = term == null
-                ? new { Limit = pageSize, Offset = offset }
-                : new { Term = $"%{term}%", Limit = pageSize, Offset = offset };
+                : " WHERE " + string.Join(" AND ", conditions);
+
+            var countParams = new DynamicParameters();
+            var listParams = new DynamicParameters();
+            listParams.Add("Limit", pageSize);
+            listParams.Add("Offset", offset);
+            if (term != null)
+            {
+                countParams.Add("Term", $"%{term}%");
+                listParams.Add("Term", $"%{term}%");
+            }
+            if (!includeClosed && includeId > 0)
+            {
+                countParams.Add("IncludeId", includeId);
+                listParams.Add("IncludeId", includeId);
+            }
 
             using var c = _db.Open();
             int total = c.ExecuteScalar<int>($@"
                 SELECT COUNT(*)
                 FROM projects p
                 LEFT JOIN customers cu ON cu.id = p.customer_id
-                LEFT JOIN employees e ON e.id = p.pm_id{searchClause}", countParams);
+                LEFT JOIN employees e ON e.id = p.pm_id{whereClause}", countParams);
 
+            // Le chiuse (quando richieste) finiscono in fondo: le aperte restano a portata di clic.
+            // Dentro ai gruppi comanda la DATA letta dal codice (vedi `CodeDateSql`), non
+            // l'ordine alfabetico: i due formati di codice in uso non si ordinano fra loro.
+            // La riga iniettata dal deep-link (`includeId`) va IN TESTA: ordinata da chiusa
+            // finirebbe nelle ultime pagine dello scroll infinito e l'albero resterebbe
+            // senza il nodo di ciò che si vede a destra — proprio il caso che includeId copre.
+            string orderBy = !includeClosed && includeId > 0
+                ? $"(p.id = @IncludeId) DESC, {ProjectOrderBySql}"
+                : ProjectOrderBySql;
             var rows = c.Query<ProjectListItem>($@"
-            SELECT p.id, p.code, p.title, 
+            SELECT p.id, p.code, p.title,
                    COALESCE(cu.company_name, 'CLIENTE MANCANTE') AS CustomerName,
                    COALESCE(CONCAT(e.first_name,' ',e.last_name), 'NON ASSEGNATO') AS PmName,
                    p.status, p.priority, p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
@@ -104,8 +195,8 @@ public class ProjectsController : ControllerBase
                    COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS LinkedQuoteId
             FROM projects p
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            LEFT JOIN employees e ON e.id = p.pm_id{searchClause}
-            ORDER BY p.created_at DESC
+            LEFT JOIN employees e ON e.id = p.pm_id{whereClause}
+            ORDER BY {orderBy}
             LIMIT @Limit OFFSET @Offset", listParams).ToList();
 
             int loaded = (page - 1) * pageSize + rows.Count;
@@ -131,14 +222,14 @@ public class ProjectsController : ControllerBase
         try
         {
             using var c = _db.Open();
-            List<ProjectTreeItemDto> rows = c.Query<ProjectTreeItemDto>(@"
+            List<ProjectTreeItemDto> rows = c.Query<ProjectTreeItemDto>($@"
                 SELECT p.id, p.code, p.title,
                        p.status,
                        COALESCE(cu.company_name, '') AS CustomerName
                 FROM projects p
                 LEFT JOIN customers cu ON cu.id = p.customer_id
-                WHERE p.status <> 'CANCELLED'
-                ORDER BY p.code DESC").ToList();
+                WHERE p.status <> 'CANCELLED'{_guard.FiltroBozzeSql(User)}
+                ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
             return Ok(ApiResponse<List<ProjectTreeItemDto>>.Ok(rows));
         }
         catch (Exception ex)
@@ -159,6 +250,8 @@ public class ProjectsController : ControllerBase
                    COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS LinkedQuoteId
             FROM projects p WHERE id=@Id", new { Id = id });
         if (proj == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+        // #88: la bozza nascosta a chi non ha la chiave è già gestita da [RequireProjectVisible]
+        // sulla classe (404 identico alla commessa inesistente).
         return Ok(ApiResponse<ProjectSaveRequest>.Ok(proj));
     }
 
@@ -166,24 +259,74 @@ public class ProjectsController : ControllerBase
     public IActionResult Create([FromBody] ProjectSaveRequest req)
     {
         using var c = _db.Open();
+
+        // Il codice arriva precompilato dal client (progressivo della giornata): se nel frattempo
+        // qualcun altro ha creato la stessa commessa, meglio un errore chiaro che due codici uguali
+        // (projects.code non ha un indice UNIQUE).
+        bool codeTaken = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM projects WHERE code = @Code", new { req.Code }) > 0;
+        if (codeTaken)
+        {
+            return Ok(ApiResponse<int>.Fail(
+                $"Il codice {req.Code} è già usato da un'altra commessa: riapri il dialogo per avere il numero successivo."));
+        }
+
         using var trx = c.BeginTransaction();
         int newId;
         try
         {
+            // `server_path` NON si prende dal body: lo scrive il server subito dopo il commit
+            // (riga più sotto), da BasePath + anno + codice. Prima entrava da qui e veniva
+            // sovrascritto — ma solo se `CopyToProject` non lanciava: al primo errore il catch
+            // ingoiava l'eccezione e restava dentro il percorso scelto dal chiamante, che è la
+            // radice del problema descritto nella #63 (la cartella documenti è l'unica barriera
+            // che protegge i file, e non deve poterla scegliere il client).
             newId = c.ExecuteScalar<int>(@"
         INSERT INTO projects (code,title,customer_id,pm_id,description,start_date,end_date_planned,budget_total,budget_hours_total,revenue,status,priority,server_path,notes)
-        VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,@ServerPath,@Notes);
+        VALUES (@Code,@Title,@CustomerId,@PmId,@Description,@StartDate,@EndDatePlanned,@BudgetTotal,@BudgetHoursTotal,@Revenue,@Status,@Priority,'',@Notes);
         SELECT LAST_INSERT_ID()", req, trx);
 
             // Crea fasi di default
+            // v73 — le fasi nascono da COPPIE (fase, sezione): «Call Cliente» agganciata sia a
+            // Program Manager sia a Progettazione entra DUE volte, una per sezione, così le ore
+            // restano separate nel Bilancio. La sezione si scrive sulla riga: prima si deduceva
+            // dal template, e con una fase su più sezioni quella deduzione non esiste più.
+            // Solo sezioni ATTIVE: sono le stesse che ProjectCostingController porta dentro la
+            // commessa, e una fase su una sezione spenta resterebbe appesa a una sezione assente.
             if (req.CreateDefaultPhases)
             {
-                var templates = c.Query("SELECT id, department_id, sort_order FROM phase_templates WHERE is_default=1 ORDER BY sort_order", transaction: trx);
-                foreach (var t in templates)
+                var defaults = c.Query(@"
+                    SELECT pt.id AS template_id, pt.department_id, pts.cost_section_template_id AS section_id
+                    FROM phase_template_sections pts
+                    JOIN phase_templates pt ON pt.id = pts.phase_template_id
+                    JOIN cost_section_templates cst ON cst.id = pts.cost_section_template_id
+                    LEFT JOIN cost_section_groups g ON g.id = cst.group_id
+                    WHERE pts.is_default = 1 AND cst.is_active = 1
+                    ORDER BY g.sort_order, cst.sort_order, pts.sort_order", transaction: trx);
+
+                // Fasi «trasversali»: predefinite ma senza nessuna sezione. Restano com'erano —
+                // toglierle è una decisione di anagrafica, non tecnica (vedi PIANO-FASI-MULTISEZIONE.md §7).
+                var crossPhases = c.Query(@"
+                    SELECT pt.id AS template_id, pt.department_id, NULL AS section_id
+                    FROM phase_templates pt
+                    WHERE pt.is_default = 1
+                      AND NOT EXISTS (SELECT 1 FROM phase_template_sections s WHERE s.phase_template_id = pt.id)
+                    ORDER BY pt.sort_order", transaction: trx);
+
+                int sort = 0;
+                foreach (var t in defaults.Concat(crossPhases))
                 {
-                    c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, department_id, sort_order)
-                    VALUES (@ProjId, @TplId, @DeptId, @Sort)",
-                        new { ProjId = newId, TplId = (int)t.id, DeptId = (int?)t.department_id, Sort = (int)t.sort_order }, trx);
+                    sort++;
+                    c.Execute(@"INSERT INTO project_phases (project_id, phase_template_id, cost_section_template_id, department_id, sort_order)
+                    VALUES (@ProjId, @TplId, @SecId, @DeptId, @Sort)",
+                        new
+                        {
+                            ProjId = newId,
+                            TplId = (int)t.template_id,
+                            SecId = (int?)t.section_id,
+                            DeptId = (int?)t.department_id,
+                            Sort = sort
+                        }, trx);
                 }
             }
 
@@ -211,14 +354,75 @@ public class ProjectsController : ControllerBase
             Console.WriteLine($"[Projects] Warning: errore post-creazione commessa {req.Code}: {ex.Message}");
         }
 
+        NotifyProjectsChanged("create", newId, req.Code);
         return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
+    /// <summary>
+    /// La cartella documenti richiesta sta sotto la cartella base configurata (<c>BasePath</c>)?
+    ///
+    /// Serve perché <c>server_path</c> è l'<b>unica</b> barriera che protegge i documenti: tutte
+    /// le action file si limitano a controllare che il file richiesto stia dentro quel percorso,
+    /// quindi chi può riscriverlo sposta la barriera dove vuole. Provato il 13/08/2026 con
+    /// un'utenza da tecnico: percorso ripuntato sulla cartella del server → la sezione Documenti
+    /// elencava 98 file e <c>appsettings.Secrets.json</c> si scaricava (segnalazione #63).
+    ///
+    /// La radice stessa non è ammessa: punterebbe la commessa sull'elenco di TUTTE le commesse.
+    /// </summary>
+    private bool IsUnderBasePath(string candidate)
+    {
+        try
+        {
+            string root = Path.GetFullPath(_db.GetConfig("BasePath", @"C:\ATEC_Commesse"));
+            string relative = Path.GetRelativePath(root, Path.GetFullPath(candidate));
+            return relative != "."
+                && !relative.StartsWith("..", StringComparison.Ordinal)
+                && !Path.IsPathRooted(relative);
+        }
+        catch
+        {
+            return false; // percorso malformato (caratteri non validi, UNC irrisolvibile…)
+        }
+    }
+
+    // ⚠️ `action.edit_project` («Modifica Commessa», livello 2) esisteva in auth_features dal
+    // principio ma non era usata da NESSUNA parte, né qui né nel client. Applicarla qui non
+    // toglie niente a nessuno: il pulsante «Modifica» che apre questo salvataggio sta dentro la
+    // Dashboard Commessa (`project.dettagli`, livello 2), quindi dall'interfaccia la modifica era
+    // già dei soli PM/ADMIN — era l'API a essere aperta a chiunque fosse autenticato.
+    [RequireFeature("action.edit_project")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] ProjectSaveRequest req)
     {
         using var c = _db.Open();
         req.Id = id;
+
+        string percorsoAttuale = c.ExecuteScalar<string?>(
+            "SELECT server_path FROM projects WHERE id=@Id", new { Id = id }) ?? "";
+
+        // Il percorso si può cambiare solo restando dentro la cartella base. Un percorso
+        // INVARIATO passa sempre: il client rimanda il valore che ha letto, e una commessa
+        // storica finita fuori base non deve diventare impossibile da salvare.
+        if (!string.IsNullOrWhiteSpace(req.ServerPath)
+            && !string.Equals(req.ServerPath.Trim(), percorsoAttuale.Trim(), StringComparison.OrdinalIgnoreCase)
+            && !IsUnderBasePath(req.ServerPath))
+        {
+            string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
+            return Ok(ApiResponse<int>.Fail(
+                $"La cartella documenti dev'essere dentro «{basePath}»: il percorso indicato è fuori e non è stato salvato."));
+        }
+
+        // Stesso controllo della POST: `projects.code` non ha un indice UNIQUE, quindi senza
+        // questa guardia una rinomina può creare due commesse con lo stesso codice (e il codice
+        // è la chiave con cui si agganciano DDP, import e cartelle sul server).
+        bool codeTaken = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM projects WHERE code = @Code AND id <> @Id",
+            new { req.Code, Id = id }) > 0;
+        if (codeTaken)
+        {
+            return Ok(ApiResponse<int>.Fail(
+                $"Il codice {req.Code} è già usato da un'altra commessa: scegline un altro."));
+        }
 
         // Leggi stato precedente per confronto
         string oldStatus = c.ExecuteScalar<string?>(
@@ -229,21 +433,180 @@ public class ProjectsController : ControllerBase
             budget_total=@BudgetTotal,budget_hours_total=@BudgetHoursTotal,revenue=@Revenue,
             status=@Status,priority=@Priority,server_path=@ServerPath,notes=@Notes WHERE id=@Id", req);
 
+        // L'ordine può essere scomposto in posizioni (project_order_lines) e `revenue` ne è la
+        // somma: senza questa riconciliazione il campo «Ricavo» della scheda commessa e il
+        // Totale Ordine del Bilancio direbbero due numeri diversi.
+        //  - una sola posizione → il valore digitato qui la aggiorna;
+        //  - più posizioni → l'ordine si modifica solo dalla tabella, quindi `revenue` torna
+        //    alla somma delle righe e il campo della scheda viene ignorato.
+        ReconcileOrderLinesWithRevenue(c, id, req.Revenue);
+
         // Notifica a tutti i dipendenti se la commessa cambia stato operativo
         if (oldStatus != req.Status && req.Status is "ACTIVE" or "ON_HOLD" or "CANCELLED")
         {
             NotifyProjectStatusChange(id, req.Code, req.Status);
         }
 
+        NotifyProjectsChanged("update", id, req.Code);
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
+    /// <summary>
+    /// Cambio di <b>solo stato</b> dalla colonna «Stato» della Dashboard (#88). La PUT completa
+    /// riscrive tutta la commessa e chiede <c>action.edit_project</c>: per girare una tendina
+    /// serviva un endpoint che tocchi una colonna sola.
+    /// <para><b>Chi può</b>: la chiave della #88 («Opera su commesse sospese o chiuse»), perché
+    /// ogni transizione reale ha uno stato bloccato da almeno un lato — mettere in stand-by,
+    /// chiudere, riaprire, pubblicare una bozza sono tutti gesti da PM/amministratore.</para>
+    /// <para><b>CANCELLED è rifiutato</b>: è il soft delete dell'eliminazione, che ha il suo
+    /// percorso (DELETE) con la conferma davanti. Da una tendina di stato non si cancella.</para>
+    /// </summary>
+    [RequireFeature(ProjectWriteGuard.OverrideFeature)]
+    [HttpPatch("{id}/status")]
+    public IActionResult UpdateStatus(int id, [FromBody] string status)
+    {
+        string nuovo = (status ?? "").Trim().ToUpperInvariant();
+        string[] ammessi =
+        {
+            ATEC.PM.Shared.ProjectStatuses.Draft, ATEC.PM.Shared.ProjectStatuses.Active,
+            ATEC.PM.Shared.ProjectStatuses.OnHold, ATEC.PM.Shared.ProjectStatuses.Completed,
+        };
+        if (!ammessi.Contains(nuovo))
+            return Ok(ApiResponse<int>.Fail($"Stato non valido: {status}"));
+
+        using var c = _db.Open();
+        var riga = c.QueryFirstOrDefault<(string Code, string Status)>(
+            "SELECT code AS Code, status AS Status FROM projects WHERE id = @Id", new { Id = id });
+        if (riga.Code == null) return NotFound(ApiResponse<int>.Fail("Non trovato"));
+        if (string.Equals(riga.Status, nuovo, StringComparison.OrdinalIgnoreCase))
+            return Ok(ApiResponse<int>.Ok(id, "Stato invariato"));
+
+        c.Execute("UPDATE projects SET status = @Status WHERE id = @Id",
+            new { Status = nuovo, Id = id });
+
+        // Stessa campanella della PUT: il passaggio operativo (attiva/sospesa) interessa tutti.
+        if (nuovo is "ACTIVE" or "ON_HOLD")
+            NotifyProjectStatusChange(id, riga.Code, nuovo);
+
+        NotifyProjectsChanged("update", id, riga.Code);
+        return Ok(ApiResponse<int>.Ok(id, "Stato aggiornato"));
+    }
+
+    /// <summary>
+    /// Promozione di un'<b>Altra Attività</b> a commessa (#88, rivista con la #89): il client
+    /// apre il dialog di configurazione precompilato dall'attività e arriva qui con
+    /// l'anagrafica completa rivista dall'utente. Il codice nuovo lo genera comunque il
+    /// server (<see cref="ProjectCodeGenerator"/>, progressivo della giornata): scriverlo a
+    /// mano riaprirebbe la porta ai codici doppi che il generatore esiste per evitare.
+    /// <para>Il codice vecchio non si perde: la nota storica la scrive il server in testa alle
+    /// note inviate dal dialog (lasciata al client si perderebbe alla prima modifica del campo).
+    /// È l'unico posto che sopravvive alla rinomina — DDP, SAL e documenti si agganciano per
+    /// id, non per codice.</para>
+    /// <para><c>server_path</c> resta quello dell'attività (il dialog lo mostra disabilitato):
+    /// la barriera dei documenti si sposta solo dalla PUT, che ha la validazione
+    /// <see cref="IsUnderBasePath"/> davanti.</para>
+    /// <para>Stessa chiave della #88: la segnalazione mette questo gesto nello stesso elenco di
+    /// privilegi «solo PM e Amministratore» del cancello.</para>
+    /// </summary>
+    [RequireFeature(ProjectWriteGuard.OverrideFeature)]
+    [HttpPost("{id}/promote-to-commessa")]
+    public IActionResult PromoteToCommessa(int id, [FromBody] ProjectSaveRequest req)
+    {
+        string nuovoStato = (req.Status ?? "").Trim().ToUpperInvariant();
+        string[] ammessi =
+        {
+            ATEC.PM.Shared.ProjectStatuses.Draft, ATEC.PM.Shared.ProjectStatuses.Active,
+            ATEC.PM.Shared.ProjectStatuses.OnHold, ATEC.PM.Shared.ProjectStatuses.Completed,
+        };
+        if (!ammessi.Contains(nuovoStato))
+            return Ok(ApiResponse<string>.Fail($"Stato non valido: {req.Status}"));
+        if (string.IsNullOrWhiteSpace(req.Title))
+            return Ok(ApiResponse<string>.Fail("Il titolo è obbligatorio."));
+
+        using var c = _db.Open();
+        var riga = c.QueryFirstOrDefault<(string Code, string Status)>(
+            "SELECT code AS Code, status AS Status FROM projects WHERE id = @Id",
+            new { Id = id });
+        if (riga.Code == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+
+        if (ProjectSorting.HasCommessaCode(riga.Code))
+            return Ok(ApiResponse<string>.Fail($"{riga.Code} è già un codice commessa: non c'è niente da promuovere."));
+
+        using var tx = c.BeginTransaction();
+        string nuovoCodice = ProjectCodeGenerator.Next(c, tx);
+        string nota = $"Promossa a commessa il {DateTime.Now:dd/MM/yyyy}: prima si chiamava «{riga.Code}».";
+        c.Execute(@"UPDATE projects SET code = @Code, title = @Title, customer_id = @CustomerId,
+                        pm_id = @PmId, description = @Description, start_date = @StartDate,
+                        end_date_planned = @EndDatePlanned, budget_total = @BudgetTotal,
+                        budget_hours_total = @BudgetHoursTotal, revenue = @Revenue,
+                        status = @Status, priority = @Priority,
+                        notes = TRIM(CONCAT(@Nota, '\n', COALESCE(@Notes,'')))
+                    WHERE id = @Id",
+            new
+            {
+                Code = nuovoCodice, req.Title, req.CustomerId, req.PmId, req.Description,
+                req.StartDate, req.EndDatePlanned, req.BudgetTotal, req.BudgetHoursTotal,
+                req.Revenue, Status = nuovoStato, req.Priority, Nota = nota, req.Notes, Id = id,
+            }, tx);
+        tx.Commit();
+
+        // Stessa riconciliazione della PUT: l'attività può avere già righe d'ordine dal Bilancio.
+        ReconcileOrderLinesWithRevenue(c, id, req.Revenue);
+
+        // Stessa campanella della PUT: il passaggio operativo (attiva/sospesa) interessa tutti.
+        if (!string.Equals(riga.Status, nuovoStato, StringComparison.OrdinalIgnoreCase)
+            && nuovoStato is "ACTIVE" or "ON_HOLD")
+            NotifyProjectStatusChange(id, nuovoCodice, nuovoStato);
+
+        NotifyProjectsChanged("update", id, nuovoCodice);
+        return Ok(ApiResponse<string>.Ok(nuovoCodice, $"Ora è la commessa {nuovoCodice}"));
+    }
+
+    /// <summary>
+    /// Order price della commessa. Dal 04/08/2026 l'ordine può essere scomposto in posizioni
+    /// (project_order_lines) e <c>revenue</c> ne è la somma: per non far divergere i due numeri
+    /// questo endpoint scrive ANCHE sulla riga d'ordine quando ce n'è una sola, e si rifiuta di
+    /// scrivere quando le posizioni sono più di una (lì l'ordine si modifica dalla tabella).
+    /// </summary>
     [HttpPatch("{id}/revenue")]
     public IActionResult UpdateRevenue(int id, [FromBody] decimal value)
     {
         using var c = _db.Open();
+
+        int lineCount = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM project_order_lines WHERE project_id=@Id", new { Id = id });
+        if (lineCount > 1)
+            return Ok(ApiResponse<bool>.Fail(
+                "L'ordine è scomposto in più posizioni: modificalo dalla tabella «Ordine Commessa» del Bilancio."));
+
         c.Execute("UPDATE projects SET revenue=@Val WHERE id=@Id", new { Val = value, Id = id });
+        ReconcileOrderLinesWithRevenue(c, id, value);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>
+    /// Tiene insieme <c>projects.revenue</c> e le righe di <c>project_order_lines</c> dopo una
+    /// scrittura che ha toccato il solo <c>revenue</c>. Con una riga sola la riga segue il
+    /// valore; con più righe vince la tabella e <c>revenue</c> torna alla loro somma. Senza
+    /// righe non fa nulla: la commessa non ha ancora aperto il Bilancio e resta com'era.
+    /// </summary>
+    private static void ReconcileOrderLinesWithRevenue(IDbConnection c, int projectId, decimal revenue)
+    {
+        var lineIds = c.Query<int>(
+            "SELECT id FROM project_order_lines WHERE project_id=@Id ORDER BY sort_order, id",
+            new { Id = projectId }).ToList();
+
+        if (lineIds.Count == 0) return;
+
+        if (lineIds.Count == 1)
+        {
+            c.Execute(
+                "UPDATE project_order_lines SET amount=@Val, row_version = row_version + 1 WHERE id=@LineId",
+                new { Val = revenue, LineId = lineIds[0] });
+            return;
+        }
+
+        ProjectEconomics.SyncRevenueFromOrderLines(c, projectId);
     }
 
     [HttpDelete("{id}")]
@@ -254,7 +617,24 @@ public class ProjectsController : ControllerBase
             "SELECT code FROM projects WHERE id=@Id", new { Id = id }) ?? "";
         c.Execute("UPDATE projects SET status='CANCELLED' WHERE id=@Id", new { Id = id });
         NotifyProjectStatusChange(id, projCode, "CANCELLED");
+        // L'eliminazione è un soft delete → CANCELLED: per gli elenchi (che mostrano solo
+        // le aperte) la commessa sparisce, quindi vale come "delete" anche per i client.
+        NotifyProjectsChanged("delete", id, projCode);
         return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    // Anagrafica commesse cambiata (creata / modificata / eliminata): avvisa il gruppo globale
+    // "projects-all" così tutti gli elenchi aperti dai colleghi si ricaricano da soli.
+    // Fire-and-forget, niente self-exclusion: chi ha fatto la modifica ricarica comunque già.
+    private void NotifyProjectsChanged(string action, int projectId, string code)
+    {
+        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup)
+            .SendAsync("ProjectsChanged", new ProjectChange
+            {
+                ProjectId = projectId,
+                Action = action,
+                Code = code
+            });
     }
 
     private void NotifyProjectStatusChange(int projectId, string projectCode, string newStatus)
@@ -294,6 +674,7 @@ public class ProjectsController : ControllerBase
     /// DELETE /api/projects/{id}/hard — Cancellazione definitiva: DB (CASCADE) + cartelle + ripristino offerta.
     /// </summary>
     [HttpDelete("{id}/hard")]
+    [RequireFeature("action.delete_project")]
     public IActionResult HardDelete(int id)
     {
         try
@@ -371,26 +752,16 @@ public class ProjectsController : ControllerBase
     }
 
     // --- CODICE AUTO ---
+    /// <summary>Codice proposto per una nuova commessa: C{aaaammgg}.{progressivo del giorno}.</summary>
     [HttpGet("next-code")]
     public IActionResult NextCode()
     {
         using var c = _db.Open();
-        var year = DateTime.Now.Year;
-        var prefix = $"AT{year}";
-        // Cerchiamo l'ultimo numero progressivo per l'anno in corso
-        var maxCode = c.ExecuteScalar<string>("SELECT MAX(code) FROM projects WHERE code LIKE @Pref", new { Pref = prefix + "%" });
-
-        int next = 1;
-        if (!string.IsNullOrEmpty(maxCode) && maxCode.Length > prefix.Length)
-        {
-            var suffix = maxCode.Replace(prefix, "");
-            if (int.TryParse(suffix, out var n))
-                next = n + 1;
-        }
-        return Ok(ApiResponse<string>.Ok($"{prefix}{next:D3}"));
+        return Ok(ApiResponse<string>.Ok(ProjectCodeGenerator.Next(c)));
     }
 
     // --- FILE SYSTEM ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/create-folder")]
     public IActionResult CreateFolder(int id)
     {
@@ -413,6 +784,7 @@ public class ProjectsController : ControllerBase
         return Ok(ApiResponse<string>.Ok(fullPath));
     }
 
+    [RequireFeature("project.documenti")]
     [HttpGet("{id}/files")]
     public IActionResult GetFiles(int id, [FromQuery] string? subPath)
     {
@@ -431,7 +803,7 @@ public class ProjectsController : ControllerBase
 
             // CONTROLLO DI SICUREZZA: Impedisce il "Path Traversal"
             // Verifica che il percorso risultante sia ancora all'interno di serverPath
-            if (!targetPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+            if (!IsPathAllowed(serverPath, targetPath))
             {
                 return BadRequest(ApiResponse<string>.Fail("Accesso negato al percorso specificate fuori dalla root di progetto."));
             }
@@ -480,6 +852,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    [RequireFeature("project.documenti")]
     [HttpGet("{id}/file-tree")]
     public IActionResult GetFileTree(int id)
     {
@@ -526,7 +899,48 @@ public class ProjectsController : ControllerBase
         return items;
     }
 
+    /// <summary>
+    /// Il percorso richiesto sta davvero dentro la cartella della commessa, fuori dall'area Chat?
+    /// È l'unica barriera che protegge i documenti una volta concesso <c>project.documenti</c>,
+    /// quindi qui stanno insieme i due controlli che prima erano sparsi e incoerenti
+    /// (segnalazione #63, Fase 1):
+    /// <list type="number">
+    /// <item><b>Confine della commessa.</b> I confronti precedenti usavano
+    /// <c>StartsWith(root)</c> senza separatore finale — e due su otto erano pure
+    /// case-sensitive — quindi una cartella sorella con lo stesso prefisso (…\C001 accanto a
+    /// …\C0011) superava il controllo. Qui il confronto è sul percorso RELATIVO: fuori dalla
+    /// radice <c>GetRelativePath</c> restituisce un percorso che risale (<c>..</c>) o assoluto.</item>
+    /// <item><b>Area Chat.</b> Gli allegati dei messaggi vivono in
+    /// <c>&lt;cartella commessa&gt;\Chat\{chatId}</c>. L'elenco file la saltava confrontando il
+    /// NOME della cartella al livello che stava elencando: bastava chiedere
+    /// <c>?subPath=Chat/12</c> per scendere dentro e scaricare gli allegati delle chat private
+    /// senza avere <c>project.chat</c> — e saltando l'unico controllo di partecipazione del
+    /// modulo, quello di <c>ChatController.GetAttachment</c>. Il confronto sul percorso relativo
+    /// chiude l'ingresso a qualunque profondità.</item>
+    /// </list>
+    /// </summary>
+    private static bool IsPathAllowed(string serverPath, string candidatePath)
+    {
+        string root = Path.GetFullPath(serverPath);
+        string full = Path.GetFullPath(candidatePath);
+
+        string relative = Path.GetRelativePath(root, full);
+
+        // Fuori dalla radice: GetRelativePath risale con ".." o resta assoluto (altro disco).
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+            return false;
+
+        if (relative == ".") return true; // è la radice stessa
+
+        string firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        return !firstSegment.Equals(ChatFolderName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Cartella degli allegati chat dentro la commessa: non passa mai dai Documenti.</summary>
+    private const string ChatFolderName = "Chat";
+
     // --- DOWNLOAD FILE ---
+    [RequireFeature("project.documenti")]
     [HttpGet("{id}/download")]
     public IActionResult DownloadFile(int id, [FromQuery] string path)
     {
@@ -540,8 +954,7 @@ public class ProjectsController : ControllerBase
 
         // Sicurezza: verifica che il path sia dentro la cartella commessa
         var normalizedFull = Path.GetFullPath(fullPath);
-        var normalizedRoot = Path.GetFullPath(serverPath);
-        if (!normalizedFull.StartsWith(normalizedRoot))
+        if (!IsPathAllowed(serverPath, normalizedFull))
             return BadRequest("Path non valido");
 
         if (!System.IO.File.Exists(fullPath))
@@ -583,6 +996,7 @@ public class ProjectsController : ControllerBase
 
 
     // --- PREVIEW EXCEL/CSV → HTML ---
+    [RequireFeature("project.documenti")]
     [HttpGet("{id}/preview")]
     public IActionResult PreviewFile(int id, [FromQuery] string path)
     {
@@ -593,8 +1007,7 @@ public class ProjectsController : ControllerBase
         if (string.IsNullOrEmpty(serverPath)) return NotFound("Cartella non trovata");
 
         var fullPath = Path.GetFullPath(Path.Combine(serverPath, path));
-        var normalizedRoot = Path.GetFullPath(serverPath);
-        if (!fullPath.StartsWith(normalizedRoot)) return BadRequest("Path non valido");
+        if (!IsPathAllowed(serverPath, fullPath)) return BadRequest("Path non valido");
         if (!System.IO.File.Exists(fullPath)) return NotFound("File non trovato");
 
         var ext = Path.GetExtension(fullPath).ToLower();
@@ -836,7 +1249,13 @@ public class ProjectsController : ControllerBase
     public IActionResult LookupCustomers()
     {
         using var c = _db.Open();
-        var rows = c.Query<LookupItem>("SELECT id AS Id, company_name AS Name FROM customers WHERE is_active=1 ORDER BY company_name").ToList();
+        // Il cliente tecnico «ATEC — Sistema» esiste solo per la commessa INTERNA:
+        // non deve essere assegnabile a una commessa vera.
+        var rows = c.Query<LookupItem>(@"
+            SELECT id AS Id, company_name AS Name FROM customers
+            WHERE is_active=1 AND (vat_number IS NULL OR vat_number <> @SystemVat)
+            ORDER BY company_name",
+            new { SystemVat = ATEC.PM.Shared.SystemProjects.SystemCustomerVat }).ToList();
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
     }
 
@@ -915,6 +1334,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- DDP (Distinta Di Produzione) ---
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
     [HttpGet("{id}/ddp")]
     public IActionResult GetDdpItems(int id, [FromQuery] string type = "COMMERCIAL")
     {
@@ -937,10 +1357,17 @@ public class ProjectsController : ControllerBase
                    b.destination_spec AS DestinationSpec, COALESCE(b.notes,'') AS Notes,
                    -- Codice ATEC effettivo: snapshot di riga, altrimenti mapping vivo dell'articolo.
                    b.ddp_type AS DdpType, COALESCE(NULLIF(b.atec_code,''), ci.atec_code, '') AS AtecCode,
-                   b.created_at AS CreatedAt, b.updated_at AS UpdatedAt
+                   b.created_by AS CreatedById,
+                   COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
+                   b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,
+                   -- «Consegnato il»: ultimo passaggio a DISP nella cronistoria della riga.
+                   (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
+                     WHERE ev.item_type = 'COMMERCIAL' AND ev.item_id = b.id
+                       AND ev.to_status = 'DISP') AS DeliveredAt
             FROM bom_items b
             LEFT JOIN suppliers s ON s.id = b.supplier_id
             LEFT JOIN catalog_items ci ON ci.id = b.catalog_item_id
+            LEFT JOIN employees e ON e.id = b.created_by
             WHERE b.project_id = @Id AND b.ddp_type = @Type
             ORDER BY b.id", new { Id = id, Type = type }).ToList();
             foreach (BomItemListItem row in rows)
@@ -955,6 +1382,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
     [HttpPost("{id}/ddp")]
     public IActionResult AddDdpItem(int id, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -965,26 +1393,33 @@ public class ProjectsController : ControllerBase
 
             // Finestra di partenza (riga INIZIO della matrice, per tipo): sulla commerciale
             // esclude DC — il materiale commerciale si acquista, non si costruisce.
-            string? startError = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeCommercial, null, req.ItemStatus);
+            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, null, req.ItemStatus, _cache);
             if (startError != null)
                 return BadRequest(ApiResponse<int>.Fail(startError));
 
             // Normalizza atec_code senza punti (formato DB Codex).
             req.AtecCode = (req.AtecCode ?? "").Replace(".", "").Trim();
 
+            int? createdBy = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
+
             var newId = c.ExecuteScalar<int>(@"
             INSERT INTO bom_items
                 (project_id, catalog_item_id, part_number, description, unit, quantity,
                  unit_cost, supplier_id, manufacturer, item_status, requested_by,
                  danea_ref, date_needed, destination, destination_spec, notes, ddp_type,
-                 atec_code, updated_at)
+                 atec_code, created_by, updated_at)
             VALUES
                 (@ProjectId, @CatalogItemId, @PartNumber, @Description, @Unit, @Quantity,
-                 @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, @RequestedBy,
+                 @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, COALESCE(@RequestedBy,''),
                  @DaneaRef, @DateNeeded, @Destination, @DestinationSpec, @Notes, @DdpType,
-                 NULLIF(@AtecCode,''), NOW());
-            SELECT LAST_INSERT_ID()", req);
+                 NULLIF(@AtecCode,''), @CreatedBy, NOW());
+            SELECT LAST_INSERT_ID()", new
+            {
+                req.ProjectId, req.CatalogItemId, req.PartNumber, req.Description, req.Unit, req.Quantity,
+                req.UnitCost, req.SupplierId, req.Manufacturer, req.ItemStatus, req.RequestedBy,
+                req.DaneaRef, req.DateNeeded, req.Destination, req.DestinationSpec, req.Notes, req.DdpType,
+                req.AtecCode, CreatedBy = createdBy
+            });
 
             NotifyDdpChange(id, conn, "create", newId);
             return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
@@ -995,6 +1430,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
     [HttpPut("{id}/ddp/{itemId}")]
     public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1023,8 +1459,7 @@ public class ProjectsController : ControllerBase
             // Matrice degli avanzamenti di stato (v7, tipo COMMERCIAL): il server rifiuta le
             // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
             // client vecchi e modifiche concorrenti).
-            string? transitionError = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus);
+            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus, _cache);
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
 
@@ -1049,6 +1484,9 @@ public class ProjectsController : ControllerBase
                 -- SET di MySQL sono applicate in ordine, qui danea_ref è ancora quello vecchio).
                 danea_order_iddoc = IF(COALESCE(danea_ref,'') <> @DaneaRef, NULL, danea_order_iddoc),
                 danea_ref = @DaneaRef, date_needed = @DateNeeded,
+                -- «Inserito da» (#61): NULL = il chiamante non gestisce il campo → autore
+                -- invariato. Per svuotarlo si manda la stringa vuota.
+                requested_by = COALESCE(@RequestedBy, requested_by),
                 destination = @Destination, destination_spec = @DestinationSpec,
                 supplier_id = IF(@UpdateSupplier OR @UpdateCatalogSnapshot, @SupplierId, supplier_id),
                 catalog_item_id = IF(@UpdateCatalogSnapshot, @CatalogItemId, catalog_item_id),
@@ -1061,8 +1499,15 @@ public class ProjectsController : ControllerBase
                 manufacturer = IF(@UpdateCatalogSnapshot, @Manufacturer, manufacturer),
                 atec_code = IF(@UpdateCatalogSnapshot OR LENGTH(@AtecCode) > 0,
                                NULLIF(@AtecCode,''), atec_code),
-                notes = @Notes, updated_at = NOW()
-            WHERE id = @Id AND project_id = @ProjectId", req);
+                notes = @Notes, updated_at = NOW(),
+                -- Firma dell'ultima modifica (#114): la card «DDP Commesse» della Dashboard
+                -- elenca le distinte toccate DA ALTRI, e senza autore non saprebbe distinguerle.
+                updated_by = @UpdatedBy
+            WHERE id = @Id AND project_id = @ProjectId", ConFirma(req));
+
+            // Cronistoria: da qui esce il «consegnato il …» e la storia completa della riga.
+            DdpItemEvents.Registra(c, DdpItemEvents.Commerciale, itemId, id,
+                oldStatus, req.ItemStatus, User, log: _logger);
 
             // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
             string projStatus = c.ExecuteScalar<string?>(
@@ -1114,6 +1559,14 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    // Cancellazione DEFINITIVA della riga commerciale (l'annullo è un cambio stato → ANN
+    // sulla PUT, non passa di qui): serve la chiave `action.delete_ddp_row`, la stessa della
+    // gemella officina. Fino alla Fase E il freno era solo il menu del client, che ora la
+    // chiave sostituisce anche sull'API. I due [RequireFeature] sono filtri distinti e si
+    // sommano in AND: vedere la distinta E poter cancellare. Dentro il primo attributo la
+    // chiave sarebbe finita in OR con le altre tre, cioè avrebbe aperto il cancello.
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
+    [RequireFeature("action.delete_ddp_row")]
     [HttpDelete("{id}/ddp/{itemId}")]
     public IActionResult DeleteDdpItem(int id, int itemId, [FromQuery] string? conn = null)
     {
@@ -1134,6 +1587,7 @@ public class ProjectsController : ControllerBase
     // --- DDP OFFICINA (distinta particolari meccanici, tabella dedicata ddp_officina_items) ---
     // Stesso contratto della DDP commerciale (concorrenza ottimistica, real-time, notifiche cambio stato),
     // ma campi del template officina: Codice 101, Materiale, Trattamento, fornitore testuale.
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
     [HttpGet("{id}/ddp-officina")]
     public IActionResult GetOfficinaItems(int id)
     {
@@ -1142,23 +1596,36 @@ public class ProjectsController : ControllerBase
             using var c = _db.Open();
             // COALESCE su tutte le colonne testo nullable: righe storiche/importate possono
             // avere NULL (lo schema lo permette) e un null manderebbe in crash le combo web.
+            // 🪤 Le colonne vanno qualificate con l'alias `o`: da quando c'è il LEFT JOIN su
+            // `employees` (colonna «Creata da»), quattro nomi esistono in ENTRAMBE le tabelle —
+            // id, supplier_id, created_at, updated_at — e MySQL rifiuta la query con
+            // «Column '...' in field list is ambiguous». Non si vedeva in sviluppo perché questa
+            // action incapsula l'errore in un ApiResponse.Fail dentro un HTTP 200: uno smoke che
+            // guarda solo il codice di stato la dà per buona. La query gemella delle DDP
+            // commerciali non ne soffriva perché usa già l'alias `b`.
             var rows = c.Query<OfficinaItemListItem>(@"
-            SELECT id, project_id AS ProjectId, COALESCE(part_number,'') AS PartNumber,
-                   COALESCE(description,'') AS Description,
-                   quantity, quantity_produced AS QuantityProduced,
-                   unit_cost AS UnitCost, COALESCE(material,'') AS Material,
-                   COALESCE(treatment,'') AS Treatment,
-                   supplier_id AS SupplierId, COALESCE(supplier_name,'') AS SupplierName,
-                   COALESCE(item_status,'') AS ItemStatus,
-                   COALESCE(requested_by,'') AS RequestedBy, COALESCE(danea_ref,'') AS DaneaRef,
-                   date_needed AS DateNeeded, order_date AS OrderDate,
-                   COALESCE(destination,'') AS Destination,
-                   destination_spec AS DestinationSpec, COALESCE(notes,'') AS Notes,
-                   parent_officina_item_id AS ParentOfficinaItemId, composition_qty AS CompositionQty,
-                   created_at AS CreatedAt, updated_at AS UpdatedAt
-            FROM ddp_officina_items
-            WHERE project_id = @Id
-            ORDER BY id", new { Id = id }).ToList();
+            SELECT o.id, o.project_id AS ProjectId, COALESCE(o.part_number,'') AS PartNumber,
+                   COALESCE(o.description,'') AS Description,
+                   o.quantity, o.quantity_produced AS QuantityProduced,
+                   o.work_hours AS WorkHours, o.hourly_rate AS HourlyRate,
+                   o.unit_cost AS UnitCost, COALESCE(o.material,'') AS Material,
+                   COALESCE(o.treatment,'') AS Treatment,
+                   o.supplier_id AS SupplierId, COALESCE(o.supplier_name,'') AS SupplierName,
+                   COALESCE(o.item_status,'') AS ItemStatus,
+                   COALESCE(o.work_type,'') AS WorkType,
+                   COALESCE(o.requested_by,'') AS RequestedBy, COALESCE(o.danea_ref,'') AS DaneaRef,
+                   o.date_needed AS DateNeeded, o.order_date AS OrderDate,
+                   o.delivered_at AS DeliveredAt,
+                   COALESCE(o.destination,'') AS Destination,
+                   o.destination_spec AS DestinationSpec, COALESCE(o.notes,'') AS Notes,
+                   o.parent_officina_item_id AS ParentOfficinaItemId, o.composition_qty AS CompositionQty,
+                   o.created_by AS CreatedById,
+                   COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
+                   o.created_at AS CreatedAt, o.updated_at AS UpdatedAt
+            FROM ddp_officina_items o
+            LEFT JOIN employees e ON e.id = o.created_by
+            WHERE o.project_id = @Id
+            ORDER BY o.id", new { Id = id }).ToList();
 
             return Ok(ApiResponse<List<OfficinaItemListItem>>.Ok(rows));
         }
@@ -1168,6 +1635,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
     [HttpPost("{id}/ddp-officina")]
     public IActionResult AddOfficinaItem(int id, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1177,8 +1645,7 @@ public class ProjectsController : ControllerBase
             req.ProjectId = id;
 
             // Finestra di partenza (riga INIZIO della matrice, tipo OFFICINA).
-            string? startError = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeOfficina, null, req.ItemStatus);
+            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, null, req.ItemStatus, _cache);
             if (startError != null)
                 return BadRequest(ApiResponse<int>.Fail(startError));
 
@@ -1188,20 +1655,28 @@ public class ProjectsController : ControllerBase
             {
                 req.OrderDate = DateTime.Today;
             }
+            int? createdBy = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
             var newId = c.ExecuteScalar<int>(@"
             INSERT INTO ddp_officina_items
-                (project_id, part_number, description, quantity, unit_cost, material,
+                (project_id, part_number, description, quantity, work_hours, hourly_rate, unit_cost, material,
                  treatment, supplier_id, supplier_name, item_status, requested_by, danea_ref,
-                 date_needed, order_date, destination, destination_spec, notes, updated_at)
+                 date_needed, order_date, delivered_at, destination, destination_spec, notes, created_by, updated_at)
             VALUES
-                (@ProjectId, @PartNumber, @Description, @Quantity, @UnitCost, @Material,
-                 @Treatment, @SupplierId, @SupplierName, @ItemStatus, @RequestedBy, @DaneaRef,
-                 @DateNeeded, @OrderDate, @Destination, @DestinationSpec, @Notes, NOW());
-            SELECT LAST_INSERT_ID()", req);
+                (@ProjectId, @PartNumber, @Description, @Quantity, @WorkHours, @HourlyRate, @UnitCost, @Material,
+                 @Treatment, @SupplierId, @SupplierName, @ItemStatus, COALESCE(@RequestedBy,''), @DaneaRef,
+                 @DateNeeded, @OrderDate, @DeliveredAt, @Destination, @DestinationSpec, @Notes, @CreatedBy, NOW());
+            SELECT LAST_INSERT_ID()", new
+            {
+                req.ProjectId, req.PartNumber, req.Description, req.Quantity, req.WorkHours, req.HourlyRate, req.UnitCost,
+                req.Material, req.Treatment, req.SupplierId, req.SupplierName, req.ItemStatus, req.RequestedBy,
+                req.DaneaRef, req.DateNeeded, req.OrderDate, req.DeliveredAt, req.Destination, req.DestinationSpec, req.Notes,
+                CreatedBy = createdBy
+            });
 
-            // Ogni riga officina genera la sua bozza di lavorazione (Pannello Lavorazioni).
-            WorkRequestDdpSync.SyncResult? sync = WorkRequestDdpSync.Upsert(c, newId);
-            if (sync != null) NotifyWorkRequestsChanged("create", sync.ProjectId);
+            // Niente più bozze da generare (#83): la riga si vede in Lavorazioni Officine dov'è.
+            // Resta il congelamento del Tipo, su cui si reggono Bilancio e viste Interne/Esterne.
+            OfficinaRowSync.CongelaTipoDaStato(c, newId);
+            NotifyWorkRequestsChanged("create", id);
 
             NotifyDdpChange(id, conn, "create", newId, "OFFICINA");
             return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
@@ -1217,6 +1692,7 @@ public class ProjectsController : ControllerBase
     // righe della DDP officina con snapshot codice/descrizione/costo/fornitore, stato DO.
     // Dedup per codice normalizzato (senza punti): se il figlio è già in distinta si somma la
     // quantità della composizione alla riga esistente. I figli da Catalogo vengono saltati e contati.
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
     [HttpPost("{id}/ddp-officina/import-composition")]
     public IActionResult ImportOfficinaComposition(int id, [FromBody] OfficinaImportCompositionRequest req, [FromQuery] string? conn = null)
     {
@@ -1266,6 +1742,7 @@ public class ProjectsController : ControllerBase
             }
 
             var result = new OfficinaImportCompositionResult { ParentQuantity = parentQty };
+            int? createdByComp = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
             foreach (OfficinaCompositionChild child in children)
             {
                 // I figli da Catalogo (preventivi) non sono particolari d'officina: saltati e contati.
@@ -1280,10 +1757,10 @@ public class ProjectsController : ControllerBase
                                 quantity = quantity + @Add,
                                 parent_officina_item_id = COALESCE(parent_officina_item_id, @ParentRowId),
                                 composition_qty = COALESCE(composition_qty, @CompQty),
-                                updated_at = NOW()
+                                updated_at = NOW(), updated_by = @UpdatedBy
                                 WHERE id = @Id",
-                        new { Add = child.Quantity * parentQty, ParentRowId = parentRowId, CompQty = (decimal)child.Quantity, Id = existingId });
-                    WorkRequestDdpSync.Upsert(c, existingId);
+                        new { Add = child.Quantity * parentQty, ParentRowId = parentRowId, CompQty = (decimal)child.Quantity, Id = existingId, UpdatedBy = createdByComp });
+                    OfficinaRowSync.CongelaTipoDaStato(c, existingId);
                     result.Updated++;
                 }
                 else
@@ -1293,12 +1770,12 @@ public class ProjectsController : ControllerBase
                         (project_id, part_number, description, quantity, unit_cost, material,
                          treatment, supplier_name, item_status, requested_by, danea_ref,
                          date_needed, destination, destination_spec, notes,
-                         parent_officina_item_id, composition_qty, updated_at)
+                         parent_officina_item_id, composition_qty, created_by, updated_at)
                     VALUES
                         (@ProjectId, @PartNumber, @Description, @Quantity, @UnitCost, '',
                          '', @SupplierName, 'DO', @RequestedBy, '',
                          NULL, '', '', '',
-                         @ParentRowId, @CompQty, NOW());
+                         @ParentRowId, @CompQty, @CreatedBy, NOW());
                     SELECT LAST_INSERT_ID()", new
                     {
                         ProjectId = id,
@@ -1309,10 +1786,10 @@ public class ProjectsController : ControllerBase
                         SupplierName = child.Fornitore,
                         RequestedBy = req.RequestedBy,
                         ParentRowId = parentRowId,
-                        CompQty = (decimal)child.Quantity
+                        CompQty = (decimal)child.Quantity,
+                        CreatedBy = createdByComp
                     });
-                    // Ogni riga officina genera la sua bozza di lavorazione (Pannello Lavorazioni).
-                    WorkRequestDdpSync.Upsert(c, newId);
+                    OfficinaRowSync.CongelaTipoDaStato(c, newId);
                     existingByCode[key] = newId;
                     result.Added++;
                 }
@@ -1344,6 +1821,7 @@ public class ProjectsController : ControllerBase
         public bool IsCatalog { get; set; }
     }
 
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
     [HttpPut("{id}/ddp-officina/{itemId}")]
     public IActionResult UpdateOfficinaItem(int id, int itemId, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1363,10 +1841,12 @@ public class ProjectsController : ControllerBase
                         "Riga modificata da un altro utente nel frattempo. Ricarica e riprova."));
             }
 
-            // Leggi stato, quantità e order_date precedenti (notifiche + «comanda il padre» + auto IO)
-            (string? ItemStatus, decimal Quantity, int? ParentOfficinaItemId, DateTime? OrderDate) before =
-                c.QueryFirstOrDefault<(string?, decimal, int?, DateTime?)>(
-                "SELECT item_status, quantity, parent_officina_item_id, order_date FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
+            // Leggi stato, quantità, order_date e delivered_at precedenti
+            // (notifiche + «comanda il padre» + auto IO / Consegnato il).
+            (string? ItemStatus, decimal Quantity, int? ParentOfficinaItemId, DateTime? OrderDate, DateTime? DeliveredAt) before =
+                c.QueryFirstOrDefault<(string?, decimal, int?, DateTime?, DateTime?)>(
+                @"SELECT item_status, quantity, parent_officina_item_id, order_date, delivered_at
+                  FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
             string? oldStatus = before.ItemStatus;
 
@@ -1374,8 +1854,7 @@ public class ProjectsController : ControllerBase
             // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
             // client vecchi e modifiche concorrenti). Gli auto-avanzamenti successivi
             // (pezzi prodotti → PAR/DISP) sono transizioni di sistema già coerenti con la matrice.
-            string? transitionError = DdpTransitionService.Validate(
-                c, DdpTransitionService.TypeOfficina, oldStatus, req.ItemStatus);
+            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, oldStatus, req.ItemStatus, _cache);
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
 
@@ -1419,18 +1898,59 @@ public class ProjectsController : ControllerBase
                     req.ItemStatus = "PAR";
             }
 
+            // Auto-fill «Consegnato il» (#82): solo al PASSAGGIO in chiusura positiva
+            // (CON / COS / DISP), se ancora vuota → oggi. Se la riga è già chiusa non si
+            // reimpone (così si può svuotare o correggere a mano senza che torni da sola).
+            bool closingPositive =
+                string.Equals(req.ItemStatus, "CON", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(req.ItemStatus, "COS", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(req.ItemStatus, "DISP", StringComparison.OrdinalIgnoreCase);
+            bool wasClosing =
+                string.Equals(oldStatus, "CON", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(oldStatus, "COS", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(oldStatus, "DISP", StringComparison.OrdinalIgnoreCase);
+            if (closingPositive && !wasClosing
+                && !req.DeliveredAt.HasValue && !before.DeliveredAt.HasValue)
+            {
+                req.DeliveredAt = DateTime.Today;
+            }
+
             req.Id = itemId;
             req.ProjectId = id;
             c.Execute(@"
             UPDATE ddp_officina_items SET
                 quantity = @Quantity, quantity_produced = @QuantityProduced,
+                -- Stessa regola di work_type: NULL = il chiamante non gestisce il campo →
+                -- ore invariate. Sono parecchi i punti che salvano una riga officina
+                -- (picker Codex, inbox officina, celle in griglia) e nessuno di loro deve
+                -- cancellare le ore per il fatto di non conoscerle. Per azzerarle si scrive 0.
+                work_hours = COALESCE(@WorkHours, work_hours),
+                -- Stessa regola: la tariffa oraria scelta (#87) resta com'è se il chiamante non la manda.
+                hourly_rate = COALESCE(@HourlyRate, hourly_rate),
                 unit_cost = @UnitCost, material = @Material,
                 treatment = @Treatment, supplier_id = @SupplierId, supplier_name = @SupplierName,
-                item_status = @ItemStatus, danea_ref = @DaneaRef, date_needed = @DateNeeded,
-                order_date = @OrderDate,
+                item_status = @ItemStatus,
+                -- NULL = il chiamante non gestisce il campo → classificazione invariata.
+                work_type = COALESCE(@WorkType, work_type),
+                -- «Inserito da» (#61): stessa regola, NULL = autore invariato.
+                requested_by = COALESCE(@RequestedBy, requested_by),
+                danea_ref = @DaneaRef,
+                -- «Data Richiesta» NON si tocca da qui (#83): la decide chi programma il
+                -- lavoro, dalla pagina Lavorazioni Officine, e da lì si riporta sulla riga.
+                -- Restava scrivibile in distinta, e due padroni sulla stessa data significa
+                -- che l'ultimo che salva vince — anche solo riaprendo e chiudendo il dialogo.
+                -- Alla creazione della riga la data si mette ancora (POST qui sopra).
+                order_date = @OrderDate, delivered_at = @DeliveredAt,
                 destination = @Destination, destination_spec = @DestinationSpec,
-                notes = @Notes, updated_at = NOW()
-            WHERE id = @Id AND project_id = @ProjectId", req);
+                notes = @Notes, updated_at = NOW(),
+                -- Firma dell'ultima modifica (#114): la card «DDP Commesse» della Dashboard
+                -- elenca le distinte toccate DA ALTRI, e senza autore non saprebbe distinguerle.
+                updated_by = @UpdatedBy
+            WHERE id = @Id AND project_id = @ProjectId", ConFirma(req));
+
+            // Cronistoria della riga di officina (stessa logica della distinta commerciale).
+            DdpItemEvents.Registra(c, DdpItemEvents.Officina, itemId, id,
+                oldStatus, req.ItemStatus, User, log: _logger);
 
             if (req.UpdateCodexPrice == true && !string.IsNullOrWhiteSpace(req.PartNumber))
             {
@@ -1447,6 +1967,7 @@ public class ProjectsController : ControllerBase
             if (!string.IsNullOrEmpty(oldStatus) && req.Quantity != before.Quantity)
             {
                 decimal delta = req.Quantity - before.Quantity;
+                int? firmaFiglio = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
                 var excluded = c.Query<string>(@"
                     SELECT s.status_key FROM ddp_aggregation_states s
                     JOIN ddp_aggregations a ON a.id = s.aggregation_id
@@ -1460,9 +1981,11 @@ public class ProjectsController : ControllerBase
                 foreach (int childId in childIds)
                 {
                     c.Execute(@"UPDATE ddp_officina_items
-                        SET quantity = GREATEST(0, quantity + composition_qty * @Delta), updated_at = NOW()
-                        WHERE id = @Id", new { Delta = delta, Id = childId });
-                    WorkRequestDdpSync.Upsert(c, childId);
+                        SET quantity = GREATEST(0, quantity + composition_qty * @Delta),
+                            updated_at = NOW(), updated_by = @UpdatedBy
+                        WHERE id = @Id",
+                        new { Delta = delta, Id = childId, UpdatedBy = firmaFiglio });
+                    OfficinaRowSync.CongelaTipoDaStato(c, childId);
                 }
                 if (childIds.Count > 0) NotifyWorkRequestsChanged("update", id);
             }
@@ -1499,9 +2022,10 @@ public class ProjectsController : ControllerBase
                 catch { /* non bloccare l'update per errore notifica */ }
             }
 
-            // Riallinea i campi derivati della lavorazione collegata (o crea la bozza se manca).
-            WorkRequestDdpSync.SyncResult? sync = WorkRequestDdpSync.Upsert(c, itemId);
-            if (sync != null) NotifyWorkRequestsChanged(sync.Created ? "create" : "update", sync.ProjectId);
+            // Lo stato può essere appena cambiato: se ora rivela la natura del lavoro, si congela.
+            // La riga si vede in Lavorazioni Officine, quindi chi ha quella pagina aperta va avvisato.
+            OfficinaRowSync.CongelaTipoDaStato(c, itemId);
+            NotifyWorkRequestsChanged("update", id);
 
             // Real-time: avvisa gli altri che guardano la distinta officina di questa commessa.
             NotifyDdpChange(id, conn, "update", itemId, "OFFICINA");
@@ -1518,11 +2042,17 @@ public class ProjectsController : ControllerBase
     }
 
     // Cancellazione DEFINITIVA della riga (diversa dall'annullo, che è un cambio stato):
-    // riservata ad ADMIN e PM, esposta nel menu riga della griglia officina.
+    // serve la chiave `action.delete_ddp_row`, esposta nel menu riga della griglia officina.
+    // I due [RequireFeature] sono filtri distinti e si sommano in AND: devi poter vedere la
+    // distinta (una delle tre chiavi di sezione) E avere la concessione di cancellazione.
+    // Mettere la chiave nuova dentro il primo attributo l'avrebbe messa in OR con le altre,
+    // cioè avrebbe aperto il cancello invece di stringerlo.
     // «Comanda il padre» anche qui: eliminare un padre elimina in cascata i componenti
     // importati dalla sua composizione (ognuno con la propria bozza in staging).
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
+    [RequireFeature("action.delete_ddp_row")]
     [HttpDelete("{id}/ddp-officina/{itemId}")]
-    [Authorize(Roles = "ADMIN,PM")]
+    [Authorize]
     public IActionResult DeleteOfficinaItem(int id, int itemId, [FromQuery] string? conn = null)
     {
         try
@@ -1538,19 +2068,15 @@ public class ProjectsController : ControllerBase
             var childIds = c.Query<int>(
                 "SELECT id FROM ddp_officina_items WHERE parent_officina_item_id = @Pid AND project_id = @Id",
                 new { Pid = itemId, Id = id }).ToList();
-            bool anyStagingDeleted = false;
             foreach (int childId in childIds)
-            {
-                anyStagingDeleted |= WorkRequestDdpSync.DeleteStagingFor(c, childId).HasValue;
                 c.Execute("DELETE FROM ddp_officina_items WHERE id = @Id", new { Id = childId });
-            }
 
-            // La bozza in staging segue la riga; le lavorazioni promosse restano
-            // (la FK ON DELETE SET NULL le scollega alla cancellazione della riga).
-            anyStagingDeleted |= WorkRequestDdpSync.DeleteStagingFor(c, itemId).HasValue;
+            // Niente bozze da portarsi dietro (#83): la riga eliminata sparisce da Lavorazioni
+            // Officine perché non esiste più. Le eventuali lavorazioni storiche collegate
+            // restano, scollegate dalla FK ON DELETE SET NULL.
             c.Execute("DELETE FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
-            if (anyStagingDeleted) NotifyWorkRequestsChanged("delete", id);
+            NotifyWorkRequestsChanged("delete", id);
             NotifyDdpChange(id, conn, "delete", itemId, "OFFICINA");
             return Ok(ApiResponse<bool>.Ok(true, childIds.Count > 0
                 ? $"Eliminata riga + {childIds.Count} componenti collegati"
@@ -1564,6 +2090,24 @@ public class ProjectsController : ControllerBase
 
     [HttpGet("{id}/dashboard")]
     public IActionResult GetDashboard(int id)
+    {
+        try
+        {
+            ProjectDashboardData? data = BuildProjectDashboard(id);
+            if (data == null) return NotFound(ApiResponse<string>.Fail("Commessa non trovata"));
+            return Ok(ApiResponse<ProjectDashboardData>.Ok(data));
+        }
+        catch (Exception ex)
+        {
+            // Mai un 500 nudo: il client mostrerebbe solo "Internal Server Error" e il motivo
+            // resterebbe sepolto nel log del server. Meglio il messaggio vero in pagina.
+            _logger.LogError(ex, "[Dashboard] Commessa {ProjectId}: calcolo dashboard fallito", id);
+            return Ok(ApiResponse<ProjectDashboardData>.Fail($"Dashboard non disponibile: {ex.Message}"));
+        }
+    }
+
+    /// <summary>Calcola la dashboard della commessa. <c>null</c> se la commessa non esiste.</summary>
+    private ProjectDashboardData? BuildProjectDashboard(int id)
     {
         using var c = _db.Open();
 
@@ -1582,16 +2126,19 @@ public class ProjectsController : ControllerBase
             LEFT JOIN employees pm ON pm.id = p.pm_id
             WHERE p.id = @Id", new { Id = id });
 
-        if (data == null) return NotFound(ApiResponse<string>.Fail("Commessa non trovata"));
+        if (data == null) return null;
 
         // Ore lavorate totali + costo consuntivo
         // Fallback robusto: priorità is_primary, poi is_responsible, poi qualsiasi reparto (MIN id).
-        var totals = c.QueryFirstOrDefault<dynamic>(@"
+        // Extra Lavoro (#39): fuori le ore che il PM ha tolto dalla contabilità della commessa,
+        // o questa card direbbe un numero e il Bilancio un altro — sulla stessa schermata.
+        var totals = c.QueryFirstOrDefault<dynamic>($@"
     SELECT COALESCE(SUM(te.hours), 0) AS HoursWorked,
            COALESCE(SUM(te.hours * COALESCE(d.hourly_cost, 0)), 0) AS CostWorked
     FROM timesheet_entries te
     JOIN employees e ON e.id = te.employee_id
     JOIN project_phases pp ON pp.id = te.project_phase_id
+    {ProjectEconomics.ExtraWorkJoin}
     LEFT JOIN (
         SELECT employee_id, department_id,
                ROW_NUMBER() OVER (PARTITION BY employee_id
@@ -1599,14 +2146,14 @@ public class ProjectsController : ControllerBase
         FROM employee_departments
     ) ed ON ed.employee_id = e.id AND ed.rn = 1
     LEFT JOIN departments d ON d.id = ed.department_id
-    WHERE pp.project_id = @Id", new { Id = id });
+    WHERE pp.project_id = @Id AND {ProjectEconomics.ExtraWorkCounts}", new { Id = id });
 
         data.HoursWorked = (decimal)(totals?.HoursWorked ?? 0m);
         data.CostWorked = (decimal)(totals?.CostWorked ?? 0m);
 
         // Costo materiali DDP — esclude solo gli stati «esclusi da totale» (aggregazione A9);
         // i materiali consegnati (A2) SONO un costo reale e restano nel totale.
-        string[] ddpExcluded = DdpAggregationSet.Load(c, "A9");
+        string[] ddpExcluded = DdpAggregationSet.Load(c, "A9", _cache);
         decimal materialCostCommercial = c.ExecuteScalar<decimal>(@"
             SELECT COALESCE(SUM(quantity * unit_cost), 0)
             FROM bom_items
@@ -1623,26 +2170,56 @@ public class ProjectsController : ControllerBase
         data.MaterialCostCommercial = materialCostCommercial;
         data.MaterialCostOfficina = materialCostOfficina;
         data.MaterialCost = materialCostCommercial + materialCostOfficina;
-        data.TotalCost = data.CostWorked + data.MaterialCost;
+
+        // La trasferta a consuntivo fa parte del costo totale: senza, il MARGINE del tab
+        // Dettagli risultava più alto della Redditività del conto economico, che la include.
+        // Stessa regola del conto economico e di /bilancio: se la trasferta è compilata a righe
+        // (blocco 6) il costo lo dice il suo foglio, altrimenti il valore digitato a mano.
+        data.TravelCost = c.ExecuteScalar<decimal?>(
+            $"SELECT {TravelPlanService.ActualTravelCostSql} FROM projects p WHERE p.id=@Id",
+            new { Id = id }) ?? 0;
+        data.TotalCost = data.CostWorked + data.MaterialCost + data.TravelCost;
 
         // Conteggio fasi
         var phaseCounts = c.QueryFirstOrDefault<dynamic>(@"
+            -- Le fasi spente (#51) stanno fuori dall'elenco e dal Timesheet: contarle
+            -- al denominatore dell'avanzamento vorrebbe dire chiedere di completare
+            -- fasi che nessuno vede più.
             SELECT COUNT(*) AS Total,
                    SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END) AS Completed
-            FROM project_phases WHERE project_id = @Id", new { Id = id });
+            FROM project_phases WHERE is_off = 0 AND project_id = @Id", new { Id = id });
 
         data.TotalPhases = (int)(phaseCounts?.Total ?? 0);
         data.CompletedPhases = (int)(phaseCounts?.Completed ?? 0);
 
         // Riepilogo per reparto — 3 livelli: Preventivate / Assegnate / Lavorate
-        // Ore preventivate dal costing (per reparto della sezione costo → template → reparti)
+        // Ore preventivate: le ore della sezione si SPEZZANO sui reparti collegati allo
+        // snapshot di sezione (fallback al template). Prima il JOIN le ripeteva intere su
+        // ogni reparto (segnalazione #74): Prev MEC+INS sulla stessa sezione valeva 2×.
         var costingByDept = c.Query<(string Code, string Name, decimal Hours)>(@"
-            SELECT d.code, d.name, SUM(r.work_days * r.hours_per_day) AS Hours
+            SELECT d.code, d.name,
+                   ROUND(SUM(r.work_days * r.hours_per_day / NULLIF(dc.cnt, 0)), 2) AS Hours
             FROM project_cost_resources r
             JOIN project_cost_sections pcs ON pcs.id = r.section_id
-            JOIN cost_section_templates cst ON cst.id = pcs.template_id
-            JOIN cost_section_template_departments cstd ON cstd.section_template_id = cst.id
-            JOIN departments d ON d.id = cstd.department_id
+            JOIN (
+                SELECT section_id, department_id, cnt FROM (
+                    SELECT pcsd.project_cost_section_id AS section_id,
+                           pcsd.department_id,
+                           COUNT(*) OVER (PARTITION BY pcsd.project_cost_section_id) AS cnt
+                    FROM project_cost_section_departments pcsd
+                ) proj
+                UNION ALL
+                SELECT pcs2.id AS section_id, cstd.department_id,
+                       COUNT(*) OVER (PARTITION BY pcs2.id) AS cnt
+                FROM project_cost_sections pcs2
+                JOIN cost_section_template_departments cstd
+                  ON cstd.section_template_id = pcs2.template_id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM project_cost_section_departments x
+                    WHERE x.project_cost_section_id = pcs2.id
+                )
+            ) dc ON dc.section_id = pcs.id
+            JOIN departments d ON d.id = dc.department_id
             WHERE pcs.project_id = @Id AND pcs.is_enabled = 1
             GROUP BY d.code, d.name", new { Id = id }).ToList();
 
@@ -1666,7 +2243,9 @@ public class ProjectsController : ControllerBase
             GROUP BY COALESCE(d.code, ed.code, 'TRASV'), COALESCE(d.name, ed.name, 'Trasversale')", new { Id = id }).ToList();
 
         // Fasi, completamento, ore lavorate, materiali
-        var phasesByDept = c.Query<DeptSummary>(@"
+        // Extra Lavoro (#39): le ore tolte dalla commessa escono anche da qui, o il grafico
+        // «Lavorato per reparto» non somma più al totale della card «Ore totali».
+        var phasesByDept = c.Query<DeptSummary>($@"
             SELECT dept_code AS DepartmentCode, dept_name AS DepartmentName,
                    SUM(HoursWorked) AS HoursWorked,
                    SUM(TotalPhases) AS TotalPhases, SUM(CompletedPhases) AS CompletedPhases,
@@ -1675,9 +2254,14 @@ public class ProjectsController : ControllerBase
                 -- Fasi con reparto
                 SELECT COALESCE(d.code, 'TRASV') AS dept_code,
                        COALESCE(d.name, 'Trasversale') AS dept_name,
-                       COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
-                       1 AS TotalPhases,
-                       CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
+                       COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te
+                                 {ProjectEconomics.ExtraWorkJoin}
+                                 WHERE te.project_phase_id = pp.id
+                                   AND {ProjectEconomics.ExtraWorkCounts}), 0) AS HoursWorked,
+                       -- Le fasi spente restano fuori dal conteggio, come nella card
+                       -- «Avanzamento»: le ore però ci sono ancora, e restano contate.
+                       CASE WHEN pp.is_off = 1 THEN 0 ELSE 1 END AS TotalPhases,
+                       CASE WHEN pp.status='COMPLETED' AND pp.is_off = 0 THEN 1 ELSE 0 END AS CompletedPhases,
                        COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND COALESCE(b.item_status,'') NOT IN @Excluded), 0) AS MaterialCost
                 FROM project_phases pp
                 LEFT JOIN departments d ON d.id = pp.department_id
@@ -1685,25 +2269,17 @@ public class ProjectsController : ControllerBase
 
                 UNION ALL
 
-                -- Fasi senza department_id: ore attribuite al PRIMO reparto della sezione di costo della fase
-                -- (snapshot-aware: usa pp.cost_section_template_id, fallback su phase_templates).
-                -- Se la sezione non ha reparti o la fase non ha sezione → fallback al reparto primario del dipendente.
-                SELECT COALESCE(dsec.code, ed.code, 'TRASV') AS dept_code,
-                       COALESCE(dsec.name, ed.name, 'Trasversale') AS dept_name,
+                -- Fasi senza department_id (casi tipici in produzione): non usare MIN(department_id)
+                -- della sezione — con sezioni multi-reparto scaricava tutto sul primo id
+                -- (segnalazione #74: «Installazione elettrica» di Tomasi/INS finiva in MEC).
+                -- Ordine: reparto primario del dipendente SE è tra quelli della sezione;
+                -- altrimenti il primario comunque; altrimenti il primo della sezione; altrimenti TRASV.
+                SELECT COALESCE(d_match.code, ed.code, dsec.code, 'TRASV') AS dept_code,
+                       COALESCE(d_match.name, ed.name, dsec.name, 'Trasversale') AS dept_name,
                        te.hours AS HoursWorked,
                        0 AS TotalPhases, 0 AS CompletedPhases, 0 AS MaterialCost
                 FROM timesheet_entries te
                 JOIN project_phases pp ON pp.id = te.project_phase_id
-                LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
-                LEFT JOIN project_cost_sections pcs
-                     ON pcs.project_id = pp.project_id
-                    AND pcs.template_id = COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)
-                LEFT JOIN (
-                    SELECT pcsd.project_cost_section_id, MIN(pcsd.department_id) AS department_id
-                    FROM project_cost_section_departments pcsd
-                    GROUP BY pcsd.project_cost_section_id
-                ) firstdept ON firstdept.project_cost_section_id = pcs.id
-                LEFT JOIN departments dsec ON dsec.id = firstdept.department_id
                 LEFT JOIN (
                     SELECT employee_id, department_id,
                            ROW_NUMBER() OVER (PARTITION BY employee_id
@@ -1711,41 +2287,112 @@ public class ProjectsController : ControllerBase
                     FROM employee_departments
                 ) empd ON empd.employee_id = te.employee_id AND empd.rn = 1
                 LEFT JOIN departments ed ON ed.id = empd.department_id
+                LEFT JOIN project_cost_sections pcs
+                     ON pcs.project_id = pp.project_id
+                    AND pcs.template_id = pp.cost_section_template_id
+                LEFT JOIN project_cost_section_departments pcsd_match
+                     ON pcsd_match.project_cost_section_id = pcs.id
+                    AND pcsd_match.department_id = empd.department_id
+                LEFT JOIN departments d_match ON d_match.id = pcsd_match.department_id
+                LEFT JOIN (
+                    SELECT pcsd.project_cost_section_id, MIN(pcsd.department_id) AS department_id
+                    FROM project_cost_section_departments pcsd
+                    GROUP BY pcsd.project_cost_section_id
+                ) firstdept ON firstdept.project_cost_section_id = pcs.id
+                LEFT JOIN departments dsec ON dsec.id = firstdept.department_id
+                {ProjectEconomics.ExtraWorkJoin}
                 WHERE pp.project_id = @Id AND pp.department_id IS NULL
+                  AND {ProjectEconomics.ExtraWorkCounts}
 
                 UNION ALL
 
-                -- Fasi trasversali: conteggio fasi (come Trasversale)
-                SELECT 'TRASV' AS dept_code, 'Trasversale' AS dept_name,
+                -- Fasi senza reparto proprio: il reparto si ricava con la STESSA cascata
+                -- del ramo delle ore qui sopra (segnalazione #107), così fasi e ore di
+                -- una stessa fase cadono sullo stesso reparto.
+                -- Prima finivano tutte su 'TRASV': con l'anagrafica attività di oggi
+                -- `project_phases.department_id` nasce NULL (BulkCreate non lo scrive e
+                -- `phase_templates.department_id` è vuoto su tutti i template), quindi il
+                -- conteggio fasi di OGNI reparto risultava 0/0 e un reparto che in
+                -- anagrafica non esiste si prendeva tutte le fasi della commessa, con
+                -- zero ore — mentre le ore andavano ai reparti veri.
+                -- Ordine: reparto della persona assegnata alla fase se è fra quelli della
+                -- sezione; altrimenti il suo reparto principale; altrimenti il primo
+                -- reparto della sezione; altrimenti TRASV (fase senza sezione e senza
+                -- nessuno assegnato). Una fase conta SEMPRE una volta sola: spezzarla in
+                -- frazioni sui reparti della sezione scriverebbe «3,5 fasi su 7».
+                SELECT COALESCE(d_match2.code, ed2.code, dsec2.code, 'TRASV') AS dept_code,
+                       COALESCE(d_match2.name, ed2.name, dsec2.name, 'Trasversale') AS dept_name,
                        0 AS HoursWorked,
-                       1 AS TotalPhases,
-                       CASE WHEN pp.status='COMPLETED' THEN 1 ELSE 0 END AS CompletedPhases,
+                       CASE WHEN pp.is_off = 1 THEN 0 ELSE 1 END AS TotalPhases,
+                       CASE WHEN pp.status='COMPLETED' AND pp.is_off = 0 THEN 1 ELSE 0 END AS CompletedPhases,
                        COALESCE((SELECT SUM(b.quantity * b.unit_cost) FROM bom_items b WHERE b.project_phase_id = pp.id AND COALESCE(b.item_status,'') NOT IN @Excluded), 0) AS MaterialCost
                 FROM project_phases pp
+                LEFT JOIN (
+                    SELECT project_phase_id, employee_id,
+                           ROW_NUMBER() OVER (PARTITION BY project_phase_id ORDER BY id) AS rn
+                    FROM phase_assignments
+                ) pa1 ON pa1.project_phase_id = pp.id AND pa1.rn = 1
+                LEFT JOIN (
+                    SELECT employee_id, department_id,
+                           ROW_NUMBER() OVER (PARTITION BY employee_id
+                                              ORDER BY is_primary DESC, is_responsible DESC, id) AS rn
+                    FROM employee_departments
+                ) empd2 ON empd2.employee_id = pa1.employee_id AND empd2.rn = 1
+                LEFT JOIN departments ed2 ON ed2.id = empd2.department_id
+                LEFT JOIN project_cost_sections pcs2b
+                       ON pcs2b.project_id = pp.project_id
+                      AND pcs2b.template_id = pp.cost_section_template_id
+                LEFT JOIN project_cost_section_departments pcsd_match2
+                       ON pcsd_match2.project_cost_section_id = pcs2b.id
+                      AND pcsd_match2.department_id = empd2.department_id
+                LEFT JOIN departments d_match2 ON d_match2.id = pcsd_match2.department_id
+                LEFT JOIN (
+                    SELECT pcsd.project_cost_section_id, MIN(pcsd.department_id) AS department_id
+                    FROM project_cost_section_departments pcsd
+                    GROUP BY pcsd.project_cost_section_id
+                ) firstdept2 ON firstdept2.project_cost_section_id = pcs2b.id
+                LEFT JOIN departments dsec2 ON dsec2.id = firstdept2.department_id
                 WHERE pp.project_id = @Id AND pp.department_id IS NULL
             ) sub
             GROUP BY dept_code, dept_name", new { Id = id, Excluded = ddpExcluded }).ToList();
 
-        // Merge: unisci costing + assigned + fasi in un unico elenco per reparto
-        HashSet<string> allDepts = phasesByDept.Select(p => p.DepartmentCode)
-            .Union(costingByDept.Select(c2 => c2.Code))
-            .Union(assignedByDept.Select(a => a.Code))
-            .ToHashSet();
+        // Merge: unisci costing + assigned + fasi in un unico elenco per reparto.
+        // Tollerante ai duplicati: due righe con lo STESSO codice reparto (capita con reparti
+        // dal codice NULL/vuoto, che ricadono su 'TRASV' insieme alle fasi trasversali) vanno
+        // sommate — con ToDictionary sarebbero un'eccezione e quindi tutta la dashboard in errore.
+        static string DeptKey(string? code) =>
+            string.IsNullOrWhiteSpace(code) ? "TRASV" : code;
 
-        Dictionary<string, DeptSummary> deptMap = phasesByDept.ToDictionary(p => p.DepartmentCode);
-        foreach (string code in allDepts)
+        Dictionary<string, DeptSummary> deptMap = new();
+        foreach (DeptSummary row in phasesByDept)
         {
-            if (!deptMap.ContainsKey(code))
+            string code = DeptKey(row.DepartmentCode);
+            if (deptMap.TryGetValue(code, out DeptSummary? existing))
             {
-                string name = costingByDept.FirstOrDefault(x => x.Code == code).Name
-                    ?? assignedByDept.FirstOrDefault(x => x.Code == code).Name ?? code;
-                deptMap[code] = new DeptSummary { DepartmentCode = code, DepartmentName = name };
+                existing.HoursWorked += row.HoursWorked;
+                existing.TotalPhases += row.TotalPhases;
+                existing.CompletedPhases += row.CompletedPhases;
+                existing.MaterialCost += row.MaterialCost;
+                if (string.IsNullOrWhiteSpace(existing.DepartmentName))
+                    existing.DepartmentName = row.DepartmentName ?? code;
+            }
+            else
+            {
+                row.DepartmentCode = code;
+                row.DepartmentName = string.IsNullOrWhiteSpace(row.DepartmentName) ? code : row.DepartmentName;
+                deptMap[code] = row;
             }
         }
+        foreach (var (code, name, _) in costingByDept.Concat(assignedByDept))
+        {
+            string key = DeptKey(code);
+            if (!deptMap.ContainsKey(key))
+                deptMap[key] = new DeptSummary { DepartmentCode = key, DepartmentName = name ?? key };
+        }
         foreach (var (code, _, hours) in costingByDept)
-            if (deptMap.TryGetValue(code, out DeptSummary? ds)) ds.CostingHours += hours;
+            if (deptMap.TryGetValue(DeptKey(code), out DeptSummary? ds)) ds.CostingHours += hours;
         foreach (var (code, _, hours) in assignedByDept)
-            if (deptMap.TryGetValue(code, out DeptSummary? ds)) ds.AssignedHours += hours;
+            if (deptMap.TryGetValue(DeptKey(code), out DeptSummary? ds)) ds.AssignedHours += hours;
 
         // BudgetHours = costing come riferimento principale
         foreach (DeptSummary ds in deptMap.Values)
@@ -1767,45 +2414,64 @@ public class ProjectsController : ControllerBase
             ORDER BY te.work_date DESC, te.id DESC
             LIMIT 10", new { Id = id }).ToList();
 
-        // Tecnici assegnati alle fasi (non dal timesheet)
-        data.ActiveTechnicians = c.Query<ActiveTechSummary>(@"
+        // Tecnici assegnati alle fasi (non dal timesheet).
+        // REPARTO = primario della persona (#74): le fasi in produzione hanno spesso
+        // department_id NULL, e usare quello della fase lasciava il badge vuoto.
+        // «ORE LAV.»: stesse ore del totale della commessa, senza Extra Lavoro (#39).
+        data.ActiveTechnicians = c.Query<ActiveTechSummary>($@"
             SELECT CONCAT(e.first_name,' ',e.last_name) AS EmployeeName,
-                   COALESCE(d.code, '') AS DepartmentCode,
-                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te 
-                             WHERE te.employee_id = e.id 
-                             AND te.project_phase_id IN (SELECT pp2.id FROM project_phases pp2 WHERE pp2.project_id = @Id)), 0) AS TotalHours,
+                   COALESCE(ed.code, '') AS DepartmentCode,
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te
+                             {ProjectEconomics.ExtraWorkJoin}
+                             WHERE te.employee_id = e.id
+                             AND te.project_phase_id IN (SELECT pp2.id FROM project_phases pp2 WHERE pp2.project_id = @Id)
+                             AND {ProjectEconomics.ExtraWorkCounts}), 0) AS TotalHours,
                    COUNT(DISTINCT pa.project_phase_id) AS PhaseCount
             FROM phase_assignments pa
             JOIN employees e ON e.id = pa.employee_id
             JOIN project_phases pp ON pp.id = pa.project_phase_id
-            LEFT JOIN departments d ON d.id = pp.department_id
+            LEFT JOIN (
+                SELECT employee_id, department_id,
+                       ROW_NUMBER() OVER (PARTITION BY employee_id
+                                          ORDER BY is_primary DESC, is_responsible DESC, id) AS rn
+                FROM employee_departments
+            ) empd ON empd.employee_id = e.id AND empd.rn = 1
+            LEFT JOIN departments ed ON ed.id = empd.department_id
             WHERE pp.project_id = @Id
-            GROUP BY e.id, e.first_name, e.last_name, d.code
+            GROUP BY e.id, e.first_name, e.last_name, ed.code
             ORDER BY e.last_name", new { Id = id }).ToList();
 
         // ── Ore settimanali (ultime 12 settimane) ────────────────
-        data.WeeklyHours = c.Query<WeeklyHoursSummary>(@"
+        // Anche qui senza Extra Lavoro (#39): le barre devono sommare alle «Ore totali».
+        data.WeeklyHours = c.Query<WeeklyHoursSummary>($@"
             SELECT YEAR(te.work_date) AS Year,
                    WEEK(te.work_date, 1) AS Week,
                    SUM(te.hours) AS Hours,
                    CONCAT('S', WEEK(te.work_date, 1)) AS WeekLabel
             FROM timesheet_entries te
             JOIN project_phases pp ON pp.id = te.project_phase_id
+            {ProjectEconomics.ExtraWorkJoin}
             WHERE pp.project_id = @Id
+              AND {ProjectEconomics.ExtraWorkCounts}
               AND te.work_date >= DATE_SUB(CURDATE(), INTERVAL 12 WEEK)
-            GROUP BY YEAR(te.work_date), WEEK(te.work_date, 1)
+            GROUP BY YEAR(te.work_date), WEEK(te.work_date, 1),
+                     CONCAT('S', WEEK(te.work_date, 1))
             ORDER BY Year, Week", new { Id = id }).ToList();
 
         // ── Gantt fasi ───────────────────────────────────────────
         // Snapshot-aware: LEFT JOIN + fallback pp.name per fasi locali (phase_template_id NULL)
-        data.PhaseGantt = c.Query<PhaseGanttItem>(@"
+        // Ore per fase senza Extra Lavoro (#39), come già fa PhasesController sulla stessa cifra.
+        data.PhaseGantt = c.Query<PhaseGanttItem>($@"
             SELECT pp.id AS PhaseId,
                    COALESCE(NULLIF(pp.custom_name,''), pp.name, pt.name) AS PhaseName,
                    COALESCE(d.code, 'TRASV') AS DepartmentCode,
                    pp.status AS Status,
                    pp.progress_pct AS ProgressPct,
                    pp.budget_hours AS BudgetHours,
-                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te WHERE te.project_phase_id = pp.id), 0) AS HoursWorked,
+                   COALESCE((SELECT SUM(te.hours) FROM timesheet_entries te
+                             {ProjectEconomics.ExtraWorkJoin}
+                             WHERE te.project_phase_id = pp.id
+                               AND {ProjectEconomics.ExtraWorkCounts}), 0) AS HoursWorked,
                    pp.start_date AS StartDate,
                    pp.end_date AS EndDate,
                    pp.sort_order AS SortOrder
@@ -1832,11 +2498,12 @@ public class ProjectsController : ControllerBase
             ORDER BY pp.end_date ASC
             LIMIT 10", new { Id = id }).ToList();
 
-        return Ok(ApiResponse<ProjectDashboardData>.Ok(data));
+        return data;
     }
 
 
     // --- UPLOAD FILE ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/upload")]
     public async Task<IActionResult> UploadFile(int id, [FromQuery] string? subPath, IFormFile file)
     {
@@ -1852,7 +2519,7 @@ public class ProjectsController : ControllerBase
             ? serverPath
             : Path.GetFullPath(Path.Combine(serverPath, subPath));
 
-        if (!targetDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+        if (!IsPathAllowed(serverPath, targetDir))
             return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
 
         LongPathHelper.CreateDirectory(targetDir);
@@ -1877,6 +2544,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- UPLOAD MULTIPLO ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/upload-multiple")]
     public async Task<IActionResult> UploadMultiple(int id, [FromQuery] string? subPath, List<IFormFile> files)
     {
@@ -1892,7 +2560,7 @@ public class ProjectsController : ControllerBase
             ? serverPath
             : Path.GetFullPath(Path.Combine(serverPath, subPath));
 
-        if (!targetDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+        if (!IsPathAllowed(serverPath, targetDir))
             return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
 
         LongPathHelper.CreateDirectory(targetDir);
@@ -1919,6 +2587,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- CREA SOTTOCARTELLA ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/create-subfolder")]
     public IActionResult CreateSubfolder(int id, [FromBody] SubfolderRequest req)
     {
@@ -1931,7 +2600,7 @@ public class ProjectsController : ControllerBase
             ? serverPath
             : Path.GetFullPath(Path.Combine(serverPath, req.SubPath));
 
-        if (!parentDir.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+        if (!IsPathAllowed(serverPath, parentDir))
             return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
 
         string newFolder = Path.Combine(parentDir, req.FolderName);
@@ -1944,6 +2613,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- RINOMINA FILE/CARTELLA ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/rename")]
     public IActionResult RenameItem(int id, [FromBody] RenameRequest req)
     {
@@ -1956,7 +2626,7 @@ public class ProjectsController : ControllerBase
         string parentDir = Path.GetDirectoryName(oldPath) ?? serverPath;
         string newPath = Path.Combine(parentDir, req.NewName);
 
-        if (!oldPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+        if (!IsPathAllowed(serverPath, oldPath))
             return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
 
         if (LongPathHelper.DirectoryExists(oldPath))
@@ -1979,6 +2649,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- ELIMINA FILE/CARTELLA ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/delete-item")]
     public IActionResult DeleteItem(int id, [FromBody] DeleteItemRequest req)
     {
@@ -1989,7 +2660,7 @@ public class ProjectsController : ControllerBase
 
         string fullPath = Path.GetFullPath(Path.Combine(serverPath, req.ItemPath));
 
-        if (!fullPath.StartsWith(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase))
+        if (!IsPathAllowed(serverPath, fullPath))
             return BadRequest(ApiResponse<string>.Fail("Percorso non valido."));
 
         if (Path.GetFullPath(fullPath) == Path.GetFullPath(serverPath))
@@ -2007,6 +2678,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- SPOSTA FILE/CARTELLA ---
+    [RequireFeature("project.documenti")]
     [HttpPost("{id}/move-item")]
     public IActionResult MoveItem(int id, [FromBody] MoveItemRequest req)
     {

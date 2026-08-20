@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchCatalogItems } from "@/lib/api/catalog"
 import { createDdpRow, fetchDdpRows, updateDdpRow } from "@/lib/api/project-ddp"
 import type { CatalogItemListItem } from "@/lib/api/types"
@@ -265,12 +266,9 @@ export function CatalogPickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          className="min-h-0 flex-1 overflow-auto rounded-lg border [&>div]:overflow-visible"
-          onScroll={handleScroll}
-        >
+        <GridScroller fill className="rounded-lg border" onScroll={handleScroll}>
           <Table>
-            <TableHeader className="sticky top-0 z-20 bg-muted [&_th]:bg-muted">
+            <TableHeader>
 
               <TableRow className="hover:bg-transparent">
                 {COLUMNS.map((column) => (
@@ -370,7 +368,7 @@ export function CatalogPickerDialog({
               Caricamento…
             </p>
           ) : null}
-        </div>
+        </GridScroller>
 
         <DialogFooter className="sm:justify-between">
           <div className="flex flex-1 items-center gap-3 text-sm">

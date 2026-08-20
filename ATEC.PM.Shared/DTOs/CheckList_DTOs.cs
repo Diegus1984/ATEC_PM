@@ -37,6 +37,8 @@ public class ChecklistProjectDto
     public int ProjectId { get; set; }
     public string Code { get; set; } = "";
     public string Title { get; set; } = "";
+    /// <summary>Cliente della commessa: riga separata nella colonna "Commessa / Gruppo".</summary>
+    public string CustomerName { get; set; } = "";
     public string Display => string.IsNullOrWhiteSpace(Title) ? Code : $"{Code} — {Title}";
     public List<ChecklistItemDto> Items { get; set; } = new();
 }

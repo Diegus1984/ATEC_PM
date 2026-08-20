@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { fetchCodex } from "@/lib/api/codex"
@@ -235,9 +236,12 @@ export function CodexImportDialog({
                 </div>
               </div>
 
-              <div className="rounded-md border max-h-[300px] overflow-y-auto">
+              <GridScroller
+                className="rounded-md border"
+                scrollerClassName="max-h-[300px]"
+              >
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted border-b text-muted-foreground uppercase tracking-wider font-semibold">
+                  <thead className="bg-muted border-b text-muted-foreground uppercase tracking-wider font-semibold">
                     <tr>
                       <th className="px-3 py-2 text-left w-32">Codice</th>
                       <th className="px-3 py-2 text-center w-16">Q.tà</th>
@@ -263,7 +267,7 @@ export function CodexImportDialog({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </GridScroller>
 
               {invalidCount > 0 ? (
                 <p className="text-xs text-muted-foreground">

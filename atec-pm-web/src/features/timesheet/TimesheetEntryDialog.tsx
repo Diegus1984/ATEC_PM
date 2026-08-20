@@ -4,6 +4,8 @@ import { Trash2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { DateField } from "@/components/shared/date-field"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,11 +20,14 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { salTestoSuFondo } from "@/features/commesse/sal-utils"
 import { ENTRY_TYPES } from "@/features/timesheet/entry-types"
 import {
   deleteTimesheetEntry,
@@ -35,11 +40,18 @@ import {
   saveTimesheetEntry,
   toIsoDate,
 } from "@/lib/api/timesheet"
-import { getSession } from "@/lib/auth/session"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { formatDateShort } from "@/lib/date-iso"
-import type { TimesheetEntryDto, TimesheetSaveRequest } from "@/lib/api/types"
+import type {
+  TimesheetEntryDto,
+  TimesheetPhaseOption,
+  TimesheetSaveRequest,
+} from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 import { fmtHours } from "@/lib/format"
+
+/** Grigio di riserva del Bilancio quando un gruppo non ha colore in anagrafica. */
+const GRUPPO_SENZA_COLORE = "#6B7280"
 
 const MAX_HOURS_PER_DAY = 24
 
@@ -103,10 +115,14 @@ export function TimesheetEntryDialog({
     }
   }, [open, isEdit, phaseProjectQuery.data])
 
+  // In modifica la commessa della registrazione resta in elenco anche se è un'Altra Attività
+  // (#86): senza, riaprire una vecchia riga mostrerebbe la tendina commessa vuota.
+  const commessaInModifica = isEdit ? phaseProjectQuery.data ?? 0 : 0
+
   const projectsQuery = useQuery({
-    queryKey: ["timesheet-projects", empId],
-    queryFn: () => fetchProjectsForEmployee(empId),
-    enabled: open && empId > 0,
+    queryKey: ["timesheet-projects", empId, commessaInModifica],
+    queryFn: () => fetchProjectsForEmployee(empId, commessaInModifica),
+    enabled: open && empId > 0 && (!isEdit || phaseProjectQuery.isFetched),
   })
 
   const phasesQuery = useQuery({
@@ -114,6 +130,47 @@ export function TimesheetEntryDialog({
     queryFn: () => fetchPhasesForEmployee(empId, Number(projectId)),
     enabled: open && empId > 0 && projectId !== "",
   })
+
+  /**
+   * Fasi raggruppate per sezione di costo (segnalazione #42): la tendina piatta non
+   * diceva dove finiscono le ore e rendeva indistinguibili i nomi quasi uguali.
+   * L'ordine arriva già giusto dal server (gruppo → sezione → fase), qui si spezza
+   * solo in intestazioni; le fasi senza sezione restano in coda, dichiarate.
+   */
+  const phaseGroups = React.useMemo(() => {
+    type Gruppo = {
+      key: string
+      label: string
+      /** Gruppo dell'anagrafica sezioni (GESTIONE, SITO PILOTA…): è la parte colorata. */
+      groupName: string
+      sectionName: string
+      /** Colore del gruppo dal DB (#105): stesso del Bilancio, grigio se manca. */
+      color: string
+      isClient: boolean
+      phases: TimesheetPhaseOption[]
+    }
+    const groups: Gruppo[] = []
+    for (const phase of phasesQuery.data ?? []) {
+      const label = phase.costSectionName
+        ? `${phase.costSectionGroup ? `${phase.costSectionGroup} · ` : ""}${phase.costSectionName}${
+            phase.costSectionType === "DA_CLIENTE" ? " (cliente)" : ""
+          }`
+        : "Senza sezione di costo"
+      const last = groups[groups.length - 1]
+      if (last && last.label === label) last.phases.push(phase)
+      else
+        groups.push({
+          key: `${label}-${groups.length}`,
+          label,
+          groupName: phase.costSectionGroup,
+          sectionName: phase.costSectionName || "Senza sezione di costo",
+          color: phase.costSectionGroupColor || GRUPPO_SENZA_COLORE,
+          isClient: phase.costSectionType === "DA_CLIENTE",
+          phases: [phase],
+        })
+    }
+    return groups
+  }, [phasesQuery.data])
 
   const dayTotalQuery = useQuery({
     queryKey: ["timesheet-day-total", empId, workDate, entry?.id ?? 0],
@@ -223,12 +280,11 @@ export function TimesheetEntryDialog({
     })
   }
 
-  const session = getSession()
+  // «Registra per»: imputare ore a un'altra persona è una scrittura sui dati altrui.
+  // Chi ha solo la lettura non deve nemmeno vedere la tendina.
   const showEmployeeSelect =
     (employeesQuery.data?.length ?? 0) > 1 &&
-    (session?.user.userRole === "ADMIN" ||
-      session?.user.userRole === "PM" ||
-      session?.user.userRole === "RESP_REPARTO")
+    canWriteFeature("action.timesheet_for_others")
 
   const busy = saveMutation.isPending || deleteMutation.isPending
 
@@ -248,18 +304,16 @@ export function TimesheetEntryDialog({
           {showEmployeeSelect ? (
             <div className="grid gap-2">
               <Label>Registra per</Label>
-              <Select value={String(empId)} onValueChange={handleEmployeeChange}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(employeesQuery.data ?? []).map((employee) => (
-                    <SelectItem key={employee.id} value={String(employee.id)}>
-                      {employee.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LookupCombobox
+                options={(employeesQuery.data ?? []).map((employee) => ({
+                  id: String(employee.id),
+                  name: employee.name,
+                }))}
+                value={String(empId)}
+                onValueChange={(id) => id != null && handleEmployeeChange(id)}
+                searchPlaceholder="Cerca dipendente…"
+                emptyText="Nessun dipendente trovato"
+              />
             </div>
           ) : null}
 
@@ -276,25 +330,21 @@ export function TimesheetEntryDialog({
 
           <div className="grid gap-2">
             <Label>Commessa</Label>
-            <Select value={projectId} onValueChange={handleProjectChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Seleziona commessa" />
-              </SelectTrigger>
-              <SelectContent>
-                {(projectsQuery.data ?? []).map((project) => (
-                  <SelectItem
-                    key={project.projectId}
-                    value={String(project.projectId)}
-                  >
-                    {project.display}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LookupCombobox
+              options={(projectsQuery.data ?? []).map((project) => ({
+                id: String(project.projectId),
+                name: project.display,
+              }))}
+              value={projectId || null}
+              onValueChange={(id) => handleProjectChange(id ?? "")}
+              placeholder="Seleziona commessa"
+              searchPlaceholder="Cerca commessa…"
+              emptyText="Nessuna commessa trovata"
+            />
           </div>
 
           <div className="grid gap-2">
-            <Label>Fase</Label>
+            <Label>Fase dettaglio commessa</Label>
             <Select
               value={phaseId}
               onValueChange={setPhaseId}
@@ -304,10 +354,52 @@ export function TimesheetEntryDialog({
                 <SelectValue placeholder="Seleziona fase" />
               </SelectTrigger>
               <SelectContent>
-                {(phasesQuery.data ?? []).map((phase) => (
-                  <SelectItem key={phase.phaseId} value={String(phase.phaseId)}>
-                    {phase.display}
-                  </SelectItem>
+                {phaseGroups.map((group) => (
+                  <SelectGroup key={group.key}>
+                    {/* #105 — intestazione dipinta come i gruppi del Bilancio: la
+                        striscia col colore del gruppo (dall'anagrafica sezioni, non
+                        da una mappa cablata) e accanto la sezione con il suo badge
+                        CLIENTE / SEDE. Prima erano tutte righine grigie uguali e
+                        scaricare le ore sulla fase sbagliata era facilissimo. */}
+                    <SelectLabel className="px-1 py-1.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {group.groupName ? (
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                            style={{
+                              backgroundColor: group.color,
+                              color: salTestoSuFondo(group.color) ?? "#ffffff",
+                            }}
+                          >
+                            {group.groupName}
+                          </span>
+                        ) : null}
+                        <span className="text-xs font-medium text-foreground">
+                          {group.sectionName}
+                        </span>
+                        {group.sectionName !== "Senza sezione di costo" ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              group.isClient
+                                ? "border-amber-500/40 px-1 py-0 text-[9px] text-amber-600"
+                                : "border-emerald-500/40 px-1 py-0 text-[9px] text-emerald-600"
+                            }
+                          >
+                            {group.isClient ? "CLIENTE" : "SEDE"}
+                          </Badge>
+                        ) : null}
+                      </span>
+                    </SelectLabel>
+                    {group.phases.map((phase) => (
+                      <SelectItem
+                        key={phase.phaseId}
+                        value={String(phase.phaseId)}
+                      >
+                        {phase.display}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, Trash2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { AutoTextarea } from "@/features/checklist/checklist-shared"
@@ -16,13 +17,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -30,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   addMoMNote,
   assignMoMNote,
@@ -151,7 +146,7 @@ export function MoMNotePage() {
             Butta giù i punti qui, poi assegnali al verbale di destinazione.
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-card">
+          <GridScroller className="rounded-lg border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -175,7 +170,7 @@ export function MoMNotePage() {
                 <NoteNewRow onCreated={() => void reloadNotes()} />
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
         </CardContent>
       </Card>
 
@@ -316,23 +311,15 @@ function NoteRow({
         />
       </TableCell>
       <TableCell>
-        <Select value="" onValueChange={(v) => void assign(Number(v))}>
-          <SelectTrigger
-            className={cn(
-              "h-9 w-full",
-              hasText && "border-primary/40 bg-primary/5"
-            )}
-          >
-            <SelectValue placeholder="Assegna a…" />
-          </SelectTrigger>
-          <SelectContent position="popper" align="start">
-            {moms.map((mom) => (
-              <SelectItem key={mom.id} value={String(mom.id)}>
-                {momDisplayName(mom)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <LookupCombobox
+          options={moms.map((mom) => ({ id: mom.id, name: momDisplayName(mom) }))}
+          value={null}
+          onValueChange={(id) => id != null && void assign(id)}
+          placeholder="Assegna a…"
+          searchPlaceholder="Cerca verbale…"
+          emptyText="Nessun verbale trovato"
+          className={cn(hasText && "border-primary/40 bg-primary/5")}
+        />
       </TableCell>
       <TableCell className="w-12 py-1.5 align-middle">
         <div className="flex justify-end">

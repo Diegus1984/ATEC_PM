@@ -34,7 +34,14 @@ export function DdpControlloPage({ defaultView = "rit" }: { defaultView?: string
     requested === "gestore" || requested === "consegne" || controlReportDef(requested)
       ? requested
       : "rit"
-  const ddpType = searchParams.get("type") === "OFFICINA" ? "OFFICINA" : "COMMERCIAL"
+  // Per i report solo Officina (DC/MIT/ASS) il default è OFFICINA: altrimenti si
+  // atterra su Commerciali vuote (segnalazione #62 — separazione C/O).
+  const reportHint = controlReportDef(current)
+  const ddpType =
+    searchParams.get("type") === "OFFICINA" ||
+    (searchParams.get("type") == null && reportHint?.officinaOnly)
+      ? "OFFICINA"
+      : "COMMERCIAL"
 
   // staleTime 0: gli aggregati del pannello dipendono dalle distinte modificate in
   // ALTRE pagine, e l'hub esclude la connessione che ha fatto la modifica — senza
@@ -90,11 +97,43 @@ export function DdpControlloPage({ defaultView = "rit" }: { defaultView?: string
 
   const containers: PmContainer[] = CONTROL_REPORTS.map((def) => {
     const counts = byReport.get(def.key)
-    const total = (counts?.commercialCount ?? 0) + (counts?.officinaCount ?? 0)
+    const commercial = def.officinaOnly ? 0 : (counts?.commercialCount ?? 0)
+    const officina = counts?.officinaCount ?? 0
+    const total = commercial + officina
+    const defaultType = def.officinaOnly ? "OFFICINA" : "COMMERCIAL"
+    const children = def.officinaOnly
+      ? [
+          {
+            key: `${def.key}-officina`,
+            selected: current === def.key && ddpType === "OFFICINA",
+            onClick: () => selectReport(def.key, "OFFICINA"),
+            label: "Officine",
+            count: officina,
+            dotClass: "bg-amber-500",
+          },
+        ]
+      : [
+          {
+            key: `${def.key}-commercial`,
+            selected: current === def.key && ddpType === "COMMERCIAL",
+            onClick: () => selectReport(def.key, "COMMERCIAL"),
+            label: "Commerciali",
+            count: commercial,
+            dotClass: "bg-sky-500",
+          },
+          {
+            key: `${def.key}-officina`,
+            selected: current === def.key && ddpType === "OFFICINA",
+            onClick: () => selectReport(def.key, "OFFICINA"),
+            label: "Officine",
+            count: officina,
+            dotClass: "bg-amber-500",
+          },
+        ]
     return {
       key: def.key,
       selected: current === def.key,
-      onClick: () => selectReport(def.key, "COMMERCIAL"),
+      onClick: () => selectReport(def.key, defaultType),
       label: `${def.badge} — ${def.title}`,
       count: total,
       dots:
@@ -105,24 +144,7 @@ export function DdpControlloPage({ defaultView = "rit" }: { defaultView?: string
                 : { dotClass: "bg-amber-500", label: "Da gestire" },
             ]
           : [],
-      children: [
-        {
-          key: `${def.key}-commercial`,
-          selected: current === def.key && ddpType === "COMMERCIAL",
-          onClick: () => selectReport(def.key, "COMMERCIAL"),
-          label: "Commerciali",
-          count: counts?.commercialCount ?? 0,
-          dotClass: "bg-sky-500",
-        },
-        {
-          key: `${def.key}-officina`,
-          selected: current === def.key && ddpType === "OFFICINA",
-          onClick: () => selectReport(def.key, "OFFICINA"),
-          label: "Officine",
-          count: counts?.officinaCount ?? 0,
-          dotClass: "bg-amber-500",
-        },
-      ],
+      children,
     }
   })
 

@@ -29,7 +29,7 @@ import {
 } from "@/lib/api/codex-compositions"
 import { fetchAllCodex, fetchCodex } from "@/lib/api/codex"
 import type { CodexListItem, CompositionTreeNode } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { useCodexHub } from "@/lib/signalr/use-codex-hub"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
@@ -403,7 +403,7 @@ export function CodexCompositionPage() {
 
 
   const confirm = useConfirm()
-  const canEdit = getSession()?.user.userRole === "ADMIN"
+  const canEdit = canWriteFeature("action.edit_codex_composition")
 
   const [typeCode, setTypeCode] = React.useState("501")
   const [selectedParent, setSelectedParent] = React.useState<CodexListItem | null>(null)

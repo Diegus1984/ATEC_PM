@@ -6,7 +6,7 @@ import "./risorse-gantt.css"
 import { ApiError } from "@/lib/api/client"
 import { deleteAssignment as apiDeleteAssignment } from "@/lib/api/resource-planner"
 import type { ResAssignmentDto, ResTipo } from "@/lib/api/types"
-import { canAccessFeature } from "@/lib/auth/permissions"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 import { useConfirm } from "@/components/shared/confirm"
 import { AssignmentDialog } from "@/features/risorse/AssignmentDialog"
@@ -42,7 +42,10 @@ export function ResourcePlannerPage() {
   const confirm = useConfirm()
   const navigate = useNavigate()
   const myEmployeeId = getSession()?.user.employeeId ?? 0
-  const canEdit = canAccessFeature("resources.edit")
+  // `canWriteFeature` e non `canAccessFeature`: con la funzione concessa in sola lettura
+  // il piano si guarda ma non si tocca, altrimenti l'interfaccia resterebbe scrivibile e a
+  // respingere sarebbe solo l'API, a modifica già fatta a video.
+  const canEdit = canWriteFeature("resources.edit")
 
   const [settings, patch] = usePlannerSettings()
   const {

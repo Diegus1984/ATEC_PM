@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { ApiError } from "@/lib/api/client"
 import { fetchSalEconomics } from "@/lib/api/sal"
 import { dateToIso, formatDateShort } from "@/lib/date-iso"
@@ -256,34 +257,46 @@ export function SalAnalisiView() {
     [openDrill]
   )
 
-  /** Etichetta del totale sopra la barra impilata: cliccabile → drill 'bar'. */
-  const renderTotalLabel = React.useCallback(
-    (props: unknown): React.ReactElement | null => {
-      const { x, y, width, value, index } = props as {
-        x?: number | string
-        y?: number | string
-        width?: number | string
-        value?: number | string
-        index?: number
-      }
-      const tot = Number(value ?? 0)
-      if (!tot || Number.isNaN(tot) || x == null || y == null) return null
-      const ym = index != null ? series[index]?.ym : undefined
-      return (
-        <text
-          x={Number(x) + Number(width ?? 0) / 2}
-          y={Number(y) - 6}
-          textAnchor="middle"
-          fontSize={10}
-          fontWeight={600}
-          className={cn("fill-foreground", ym && "cursor-pointer")}
-          onClick={() => ym && openDrill("bar", ym)}
-        >
-          {n0(tot)}
-        </text>
-      )
-    },
-    [series, openDrill]
+  /**
+   * Etichetta totale sopra la barra: cliccabile → drill 'bar'.
+   * Usa sempre `payload.ym` (non `series[index]`): con LabelList sul segmento
+   * in cima allo stack Recharts può passare un index relativo alle sole celle
+   * disegnate (#76: click su ago 26 apriva dicembre 2024).
+   * `segment` = quale Bar monta la LabelList; disegna solo se è il pezzo in cima
+   * (altrimenti i mesi con daf=0 non avrebbero etichetta, o ci sarebbero doppioni).
+   */
+  const renderTotalLabelFor = React.useCallback(
+    (segment: SalBucket) =>
+      (props: unknown): React.ReactElement | null => {
+        const { x, y, width, payload } = props as {
+          x?: number | string
+          y?: number | string
+          width?: number | string
+          payload?: SalMonthPoint
+        }
+        if (!payload || x == null || y == null) return null
+        const tot = Number(payload.tot ?? 0)
+        if (!tot || Number.isNaN(tot)) return null
+        // Ordine stack: inc (basso) → em → daf (alto)
+        const top: SalBucket | null =
+          payload.daf > 0 ? "daf" : payload.em > 0 ? "em" : payload.inc > 0 ? "inc" : null
+        if (top !== segment) return null
+        const ym = payload.ym
+        return (
+          <text
+            x={Number(x) + Number(width ?? 0) / 2}
+            y={Number(y) - 6}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            className={cn("fill-foreground", ym && "cursor-pointer")}
+            onClick={() => ym && openDrill("bar", ym)}
+          >
+            {n0(tot)}
+          </text>
+        )
+      },
+    [openDrill]
   )
 
   /** Punto della linea «Incasso previsto»: cliccabile → drill 'prev'. */
@@ -428,7 +441,9 @@ export function SalAnalisiView() {
                   maxBarSize={46}
                   className="cursor-pointer"
                   onClick={barClick("inc")}
-                />
+                >
+                  <LabelList dataKey="tot" content={renderTotalLabelFor("inc")} />
+                </Bar>
                 <Bar
                   dataKey="em"
                   stackId="a"
@@ -436,7 +451,9 @@ export function SalAnalisiView() {
                   maxBarSize={46}
                   className="cursor-pointer"
                   onClick={barClick("em")}
-                />
+                >
+                  <LabelList dataKey="tot" content={renderTotalLabelFor("em")} />
+                </Bar>
                 <Bar
                   dataKey="daf"
                   stackId="a"
@@ -445,7 +462,7 @@ export function SalAnalisiView() {
                   className="cursor-pointer"
                   onClick={barClick("daf")}
                 >
-                  <LabelList dataKey="tot" content={renderTotalLabel} />
+                  <LabelList dataKey="tot" content={renderTotalLabelFor("daf")} />
                 </Bar>
                 <Line
                   type="monotone"
@@ -524,7 +541,7 @@ export function SalAnalisiView() {
                   Nessuna riga per il mese selezionato.
                 </p>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border">
+                <GridScroller fill className="rounded-lg border">
                   <Table>
                     <TableHeader className="bg-muted/40">
                       <TableRow>
@@ -594,7 +611,7 @@ export function SalAnalisiView() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
+                </GridScroller>
               )}
             </>
           )}

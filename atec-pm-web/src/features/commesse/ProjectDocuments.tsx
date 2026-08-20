@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { useSearchParams } from "react-router-dom"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import {
   Download,
   Eye,
@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,13 +45,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchProjectFiles } from "@/lib/api/project-documents"
 import { downloadProjectFile } from "@/lib/api/projects"
 import { getSession } from "@/lib/auth/session"
 import { notifyError } from "@/lib/toast"
 import type { FileItem } from "@/lib/api/types"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
+import {
+  hasLegacyDocumentsParams,
+  readDocumentsNav,
+  stripLegacyDocumentsParams,
+  withDocumentsNav,
+} from "./documents-nav-state"
 import { filterFileItems } from "./project-documents-filter"
 import { FileDocContextMenu } from "./FileDocContextMenu"
 import { FolderDocContextMenu } from "./FolderDocContextMenu"
@@ -58,6 +67,15 @@ import { useProjectDocumentsActions } from "./project-documents-actions"
 import { ProjectFilePreviewDialog } from "./ProjectFilePreviewDialog"
 import { formatSize } from "@/lib/format"
 import { sortItems } from "./documents-shared"
+
+/** Colonne opzionali dell'elenco documenti («Nome» e le azioni restano sempre). */
+const DOC_COLUMNS: { id: string; label: string }[] = [
+  { id: "size", label: "Dimensione" },
+  { id: "modified", label: "Modificato" },
+]
+const DOC_COLUMNS_DEFAULT = Object.fromEntries(
+  DOC_COLUMNS.map((column) => [column.id, true])
+)
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—"
@@ -78,17 +96,37 @@ interface PathCrumb {
 }
 
 /**
- * Card "contenuto cartella" della commessa. La cartella corrente è pilotata dal
- * query param `?path=` dell'URL, così l'albero documenti nel pannello sinistro
- * (CommessaTree → CommessaDocumentsTree) e questa vista restano sincronizzati.
- * `?preview=<percorso file>` apre direttamente l'anteprima (click su un file
+ * Card "contenuto cartella" della commessa. La cartella corrente è pilotata
+ * dall'history state (`docPath`, vedi `documents-nav-state`), così l'albero
+ * documenti nel pannello sinistro (CommessaTree → CommessaDocumentsTree) e
+ * questa vista restano sincronizzati senza esporre il percorso nell'URL.
+ * `docPreview` apre direttamente l'anteprima di un file (click su un file
  * nell'albero a sinistra).
  */
 export function ProjectDocuments({ projectId }: { projectId: number }) {
   const docActions = useProjectDocumentsActions()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
 
-  const subPath = searchParams.get("path") ?? ""
+  const { docPath: subPath, docPreview } = readDocumentsNav(
+    location.state,
+    searchParams
+  )
+
+  const [visibleCols, setVisibleCols] = usePersistedColumnVisibility(
+    "project-documents-columns-v1",
+    DOC_COLUMNS_DEFAULT
+  )
+  const showCol = (id: string) => visibleCols[id] ?? true
+  const columnToggles = DOC_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: showCol(id),
+    onToggle: (value: boolean) =>
+      setVisibleCols((prev) => ({ ...prev, [id]: value })),
+  }))
+  const docColCount = 2 + DOC_COLUMNS.filter((column) => showCol(column.id)).length
 
   const [previewItem, setPreviewItem] = React.useState<FileItem | null>(null)
   const [dragOver, setDragOver] = React.useState(false)
@@ -104,40 +142,61 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
     }))
   }, [subPath])
 
-  /** Aggiorna la cartella corrente nell'URL (azzera sempre l'eventuale preview). */
+  /**
+   * Aggiorna la cartella corrente nell'history state (azzera sempre l'eventuale
+   * preview). L'URL non cambia, ma avanti/indietro del browser tornano alla
+   * cartella precedente.
+   */
   const navigateTo = React.useCallback(
     (path: string) => {
       setStatusMessage(null)
-      const next = new URLSearchParams(searchParams)
-      if (path) {
-        next.set("path", path)
-      } else {
-        next.delete("path")
-      }
-      next.delete("preview")
-      setSearchParams(next)
+      navigate(
+        {
+          pathname: location.pathname,
+          search: stripLegacyDocumentsParams(searchParams),
+        },
+        { state: withDocumentsNav(location.state, { docPath: path }) }
+      )
     },
-    [searchParams, setSearchParams]
+    [location.pathname, location.state, navigate, searchParams]
   )
 
-  // Apertura anteprima da deep-link (?preview=...): apre il dialogo e ripulisce
-  // il parametro dall'URL senza aggiungere voci alla history.
+  // Anteprima richiesta dall'albero (o da un vecchio link `?preview=`): apre il
+  // dialogo e consuma il riferimento con un replace, così back e refresh non la
+  // riaprono. Lo stesso passaggio ripulisce l'URL dai parametri legacy.
+  const legacyParams = hasLegacyDocumentsParams(searchParams)
   React.useEffect(() => {
-    const preview = searchParams.get("preview")
-    if (!preview) {
+    if (!docPreview && !legacyParams) {
       return
     }
-    setPreviewItem({
-      name: preview.split("/").pop() ?? preview,
-      isFolder: false,
-      size: 0,
-      relativePath: preview,
-      modified: null,
-    })
-    const next = new URLSearchParams(searchParams)
-    next.delete("preview")
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+    if (docPreview) {
+      setPreviewItem({
+        name: docPreview.split("/").pop() ?? docPreview,
+        isFolder: false,
+        size: 0,
+        relativePath: docPreview,
+        modified: null,
+      })
+    }
+    navigate(
+      {
+        pathname: location.pathname,
+        search: stripLegacyDocumentsParams(searchParams),
+      },
+      {
+        replace: true,
+        state: withDocumentsNav(location.state, { docPath: subPath }),
+      }
+    )
+  }, [
+    docPreview,
+    legacyParams,
+    location.pathname,
+    location.state,
+    navigate,
+    searchParams,
+    subPath,
+  ])
 
   const filesQuery = useQuery({
     queryKey: ["project-folder", projectId, subPath],
@@ -185,6 +244,7 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            <ColumnsMenu columns={columnToggles} />
             <Button
               variant="outline"
               size="sm"
@@ -295,7 +355,7 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
 
         <div
           className={cn(
-            "relative overflow-x-auto rounded-lg border transition-colors",
+            "relative overflow-hidden rounded-lg border transition-colors",
             dragOver && "border-primary bg-primary/5"
           )}
           onDragOver={(event) => {
@@ -322,12 +382,17 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
             </div>
           ) : null}
 
+          <GridScroller>
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow className="hover:bg-transparent">
                 <TableHead>Nome</TableHead>
-                <TableHead className="w-28 text-right">Dimensione</TableHead>
-                <TableHead className="w-44">Modificato</TableHead>
+                {showCol("size") && (
+                  <TableHead className="w-28 text-right">Dimensione</TableHead>
+                )}
+                {showCol("modified") && (
+                  <TableHead className="w-44">Modificato</TableHead>
+                )}
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -335,7 +400,7 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
               {filesQuery.isLoading ? (
                 Array.from({ length: 5 }).map((_, rowIndex) => (
                   <TableRow key={`skeleton-${rowIndex}`}>
-                    {Array.from({ length: 4 }).map((__, cellIndex) => (
+                    {Array.from({ length: docColCount }).map((__, cellIndex) => (
                       <TableCell key={cellIndex}>
                         <Skeleton className="h-5 w-full" />
                       </TableCell>
@@ -345,7 +410,7 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
               ) : isEmpty ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={docColCount}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {isFiltering ? (
@@ -390,12 +455,16 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {item.isFolder ? "" : formatSize(item.size)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDateTime(item.modified)}
-                      </TableCell>
+                      {showCol("size") && (
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {item.isFolder ? "" : formatSize(item.size)}
+                        </TableCell>
+                      )}
+                      {showCol("modified") && (
+                        <TableCell className="text-muted-foreground">
+                          {formatDateTime(item.modified)}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right">
                         <RowActionsMenu
                           label={item.name}
@@ -492,6 +561,7 @@ export function ProjectDocuments({ projectId }: { projectId: number }) {
               )}
             </TableBody>
           </Table>
+          </GridScroller>
         </div>
       </CardContent>
 

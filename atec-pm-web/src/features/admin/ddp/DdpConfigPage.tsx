@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   Tabs,
   TabsContent,
@@ -183,6 +184,7 @@ export function DdpConfigPage() {
                   Nuova destinazione
                 </Button>
               </div>
+              <GridScroller className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -236,6 +238,7 @@ export function DdpConfigPage() {
                   ))}
                 </TableBody>
               </Table>
+              </GridScroller>
             </TabsContent>
 
             <TabsContent value="statuses" className="space-y-4">
@@ -256,6 +259,7 @@ export function DdpConfigPage() {
                   Nuovo stato
                 </Button>
               </div>
+              <GridScroller className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -310,6 +314,7 @@ export function DdpConfigPage() {
                   ))}
                 </TableBody>
               </Table>
+              </GridScroller>
             </TabsContent>
 
             <TabsContent value="treatments" className="space-y-4">
@@ -319,6 +324,7 @@ export function DdpConfigPage() {
                   Nuovo trattamento
                 </Button>
               </div>
+              <GridScroller className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -372,6 +378,7 @@ export function DdpConfigPage() {
                   ))}
                 </TableBody>
               </Table>
+              </GridScroller>
             </TabsContent>
             <TabsContent value="transitions">
               <TransitionsMatrixTab statuses={statusesQuery.data ?? []} />
@@ -588,7 +595,7 @@ function TransitionsMatrixTab({ statuses }: { statuses: DdpStatusItem[] }) {
         salvataggio scrive entrambe le matrici (Commerciale e Officina).
       </p>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <div className="overflow-x-auto rounded-md border">
+      <GridScroller className="rounded-md border">
         <table className="w-max border-collapse text-xs">
           <thead>
             <tr>
@@ -646,7 +653,7 @@ function TransitionsMatrixTab({ statuses }: { statuses: DdpStatusItem[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </GridScroller>
     </div>
   )
 }

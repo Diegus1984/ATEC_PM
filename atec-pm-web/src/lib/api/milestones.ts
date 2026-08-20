@@ -93,3 +93,46 @@ export async function fetchActiveActivityCatalog(): Promise<ActivityCatalogItem[
   return unwrapApi(response)
 }
 
+
+// ── Viste salvate del Gantt ─────────────────────────────────────────────────
+// Stanno lato server e non in localStorage: la composizione del «Gantt cliente»
+// è una scelta condivisa, non una preferenza del singolo PC.
+
+export interface MilestoneGanttView {
+  name: string
+  /** JSON opaco per il server: lo interpreta solo il Gantt (vedi GanttComposition). */
+  payload: string
+  updatedAt: string
+  updatedByName: string
+}
+
+export async function fetchGanttViews(
+  projectId: number
+): Promise<MilestoneGanttView[]> {
+  const response = await apiGet<ApiResponse<MilestoneGanttView[]>>(
+    `/api/milestones/project/${projectId}/views`
+  )
+  return unwrapApi(response)
+}
+
+export async function saveGanttView(
+  projectId: number,
+  name: string,
+  payload: string
+): Promise<boolean> {
+  const response = await apiPut<ApiResponse<boolean>>(
+    `/api/milestones/project/${projectId}/views/${encodeURIComponent(name)}`,
+    { payload }
+  )
+  return unwrapApi(response)
+}
+
+export async function deleteGanttView(
+  projectId: number,
+  name: string
+): Promise<boolean> {
+  const response = await apiDelete<ApiResponse<boolean>>(
+    `/api/milestones/project/${projectId}/views/${encodeURIComponent(name)}`
+  )
+  return unwrapApi(response)
+}

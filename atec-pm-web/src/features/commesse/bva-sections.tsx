@@ -4,13 +4,20 @@
 
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react"
+import { ChevronRight, Pencil, Plane, Plus, Trash2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible } from "@/components/ui/collapsible"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -19,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { SectionPhases } from "@/features/commesse/SectionPhases"
 import {
   MaterialItemDialog,
@@ -32,6 +40,7 @@ import {
   deleteProjectResource,
 } from "@/lib/api/project-costing"
 import type {
+  BvaActualEmployeeDto,
   BvaBudgetResourceDto,
   BvaGroupDto,
   BvaMaterialItemDto,
@@ -39,30 +48,153 @@ import type {
   BvaSectionDto,
   PhaseListItem,
 } from "@/lib/api/types"
+import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
-import { ThreeColumn } from "./bva-shared"
+import {
+  ThreeColumn,
+  bvaActualTitleClass,
+  bvaHoursClass,
+  bvaMoneyClass,
+} from "./bva-shared"
+import { PreventivoTravelTable } from "./preventivo-travel-table"
+import { useCostTravelRows } from "./preventivo-travel-shared"
+
+/**
+ * Risorse a CONSUNTIVO della sezione, a due livelli: una riga per dipendente che si apre
+ * sulle sue ore versate (data · fase · causale · ore · €/h · costo).
+ *
+ * `actualEmployees` arrivava nel DTO da sempre e non veniva reso da nessuna parte: il
+ * consuntivo si leggeva solo come totale in testata. È la «riga con N linee-risorsa» del
+ * punto 5 del blocco 5 — qui però il dato non è digitato, viene dal timesheet reale.
+ */
+function ActualEmployees({ employees }: { employees: BvaActualEmployeeDto[] }) {
+  const [open, setOpen] = React.useState<Set<string>>(new Set())
+
+  function toggle(name: string) {
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className={bvaActualTitleClass}>Risorse a consuntivo</p>
+      <div className="divide-y rounded-md border">
+        {employees.map((employee) => {
+          const isOpen = open.has(employee.employeeName)
+          return (
+            <div key={employee.employeeName}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
+                onClick={() => toggle(employee.employeeName)}
+              >
+                <ChevronRight
+                  className={cn(
+                    "size-3.5 shrink-0 transition-transform duration-[var(--accordion-duration)] ease-[var(--accordion-ease)]",
+                    isOpen && "rotate-90"
+                  )}
+                />
+                <span className="flex-1 truncate font-medium">
+                  {employee.employeeName}
+                </span>
+                <span className={bvaHoursClass}>{hours(employee.totalHours)}</span>
+                <span className={bvaMoneyClass}>{euro(employee.totalCost)}</span>
+              </button>
+              <Collapsible open={isOpen}>
+                <GridScroller>
+                  <Table>
+                    <TableHeader className="bg-muted/20">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-[10px]">Data</TableHead>
+                        <TableHead className="text-[10px]">Fase dettaglio commessa</TableHead>
+                        <TableHead className="text-right text-[10px]">Ore</TableHead>
+                        <TableHead className="text-right text-[10px]">€/h</TableHead>
+                        <TableHead className="text-right text-[10px]">Costo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employee.details.map((detail, index) => (
+                        <TableRow key={`${detail.workDate}-${detail.phaseName}-${index}`}>
+                          <TableCell className="text-xs tabular-nums">
+                            {formatDateShort(detail.workDate)}
+                          </TableCell>
+                          <TableCell className="text-xs" title={detail.phaseName}>
+                            {detail.phaseName || "—"}
+                            {detail.entryType && detail.entryType !== "REGULAR" ? (
+                              <span className="ml-1 text-[10px] text-muted-foreground">
+                                ({detail.entryType})
+                              </span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell
+                            className={cn("text-right text-xs", bvaHoursClass)}
+                          >
+                            {detail.hours.toFixed(1)}
+                          </TableCell>
+                          <TableCell
+                            className={cn("text-right text-xs", bvaMoneyClass)}
+                          >
+                            {euro(detail.hourlyCost)}
+                          </TableCell>
+                          <TableCell
+                            className={cn("text-right text-xs", bvaMoneyClass)}
+                          >
+                            {euro(detail.totalCost)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </GridScroller>
+              </Collapsible>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function SectionBlock({
   section,
   projectId,
   phasesByTemplate,
-  existingTemplateIds,
+  existingPhaseKeys,
   canEditBudget,
   onPhasesChanged,
 }: {
   section: BvaSectionDto
   projectId: number
   phasesByTemplate: Map<number, PhaseListItem[]>
-  existingTemplateIds: Set<number>
+  existingPhaseKeys: Set<string>
   canEditBudget: boolean
   onPhasesChanged: () => void
 }) {
   const confirm = useConfirm()
   const isClient = section.sectionType === "DA_CLIENTE"
-  const hasTravel = section.budgetTotalTravelCost > 0
+
+  // Righe trasferta della sezione (segnalazione #33). Si chiedono solo sulle sezioni
+  // con Tag Cliente: sulle altre la trasferta non esiste proprio.
+  const travelRowsQuery = useCostTravelRows(projectId, section.sectionId, isClient)
+  const travelRows = React.useMemo(
+    () => travelRowsQuery.data ?? [],
+    [travelRowsQuery.data]
+  )
+
+  // #99: la tabella «Trasferta (sezione da cliente)» e la riga gialla del riepilogo non
+  // stanno più distese nel Bilancio — Zanoni le leggeva come un doppione della Gestione
+  // Trasferta. La tabella però è l'UNICO punto dove il PREVENTIVO trasferta si compila
+  // (alimenta la voce «Spese Trasferta» del Riepilogo Costi e i previsti della card #96/#98),
+  // quindi non sparisce: vive in un dialogo, dietro il pulsante qui sotto.
+  const [travelOpen, setTravelOpen] = React.useState(false)
+
   const sectionPhases =
     section.templateId != null
       ? phasesByTemplate.get(section.templateId) ?? []
@@ -86,7 +218,7 @@ function SectionBlock({
 
   async function handleDeleteSection() {
     const ok = await confirm({
-      title: "Elimina sezione",
+      title: "Elimina sezione di costo",
       description: `Eliminare la sezione "${section.sectionName}" e tutte le sue righe risorsa?`,
       confirmLabel: "Elimina",
     })
@@ -122,7 +254,7 @@ function SectionBlock({
               size="icon-sm"
               actions={[
                 {
-                  label: "Elimina sezione",
+                  label: "Elimina sezione di costo",
                   icon: Trash2,
                   destructive: true,
                   onClick: () => void handleDeleteSection(),
@@ -149,21 +281,36 @@ function SectionBlock({
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Risorse pianificate
             </p>
-            {canEditBudget && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={() => setResourceDialog("new")}
-              >
-                <Plus className="size-3 mr-1" />
-                Risorsa
-              </Button>
-            )}
+            <div className="flex items-center gap-1.5">
+              {/* #99: la trasferta a preventivo si apre da qui. Il pulsante compare anche in
+                  sola lettura se ci sono righe da vedere, mai su una sezione «in Atec». */}
+              {isClient && (canEditBudget || travelRows.length > 0) ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setTravelOpen(true)}
+                >
+                  <Plane className="size-3 mr-1" />
+                  Trasferta preventivo
+                </Button>
+              ) : null}
+              {canEditBudget && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setResourceDialog("new")}
+                >
+                  <Plus className="size-3 mr-1" />
+                  Risorsa
+                </Button>
+              )}
+            </div>
           </div>
           {/* Preventivo: risorse pianificate */}
           {section.budgetResources.length > 0 ? (
-            <div className="overflow-x-auto rounded-md border">
+            <GridScroller className="rounded-md border">
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow className="hover:bg-transparent">
@@ -188,19 +335,19 @@ function SectionBlock({
                       <TableCell className="text-right tabular-nums">
                         {r.hoursPerDay}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={cn("text-right", bvaHoursClass)}>
                         {r.totalHours.toFixed(1)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={cn("text-right", bvaMoneyClass)}>
                         {euro(r.hourlyCost)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={cn("text-right", bvaMoneyClass)}>
                         {euro(r.totalCost)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {r.markupValue.toFixed(3)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={cn("text-right", bvaMoneyClass)}>
                         {euro(r.totalSale)}
                       </TableCell>
                       {canEditBudget && (
@@ -245,26 +392,16 @@ function SectionBlock({
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </GridScroller>
           ) : (
             <p className="text-xs text-muted-foreground">
               Nessuna risorsa preventivata in questa sezione.
             </p>
           )}
 
-          {/* Trasferta (solo DA_CLIENTE) */}
-          {isClient && hasTravel ? (
-            <div className="rounded-md border bg-amber-50/40 px-3 py-2 text-xs tabular-nums">
-              <span className="font-medium">Trasferta preventivo:</span>{" "}
-              viaggi {euro(section.budgetTravelCost)} · vitto/hotel{" "}
-              {euro(section.budgetAccommodationCost)} · indennità{" "}
-              {euro(section.budgetAllowanceCost)} ={" "}
-              <span className="font-medium">
-                {euro(section.budgetTotalTravelCost)}
-              </span>
-            </div>
+          {section.actualEmployees.length > 0 ? (
+            <ActualEmployees employees={section.actualEmployees} />
           ) : null}
-
         </div>
 
         {/* DESTRA: fasi assegnate DENTRO la sezione (come il WPF) */}
@@ -272,7 +409,7 @@ function SectionBlock({
           projectId={projectId}
           sectionTemplateId={section.templateId}
           phases={sectionPhases}
-          existingTemplateIds={existingTemplateIds}
+          existingPhaseKeys={existingPhaseKeys}
           onChanged={onPhasesChanged}
         />
       </div>
@@ -294,6 +431,35 @@ function SectionBlock({
           }}
         />
       )}
+
+      {/* #99: la tabella trasferta del preventivo, uscita dal corpo della sezione. */}
+      {isClient ? (
+        <Dialog open={travelOpen} onOpenChange={(o) => !o && setTravelOpen(false)}>
+          {/* sm:max-w-5xl, non max-w-5xl: il default shadcn è `sm:max-w-lg` e senza lo
+              stesso breakpoint non viene scavalcato. Il min-w-0 sul wrapper è per la
+              griglia del DialogContent: senza, l'item cresce a min-content e la tabella
+              esce dal bordo del dialogo invece di scorrere. */}
+          <DialogContent className="sm:max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>Trasferta preventivo — {section.sectionName}</DialogTitle>
+              <DialogDescription>
+                Alimenta la voce «Spese Trasferta» del Riepilogo Costi e i previsti della
+                card Trasferta. Il consuntivo resta nella Gestione Trasferta.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-w-0">
+              <PreventivoTravelTable
+                projectId={projectId}
+                sectionId={section.sectionId}
+                rows={travelRows}
+                resources={section.budgetResources}
+                canEdit={canEditBudget}
+                onChanged={onPhasesChanged}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   )
 }
@@ -304,16 +470,18 @@ export function GroupBlock({
   onToggle,
   projectId,
   phasesByTemplate,
-  existingTemplateIds,
+  existingPhaseKeys,
   canEditBudget,
   onPhasesChanged,
 }: {
   group: BvaGroupDto
+  /** Aperto/chiuso: lo tiene il padre, perché chiudendo «Impegno Risorse» questo blocco
+   *  viene smontato e uno stato locale si perderebbe. */
   open: boolean
   onToggle: () => void
   projectId: number
   phasesByTemplate: Map<number, PhaseListItem[]>
-  existingTemplateIds: Set<number>
+  existingPhaseKeys: Set<string>
   canEditBudget: boolean
   onPhasesChanged: () => void
 }) {
@@ -339,9 +507,18 @@ export function GroupBlock({
             ({group.sections.length} sezioni)
           </span>
         </button>
-        <div className="hidden text-xs tabular-nums opacity-90 sm:block">
-          Prev {hours(group.budgetHours)} · Assegn {hours(group.assignedHours)} ·
-          Cons {hours(group.actualHours)}
+        {/* Chip chiaro: stesso blocco delle sezioni (ore + € + delta), etichette
+            nere sul fondo colorato del gruppo (#66). Prima c'erano solo le ore. */}
+        <div className="hidden rounded-md bg-white/95 px-2.5 py-1 shadow-sm sm:block">
+          <ThreeColumn
+            budgetHours={group.budgetHours}
+            budgetCost={group.budgetCost}
+            assignedHours={group.assignedHours}
+            assignedCost={group.assignedCost}
+            actualHours={group.actualHours}
+            actualCost={group.actualCost}
+            deltaHours={group.actualHours - group.budgetHours}
+          />
         </div>
       </div>
 
@@ -353,7 +530,7 @@ export function GroupBlock({
               section={section}
               projectId={projectId}
               phasesByTemplate={phasesByTemplate}
-              existingTemplateIds={existingTemplateIds}
+              existingPhaseKeys={existingPhaseKeys}
               canEditBudget={canEditBudget}
               onPhasesChanged={onPhasesChanged}
             />
@@ -394,7 +571,7 @@ export function MaterialSectionBlock({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <GridScroller className="rounded-lg border">
       {/* table-fixed + larghezze fisse: le colonne numeriche restano allineate
           tra tutte le sezioni materiali (la 1ª colonna nome prende il resto). */}
       <Table className="table-fixed">
@@ -500,6 +677,6 @@ export function MaterialSectionBlock({
           }}
         />
       )}
-    </div>
+    </GridScroller>
   )
 }

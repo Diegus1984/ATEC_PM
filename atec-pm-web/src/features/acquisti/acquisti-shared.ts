@@ -64,6 +64,23 @@ export function getSmartActionSortKey(item: AcquistiInboxItem): string {
   return `4_OTHER_${statusOf(item)}`
 }
 
+/**
+ * Ordine «naturale» dell'Inbox: commessa, poi Prossimo Passo. È lo stesso ordine
+ * che `buildProjectGroups` produce riga per riga, ma su una lista piatta: serve a
+ * `useDeferredItemOrder` per sapere come rimettere tutto in fila su «Aggiorna».
+ */
+export function sortAcquistiByProjectAndAction(
+  items: AcquistiInboxItem[]
+): AcquistiInboxItem[] {
+  const keyed = items.map((it) => ({ it, key: getSmartActionSortKey(it) }))
+  keyed.sort(
+    (a, b) =>
+      a.it.projectCode.localeCompare(b.it.projectCode, "it") ||
+      a.key.localeCompare(b.key)
+  )
+  return keyed.map((k) => k.it)
+}
+
 export interface StatusCountItem {
   key: string
   value: string
@@ -103,11 +120,14 @@ export function buildStatusCounts(
 
 export const COLUMN_LABELS: Record<string, string> = {
   rowNumber: "#",
-  createdAt: "Data",
-  requestedBy: "Rich.",
+  // Stessi nomi delle DDP di commessa (segnalazione #61): sono le stesse righe viste
+  // da qui, non possono chiamarsi in due modi.
+  createdAt: "Data inserimento",
+  requestedBy: "Inserito da",
   atecCode: "Cod. ATEC",
   partNumber: "Codice",
   description: "Descrizione",
+  rfqAction: "Az. (oggetto RDO)",
   quantity: "Qtà",
   unit: "UM",
   supplierName: "Fornitore",
@@ -178,7 +198,9 @@ export function buildOrderGroups(rfqs: PurchaseRfqListItem[]): OrderSupplierGrou
  *  righe seguono l'ordine della colonna «Prossimo Passo». */
 export function buildProjectGroups(
   items: AcquistiInboxItem[],
-  rfqsByProject: Map<number, PurchaseRfqListItem[]>
+  rfqsByProject: Map<number, PurchaseRfqListItem[]>,
+  /** `keepItemOrder`: le righe arrivano già nell'ordine voluto (ordine congelato). */
+  opts?: { keepItemOrder?: boolean }
 ): GroupByProject[] {
   const map = new Map<number, GroupByProject>()
   for (const item of items) {
@@ -203,11 +225,13 @@ export function buildProjectGroups(
   const groups = [...map.values()].sort((a, b) =>
     a.projectCode.localeCompare(b.projectCode, "it")
   )
-  for (const g of groups) {
-    // Chiave calcolata una volta per riga, non a ogni confronto del sort.
-    const keyed = g.items.map((it) => ({ it, key: getSmartActionSortKey(it) }))
-    keyed.sort((a, b) => a.key.localeCompare(b.key))
-    g.items = keyed.map((k) => k.it)
+  if (opts?.keepItemOrder !== true) {
+    for (const g of groups) {
+      // Chiave calcolata una volta per riga, non a ogni confronto del sort.
+      const keyed = g.items.map((it) => ({ it, key: getSmartActionSortKey(it) }))
+      keyed.sort((a, b) => a.key.localeCompare(b.key))
+      g.items = keyed.map((k) => k.it)
+    }
   }
   return groups
 }

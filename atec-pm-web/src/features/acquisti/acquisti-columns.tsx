@@ -8,6 +8,7 @@ import { CheckCircle2, Clock, FileCheck2, Link2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { DdpStatusMenu } from "@/features/commesse/DdpStatusMenu"
 import type { AcquistiInboxItem, DdpStatusItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
@@ -67,19 +68,20 @@ export function buildAcquistiColumns({
         <span className="tabular-nums font-mono text-xs opacity-80">{row.index + 1}</span>
       ),
     },
+    // Stessi nomi e stesso ordine delle DDP di commessa (segnalazione #61).
+    {
+      accessorKey: "requestedBy",
+      header: "Inserito da",
+      cell: ({ row }) => <span className="text-xs">{row.original.requestedBy || "—"}</span>,
+    },
     {
       accessorKey: "createdAt",
-      header: "Data",
+      header: "Data inserimento",
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-xs">
           {formatDateShort(row.original.createdAt) || "—"}
         </span>
       ),
-    },
-    {
-      accessorKey: "requestedBy",
-      header: "Rich.",
-      cell: ({ row }) => <span className="text-xs">{row.original.requestedBy || "—"}</span>,
     },
     {
       accessorKey: "atecCode",
@@ -115,22 +117,65 @@ export function buildAcquistiColumns({
       accessorKey: "description",
       header: "Descrizione",
       cell: ({ row }) => (
-        <span className="block max-w-[260px] truncate text-xs" title={row.original.description}>
+        <span
+          className="block max-w-[260px] whitespace-normal break-words text-xs"
+          title={row.original.description}
+        >
           {row.original.description || "—"}
         </span>
       ),
     },
+    /* COLONNA AZIONE: l'oggetto della RDO (titolo della gara) vive qui, in tooltip.
+       Nella descrizione ci deve stare l'articolo comprato, non «Richiesta offerta — …». */
+    {
+      id: "rfqAction",
+      header: "Az.",
+      enableColumnFilter: false,
+      cell: ({ row }) => {
+        const item = row.original
+        const subject = (item.activeRfqSubject ?? "").trim()
+        if (!subject) return <span className="text-xs opacity-40">—</span>
+        const label = item.activeRfqId ? `RDO #${item.activeRfqId} — ${subject}` : subject
+        return (
+          <span className="flex justify-center" title={label} aria-label={label}>
+            <FileCheck2 className="size-4 opacity-70" />
+          </span>
+        )
+      },
+    },
     {
       accessorKey: "quantity",
       header: "Qtà",
+      // Filtro stretto su misura: l'input standard allargherebbe la colonna ben oltre
+      // le 2-3 cifre di una quantità.
+      meta: {
+        filterInput: ({ value, onChange }) => (
+          <Input
+            value={(value as string) ?? ""}
+            className="h-8 w-12 bg-background dark:bg-background"
+            onChange={(event) => onChange(event.target.value)}
+          />
+        ),
+      },
       cell: ({ row }) => (
-        <span className="font-semibold text-xs tabular-nums">{row.original.quantity}</span>
+        <span className="font-semibold text-[11px] tabular-nums">{row.original.quantity}</span>
       ),
     },
     {
       accessorKey: "unit",
       header: "UM",
-      cell: ({ row }) => <span className="text-xs uppercase">{row.original.unit || "—"}</span>,
+      meta: {
+        filterInput: ({ value, onChange }) => (
+          <Input
+            value={(value as string) ?? ""}
+            className="h-8 w-12 bg-background dark:bg-background"
+            onChange={(event) => onChange(event.target.value)}
+          />
+        ),
+      },
+      cell: ({ row }) => (
+        <span className="text-[11px] uppercase opacity-80">{row.original.unit || "—"}</span>
+      ),
     },
     {
       accessorKey: "supplierName",
@@ -269,7 +314,10 @@ export function buildAcquistiColumns({
       accessorKey: "notes",
       header: "Note",
       cell: ({ row }) => (
-        <span className="block max-w-[120px] truncate text-xs opacity-75" title={row.original.notes}>
+        <span
+          className="block max-w-[120px] whitespace-normal break-words text-xs opacity-75"
+          title={row.original.notes}
+        >
           {row.original.notes || "—"}
         </span>
       ),

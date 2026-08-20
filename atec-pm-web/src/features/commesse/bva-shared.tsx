@@ -13,37 +13,71 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Collapsible } from "@/components/ui/collapsible"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { hours } from "@/features/commesse/preventivo-dialogs"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-/** Rosso se il delta sfora (consuntivo > preventivo), verde se sotto. */
-function deltaClass(delta: number): string {
-  if (delta > 0.05) return "text-destructive"
+import { useBvaWindow } from "./bva-expand"
+
+/** Rosso se il delta sfora (consuntivo > preventivo), verde se sotto (#66). */
+export function deltaClass(delta: number): string {
+  if (delta > 0.05) return "text-red-600"
   if (delta < -0.05) return "text-emerald-600"
   return "text-muted-foreground"
 }
 
-function deltaText(delta: number): string {
+export function deltaText(delta: number): string {
   const sign = delta > 0 ? "+" : ""
   return `Δ ${sign}${delta.toFixed(1)} h`
 }
 
+/** Stili condivisi ore / € / etichette (#65, #66): rosso pastello, blu pastello, nero. */
+export const bvaLabelClass = "font-bold text-black dark:text-foreground"
+export const bvaHoursClass = "font-bold tabular-nums text-rose-500"
+export const bvaMoneyClass = "font-bold tabular-nums text-sky-600"
+/** Ore delle fasi (#68): preventivate, assegnate/lavorate e % in grassetto nero. */
+export const bvaPhaseHoursClass =
+  "font-bold tabular-nums text-black dark:text-foreground"
+/**
+ * Titolo «Risorse a consuntivo» (#104): grassetto rosso, così si stacca dal
+ * fratello grigio «Risorse pianificate» che gli sta sopra nella stessa colonna.
+ */
+export const bvaActualTitleClass =
+  "text-[10px] font-bold uppercase tracking-wide text-destructive"
+export function bvaDeltaClass(delta: number): string {
+  return cn("font-bold tabular-nums", deltaClass(delta))
+}
+
+/**
+ * Riquadro KPI del Bilancio.
+ *
+ * `explain` (segnalazioni #35 / #45) compare al passaggio del mouse: solo da dove
+ * esce il numero (titolo + formula + cifre), senza commenti. Stile chiaro come negli
+ * esempi della #45; il Tooltip scuro di default dell'app qui non andrebbe bene.
+ */
 export function Kpi({
   label,
   value,
   hint,
   accent,
+  explain,
   onEdit,
 }: {
   label: string
-  value: string
-  hint?: string
+  value: React.ReactNode
+  hint?: React.ReactNode
   accent?: string
+  /** Spiegazione del calcolo, mostrata al passaggio del mouse. */
+  explain?: React.ReactNode
   onEdit?: () => void
 }) {
-  return (
-    <Card size="sm">
+  const card = (
+    <Card size="sm" className={explain ? "cursor-help" : undefined}>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardDescription>{label}</CardDescription>
@@ -67,9 +101,27 @@ export function Kpi({
       </CardHeader>
     </Card>
   )
+
+  if (!explain) return card
+
+  return (
+    <Tooltip>
+      {/* `asChild` su un div e non sulla Card: il trigger deve accettare i ref e gli
+          handler senza che la Card perda le sue classi. */}
+      <TooltipTrigger asChild>
+        <div>{card}</div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="max-w-sm border border-border bg-card px-3 py-2.5 text-xs leading-snug text-card-foreground shadow-md"
+      >
+        {explain}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
-/** Blocco Prev / Assegn / Cons (ore + €) con delta colorato. */
+/** Blocco Preventivato / Assegnato / Consuntivato (ore + €) con delta colorato (#66). */
 export function ThreeColumn({
   budgetHours,
   budgetCost,
@@ -91,30 +143,31 @@ export function ThreeColumn({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs tabular-nums">
-      <span className="text-muted-foreground">
-        Prev:{" "}
-        <span className="font-medium text-foreground">{hours(budgetHours)}</span>{" "}
-        · {euro(budgetCost)}
+      <span>
+        <span className={bvaLabelClass}>Preventivato</span>{" "}
+        <span className={bvaHoursClass}>{hours(budgetHours)}</span>
+        {" · "}
+        <span className={bvaMoneyClass}>{euro(budgetCost)}</span>
       </span>
       {travel != null && travel > 0 ? (
-        <span className="text-muted-foreground">+ Trasferta {euro(travel)}</span>
+        <span className="text-muted-foreground">
+          + Trasferta <span className={bvaMoneyClass}>{euro(travel)}</span>
+        </span>
       ) : null}
-      <span className="text-muted-foreground">
-        Assegn:{" "}
-        <span className="font-medium text-foreground">
-          {hours(assignedHours)}
-        </span>{" "}
-        · {euro(assignedCost)}
+      <span>
+        <span className={bvaLabelClass}>Assegnato</span>{" "}
+        <span className={bvaHoursClass}>{hours(assignedHours)}</span>
+        {" · "}
+        <span className={bvaMoneyClass}>{euro(assignedCost)}</span>
       </span>
-      <span className="text-muted-foreground">
-        Cons:{" "}
-        <span className="font-medium text-foreground">{hours(actualHours)}</span>{" "}
-        · {euro(actualCost)}
+      <span>
+        <span className={bvaLabelClass}>Consuntivato</span>{" "}
+        <span className={bvaHoursClass}>{hours(actualHours)}</span>
+        {" · "}
+        <span className={bvaMoneyClass}>{euro(actualCost)}</span>
       </span>
       {Math.abs(deltaHours) > 0.05 ? (
-        <span className={cn("font-medium", deltaClass(deltaHours))}>
-          {deltaText(deltaHours)}
-        </span>
+        <span className={bvaDeltaClass(deltaHours)}>{deltaText(deltaHours)}</span>
       ) : null}
     </div>
   )
@@ -132,7 +185,7 @@ export function BlueSection({
   defaultOpen?: boolean
   children: React.ReactNode
 }) {
-  const [open, setOpen] = React.useState(defaultOpen)
+  const { open, toggle } = useBvaWindow(defaultOpen)
   return (
     <div className="overflow-hidden rounded-lg border">
       <div
@@ -142,7 +195,7 @@ export function BlueSection({
         <button
           type="button"
           className="flex items-center gap-2 text-left"
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
         >
           <ChevronRight
             className={cn(

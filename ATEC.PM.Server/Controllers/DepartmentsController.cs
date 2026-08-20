@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
+using ATEC.PM.Server.Hubs;
 using ATEC.PM.Server.Services;
 
 namespace ATEC.PM.Server.Controllers;
@@ -12,7 +14,22 @@ namespace ATEC.PM.Server.Controllers;
 public class DepartmentsController : ControllerBase
 {
     private readonly DbService _db;
-    public DepartmentsController(DbService db) => _db = db;
+    private readonly IHubContext<ProjectHub> _hub;
+
+    public DepartmentsController(DbService db, IHubContext<ProjectHub> hub)
+    {
+        _db = db;
+        _hub = hub;
+    }
+
+    /// <summary>
+    /// Avvisa chi ha aperto la Configurazione sezioni: il pannello dei reparti vive in quella pagina.
+    /// Stesso evento di <c>CostSectionsController</c>.
+    /// </summary>
+    private void NotifyCostSectionsChanged(string action) =>
+        _ = _hub.Clients.Group(ProjectHub.CostSectionsGroup)
+            .SendAsync("CostSectionsChanged", new { action });
+
 
     [HttpGet]
     public IActionResult GetAll()
@@ -56,6 +73,7 @@ public class DepartmentsController : ControllerBase
               VALUES (@Code, @Name, @HourlyCost, @DefaultMarkup, @SortOrder, @IsActive);
               SELECT LAST_INSERT_ID();", req);
 
+        NotifyCostSectionsChanged("department-created");
         return Ok(ApiResponse<int>.Ok(id, "Reparto creato"));
     }
 
@@ -80,6 +98,7 @@ public class DepartmentsController : ControllerBase
             new { req.Code, req.Name, req.HourlyCost, req.DefaultMarkup, req.SortOrder, req.IsActive, id });
 
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Reparto non trovato"));
+        NotifyCostSectionsChanged("department-updated");
         return Ok(ApiResponse<string>.Ok("", "Reparto aggiornato"));
     }
 
@@ -105,6 +124,7 @@ public class DepartmentsController : ControllerBase
 
         int rows = c.Execute("DELETE FROM departments WHERE id=@id", new { id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Reparto non trovato"));
+        NotifyCostSectionsChanged("department-deleted");
         return Ok(ApiResponse<string>.Ok("", "Reparto eliminato"));
     }
 }

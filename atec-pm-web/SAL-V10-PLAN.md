@@ -94,11 +94,12 @@ CREATE TABLE IF NOT EXISTS sal_sap_causali (
 CREATE TABLE IF NOT EXISTS sal_payment_states (…identica…);
 -- seed se vuota: 'Pagata', 'Parzialmente Pagata'
 
--- controllo periodico prospetto
-CREATE TABLE IF NOT EXISTS sal_prospetto_checks (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  checked_by INT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- controllo periodico prospetto — RIMOSSO il 03/08/2026: la CREATE non c'è più in
+-- SalDbService.InitTables. Dove la tabella esiste già resta lì, inutilizzata (nessun DROP).
+-- CREATE TABLE IF NOT EXISTS sal_prospetto_checks (
+--   id INT AUTO_INCREMENT PRIMARY KEY,
+--   checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--   checked_by INT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- migrazione dati: stato legacy 'pagata' → emessa + Pagata (paid_by/paid_at restano)
 UPDATE sal_rows SET pagamento='Pagata', stato='emessa' WHERE stato='pagata';
@@ -108,7 +109,7 @@ Aggiornare **anche** `SalDbService.InitTables` + `SeedConditions` (percorso DEVE
 ### 2.2 DTO (`Sal_DTOs.cs` + mirror `types.ts`)
 - `SalRowDto` / `SalRowSaveRequest` += `IvaPerc(int?), GgSaldo(int?), NFatt(string), ContoSap(string), Pagamento(string), DataPagamento(DateTime?), Note(string)`
 - `SalHeaderDto` / `SalHeaderSaveRequest` += `Po(string), RifOfferta(string)`
-- Nuovi: `SalSapCausaleDto`/`SalPaymentStateDto` (= shape `SalConditionDto`), `SalProspettoCheckDto { CheckedAt, CheckedByName, Days, Due, NextDue }`
+- Nuovi: `SalSapCausaleDto`/`SalPaymentStateDto` (= shape `SalConditionDto`), ~~`SalProspettoCheckDto { CheckedAt, CheckedByName, Days, Due, NextDue }`~~ (rimosso il 03/08/2026)
 - `SalProspettoRowDto` += `GgSaldo, DataSaldo(DateTime?), Stato, Pagamento, Alert` esteso (`warn|pre|incasso|attesa|plan`)
 - `SalSummaryDto` += `Incasso(int)` (conteggio fatture con incasso scaduto)
 - Nuovo `SalEconomicsRowDto { ProjectId, Code, Cliente, Step, Perc, Importo, IvaPerc, Iva, TotIva, Condizione, DataFatt, GgSaldo, DataSaldo, Stato, Pagamento }` (base per Cash Flow/Analisi/drill-down, calcolo in SQL)
@@ -120,7 +121,7 @@ Aggiornare **anche** `SalDbService.InitTables` + `SeedConditions` (percorso DEVE
 | `DELETE rows/{id}` | **Fix**: aggiungere check `row_version` (oggi assente) + stessa regola Pagata/ADMIN |
 | `GET/POST/PUT/DELETE /sap-causali[...]` e `/payment-states[...]` | CRUD + `toggle-active` + `reorder` + `reset` — clone esatto di `/conditions` |
 | `GET /prospetto` | Regola inclusione v10: `data_fatt IS NOT NULL AND (stato <> 'emessa' OR (pagamento <> 'Pagata' AND gg_saldo IS NOT NULL))`; `DataSaldo = DATE_ADD(data_fatt, INTERVAL gg_saldo DAY)`; alert calcolato in SQL: `incasso` (saldo scaduto) > `warn` > `pre` > `attesa` (emessa in attesa) > `plan`; **tutte le righe** (via da LIMIT 2) |
-| `GET /prospetto/check` + `POST /prospetto/check` | Stato controllo periodico (ultima riga di `sal_prospetto_checks`, `due = days >= 15`) + conferma (insert con employeeId) |
+| ~~`GET /prospetto/check` + `POST /prospetto/check`~~ | **Rimossi il 03/08/2026** insieme al banner del controllo periodico |
 | `GET /economics` | Tutte le righe SAL con campi calcolati (per Cash Flow + Analisi + drill-down); **solo PM/ADMIN** (403 altrimenti) |
 | `GET /summary` | += conteggio `incasso` per i dots sidebar |
 
@@ -169,7 +170,8 @@ Realtime: invariato (`SalChanged`/`GlobalSalChanged` dopo ogni mutazione; aggiun
 
 1. Colonne: Segnalazione · Commessa · Cliente · Step SAL · % · Condizioni · Importo · Ipotesi Fatturazione · **Data Prevista Saldo**. Pill estese: 🔴 Scaduto / 🔴 Fattura no incasso / 🟡 Pre-warning / 🔵 Emessa – attesa incasso / ⚪ In programma. Righe colorate coerenti (rosa/giallo).
 2. Dati dal `/prospetto` esteso (tutte le righe, regola inclusione v10); ordinamento client su ogni colonna (già c'è, aggiungere `dataSaldo`); default = Ipotesi Fatturazione crescente.
-3. **Banner controllo periodico**: da `GET /api/sal/prospetto/check` — rosso se `due` («Warning — Allinea Gestione Commesse. Sono trascorsi N giorni…», bottone primario «Conferma controllo» → `POST` con `useConfirm`? no, azione non distruttiva → diretto) / verde se ok («Ultimo controllo il … di <nome>. Prossimo avviso il …»).
+3. ~~**Banner controllo periodico**: da `GET /api/sal/prospetto/check` — rosso se `due` («Warning — Allinea Gestione Commesse. Sono trascorsi N giorni…», bottone primario «Conferma controllo» → `POST` con `useConfirm`? no, azione non distruttiva → diretto) / verde se ok («Ultimo controllo il … di <nome>. Prossimo avviso il …»).~~
+   **RIMOSSO il 03/08/2026 su richiesta dell'utente** — niente più banner né «Conferma controllo» nel Prospetto SAL. Rimossi anche gli endpoint `GET`/`POST /api/sal/prospetto/check`, il `SalProspettoCheckDto`, i wrapper client e il `CREATE TABLE sal_prospetto_checks`. La tabella resta sui DB dove esisteva già (dati storici), inutilizzata: non è stato fatto alcun DROP. Non reintrodurre il banner.
 4. Sommario contatori: monitorate / scadute fatturazione / pre-warning / non incassate / emesse in attesa.
 5. CSV + stampa aggiornati alle nuove colonne/pill (pattern esistente).
 6. **Sidebar `/sal`**: `salSummaryDots` += pallino «incasso scaduto»; count quick view Prospetto += incasso.

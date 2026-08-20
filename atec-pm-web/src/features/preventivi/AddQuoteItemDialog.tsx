@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import { notifyError } from "@/lib/toast"
 import {
@@ -12,13 +13,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -26,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchCategories,
   fetchGroups,
@@ -33,7 +28,7 @@ import {
 } from "@/lib/api/quote-catalog"
 import { addQuoteProduct } from "@/lib/api/quotes"
 import { useDebounced } from "@/lib/use-debounced"
-import { fmt2 } from "@/lib/format"
+import { euro } from "@/lib/format"
 
 const ALL_GROUPS = "__all_groups__"
 const ALL_CATS = "__all_cats__"
@@ -116,7 +111,7 @@ export function AddQuoteItemDialog({
         const sells = p.variants.map((v) => v.sellPrice)
         const min = Math.min(...sells)
         const max = Math.max(...sells)
-        priceRange = min === max ? `${fmt2(min)}€` : `${fmt2(min)}€ – ${fmt2(max)}€`
+        priceRange = min === max ? euro(min) : `${euro(min)} – ${euro(max)}`
       }
       return {
         productId: p.id,
@@ -170,42 +165,30 @@ export function AddQuoteItemDialog({
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={groupId}
-            onValueChange={(v) => {
-              setGroupId(v)
+          <LookupCombobox
+            options={groups.map((g) => ({ id: String(g.id), name: g.name }))}
+            value={groupId === ALL_GROUPS ? null : groupId}
+            onValueChange={(id) => {
+              setGroupId(id ?? ALL_GROUPS)
               setCategoryId(ALL_CATS)
             }}
-          >
-            <SelectTrigger size="sm" className="h-8 w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_GROUPS}>Tutti i gruppi</SelectItem>
-              {groups.map((g) => (
-                <SelectItem key={g.id} value={String(g.id)}>
-                  {g.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={categoryId}
-            onValueChange={setCategoryId}
+            placeholder="Tutti i gruppi"
+            noneLabel="Tutti i gruppi"
+            searchPlaceholder="Cerca gruppo…"
+            emptyText="Nessun gruppo trovato"
+            className="h-8 w-48"
+          />
+          <LookupCombobox
+            options={categories.map((c) => ({ id: String(c.id), name: c.name }))}
+            value={categoryId === ALL_CATS ? null : categoryId}
+            onValueChange={(id) => setCategoryId(id ?? ALL_CATS)}
             disabled={numericGroup === undefined}
-          >
-            <SelectTrigger size="sm" className="h-8 w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_CATS}>Tutte le categorie</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder="Tutte le categorie"
+            noneLabel="Tutte le categorie"
+            searchPlaceholder="Cerca categoria…"
+            emptyText="Nessuna categoria trovata"
+            className="h-8 w-48"
+          />
           <Input
             value={search}
             placeholder="Cerca codice o nome…"
@@ -214,9 +197,9 @@ export function AddQuoteItemDialog({
           />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
+        <GridScroller fill className="rounded-md border">
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableHeader>
               <TableRow>
                 <TableHead className="w-16">TIPO</TableHead>
                 <TableHead className="w-32">CODICE</TableHead>
@@ -263,7 +246,7 @@ export function AddQuoteItemDialog({
               )}
             </TableBody>
           </Table>
-        </div>
+        </GridScroller>
 
         <DialogFooter className="flex items-center sm:justify-between">
           <span className="text-xs text-muted-foreground">

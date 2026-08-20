@@ -111,18 +111,17 @@ public class EmailService : BackgroundService
             Set("email.password", EncryptPassword(dto.Password));
     }
 
-    private static string EncryptPassword(string plain)
-    {
-        byte[] bytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(plain), null, DataProtectionScope.CurrentUser);
-        return Convert.ToBase64String(bytes);
-    }
+    // Stessa cifratura DPAPI dei segreti di configurazione: sul server aziendale il
+    // programma gira come servizio (nessun profilo utente caricato) e ProtectedConfigHelper
+    // sceglie da solo l'ambito giusto. Cifrare qui "per utente" renderebbe la password
+    // SMTP illeggibile al primo riavvio del servizio.
+    private static string EncryptPassword(string plain) => ProtectedConfigHelper.Encrypt(plain);
 
     private static string? DecryptPassword(string encryptedBase64)
     {
         try
         {
-            byte[] bytes = ProtectedData.Unprotect(Convert.FromBase64String(encryptedBase64), null, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(bytes);
+            return ProtectedConfigHelper.Decrypt(encryptedBase64);
         }
         catch
         {

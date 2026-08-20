@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/api/client"
+import { MoneyInput } from "@/components/shared/money-input"
 import { DateField } from "@/components/shared/date-field"
 import { SupplierSearchCombobox } from "@/components/shared/supplier-search-combobox"
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,7 @@ import {
   DDP_DESTINATION_NONE,
 } from "./ddp-destination-options"
 import { DDP_STATUS_VERIFY, filterStatusOptions, isCommercialQtyEditable } from "./ddp-constants"
-import { toDateOnly } from "@/lib/date-iso"
+import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
 import { parseDecimal } from "@/lib/format"
 
 const EDITABLE = {
@@ -49,6 +50,8 @@ const EDITABLE = {
   destination: "",
   destinationSpec: "",
   notes: "",
+  /** «Inserito da» (#61): nasce col nome di chi crea la riga, ma si può correggere. */
+  requestedBy: "",
 }
 
 type EditableState = typeof EDITABLE
@@ -125,6 +128,7 @@ export function DdpRowDialog({
       destination: editRow.destination ?? "",
       destinationSpec: editRow.destinationSpec ?? "",
       notes: editRow.notes ?? "",
+      requestedBy: editRow.requestedBy ?? "",
     })
     // defaultStatus dipende da `statuses`, ma ricarichiamo solo al cambio target/apertura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,7 +163,7 @@ export function DdpRowDialog({
         updateSupplier: true,
         manufacturer: editRow.manufacturer,
         itemStatus: nextStatus,
-        requestedBy: editRow.requestedBy,
+        requestedBy: form.requestedBy.trim(),
         daneaRef: form.daneaRef.trim(),
         dateNeeded: form.dateNeeded,
         destination: form.destination.trim(),
@@ -237,7 +241,11 @@ export function DdpRowDialog({
             </div>
             <div className="grid gap-2">
               <Label>Costo unit. (€)</Label>
-              <Input value={String(editRow.unitCost ?? 0)} disabled />
+              <MoneyInput
+                value={String(editRow.unitCost ?? 0)}
+                onChange={() => {}}
+                disabled
+              />
             </div>
             <div className="grid gap-2">
               <Label>Stato</Label>
@@ -346,9 +354,25 @@ export function DdpRowDialog({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Richiesto da</Label>
-            <Input value={editRow.requestedBy} disabled />
+          {/* Stessi nomi della griglia (segnalazione #61): «Inserito da» si compila da
+              solo alla nascita della riga ma resta correggibile; «Data inserimento» e
+              «Creata da» no, sono il momento e l'autore veri, registrati dal server. */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-2">
+              <Label>Inserito da</Label>
+              <Input
+                value={form.requestedBy}
+                onChange={(event) => set("requestedBy", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Data inserimento</Label>
+              <Input value={formatDateOrDash(editRow.createdAt)} disabled />
+            </div>
+            <div className="grid gap-2">
+              <Label>Creata da</Label>
+              <Input value={editRow.createdByName || "—"} disabled />
+            </div>
           </div>
 
           <div className="grid gap-2">

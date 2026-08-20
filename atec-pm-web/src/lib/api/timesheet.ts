@@ -89,11 +89,17 @@ export async function fetchRegistrableEmployees(): Promise<LookupItem[]> {
   return unwrapApi(response)
 }
 
+/**
+ * Commesse selezionabili nel dialogo ore. Dal #86 sono le sole commesse vere:
+ * `includeProjectId` tiene in elenco quella della registrazione che si sta modificando,
+ * anche quando è un'Altra Attività registrata prima di questa regola.
+ */
 export async function fetchProjectsForEmployee(
-  employeeId: number
+  employeeId: number,
+  includeProjectId = 0
 ): Promise<TimesheetProjectOption[]> {
   const response = await apiGet<ApiResponse<TimesheetProjectOption[]>>(
-    `/api/timesheet/projects-for-employee?employeeId=${employeeId}`
+    `/api/timesheet/projects-for-employee?employeeId=${employeeId}&includeProjectId=${includeProjectId}`
   )
   return unwrapApi(response)
 }

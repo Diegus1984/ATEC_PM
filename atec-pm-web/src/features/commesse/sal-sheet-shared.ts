@@ -6,15 +6,15 @@ import type { SalRow, SalRowSaveRequest } from "@/lib/api/types"
 export const SAL_COL = {
   num: "w-14",
   iva: "w-24",
-  ivaPerc: "w-16",
+  ivaPerc: "w-20 min-w-[4.5rem]",
   totIva: "w-24",
   dataSaldo: "w-24",
-  ggSaldo: "w-16",
+  ggSaldo: "w-20 min-w-[5rem]",
   step: "min-w-[10rem]",
   // 10 cifre (es. 2026000193) a text-sm ≈ 82px + padding cella/input: sotto i 8rem il numero si taglia.
   nFatt: "w-32",
   contoSap: "w-32",
-  perc: "w-16",
+  perc: "w-20 min-w-[4.5rem]",
   condizione: "w-32",
   importo: "w-24",
   dataFatt: "w-28",

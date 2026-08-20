@@ -78,6 +78,20 @@ interface PrintColumn {
   cell: (m: Milestone, nr: number) => string
 }
 
+/**
+ * Numero di riga da stampare = posizione nell'elenco COMPLETO della commessa, esattamente
+ * come la colonna «#» della griglia a video.
+ *
+ * Prima si usava la posizione fra le sole righe stampate: bastava nascondere una riga dal
+ * Gantt perché la stampa ripartisse da 1..N e non fosse più confrontabile con la griglia.
+ * Il prototipo conserva l'indice originale (`c.milestones.map((m,i)=>…).filter(…)`).
+ */
+function rowNumberMap(all: Milestone[]): Map<number, number> {
+  const map = new Map<number, number>()
+  all.forEach((m, i) => map.set(m.id, i + 1))
+  return map
+}
+
 // Definizione colonne del pannello sinistro (id allineati a SIDEBAR_COLUMNS del Gantt).
 const ALL_COLUMNS: PrintColumn[] = [
   { key: "nr", th: "Nr", width: 26, cell: (_m, nr) => `<td class="ix">${nr}</td>` },
@@ -120,6 +134,9 @@ export interface PrintMilestoneGanttOptions {
   projectTitle?: string
   /** Milestone già filtrate: attive e visibili nell'ordine di visualizzazione. */
   milestones: Milestone[]
+  /** Elenco COMPLETO della commessa nell'ordine della griglia: serve solo a numerare le righe
+   *  con lo stesso «Nr» che si vede a video (vedi {@link rowNumberMap}). */
+  allMilestones: Milestone[]
   /** Id colonne del pannello sinistro attualmente visibili (sottoinsieme di ALL_COLUMNS). */
   visibleColumnIds: string[]
   /** Se mostrare la timeline (parte destra) — normalmente sempre true per il Gantt. */
@@ -143,12 +160,15 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
     projectCode,
     projectTitle,
     milestones,
+    allMilestones,
     visibleColumnIds,
     showTimeline = true,
     filterFrom,
     filterTo,
     onError,
   } = opts
+
+  const rowNr = rowNumberMap(allMilestones)
 
   const fail = (msg: string) => {
     if (onError) onError(msg)
@@ -181,7 +201,11 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
   }
 
   let start = mondayOf(isoToDate(minIso)!)
-  let end = sundayOf(addDays(isoToDate(maxIso)!, 7))
+  // La settimana in più serve solo quando la fine è dedotta dalle attività: se «Al» l'ha
+  // scelto l'utente, la finestra si chiude alla domenica di quella data.
+  let end = filterTo
+    ? sundayOf(isoToDate(maxIso)!)
+    : sundayOf(addDays(isoToDate(maxIso)!, 7))
   const today = startOfDay(new Date())
   // Include sempre oggi nell'intervallo, salvo quando escluso da un filtro esplicito.
   if (!filterFrom && today < start) start = mondayOf(today)
@@ -250,10 +274,10 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
 
   // Righe.
   let rows = ""
-  milestones.forEach((m, index) => {
+  milestones.forEach((m) => {
     const av = typeof m.avanzamento === "number" ? m.avanzamento : null
     const full = av === 100
-    const tds = cols.map((c) => c.cell(m, index + 1)).join("")
+    const tds = cols.map((c) => c.cell(m, rowNr.get(m.id) ?? 0)).join("")
 
     let timeCell = ""
     if (timelineVisible) {
@@ -277,10 +301,10 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
             dw * 0.8,
             (Math.min(totalDays, off + len) - Math.max(0, off)) * dw - 1
           )
-          bar =
-            `<div class="bar ${full ? "done" : ""}" style="left:${left}px;width:${width}px">` +
-            (av != null && av > 0 && !full ? `<span class="fl" style="width:${av}%"></span>` : "") +
-            "</div>"
+          // Barra piena, senza riempimento proporzionale all'avanzamento: sulla barra
+          // non deve comparire nessun riferimento alla percentuale (resta la colonna
+          // «Avanz.» della tabella). Il verde è lo stato «completata», non una quota.
+          bar = `<div class="bar ${full ? "done" : ""}" style="left:${left}px;width:${width}px"></div>`
         }
       }
       timeCell = `<td class="tl"><div class="trow" style="width:${timeW}px">${cells}<div class="bt">${bar}</div></div></td>`
@@ -294,19 +318,20 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
       ? `<th class="tl"><div class="bands"><div class="mrow" style="width:${timeW}px">${months}</div><div class="wrow" style="width:${timeW}px">${weeks}</div><div class="drow" style="width:${timeW}px">${dayHdr}</div></div></th>`
       : "")
 
+  // Titolo in due versioni: testo semplice (fallback) e HTML con il codice evidenziato.
   const title = projectCode
+    ? `${projectCode}${projectTitle ? " — " + projectTitle : ""}`
+    : "Milestones"
+  const titleHtml = projectCode
     ? `<span class="code">${escapeHtml(projectCode)}</span>${projectTitle ? " — " + escapeHtml(projectTitle) : ""}`
     : "Milestones"
 
   const customStyles = `
-    .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:9px; color:#5A6B7A; margin-bottom:8px}
-    .legend .lg{display:flex; align-items:center; gap:5px} .legend .sw{display:inline-block; width:18px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.08)}
-    .sw.base{background:#2E75B6} .sw.prog{background:#1F5A92} .sw.done{background:#3E8E63} .sw.tdy{background:#FFD966}
     table{border-collapse:collapse; width:${tableW}px; table-layout:fixed} th,td{border:1px solid #D9E1EC; padding:2px 5px; font-size:9px; vertical-align:middle}
     th{background:#EAF1F9; color:#5A6B7A; text-transform:uppercase; font-size:8px; white-space:pre-line; vertical-align:bottom}
     td.ix{text-align:right;color:#9AA7B4;font-family:'JetBrains Mono',monospace} td.ds{font-weight:600; white-space:normal; word-break:break-word; line-height:1.2} td.ds.dn{color:#3E8E63} td.ds.hl{color:#8E1B2E;font-weight:700} td.ce{text-align:center;font-family:'JetBrains Mono',monospace;white-space:nowrap} td.nt{color:#5A6B7A; white-space:normal; word-break:break-word; line-height:1.2}
     td.tl{padding:0; overflow:hidden} .trow{position:relative; height:18px; display:flex} .d{height:18px;border-right:1px solid #EEF2F7; flex:0 0 auto} .d.we{background:#E8EDF3} .d.ho{background:#F3E1E4} .d.t{background:#FFD966}
-    .bt{position:absolute;inset:0} .bar{position:absolute;top:3px;height:12px;background:#2E75B6;border-radius:3px;box-shadow:0 1px 1px rgba(31,90,146,.25)} .bar.done{background:#3E8E63} .fl{position:absolute;left:0;top:0;bottom:0;background:#1F5A92;border-radius:3px 0 0 3px} .bar.done .fl{background:#2E7D4F}
+    .bt{position:absolute;inset:0} .bar{position:absolute;top:3px;height:12px;background:#2E75B6;border-radius:3px;box-shadow:0 1px 1px rgba(31,90,146,.25)} .bar.done{background:#3E8E63}
     .bands{display:flex;flex-direction:column} .mrow,.wrow{display:flex} .m{font-size:8px;font-weight:800;text-transform:uppercase;color:#2F6098;background:#EAF1F9;border-right:1px solid #C9D6E5;padding:2px 4px;overflow:hidden;white-space:nowrap;flex:0 0 auto}
     .w{font-family:'JetBrains Mono',monospace;font-size:7px;font-weight:700;color:#33639B;background:#E9F1FA;border-right:1px solid #DDE6F1;text-align:center;overflow:hidden;flex:0 0 auto}
     th.tl{padding:0; vertical-align:bottom}
@@ -318,12 +343,6 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
   `
 
   const contentHtml = `
-    <div class="legend">
-      <span class="lg"><span class="sw base"></span>Pianificato</span>
-      <span class="lg"><span class="sw prog"></span>Avanzamento</span>
-      <span class="lg"><span class="sw done"></span>Completata</span>
-      <span class="lg"><span class="sw tdy"></span>Oggi</span>
-    </div>
     <table>
       ${colgroup}
       <thead><tr>${headCells}</tr></thead>
@@ -331,13 +350,12 @@ export function printMilestoneGantt(opts: PrintMilestoneGanttOptions): void {
     </table>
   `
 
+  // Testata ridotta al solo logo + commessa (#71): dal foglio spariscono il
+  // sottotitolo «GANTT MILESTONES», i metadati (conteggio Milestones e la nota
+  // «Settimane ISO 8601») e la legenda dei colori. Restano titolo, tabella e piè.
   printHtml({
     title,
-    subtitle: "Gantt Milestones",
-    meta: [
-      { label: "Milestones", value: milestones.length },
-      { label: "Note", value: "Settimane ISO 8601" }
-    ],
+    titleHtml,
     contentHtml,
     orientation: "landscape",
     paperSize: "A3",
@@ -349,7 +367,9 @@ export interface PrintMilestoneTableOptions {
   projectCode?: string
   projectTitle?: string
   projectSub?: string
+  /** Righe effettivamente stampate (attive e visibili). */
   milestones: Milestone[]
+  /** Elenco COMPLETO della commessa, usato solo per numerare le righe come nella griglia. */
   allMilestones: Milestone[]
   onError?: (message: string) => void
 }
@@ -368,7 +388,11 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
   } = opts
 
   const now = new Date()
-  const avg = avgAvanz(allMilestones)
+  const rowNr = rowNumberMap(allMilestones)
+  // Conteggio, media e periodo si riferiscono alle SOLE righe stampate (come il prototipo):
+  // prima la media arrivava da `allMilestones`, quindi comprendeva anche le righe nascoste
+  // dal Gantt e il valore in testata non corrispondeva al foglio.
+  const avg = avgAvanz(milestones)
 
   // Calcolo intervallo date pianificato
   const dates: string[] = []
@@ -382,13 +406,13 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
     : "—"
 
   const rows = milestones
-    .map((m, index) => {
+    .map((m) => {
       const av = typeof m.avanzamento === "number" ? m.avanzamento : null
       const full = av === 100
       const tot = weekTot(m.dataInizio, m.dataFine)
       const barFill = av || 0
       return `<tr>
-        <td class="ix">${index + 1}</td>
+        <td class="ix">${rowNr.get(m.id) ?? 0}</td>
         <td class="ds ${full ? "dn" : ""} ${m.evidenza ? "hl" : ""}">${escapeHtml(m.descrizione || "—")}</td>
         <td class="ce">${weekLabel(m.dataInizio) || "—"}</td>
         <td class="ce">${fmtItShort(m.dataInizio) || "—"}</td>
@@ -405,6 +429,9 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
     .join("")
 
   const docTitle = projectCode
+    ? `${projectCode}${projectTitle ? " — " + projectTitle : ""}`
+    : "Milestones di Commessa"
+  const docTitleHtml = projectCode
     ? `<span class="code">${escapeHtml(projectCode)}</span>${
         projectTitle ? " — " + escapeHtml(projectTitle) : ""
       }`
@@ -441,6 +468,7 @@ export function printMilestoneTable(opts: PrintMilestoneTableOptions): void {
 
   printHtml({
     title: docTitle,
+    titleHtml: docTitleHtml,
     subtitle: projectSub ? `Milestones di Commessa — ${projectSub}` : "Milestones di Commessa",
     meta: [
       { label: "Milestones", value: milestones.length },

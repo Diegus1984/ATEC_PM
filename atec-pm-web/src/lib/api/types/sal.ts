@@ -40,6 +40,11 @@ export interface SalHeader {
   po: string
   /** Riferimento Offerta ATEC. */
   rifOfferta: string
+  /**
+   * Commessa chiusa (COMPLETED/CANCELLED): il foglio SAL è in sola lettura per chi non
+   * è ADMIN. È l'unico lock del SAL — da una riga «Pagata» si può sempre tornare indietro.
+   */
+  isProjectClosed: boolean
 }
 
 export interface SalBundle {
@@ -125,20 +130,6 @@ export interface SalProspettoRow {
   pagamento: string
 }
 
-/** Stato del controllo periodico del prospetto SAL (ultima conferma registrata). */
-export interface SalProspettoCheck {
-  /** Data/ora ultimo controllo (null se mai fatto). */
-  checkedAt: string | null
-  /** Nome di chi ha confermato l'ultimo controllo. */
-  checkedByName: string
-  /** Giorni trascorsi dall'ultimo controllo. */
-  days: number | null
-  /** true = controllo dovuto (mai fatto o periodo di 15 gg scaduto). */
-  due: boolean
-  /** Prossima scadenza del controllo. */
-  nextDue: string | null
-}
-
 /** Testata economica Cash Flow: una per ogni project_sal di commessa attiva (anche senza righe). */
 export interface SalEconomicsHeader {
   projectId: number
@@ -193,4 +184,10 @@ export interface SalSummary {
   percTotal: number
   /** Σ % delle righe con Pagamento = «Pagata». */
   percPaid: number
+  /** PO - Ordine cliente (intestazione del foglio SAL, #91). */
+  po: string
+  /** Riferimento Offerta ATEC (intestazione del foglio SAL, #91). */
+  rifOfferta: string
+  /** Importo ordine — null anche per chi non ha `sal.economics` (azzerato dal server). */
+  valore: number | null
 }

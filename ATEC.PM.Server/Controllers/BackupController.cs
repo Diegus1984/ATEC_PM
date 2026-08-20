@@ -2,25 +2,30 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/backup")]
-// Solo ADMIN: questi endpoint creano/cancellano backup e possono RIPRISTINARE
-// l'intero database (restore svuota tutte le tabelle). Mai aprire a [Authorize] generico.
-[Authorize(Roles = "ADMIN")]
+// Solo a chi ha la funzione «Backup DB»: questi endpoint creano/cancellano backup e possono
+// RIPRISTINARE l'intero database (restore svuota tutte le tabelle). Il solo
+// [Authorize] non basta mai qui: serve sempre anche la chiave.
+[Authorize]
+[RequireFeature("nav.backup")]
 public class BackupController : ControllerBase
 {
     private readonly DbService _db;
     private readonly IConfiguration _config;
     private readonly ILogger<BackupController> _log;
+    private readonly FullBackupService _full;
 
-    public BackupController(DbService db, IConfiguration config, ILogger<BackupController> log)
+    public BackupController(DbService db, IConfiguration config, ILogger<BackupController> log, FullBackupService full)
     {
         _db = db;
         _config = config;
         _log = log;
+        _full = full;
     }
 
     /// <summary>
@@ -91,50 +96,10 @@ public class BackupController : ControllerBase
             string safetyBackup = ExecuteBackup("pre_restore");
             _log.LogInformation("[Restore] Backup preventivo creato: {Path}", safetyBackup);
 
-            // 2. Leggi il file SQL
-            string sql = System.IO.File.ReadAllText(fullPath, System.Text.Encoding.UTF8);
-
-            // 3. Svuota tutte le tabelle nell'ordine corretto (FK)
-            using var c = _db.Open();
-
-            c.Execute("SET FOREIGN_KEY_CHECKS=0");
-
-            var tables = c.Query<string>(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
-            ).ToList();
-            foreach (string table in tables)
-            {
-                c.Execute($"DELETE FROM `{table}`");
-                // Reset auto_increment
-                try { c.Execute($"ALTER TABLE `{table}` AUTO_INCREMENT = 1"); } catch (Exception ex) { _log.LogDebug(ex, "[Restore] Impossibile azzerare AUTO_INCREMENT per la tabella {Table}", table); }
-            }
-
-            // 4. Esegui gli INSERT dal backup
-            // Split per singolo statement (ogni riga che finisce con ;)
-            var statements = sql.Split('\n')
-                .Where(line => !string.IsNullOrWhiteSpace(line)
-                    && !line.TrimStart().StartsWith("--")
-                    && !line.TrimStart().StartsWith("SET FOREIGN_KEY_CHECKS"))
-                .Where(line => line.TrimEnd().EndsWith(";"));
-
-            int insertCount = 0;
-            int errorCount = 0;
-
-            foreach (string stmt in statements)
-            {
-                try
-                {
-                    c.Execute(stmt);
-                    insertCount++;
-                }
-                catch (Exception ex)
-                {
-                    errorCount++;
-                    _log.LogWarning("[Restore] Errore su statement: {Error}", ex.Message);
-                }
-            }
-
-            c.Execute("SET FOREIGN_KEY_CHECKS=1");
+            // 2. Svuota le tabelle e riesegue gli INSERT del backup (stessa procedura del
+            //    ripristino dal pacchetto completo).
+            using var sr = new StreamReader(fullPath, System.Text.Encoding.UTF8);
+            (int insertCount, int errorCount) = _full.RipristinaDatabase(sr);
 
             string msg = $"Ripristino completato: {insertCount} record importati";
             if (errorCount > 0)
@@ -185,6 +150,163 @@ public class BackupController : ControllerBase
     }
 
     // ══════════════════════════════════════════════════════════════
+    // BACKUP COMPLETO (database + cartelle) — pacchetto .zip
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>Cosa finirebbe nel pacchetto e quanto peserebbe, senza crearlo.</summary>
+    [HttpGet("full/stima")]
+    public IActionResult StimaPacchetto() => Ok(ApiResponse<object>.Ok(_full.StimaDimensione()));
+
+    [HttpGet("full/list")]
+    public IActionResult ListaPacchetti() => Ok(ApiResponse<List<object>>.Ok(_full.ListaPacchetti()));
+
+    /// <summary>Avvia la creazione del pacchetto completo. Torna subito: l'avanzamento
+    /// si segue con full/stato/{id} (con GB di documenti ci vogliono minuti).</summary>
+    [HttpPost("full/start")]
+    public IActionResult AvviaPacchetto()
+    {
+        FullBackupService.BackupJob job = _full.AvviaBackup();
+        return Ok(ApiResponse<object>.Ok(job, "Backup completo avviato"));
+    }
+
+    [HttpGet("full/stato/{jobId}")]
+    public IActionResult StatoOperazione(string jobId)
+    {
+        FullBackupService.BackupJob? job = _full.GetJob(jobId);
+        if (job == null) return NotFound(ApiResponse<string>.Fail("Operazione non trovata"));
+        return Ok(ApiResponse<object>.Ok(job));
+    }
+
+    /// <summary>Operazione in corso (se c'è): serve alla pagina per riagganciarsi
+    /// all'avanzamento dopo un F5 o da un altro computer.</summary>
+    [HttpGet("full/stato-corrente")]
+    public IActionResult OperazioneCorrente()
+    {
+        FullBackupService.BackupJob? job = _full.GetJobAttivo();
+        return Ok(ApiResponse<object?>.Ok(job));
+    }
+
+    /// <summary>
+    /// Ripristina database e/o cartelle da un pacchetto completo.
+    /// ATTENZIONE: sostituisce i dati attuali. Le cartelle esistenti non vengono
+    /// cancellate ma spostate accanto con suffisso ".prima-ripristino-<data>".
+    /// </summary>
+    [HttpPost("full/restore/{fileName}")]
+    public IActionResult RipristinaPacchetto(string fileName, [FromQuery] bool database = true, [FromQuery] bool file = true)
+    {
+        if (!NomeFileValido(fileName, ".zip"))
+            return BadRequest(ApiResponse<string>.Fail("Nome file non valido"));
+        if (!database && !file)
+            return BadRequest(ApiResponse<string>.Fail("Non è stato scelto nulla da ripristinare"));
+        if (!System.IO.File.Exists(Path.Combine(_full.GetPackageDir(), fileName)))
+            return NotFound(ApiResponse<string>.Fail($"Pacchetto {fileName} non trovato"));
+
+        // Backup preventivo del database: se il ripristino è sbagliato si torna indietro.
+        string? sicurezza = null;
+        if (database)
+        {
+            sicurezza = ExecuteBackup("pre_restore");
+            _log.LogInformation("[RipristinoCompleto] Backup preventivo: {Path}", sicurezza);
+        }
+
+        FullBackupService.BackupJob job = _full.AvviaRipristino(fileName, database, file, sicurezza);
+        return Ok(ApiResponse<object>.Ok(job, "Ripristino avviato"));
+    }
+
+    /// <summary>
+    /// Carica un pacchetto creato su un'altra macchina (tipicamente: backup fatto sul PC
+    /// di sviluppo e ripristinato qui). Senza questo il ripristino potrebbe usare solo i
+    /// pacchetti già presenti sul server.
+    /// </summary>
+    [HttpPost("full/upload")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
+    public async Task<IActionResult> CaricaPacchetto(IFormFile? file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(ApiResponse<string>.Fail("Nessun file ricevuto"));
+
+        string nome = Path.GetFileName(file.FileName);
+        if (!NomeFileValido(nome, ".zip"))
+            return BadRequest(ApiResponse<string>.Fail("Serve un pacchetto .zip"));
+
+        string dir = _full.GetPackageDir();
+
+        // Nome già visto: si aggiunge un suffisso invece di sovrascrivere un backup esistente.
+        string destinazione = Path.Combine(dir, nome);
+        int n = 1;
+        while (System.IO.File.Exists(destinazione))
+        {
+            destinazione = Path.Combine(dir,
+                $"{Path.GetFileNameWithoutExtension(nome)}_({n++}){Path.GetExtension(nome)}");
+        }
+
+        // Si scrive prima come .parziale: un caricamento interrotto non deve lasciare in
+        // elenco un pacchetto rotto che sembra buono.
+        string temporaneo = destinazione + ".parziale";
+        try
+        {
+            await using (FileStream fs = System.IO.File.Create(temporaneo))
+            {
+                await file.CopyToAsync(fs);
+            }
+
+            // Controllo minimo: dev'essere davvero un pacchetto di ATEC PM.
+            using (System.IO.Compression.ZipArchive zip = System.IO.Compression.ZipFile.OpenRead(temporaneo))
+            {
+                if (zip.GetEntry("database.sql") == null && zip.GetEntry("manifest.json") == null)
+                    throw new InvalidOperationException(
+                        "Il file non sembra un pacchetto di backup di ATEC PM (manca database.sql).");
+            }
+
+            System.IO.File.Move(temporaneo, destinazione);
+        }
+        catch (Exception ex)
+        {
+            try { if (System.IO.File.Exists(temporaneo)) System.IO.File.Delete(temporaneo); } catch { }
+            _log.LogWarning(ex, "[BackupCompleto] Caricamento pacchetto non riuscito");
+            return BadRequest(ApiResponse<string>.Fail($"Caricamento non riuscito: {ex.Message}"));
+        }
+
+        var info = new FileInfo(destinazione);
+        _log.LogInformation("[BackupCompleto] Pacchetto caricato: {File} ({MB} MB)",
+            info.Name, Math.Round(info.Length / 1024.0 / 1024.0, 1));
+
+        return Ok(ApiResponse<string>.Ok(info.Name,
+            $"Pacchetto caricato: {info.Name} ({Math.Round(info.Length / 1024.0 / 1024.0, 1)} MB)"));
+    }
+
+    [HttpDelete("full/{fileName}")]
+    public IActionResult EliminaPacchetto(string fileName)
+    {
+        if (!NomeFileValido(fileName, ".zip"))
+            return BadRequest(ApiResponse<string>.Fail("Nome file non valido"));
+
+        string percorso = Path.Combine(_full.GetPackageDir(), fileName);
+        if (!System.IO.File.Exists(percorso)) return NotFound(ApiResponse<string>.Fail("Pacchetto non trovato"));
+
+        System.IO.File.Delete(percorso);
+        return Ok(ApiResponse<string>.Ok("", "Pacchetto eliminato"));
+    }
+
+    /// <summary>Scarica il pacchetto. In streaming: può pesare GB, caricarlo in memoria
+    /// metterebbe in ginocchio il server.</summary>
+    [HttpGet("full/download/{fileName}")]
+    public IActionResult ScaricaPacchetto(string fileName)
+    {
+        if (!NomeFileValido(fileName, ".zip")) return BadRequest("Nome file non valido");
+
+        string percorso = Path.Combine(_full.GetPackageDir(), fileName);
+        if (!System.IO.File.Exists(percorso)) return NotFound("Pacchetto non trovato");
+
+        return PhysicalFile(percorso, "application/zip", fileName, enableRangeProcessing: true);
+    }
+
+    private static bool NomeFileValido(string fileName, string estensione) =>
+        !fileName.Contains("..") && !fileName.Contains('/') && !fileName.Contains('\\')
+        && fileName.EndsWith(estensione, StringComparison.OrdinalIgnoreCase);
+
+    // ══════════════════════════════════════════════════════════════
     // HELPER
     // ══════════════════════════════════════════════════════════════
 
@@ -205,38 +327,14 @@ public class BackupController : ControllerBase
         string filename = $"atec_pm_{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}.sql";
         string fullPath = Path.Combine(backupDir, filename);
 
-        using var c = _db.Open();
-        var tables = c.Query<string>(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
-        ).ToList();
-
-        using var sw = new StreamWriter(fullPath, false, System.Text.Encoding.UTF8);
-        sw.WriteLine($"-- ATEC PM Backup ({prefix}) {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sw.WriteLine($"-- Tabelle: {tables.Count}");
-        sw.WriteLine();
-        sw.WriteLine("SET FOREIGN_KEY_CHECKS=0;");
-        sw.WriteLine();
-
-        int totalRows = 0;
-        foreach (string table in tables)
+        int totalRows;
+        int tableCount;
+        using (var sw = new StreamWriter(fullPath, false, System.Text.Encoding.UTF8))
         {
-            var rows = c.Query($"SELECT * FROM `{table}`").ToList();
-            if (rows.Count == 0) continue;
-
-            sw.WriteLine($"-- ── {table}: {rows.Count} righe ──");
-
-            foreach (IDictionary<string, object> row in rows)
-            {
-                var cols = row.Keys.Select(k => $"`{k}`");
-                var vals = row.Values.Select(FormatValue);
-                sw.WriteLine($"INSERT INTO `{table}` ({string.Join(",", cols)}) VALUES ({string.Join(",", vals)});");
-            }
-            sw.WriteLine();
-            totalRows += rows.Count;
+            // Stessa scrittura usata dal backup completo: un solo posto dove sta la
+            // logica del dump (e quindi un solo formato da mantenere).
+            (tableCount, totalRows) = _full.ScriviDumpDatabase(sw, prefix);
         }
-
-        sw.WriteLine("SET FOREIGN_KEY_CHECKS=1;");
-        sw.WriteLine($"-- Totale: {totalRows} righe");
 
         // Pulizia: tiene ultimi 30 backup manuali + 30 automatici
         CleanOldBackups(backupDir, "manual", 30, _log);
@@ -244,29 +342,9 @@ public class BackupController : ControllerBase
         CleanOldBackups(backupDir, "pre_restore", 10, _log);
 
         _log.LogInformation("[Backup] {Prefix}: {File} — {Rows} righe, {Tables} tabelle",
-            prefix, filename, totalRows, tables.Count);
+            prefix, filename, totalRows, tableCount);
 
         return fullPath;
-    }
-
-    private static string FormatValue(object v)
-    {
-        if (v == null || v is DBNull) return "NULL";
-        if (v is DateTime dt) return $"'{dt:yyyy-MM-dd HH:mm:ss}'";
-        if (v is DateOnly d) return $"'{d:yyyy-MM-dd}'";
-        if (v is bool b) return b ? "1" : "0";
-        if (v is byte[] bytes) return $"X'{Convert.ToHexString(bytes)}'";
-        if (v is decimal or int or long or double or float or short or byte)
-            return Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)!;
-
-        string s = v.ToString()!
-            .Replace("\\", "\\\\")
-            .Replace("'", "\\'")
-            .Replace("\r\n", "\\n")
-            .Replace("\n", "\\n")
-            .Replace("\r", "\\n")
-            .Replace("\t", "\\t");
-        return $"'{s}'";
     }
 
     private static void CleanOldBackups(string dir, string prefix, int keep, ILogger log)

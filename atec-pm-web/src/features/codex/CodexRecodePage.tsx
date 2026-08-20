@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   Tabs,
   TabsList,
@@ -47,7 +48,6 @@ import {
   fetchCodexRecodeStats,
 } from "@/lib/api/codex"
 import type { CodexBulkReserveResult, CodexListItem } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
 import { decodeHtmlEntities } from "@/lib/format"
 import { notifyError, notifyInfo } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
@@ -86,7 +86,7 @@ const COLUMNS: { key: string; label: string }[] = [
 export function CodexRecodePage() {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
-  const canRecode = canRecodeCodex(getSession()?.user.userRole)
+  const canRecode = canRecodeCodex()
 
   const [prefix, setPrefix] = React.useState("201")
   const debouncedPrefix = useDebounced(prefix.trim() || "201", 300)
@@ -243,7 +243,7 @@ export function CodexRecodePage() {
         <CardHeader>
           <CardTitle>Ricodifica Codex</CardTitle>
           <CardDescription>
-            Funzione riservata ad ADMIN, PM e Responsabili di reparto.
+            Non hai il permesso di ricodificare gli articoli Codex.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -432,7 +432,7 @@ export function CodexRecodePage() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
@@ -575,7 +575,7 @@ export function CodexRecodePage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <ServerPagination
             page={page}
@@ -626,9 +626,12 @@ export function CodexRecodePage() {
                 ? ` ${bulkPreview.skipped} righe selezionate sono già codificate e non compaiono.`
                 : ""}
             </p>
-            <div className="max-h-[50vh] overflow-y-auto rounded-md border">
+            <GridScroller
+              className="rounded-md border"
+              scrollerClassName="max-h-[50vh]"
+            >
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-muted">
+                <TableHeader className="bg-muted">
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Vecchio codice</TableHead>
                     <TableHead>Nuovo codice</TableHead>
@@ -656,7 +659,7 @@ export function CodexRecodePage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </GridScroller>
           </div>
           <DialogFooter>
             <Button

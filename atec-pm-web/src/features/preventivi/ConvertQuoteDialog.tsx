@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,13 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { fetchPmLookup } from "@/lib/api/projects"
 import { convertQuote } from "@/lib/api/quotes"
 
@@ -80,18 +74,14 @@ export function ConvertQuoteDialog({
 
         <div className="grid gap-2">
           <Label>Project Manager *</Label>
-          <Select value={pmId} onValueChange={setPmId}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Seleziona un PM" />
-            </SelectTrigger>
-            <SelectContent>
-              {pms.map((pm) => (
-                <SelectItem key={pm.id} value={String(pm.id)}>
-                  {pm.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LookupCombobox
+            options={pms.map((pm) => ({ id: String(pm.id), name: pm.name }))}
+            value={pmId || null}
+            onValueChange={(id) => setPmId(id ?? "")}
+            placeholder="Seleziona un PM"
+            searchPlaceholder="Cerca PM…"
+            emptyText="Nessun PM trovato"
+          />
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 

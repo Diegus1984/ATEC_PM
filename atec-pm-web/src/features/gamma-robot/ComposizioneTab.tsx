@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   addGammaDistinta,
   createGammaQuadro,
@@ -557,7 +558,7 @@ export function ComposizioneTab({
               className="h-8"
             />
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <GridScroller fill>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -597,7 +598,7 @@ export function ComposizioneTab({
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
           <div className="border-t px-2 py-1 text-xs text-muted-foreground">
             {components.length} componenti
           </div>

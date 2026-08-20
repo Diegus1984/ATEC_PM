@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/customers")]
 [Authorize]
+// Anagrafica clienti: stessa chiave della voce di menu.
+[RequireFeature("nav.clienti")]
 public class CustomersController : ControllerBase
 {
     private readonly DbService _db;
@@ -25,7 +28,10 @@ public class CustomersController : ControllerBase
                    sdi_code AS SdiCode, address AS Address,
                    notes AS Notes, payment_terms AS PaymentTerms,
                    is_active AS IsActive
-            FROM customers ORDER BY company_name").ToList();
+            FROM customers
+            WHERE vat_number IS NULL OR vat_number <> @SystemVat
+            ORDER BY company_name",
+            new { SystemVat = ATEC.PM.Shared.SystemProjects.SystemCustomerVat }).ToList();
         return Ok(ApiResponse<List<CustomerListItem>>.Ok(rows));
     }
 

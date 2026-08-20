@@ -2,6 +2,7 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,13 +14,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchGammaDistinta,
   fetchGammaQuadri,
   fetchGammaRobots,
 } from "@/lib/api/gamma-robot"
 import type { GammaQuadroDto, GammaRobotDto } from "@/lib/api/types"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
+
+/** Colonne opzionali della distinta quadro (Codice e Nome restano sempre). */
+const DISTINTA_COLUMNS: { id: string; label: string }[] = [
+  { id: "prezzoVb", label: "Prezzo VB" },
+  { id: "flags", label: "Flags" },
+]
+const DISTINTA_COLUMNS_DEFAULT = Object.fromEntries(
+  DISTINTA_COLUMNS.map((column) => [column.id, true])
+)
 
 import {
   buildQuadroLabel,
@@ -35,6 +47,20 @@ export function PerRobotTab({
   onOpenProduct: (productId: number) => void
 }) {
   const [search, setSearch] = React.useState("")
+  const [visible, setVisible] = usePersistedColumnVisibility(
+    "gamma-distinta-columns-v1",
+    DISTINTA_COLUMNS_DEFAULT
+  )
+  const show = (id: string) => visible[id] ?? true
+  const columnToggles = DISTINTA_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: show(id),
+    onToggle: (value: boolean) =>
+      setVisible((prev) => ({ ...prev, [id]: value })),
+  }))
+  const distintaColCount =
+    2 + DISTINTA_COLUMNS.filter((column) => show(column.id)).length
   const [expanded, setExpanded] = React.useState<Set<number>>(new Set())
   const [quadriByRobot, setQuadriByRobot] = React.useState<
     Record<number, GammaQuadroDto[]>
@@ -199,18 +225,21 @@ export function PerRobotTab({
       </div>
 
       <div className="flex min-h-0 flex-col rounded-lg border">
-        <div className="border-b px-4 py-3">
-          <h3 className="text-base font-semibold">
-            {selectedRobot?.modello ?? "Seleziona un quadro"}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {selectedQuadro
-              ? buildQuadroSubtitle(selectedQuadro)
-              : "Scegli un quadro a sinistra per vedere la distinta."}
-          </p>
+        <div className="flex items-start gap-2 border-b px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold">
+              {selectedRobot?.modello ?? "Seleziona un quadro"}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {selectedQuadro
+                ? buildQuadroSubtitle(selectedQuadro)
+                : "Scegli un quadro a sinistra per vedere la distinta."}
+            </p>
+          </div>
+          <ColumnsMenu columns={columnToggles} />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto">
+        <GridScroller fill>
           {!selectedQuadro ? (
             <p className="p-6 text-sm text-muted-foreground">
               Nessun quadro selezionato.
@@ -225,8 +254,10 @@ export function PerRobotTab({
                 <TableRow>
                   <TableHead className="w-[120px]">Codice</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead className="w-[80px] text-right">Prezzo VB</TableHead>
-                  <TableHead className="w-[100px]">Flags</TableHead>
+                  {show("prezzoVb") && (
+                    <TableHead className="w-[80px] text-right">Prezzo VB</TableHead>
+                  )}
+                  {show("flags") && <TableHead className="w-[100px]">Flags</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -234,7 +265,7 @@ export function PerRobotTab({
                   <React.Fragment key={sezione}>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableCell
-                        colSpan={4}
+                        colSpan={distintaColCount}
                         className="py-1.5 text-xs font-semibold text-foreground"
                       >
                         {sezione}
@@ -259,16 +290,20 @@ export function PerRobotTab({
                               </span>
                             ) : null}
                           </TableCell>
-                          <TableCell className="text-right text-sm tabular-nums">
-                            {row.prezzoVb != null
-                              ? `${formatEuro(row.prezzoVb)} €`
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            {row.isOptional ? (
-                              <Badge variant="secondary">OPT</Badge>
-                            ) : null}
-                          </TableCell>
+                          {show("prezzoVb") && (
+                            <TableCell className="text-right text-sm tabular-nums">
+                              {row.prezzoVb != null
+                                ? `${formatEuro(row.prezzoVb)} €`
+                                : "—"}
+                            </TableCell>
+                          )}
+                          {show("flags") && (
+                            <TableCell>
+                              {row.isOptional ? (
+                                <Badge variant="secondary">OPT</Badge>
+                              ) : null}
+                            </TableCell>
+                          )}
                         </TableRow>
                         {row.alternatives.map((alt) => (
                           <TableRow
@@ -284,19 +319,23 @@ export function PerRobotTab({
                             <TableCell className="text-sm text-muted-foreground">
                               {alt.productName ?? "—"}
                             </TableCell>
-                            <TableCell className="text-right text-sm tabular-nums">
-                              {alt.prezzoVb != null
-                                ? `${formatEuro(alt.prezzoVb)} €`
-                                : "—"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">ALT</Badge>
-                              {alt.isOptional ? (
-                                <Badge variant="secondary" className="ml-1">
-                                  OPT
-                                </Badge>
-                              ) : null}
-                            </TableCell>
+                            {show("prezzoVb") && (
+                              <TableCell className="text-right text-sm tabular-nums">
+                                {alt.prezzoVb != null
+                                  ? `${formatEuro(alt.prezzoVb)} €`
+                                  : "—"}
+                              </TableCell>
+                            )}
+                            {show("flags") && (
+                              <TableCell>
+                                <Badge variant="outline">ALT</Badge>
+                                {alt.isOptional ? (
+                                  <Badge variant="secondary" className="ml-1">
+                                    OPT
+                                  </Badge>
+                                ) : null}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                       </React.Fragment>
@@ -306,7 +345,7 @@ export function PerRobotTab({
               </TableBody>
             </Table>
           )}
-        </div>
+        </GridScroller>
 
         {selectedQuadro ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">

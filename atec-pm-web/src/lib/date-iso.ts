@@ -45,3 +45,43 @@ export function formatDateShort(value: Date | string | null | undefined): string
 export function formatDateOrDash(value: Date | string | null | undefined): string {
   return formatDateShort(value) || "—"
 }
+
+/**
+ * Formato data + ora breve della UI: gg/mm/aa hh:mm.
+ * Usato quando serve mostrare l'orario di creazione/modifica (es. Segnalazioni).
+ */
+export function formatDateTimeShort(value: Date | string | null | undefined): string {
+  if (!value) return ""
+  const date = value instanceof Date ? value : new Date(value)
+  if (!date || Number.isNaN(date.getTime())) return ""
+  const dateStr = date.toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  })
+  const timeStr = date.toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  return `${dateStr} ${timeStr}`
+}
+
+export function formatDateTimeOrDash(value: Date | string | null | undefined): string {
+  return formatDateTimeShort(value) || "—"
+}
+
+/**
+ * Formato data dei DOCUMENTI: gg/mm/aaaa (anno a 4 cifre).
+ * Da usare in stampe, PDF ed export (CSV/Excel), dove la data non deve mai restare
+ * in ISO `aaaa-mm-gg`: nelle griglie si continua a usare `formatDateShort`.
+ */
+export function formatDateFull(value: Date | string | null | undefined): string {
+  if (!value) return ""
+  const date = value instanceof Date ? value : isoToDate(value) ?? new Date(value)
+  if (!date || Number.isNaN(date.getTime())) return ""
+  return date.toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+}

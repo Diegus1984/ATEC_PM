@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 
 import { DateField } from "@/components/shared/date-field"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -185,24 +186,18 @@ export function MoMVerbaleDialog({
 
           <div className="grid gap-2">
             <Label>Commessa</Label>
-            <Select
-              value={form.projectId != null ? String(form.projectId) : undefined}
-              onValueChange={(value) =>
-                setForm({ ...form, projectId: Number(value) })
-              }
+            <LookupCombobox
+              options={projects.map((project) => ({
+                id: project.id,
+                name: project.display,
+              }))}
+              value={form.projectId ?? null}
+              onValueChange={(id) => setForm({ ...form, projectId: id })}
               disabled={form.tipo !== "COMMESSA"}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Seleziona commessa" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={String(project.id)}>
-                    {project.display}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Seleziona commessa"
+              searchPlaceholder="Cerca commessa…"
+              emptyText="Nessuna commessa trovata"
+            />
           </div>
 
           <div className="grid gap-2">

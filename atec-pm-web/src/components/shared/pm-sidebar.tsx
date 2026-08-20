@@ -28,7 +28,12 @@ export type PmQuickView = {
   /** Pallino colorato al posto dell'icona (es. priorità Check list). */
   dotClass?: string
   label: string
-  count: number
+  /**
+   * `undefined` ≠ 0: senza numero il badge NON si mostra. Serve alle viste a
+   * caricamento pigro (es. «Commesse chiuse» del Bilancio): uno «0» prima del
+   * primo caricamento direbbe il falso.
+   */
+  count?: number
 }
 
 /** Contenitore (commessa, gruppo, riunione…): pallini di stato + etichetta «CODICE — Titolo» + conteggio. */
@@ -37,12 +42,23 @@ export type PmContainer = {
   selected: boolean
   onClick: () => void
   label: string
-  count: number
+  /**
+   * Conteggio a destra dell'etichetta. **Omettilo** se la pagina non ha quel numero: uno
+   * zero scritto accanto a una commessa si legge «qui non c'è niente», ed è una bugia se
+   * il dato semplicemente non è stato caricato (è successo in «Ore Commessa», che mostrava
+   * `0` accanto a commesse con decine di ore imputate).
+   */
+  count?: number
   dots: PmSidebarDot[]
   /** Contenuto del pulsante nel rail compresso; default = sigla di 2 lettere ricavata da `label`. */
   railIcon?: React.ReactNode
   /** Foglie opzionali per rappresentare un contenitore ad albero. */
   children?: PmContainerChild[]
+  /**
+   * Azioni della voce (di norma un `RowActionsMenu`), a destra del conteggio. Vive fuori
+   * dal pulsante di selezione, quindi il clic sul menu non cambia vista.
+   */
+  actions?: React.ReactNode
 }
 
 export type PmContainerChild = {
@@ -54,16 +70,36 @@ export type PmContainerChild = {
   dotClass?: string
 }
 
+/** Elenco di contenitori con una sua intestazione (es. «Commesse» e «Attività» separate). */
+export type PmSidebarSection = {
+  key: string
+  label: string
+  containers: PmContainer[]
+  /** Testo mostrato quando la sezione è vuota. */
+  emptyLabel: string
+}
+
 export type PmSidebarProps = {
   /** Prefisso per la chiave localStorage del collasso (persistito per-utente): `${storageKey}.sidebar.collapsed.<id>`. */
   storageKey: string
   quickViews: PmQuickView[]
-  containers: PmContainer[]
-  /** Intestazione della sezione contenitori (es. "Commesse / Riunioni"). */
-  containersLabel: string
-  /** Testo mostrato quando non ci sono contenitori. */
-  emptyLabel: string
-}
+} & (
+  | {
+      containers: PmContainer[]
+      /** Intestazione della sezione contenitori (es. "Commesse / Riunioni"). */
+      containersLabel: string
+      /** Testo mostrato quando non ci sono contenitori. */
+      emptyLabel: string
+      sections?: never
+    }
+  /** Più elenchi separati, ognuno con la sua intestazione. */
+  | {
+      sections: PmSidebarSection[]
+      containers?: never
+      containersLabel?: never
+      emptyLabel?: never
+    }
+)
 
 function CountBadge({ children, selected }: { children: React.ReactNode; selected?: boolean }) {
   return (
@@ -91,7 +127,7 @@ function QuickNavItem({
   icon?: React.ReactNode
   dotClass?: string
   label: string
-  count: number
+  count?: number
 }) {
   return (
     <button
@@ -117,7 +153,7 @@ function QuickNavItem({
         </span>
       )}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <CountBadge selected={selected}>{count}</CountBadge>
+      {count == null ? null : <CountBadge selected={selected}>{count}</CountBadge>}
     </button>
   )
 }
@@ -131,15 +167,17 @@ function ContainerNavItem({
   children,
   expanded,
   onToggleExpanded,
+  actions,
 }: {
   selected: boolean
   onClick: () => void
   label: string
-  count: number
+  count?: number
   dots: PmSidebarDot[]
   children?: PmContainerChild[]
   expanded: boolean
   onToggleExpanded: () => void
+  actions?: React.ReactNode
 }) {
   return (
     <div className="space-y-0.5">
@@ -149,36 +187,48 @@ function ContainerNavItem({
           selected ? "bg-primary/10" : "hover:bg-muted/60"
         )}
       >
-        <button
-          type="button"
-          onClick={onClick}
-          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
-        >
-          {dots.length > 0 ? (
-            <span className="mr-1 flex shrink-0 flex-col gap-0.5" aria-hidden>
-              {dots.map((d) => (
-                <span
-                  key={d.label}
-                  className={cn("size-1.5 rounded-full", d.dotClass)}
-                  title={d.label}
-                />
-              ))}
-            </span>
-          ) : (
-            <span className="mr-1 size-1.5 shrink-0" />
-          )}
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-[12.5px] font-medium",
-              selected && "font-semibold text-primary"
-            )}
-          >
+        {/* Tooltip anche a barra ESPANSA: le etichette lunghe sono troncate, così si
+            leggono per intero insieme a conteggio e legenda dei pallini. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onClick}
+              className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
+            >
+              {dots.length > 0 ? (
+                <span className="mr-1 flex shrink-0 flex-col gap-0.5" aria-hidden>
+                  {dots.map((d) => (
+                    <span
+                      key={d.label}
+                      className={cn("size-1.5 rounded-full", d.dotClass)}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span className="mr-1 size-1.5 shrink-0" />
+              )}
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-[12.5px] font-medium",
+                  selected && "font-semibold text-primary"
+                )}
+              >
+                {label}
+              </span>
+              {count == null ? null : (
+                <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {count}
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
             {label}
-          </span>
-          <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
-            {count}
-          </span>
-        </button>
+            {count == null ? "" : ` · ${count}`}
+            {dots.length > 0 ? ` · ${dots.map((d) => d.label).join(", ")}` : ""}
+          </TooltipContent>
+        </Tooltip>
         {children && children.length > 0 ? (
           <button
             type="button"
@@ -189,6 +239,9 @@ function ContainerNavItem({
           >
             {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </button>
+        ) : null}
+        {actions ? (
+          <div className="mr-0.5 shrink-0 text-muted-foreground">{actions}</div>
         ) : null}
       </div>
 
@@ -261,7 +314,7 @@ function RailButton({
   selected: boolean
   onClick: () => void
   label: string
-  count: number
+  count?: number
   dots?: PmSidebarDot[]
   children: React.ReactNode
 }) {
@@ -283,7 +336,7 @@ function RailButton({
         >
           {children}
           <RailStatusDots dots={dots ?? []} />
-          {count > 0 ? (
+          {count != null && count > 0 ? (
             <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-muted px-1 font-mono text-[8.5px] font-semibold tabular-nums text-muted-foreground ring-1 ring-card">
               {count}
             </span>
@@ -291,20 +344,27 @@ function RailButton({
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        {label} · {count}
+        {label}
+        {count == null ? "" : ` · ${count}`}
         {dotsLabel}
       </TooltipContent>
     </Tooltip>
   )
 }
 
-export function PmSidebar({
-  storageKey,
-  quickViews,
-  containers,
-  containersLabel,
-  emptyLabel,
-}: PmSidebarProps) {
+export function PmSidebar(props: PmSidebarProps) {
+  const { storageKey, quickViews } = props
+  // Un solo elenco (`containers`) è il caso normale; `sections` serve alle pagine che
+  // separano gli elenchi (Check list: Commesse e Attività).
+  const sections: PmSidebarSection[] = props.sections ?? [
+    {
+      key: "containers",
+      label: props.containersLabel ?? "",
+      containers: props.containers ?? [],
+      emptyLabel: props.emptyLabel ?? "",
+    },
+  ]
+
   const [collapsed, setCollapsed] = React.useState<boolean>(
     () => localStorage.getItem(collapsedKey(storageKey)) === "1"
   )
@@ -315,10 +375,43 @@ export function PmSidebar({
       return next
     })
   }, [storageKey])
+  // #79: titoli di sezione (Commesse / Altre Attività) collassabili, ricordati per barra.
+  const sectionCollapseKey = `${collapsedKey(storageKey)}:sections`
+  const [collapsedSectionKeys, setCollapsedSectionKeys] = React.useState<Set<string>>(
+    () => {
+      try {
+        const raw = localStorage.getItem(sectionCollapseKey)
+        if (!raw) return new Set()
+        const parsed = JSON.parse(raw) as unknown
+        return Array.isArray(parsed)
+          ? new Set(parsed.filter((k): k is string => typeof k === "string"))
+          : new Set()
+      } catch {
+        return new Set()
+      }
+    }
+  )
+  const toggleSectionCollapsed = React.useCallback(
+    (key: string) => {
+      setCollapsedSectionKeys((prev) => {
+        const next = new Set(prev)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        try {
+          localStorage.setItem(sectionCollapseKey, JSON.stringify([...next]))
+        } catch {
+          /* storage non disponibile */
+        }
+        return next
+      })
+    },
+    [sectionCollapseKey]
+  )
   const [expandedContainerKeys, setExpandedContainerKeys] = React.useState<Set<string>>(
     () =>
       new Set(
-        containers
+        sections
+          .flatMap((section) => section.containers)
           .filter((container) => container.children?.length)
           .map((container) => container.key)
       )
@@ -333,6 +426,9 @@ export function PmSidebar({
   }, [])
 
   return (
+    // Un solo TooltipProvider per tutta la barra: i tooltip servono sia sul rail
+    // compresso sia sulle voci espanse (etichette troncate).
+    <TooltipProvider delayDuration={200}>
     <aside
       className={cn(
         "flex shrink-0 flex-col overflow-hidden border-r bg-card transition-[width] duration-300",
@@ -340,7 +436,7 @@ export function PmSidebar({
       )}
     >
       {collapsed ? (
-        <TooltipProvider delayDuration={200}>
+        <>
           <div className="flex min-h-0 flex-1 flex-col items-center gap-1 py-3">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -373,28 +469,33 @@ export function PmSidebar({
               </RailButton>
             ))}
 
-            {containers.length > 0 ? (
-              <div className="my-1 h-px w-6 shrink-0 bg-border" />
-            ) : null}
-
             <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
-              {containers.map((c) => (
-                <RailButton
-                  key={c.key}
-                  selected={c.selected}
-                  onClick={c.onClick}
-                  label={c.label}
-                  count={c.count}
-                  dots={c.dots}
-                >
-                  {c.railIcon ?? (
-                    <span className="text-[10px] font-bold uppercase">{railBadge(c.label)}</span>
-                  )}
-                </RailButton>
-              ))}
+              {sections.map((section) =>
+                section.containers.length === 0 ? null : (
+                  <React.Fragment key={section.key}>
+                    {/* Una riga di separazione per sezione: nel rail non c'è spazio per le
+                        intestazioni, ma i gruppi restano distinguibili. */}
+                    <div className="my-1 h-px w-6 shrink-0 bg-border" />
+                    {section.containers.map((c) => (
+                      <RailButton
+                        key={c.key}
+                        selected={c.selected}
+                        onClick={c.onClick}
+                        label={c.label}
+                        count={c.count}
+                        dots={c.dots}
+                      >
+                        {c.railIcon ?? (
+                          <span className="text-[10px] font-bold uppercase">{railBadge(c.label)}</span>
+                        )}
+                      </RailButton>
+                    ))}
+                  </React.Fragment>
+                )
+              )}
             </div>
           </div>
-        </TooltipProvider>
+        </>
       ) : (
         <>
           <div className="px-3.5 pb-1.5 pt-3.5">
@@ -427,35 +528,64 @@ export function PmSidebar({
             </div>
           </div>
 
-          <div className="px-3.5 pb-1">
-            <div className="px-1.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
-              {containersLabel}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {containers.length === 0 ? (
-              <p className="px-2.5 py-2 text-xs text-muted-foreground">{emptyLabel}</p>
-            ) : (
-              <div className="space-y-0.5">
-                {containers.map((c) => (
-                  <ContainerNavItem
-                    key={c.key}
-                    selected={c.selected}
-                    onClick={c.onClick}
-                    label={c.label}
-                    count={c.count}
-                    dots={c.dots}
-                    children={c.children}
-                    expanded={expandedContainerKeys.has(c.key)}
-                    onToggleExpanded={() => toggleContainerExpanded(c.key)}
-                  />
-                ))}
-              </div>
-            )}
+          {/* Le intestazioni scorrono insieme alle voci: con più sezioni devono restare
+              attaccate al proprio elenco. */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-1.5">
+            {sections.map((section, index) => {
+              const hasLabel = section.label.trim().length > 0
+              const sectionCollapsed =
+                hasLabel && collapsedSectionKeys.has(section.key)
+              return (
+                <div
+                  key={section.key}
+                  className={cn("space-y-0.5", index > 0 && "mt-4")}
+                >
+                  {hasLabel ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionCollapsed(section.key)}
+                      className="flex w-full items-center gap-1 px-2.5 pb-1.5 text-left text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                      aria-expanded={!sectionCollapsed}
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "size-3.5 shrink-0 transition-transform",
+                          !sectionCollapsed && "rotate-90"
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                      <span className="tabular-nums font-semibold normal-case tracking-normal text-muted-foreground/80">
+                        {section.containers.length}
+                      </span>
+                    </button>
+                  ) : null}
+                  {sectionCollapsed ? null : section.containers.length === 0 ? (
+                    <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                      {section.emptyLabel}
+                    </p>
+                  ) : (
+                    section.containers.map((c) => (
+                      <ContainerNavItem
+                        key={c.key}
+                        selected={c.selected}
+                        onClick={c.onClick}
+                        label={c.label}
+                        count={c.count}
+                        dots={c.dots}
+                        children={c.children}
+                        expanded={expandedContainerKeys.has(c.key)}
+                        onToggleExpanded={() => toggleContainerExpanded(c.key)}
+                        actions={c.actions}
+                      />
+                    ))
+                  )}
+                </div>
+              )
+            })}
           </div>
         </>
       )}
     </aside>
+    </TooltipProvider>
   )
 }

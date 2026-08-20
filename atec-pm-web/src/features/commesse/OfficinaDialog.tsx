@@ -1,7 +1,9 @@
 // ── Dialogo nuovo/modifica particolare meccanico ───────────────────────────
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { DateField } from "@/components/shared/date-field"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -21,12 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { formatDateOrDash } from "@/lib/date-iso"
+import { fetchTariffOptions } from "@/lib/api/tariffs"
 import type {
   DdpDestinationItem,
   DdpStatusItem,
   DdpTreatmentItem,
   OfficinaItemSaveRequest,
 } from "@/lib/api/types"
+import { euro } from "@/lib/format"
 
 import { DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { DDP_STATUS_TO_ORDER, filterStatusOptions } from "./ddp-constants"
@@ -35,6 +40,13 @@ import {
   DDP_DESTINATION_NONE,
 } from "./ddp-destination-options"
 import type { CodexPriceInfo } from "./officina-shared"
+
+/**
+ * Segnalazione #82: Data Richiesta e Data ordine si gestiscono in griglia.
+ * I campi restano nel dialogo ma nascosti — basta rimettere a `true` se
+ * domani si vuole di nuovo la doppia modifica.
+ */
+const SHOW_DIALOG_DATES = false
 
 export function OfficinaDialog({
   form,
@@ -67,6 +79,28 @@ export function OfficinaDialog({
   const [strQuantity, setStrQuantity] = React.useState("")
   const [strUnitCost, setStrUnitCost] = React.useState("")
   const [strProduced, setStrProduced] = React.useState("")
+  const [strWorkHours, setStrWorkHours] = React.useState("")
+
+  // Tariffe orarie delle officine interne (anagrafica tariffe, tipo HOURLY_RATE).
+  // Dalla segnalazione #87 sono PIÙ D'UNA e hanno un nome — meccanica 50 €/h,
+  // carpenteria 35, stampa 3D 20 — e quale usare lo dice chi compila la riga.
+  const hourlyRateQuery = useQuery({
+    queryKey: ["tariff-options", "HOURLY_RATE"],
+    queryFn: () => fetchTariffOptions("HOURLY_RATE"),
+    staleTime: 0,
+  })
+  const tariffe = React.useMemo(() => hourlyRateQuery.data ?? [], [hourlyRateQuery.data])
+
+  /**
+   * Tariffa con cui si calcola il costo: quella scritta sulla riga, altrimenti — e solo se
+   * in anagrafica ce n'è UNA SOLA — quell'unica. Con più tariffe non se ne sceglie una a
+   * caso: 5 ore × 20 € e 5 ore × 50 € sono due costi entrambi plausibili, e la differenza
+   * la vedrebbe solo il Bilancio a fine commessa.
+   */
+  const hourlyRate = React.useMemo(() => {
+    if (form?.hourlyRate != null) return form.hourlyRate
+    return tariffe.length === 1 ? tariffe[0].value : null
+  }, [form?.hourlyRate, tariffe])
   // Stato salvato sulla riga all'apertura: la finestra opzioni si calcola da qui
   // (non dal valore selezionato, che cambia mentre l'utente sceglie).
   const [baseStatus, setBaseStatus] = React.useState("")
@@ -98,6 +132,7 @@ export function OfficinaDialog({
       setStrQuantity(String(form.quantity ?? 0))
       setStrUnitCost(String(form.unitCost ?? 0))
       setStrProduced(String(form.quantityProduced ?? 0))
+      setStrWorkHours(form.workHours == null ? "" : String(form.workHours))
       setBaseStatus(form.itemStatus ?? "")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +148,27 @@ export function OfficinaDialog({
   const num = (s: string) => {
     const v = Number(s.replace(",", "."))
     return Number.isFinite(v) ? v : 0
+  }
+  /**
+   * Ore × costo orario → costo unitario (#54, #87). Il costo si riscrive solo quando ci
+   * sono ENTRAMBI: senza tariffa scelta o senza ore resta quello che c'è, che può essere
+   * stato battuto a mano.
+   */
+  const ricalcola = (
+    hours: number | null,
+    rate: number | null,
+    extra: Partial<OfficinaItemSaveRequest> = {}
+  ) => {
+    const patch: Partial<OfficinaItemSaveRequest> = { workHours: hours, ...extra }
+    if (hours != null && rate != null) {
+      const cost = hours * rate
+      patch.unitCost = cost
+      // La tariffa usata resta scritta sulla riga anche quando non è stata scelta a mano
+      // (anagrafica con una sola tariffa): è quella che spiega il costo.
+      patch.hourlyRate = rate
+      setStrUnitCost(String(cost))
+    }
+    set(patch)
   }
   const field = (
     label: string,
@@ -192,15 +248,70 @@ export function OfficinaDialog({
               }}
             />
           </div>
+          {/*
+            Ore di lavorazione (segnalazione #54): sta PRIMA del costo unitario perché è
+            quello che si compila per primo. Scrivendo le ore il costo unitario si calcola
+            da solo (ore × tariffa oraria scelta) e resta comunque correggibile a mano: il
+            calcolo propone, non impone. Svuotare il campo non azzera il costo.
+            #87: la tariffa è una scelta esplicita, perché ora ce n'è una per lavorazione.
+          */}
           <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Costo unitario (€)</Label>
+            <Label className="text-xs text-muted-foreground">Ore lavorazione</Label>
             <Input
               inputMode="decimal"
+              value={strWorkHours}
+              disabled={hasChildren}
+              title={
+                hourlyRate == null
+                  ? "Scegli il costo orario: senza, il costo unitario resta manuale"
+                  : "Ore × costo orario = costo unitario"
+              }
+              onChange={(e) => {
+                const text = e.target.value
+                setStrWorkHours(text)
+                const hours = text.trim() === "" ? null : num(text)
+                ricalcola(hours, hourlyRate)
+              }}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">Costo orario</Label>
+            <Select
+              value={hourlyRate == null ? "" : String(hourlyRate)}
+              disabled={hasChildren || tariffe.length === 0}
+              onValueChange={(v) => {
+                const rate = num(v)
+                const hours = strWorkHours.trim() === "" ? null : num(strWorkHours)
+                ricalcola(hours, rate, { hourlyRate: rate })
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue
+                  placeholder={
+                    tariffe.length === 0
+                      ? "Nessuna tariffa in anagrafica"
+                      : "Scegli il costo orario"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {tariffe.map((t) => (
+                  <SelectItem key={t.id} value={String(t.value)}>
+                    {t.label ? `${t.label} — ` : ""}
+                    {euro(t.value)}/h
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs text-muted-foreground">Costo unitario (€)</Label>
+            <MoneyInput
               value={strUnitCost}
               disabled={hasChildren}
-              onChange={(e) => {
-                setStrUnitCost(e.target.value)
-                set({ unitCost: num(e.target.value) })
+              onChange={(value) => {
+                setStrUnitCost(value)
+                set({ unitCost: num(value) })
               }}
             />
           </div>
@@ -242,22 +353,41 @@ export function OfficinaDialog({
             </Select>
           </div>
           {field("Fornitore (officina)", form.supplierName, "supplierName")}
-          {field("Richiesto da", form.requestedBy, "requestedBy", isEdit)}
-          {field("N° Ordine", form.daneaRef, "daneaRef")}
+          {/* «Inserito da» (#61): si compila da solo alla nascita della riga col nome di
+              chi è collegato, e resta correggibile anche dopo — come nell'Excel. Prima
+              si chiamava «Richiesto da» ed era bloccato in modifica. */}
+          {field("Inserito da", form.requestedBy, "requestedBy")}
           <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Necessario per</Label>
-            <DateField
-              value={form.dateNeeded}
-              onChange={(value) => set({ dateNeeded: value })}
-            />
+            <Label className="text-xs text-muted-foreground">Data inserimento</Label>
+            <Input value={formatDateOrDash(form?.createdAt)} disabled className="h-8 text-xs" />
           </div>
+          {/* «Creata da»: l'autore vero registrato dal server, che resta anche se
+              «Inserito da» viene corretto a mano. Non si scrive. */}
           <div className="grid gap-1.5">
-            <Label className="text-xs text-muted-foreground">Data ordine</Label>
-            <DateField
-              value={form.orderDate}
-              onChange={(value) => set({ orderDate: value })}
-            />
+            <Label className="text-xs text-muted-foreground">Creata da</Label>
+            <Input value={form?.createdByName || "—"} disabled className="h-8 text-xs" />
           </div>
+          {/* Stessi nomi della griglia (segnalazione #58): la finestra e la colonna che
+              scrivono lo stesso dato non possono chiamarlo in due modi. */}
+          {field("Rif. Danea", form.daneaRef, "daneaRef")}
+          {SHOW_DIALOG_DATES ? (
+            <>
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Data Richiesta</Label>
+                <DateField
+                  value={form.dateNeeded}
+                  onChange={(value) => set({ dateNeeded: value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Data ordine</Label>
+                <DateField
+                  value={form.orderDate}
+                  onChange={(value) => set({ orderDate: value })}
+                />
+              </div>
+            </>
+          ) : null}
           <div className="grid gap-1.5">
             <Label className="text-xs text-muted-foreground">Descr. destinazione</Label>
             <Select

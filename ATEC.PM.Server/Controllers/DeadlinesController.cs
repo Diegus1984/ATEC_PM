@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
@@ -7,16 +7,26 @@ using ATEC.PM.Server.Data;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/deadlines")]
 [Authorize]
+// Scadenze: stessa chiave della voce di menu (il contatore nella shell si spegne da solo).
+[RequireFeature("nav.scadenze")]
 public class DeadlinesController : ControllerBase
 {
     private readonly DbService _db;
-    public DeadlinesController(DbService db) => _db = db;
+    private readonly AnagraficheCache _cache;
+    private readonly ProjectWriteGuard _guard;
+    public DeadlinesController(DbService db, AnagraficheCache cache, ProjectWriteGuard guard)
+    {
+        _db = db;
+        _cache = cache;
+        _guard = guard;
+    }
 
     [HttpGet]
     public IActionResult GetAll()
@@ -24,9 +34,15 @@ public class DeadlinesController : ControllerBase
         using var c = _db.Open();
 
         // Carica stati esclusi (aggregazione A9) per DDP
-        string[] excluded = DdpAggregationSet.Load(c, "A9");
+        string[] excluded = DdpAggregationSet.Load(c, "A9", _cache);
 
-        string sql = @"
+        // #88: le scadenze di una bozza non suonano per chi le bozze non le vede.
+        // Due forme: sul LEFT JOIN la riga senza commessa (attivita generiche) deve restare.
+        string filtroBozze = _guard.FiltroBozzeSql(User);
+        string filtroBozzeFacolt = filtroBozze.Length == 0
+            ? "" : " AND (p.id IS NULL OR p.status <> 'DRAFT')";
+
+        string sql = $@"
             SELECT u.*, DATEDIFF(u.DueDate, CURDATE()) AS Days
             FROM (
                 -- 1. SAL (fatturazione: alert finché non emessa — stato '' o 'daEmettere')
@@ -41,7 +57,7 @@ public class DeadlinesController : ControllerBase
                     sr.data_fatt AS DueDate
                 FROM sal_rows sr
                 JOIN projects p ON p.id = sr.project_id
-                WHERE sr.data_fatt IS NOT NULL AND sr.stato <> 'emessa'
+                WHERE sr.data_fatt IS NOT NULL AND sr.stato <> 'emessa'{filtroBozze}
 
                 UNION ALL
 
@@ -72,7 +88,7 @@ public class DeadlinesController : ControllerBase
                     i.due_date AS DueDate
                 FROM checklist_items i
                 LEFT JOIN projects p ON p.id = i.project_id
-                WHERE i.due_date IS NOT NULL AND i.status <> 'CLOSED'
+                WHERE i.due_date IS NOT NULL AND i.status <> 'CLOSED'{filtroBozzeFacolt}
 
                 UNION ALL
 
@@ -89,7 +105,7 @@ public class DeadlinesController : ControllerBase
                 FROM mom_action_items a
                 JOIN mom_records m ON m.id = a.mom_id
                 LEFT JOIN projects p ON p.id = m.project_id
-                WHERE a.data_check IS NOT NULL AND a.status <> 'CLOSED'
+                WHERE a.data_check IS NOT NULL AND a.status <> 'CLOSED'{filtroBozzeFacolt}
 
                 UNION ALL
 
@@ -107,7 +123,7 @@ public class DeadlinesController : ControllerBase
                 JOIN projects p ON p.id = b.project_id
                 WHERE b.date_needed IS NOT NULL
                   AND b.item_status NOT IN @Delivered
-                  AND COALESCE(b.item_status, '') NOT IN @Excluded
+                  AND COALESCE(b.item_status, '') NOT IN @Excluded{filtroBozze}
 
                 UNION ALL
 
@@ -129,7 +145,7 @@ public class DeadlinesController : ControllerBase
                   AND sr.gg_saldo IS NOT NULL
                   -- Guardia: un gg_saldo abnorme manda DATE_ADD fuori range → NULL,
                   -- che Dapper non mappa su DueDate non-nullable (500 su tutto l'endpoint)
-                  AND DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) IS NOT NULL
+                  AND DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) IS NOT NULL{filtroBozze}
                   AND sr.pagamento <> 'Pagata'
             ) u
             ORDER BY u.DueDate ASC";

@@ -4,6 +4,7 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Plus, Trash2 } from "lucide-react"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -29,7 +30,7 @@ import type {
 import { notifyError } from "@/lib/toast"
 
 import { AddResourceDialog } from "./costing-dialogs"
-import { fmt2, parseDecimal } from "@/lib/format"
+import { euro, parseDecimal } from "@/lib/format"
 
 // ── Card sezione costo ─────────────────────────────────────
 
@@ -89,7 +90,7 @@ export function CostSectionCard({
             </PopoverContent>
           </Popover>
         ) : null}
-        <span className="ml-auto font-bold tabular-nums">{fmt2(section.totalSale)} €</span>
+        <span className="ml-auto font-bold tabular-nums">{euro(section.totalSale)}</span>
         {!readOnly ? (
           <>
             <Button size="sm" variant="outline" className="h-7" onClick={() => setAddResourceOpen(true)}>
@@ -99,7 +100,7 @@ export function CostSectionCard({
               variant="ghost"
               size="icon-sm"
               className="text-destructive hover:bg-destructive/10"
-              title="Elimina sezione"
+              title="Elimina sezione di costo"
               onClick={confirmDelete}
             >
               <Trash2 className="size-3.5" />
@@ -210,19 +211,19 @@ function ResourceRow({
   return (
     <div className="grid items-center gap-1 border-b px-3 py-1.5 text-xs last:border-b-0" style={{ gridTemplateColumns: cols }}>
       <span className="truncate font-medium">{resource.resourceName}</span>
-      <Input className="h-7 text-right text-xs" value={days} readOnly={readOnly} onChange={(e) => setDays(e.target.value)} onBlur={() => save({ workDays: parseDecimal(days) })} />
-      <Input className="h-7 text-right text-xs" value={hpd} readOnly={readOnly} onChange={(e) => setHpd(e.target.value)} onBlur={() => save({ hoursPerDay: parseDecimal(hpd) })} />
-      <Input className="h-7 text-right text-xs" value={cost} readOnly={readOnly} onChange={(e) => setCost(e.target.value)} onBlur={() => save({ hourlyCost: parseDecimal(cost) })} />
-      <Input className="h-7 text-center text-xs" value={markup} readOnly={readOnly} onChange={(e) => setMarkup(e.target.value)} onBlur={() => save({ markupValue: parseDecimal(markup) })} />
+      <Input className="h-7 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={days} readOnly={readOnly} onChange={(e) => setDays(e.target.value)} onBlur={() => save({ workDays: parseDecimal(days) })} />
+      <Input className="h-7 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={hpd} readOnly={readOnly} onChange={(e) => setHpd(e.target.value)} onBlur={() => save({ hoursPerDay: parseDecimal(hpd) })} />
+      <MoneyInput className="h-7 border-transparent bg-transparent text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={cost} readOnly={readOnly} onChange={setCost} onCommit={() => save({ hourlyCost: parseDecimal(cost) })} />
+      <Input className="h-7 border-transparent bg-transparent text-center text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={markup} readOnly={readOnly} onChange={(e) => setMarkup(e.target.value)} onBlur={() => save({ markupValue: parseDecimal(markup) })} />
       {isDaCliente ? (
         <div className="flex items-center gap-1">
-          <Input className="h-7 w-12 text-right text-xs" value={trips} readOnly={readOnly} title="N. viaggi" onChange={(e) => setTrips(e.target.value)} onBlur={() => save({ numTrips: Math.round(parseDecimal(trips)) })} />
+          <Input className="h-7 w-12 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={trips} readOnly={readOnly} title="N. viaggi" onChange={(e) => setTrips(e.target.value)} onBlur={() => save({ numTrips: Math.round(parseDecimal(trips)) })} />
           <span className="text-[10px] text-muted-foreground">×</span>
-          <Input className="h-7 w-14 text-right text-xs" value={km} readOnly={readOnly} title="Km/viaggio" onChange={(e) => setKm(e.target.value)} onBlur={() => save({ kmPerTrip: parseDecimal(km) })} />
-          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">{fmt2(resource.travelTotal + resource.accommodationTotal + resource.allowanceTotal)}€</span>
+          <Input className="h-7 w-14 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={km} readOnly={readOnly} title="Km/viaggio" onChange={(e) => setKm(e.target.value)} onBlur={() => save({ kmPerTrip: parseDecimal(km) })} />
+          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">{euro(resource.travelTotal + resource.accommodationTotal + resource.allowanceTotal)}</span>
         </div>
       ) : null}
-      <span className="text-right font-semibold tabular-nums text-[#059669]">{fmt2(resource.totalSale)}€</span>
+      <span className="text-right font-semibold tabular-nums text-[#059669]">{euro(resource.totalSale)}</span>
       {!readOnly ? (
         <Button
           variant="ghost"
@@ -285,14 +286,14 @@ export function MaterialSectionCard({
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           K:
           <Input
-            className="h-7 w-16 text-center text-xs"
+            className="h-7 w-16 border-transparent bg-transparent text-center text-xs shadow-none focus-visible:border-input focus-visible:bg-background"
             value={markup}
             readOnly={readOnly}
             onChange={(e) => setMarkup(e.target.value)}
             onBlur={() => void updateMaterialSectionField(quoteId, section.id, "markup_value", String(parseDecimal(markup))).then(onChanged)}
           />
         </span>
-        <span className="ml-auto font-bold tabular-nums">{fmt2(section.totalSale)} €</span>
+        <span className="ml-auto font-bold tabular-nums">{euro(section.totalSale)}</span>
         {!readOnly ? (
           <>
             <Button size="sm" variant="outline" className="h-7" onClick={addLocalItem}>
@@ -302,7 +303,7 @@ export function MaterialSectionCard({
               variant="ghost"
               size="icon-sm"
               className="text-destructive hover:bg-destructive/10"
-              title="Elimina sezione"
+              title="Elimina sezione materiali"
               onClick={confirmDelete}
             >
               <Trash2 className="size-3.5" />
@@ -376,11 +377,11 @@ function MaterialItemRow({
 
   return (
     <div className="grid grid-cols-[1fr_70px_90px_60px_90px_70px_36px] items-center gap-1 border-b px-3 py-1.5 text-xs last:border-b-0" style={item.isActive ? undefined : { opacity: 0.5 }}>
-      <Input className="h-7 border-transparent bg-transparent text-xs focus-visible:border-input" value={desc} readOnly={readOnly} onChange={(e) => setDesc(e.target.value)} onBlur={() => save({ description: desc })} />
-      <Input className="h-7 text-right text-xs" value={qty} readOnly={readOnly} onChange={(e) => setQty(e.target.value)} onBlur={() => save({ quantity: parseDecimal(qty) })} />
-      <Input className="h-7 text-right text-xs" value={cost} readOnly={readOnly} onChange={(e) => setCost(e.target.value)} onBlur={() => save({ unitCost: parseDecimal(cost) })} />
-      <Input className="h-7 text-center text-xs" value={markup} readOnly={readOnly} onChange={(e) => setMarkup(e.target.value)} onBlur={() => save({ markupValue: parseDecimal(markup) })} />
-      <span className="text-right font-semibold tabular-nums text-[#059669]">{fmt2(item.totalSale)}€</span>
+      <Input className="h-7 border-transparent bg-transparent text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={desc} readOnly={readOnly} onChange={(e) => setDesc(e.target.value)} onBlur={() => save({ description: desc })} />
+      <Input className="h-7 border-transparent bg-transparent text-right text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={qty} readOnly={readOnly} onChange={(e) => setQty(e.target.value)} onBlur={() => save({ quantity: parseDecimal(qty) })} />
+      <MoneyInput className="h-7 border-transparent bg-transparent text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={cost} readOnly={readOnly} onChange={setCost} onCommit={() => save({ unitCost: parseDecimal(cost) })} />
+      <Input className="h-7 border-transparent bg-transparent text-center text-xs shadow-none focus-visible:border-input focus-visible:bg-background" value={markup} readOnly={readOnly} onChange={(e) => setMarkup(e.target.value)} onBlur={() => save({ markupValue: parseDecimal(markup) })} />
+      <span className="text-right font-semibold tabular-nums text-[#059669]">{euro(item.totalSale)}</span>
       <div className="flex justify-center">
         <Switch
           checked={item.isActive}

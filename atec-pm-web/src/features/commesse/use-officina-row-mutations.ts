@@ -51,11 +51,13 @@ export interface OfficinaRowMutations {
     destination: boolean
     destinationSpec: boolean
     daneaRef: boolean
-    dateNeeded: boolean
     orderDate: boolean
+    deliveredAt: boolean
     supplier: boolean
     treatment: boolean
+    workType: boolean
     notes: boolean
+    requestedBy: boolean
     remove: boolean
   }
   changeStatus: (item: OfficinaItem, statusKey: string) => void
@@ -67,11 +69,15 @@ export interface OfficinaRowMutations {
   changeDestination: (item: OfficinaItem, destination: string) => void
   commitDestinationSpec: (item: OfficinaItem, destinationSpec: string) => void
   commitDaneaRef: (item: OfficinaItem, daneaRef: string) => void
-  changeDateNeeded: (item: OfficinaItem, dateNeeded: string | null) => void
   changeOrderDate: (item: OfficinaItem, orderDate: string | null) => void
+  changeDeliveredAt: (item: OfficinaItem, deliveredAt: string | null) => void
   changeSupplier: (item: OfficinaItem, supplier: SupplierListItem | null) => void
   changeTreatment: (item: OfficinaItem, treatment: string) => void
+  /** Natura della lavorazione: "Internal" / "External" / "" (non classificata). */
+  changeWorkType: (item: OfficinaItem, workType: string) => void
   commitNotes: (item: OfficinaItem, notes: string) => void
+  /** «Inserito da» (#61): nome di chi ha compilato la riga, correggibile a mano. */
+  commitRequestedBy: (item: OfficinaItem, requestedBy: string) => void
   /** Cancellazione DEFINITIVA (solo ADMIN/PM): la conferma la chiede il chiamante. */
   removeRow: (item: OfficinaItem) => void
 }
@@ -86,11 +92,13 @@ export function useOfficinaRowMutations(
   const destination = useFieldMutation(projectId, invalidate)
   const destinationSpec = useFieldMutation(projectId, invalidate)
   const daneaRef = useFieldMutation(projectId, invalidate)
-  const dateNeeded = useFieldMutation(projectId, invalidate)
   const orderDate = useFieldMutation(projectId, invalidate)
+  const deliveredAt = useFieldMutation(projectId, invalidate)
   const supplier = useFieldMutation(projectId, invalidate)
   const treatment = useFieldMutation(projectId, invalidate)
+  const workType = useFieldMutation(projectId, invalidate)
   const notes = useFieldMutation(projectId, invalidate)
+  const requestedBy = useFieldMutation(projectId, invalidate)
 
   // Rimuove la riga e la sua bozza di lavorazione in staging; diversa dall'annullo,
   // che è solo un cambio stato.
@@ -169,13 +177,10 @@ export function useOfficinaRowMutations(
     [daneaRef]
   )
 
-  const changeDateNeeded = React.useCallback(
-    (item: OfficinaItem, value: string | null) => {
-      if (value === toDateOnly(item.dateNeeded) || dateNeeded.isPending) return
-      dateNeeded.mutate({ item, patch: { dateNeeded: value } })
-    },
-    [dateNeeded]
-  )
+  // «Data Richiesta» non si scrive più da qui (#83): la decide chi programma il lavoro,
+  // dalla pagina Lavorazioni Officine, e il server la ignora in questo salvataggio.
+  // La mutation è stata tolta perché una scrittura che il server scarta è peggio di una
+  // colonna ferma: mostra una modifica che sparisce al primo refresh.
 
   const changeOrderDate = React.useCallback(
     (item: OfficinaItem, value: string | null) => {
@@ -183,6 +188,14 @@ export function useOfficinaRowMutations(
       orderDate.mutate({ item, patch: { orderDate: value } })
     },
     [orderDate]
+  )
+
+  const changeDeliveredAt = React.useCallback(
+    (item: OfficinaItem, value: string | null) => {
+      if (value === toDateOnly(item.deliveredAt) || deliveredAt.isPending) return
+      deliveredAt.mutate({ item, patch: { deliveredAt: value } })
+    },
+    [deliveredAt]
   )
 
   const changeSupplier = React.useCallback(
@@ -209,6 +222,14 @@ export function useOfficinaRowMutations(
     [treatment]
   )
 
+  const changeWorkType = React.useCallback(
+    (item: OfficinaItem, next: string) => {
+      if (next === (item.workType ?? "") || workType.isPending) return
+      workType.mutate({ item, patch: { workType: next } })
+    },
+    [workType]
+  )
+
   const commitNotes = React.useCallback(
     (item: OfficinaItem, value: string) => {
       const next = value.trim()
@@ -216,6 +237,15 @@ export function useOfficinaRowMutations(
       notes.mutate({ item, patch: { notes: next } })
     },
     [notes]
+  )
+
+  const commitRequestedBy = React.useCallback(
+    (item: OfficinaItem, value: string) => {
+      const next = value.trim()
+      if (next === (item.requestedBy ?? "") || requestedBy.isPending) return
+      requestedBy.mutate({ item, patch: { requestedBy: next } })
+    },
+    [requestedBy]
   )
 
   const removeRow = React.useCallback(
@@ -234,11 +264,13 @@ export function useOfficinaRowMutations(
         destination: destination.isPending,
         destinationSpec: destinationSpec.isPending,
         daneaRef: daneaRef.isPending,
-        dateNeeded: dateNeeded.isPending,
         orderDate: orderDate.isPending,
+        deliveredAt: deliveredAt.isPending,
         supplier: supplier.isPending,
         treatment: treatment.isPending,
+        workType: workType.isPending,
         notes: notes.isPending,
+        requestedBy: requestedBy.isPending,
         remove: remove.isPending,
       },
       changeStatus,
@@ -247,11 +279,13 @@ export function useOfficinaRowMutations(
       changeDestination,
       commitDestinationSpec,
       commitDaneaRef,
-      changeDateNeeded,
       changeOrderDate,
+      changeDeliveredAt,
       changeSupplier,
       changeTreatment,
+      changeWorkType,
       commitNotes,
+      commitRequestedBy,
       removeRow,
     }),
     [
@@ -261,11 +295,13 @@ export function useOfficinaRowMutations(
       destination.isPending,
       destinationSpec.isPending,
       daneaRef.isPending,
-      dateNeeded.isPending,
       orderDate.isPending,
+      deliveredAt.isPending,
       supplier.isPending,
       treatment.isPending,
+      workType.isPending,
       notes.isPending,
+      requestedBy.isPending,
       remove.isPending,
       changeStatus,
       applyQuantityPatch,
@@ -273,11 +309,13 @@ export function useOfficinaRowMutations(
       changeDestination,
       commitDestinationSpec,
       commitDaneaRef,
-      changeDateNeeded,
       changeOrderDate,
+      changeDeliveredAt,
       changeSupplier,
       changeTreatment,
+      changeWorkType,
       commitNotes,
+      commitRequestedBy,
       removeRow,
     ]
   )

@@ -1,9 +1,13 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ExternalLink, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { ExternalLink, Plus, Printer, RefreshCw, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
+import {
+  LookupCombobox,
+  type LookupComboboxOption,
+} from "@/components/shared/lookup-combobox"
 import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { PromptDialog } from "@/features/admin/config-sections/config-sections-dialogs"
@@ -17,15 +21,6 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -33,23 +28,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   AutoTextarea,
   ChecklistBulkDeleteBar,
+  ChecklistColumnsMenu,
+  ChecklistColumnsProvider,
   ChecklistContainerCard,
   ChecklistRow,
+  type ChecklistRowContainer,
   ChecklistTable,
   deleteSelectedChecklistItems,
+  useChecklistColumns,
   useChecklistRowSelection,
 } from "@/features/checklist/checklist-shared"
+import { printChecklistRows } from "@/features/checklist/checklist-print"
 import {
   ChecklistSidebar,
   type ChecklistView,
 } from "@/features/checklist/ChecklistSidebar"
 import {
+  groupNameExists,
   priorityMeta,
   sortChecklistItems,
 } from "@/features/checklist/checklist-utils"
+import { useDeferredItemOrder } from "@/lib/use-deferred-item-order"
 import {
   addChecklistGroup,
   addChecklistInbox,
@@ -66,14 +69,19 @@ import type {
   ChecklistBoard,
   ChecklistGroup,
   ChecklistInboxItem,
+  ChecklistItem,
   ChecklistProject,
   ChecklistProjectLookup,
 } from "@/lib/api/types"
+import { dateToIso } from "@/lib/date-iso"
 import { useChecklistHub } from "@/lib/signalr/use-checklist-hub"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
 const EMPTY_BOARD: ChecklistBoard = { projects: [], groups: [] }
+
+/** Destinazione scelta per un'attività dell'inbox (commessa oppure gruppo). */
+type ChecklistAssignTarget = { projectId: number | null; groupId: number | null }
 
 export function ChecklistPage() {
   const queryClient = useQueryClient()
@@ -113,15 +121,27 @@ export function ChecklistPage() {
 
   const [view, setView] = React.useState<ChecklistView>({ kind: "inbox" })
   const [extraProjectIds, setExtraProjectIds] = React.useState<number[]>([])
+  /** «Aggiorna» riordina le righe secondo priorità/data (le modifiche non spostano subito). */
+  const [layoutEpoch, setLayoutEpoch] = React.useState(0)
+
+  const handleRefresh = React.useCallback(() => {
+    setLayoutEpoch((n) => n + 1)
+    void boardQuery.refetch()
+  }, [boardQuery])
 
   return (
+    <ChecklistColumnsProvider>
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Check list</h1>
-        <p className="text-sm text-muted-foreground">
-          Attività per commessa e gruppi generici · raccoglitore e generatore di
-          check list
-        </p>
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-bold tracking-tight">Check list</h1>
+          <p className="text-sm text-muted-foreground">
+            Attività per commessa e gruppi generici · raccoglitore e generatore di
+            check list
+          </p>
+        </div>
+        <NewGroupButton groups={board.groups} onCreated={invalidateBoard} />
+        <ChecklistColumnsMenu />
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-background">
@@ -129,9 +149,18 @@ export function ChecklistPage() {
           view={view}
           onViewChange={setView}
           board={board}
+          projectsLookup={projectsQuery.data ?? []}
           inboxCount={inboxCount}
           allCount={allItems.length}
           priCount={priCount}
+          onGroupRenamed={invalidateBoard}
+          onGroupDeleted={(groupId) => {
+            // Se stavo guardando l'attività eliminata torno a «Tutte le attività».
+            if (view.kind === "group" && view.groupId === groupId) {
+              setView({ kind: "all" })
+            }
+            void invalidateBoard()
+          }}
         />
 
         <main className="min-w-0 flex-1 overflow-y-auto p-4">
@@ -154,17 +183,30 @@ export function ChecklistPage() {
               onViewChange={setView}
               onBoardMutated={invalidateBoard}
               onInboxMutated={invalidateInbox}
-              onAssigned={() => {
+              onAssigned={(target) => {
                 invalidateInbox()
                 invalidateBoard()
+                // Dopo l'assegnazione si apre la tabella di destinazione, così
+                // l'attività appena fissata si completa subito nei dettagli.
+                if (target.projectId != null) {
+                  const projectId = target.projectId
+                  setExtraProjectIds((ids) =>
+                    ids.includes(projectId) ? ids : [...ids, projectId]
+                  )
+                  setView({ kind: "project", projectId })
+                } else if (target.groupId != null) {
+                  setView({ kind: "group", groupId: target.groupId })
+                }
               }}
-              onRefresh={() => boardQuery.refetch()}
+              onRefresh={handleRefresh}
               refreshing={boardQuery.isFetching}
+              layoutEpoch={layoutEpoch}
             />
           )}
         </main>
       </div>
     </div>
+    </ChecklistColumnsProvider>
   )
 }
 
@@ -183,6 +225,7 @@ function ChecklistMainContent({
   onAssigned,
   onRefresh,
   refreshing,
+  layoutEpoch,
 }: {
   view: ChecklistView
   board: ChecklistBoard
@@ -195,9 +238,10 @@ function ChecklistMainContent({
   onViewChange: (view: ChecklistView) => void
   onBoardMutated: () => void
   onInboxMutated: () => void
-  onAssigned: () => void
+  onAssigned: (target: ChecklistAssignTarget) => void
   onRefresh: () => void
   refreshing: boolean
+  layoutEpoch: number
 }) {
   if (view.kind === "inbox") {
     return (
@@ -235,6 +279,7 @@ function ChecklistMainContent({
           onMutated={onBoardMutated}
           onRefresh={onRefresh}
           refreshing={refreshing}
+          layoutEpoch={layoutEpoch}
         />
       </>
     )
@@ -242,31 +287,63 @@ function ChecklistMainContent({
 
   if (view.kind === "priority") {
     const pm = priorityMeta(view.priority)
+    const priorityItems = [
+      ...board.projects.flatMap((p) => p.items),
+      ...board.groups.flatMap((g) => g.items),
+    ].filter((i) => i.priority === view.priority)
+    // P0: il conteggio anticipa la divisione in due tabelle (oggi / critiche).
+    const todayIso = dateToIso(new Date())
+    const dueToday = priorityItems.filter(
+      (i) => (i.dueDate ?? "").slice(0, 10) === todayIso
+    ).length
     return (
       <>
-        <ContentHead
-          title={`Priorità ${pm.code} — ${pm.name}`}
-          meta={`${board.projects.flatMap((p) => p.items).filter((i) => i.priority === view.priority).length + board.groups.flatMap((g) => g.items).filter((i) => i.priority === view.priority).length} attività`}
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-2">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {`Priorità ${pm.code} — ${pm.name}`}
+          </h2>
+          <span className="text-sm text-muted-foreground">
+            {view.priority === 0
+              ? `${priorityItems.length} attività · ${dueToday} del giorno · ${priorityItems.length - dueToday} critiche`
+              : `${priorityItems.length} attività`}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="Riordina le righe secondo priorità e scadenze aggiornate"
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : ""} />
+            Aggiorna
+          </Button>
+        </div>
+        <PriorityView
+          board={board}
+          priority={view.priority}
+          onMutated={onBoardMutated}
+          layoutEpoch={layoutEpoch}
         />
-        <PriorityView board={board} priority={view.priority} onMutated={onBoardMutated} />
       </>
     )
   }
 
   if (view.kind === "project") {
+    // Una commessa senza attività non è nella board: la si costruisce dal lookup, così
+    // ogni commessa aperta (anche appena creata) ha comunque la sua tabella vuota.
+    const lookupProject = projectsLookup.find((p) => p.id === view.projectId)
     const project =
       board.projects.find((p) => p.projectId === view.projectId) ??
-      (extraProjectIds.includes(view.projectId)
-        ? (() => {
-            const lk = projectsLookup.find((p) => p.id === view.projectId)
-            return {
-              projectId: view.projectId,
-              code: lk?.code ?? "",
-              title: lk?.title ?? "",
-              display: lk?.display ?? lk?.code ?? String(view.projectId),
-              items: [],
-            } satisfies ChecklistProject
-          })()
+      (lookupProject || extraProjectIds.includes(view.projectId)
+        ? ({
+            projectId: view.projectId,
+            code: lookupProject?.code ?? "",
+            title: lookupProject?.title ?? "",
+            customerName: "",
+            display: lookupProject?.display ?? lookupProject?.code ?? String(view.projectId),
+            items: [],
+          } satisfies ChecklistProject)
         : null)
 
     if (!project) {
@@ -291,7 +368,6 @@ function ChecklistMainContent({
           extraProjectIds={extraProjectIds}
           onExtraProjectIdsChange={onExtraProjectIdsChange}
           onViewChange={onViewChange}
-          onMutated={onBoardMutated}
           onRefresh={onRefresh}
           refreshing={refreshing}
         />
@@ -316,6 +392,7 @@ function ChecklistMainContent({
             items={project.items}
             container={{ projectId: project.projectId }}
             onMutated={onBoardMutated}
+            layoutEpoch={layoutEpoch}
           />
         </ChecklistContainerCard>
       </>
@@ -345,7 +422,6 @@ function ChecklistMainContent({
         extraProjectIds={extraProjectIds}
         onExtraProjectIdsChange={onExtraProjectIdsChange}
         onViewChange={onViewChange}
-        onMutated={onBoardMutated}
         onRefresh={onRefresh}
         refreshing={refreshing}
       />
@@ -354,6 +430,7 @@ function ChecklistMainContent({
         groups={board.groups}
         onMutated={onBoardMutated}
         onDeleted={() => onViewChange({ kind: "all" })}
+        layoutEpoch={layoutEpoch}
       />
     </>
   )
@@ -368,12 +445,39 @@ function ContentHead({ title, meta }: { title: string; meta?: string }) {
   )
 }
 
-function groupNameExists(groups: ChecklistGroup[], name: string, excludeId?: number) {
-  const normalized = name.trim().toLowerCase()
-  return groups.some(
-    (g) =>
-      g.id !== excludeId &&
-      g.name.trim().toLowerCase() === normalized
+/** Pulsante «Gruppo» dell'intestazione: crea un gruppo generico da qualsiasi vista. */
+function NewGroupButton({
+  groups,
+  onCreated,
+}: {
+  groups: ChecklistGroup[]
+  onCreated: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <Plus />
+        Gruppo
+      </Button>
+      <PromptDialog
+        open={open}
+        title="Nuovo gruppo"
+        label="Nome gruppo"
+        onClose={() => setOpen(false)}
+        onConfirm={async (name) => {
+          const trimmed = name.trim()
+          if (groupNameExists(groups, trimmed)) {
+            throw new Error("Esiste già un gruppo con questo nome")
+          }
+          await addChecklistGroup({ name: trimmed })
+          setOpen(false)
+          onCreated()
+          notifySuccess("Gruppo creato")
+        }}
+      />
+    </>
   )
 }
 
@@ -385,7 +489,6 @@ function BoardToolbar({
   extraProjectIds,
   onExtraProjectIdsChange,
   onViewChange,
-  onMutated,
   onRefresh,
   refreshing,
 }: {
@@ -394,12 +497,9 @@ function BoardToolbar({
   extraProjectIds: number[]
   onExtraProjectIdsChange: (ids: number[]) => void
   onViewChange: (view: ChecklistView) => void
-  onMutated: () => void
   onRefresh: () => void
   refreshing: boolean
 }) {
-  const [addGroupOpen, setAddGroupOpen] = React.useState(false)
-
   const boardProjectIds = new Set(board.projects.map((p) => p.projectId))
   const availableProjects = projectsLookup.filter(
     (p) => !boardProjectIds.has(p.id) && !extraProjectIds.includes(p.id)
@@ -407,56 +507,28 @@ function BoardToolbar({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onRefresh}
+        disabled={refreshing}
+        title="Riordina le righe secondo priorità e scadenze aggiornate"
+      >
         <RefreshCw className={refreshing ? "animate-spin" : ""} />
         Aggiorna
       </Button>
-      <Button size="sm" onClick={() => setAddGroupOpen(true)}>
-        <Plus />
-        Gruppo
-      </Button>
-      <Select
-        value=""
-        onValueChange={(v) => {
-          const id = Number(v)
+      <LookupCombobox
+        options={availableProjects.map((p) => ({ id: p.id, name: p.display }))}
+        value={null}
+        onValueChange={(id) => {
+          if (id == null) return
           onExtraProjectIdsChange([...extraProjectIds, id])
           onViewChange({ kind: "project", projectId: id })
         }}
-      >
-        <SelectTrigger className="h-8 w-56">
-          <SelectValue placeholder="Aggiungi commessa…" />
-        </SelectTrigger>
-        <SelectContent>
-          {availableProjects.length === 0 ? (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-              Nessuna commessa disponibile
-            </div>
-          ) : (
-            availableProjects.map((p) => (
-              <SelectItem key={p.id} value={String(p.id)}>
-                {p.display}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-
-      <PromptDialog
-        open={addGroupOpen}
-        title="Nuovo gruppo"
-        label="Nome gruppo"
-        onClose={() => setAddGroupOpen(false)}
-        onConfirm={async (name) => {
-          const trimmed = name.trim()
-          if (groupNameExists(board.groups, trimmed)) {
-            throw new Error("Esiste già un gruppo con questo nome")
-          }
-          const id = await addChecklistGroup({ name: trimmed })
-          setAddGroupOpen(false)
-          onMutated()
-          onViewChange({ kind: "group", groupId: id })
-          notifySuccess("Gruppo creato")
-        }}
+        placeholder="Aggiungi commessa…"
+        searchPlaceholder="Cerca commessa…"
+        emptyText="Nessuna commessa disponibile"
+        className="h-8 w-56"
       />
     </div>
   )
@@ -473,6 +545,7 @@ function BoardView({
   onMutated,
   onRefresh,
   refreshing,
+  layoutEpoch,
 }: {
   board: ChecklistBoard
   projectsLookup: ChecklistProjectLookup[]
@@ -482,6 +555,7 @@ function BoardView({
   onMutated: () => void
   onRefresh: () => void
   refreshing: boolean
+  layoutEpoch: number
 }) {
   const boardProjectIds = new Set(board.projects.map((p) => p.projectId))
   const placeholders: ChecklistProject[] = extraProjectIds
@@ -492,6 +566,7 @@ function BoardView({
         projectId: id,
         code: lk?.code ?? "",
         title: lk?.title ?? "",
+        customerName: "",
         display: lk?.display ?? lk?.code ?? String(id),
         items: [],
       }
@@ -507,7 +582,6 @@ function BoardView({
         extraProjectIds={extraProjectIds}
         onExtraProjectIdsChange={onExtraProjectIdsChange}
         onViewChange={onViewChange}
-        onMutated={onMutated}
         onRefresh={onRefresh}
         refreshing={refreshing}
       />
@@ -546,11 +620,18 @@ function BoardView({
                 items={p.items}
                 container={{ projectId: p.projectId }}
                 onMutated={onMutated}
+                layoutEpoch={layoutEpoch}
               />
             </ChecklistContainerCard>
           ))}
           {board.groups.map((g) => (
-            <GroupCard key={`g${g.id}`} group={g} groups={board.groups} onMutated={onMutated} />
+            <GroupCard
+              key={`g${g.id}`}
+              group={g}
+              groups={board.groups}
+              onMutated={onMutated}
+              layoutEpoch={layoutEpoch}
+            />
           ))}
         </div>
       )}
@@ -563,11 +644,13 @@ function GroupCard({
   groups,
   onMutated,
   onDeleted,
+  layoutEpoch = 0,
 }: {
   group: ChecklistGroup
   groups: ChecklistGroup[]
   onMutated: () => void
   onDeleted?: () => void
+  layoutEpoch?: number
 }) {
   const confirm = useConfirm()
   const [renaming, setRenaming] = React.useState(false)
@@ -659,6 +742,7 @@ function GroupCard({
         items={group.items}
         container={{ groupId: group.id }}
         onMutated={onMutated}
+        layoutEpoch={layoutEpoch}
       />
     </ChecklistContainerCard>
   )
@@ -693,7 +777,7 @@ function InboxView({
   groups: ChecklistGroup[]
   projectsLookup: ChecklistProjectLookup[]
   onInboxMutated: () => void
-  onAssigned: () => void
+  onAssigned: (target: ChecklistAssignTarget) => void
 }) {
   const [newGroupAssignNoteId, setNewGroupAssignNoteId] = React.useState<number | null>(null)
 
@@ -718,7 +802,7 @@ function InboxView({
       ) : error ? (
         <PageErrorAlert message={error} />
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <GridScroller className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -744,7 +828,7 @@ function InboxView({
               <InboxNewRow onCreated={onInboxMutated} />
             </TableBody>
           </Table>
-        </div>
+        </GridScroller>
       )}
 
       <PromptDialog
@@ -768,7 +852,7 @@ function InboxView({
           const groupId = await addChecklistGroup({ name: trimmed })
           await assignChecklistInbox(noteId, { projectId: null, groupId })
           setNewGroupAssignNoteId(null)
-          onAssigned()
+          onAssigned({ projectId: null, groupId })
           notifySuccess(`Attività assegnata a «${trimmed}»`)
         }}
       />
@@ -839,7 +923,7 @@ function InboxRow({
   projects: ChecklistProjectLookup[]
   groups: ChecklistGroup[]
   onInboxMutated: () => void
-  onAssigned: () => void
+  onAssigned: (target: ChecklistAssignTarget) => void
   onRequestNewGroup: () => void
 }) {
   const [text, setText] = React.useState(note.text)
@@ -865,11 +949,20 @@ function InboxRow({
     }
   }
 
+  // Voci «Assegna a…»: id prefissato p:/g: perché commesse e gruppi convivono.
+  const assignOptions = React.useMemo<LookupComboboxOption<string>[]>(
+    () => [
+      ...projects.map((p) => ({
+        id: `p:${p.id}`,
+        name: p.display,
+        group: "Commesse",
+      })),
+      ...groups.map((g) => ({ id: `g:${g.id}`, name: g.name, group: "Attività" })),
+    ],
+    [projects, groups]
+  )
+
   async function assign(value: string) {
-    if (value === "__new__") {
-      onRequestNewGroup()
-      return
-    }
     if (!text.trim()) {
       notifyError(new Error("Scrivi prima l'attività, poi assegnala"))
       return
@@ -878,7 +971,7 @@ function InboxRow({
     const groupId = value.startsWith("g:") ? Number(value.slice(2)) : null
     try {
       await assignChecklistInbox(note.id, { projectId, groupId })
-      onAssigned()
+      onAssigned({ projectId, groupId })
       notifySuccess("Attività assegnata")
     } catch (err) {
       notifyError(err as Error)
@@ -896,47 +989,24 @@ function InboxRow({
           onChange={setText}
           onCommit={() => void commit()}
           placeholder=""
+          className="border-transparent bg-transparent hover:border-input focus-visible:border-input focus-visible:bg-background"
         />
       </TableCell>
       <TableCell>
-        <Select value="" onValueChange={(v) => void assign(v)}>
-          <SelectTrigger
-            className={cn(
-              "h-9 w-full",
-              hasText && "border-primary/40 bg-primary/5"
-            )}
-          >
-            <SelectValue placeholder="Assegna a…" />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.length > 0 ? (
-              <SelectGroup>
-                <SelectLabel>Commesse</SelectLabel>
-                {projects.map((p) => (
-                  <SelectItem key={`p${p.id}`} value={`p:${p.id}`}>
-                    {p.display}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ) : null}
-            {groups.length > 0 ? (
-              <SelectGroup>
-                <SelectLabel>Attività</SelectLabel>
-                {groups.map((g) => (
-                  <SelectItem key={`g${g.id}`} value={`g:${g.id}`}>
-                    {g.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ) : null}
-            <SelectItem value="__new__">
-              <span className="flex items-center gap-2 text-primary">
-                <Plus className="size-3.5" />
-                Nuova commessa / gruppo…
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+        <LookupCombobox
+          options={assignOptions}
+          value={null}
+          onValueChange={(v) => v != null && void assign(v)}
+          placeholder="Assegna a…"
+          searchPlaceholder="Cerca commessa o gruppo…"
+          emptyText="Nessuna commessa o gruppo"
+          action={{
+            label: "Nuova commessa / gruppo…",
+            icon: <Plus className="size-3.5" />,
+            onSelect: onRequestNewGroup,
+          }}
+          className={cn(hasText && "border-primary/40 bg-primary/5")}
+        />
       </TableCell>
       <TableCell className="w-12 py-1.5 align-middle">
         <div className="flex justify-end">
@@ -964,37 +1034,207 @@ function PriorityView({
   board,
   priority,
   onMutated,
+  layoutEpoch,
 }: {
   board: ChecklistBoard
   priority: number
   onMutated: () => void
+  layoutEpoch: number
 }) {
-  const confirm = useConfirm()
   const rows = React.useMemo(
     () =>
       [
         ...board.projects.flatMap((p) =>
-          p.items.map((item) => ({ item, label: p.display }))
+          p.items.map((item) => ({
+            item,
+            container: {
+              label: p.display,
+              code: p.code,
+              customer: p.customerName,
+              title: p.title,
+            } satisfies ChecklistRowContainer,
+          }))
         ),
         ...board.groups.flatMap((g) =>
-          g.items.map((item) => ({ item, label: g.name }))
+          g.items.map((item) => ({
+            item,
+            container: { label: g.name } satisfies ChecklistRowContainer,
+          }))
         ),
       ].filter((r) => r.item.priority === priority),
     [board, priority]
   )
 
-  const sorted = React.useMemo(
-    () => sortChecklistItems(
-      rows.map((r) => r.item),
-      "date"
-    ),
-    [rows]
-  )
-  const labelById = React.useMemo(
-    () => new Map(rows.map((r) => [r.item.id, r.label])),
-    [rows]
-  )
   const pm = priorityMeta(priority)
+
+  // Sezioni P0 congelate fino ad «Aggiorna» (cambio data non sposta tra le due tabelle).
+  const [p0SectionById, setP0SectionById] = React.useState<
+    Map<number, "today" | "rest">
+  >(() => new Map())
+
+  React.useEffect(() => {
+    if (priority !== 0) return
+    const today = dateToIso(new Date())
+    const next = new Map<number, "today" | "rest">()
+    for (const r of rows) {
+      next.set(
+        r.item.id,
+        (r.item.dueDate ?? "").slice(0, 10) === today ? "today" : "rest"
+      )
+    }
+    setP0SectionById(next)
+  }, [layoutEpoch, priority]) // eslint-disable-line react-hooks/exhaustive-deps -- solo Aggiorna / cambio tab
+
+  React.useEffect(() => {
+    if (priority !== 0) return
+    setP0SectionById((prev) => {
+      const today = dateToIso(new Date())
+      const next = new Map(prev)
+      let changed = false
+      const liveIds = new Set(rows.map((r) => r.item.id))
+      for (const id of next.keys()) {
+        if (!liveIds.has(id)) {
+          next.delete(id)
+          changed = true
+        }
+      }
+      for (const r of rows) {
+        if (!next.has(r.item.id)) {
+          next.set(
+            r.item.id,
+            (r.item.dueDate ?? "").slice(0, 10) === today ? "today" : "rest"
+          )
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [rows, priority])
+
+  const split = React.useMemo(() => {
+    if (priority !== 0) return null
+    return {
+      today: rows.filter((r) => (p0SectionById.get(r.item.id) ?? "rest") === "today"),
+      rest: rows.filter((r) => (p0SectionById.get(r.item.id) ?? "rest") === "rest"),
+    }
+  }, [rows, priority, p0SectionById])
+
+  if (rows.length === 0) {
+    return (
+      <Empty className="p-8">
+        <EmptyHeader>
+          <EmptyTitle>
+            Nessuna attività in priorità {pm.code} — {pm.name}
+          </EmptyTitle>
+          <EmptyDescription>
+            Le attività con questo livello compaiono qui da tutte le commesse e i
+            gruppi.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  if (split) {
+    return (
+      <div className="space-y-6">
+        <PrioritySection
+          title="Priorità 0 del giorno"
+          description="In scadenza oggi."
+          rows={split.today}
+          emptyText="Nessuna attività P0 in scadenza oggi."
+          onMutated={onMutated}
+          layoutEpoch={layoutEpoch}
+        />
+        <PrioritySection
+          title="Priorità 0 critiche"
+          description="Tutte le altre P0: scadute, in programma o senza data."
+          rows={split.rest}
+          emptyText="Nessuna altra attività P0."
+          onMutated={onMutated}
+          layoutEpoch={layoutEpoch}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <PriorityTable rows={rows} onMutated={onMutated} layoutEpoch={layoutEpoch} />
+  )
+}
+
+/** Blocco titolato di una delle due tabelle P0. */
+function PrioritySection({
+  title,
+  description,
+  rows,
+  emptyText,
+  onMutated,
+  layoutEpoch,
+}: {
+  title: string
+  description: string
+  rows: { item: ChecklistItem; container: ChecklistRowContainer }[]
+  emptyText: string
+  onMutated: () => void
+  layoutEpoch: number
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <h3 className="text-base font-semibold">{title}</h3>
+        <span className="rounded-md border bg-background px-2 py-0.5 font-mono text-xs text-muted-foreground">
+          {rows.length}
+        </span>
+        <span className="text-sm text-muted-foreground">{description}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto self-center"
+          disabled={rows.length === 0}
+          title="Apre la stampa del browser: da lì «Salva come PDF»"
+          onClick={() => printChecklistRows({ title, subtitle: description, rows })}
+        >
+          <Printer />
+          Stampa PDF
+        </Button>
+      </div>
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+          {emptyText}
+        </p>
+      ) : (
+        <PriorityTable
+          rows={rows}
+          onMutated={onMutated}
+          layoutEpoch={layoutEpoch}
+        />
+      )}
+    </div>
+  )
+}
+
+function PriorityTable({
+  rows,
+  onMutated,
+  layoutEpoch,
+}: {
+  rows: { item: ChecklistItem; container: ChecklistRowContainer }[]
+  onMutated: () => void
+  layoutEpoch: number
+}) {
+  const confirm = useConfirm()
+  const items = React.useMemo(() => rows.map((r) => r.item), [rows])
+  const sortItems = React.useCallback(
+    (list: ChecklistItem[]) => sortChecklistItems(list, "date"),
+    []
+  )
+  const sorted = useDeferredItemOrder(items, sortItems, layoutEpoch)
+  const containerById = React.useMemo(
+    () => new Map(rows.map((r) => [r.item.id, r.container])),
+    [rows]
+  )
+  const visibleCols = useChecklistColumns()
   const visibleIds = React.useMemo(() => sorted.map((item) => item.id), [sorted])
   const {
     selectedRowIds,
@@ -1013,29 +1253,13 @@ function PriorityView({
     })
   }
 
-  if (rows.length === 0) {
-    return (
-      <Empty className="p-8">
-        <EmptyHeader>
-          <EmptyTitle>
-            Nessuna attività in priorità {pm.code} — {pm.name}
-          </EmptyTitle>
-          <EmptyDescription>
-            Le attività con questo livello compaiono qui da tutte le commesse e i
-            gruppi.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
-
   return (
     <div className="space-y-2">
       <ChecklistBulkDeleteBar
         count={selectedRowIds.size}
         onDelete={() => void deleteSelected()}
       />
-      <div className="overflow-hidden rounded-lg border">
+      <GridScroller className="rounded-lg border">
       <Table className="border-separate border-spacing-y-1.5">
         <TableHeader>
           <TableRow>
@@ -1054,13 +1278,19 @@ function PriorityView({
                 aria-label="Seleziona tutte le attività visibili"
               />
             </TableHead>
-            <TableHead className="w-56">Commessa / Gruppo</TableHead>
+            <TableHead className="w-44">Commessa / Gruppo</TableHead>
             <TableHead>Attività</TableHead>
-            <TableHead className="w-52">Inserimento</TableHead>
-            <TableHead className="w-36">Priorità</TableHead>
-            <TableHead className="w-52">Scadenza</TableHead>
-            <TableHead className="w-28 text-center">Tempo residuo</TableHead>
-            <TableHead className="w-32">Stato</TableHead>
+            {visibleCols.createdAt && (
+              <TableHead className="w-52">Inserimento</TableHead>
+            )}
+            {visibleCols.priority && (
+              <TableHead className="w-36">Priorità</TableHead>
+            )}
+            {visibleCols.dueDate && <TableHead className="w-52">Scadenza</TableHead>}
+            {visibleCols.timeLeft && (
+              <TableHead className="w-28 text-center">Tempo residuo</TableHead>
+            )}
+            {visibleCols.status && <TableHead className="w-32">Stato</TableHead>}
             <TableHead className="w-28 text-right">Azioni</TableHead>
           </TableRow>
         </TableHeader>
@@ -1071,14 +1301,14 @@ function PriorityView({
               item={item}
               onMutated={onMutated}
               showContainer
-              containerLabel={labelById.get(item.id)}
+              container={containerById.get(item.id)}
               selected={selectedRowIds.has(item.id)}
               onSelectedChange={(value) => toggleRowSelected(item.id, value)}
             />
           ))}
         </TableBody>
       </Table>
-      </div>
+      </GridScroller>
     </div>
   )
 }

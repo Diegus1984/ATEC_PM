@@ -15,6 +15,21 @@ export interface DdpProjectSummary {
   statusCounts?: DdpStatusCount[]
 }
 
+/**
+ * Voce dell'elenco «DDP aggiornate da verificare» della card Gestione Controlli (#114):
+ * una per (commessa, tipo distinta) toccata da un collega e non ancora aperta da chi guarda.
+ * `title` = nome della commessa; `updatedBy` = "" quando la modifica non porta la firma.
+ */
+export interface DdpUpdatedItem {
+  projectId: number
+  code: string
+  title: string
+  customerName: string
+  ddpType: string // COMMERCIAL | OFFICINA
+  updatedAt: string | null
+  updatedBy: string
+}
+
 export interface DdpStatusCount {
   statusKey: string
   count: number
@@ -59,6 +74,8 @@ export interface DdpControlReportRow {
   treatment: string
   itemStatus: string
   requestedBy: string
+  createdById?: number | null
+  createdByName?: string
   daneaRef: string
   dateNeeded: string | null
   createdAt: string | null
@@ -106,6 +123,9 @@ export interface DdpFeedbackMagazzinoGroup {
 export interface DdpFeedbackMagazzinoRow {
   itemId: number
   requestedBy: string
+  createdById?: number | null
+  createdByName?: string
+  createdAt?: string | null
   description: string
   quantity: number
   unit: string
@@ -142,6 +162,8 @@ export interface DdpRowItem {
   manufacturer: string
   itemStatus: string
   requestedBy: string
+  createdById?: number | null
+  createdByName?: string
   daneaRef: string
   /** IDDoc dell'ordine Danea generato da ATEC PM (null = mai ordinata via RDO): abilita il popup ordine. */
   daneaOrderIdDoc?: number | null
@@ -154,10 +176,29 @@ export interface DdpRowItem {
   atecCode?: string
   createdAt: string | null
   updatedAt: string | null
+  /** Ultimo passaggio a DISPONIBILE / CONSEGNATO, dalla cronistoria. Null = mai consegnata. */
+  deliveredAt?: string | null
   material?: string
   treatment?: string
   parentOfficinaItemId?: number | null
   compositionQty?: number | null
+}
+
+/** Una voce della cronistoria di una riga di distinta (commerciale o officina). */
+export interface DdpItemEvent {
+  id: number
+  fromStatus: string | null
+  fromLabel: string | null
+  toStatus: string
+  toLabel: string
+  toColorBg: string | null
+  toColorFg: string | null
+  changedAt: string
+  /** Vuoto per gli eventi automatici o ricostruiti dal pregresso. */
+  changedBy: string
+  /** UTENTE · SISTEMA · RICOSTR (dedotto da date precedenti alla cronistoria). */
+  origin: string
+  note: string
 }
 
 /** Richiesta crea/modifica riga DDP commerciale (`bom_items`).

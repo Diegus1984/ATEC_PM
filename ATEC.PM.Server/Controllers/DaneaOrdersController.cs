@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -13,6 +14,8 @@ namespace ATEC.PM.Server.Controllers;
 [ApiController]
 [Route("api/danea-orders")]
 [Authorize]
+// Ordini Danea: si creano dall'Inbox Acquisti / Lavorazioni.
+[RequireFeature("nav.acquisti_inbox")]
 public class DaneaOrdersController : ControllerBase
 {
     private readonly DaneaOrderService _danea;

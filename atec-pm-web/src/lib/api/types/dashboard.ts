@@ -1,30 +1,36 @@
 /** Dashboard generale — allineati a ATEC.PM.Shared/DTOs. */
 
-export interface DashboardData {
-  activeProjects: number
-  draftProjects: number
-  completedProjects: number
-  totalEmployees: number
-  totalCustomers: number
-  hoursThisMonth: number
-  hoursThisWeek: number
-  totalRevenue: number
-  recentProjects: DashboardProjectRow[]
-  dailyHours: DashboardDailyHoursPoint[]
-}
+// #88: DashboardData / DashboardProjectRow / DashboardDailyHoursPoint rimossi con la
+// vecchia «Panoramica»: le tabelle d'ingresso leggono ProjectListItem da /api/projects.
 
-export interface DashboardDailyHoursPoint {
-  workDate: string
-  hours: number
-}
+// ── Dashboard a cartelle (blocco 7) ────────────────────────────────────────
 
-export interface DashboardProjectRow {
+export interface DashboardFolder {
+  projectId: number
   code: string
   title: string
   customerName: string
+  pmName: string
   status: string
-  hoursWorked: number
-  budgetHours: number
+  inDashboard: boolean
+  /** Milestone attive (spente escluse). */
+  milestoneCount: number
+  /** Media avanzamenti delle righe attive; null = nessuna milestone. */
+  avgProgress: number | null
+  periodStart: string | null
+  periodEnd: string | null
+}
+
+export interface DashboardFoldersResponse {
+  /** Numero massimo di cartelle mostrate (DASH_MAX del prototipo). */
+  maxCards: number
+  projects: DashboardFolder[]
+  /** Commesse escluse a mano: la fascia di chip in fondo. */
+  hidden: DashboardFolder[]
+}
+
+export interface DashboardSettings {
+  maxCards: number
 }
 
 export interface ActiveTechSummary {

@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchCatalogByAtec } from "@/lib/api/catalog"
 import { updateDdpRow } from "@/lib/api/project-ddp"
 import type { CatalogItemListItem, DdpRowItem } from "@/lib/api/types"
@@ -90,7 +91,7 @@ export function DdpAtecAlternativesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[50vh] overflow-auto rounded-lg border">
+        <GridScroller className="rounded-lg border" scrollerClassName="max-h-[50vh]">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
@@ -148,7 +149,7 @@ export function DdpAtecAlternativesDialog({
               )}
             </TableBody>
           </Table>
-        </div>
+        </GridScroller>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

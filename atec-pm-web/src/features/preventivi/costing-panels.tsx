@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Wand2 } from "lucide-react"
 
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,7 +17,7 @@ import { notifyError } from "@/lib/toast"
 
 import type { DistComputed, DistRow } from "./costing-distribution"
 import { computeDist, distKey } from "./costing-distribution"
-import { fmt2, parseDecimal } from "@/lib/format"
+import { euro, parseDecimal } from "@/lib/format"
 
 export function PricingPanel({
   quoteId,
@@ -79,17 +80,17 @@ export function PricingPanel({
         </div>
 
         <div className="w-80 space-y-1 text-sm">
-          <Row label="Vendita risorse" value={`${fmt2(resourceSale)} €`} />
-          <Row label="Vendita materiali" value={`${fmt2(materialSale)} €`} />
-          <Row label="Trasferte" value={`${fmt2(travelSale)} €`} />
+          <Row label="Vendita risorse" value={euro(resourceSale)} />
+          <Row label="Vendita materiali" value={euro(materialSale)} />
+          <Row label="Trasferte" value={euro(travelSale)} />
           <div className="border-t pt-1">
-            <Row label="PREZZO NETTO" value={`${fmt2(net)} €`} strong />
+            <Row label="PREZZO NETTO" value={euro(net)} strong />
           </div>
-          <Row label={`Contingency (${cont}%)`} value={`${fmt2(contingencyAmount)} €`} />
-          <Row label="PREZZO OFFERTA" value={`${fmt2(offer)} €`} strong color="#2563EB" />
-          <Row label={`Margine (${margin}%)`} value={`${fmt2(marginAmount)} €`} />
+          <Row label={`Contingency (${cont}%)`} value={euro(contingencyAmount)} />
+          <Row label="PREZZO OFFERTA" value={euro(offer)} strong color="#2563EB" />
+          <Row label={`Margine (${margin}%)`} value={euro(marginAmount)} />
           <div className="border-t pt-1">
-            <Row label="OFFERTA FINALE" value={`${fmt2(final)} €`} strong color="#059669" />
+            <Row label="OFFERTA FINALE" value={euro(final)} strong color="#059669" />
           </div>
         </div>
       </div>
@@ -243,11 +244,11 @@ export function DistributionPanel({
           </Button>
         ) : null}
       </div>
-      <div className="overflow-x-auto">
+      <GridScroller>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b bg-muted/20 text-[10px] font-bold text-muted-foreground">
-              <th className="px-2 py-1 text-left">SEZIONE</th>
+              <th className="px-2 py-1 text-left">SEZIONE DI COSTO</th>
               <th className="px-2 py-1 text-right">VENDITA</th>
               <th className="px-2 py-1 text-right">CONT. %</th>
               <th className="px-2 py-1 text-right">CONT. €</th>
@@ -273,12 +274,12 @@ export function DistributionPanel({
                   </span>
                   {r.name}
                 </td>
-                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : `${fmt2(r.sale)}€`}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : euro(r.sale)}</td>
                 <td className="px-2 py-1 text-right"><PctCell row={r} isCont /></td>
-                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : `${fmt2(r.contingencyAmount)}€`}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : euro(r.contingencyAmount)}</td>
                 <td className="px-2 py-1 text-right"><PctCell row={r} isCont={false} /></td>
-                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : `${fmt2(r.marginAmount)}€`}</td>
-                <td className="px-2 py-1 text-right font-semibold tabular-nums">{r.isShadowed ? "—" : `${fmt2(r.sectionTotal)}€`}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{r.isShadowed ? "—" : euro(r.marginAmount)}</td>
+                <td className="px-2 py-1 text-right font-semibold tabular-nums">{r.isShadowed ? "—" : euro(r.sectionTotal)}</td>
                 <td className="px-1 py-1 text-center">
                   {!readOnly ? (
                     <button type="button" title={r.isShadowed ? "Includi" : "Escludi"} onClick={() => toggleShadow(r)}>
@@ -294,15 +295,15 @@ export function DistributionPanel({
               <td className="px-2 py-1">TOTALE</td>
               <td />
               <td />
-              <td className="px-2 py-1 text-right tabular-nums">{fmt2(totalCont)}€</td>
+              <td className="px-2 py-1 text-right tabular-nums">{euro(totalCont)}</td>
               <td />
-              <td className="px-2 py-1 text-right tabular-nums">{fmt2(totalMarg)}€</td>
-              <td className="px-2 py-1 text-right tabular-nums text-[#059669]">{fmt2(totalClient)}€</td>
+              <td className="px-2 py-1 text-right tabular-nums">{euro(totalMarg)}</td>
+              <td className="px-2 py-1 text-right tabular-nums text-[#059669]">{euro(totalClient)}</td>
               <td />
             </tr>
           </tfoot>
         </table>
-      </div>
+      </GridScroller>
     </div>
   )
 }

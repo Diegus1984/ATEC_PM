@@ -1,21 +1,29 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 // Stati (causali) della distinta DDP: etichetta + colori editabili da Conf. DDP.
 // La chiave (status_key) è il valore salvato sulle righe: si può CREARE (chiave auto-generata univoca)
 // e MODIFICARE (etichetta/colori/ordine), ma la chiave di uno stato esistente NON cambia. Niente delete.
+// Stati e matrice DDP: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.ddp_destinazioni».
 [ApiController]
 [Route("api/ddp-statuses")]
 [Authorize]
 public class DdpStatusesController : ControllerBase
 {
     private readonly DbService _db;
-    public DdpStatusesController(DbService db) => _db = db;
+    private readonly AnagraficheCache _cache;
+    public DdpStatusesController(DbService db, AnagraficheCache cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
 
     [HttpGet]
     public IActionResult GetAll()
@@ -42,6 +50,7 @@ public class DdpStatusesController : ControllerBase
         return Ok(ApiResponse<List<DdpStatusItem>>.Ok(rows));
     }
 
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpPost]
     public IActionResult Create([FromBody] DdpStatusSaveRequest req)
     {
@@ -116,6 +125,7 @@ public class DdpStatusesController : ControllerBase
     // Salvataggio integrale della matrice (editor in Conf. DDP): sostituisce tutte le righe
     // di entrambi i tipi. Una coppia (tipo, stato) con ToKeys vuota resta governata
     // (sentinella ''); una coppia NON presente nel payload esce dalla matrice → finestra completa.
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpPut("transitions")]
     public IActionResult SaveTransitions([FromBody] List<DdpStatusTransitionItem> rows)
     {
@@ -154,9 +164,16 @@ public class DdpStatusesController : ControllerBase
                     new { Type = type, From = from, To = to }, tx);
         }
         tx.Commit();
+
+        // DOPO il commit, mai prima (vedi AnagraficheCache): la matrice la legge anche il
+        // controllo di transizione riga per riga, e una voce ripopolata a metà transazione
+        // resterebbe sbagliata finché non si riavvia il server.
+        _cache.Invalida(Anagrafica.TransizioniDdp);
+
         return Ok(ApiResponse<bool>.Ok(true, "Matrice transizioni salvata"));
     }
 
+    [RequireFeature("nav.ddp_destinazioni")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] DdpStatusSaveRequest req)
     {

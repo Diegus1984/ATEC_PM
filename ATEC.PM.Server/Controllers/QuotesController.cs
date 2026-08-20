@@ -4,12 +4,15 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Shared.Models;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/quotes")]
 [Authorize]
+// Preventivi: prezzi e margini, stessa chiave della voce di menu.
+[RequireFeature("nav.preventivi")]
 public class QuotesController : ControllerBase
 {
     private readonly QuoteDbService _qdb;
@@ -739,12 +742,8 @@ public class QuotesController : ControllerBase
             if (status == "converted")
                 return BadRequest(ApiResponse<string>.Fail("Preventivo giÃ  convertito"));
 
-            int year = DateTime.Now.Year;
-            string prefix = $"AT{year}";
-            int maxNum = c.ExecuteScalar<int>(
-                "SELECT COALESCE(MAX(CAST(SUBSTRING(code, @len+1) AS UNSIGNED)),0) FROM projects WHERE code LIKE @pref",
-                new { len = prefix.Length, pref = prefix + "%" }, tx);
-            string projectCode = $"{prefix}{(maxNum + 1):D3}";
+            // Stesso formato del dialog "Nuova commessa": C{aaaammgg}.{progressivo del giorno}.
+            string projectCode = ProjectCodeGenerator.Next(c, tx);
 
             int projectId = (int)c.ExecuteScalar<long>(@"
                 INSERT INTO projects (code, title, customer_id, pm_id, description, status, priority)
@@ -841,36 +840,47 @@ public class QuotesController : ControllerBase
                 "SELECT DISTINCT template_id FROM project_cost_sections WHERE project_id=@pid AND template_id IS NOT NULL",
                 new { pid = projectId }, tx).ToList();
 
+            // v73 — le fasi arrivano dai LEGAMI delle sezioni finite in commessa: la stessa fase
+            // agganciata a due di quelle sezioni entra due volte, una per sezione, con la sezione
+            // scritta sulla riga. Prima si leggeva `phase_templates.cost_section_template_id`,
+            // che con una fase su più sezioni ne indica una sola.
             List<dynamic> phasesToCopy = new();
             if (sectionTemplateIds.Count > 0)
             {
                 phasesToCopy = c.Query<dynamic>(@"
-                    SELECT id, name, category, department_id, cost_section_template_id, sort_order
-                    FROM phase_templates
-                    WHERE cost_section_template_id IN @ids
-                    ORDER BY sort_order",
+                    SELECT pt.id, pt.name, pt.department_id,
+                           pts.cost_section_template_id, pts.sort_order
+                    FROM phase_template_sections pts
+                    JOIN phase_templates pt ON pt.id = pts.phase_template_id
+                    JOIN cost_section_templates cst ON cst.id = pts.cost_section_template_id
+                    LEFT JOIN cost_section_groups g ON g.id = cst.group_id
+                    WHERE pts.cost_section_template_id IN @ids
+                    ORDER BY g.sort_order, cst.sort_order, pts.sort_order",
                     new { ids = sectionTemplateIds }, tx).ToList();
             }
 
+            // Fasi «trasversali»: predefinite e senza nessuna sezione. Restano com'erano — se
+            // vadano tenute è una scelta di anagrafica (vedi PIANO-FASI-MULTISEZIONE.md §7).
             List<dynamic> crossPhases = c.Query<dynamic>(@"
-                SELECT id, name, category, department_id, cost_section_template_id, sort_order
-                FROM phase_templates
-                WHERE is_default=1 AND cost_section_template_id IS NULL
-                ORDER BY sort_order", transaction: tx).ToList();
+                SELECT pt.id, pt.name, pt.department_id,
+                       NULL AS cost_section_template_id, pt.sort_order
+                FROM phase_templates pt
+                WHERE pt.is_default = 1
+                  AND NOT EXISTS (SELECT 1 FROM phase_template_sections s WHERE s.phase_template_id = pt.id)
+                ORDER BY pt.sort_order", transaction: tx).ToList();
             phasesToCopy.AddRange(crossPhases);
 
             foreach (dynamic t in phasesToCopy)
             {
                 c.Execute(@"INSERT INTO project_phases
-                    (project_id, phase_template_id, name, category, cost_section_template_id,
+                    (project_id, phase_template_id, name, cost_section_template_id,
                      department_id, sort_order, is_local)
-                    VALUES (@ProjId, @TplId, @Name, @Cat, @SecTplId, @DeptId, @Sort, 0)",
+                    VALUES (@ProjId, @TplId, @Name, @SecTplId, @DeptId, @Sort, 0)",
                     new
                     {
                         ProjId = projectId,
                         TplId = (int)t.id,
                         Name = (string)t.name,
-                        Cat = (string?)t.category,
                         SecTplId = (int?)t.cost_section_template_id,
                         DeptId = (int?)t.department_id,
                         Sort = (int)t.sort_order
@@ -953,7 +963,7 @@ public class QuotesController : ControllerBase
             try
             {
                 string basePath = _db.GetConfig("BasePath", @"C:\ATEC_Commesse");
-                string fullPath = Path.Combine(basePath, year.ToString(), projectCode);
+                string fullPath = Path.Combine(basePath, DateTime.Now.Year.ToString(), projectCode);
                 c.Execute("UPDATE projects SET server_path=@Path WHERE id=@Id", new { Path = fullPath, Id = projectId }, tx);
             }
             catch (Exception ex)

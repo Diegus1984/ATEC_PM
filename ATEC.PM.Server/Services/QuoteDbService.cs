@@ -284,21 +284,37 @@ public class QuoteDbService
         AddColumnIfMissing(c, "quote_material_items", "description_rtf", "LONGTEXT NULL AFTER description");
         AddColumnIfMissing(c, "quote_material_items", "is_active", "BOOLEAN NOT NULL DEFAULT TRUE AFTER sort_order");
 
-        try
+        // FK con nome esplicito: il check evita di rigiocare la ALTER (e la relativa eccezione)
+        // ad ogni avvio. Il nome le rende comunque non duplicabili.
+        if (!ConstraintExists(c, "fk_qmi_product"))
         {
-            c.Execute(@"
-                ALTER TABLE quote_material_items
-                ADD CONSTRAINT fk_qmi_product FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE SET NULL");
+            try
+            {
+                c.Execute(@"
+                    ALTER TABLE quote_material_items
+                    ADD CONSTRAINT fk_qmi_product FOREIGN KEY (product_id) REFERENCES quote_products(id) ON DELETE SET NULL");
+            }
+            catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_product non applicabile"); }
         }
-        catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_product già presente o non applicabile"); }
 
-        try
+        if (!ConstraintExists(c, "fk_qmi_variant"))
         {
-            c.Execute(@"
-                ALTER TABLE quote_material_items
-                ADD CONSTRAINT fk_qmi_variant FOREIGN KEY (variant_id) REFERENCES quote_product_variants(id) ON DELETE SET NULL");
+            try
+            {
+                c.Execute(@"
+                    ALTER TABLE quote_material_items
+                    ADD CONSTRAINT fk_qmi_variant FOREIGN KEY (variant_id) REFERENCES quote_product_variants(id) ON DELETE SET NULL");
+            }
+            catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_variant non applicabile"); }
         }
-        catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] fk_qmi_variant già presente o non applicabile"); }
+    }
+
+    private static bool ConstraintExists(MySqlConnection c, string constraintName)
+    {
+        return c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.table_constraints
+            WHERE table_schema = DATABASE() AND constraint_name = @Name",
+            new { Name = constraintName }) > 0;
     }
 
     private void CreateQuoteCostingTables(MySqlConnection c)
@@ -391,9 +407,27 @@ public class QuoteDbService
             INDEX idx_qmi_product (product_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Migration legacy: parent_item_id su DB creati prima della gerarchia prodotti
-        try { c.Execute("ALTER TABLE quote_material_items ADD COLUMN parent_item_id INT NULL AFTER section_id"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD COLUMN parent_item_id fallito o già presente"); }
-        try { c.Execute("ALTER TABLE quote_material_items ADD FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE"); } catch (Exception ex) { _logger?.LogDebug(ex, "[QuoteDB Migration] ADD FOREIGN KEY (parent_item_id) fallito o già presente"); }
+        // Migration legacy: parent_item_id su DB creati prima della gerarchia prodotti.
+        // Entrambe le ALTER sono condizionate: senza il check sulla FK, MySQL ne accetta una
+        // NUOVA (anonima) ad ogni avvio — così il DB di sviluppo aveva accumulato 557 FK
+        // duplicate sulla stessa colonna, con altrettanti indici. La ripulitura dei duplicati
+        // già presenti è nella migrazione v52 di DbService.
+        bool hasParentColumn = c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'quote_material_items'
+              AND column_name = 'parent_item_id'") > 0;
+        if (!hasParentColumn)
+            c.Execute("ALTER TABLE quote_material_items ADD COLUMN parent_item_id INT NULL AFTER section_id");
+
+        bool hasParentFk = c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.key_column_usage
+            WHERE table_schema = DATABASE()
+              AND table_name = 'quote_material_items'
+              AND column_name = 'parent_item_id'
+              AND referenced_table_name IS NOT NULL") > 0;
+        if (!hasParentFk)
+            c.Execute("ALTER TABLE quote_material_items ADD FOREIGN KEY (parent_item_id) REFERENCES quote_material_items(id) ON DELETE CASCADE");
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS quote_pricing (
             id INT AUTO_INCREMENT PRIMARY KEY,

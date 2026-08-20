@@ -22,6 +22,7 @@ export function DdpStatusBreakdown({
   className,
   sectionLabel = "Distribuzione",
   totalCaption = "righe totali",
+  onOpenStatus,
 }: {
   bars: BarRow[]
   subtitle?: string
@@ -29,6 +30,8 @@ export function DdpStatusBreakdown({
   /** Etichetta per accessibilità e contesto (es. «Ripartizione per stato»). */
   sectionLabel?: string
   totalCaption?: string
+  /** Click su barra/fetta/legenda → drill-down allo stato. */
+  onOpenStatus?: (status: string) => void
 }) {
   const total = React.useMemo(
     () => bars.reduce((sum, bar) => sum + bar.count, 0),
@@ -78,12 +81,34 @@ export function DdpStatusBreakdown({
           bar.count > 0 ? (
             <div
               key={chartKey(bar, index)}
-              className="h-full min-w-[3px] transition-[flex-grow] duration-300"
+              role={onOpenStatus && bar.key ? "button" : undefined}
+              tabIndex={onOpenStatus && bar.key ? 0 : undefined}
+              className={cn(
+                "h-full min-w-[3px] transition-[flex-grow] duration-300",
+                onOpenStatus && bar.key && "cursor-pointer hover:opacity-90"
+              )}
               style={{
                 flexGrow: bar.count,
                 backgroundColor: bar.bg,
               }}
-              title={`${bar.label}: ${bar.count} (${bar.pct})`}
+              title={`${bar.label}: ${bar.count} (${bar.pct})${
+                onOpenStatus && bar.key ? " — clic per aprire" : ""
+              }`}
+              onClick={
+                onOpenStatus && bar.key
+                  ? () => onOpenStatus(bar.key)
+                  : undefined
+              }
+              onKeyDown={
+                onOpenStatus && bar.key
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        onOpenStatus(bar.key)
+                      }
+                    }
+                  : undefined
+              }
             />
           ) : null
         )}
@@ -126,6 +151,15 @@ export function DdpStatusBreakdown({
                 stroke="var(--background)"
                 label={DdpPieSliceLabel}
                 labelLine={false}
+                className={onOpenStatus ? "cursor-pointer outline-none" : undefined}
+                onClick={
+                  onOpenStatus
+                    ? (_data, index) => {
+                        const row = chartData[index]
+                        if (row?.key) onOpenStatus(row.key)
+                      }
+                    : undefined
+                }
               >
                 {chartData.map((entry) => (
                   <Cell key={entry.id} fill={entry.fill} />
@@ -143,11 +177,10 @@ export function DdpStatusBreakdown({
 
         {/* Legenda dettagliata */}
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-          {bars.map((bar, index) => (
-            <div
-              key={chartKey(bar, index)}
-              className="flex items-start gap-2.5 rounded-xl border bg-card/60 px-3 py-2.5 shadow-xs"
-            >
+          {bars.map((bar, index) => {
+            const clickable = Boolean(onOpenStatus && bar.key)
+            const body = (
+              <>
               {bar.key ? (
                 <span
                   className="inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-tight"
@@ -188,8 +221,30 @@ export function DdpStatusBreakdown({
                   </span>
                 </div>
               </div>
-            </div>
-          ))}
+              </>
+            )
+            if (clickable) {
+              return (
+                <button
+                  key={chartKey(bar, index)}
+                  type="button"
+                  title="Apri le righe in Avanzamento"
+                  onClick={() => onOpenStatus!(bar.key)}
+                  className="flex w-full items-start gap-2.5 rounded-xl border bg-card/60 px-3 py-2.5 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent"
+                >
+                  {body}
+                </button>
+              )
+            }
+            return (
+              <div
+                key={chartKey(bar, index)}
+                className="flex items-start gap-2.5 rounded-xl border bg-card/60 px-3 py-2.5 shadow-xs"
+              >
+                {body}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

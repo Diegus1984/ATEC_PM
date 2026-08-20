@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { RowActionsMenu } from "@/components/shared/row-actions"
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
@@ -55,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   createCategory,
   deleteCategory,
@@ -74,12 +76,13 @@ import type {
   QuoteProductDto,
 } from "@/lib/api/types"
 import { useDebounced } from "@/lib/use-debounced"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
 import { QuoteCategoryDialog } from "./QuoteCategoryDialog"
 import { QuoteGroupDialog } from "./QuoteGroupDialog"
 import { QuoteProductDialog } from "./QuoteProductDialog"
-import { fmt2 } from "@/lib/format"
+import { euro } from "@/lib/format"
 import { wildcardMatch } from "@/lib/wildcard"
 
 // ── Helper ─────────────────────────────────────────────────
@@ -87,7 +90,19 @@ import { wildcardMatch } from "@/lib/wildcard"
 const ALL_PRICE_LISTS = "__all__"
 
 /** Colonne griglia prodotti (per colspan righe varianti / vuoto). */
-const PRODUCT_TABLE_COL_COUNT = 9
+/** Colonne opzionali della griglia prodotti (menu «Colonne», vedi BLOCKS-RULES.md). */
+const PRODUCT_COLUMNS: { id: string; label: string }[] = [
+  { id: "type", label: "Tipo" },
+  { id: "code", label: "Codice" },
+  { id: "name", label: "Nome" },
+  { id: "variants", label: "Varianti" },
+  { id: "price", label: "Prezzo cliente" },
+  { id: "cost", label: "Costo aziendale" },
+  { id: "autoInclude", label: "Auto-incl." },
+]
+const PRODUCT_COLUMNS_DEFAULT = Object.fromEntries(
+  PRODUCT_COLUMNS.map((column) => [column.id, true])
+)
 
 /** Ordinamento naturale ("IRB 120" prima di "IRB 1200"), come il WPF. */
 function naturalCompare(a: string, b: string): number {
@@ -252,15 +267,15 @@ function toProductView(p: QuoteProductDto): ProductView {
     const sells = variants.map((v) => v.sell)
     const costs = variants.map((v) => v.cost)
     if (variants.length === 1) {
-      priceRange = `${fmt2(sells[0])}€`
-      costRange = `${fmt2(costs[0])}€`
+      priceRange = euro(sells[0])
+      costRange = euro(costs[0])
     } else {
       const minP = Math.min(...sells)
       const maxP = Math.max(...sells)
       const minC = Math.min(...costs)
       const maxC = Math.max(...costs)
-      priceRange = minP === maxP ? `${fmt2(minP)}€` : `${fmt2(minP)}€ – ${fmt2(maxP)}€`
-      costRange = minC === maxC ? `${fmt2(minC)}€` : `${fmt2(minC)}€ – ${fmt2(maxC)}€`
+      priceRange = minP === maxP ? euro(minP) : `${euro(minP)} – ${euro(maxP)}`
+      costRange = minC === maxC ? euro(minC) : `${euro(minC)} – ${euro(maxC)}`
     }
   }
   return {
@@ -500,6 +515,22 @@ export function CatalogoPreventiviPage() {
   const debFName = useDebounced(fName, 300)
 
   const [expandedProducts, setExpandedProducts] = React.useState<Set<number>>(new Set())
+
+  const [visibleCols, setVisibleCols] = usePersistedColumnVisibility(
+    "catalogo-preventivi-columns-v1",
+    PRODUCT_COLUMNS_DEFAULT
+  )
+  const showCol = (id: string) => visibleCols[id] ?? true
+  const productColumnToggles = PRODUCT_COLUMNS.map(({ id, label }) => ({
+    id,
+    label,
+    checked: showCol(id),
+    onToggle: (value: boolean) =>
+      setVisibleCols((prev) => ({ ...prev, [id]: value })),
+  }))
+  // Espansore varianti + colonne accese + Azioni.
+  const productColCount =
+    2 + PRODUCT_COLUMNS.filter((column) => showCol(column.id)).length
 
   // Dialoghi.
   const [groupDialog, setGroupDialog] = React.useState<{ open: boolean; group: QuoteGroupDto | null }>(
@@ -885,6 +916,7 @@ export function CatalogoPreventiviPage() {
                       Pulisci filtri
                     </Button>
                   ) : null}
+                  <ColumnsMenu columns={productColumnToggles} />
                   {showNewProduct ? (
                     <Button size="sm" onClick={handleNewProduct}>
                       <Plus className="size-4" />
@@ -900,7 +932,7 @@ export function CatalogoPreventiviPage() {
                   <code className="font-mono">*abc</code> finisce con
                 </p>
               ) : null}
-              <div className="min-h-0 flex-1 overflow-auto">
+              <GridScroller fill>
                 {selected == null ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                     Seleziona un gruppo o una categoria a sinistra.
@@ -909,37 +941,55 @@ export function CatalogoPreventiviPage() {
                   <p className="p-4 text-sm text-muted-foreground">Caricamento prodotti…</p>
                 ) : (
                   <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-muted/50">
+                    <TableHeader className="bg-muted/50">
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="w-8" />
-                        <TableHead className="w-16">Tipo</TableHead>
-                        <TableHead className="w-36">Codice</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead className="w-20 text-center">Varianti</TableHead>
-                        <TableHead className="w-40 text-right">Prezzo cliente</TableHead>
-                        <TableHead className="w-40 text-right">Costo aziendale</TableHead>
-                        <TableHead className="w-14 text-center">Auto-incl.</TableHead>
+                        {showCol("type") && <TableHead className="w-16">Tipo</TableHead>}
+                        {showCol("code") && (
+                          <TableHead className="w-36">Codice</TableHead>
+                        )}
+                        {showCol("name") && <TableHead>Nome</TableHead>}
+                        {showCol("variants") && (
+                          <TableHead className="w-20 text-center">Varianti</TableHead>
+                        )}
+                        {showCol("price") && (
+                          <TableHead className="w-40 text-right">Prezzo cliente</TableHead>
+                        )}
+                        {showCol("cost") && (
+                          <TableHead className="w-40 text-right">Costo aziendale</TableHead>
+                        )}
+                        {showCol("autoInclude") && (
+                          <TableHead className="w-14 text-center">Auto-incl.</TableHead>
+                        )}
                         <TableHead className="w-12 text-right">Azioni</TableHead>
                       </TableRow>
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="h-auto px-2 py-2" />
-                        <TableHead className="h-auto px-2 py-2" />
-                        <TableHead className="h-auto px-2 py-2 align-middle">
-                          <ColumnFilterInput
-                            value={fCode}
-                            onChange={setFCode}
-                          />
-                        </TableHead>
-                        <TableHead className="h-auto px-2 py-2 align-middle">
-                          <ColumnFilterInput
-                            value={fName}
-                            onChange={setFName}
-                          />
-                        </TableHead>
-                        <TableHead className="h-auto px-2 py-2" />
-                        <TableHead className="h-auto px-2 py-2" />
-                        <TableHead className="h-auto px-2 py-2" />
-                        <TableHead className="h-auto px-2 py-2" />
+                        {showCol("type") && <TableHead className="h-auto px-2 py-2" />}
+                        {showCol("code") && (
+                          <TableHead className="h-auto px-2 py-2 align-middle">
+                            <ColumnFilterInput
+                              value={fCode}
+                              onChange={setFCode}
+                            />
+                          </TableHead>
+                        )}
+                        {showCol("name") && (
+                          <TableHead className="h-auto px-2 py-2 align-middle">
+                            <ColumnFilterInput
+                              value={fName}
+                              onChange={setFName}
+                            />
+                          </TableHead>
+                        )}
+                        {showCol("variants") && (
+                          <TableHead className="h-auto px-2 py-2" />
+                        )}
+                        {showCol("price") && <TableHead className="h-auto px-2 py-2" />}
+                        {showCol("cost") && <TableHead className="h-auto px-2 py-2" />}
+                        {showCol("autoInclude") && (
+                          <TableHead className="h-auto px-2 py-2" />
+                        )}
                         <TableHead className="h-auto px-2 py-2" />
                       </TableRow>
                     </TableHeader>
@@ -974,21 +1024,35 @@ export function CatalogoPreventiviPage() {
                                   )}
                                 </button>
                               </TableCell>
-                              <TableCell>
-                                <TypeBadge itemType={p.itemType} />
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">{p.code}</TableCell>
-                              <TableCell className="font-semibold">{p.name}</TableCell>
-                              <TableCell className="text-center">{p.variantCount}</TableCell>
-                              <TableCell className="text-right font-semibold tabular-nums">
-                                {p.priceRange}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums text-[#16A34A]">
-                                {p.costRange}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {p.autoInclude ? "✓" : ""}
-                              </TableCell>
+                              {showCol("type") && (
+                                <TableCell>
+                                  <TypeBadge itemType={p.itemType} />
+                                </TableCell>
+                              )}
+                              {showCol("code") && (
+                                <TableCell className="font-mono text-xs">{p.code}</TableCell>
+                              )}
+                              {showCol("name") && (
+                                <TableCell className="font-semibold">{p.name}</TableCell>
+                              )}
+                              {showCol("variants") && (
+                                <TableCell className="text-center">{p.variantCount}</TableCell>
+                              )}
+                              {showCol("price") && (
+                                <TableCell className="text-right font-semibold tabular-nums">
+                                  {p.priceRange}
+                                </TableCell>
+                              )}
+                              {showCol("cost") && (
+                                <TableCell className="text-right tabular-nums text-[#16A34A]">
+                                  {p.costRange}
+                                </TableCell>
+                              )}
+                              {showCol("autoInclude") && (
+                                <TableCell className="text-center">
+                                  {p.autoInclude ? "✓" : ""}
+                                </TableCell>
+                              )}
                               <TableCell className="text-right">
                                 <div
                                   className="flex justify-end"
@@ -1022,7 +1086,7 @@ export function CatalogoPreventiviPage() {
                             </TableRow>
                             {isExpanded ? (
                               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                                <TableCell colSpan={PRODUCT_TABLE_COL_COUNT} className="p-0">
+                                <TableCell colSpan={productColCount} className="p-0">
                                   <div className="px-10 py-2">
                                     <p className="mb-1 text-xs font-semibold text-muted-foreground">
                                       VARIANTI ({p.variantCount}):
@@ -1039,7 +1103,7 @@ export function CatalogoPreventiviPage() {
                                             <span className="text-muted-foreground">{v.code}</span>
                                             <span className="font-medium">{v.name}</span>
                                             <span className="text-right text-[#16A34A]">
-                                              {fmt2(v.cost)}€
+                                              {euro(v.cost)}
                                             </span>
                                             <span className="text-center text-muted-foreground">
                                               x{v.markup.toLocaleString("it-IT", {
@@ -1048,7 +1112,7 @@ export function CatalogoPreventiviPage() {
                                               })}
                                             </span>
                                             <span className="text-right font-semibold">
-                                              {fmt2(v.sell)}€
+                                              {euro(v.sell)}
                                             </span>
                                           </div>
                                         ))}
@@ -1064,7 +1128,7 @@ export function CatalogoPreventiviPage() {
                       {filteredProducts.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={PRODUCT_TABLE_COL_COUNT}
+                            colSpan={productColCount}
                             className="h-24 text-center text-sm text-muted-foreground"
                           >
                             {hasProductColumnFilters
@@ -1076,7 +1140,7 @@ export function CatalogoPreventiviPage() {
                     </TableBody>
                   </Table>
                 )}
-              </div>
+              </GridScroller>
               <div className="flex items-center justify-between border-t px-3 py-1.5 text-[11px] text-muted-foreground">
                 <span>
                   {selected

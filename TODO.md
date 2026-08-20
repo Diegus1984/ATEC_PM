@@ -6,6 +6,56 @@ Legenda: `[ ]` aperto · `[~]` in corso · `[x]` fatto · `[-]` scartato
 
 ---
 
+## 0 · PROMEMORIA CON SCADENZA (guardare qui per primo)
+
+### 🔴 E1 — la misura delle prestazioni è pronta ma NON è ancora partita
+
+Gli strumenti sono in produzione dal **15/08/2026** (deploy di oggi). Quello che manca è la
+parte che non si può programmare: **lasciarla accesa e tornare a leggerla**. Finché non ci sono
+quei dati, E2 (indici), E3 (N+1) ed E5 (async) si farebbero a naso — che è esattamente ciò che
+il piano vieta. Dettagli in [PIANO-MIGLIORIE-TECNICHE.md](PIANO-MIGLIORIE-TECNICHE.md) §E1.
+
+- [x] **① Accendere lo slow query log sul server** — **PROGRAMMATO: lunedì 24/08/2026 alle 08:00**
+      (spostato dal 17: era in piena settimana di Ferragosto e si sarebbe misurato il silenzio).
+      Attività pianificata `AtecPm-SlowQueryLogOn` sul server, gira come SYSTEM anche a PC spento e
+      senza nessuno collegato. Lo script
+      [accendi-slow-log.ps1](../deploy/accendi-slow-log.ps1) (copia sul server in
+      `C:\ATEC_PM\Updates\`) si legge da solo la password di **root** da
+      `C:\ATEC_PM\Config\credenziali.txt` — non c'è nessuna password dentro l'attività pianificata,
+      né in uno script, né in una cronologia di terminale. Provato a vuoto il 15/08 (`-SoloProva`):
+      password letta, root connesso, niente modificato. A lavoro fatto l'attività **si cancella da
+      sola**.
+
+      **Martedì mattina, controllare che sia partito** (una riga):
+      ```
+      ssh -i "$env:USERPROFILE\.ssh\atec_vps" atec@192.168.2.150 "type C:\ATEC_PM\Logs\slow-log-accensione.txt"
+      ```
+      Deve dire «Slow query log ACCESO». Se dice FALLITO, il motivo è sulla stessa riga.
+
+      **Per rimandare ancora o annullare**:
+      ```
+      ssh -i "$env:USERPROFILE\.ssh\atec_vps" atec@192.168.2.150 "schtasks /change /tn AtecPm-SlowQueryLogOn /sd 31/08/2026 /st 08:00"
+      ```
+      (con `/delete /f` al posto di `/change ... /sd ...` per toglierlo del tutto).
+
+      **Poi la settimana di attesa**: leggere le tre liste da lunedì **31/08** in avanti.
+
+- [ ] **② Dopo una settimana di lavoro vero, leggere le tre liste** (sempre sul server):
+
+      ```
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\ATEC_PM\Updates\misura-prestazioni.ps1 -Azione lente
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\ATEC_PM\Updates\misura-prestazioni.ps1 -Azione classifica
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\ATEC_PM\Updates\misura-prestazioni.ps1 -Azione richieste
+      ```
+
+      `richieste` non chiede password e funziona **da subito**: legge i log del server.
+
+- [ ] **③ Poi spegnere e svuotare** — `-Azione spegni` e `-Azione svuota`: il registro sta in una
+      tabella (`mysql.slow_log`) che cresce e non si pulisce da sola.
+      La misura delle richieste HTTP invece può restare accesa: scrive solo sopra i 500 ms.
+
+---
+
 ## 1 · Security / hardening (priorità ALTA)
 
 - [x] **BackupController — restringere a ADMIN** *(fatto 2026-06-03)*
@@ -110,6 +160,129 @@ Legenda: `[ ]` aperto · `[~]` in corso · `[x]` fatto · `[-]` scartato
 ---
 
 ## 3 · Refactor / debito tecnico
+
+- [ ] 🔴 **Il deploy è diventato lento: pubblicare una virgola costa minuti** *(chiesto il 15/08/2026)*
+  File: `deploy/_comune.ps1`, `deploy/aggiorna-server.ps1`, `deploy/applica-aggiornamento.ps1`, `ATEC.PM.Tests/Infrastruttura/DatabaseDiProva.cs`
+
+  **Il sintomo, con i numeri di oggi:** l'aggiornamento del 15/08 ha spedito **9 file, 6,5 MB su
+  160,8** — e ci ha messo comunque diversi minuti. La sensazione che «prima, quando si spedivano
+  160 MB, era più veloce» è fondata: **la rete non è mai stata il collo di bottiglia**. Su questa
+  LAN 160 MB viaggiano in ~2 secondi (misurato il 04/08, sta scritto in GUIDA-SERVER-LAN.md §4).
+  Il differenziale ha risparmiato quei 2 secondi e ne ha aggiunti parecchi altrove.
+
+  **RISULTATO: da 228,5 s a 47,6 s** (aggiornamento vero, solo client, misurato il 16/08/2026).
+  Il salto dei test vale da solo 163 secondi. Ripartizione dei 47,6 s che restano: confronto e
+  pacchetto 20,4 · npm build 17,5 · upload 4,8 · publish 2,5 · applica sul server 1,9 · test 0,4.
+
+  **MISURATO PRIMA** dell'intervento, sullo stesso tipo di aggiornamento — **228,5 s in tutto**:
+
+  | fase | secondi | quota |
+  |------|--------:|------:|
+  | test | **163,6** | **72%** |
+  | confronto e pacchetto (impronte SHA256 locale + server) | 33,1 | 14% |
+  | npm build (client) | 18,8 | 8% |
+  | dotnet publish (server) | 4,6 | 2% |
+  | upload | 4,5 | 2% |
+  | applica sul server | 3,8 | 2% |
+  | copia in wwwroot | 0,0 | 0% |
+
+  Due ipotesi ragionevoli sono state **smentite dai numeri**: `dotnet publish` costa 4,6 s (è
+  incrementale, non ricostruisce il runtime) e l'upload 4,5 s. Restano in piedi solo le prime due
+  righe. Il **robocopy sul server** è dentro i 3,8 s di «applica»: non è un problema.
+
+  **Dove se ne va il tempo** (analisi di partenza, tenuta per memoria di come ci si è arrivati):
+  1. **I test: ~3 minuti e 30.** La guida dice ancora «una cinquantina di secondi», ed era vero
+     con 72 test. Oggi sono **130**, e quelli aggiunti da A1/A2/E2/E4/#83 creano **un database
+     MySQL nuovo per ogni test**, ci applicano **tutte** le 92 migrazioni e lo buttano.
+     Girano prima di ogni deploy, anche cinque minuti dopo averli visti verdi.
+  2. **Le impronte SHA256, calcolate due volte su ~160 MB.** Il PC le calcola su tutto il
+     pubblicato (`_comune.ps1:192`) e il server su tutto l'installato
+     (`applica-aggiornamento.ps1:60`), a ogni deploy, per riscoprire ogni volta che i ~150 MB
+     del runtime .NET non sono cambiati.
+  3. **La copia completa sul server.** La versione nuova si compone copiando l'attuale con
+     `robocopy /MIR` (`applica-aggiornamento.ps1:372`) e applicandoci sopra i file nuovi: 160 MB
+     copiati sul disco del server per scriverci sopra 6 MB. Prima si scompattava un tar e basta.
+  4. `dotnet publish --self-contained` ricostruisce ogni volta anche il runtime.
+
+  **Da fare, in quest'ordine:**
+  - [x] **① Prima misurare, poi tagliare** *(fatto 16/08/2026)*. Lo script cronometra ogni fase e
+        alla fine stampa la classifica («DOVE SE N'E' ANDATO IL TEMPO»): la prima riga è sempre il
+        prossimo lavoro. `Start-Cronometro` / `Add-Tappa` / `Show-Cronometro` in `_comune.ps1`.
+  - [x] **③ Saltare i test se il codice non è cambiato** *(fatto 16/08/2026)*. `Get-ImprontaSorgenti`
+        calcola lo SHA256 dei sorgenti **C#** (server + DTO + test; il client web non c'è dentro
+        apposta: i test non lo guardano). Se coincide con l'ultima esecuzione verde
+        (`deploy/out/.ultimo-test-verde`), i test si saltano. Un fallimento cancella l'impronta,
+        così non si eredita mai un verde vecchio. Si forza con `aggiorna-server.bat -ConTest`.
+        **È il taglio che risolve il caso di tutti i giorni**: pubblicare una modifica di sola
+        grafica non costa più 3m30 di test.
+        🪤 **`wwwroot` va tenuto fuori dall'impronta**: è il client *compilato* dentro il progetto
+        server e contiene `version.json` con l'identificativo della build, che cambia a ogni
+        `npm build`. Includendolo, l'impronta non tornava mai uguale: il salto sembrava attivo e
+        non saltava niente. Se ne è accorto solo il cronometro, che continuava a segnare 164 s.
+  - [x] **④ Le impronte SHA256 hanno una memoria** *(fatto 16/08/2026)*: l'hash di un file si
+        ricalcola solo se sono cambiate dimensione o data di modifica, altrimenti si riusa quello
+        già noto (`deploy/out/.impronte-pubblicate.txt` sul PC, `Updates\.impronte-installate.txt`
+        sul server — **fuori** dalla cartella del server, che a ogni aggiornamento viene
+        ricomposta da capo). I ~150 MB di runtime .NET non vengono più digeriti a ogni giro.
+  - [x] **⑥ I test escono dal deploy: `prova-test.bat`** *(fatto 19/08/2026)*. Il cancello del
+        14/08 resta, ma non si aspetta più davanti allo schermo: la suite si lancia quando fa
+        comodo — anche mentre si continua a lavorare — e se è verde registra l'impronta in
+        `deploy/out/.ultimo-test-verde`, la stessa che il deploy consulta. Il deploy successivo
+        li salta legittimamente (nessuna rete tolta) e scende a ~50 s. `deploy/prova-test.ps1`
+        ricalcola l'impronta **a fine corsa** e non registra niente se il C# è cambiato mentre
+        i test giravano: registrarla darebbe un lasciapassare a codice che nessuno ha provato.
+        🪤 Gli `.ps1` di questo progetto vanno salvati **con BOM UTF-8**: PowerShell 5.1 senza
+        BOM legge il file come ANSI e va in errore di sintassi sulla prima lettera accentata.
+
+  - [x] **⑦ npm build si salta se il client non è cambiato** *(fatto 19/08/2026)*. Erano 30 s —
+        il **48%** del deploy misurato — spesi a ricostruire un bundle identico dopo una modifica
+        di solo C#. `Get-ImprontaClient` + `deploy/out/.ultima-build-client`, stessa idea dei test.
+        Si forza con `aggiorna-server.bat -ConClient`.
+        🪤 L'impronta guarda **percorso, dimensione e data**, non il contenuto: con l'hash pieno
+        costava 15 s a freddo, cioè metà di quello che doveva far risparmiare.
+        📌 Saltando la build, `version.json` e il `<meta app-build>` restano quelli di prima — ed è
+        giusto: identificano la versione del **client**, non il deploy. Nessun banner «aggiorna
+        adesso» quando il client non è cambiato.
+
+  - [x] **② Test: lo schema non si ricostruisce più a ogni test** *(fatto 19/08/2026)*.
+        `ATEC.PM.Tests/Infrastruttura/SchemaCondiviso.cs`: un database solo per tutte le classi
+        che non provano le migrazioni, e ogni test riparte da pulito in **~45 ms** invece di ~5 s.
+        ⚠️ **Le due strade ovvie erano entrambe sbagliate, misurate il 19/08:**
+        `TRUNCATE` di 119 tabelle costa **4,4 s** (ogni TRUNCATE ricrea il tablespace InnoDB) e
+        `TRUNCATE`+riseed **6,0 s** — cioè *più* che ricreare il database da zero. Quello che
+        funziona è l'opposto: fotografare l'ultimo `id` di ogni tabella a schema appena creato
+        (110 su 119 ce l'hanno) e cancellare **solo le righe più recenti**, lasciando stare i dati
+        di partenza. 214 ms la fotografia, 43 ms la pulizia.
+        **Restano col database usa-e-getta**, e devono restarci: i test delle migrazioni (partono
+        da vuoto per definizione), `IndiciEQueryTests` (crea e cancella **indici**: cambia lo
+        schema) e `CacheLettureEquivalentiTests` (scrive nelle tabelle di **configurazione** —
+        `ddp_aggregation_states`, `ddp_status_transitions` — che la pulizia non tocca).
+
+  - [ ] **② (residuo) i test delle migrazioni** — ⚠️ **la causa NON è dove sembrava**.
+        Misurato il 16/08/2026 su un test vero: `CREATE DATABASE` 0,08 s · **`InitDatabase` +
+        migrazioni 5,14 s** · `DROP DATABASE` 0,60 s. Ma la somma dei `duration_ms` delle 92
+        migrazioni è **1,4 s**: gli altri **3,7 s sono la creazione delle 119 tabelle** dentro
+        `InitDatabase`. Ottimizzare le migrazioni non servirebbe quasi a niente.
+        Strade, in ordine di rischio: (a) **stampo** dello schema costruito una volta e riusato
+        (⚠️ `CREATE TABLE … LIKE` **non copia le foreign key**: servirebbe `SHOW CREATE TABLE`, e
+        i test sulle FK sono proprio quelli che si romperebbero in silenzio); (b) fixture
+        condivisa xUnit per i ~24 test che **non** provano le migrazioni (i 22 di
+        `MotoreMigrazioniTests`/`MigrationRunnerTests` devono continuare a partire da zero);
+        (c) lasciar perdere, visto che con ③ i test girano solo quando il C# cambia davvero.
+        Guadagno stimato: la suite da 3m30 a ~1m20. **Da fare solo se ② dà fastidio davvero.**
+        📈 **Aggiornamento 19/08/2026:** i test sono 146 e **62 di loro si creano un database**
+        (5,2 s l'uno): la suite completa è arrivata a **11 minuti**. Con ⑥ non si aspetta più
+        durante il deploy, ma questo resta il taglio grosso che manca — è il 90% di quegli
+        11 minuti.
+  - [ ] **④ Non riesaminare il runtime .NET.** Le sue ~150 MB non cambiano se non si aggiorna
+        l'SDK: bastano nome+dimensione+data per accorgersene, e l'hash pieno solo sul resto.
+        Alternativa più netta: hash **solo** dei file dell'applicazione, runtime confrontato a parte.
+  - [ ] **⑤ Applicare i file nuovi direttamente**, invece di copiare 160 MB per poi sovrascriverne 6
+        (la versione precedente è già salvata a parte: `Server.precedente` serve già a quello).
+
+  **Riferimento:** la strada breve per gli aggiornamenti di sola grafica esiste già ed è documentata
+  in GUIDA-SERVER-LAN.md §4 («Aggiornamenti di solo client: nessuna interruzione»): lì il servizio
+  non si ferma nemmeno. Il problema è tutto in quello che viene **prima** della spedizione.
 
 - [ ] **ShadcnMessageBox — completare migrazione (286 → 2 usi attuali)**
   File: `ATEC.PM.Client/Controls/ShadcnMessageBox.xaml.cs`
@@ -371,6 +544,39 @@ Modifiche fatte sul programma lite `C:\Users\diego\Desktop\ATEC_Risorse` (2026-0
 
 ### Già allineati (verificato, NON servono)
 Lockout 5 tentativi/5min, bcrypt + migrazione SHA256→bcrypt, gestione 401→re-login: identici nei due programmi. La gestione utenti del lite (ricerca/CRUD/EmployeeDialog) era a sua volta un port DA PM.
+
+---
+
+## 10 · Permessi — generalizzare le concessioni per reparto *(da discutere con l'utente, proposto 2026-08-04)*
+
+Oggi (04/08/2026) esistono **tre** criteri di accesso: livelli (`auth_features.min_level`),
+concessioni per ruolo (`auth_role_features`, ruoli con `access_mode='GRANTS'`) e — dal fix
+del reparto Contabilità — una **lista bianca esclusiva legata al reparto**, cablata in
+`FeatureAccessService.ContabilitaFeatures` (`nav.sal`, `sal.economics`, `nav.bug_reports`,
+`nav.clienti`; responsabile FULL, tecnico READ, Clienti sempre READ, ADMIN esenti).
+
+**Proposta**: portare il terzo criterio in DB e renderlo governabile dall'ADMIN.
+
+- Nuova `auth_department_features` (`department_id` + `feature_key` + `access` READ/FULL),
+  gemella di `auth_role_features`.
+- Flag su `departments` per distinguere i reparti **esclusivi** (Contabilità: vede solo la
+  sua lista) dai reparti **additivi** (Officina, Acquisti…: la lista si somma al livello).
+  Senza il flag, estendere la regola a tutti i reparti toglierebbe Dashboard/Timesheet ai
+  tecnici che oggi li vedono.
+- Editor nella pagina «Permessi» (matrice reparto × funzione) accanto a quella dei livelli.
+- Mappatura da concordare (bozza utente del 04/08): UTM/UTE → `nav.codex` + `nav.commesse`;
+  MEC/INS/PLC/ROB → `nav.gestore_ddp` (+ `nav.officina_inbox`?) + `nav.risorse`;
+  ACQ → `nav.acquisti_inbox` + `nav.fornitori`.
+
+**Scartate** (dalla stessa bozza, motivi già discussi):
+- «accesso = reparto abilitato **OPPURE** livello ≥ 2»: scavalca `min_level` e la pagina
+  «Permessi», e toglie Dashboard/Timesheet/Commesse (livello 0) a chi non ha un reparto
+  abilitato;
+- «scrittura = livello ≥ 1 ovunque ci sia accesso»: cancella ogni concessione READ, a
+  partire da Clienti in sola lettura per la contabilità.
+
+Client: **niente mappatura duplicata** in `permissions.ts` — i grant continuano ad arrivare
+già calcolati da `GET /api/auth-levels/features/my`.
 
 ---
 

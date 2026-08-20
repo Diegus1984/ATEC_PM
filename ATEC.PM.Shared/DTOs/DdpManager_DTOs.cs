@@ -79,6 +79,8 @@ public class DdpControlReportRow
     public string RequestedBy { get; set; } = "";
     public string DaneaRef { get; set; } = "";
     public DateTime? DateNeeded { get; set; }
+    public int? CreatedById { get; set; }
+    public string CreatedByName { get; set; } = "";
     public DateTime? CreatedAt { get; set; }
     public string Destination { get; set; } = "";
     public string DestinationSpec { get; set; } = "";
@@ -96,4 +98,19 @@ public class DdpDeliveriesDay
     public decimal CommercialValue { get; set; }
     public int OfficinaCount { get; set; }
     public decimal OfficinaValue { get; set; }
+}
+
+// Voce dell'elenco «DDP aggiornate da verificare» della card Gestione Controlli (#114):
+// una per (commessa, tipo distinta) toccata da un collega e non ancora aperta da chi guarda.
+// Title = nome della commessa (projects.title); UpdatedBy = chi ha fatto l'ultimo intervento
+// ("" quando la modifica non porta la firma: righe storiche o passaggi automatici).
+public class DdpUpdatedItem
+{
+    public int ProjectId { get; set; }
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string CustomerName { get; set; } = "";
+    public string DdpType { get; set; } = "COMMERCIAL";   // "COMMERCIAL" | "OFFICINA"
+    public DateTime? UpdatedAt { get; set; }
+    public string UpdatedBy { get; set; } = "";
 }

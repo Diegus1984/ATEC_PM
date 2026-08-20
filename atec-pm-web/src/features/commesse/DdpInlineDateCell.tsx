@@ -1,4 +1,5 @@
 import { DateField } from "@/components/shared/date-field"
+import { cn } from "@/lib/utils"
 
 /**
  * Date picker inline di cella: il DateField standard dell'app (icona calendario,
@@ -11,11 +12,14 @@ export function DdpInlineDateCell({
   value,
   disabled,
   onChange,
+  className,
 }: {
   value: string | null
   disabled?: boolean
   /** `null` = data rimossa. */
   onChange: (value: string | null) => void
+  /** Classi in coda a quelle del campo (es. il rosso grassetto delle date scadute). */
+  className?: string
 }) {
   return (
     <span
@@ -32,7 +36,10 @@ export function DdpInlineDateCell({
         stackedWeekday
         // text-current + [&_svg]:text-current: testo e icona calendario ereditano
         // il colore della riga tinta (l'icona di suo è text-foreground cablato).
-        className="w-full min-w-0 border-transparent bg-transparent text-sm text-current shadow-none hover:bg-white hover:text-foreground dark:hover:bg-zinc-950 [&_svg]:text-current"
+        className={cn(
+          "w-full min-w-0 border-transparent bg-transparent text-sm text-current shadow-none hover:bg-white hover:text-foreground dark:hover:bg-zinc-950 [&_svg]:text-current",
+          className
+        )}
       />
     </span>
   )

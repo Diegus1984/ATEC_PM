@@ -1,4 +1,4 @@
-using MySqlConnector;
+﻿using MySqlConnector;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using ATEC.PM.Server.Data;
@@ -7,23 +7,20 @@ namespace ATEC.PM.Server.Services;
 
 // Service per la gestione dei SAL (Stato Avanzamento Lavori) e delle Fatturazioni associate.
 // Gestisce tabelle sal_conditions, project_sal e sal_rows.
-public class SalDbService
+// Statica: di questo modulo si usano solo le funzioni di schema/seed qui sotto, chiamate
+// dall'avvio (DbService.InitDatabase) e dalle migrazioni v16 e v21. Il lato istanza —
+// connessione, logger, Open() — non lo chiamava più nessuno da quando le migrazioni sono
+// classi a sé.
+public static class SalDbService
 {
-    private readonly DbService _db;
-    private readonly ILogger<SalDbService>? _logger;
-
-    public SalDbService(DbService db, ILogger<SalDbService>? logger = null)
-    {
-        _db = db;
-        _logger = logger;
-    }
-
-    public MySqlConnection Open() => _db.Open();
 
     /// <summary>
     /// Crea le tabelle relative al modulo SAL se non esistono.
+    /// <para><b>Statico apposta</b>: lo chiamano sia <c>DbService.InitDatabase</c> sia le
+    /// migrazioni v16 e v21, che sono classi a sé e non hanno un <c>DbService</c> da passare al
+    /// costruttore. Del servizio non serviva niente: qui dentro si usa solo la connessione.</para>
     /// </summary>
-    public void InitTables(MySqlConnection c)
+    public static void InitTables(MySqlConnection c, ILogger? log = null)
     {
         // sal_conditions: Anagrafica globale delle condizioni di pagamento.
         c.Execute(@"CREATE TABLE IF NOT EXISTS sal_conditions (
@@ -100,21 +97,17 @@ public class SalDbService
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-        // sal_prospetto_checks: Storico dei controlli periodici del prospetto (chi + quando).
-        // Lo stato corrente è l'ultima riga; il banner scatta a 15 giorni dall'ultimo controllo.
-        c.Execute(@"CREATE TABLE IF NOT EXISTS sal_prospetto_checks (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            checked_by INT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        // NB: `sal_prospetto_checks` (storico dei controlli periodici del prospetto) non viene
+        // più creata: il banner «Conferma controllo» è stato rimosso il 03/08/2026. La tabella
+        // resta sui database dove era già stata creata, semplicemente inutilizzata.
 
-        _logger?.LogInformation("[InitTables] Tabelle SAL (sal_conditions, project_sal, sal_rows, sal_sap_causali, sal_payment_states, sal_prospetto_checks) verificate/create.");
+        log?.LogInformation("[InitTables] Tabelle SAL (sal_conditions, project_sal, sal_rows, sal_sap_causali, sal_payment_states) verificate/create.");
     }
 
     /// <summary>
     /// Esegue il seed delle condizioni di pagamento standard se vuoto.
     /// </summary>
-    public void SeedConditions(MySqlConnection c)
+    public static void SeedConditions(MySqlConnection c, ILogger? log = null)
     {
         int count = c.ExecuteScalar<int>("SELECT COUNT(*) FROM sal_conditions");
         if (count > 0) return;
@@ -126,13 +119,13 @@ public class SalDbService
             c.Execute("INSERT INTO sal_conditions (label, sort_order, is_active) VALUES (@Label, @Sort, TRUE)",
                 new { Label = cond, Sort = order++ });
         }
-        _logger?.LogInformation("[SeedConditions] Condizioni di pagamento SAL standard inserite.");
+        log?.LogInformation("[SeedConditions] Condizioni di pagamento SAL standard inserite.");
     }
 
     /// <summary>
     /// Esegue il seed delle causali Conto SAP standard se vuoto.
     /// </summary>
-    public void SeedSapCausali(MySqlConnection c)
+    public static void SeedSapCausali(MySqlConnection c, ILogger? log = null)
     {
         int count = c.ExecuteScalar<int>("SELECT COUNT(*) FROM sal_sap_causali");
         if (count > 0) return;
@@ -144,13 +137,13 @@ public class SalDbService
             c.Execute("INSERT INTO sal_sap_causali (label, sort_order, is_active) VALUES (@Label, @Sort, TRUE)",
                 new { Label = causale, Sort = order++ });
         }
-        _logger?.LogInformation("[SeedSapCausali] Causali Conto SAP standard inserite.");
+        log?.LogInformation("[SeedSapCausali] Causali Conto SAP standard inserite.");
     }
 
     /// <summary>
     /// Esegue il seed degli stati pagamento standard se vuoto.
     /// </summary>
-    public void SeedPaymentStates(MySqlConnection c)
+    public static void SeedPaymentStates(MySqlConnection c, ILogger? log = null)
     {
         int count = c.ExecuteScalar<int>("SELECT COUNT(*) FROM sal_payment_states");
         if (count > 0) return;
@@ -186,6 +179,6 @@ public class SalDbService
                     new { state.Label, Sort = order++ });
             }
         }
-        _logger?.LogInformation("[SeedPaymentStates] Stati pagamento SAL standard inseriti.");
+        log?.LogInformation("[SeedPaymentStates] Stati pagamento SAL standard inseriti.");
     }
 }

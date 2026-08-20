@@ -1,6 +1,7 @@
 import {
   apiDelete,
   apiGet,
+  apiPatch,
   apiPost,
   apiPut,
   unwrapApi,
@@ -19,6 +20,16 @@ export interface FetchProjectsParams {
   page?: number
   pageSize?: number
   search?: string
+  /**
+   * Include anche le commesse chiuse (Completate/Annullate). Default `false`:
+   * le liste mostrano solo il lavoro in corso (Bozza/Attiva/In pausa).
+   */
+  includeClosed?: boolean
+  /**
+   * Forza la presenza di questa commessa nel risultato anche se chiusa.
+   * Serve al deep-link su una commessa chiusa con il filtro "solo aperte" attivo.
+   */
+  includeId?: number
 }
 
 export async function fetchProjects(
@@ -36,6 +47,12 @@ export async function fetchProjects(
   if (search) {
     query.set("search", search)
   }
+  if (params.includeClosed) {
+    query.set("includeClosed", "true")
+  }
+  if (!params.includeClosed && params.includeId) {
+    query.set("includeId", String(params.includeId))
+  }
 
   const response = await apiGet<ApiResponse<PagedResult<ProjectListItem>>>(
     `/api/projects?${query.toString()}`
@@ -44,7 +61,10 @@ export async function fetchProjects(
   return unwrapApi(response)
 }
 
-/** Codice commessa successivo proposto (es. `AT2026001`). */
+/**
+ * Codice commessa successivo proposto: `C{aaaammgg}.{progressivo del giorno}`
+ * (es. `C20260731.001`, poi `.002`…). Il progressivo riparte ogni giorno.
+ */
 export async function fetchProjectNextCode(): Promise<string> {
   const response = await apiGet<ApiResponse<string>>("/api/projects/next-code")
   return unwrapApi(response)
@@ -77,6 +97,37 @@ export async function updateProject(
     request
   )
   unwrapApi(response)
+}
+
+/**
+ * Cambio di solo stato dalla colonna «Stato» della Dashboard (#88).
+ * Serve il permesso «Opera su commesse sospese o chiuse»; CANCELLED è rifiutato dal server.
+ */
+export async function patchProjectStatus(
+  projectId: number,
+  status: string
+): Promise<void> {
+  const response = await apiPatch<ApiResponse<number>>(
+    `/api/projects/${projectId}/status`,
+    status
+  )
+  unwrapApi(response)
+}
+
+/**
+ * Promozione di un'Altra Attività a commessa (#88, rivista con la #89): il dialog di
+ * configurazione manda l'anagrafica completa; il server genera il codice nuovo
+ * (progressivo di oggi) e conserva quello vecchio nelle note. Ritorna il codice assegnato.
+ */
+export async function promoteProjectToCommessa(
+  projectId: number,
+  request: ProjectSaveRequest
+): Promise<string> {
+  const response = await apiPost<ApiResponse<string>>(
+    `/api/projects/${projectId}/promote-to-commessa`,
+    request
+  )
+  return unwrapApi(response)
 }
 
 /** Eliminazione logica (soft delete: stato → CANCELLED). */

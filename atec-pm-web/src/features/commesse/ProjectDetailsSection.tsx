@@ -5,7 +5,6 @@ import {
   Bar,
   BarChart,
   Cell,
-  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -15,15 +14,35 @@ import {
 } from "recharts"
 
 import { Skeleton } from "@/components/ui/skeleton"
+import { fetchBudgetVsActual } from "@/lib/api/project-bva"
 import { fetchProjectDashboard } from "@/lib/api/projects"
 import type {
   DeptSummary,
   ProjectDashboardData,
   UpcomingDeadline,
 } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
+import { canAccessFeature } from "@/lib/auth/permissions"
 import { formatDateOrDash } from "@/lib/date-iso"
+import { projectStatusMeta } from "@/features/commesse/project-status"
+import { economicKpis } from "@/features/commesse/bva-economics"
+// Un solo stile di riquadro (quello del Bilancio): segnalazione #46 chiede che tutte le
+// finestre della Dashboard abbiano la stessa estetica delle prime.
+import {
+  Kpi,
+  bvaDeltaClass,
+  bvaHoursClass,
+  bvaMoneyClass,
+  deltaText,
+} from "@/features/commesse/bva-shared"
+import { hours } from "@/features/commesse/preventivo-dialogs"
+import { euro } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
+/**
+ * Un colore per reparto: tinge la barra e, dalla #108, anche il testo che la
+ * accompagna. QLT e SRV mancavano e finivano sul grigio di riserva, cioè lo
+ * stesso di AMM e delle fasi senza reparto: tre righe scritte tutte uguali.
+ */
 const DEPT_COLORS: Record<string, string> = {
   PM: "#4F6EF7",
   UTM: "#059669",
@@ -33,24 +52,25 @@ const DEPT_COLORS: Record<string, string> = {
   PLC: "#7C3AED",
   ROB: "#BE185D",
   ACQ: "#0891B2",
+  QLT: "#0F766E",
+  SRV: "#B45309",
   AMM: "#6B7280",
   TRASV: "#6B7280",
   DEFAULT: "#6B7280",
 }
 const deptColor = (code: string) => DEPT_COLORS[code] ?? DEPT_COLORS.DEFAULT
 
-function statusColor(s: string): string {
-  switch (s) {
-    case "ACTIVE":
-      return "#059669"
-    case "COMPLETED":
-      return "#2563EB"
-    case "ON_HOLD":
-      return "#D97706"
-    default:
-      return "#6B7280"
-  }
-}
+/**
+ * Le tre serie del grafico ore (#106), nell'ordine in cui compaiono le barre:
+ * preventivate azzurre, assegnate verdi, lavorate rosse. Recharts non legge le
+ * variabili CSS del tema, quindi qui gli esadecimali sono obbligati.
+ */
+const ORE_SERIE = [
+  { key: "costingHours", label: "Preventivato", color: "#38BDF8" },
+  { key: "assignedHours", label: "Assegnato", color: "#059669" },
+  { key: "hoursWorked", label: "Lavorato", color: "#DC2626" },
+] as const
+
 function priorityColor(p: string): string {
   switch (p) {
     case "HIGH":
@@ -66,49 +86,134 @@ function priorityColor(p: string): string {
 const n0 = (v: number) => v.toLocaleString("it-IT", { maximumFractionDigits: 0 })
 const n1 = (v: number) =>
   v.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const n2 = (v: number) =>
+  v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
+/** Tooltip Recharts: ore a max 2 decimali (Prev spezzato sui reparti → 145.333… → 145,33). */
+const hoursTooltipFormatter = (value: unknown) => {
+  const n = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(n) ? n2(n) : String(value ?? "")
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="mt-6 mb-2 text-sm font-semibold text-foreground">{children}</h3>
   )
 }
+
+/**
+ * I sei riquadri del Conto Economico, ripetuti qui nella Dashboard commessa (#35).
+ *
+ * Legge lo **stesso endpoint** del Bilancio invece di farsi mandare i numeri dal payload
+ * della Dashboard: così i due posti non possono mostrare cifre diverse. Il permesso
+ * combacia — l'endpoint e questi riquadri sono chiusi dalla STESSA chiave `data.budget` —
+ * quindi chi arriva qui la chiamata la può fare.
+ *
+ * Query key condivisa con il tab Bilancio (`project-bva`): aprendo prima l'uno e poi
+ * l'altro il dato è già in cache e non si ricarica.
+ *
+ * Subito sotto (#65) i tre riquadri «Bilancio Risorse»: preventivate / assegnate /
+ * consuntivate, stesso endpoint e stessa palette ore/€ del Bilancio (#66).
+ */
+function ProjectEconomicKpis({ projectId }: { projectId: number }) {
+  const query = useQuery({
+    queryKey: ["project-bva", projectId],
+    queryFn: () => fetchBudgetVsActual(projectId),
+  })
+
+  if (query.isLoading) {
+    return (
+      <>
+        <SectionTitle>Bilancio Commessa</SectionTitle>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <SectionTitle>Bilancio Risorse Commessa</SectionTitle>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+      </>
+    )
+  }
+  // Errore completo: niente da mostrare. Se manca solo il conto economico, i riquadri
+  // risorse (#65) restano comunque utili.
+  if (!query.data) return null
+
+  const data = query.data
+  const economic = data.economic
+  const deltaHours = data.totalActualHours - data.totalBudgetHours
+
+  return (
+    <>
+      {economic ? (
+        <>
+          <SectionTitle>Bilancio Commessa</SectionTitle>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {economicKpis(economic).map((kpi) => (
+              <Kpi
+                key={kpi.label}
+                label={kpi.label}
+                value={kpi.value}
+                hint={kpi.hint}
+                accent={kpi.accent}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      <SectionTitle>Bilancio Risorse Commessa</SectionTitle>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Kpi
+          label="Ore Preventivate"
+          value={hours(data.totalBudgetHours)}
+          accent={bvaHoursClass}
+          hint={<span className={bvaMoneyClass}>{euro(data.totalBudgetCost)}</span>}
+        />
+        <Kpi
+          label="Ore Assegnate"
+          value={hours(data.totalAssignedHours)}
+          accent={bvaHoursClass}
+          hint={<span className={bvaMoneyClass}>{euro(data.totalAssignedCost)}</span>}
+        />
+        <Kpi
+          label="Ore Consuntivate"
+          value={hours(data.totalActualHours)}
+          accent={bvaHoursClass}
+          hint={
+            <span className="flex flex-col items-start gap-0.5">
+              <span className={bvaMoneyClass}>{euro(data.totalActualCost)}</span>
+              {Math.abs(deltaHours) > 0.05 ? (
+                <span className={cn(bvaDeltaClass(deltaHours), "text-base")}>
+                  {deltaText(deltaHours)}
+                </span>
+              ) : null}
+            </span>
+          }
+        />
+      </div>
+    </>
+  )
+}
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="rounded-lg border bg-card p-4">{children}</div>
 }
 
-function Kpi({
-  label,
-  value,
-  subtitle,
-  color,
-  extra,
-}: {
-  label: string
-  value: string
-  subtitle: string
-  color: string
-  extra?: React.ReactNode
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-3 flex justify-between items-center" style={{ borderLeft: `3px solid ${color}` }}>
-      <div>
-        <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-1 text-xl font-semibold tabular-nums" style={{ color }}>
-          {value}
-        </p>
-        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
-      </div>
-      {extra ? <div className="text-right text-[11px] tabular-nums font-semibold border-l pl-3 ml-2 flex flex-col gap-0.5 justify-center leading-none">{extra}</div> : null}
-    </div>
-  )
-}
-
-/** Sezione "Dettagli" — riproduzione fedele del WPF ProjectDashboardControl. */
+/**
+ * Dashboard Commessa (ex «Dettagli») — segnalazione #46.
+ *
+ * Prima i dati di bilancio, poi l'avanzamento; niente riquadri che ripetono gli stessi
+ * importi del Conto Economico (Ricavo / Margine / Costo Totale / Costo Ore / Costo Mat.
+ * erano doppioni di Totale Ordine / Redditività Effettiva / Consuntivo Costi).
+ */
 export function ProjectDetailsSection({ projectId }: { projectId: number }) {
-  const role = getSession()?.user.userRole
-  const isPm = role === "ADMIN" || role === "PM"
+  // Conto Economico: è un dato che si MOSTRA, quindi `canAccessFeature` — la concessione
+  // in sola lettura di `data.budget` deve continuare a farlo vedere.
+  const canSeeEconomics = canAccessFeature("data.budget")
 
   const query = useQuery({
     queryKey: ["project-dashboard", projectId],
@@ -120,9 +225,14 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-28 rounded-xl" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       </div>
@@ -137,34 +247,39 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
   }
 
   const d = query.data
+  const statusMeta = projectStatusMeta(d.status)
+  const StatusIcon = statusMeta.icon
   const phasePct = d.totalPhases > 0 ? Math.round((d.completedPhases / d.totalPhases) * 100) : 0
   const hoursPct = d.budgetHoursTotal > 0 ? Math.round((d.hoursWorked / d.budgetHoursTotal) * 100) : 0
-  const margin = d.revenue - d.totalCost
+  const hoursOverBudget = hoursPct > 100
 
   return (
     <div className="space-y-1">
-      {/* Header scuro */}
-      <div className="rounded-lg p-5 text-white" style={{ backgroundColor: "#1A1D26" }}>
+      {/* Testata della commessa (#106): il fondo nero pieno pesava troppo sulla
+          pagina — ora è un grigio pastello sfumato. Va a token e non a colori
+          fissi, così regge anche il tema scuro; i due badge, che hanno un fondo
+          pieno loro, si portano dietro il bianco esplicito (prima lo ereditavano
+          dal `text-white` della testata). */}
+      <div className="rounded-lg border bg-gradient-to-br from-muted via-muted/50 to-background p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[22px] font-bold" style={{ color: "#4F6EF7" }}>
             {d.code}
           </span>
           <span
-            className="rounded px-2.5 py-0.5 text-[10px] font-semibold"
-            style={{ backgroundColor: statusColor(d.status) }}
+            className="inline-flex items-center gap-1 rounded px-2.5 py-0.5 text-[10px] font-semibold text-white"
+            style={{ backgroundColor: statusMeta.color }}
           >
-            {d.status}
+            <StatusIcon className="size-3" />
+            {statusMeta.label}
           </span>
           <span
-            className="rounded px-2.5 py-0.5 text-[10px] font-semibold"
+            className="rounded px-2.5 py-0.5 text-[10px] font-semibold text-white"
             style={{ backgroundColor: priorityColor(d.priority) }}
           >
             {d.priority}
           </span>
         </div>
-        <p className="mt-1 text-sm" style={{ color: "#E5E7EB" }}>
-          {d.title}
-        </p>
+        <p className="mt-1 text-sm text-foreground">{d.title}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <Chip icon="🏢" text={d.customerName} />
           {d.pmName ? <Chip icon="👤" text={d.pmName} /> : null}
@@ -175,37 +290,35 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
         </div>
       </div>
 
-      {/* KPI */}
-      <div className="grid gap-3 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="AVANZAMENTO" value={`${phasePct}%`} subtitle={`${d.completedPhases}/${d.totalPhases} Fasi`} color="#4F6EF7" />
-        <Kpi label="ORE TOTALI" value={n1(d.hoursWorked)} subtitle={`Budget: ${n0(d.budgetHoursTotal)} h (${hoursPct}%)`} color={hoursPct > 100 ? "#EF4444" : "#059669"} />
-        <Kpi label="TECNICI" value={String(d.activeTechnicians.length)} subtitle="Attivi" color="#7C3AED" />
+      {/* 1) Bilancio — prima i numeri economici (#46). Stessi sei riquadri del Bilancio
+          (#35), stessa funzione `economicKpis`, stesso endpoint. */}
+      {canSeeEconomics ? <ProjectEconomicKpis projectId={projectId} /> : null}
+
+      {/* 2) Avanzamento — solo ciò che non è già nel bilancio (niente Ricavo/Margine/
+          Costo Totale/Ore/Mat.: stanno già in Totale Ordine / Redditività / Consuntivo). */}
+      {/* #80: niente tooltip su Avanzamento / Ore totali / Tecnici (come #69 sul bilancio). */}
+      <SectionTitle>Avanzamento Commessa</SectionTitle>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* #106: l'avanzamento sono le fasi chiuse dal PM (menù della fase in
+            «Fasi assegnate» → «Segna come completata»), non le ore lavorate: le
+            ore dicono quanto si è speso, non quanto manca. Le fasi spente non
+            entrano nel conto. */}
         <Kpi
-          label="COSTO MAT."
-          value={`${n0(d.materialCost)} €`}
-          subtitle="Da acquisti"
-          color="#0891B2"
-          extra={
-            <>
-              <div className="flex justify-between gap-2 text-muted-foreground">
-                <span>Comm.:</span>
-                <span className="font-bold text-foreground">{n0(d.materialCostCommercial)} €</span>
-              </div>
-              <div className="flex justify-between gap-2 text-muted-foreground">
-                <span>Off.:</span>
-                <span className="font-bold text-foreground">{n0(d.materialCostOfficina)} €</span>
-              </div>
-            </>
-          }
+          label="Avanzamento"
+          value={`${phasePct}%`}
+          hint={`${d.completedPhases}/${d.totalPhases} fasi completate`}
         />
-        {isPm ? (
-          <>
-            <Kpi label="COSTO ORE" value={`${n0(d.costWorked)} €`} subtitle="Manodopera" color="#D97706" />
-            <Kpi label="COSTO TOTALE" value={`${n0(d.totalCost)} €`} subtitle={`Budget: ${n0(d.budgetTotal)} €`} color={d.totalCost > d.budgetTotal ? "#EF4444" : "#059669"} />
-            <Kpi label="RICAVO" value={`${n0(d.revenue)} €`} subtitle="Commessa" color="#2563EB" />
-            <Kpi label="MARGINE" value={`${n0(margin)} €`} subtitle={`${d.revenue > 0 ? Math.round((margin / d.revenue) * 100) : 0}%`} color={margin >= 0 ? "#059669" : "#EF4444"} />
-          </>
-        ) : null}
+        <Kpi
+          label="Ore totali"
+          value={n1(d.hoursWorked)}
+          hint={`Budget: ${n0(d.budgetHoursTotal)} h (${hoursPct}%)`}
+          accent={hoursOverBudget ? "text-destructive" : undefined}
+        />
+        <Kpi
+          label="Tecnici"
+          value={String(d.activeTechnicians.length)}
+          hint="attivi sulla commessa"
+        />
       </div>
 
       {d.description ? (
@@ -213,17 +326,6 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
           <SectionTitle>Descrizione</SectionTitle>
           <Card>
             <p className="text-sm whitespace-pre-wrap text-muted-foreground">{d.description}</p>
-          </Card>
-        </>
-      ) : null}
-
-      {d.serverPath ? (
-        <>
-          <SectionTitle>Cartella Progetto</SectionTitle>
-          <Card>
-            <p className="truncate text-xs text-muted-foreground" title={d.serverPath}>
-              {d.serverPath}
-            </p>
           </Card>
         </>
       ) : null}
@@ -262,21 +364,43 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
                         <Cell key={s.departmentCode} fill={deptColor(s.departmentCode)} />
                       ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={hoursTooltipFormatter} />
                 </PieChart>
               </ResponsiveContainer>
             </Card>
             <Card>
-              <p className="mb-2 text-xs font-semibold">Preventivato vs Assegnato vs Consuntivo</p>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold">
+                  Preventivato vs Assegnato vs Consuntivo
+                </p>
+                {/* Legenda scritta a mano: quella di recharts si riordina da sola in
+                    ordine alfabetico e non segue le barre — chi legge finisce per
+                    associare il colore alla voce sbagliata. */}
+                <div className="flex flex-wrap items-center gap-3 text-[10px]">
+                  {ORE_SERIE.map((serie) => (
+                    <span key={serie.label} className="flex items-center gap-1">
+                      <span
+                        className="size-2 rounded-[2px]"
+                        style={{ backgroundColor: serie.color }}
+                      />
+                      {serie.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={d.departmentSummaries}>
                   <XAxis dataKey="departmentCode" fontSize={10} />
                   <YAxis fontSize={9} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Bar dataKey="costingHours" name="Preventivato" fill="#4F6EF7" fillOpacity={0.4} />
-                  <Bar dataKey="assignedHours" name="Assegnato" fill="#4F6EF7" fillOpacity={0.7} />
-                  <Bar dataKey="hoursWorked" name="Lavorato" fill="#059669" />
+                  <Tooltip formatter={hoursTooltipFormatter} />
+                  {ORE_SERIE.map((serie) => (
+                    <Bar
+                      key={serie.key}
+                      dataKey={serie.key}
+                      name={serie.label}
+                      fill={serie.color}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -395,11 +519,10 @@ export function ProjectDetailsSection({ projectId }: { projectId: number }) {
 }
 
 function Chip({ icon, text }: { icon: string; text: string }) {
+  // Sulla testata chiara (#106) i chip scuri non stavano più: fondo carta con
+  // bordo, come le altre etichette dell'applicazione.
   return (
-    <span
-      className="rounded px-2 py-0.5 text-[11px]"
-      style={{ backgroundColor: "#2A2D36", color: "#D1D5DB" }}
-    >
+    <span className="rounded border bg-background/70 px-2 py-0.5 text-[11px] text-muted-foreground">
       {icon} {text}
     </span>
   )
@@ -424,8 +547,35 @@ function DeptBars({ s, max }: { s: DeptSummary; max: number }) {
         <span className="w-12 text-xs font-semibold" style={{ color }}>
           {s.departmentCode}
         </span>
-        <span className="text-[11px] text-muted-foreground">
-          Prev: {n0(s.costingHours)} h · Assegn: {n0(s.assignedHours)} h · Lav: {n1(s.hoursWorked)} h ({pctPrev}%) — {s.completedPhases}/{s.totalPhases} fasi
+        {/* #111: ogni valore prende la tonalità della PROPRIA barra — preventivate la
+            più tenue, assegnate la media, lavorate il colore pieno — così la riga
+            scritta e le tre barre sotto si leggono in coppia.
+            Le tonalità si ottengono smorzando verso il GRIGIO del tema, non verso il
+            bianco: schiarendo con il bianco alla stessa misura delle barre (opacità
+            0,3 e 0,6) il testo scendeva a un contrasto di 2,1:1 su fondo carta, e a
+            11 px in grassetto non si leggeva più. Smorzando resta la stessa famiglia
+            di colore, la scala si vede lo stesso e tutt'e tre restano leggibili.
+            Il conteggio fasi resta grigio: è un'informazione di altra natura. */}
+        <span className="text-[11px] font-bold">
+          <span
+            style={{ color: `color-mix(in srgb, ${color} 55%, var(--muted-foreground))` }}
+          >
+            Prev: {n2(s.costingHours)} h
+          </span>
+          <span className="font-normal text-muted-foreground"> · </span>
+          <span
+            style={{ color: `color-mix(in srgb, ${color} 78%, var(--muted-foreground))` }}
+          >
+            Assegn: {n2(s.assignedHours)} h
+          </span>
+          <span className="font-normal text-muted-foreground"> · </span>
+          <span style={{ color }}>
+            Lav: {n2(s.hoursWorked)} h ({pctPrev}%)
+          </span>
+          <span className="font-normal text-muted-foreground">
+            {" "}
+            — {s.completedPhases}/{s.totalPhases} fasi
+          </span>
         </span>
       </div>
       <div className="mt-1 space-y-0.5 pl-12">

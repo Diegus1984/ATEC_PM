@@ -183,6 +183,7 @@ Per le tante date di ATEC PM (timesheet, ferie, DDP) usa **sempre** la composizi
 | `AppShell` | `@/app/AppShell` | Guscio sidebar+header+content (`dashboard-01`). CONGELATO, non duplicare. |
 | `DataTableCard` | `@/components/shared/data-table-card` | Tabella standard client-side: header, ricerca globale, «Colonne», selezione, sort, stati loading/vuoto/errore. La pagina passa solo `columns`+`data`+`toolbarActions`+dialog. |
 | `DataTableCardFiltered` | `@/components/shared/data-table-card-filtered` | Variante di `DataTableCard` con **ricerca per colonna** (una casella sotto ogni intestazione filtrabile) + ricerca globale (disattivabile con `enableGlobalSearch={false}`) + pulsante «Pulisci filtri». **Drop-in**: stesse props, basta cambiare l'import. ⚠️ I filtri di colonna si combinano in **AND** — affinano la ricerca, vedi regola sotto. |
+| `GridScroller` | `@/components/shared/grid-scroller` | Scroller standard attorno a una `<Table>` (o `<table>` nativa) nelle griglie scritte a mano: righe che scorrono dentro la griglia fino a `--grid-max-h`, **intestazione fissa**, **barra orizzontale in alto**. `DataTableCard`/`Filtered` lo usano già dentro. Vedi regola sotto. |
 | `ColumnsMenu` | `@/components/shared/columns-menu` | Menu **«Colonne»** (visibilità colonne). Master unico: si adatta alla voce più larga (`w-auto`), spazio per la spunta, niente a-capo. La pagina passa `columns: { id, label, checked, onToggle }[]`. `DataTableCard` lo usa internamente; per liste/tabelle custom (es. Codex, dashboard) usalo direttamente. |
 | `SortableHeader` | `@/components/shared/sortable-header` | Intestazione colonna **ordinabile server-side** (icona neutro/asc/desc). Per liste paginate (Catalogo, Codex): la pagina tiene `SortState { by, dir }` e lo passa alla query API (`sortBy`/`sortDir`). |
 | `RowActionsMenu` | `@/components/shared/row-actions` | Menu **`⋮`** azioni di riga (modifica/elimina/…). Passa `actions: RowAction[]`. |
@@ -193,7 +194,81 @@ Per le tante date di ATEC PM (timesheet, ferie, DDP) usa **sempre** la composizi
 | `ServerPagination` | `@/components/shared/server-pagination` | Footer paginazione **server-side** (Codex, Catalogo). |
 | `TablePagination` | `@/components/shared/table-pagination` | Footer paginazione **client-side** TanStack Table. |
 | `ModulePlaceholder` | `@/components/shared/ModulePlaceholder` | Placeholder per moduli non ancora `live`. |
+| `LookupCombobox` | `@/components/shared/lookup-combobox` | **Tendina lunga con ricerca integrata** (clienti, commesse, dipendenti, sezioni…): pulsante come una `Select` + popover con casella «Cerca…». Props: `options: {id,name,group?,hint?}[]`, `value`, `onValueChange`, `noneLabel` (voce «— nessuna —»), `action` (voce finale tipo «Nuovo…»). |
 | `useDebounced(value, ms)` | `@/lib/use-debounced` | Debounce per ricerche/typeahead. |
+
+### Regola — le tendine lunghe sono combo con ricerca (standard, 03/08/2026)
+
+Una `Select` va bene **solo** per elenchi fissi e corti (stati, priorità, tipi, UM).
+Appena le voci arrivano da un'anagrafica (clienti, commesse, dipendenti, verbali,
+sezioni di costo, categorie…) si usa **`LookupCombobox`**: la ricerca sta dentro la
+tendina, si digitano due lettere invece di scorrere centinaia di righe, e Radix non
+monta tutte le voci a menu chiuso (una `Select` sì: rallenta l'intero dialog).
+
+Senza testo digitato mostra le prime 100 voci con l'avviso «+N altri — digita per
+cercare». Per fornitori e clienti in contesti inline restano validi
+`SupplierSearchCombobox` / `CustomerSearchCombobox` (input type-ahead, non a tendina).
+
+### Regola — ogni griglia ha il menu «Colonne» (standard, 31/07/2026)
+
+**Ogni griglia dati ha SEMPRE il menu «Colonne»** per scegliere cosa vedere: è uno
+standard di prodotto, non una decisione per pagina. Griglia dati = tabella che elenca
+record che l'utente sfoglia (righe DDP, attività, milestone, articoli, prodotti…).
+
+- Il menu è **`ColumnsMenu`** (`@/components/shared/columns-menu`), mai fatto a mano.
+  Con `DataTableCard` / `DataTableCardFiltered` arriva già incluso: non aggiungerne un
+  secondo.
+- La visibilità si **persiste in localStorage** con
+  **`usePersistedColumnVisibility(chiave, defaults)`** (`@/lib/use-persisted-column-visibility`).
+  **Chiave versionata** (`…-columns-v1`): cambiando gli id delle colonne si **alza la
+  versione**, altrimenti il salvato di ieri nasconde le colonne di oggi.
+- Le colonne opzionali si dichiarano una volta in cima al file
+  (`const X_COLUMNS = [{ id, label }]` + `X_COLUMNS_DEFAULT`), e header **e** celle si
+  rendono con lo stesso `show(id)`. `colSpan` delle righe «vuoto / aggiungi / totale»
+  va **calcolato** dalle colonne accese, mai cablato a un numero.
+- **Restano fisse** (fuori dal menu) solo le colonne strutturali: spunta di selezione,
+  espansore, la colonna identità della riga (Descrizione/Attività/Nome/Codice) e la
+  colonna azioni `⋮`.
+- Più tabelle sulla stessa pagina che mostrano gli stessi record (una card per
+  commessa/gruppo) → **un solo menu** in toolbar e stato condiviso via context
+  (`ChecklistColumnsProvider`), non un menu per card.
+- Se la vista ha una stampa/export «quello che vedo» (Report di Controllo), l'export
+  segue le colonne accese.
+
+**Fuori standard** (niente menu): dialoghi e picker, pagine di configurazione admin,
+matrice permessi, fogli a struttura fissa (verbale MoM, foglio SAL, Flusso di Cassa,
+Preventivo vs Consuntivo, costing preventivi) e tabelle con 2-3 colonne tutte
+indispensabili (Codex Ricodifica, MoM Note, Composizione Gamma).
+
+### Regola — intestazione fissa + barra orizzontale in alto (standard, 03/08/2026)
+
+**In ogni griglia le righe scorrono DENTRO la griglia, l'intestazione resta ferma in
+alto e la barra di scorrimento orizzontale sta SOPRA la griglia** (non in fondo, dove
+per vederla bisognerebbe scorrere fino all'ultima riga). Standard di prodotto, non una
+decisione per pagina.
+
+- Si ottiene **solo** con **`GridScroller`** (`@/components/shared/grid-scroller`), mai
+  a mano: sostituisce il vecchio `<div className="overflow-x-auto rounded-lg border">`
+  attorno alla `<Table>`. Il bordo/raggio va nel suo `className`.
+- `DataTableCard` / `DataTableCardFiltered` lo usano **già dentro**: le pagine che
+  passano da lì non devono fare nulla (`stickyHeader` e `topScrollbar` sono `true` di
+  default, si disattivano solo in casi motivati).
+- L'altezza massima dello scroller è il token **`--grid-max-h`** (`index.css`, 65vh):
+  si cambia **lì per tutte** le griglie. Per una singola griglia:
+  `scrollerClassName="max-h-[40vh]"`.
+- Griglia dentro un pannello che ne stabilisce già l'altezza (colonne a tutta pagina,
+  dialoghi in flex) → **`<GridScroller fill>`**: riempie il genitore invece di usare
+  `--grid-max-h`.
+- **Niente `sticky top-0` sul `TableHeader`** e niente `[&>div]:overflow-visible` nelle
+  pagine: le regole (a specificità zero, `:where(.grid-sticky-head …)` in `index.css`)
+  ci pensano da sole e restano sovrascrivibili con una classe Tailwind sul `<th>`.
+- Vale anche per le tabelle HTML native (matrice transizioni DDP, Flusso di Cassa,
+  distribuzione prezzo, anteprime di import): `GridScroller` lavora su qualsiasi
+  `<thead>`.
+- Vale **anche in dialoghi e picker**: lì la griglia sta in un `DialogContent`
+  `flex flex-col` → `<GridScroller fill>`. Se il picker ha lo **scroll infinito**,
+  l'handler va passato con la prop **`onScroll`** (il componente lo richiama dopo aver
+  sincronizzato la barra in alto), mai rimesso su un `div` esterno.
 
 ### Regola — filtri per colonna in AND (mai OR)
 
@@ -208,6 +283,98 @@ Anche la ricerca globale si combina in AND con i filtri di colonna.
   trasformino l'AND in OR). Un `filterFn` per colonna è ammesso solo per cambiare il
   *matching su quella singola colonna* (es. date/valuta/badge che non filtrano col
   "contiene" di default), mai per alterare la logica AND fra colonne.
+
+### Regola — la riga si adatta al testo, mai testo tagliato
+
+In **tutte le tabelle** con celle di testo su più righe, la riga deve **crescere in
+altezza** fino a mostrare tutto il contenuto: se il testo va a capo e la cella resta
+alta com'era, quello che sta sotto non si legge più.
+
+- Celle di testo lungo/multi-riga → `<Textarea rows={1}>` con
+  **`field-sizing-content min-h-8 resize-none`**. Fa tutto il browser, niente JS.
+- **Mai** `h-8`/altezza fissa + `overflow-hidden` su una cella editabile a riposo, e mai
+  altezze calcolate solo quando il campo ha il focus: fuori dal focus il testo sparirebbe.
+- Non mettere altezze fisse sulla `TableRow`: deve seguire la cella più alta.
+- Celle di sola lettura con testo lungo (Descrizione, Note) → `max-w-[Npx]` +
+  **`whitespace-normal break-words`**. Nota: `TableCell` di shadcn ha `whitespace-nowrap`
+  di default, quindi `whitespace-normal` va messo esplicitamente o il testo non va a capo.
+- `truncate` (una riga + puntini) va bene solo dove la riga **deve** restare compatta
+  (alberi, sidebar, chip, legende dei grafici) e il testo intero è comunque nel `title`.
+- Campi corti per natura (codice, Rif. Danea, N° ordine, quantità) restano `<Input>` a
+  riga singola: `DdpInlineTextCell` diventa textarea solo con `multiline`.
+
+Conformi: Check list (`AutoTextarea`), Milestone (`GrowTextarea`), MoM (`mom-sheet`),
+SAL (`sal-sheet-fields`), Lavorazioni (`inline-fields`), DDP Commerciale/Officina,
+Acquisti, Gestore DDP (Descrizione e Note, decisione utente del 31/07/2026).
+
+### Regola — importi sempre con € e due decimali
+
+Ogni importo mostrato all'utente, **in tutto ATEC PM**, si formatta con **`euro()`**
+(`@/lib/format`): due decimali, virgola decimale, punto delle migliaia e simbolo € in
+coda (`4.000,00 €`). Vale per celle di tabella, totali, KPI, etichette dei grafici,
+stampe e dialog.
+
+- **Mai** formattare a mano: niente `` `${fmt2(x)} €` ``, `x.toFixed(2)`,
+  `toLocaleString` con currency. Producono varianti incoerenti (`4000,00€`) e prima o
+  poi divergono.
+- `fmt2()` resta solo per numeri **non monetari** (ore, quantità, percentuali).
+- **Campi di importo → `MoneyInput`** (`@/components/shared/money-input`), **mai un
+  `<Input>` nudo**: mostra `100.000,00 €` a riposo e il numero grezzo appena ci clicchi
+  dentro, normalizza il valore al blur (così chi salva con `parseDecimal` non inciampa su
+  «1.234,50») e allinea a destra. Firma: `value` stringa + `onChange(value)`, opzionale
+  `onCommit` (blur/Invio).
+- Le tacche dell'asse Y dei grafici possono restare compatte (`4.000`): l'unità sta nel
+  titolo/tooltip, altrimenti l'asse diventa illeggibile.
+- **Griglie a molte colonne** (Cash Flow commessa: 13 mesi): il `€` completo sta sulla
+  colonna «Totale» e sulle righe calcolate; le celle ripetute possono restare compatte
+  passando `format` a `MoneyInput` (es. `format={n0}`) e dichiarando «Importi in €»
+  nell'intestazione. Il valore raccolto e la normalizzazione al blur non cambiano.
+
+### Regola — liste di card in uno scroller: contenitore a BLOCCO, mai flex (04/08/2026)
+
+Una lista di `Card` dentro un'area che scorre (`overflow-y-auto`) usa **`space-y-*`**, non
+`flex flex-col gap-*`. Motivo tecnico, non estetico: `Card` ha `overflow-hidden`, e per le
+regole del CSS un flex item con `overflow` diverso da `visible` ha **min-height automatica 0**.
+Quindi in un contenitore flex, appena le card superano l'altezza disponibile, il browser **le
+comprime tutte** e `overflow-hidden` taglia il contenuto — nel caso reale (18 commesse in `/sal`)
+le card sono finite **a 0px di altezza** con la riga «Cliente / PM» tagliata a metà. Misurato,
+non ipotizzato: stesso DOM, contenitore flex → 18 card tagliate; contenitore a blocco → 0.
+
+Non si vede con poche card (in sviluppo ce n'erano due e sembrava tutto a posto): **si vede solo
+con la lista piena**. Se una lista di card sta in uno scroller, `space-y-*` e via.
+
+Se per qualche motivo il contenitore deve restare flex, alle card serve **`shrink-0`**.
+
+### Regola — il `!` di Tailwind v4 va in CODA
+
+`pb-3!`, non `!pb-3`. La forma con il punto esclamativo davanti è quella di Tailwind 3: in v4
+**non genera CSS**, quindi la regola che volevi forzare semplicemente non esiste e te ne accorgi
+solo guardando il risultato. Capitato il 04/08/2026 su `[.border-b]:pb-3` nelle card di SAL e
+Bilancio: serviva a battere la variante di serie di `CardHeader`
+(`[.border-b]:pb-(--card-spacing)`, che a card espansa mette 24px sotto contro i 12 di sopra) e
+non faceva niente. Nel dubbio: `grep` della classe nel CSS generato in `dist/assets/*.css` —
+se non c'è, non esiste.
+
+### Regola — barra laterale PM: «Commesse» e «Altre commesse» separate (standard, 04/08/2026)
+
+Ogni pagina con `PmSidebar` e un elenco di commesse mostra **due sezioni**, mai un elenco
+unico: **«Commesse»** con i codici che cominciano con la data (`C{aaaammgg}…`), ordinati
+**dalla meno recente alla più recente** (`compareProjectCodes`), e **«Altre commesse»** con
+le commesse di servizio a codice libero (INTERNA, SERVICE _ SANGRATO…), in ordine alfabetico
+italiano e con quelle di sistema in testa.
+
+- Si costruiscono con **`buildPmProjectSections()`** (`@/lib/pm-project-sections`): si passa
+  `{ code, container }` per ogni commessa e la funzione fa filtro, ordinamento e sezioni.
+  **Mai** la prop `containers` piatta per un elenco di commesse — è così che Trasferta e
+  Inbox Officina si erano perse la regola (corrette il 04/08/2026 su segnalazione dell'utente).
+- La prop `containers` piatta resta legittima per elenchi che **non** sono commesse
+  (es. i report del Gestore DDP).
+- Chi ha bisogno di un ordinamento diverso dentro «Altre commesse» passa le opzioni
+  dell'helper, non riscrive il blocco.
+
+Conformi: Milestones, SAL, Bilancio, Lavorazioni, MoM, Check list, Trasferta, Inbox Officina.
+(Le prime sei hanno ancora il blocco in linea, equivalente: si passeranno all'helper alla
+prossima occasione in cui si toccano.)
 
 ## Sostituzioni obbligatorie
 

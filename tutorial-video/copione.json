@@ -1,0 +1,77 @@
+[
+  {
+    "id": "01-intro",
+    "sub": "Configurazione sezioni",
+    "say": "Benvenuto. In questo tutorial vediamo la Configurazione sezioni di ATEC PM. È la pagina dove si decide come è fatto l'elenco delle voci di costo che poi ritrovi in ogni preventivo e in ogni bilancio di commessa."
+  },
+  {
+    "id": "02-perche",
+    "sub": "Perché questa pagina conta",
+    "say": "Partiamo dal perché. Ogni ora che un tecnico registra finisce su una fase. Ogni fase appartiene a una sezione. E la sezione dice una cosa fondamentale: se quel lavoro è stato fatto in sede oppure dal cliente. Se questa pagina è configurata male, le ore ci sono ma il bilancio le mette nella colonna sbagliata."
+  },
+  {
+    "id": "03-mappa",
+    "sub": "Tre livelli: gruppo, sezione, fase",
+    "say": "La pagina si legge come un albero, con tre livelli. In alto i gruppi, che sono le grandi fasi della commessa. Dentro ogni gruppo le sezioni, cioè le voci di costo vere e proprie. E dentro ogni sezione le fasi, il lavoro che le persone selezionano quando registrano le ore."
+  },
+  {
+    "id": "04-contatore",
+    "sub": "Il contatore in alto",
+    "say": "Questa riga in alto è la prima cosa da guardare quando apri la pagina. Ti dice quanti gruppi e quante sezioni ci sono, e soprattutto quante fasi sono collegate a una sezione sul totale. Se il numero è scritto in arancione, vuol dire che qualche fase è rimasta fuori. Ci torniamo fra poco, perché è il problema più comune."
+  },
+  {
+    "id": "05-apri-gruppo",
+    "sub": "Aprire un gruppo",
+    "say": "Per aprire un gruppo basta cliccarci sopra. Apro Gestione. I gruppi hanno un colore, che serve solo a riconoscerli a colpo d'occhio: puoi cambiarlo, e non influenza nessun calcolo."
+  },
+  {
+    "id": "06-sezione",
+    "sub": "Una sezione da vicino",
+    "say": "Ecco una sezione. Ha un nome, e subito accanto un'etichetta che ne dichiara il tipo. Sotto, i reparti a cui la sezione si applica. E più sotto ancora, nel riquadro giallo, le fasi che le appartengono."
+  },
+  {
+    "id": "07-tipo",
+    "sub": "In sede oppure da cliente",
+    "say": "Questa etichetta è il campo più importante di tutta la pagina. Verde significa in sede: il lavoro si fa dentro ATEC. Arancione significa da cliente: si fa in trasferta, sull'impianto. Il bilancio della commessa usa esattamente questa distinzione per separare i costi. Sbagliarla non produce nessun errore a video, ma sposta i numeri."
+  },
+  {
+    "id": "08-reparti",
+    "sub": "I reparti",
+    "say": "Nella colonna di sinistra ci sono i reparti. Per ognuno vedi la sigla, il nome, il ricarico applicato e il costo orario. Questi due valori sono quelli che il preventivo propone quando calcola le ore di quel reparto."
+  },
+  {
+    "id": "09-drag",
+    "sub": "Collegare un reparto a una sezione",
+    "say": "Per collegare un reparto a una sezione lo si trascina, dal pannello di sinistra sopra alla sezione. La sezione si illumina quando è pronta a riceverlo. Per toglierlo, invece, si usa la crocetta accanto alla sigla. Attenzione: i reparti collegati decidono chi può imputare ore su quella sezione."
+  },
+  {
+    "id": "10-fasi",
+    "sub": "Le fasi template",
+    "say": "Nel riquadro giallo ci sono le fasi. Queste sono i modelli: quando nasce una commessa nuova, il sistema ne crea una copia. Si riordinano trascinandole una sopra l'altra, e con un doppio clic si rinominano. L'ordine che imposti qui è l'ordine in cui appariranno nelle tendine."
+  },
+  {
+    "id": "11-nuova-sezione",
+    "sub": "Creare una nuova sezione",
+    "say": "Per aggiungere una sezione si usa il menu dei tre puntini sulla barra colorata del gruppo, e si sceglie Nuova sezione. Si apre questa finestra."
+  },
+  {
+    "id": "12-default",
+    "sub": "Default commessa e default preventivo",
+    "say": "Qui dentro ci sono due caselle che vale la pena capire bene. Default commessa vuol dire che la sezione comparirà da sola su ogni commessa nuova. Default preventivo fa la stessa cosa sulle offerte. Se non spunti niente, la sezione esiste in anagrafica ma nessuno la vedrà finché non la aggiunge a mano."
+  },
+  {
+    "id": "13-orfane",
+    "sub": "Le fasi senza sezione",
+    "say": "Torniamo al problema di prima. Quando una fase non appartiene a nessuna sezione, compare in questo riquadro in cima alla pagina. Non è un dettaglio estetico: le ore registrate su quelle fasi restano fuori dalla ripartizione del bilancio, perché il sistema non sa se attribuirle al lavoro in sede o a quello dal cliente. Il totale delle ore resta giusto, ma la suddivisione no. Per sistemarle basta trascinare ogni fase sulla sezione a cui appartiene."
+  },
+  {
+    "id": "14-tariffe",
+    "sub": "Anagrafica tariffe",
+    "say": "In fondo alla pagina c'è l'anagrafica tariffe. Sono i valori che le calcolatrici propongono: le tariffe orarie delle officine, il rimborso chilometrico, il vitto, l'alloggio e l'indennità di trasferta. Una regola importante: se correggi un importo qui, cambi solo quello che verrà proposto d'ora in avanti. Le righe già compilate conservano il valore con cui sono state scritte, quindi non riscrivi la storia. E un valore già usato da qualcuno non si può cancellare."
+  },
+  {
+    "id": "15-fine",
+    "sub": "Da ricordare",
+    "say": "Chiudiamo con tre cose da ricordare. Primo: questa è un'anagrafica condivisa, quello che modifichi qui lo vedono tutti e si riflette sulle commesse nuove. Secondo: il tipo della sezione, in sede o da cliente, è il campo che muove i numeri del bilancio. Terzo: se il contatore in alto segnala fasi senza sezione, sistemale, perché sono ore che non finiscono nella ripartizione. Grazie per l'attenzione."
+  }
+]

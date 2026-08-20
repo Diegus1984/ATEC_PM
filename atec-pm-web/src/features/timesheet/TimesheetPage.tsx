@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,13 +19,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TimesheetEntryDialog } from "@/features/timesheet/TimesheetEntryDialog"
 import {
@@ -418,24 +412,17 @@ export function TimesheetPage() {
                   <span className="text-sm text-muted-foreground">
                     Dipendente
                   </span>
-                  <Select
-                    value={String(employeeId)}
-                    onValueChange={(value) => setEmployeeId(Number(value))}
-                  >
-                    <SelectTrigger size="sm" className="w-52">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(employeesQuery.data ?? []).map((employee) => (
-                        <SelectItem
-                          key={employee.id}
-                          value={String(employee.id)}
-                        >
-                          {employee.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <LookupCombobox
+                    options={(employeesQuery.data ?? []).map((employee) => ({
+                      id: employee.id,
+                      name: employee.name,
+                    }))}
+                    value={employeeId}
+                    onValueChange={(id) => id != null && setEmployeeId(id)}
+                    searchPlaceholder="Cerca dipendente…"
+                    emptyText="Nessun dipendente trovato"
+                    className="h-8 w-52"
+                  />
                 </div>
               ) : null}
 

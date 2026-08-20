@@ -1,4 +1,4 @@
-using MySqlConnector;
+﻿using MySqlConnector;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using ATEC.PM.Server.Data;
@@ -16,25 +16,18 @@ namespace ATEC.PM.Server.Services;
 //   W.Inizio/W.Fine/W.Tot e lo stato/colore NON sono persistiti: sono derivati lato client dalle date
 //   (settimana ISO 8601 e confronto con la data odierna). "spento" ed "evidenza" (hl) sono colonne
 //   della riga (nel prototipo lo "spento" viveva nel registro Gantt, qui è promosso a colonna).
-public class MilestonesDbService
+// Statica: di questo modulo si usano solo le due funzioni di schema qui sotto, chiamate
+// dall'avvio (DbService.InitDatabase) e dalla migrazione v15. Il lato istanza — connessione,
+// logger, Open() — non lo chiamava più nessuno da quando le migrazioni sono classi a sé.
+public static class MilestonesDbService
 {
-    private readonly DbService _db;
-    private readonly ILogger<MilestonesDbService>? _logger;
-
-    public MilestonesDbService(DbService db, ILogger<MilestonesDbService>? logger = null)
-    {
-        _db = db;
-        _logger = logger;
-    }
-
-    public MySqlConnection Open() => _db.Open();
 
     /// <summary>
     /// Chiamato da DbService.InitDatabase() — crea le tabelle (idempotente).
     /// Il SEED del catalogo avviene una-tantum nella migrazione v15 (vedi <see cref="SeedCatalog"/>),
     /// così le voci eliminate dall'utente non ricompaiono ad ogni avvio.
     /// </summary>
-    public void InitTables(MySqlConnection c)
+    public static void InitTables(MySqlConnection c, ILogger? log = null)
     {
         // activity_catalog — catalogo globale delle voci attività standard (nessuna FK).
         c.Execute(@"CREATE TABLE IF NOT EXISTS activity_catalog (
@@ -67,14 +60,14 @@ public class MilestonesDbService
             KEY idx_pms_project (project_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        _logger?.LogInformation("[InitTables] Tabelle Anagrafica attività / Milestone verificate/create.");
+        log?.LogInformation("[InitTables] Tabelle Anagrafica attività / Milestone verificate/create.");
     }
 
     /// <summary>
     /// Seed una-tantum del catalogo attività con l'elenco standard. Non fa nulla se il catalogo
     /// contiene già delle voci (già seedato o già personalizzato). Pensato per la migrazione v15.
     /// </summary>
-    public void SeedCatalog(MySqlConnection c)
+    public static void SeedCatalog(MySqlConnection c, ILogger? log = null)
     {
         int count = c.ExecuteScalar<int>("SELECT COUNT(*) FROM activity_catalog");
         if (count > 0) return;

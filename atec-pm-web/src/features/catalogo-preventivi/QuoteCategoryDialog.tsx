@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,13 +13,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { createCategory, updateCategory } from "@/lib/api/quote-catalog"
 import type { QuoteCategoryDto, QuoteGroupDto } from "@/lib/api/types"
@@ -100,18 +94,17 @@ export function QuoteCategoryDialog({
         <div className="space-y-4">
           <div className="grid gap-2">
             <Label>Gruppo *</Label>
-            <Select value={groupId} onValueChange={setGroupId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Seleziona un gruppo" />
-              </SelectTrigger>
-              <SelectContent>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={String(group.id)}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LookupCombobox
+              options={groups.map((group) => ({
+                id: String(group.id),
+                name: group.name,
+              }))}
+              value={groupId || null}
+              onValueChange={(id) => setGroupId(id ?? "")}
+              placeholder="Seleziona un gruppo"
+              searchPlaceholder="Cerca gruppo…"
+              emptyText="Nessun gruppo trovato"
+            />
           </div>
           <div className="grid gap-2">
             <Label>Nome *</Label>

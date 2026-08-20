@@ -13,6 +13,9 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { createMoM, deleteMoM, fetchMoMList } from "@/lib/api/mom"
+import { canWriteFeature } from "@/lib/auth/permissions"
+import { MoMClosedProgress } from "@/features/mom/mom-closed-progress"
+import { MOM_CONDITION_STYLE } from "@/features/mom/mom-palette"
 import type { MoMListItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 import { formatDateOrDash } from "@/lib/date-iso"
@@ -28,6 +31,11 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
   const confirm = useConfirm()
   const queryClient = useQueryClient()
 
+  // Funzione concessa in sola lettura: i verbali si aprono e si leggono, ma niente
+  // creazione o eliminazione. A respingere davvero le scritture è l'API; qui si
+  // tolgono i comandi, altrimenti ogni clic finirebbe in un errore rosso.
+  const readOnly = !canWriteFeature("nav.mom")
+
   const query = useQuery({
     queryKey: ["mom-list", "project", projectId],
     queryFn: () => fetchMoMList(projectId),
@@ -38,14 +46,18 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
     queryClient.invalidateQueries({ queryKey: ["mom-list", "project", projectId] })
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      createMoM({
+    // Guardia nella mutation, non solo sul pulsante: stesso pattern delle altre pagine
+    // in sola lettura (ProjectDdpOfficina, MoMDetailPage), regge anche i chiamanti futuri.
+    mutationFn: async () => {
+      if (readOnly) throw new Error("Verbali concessi in sola lettura.")
+      return createMoM({
         tipo: "COMMESSA",
         projectId,
         title: "Nuovo verbale",
         meetingDate: new Date().toISOString().slice(0, 10),
         inDashboard: true,
-      }),
+      })
+    },
     onSuccess: (newId) => navigate(`/mom/${newId}`, { state: { fromProject: true } }),
     onError: (err: Error) => notifyError(err),
   })
@@ -57,6 +69,8 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
   })
 
   async function handleDelete(item: MoMListItem) {
+    // In sola lettura non si arriva nemmeno alla richiesta di conferma.
+    if (readOnly) return
     const ok = await confirm({
       title: "Elimina verbale",
       description: `Eliminare il verbale "${item.title}" e tutte le sue azioni?`,
@@ -71,14 +85,16 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
-        >
-          <Plus />
-          Nuovo Verbale
-        </Button>
+        {!readOnly && (
+          <Button
+            size="sm"
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending}
+          >
+            <Plus />
+            Nuovo Verbale
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -99,7 +115,9 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
           <EmptyHeader>
             <EmptyTitle>Nessun verbale per questa commessa</EmptyTitle>
             <EmptyDescription>
-              Crea il primo verbale con «Nuovo Verbale».
+              {readOnly
+                ? "Nessun verbale da consultare."
+                : "Crea il primo verbale con «Nuovo Verbale»."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -120,17 +138,25 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
                 <div className="my-2 border-t" />
                 <Row label="Milestones / attività" value={item.itemsCount} />
                 <div className="flex items-center justify-between gap-2 py-0.5">
+                  <span className="text-sm text-muted-foreground">Avanzamento</span>
+                  <MoMClosedProgress
+                    itemsCount={item.itemsCount}
+                    openCount={item.openCount}
+                    className="max-w-[65%] flex-1"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2 py-0.5">
                   <span className="text-sm text-muted-foreground">
                     Ripartizione priorità
                   </span>
                   <div className="flex gap-1">
-                    <span className={cn(pill, "bg-red-100 text-red-700")}>
+                    <span className={cn(pill, MOM_CONDITION_STYLE.p1.pillClass)}>
                       {item.p1Count}
                     </span>
-                    <span className={cn(pill, "bg-yellow-100 text-yellow-700")}>
+                    <span className={cn(pill, MOM_CONDITION_STYLE.p2.pillClass)}>
                       {item.p2Count}
                     </span>
-                    <span className={cn(pill, "bg-green-100 text-green-700")}>
+                    <span className={cn(pill, MOM_CONDITION_STYLE.p3.pillClass)}>
                       {item.p3Count}
                     </span>
                   </div>
@@ -138,16 +164,18 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
                 <Row label="Periodo attività" value={periodLabel(item)} />
                 <Row label="Data riunione" value={formatDateOrDash(item.meetingDate)} />
               </button>
-              <div className="flex justify-end border-t px-3 py-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void handleDelete(item)}
-                >
-                  <Trash2 />
-                  Elimina
-                </Button>
-              </div>
+              {!readOnly && (
+                <div className="flex justify-end border-t px-3 py-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void handleDelete(item)}
+                  >
+                    <Trash2 />
+                    Elimina
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
         </div>

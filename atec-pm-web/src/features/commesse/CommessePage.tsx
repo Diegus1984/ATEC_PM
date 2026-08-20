@@ -1,17 +1,18 @@
 import * as React from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, PanelLeft, Pencil, Trash2 } from "lucide-react"
 import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
-import { hardDeleteProject } from "@/lib/api/projects"
+import { fetchProject, hardDeleteProject } from "@/lib/api/projects"
 import type { ProjectListItem } from "@/lib/api/types"
-import { getSession } from "@/lib/auth/session"
+import { canAccessFeature, canWriteFeature } from "@/lib/auth/permissions"
 import { cn } from "@/lib/utils"
 
 import { CommessaTree } from "./CommessaTree"
+import { readDocumentsNav, withDocumentsNav } from "./documents-nav-state"
 import { ProjectDocumentsActionsProvider } from "./project-documents-actions"
 import { ProjectBudgetVsActual } from "./ProjectBudgetVsActual"
 import { ProjectCashFlow } from "./ProjectCashFlow"
@@ -25,7 +26,8 @@ import { ProjectDdpCommercial } from "./ProjectDdpCommercial"
 import { ProjectDetailsSection } from "./ProjectDetailsSection"
 import { ProjectDialog } from "./ProjectDialog"
 import { ProjectDocuments } from "./ProjectDocuments"
-import { ProjectWorkRequests } from "./ProjectWorkRequests"
+import { ProjectWorkshopRows } from "./ProjectWorkshopRows"
+import { sezioniVisibili } from "./commessa-sections"
 
 const TREE_WIDTH_KEY = "atec_pm_commesse_tree_width"
 const TREE_MIN = 180
@@ -44,6 +46,8 @@ const SECTION_TITLES: Record<string, string> = {
   ddp_officina: "DDP Officina",
   work_requests: "Lavorazioni",
   documents: "Documenti",
+  milestones: "Milestone",
+  sal: "SAL / Fatturazione",
 }
 
 function loadTreeWidth(): number {
@@ -67,20 +71,59 @@ export function CommessePage() {
   const fromGlobal = location.state?.fromGlobal
   const queryClient = useQueryClient()
   const confirm = useConfirm()
-  const isAdmin = getSession()?.user.userRole === "ADMIN"
-  const role = getSession()?.user.userRole
-  const canSeeEconomics = role === "ADMIN" || role === "PM"
+  // Sezioni economiche dell'albero: è una VISIBILITÀ di dato, non una modifica, quindi
+  // `canAccessFeature` — chi ha `data.budget` in sola lettura deve comunque vederle.
+  const canSeeEconomics = canAccessFeature("data.budget")
 
   const projectId = params.projectId ? Number(params.projectId) : null
   const section = params.section ?? null
-  // Cartella documenti corrente (condivisa tra albero a sinistra e card a destra).
-  const documentPath = section === "documents" ? searchParams.get("path") ?? "" : ""
+  const chatFromUrl = Number(searchParams.get("chat") || 0)
+  // Cartella documenti corrente (condivisa tra albero a sinistra e card a destra):
+  // sta nell'history state, non nell'URL (vedi `documents-nav-state`).
+  const documentPath =
+    section === "documents"
+      ? readDocumentsNav(location.state, searchParams).docPath
+      : ""
 
   const [selectedProject, setSelectedProject] =
     React.useState<ProjectListItem | null>(null)
   const [dialogProject, setDialogProject] = React.useState<
     number | "new" | null
   >(null)
+
+  // #94 — Intestazione commessa: `selectedProject` si valorizza solo dai click
+  // sull'albero, quindi su deep-link (es. card di /milestones) resterebbe null e
+  // l'header direbbe solo «Commessa». Codice e titolo arrivano da questa query
+  // leggera; finché carica — o se fallisce (bozza 404 per chi non ha la chiave) —
+  // si ripiega su `selectedProject` e la pagina non si rompe.
+  const headerQuery = useQuery({
+    queryKey: ["project-header", projectId],
+    queryFn: () => fetchProject(projectId!),
+    enabled: projectId != null,
+    retry: false, // un 404 su bozza è definitivo: inutile insistere
+  })
+  // Il ripiego vale solo se è la STESSA commessa dell'URL: con Back/Forward o un
+  // link interno verso un'altra commessa il componente non si rimonta e
+  // `selectedProject` resterebbe quello vecchio — l'header (e la stampa SAL)
+  // direbbero codice e titolo di un'altra riga.
+  const fallbackProject =
+    selectedProject && selectedProject.id === projectId ? selectedProject : null
+  const headerProject = headerQuery.data ?? fallbackProject
+  const headerLabel = headerProject
+    ? [headerProject.code, headerProject.title].filter(Boolean).join(" — ")
+    : ""
+
+  // Titolo della scheda del browser: «{code} — {title} · ATEC PM» quando la
+  // commessa è nota; uscendo dalla pagina si ripristina il default.
+  React.useEffect(() => {
+    if (!headerLabel) {
+      return
+    }
+    document.title = `${headerLabel} · ATEC PM`
+    return () => {
+      document.title = "ATEC PM"
+    }
+  }, [headerLabel])
 
   // Larghezza pannello albero (persistita), con splitter trascinabile.
   const [treeWidth, setTreeWidth] = React.useState<number>(loadTreeWidth)
@@ -152,8 +195,9 @@ export function CommessePage() {
 
   function openDocumentFolder(project: ProjectListItem, path: string) {
     setSelectedProject(project)
-    const query = path ? `?path=${encodeURIComponent(path)}` : ""
-    navigate(`/commesse/${project.id}/documents${query}`)
+    navigate(`/commesse/${project.id}/documents`, {
+      state: withDocumentsNav(null, { docPath: path }),
+    })
   }
 
   function openDocumentFile(
@@ -162,19 +206,20 @@ export function CommessePage() {
     fileRelativePath: string
   ) {
     setSelectedProject(project)
-    const query = new URLSearchParams()
-    if (parentPath) {
-      query.set("path", parentPath)
-    }
-    query.set("preview", fileRelativePath)
-    navigate(`/commesse/${project.id}/documents?${query.toString()}`)
+    navigate(`/commesse/${project.id}/documents`, {
+      state: withDocumentsNav(null, {
+        docPath: parentPath,
+        docPreview: fileRelativePath,
+      }),
+    })
   }
 
-  async function handleHardDelete() {
-    if (!projectId) {
+  async function handleHardDelete(project?: ProjectListItem) {
+    const id = project?.id ?? projectId
+    if (!id) {
       return
     }
-    const code = selectedProject?.code ?? `#${projectId}`
+    const code = project?.code ?? selectedProject?.code ?? `#${id}`
     const first = await confirm({
       title: "Elimina definitivamente",
       description: `Eliminare DEFINITIVAMENTE la commessa "${code}"?\n\nVerranno cancellati tutti i dati (fasi, timesheet, DDP, costing, documenti) e le cartelle su disco. Se la commessa deriva da un'offerta, l'offerta tornerà "Accettata". L'operazione è irreversibile.`,
@@ -192,20 +237,39 @@ export function CommessePage() {
       return
     }
     try {
-      await hardDeleteProject(projectId)
+      await hardDeleteProject(id)
       await queryClient.invalidateQueries({ queryKey: ["projects-tree"] })
-      setSelectedProject(null)
-      navigate("/commesse")
+      if (projectId === id) {
+        setSelectedProject(null)
+        navigate("/commesse")
+      }
     } catch (error) {
       notifyError(error, "Errore nell'eliminazione.")
     }
   }
 
+  const sezioneConsentita =
+    section == null ||
+    sezioniVisibili(canSeeEconomics, canAccessFeature).some((s) => s.key === section)
+
+  // Sezione senza permesso aperta scrivendo l'indirizzo a mano: si torna alla commessa
+  // senza dire nulla — per chi non ha il permesso quella sezione non esiste.
+  React.useEffect(() => {
+    if (!sezioneConsentita) {
+      navigate(projectId != null ? `/commesse/${projectId}` : "/commesse", {
+        replace: true,
+      })
+    }
+  }, [sezioneConsentita, projectId, navigate])
+
   const isProjectNode = section == null || section === "details"
   const sectionTitle =
     section && SECTION_TITLES[section] ? SECTION_TITLES[section] : null
-  const showCommessaHeader =
-    projectId != null && sectionTitle == null && selectedProject != null
+  // #94 — Riga principale dell'header: sempre «{code} — {title}» quando c'è una
+  // commessa (anche su deep-link, appena la query risponde); «Commessa» è solo il
+  // placeholder transitorio mentre non si sa ancora nulla.
+  const headerText =
+    projectId == null ? "Seleziona una commessa" : headerLabel || "Commessa"
 
   const page = (
     <div
@@ -228,6 +292,10 @@ export function CommessePage() {
           onOpenDocumentFolder={openDocumentFolder}
           onOpenDocumentFile={openDocumentFile}
           onNewProject={() => setDialogProject("new")}
+          onEditProject={(project) => setDialogProject(project.id)}
+          onDeleteProject={(project) => {
+            void handleHardDelete(project)
+          }}
           isCollapsed={isTreeCollapsed}
         />
       </div>
@@ -274,27 +342,25 @@ export function CommessePage() {
               Indietro
             </Button>
           )}
-          {showCommessaHeader ? (
-            <div className="min-w-0">
-              <h2 className="truncate text-xl font-bold leading-tight">
-                {selectedProject!.code}
-              </h2>
-              <p className="truncate pl-4 text-base font-medium text-muted-foreground leading-tight">
-                {selectedProject!.customerName || "—"}
-              </p>
-            </div>
-          ) : (
+          <div className="min-w-0">
             <h2
               className={cn(
-                "truncate text-lg font-semibold",
+                "truncate text-lg font-semibold leading-tight",
                 projectId == null && "text-muted-foreground"
               )}
+              title={headerText}
             >
-              {projectId == null
-                ? "Seleziona una commessa"
-                : sectionTitle ?? "Commessa"}
+              {headerText}
             </h2>
-          )}
+            {projectId != null && sectionTitle ? (
+              <p
+                className="truncate text-sm text-muted-foreground leading-tight"
+                title={sectionTitle}
+              >
+                {sectionTitle}
+              </p>
+            ) : null}
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {projectId != null && section === "details" ? (
               <Button
@@ -306,7 +372,9 @@ export function CommessePage() {
                 Modifica
               </Button>
             ) : null}
-            {projectId != null && isProjectNode && isAdmin ? (
+            {projectId != null &&
+            isProjectNode &&
+            canWriteFeature("action.delete_project") ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -322,7 +390,12 @@ export function CommessePage() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className={cn(
+            "min-h-0 flex-1",
+            section === "chat" ? "overflow-hidden" : "overflow-y-auto"
+          )}
+        >
           {projectId == null ? (
             <div className="flex h-full items-center justify-center p-8 text-center">
               <div className="max-w-md">
@@ -331,7 +404,7 @@ export function CommessePage() {
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Scegli una commessa dall'albero a sinistra, poi apri una delle
-                  sue sezioni (Dettagli, Flusso di cassa, Preventivo vs
+                  sue sezioni (Dashboard Commessa, Flusso di cassa, Preventivo vs
                   consuntivo, Chat, Verbali, DDP, Documenti).
                 </p>
               </div>
@@ -341,19 +414,24 @@ export function CommessePage() {
               <div className="max-w-md">
                 <p className="text-base font-semibold">Seleziona una sezione</p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Apri Dettagli, Flusso di cassa, Preventivo vs consuntivo,
+                  Apri Dashboard Commessa, Flusso di cassa, Preventivo vs consuntivo,
                   Chat, Verbali, DDP o Documenti dall'albero a sinistra.
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="p-5">
+          ) : !sezioneConsentita ? null : (
+            <div
+              className={
+                section === "chat" ? "flex h-full min-h-0 flex-col" : "p-5"
+              }
+            >
               <SectionContent
                 projectId={projectId}
                 section={section}
                 canSeeEconomics={canSeeEconomics}
-                projectCode={selectedProject?.code}
-                projectTitle={selectedProject?.title}
+                projectCode={headerProject?.code}
+                projectTitle={headerProject?.title}
+                initialChatId={chatFromUrl > 0 ? chatFromUrl : null}
               />
             </div>
           )}
@@ -364,13 +442,26 @@ export function CommessePage() {
         open={dialogProject !== null}
         projectId={dialogProject}
         onClose={() => setDialogProject(null)}
-        onSaved={async () => {
+        onSaved={async (newProjectId) => {
           setDialogProject(null)
           await queryClient.invalidateQueries({ queryKey: ["projects-tree"] })
           if (typeof dialogProject === "number") {
             await queryClient.invalidateQueries({
               queryKey: ["project-dashboard", dialogProject],
             })
+            await queryClient.invalidateQueries({
+              queryKey: ["project-header", dialogProject],
+            })
+          }
+          // Commessa appena creata: si atterra sul suo piano di fatturazione, che è
+          // la prima cosa da compilare (il SAL vuoto viene creato al volo). Chi il SAL
+          // non lo vede resta sulla scheda della commessa.
+          if (newProjectId) {
+            navigate(
+              canAccessFeature("nav.sal")
+                ? `/commesse/${newProjectId}/sal`
+                : `/commesse/${newProjectId}`
+            )
           }
         }}
       />
@@ -394,12 +485,14 @@ function SectionContent({
   canSeeEconomics,
   projectCode,
   projectTitle,
+  initialChatId,
 }: {
   projectId: number
   section: string
   canSeeEconomics: boolean
   projectCode?: string
   projectTitle?: string
+  initialChatId?: number | null
 }) {
   switch (section) {
     case "details":
@@ -420,7 +513,14 @@ function SectionContent({
     case "cashflow":
       return <ProjectCashFlow projectId={projectId} />
     case "chat":
-      return <ProjectChat projectId={projectId} />
+      return (
+        <ProjectChat
+          projectId={projectId}
+          projectCode={projectCode}
+          projectTitle={projectTitle}
+          initialChatId={initialChatId}
+        />
+      )
     case "mom":
       return <ProjectMoM projectId={projectId} />
     case "checklist":
@@ -444,7 +544,7 @@ function SectionContent({
     case "ddp_officina":
       return <ProjectDdpOfficina projectId={projectId} />
     case "work_requests":
-      return <ProjectWorkRequests projectId={projectId} />
+      return <ProjectWorkshopRows projectId={projectId} />
     default:
       return (
         <p className="text-sm text-muted-foreground">Sezione sconosciuta.</p>

@@ -1,50 +1,64 @@
-import { useQuery } from "@tanstack/react-query"
+import * as React from "react"
 
-import { Skeleton } from "@/components/ui/skeleton"
-import { DashboardHoursChart } from "@/features/dashboard/components/DashboardHoursChart"
-import { DashboardProjectsTable } from "@/features/dashboard/components/DashboardProjectsTable"
-import { DashboardSectionCards } from "@/features/dashboard/components/DashboardSectionCards"
-import { fetchDashboard } from "@/lib/api/dashboard"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DashboardCommesseTables } from "@/features/dashboard/components/DashboardCommesseTables"
+import { DashboardControlliSection } from "@/features/dashboard/components/DashboardControlliSection"
+import { DashboardFolders } from "@/features/dashboard/components/DashboardFolders"
 
-function DashboardSkeleton() {
-  return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-36 rounded-xl" />
-        ))}
-      </div>
-      <Skeleton className="h-80 rounded-xl" />
-      <Skeleton className="h-64 rounded-xl" />
-    </div>
-  )
+/**
+ * Pagina d'ingresso. Dalla #88 si apre sulle due tabelle **Commesse / Altre Attività**
+ * (Codice · Titolo · Cliente · Stato cliccabile, senza colonna Ore): la vecchia
+ * «Panoramica» — 4 card KPI + grafico ore — è stata eliminata su richiesta esplicita
+ * della segnalazione. Le **Cartelle** (blocco 7) restano nella seconda scheda: non le ha
+ * chieste via nessuno, e la scelta resta ricordata per chi ci lavora.
+ *
+ * Sotto le tabelle commesse, la #113 introduce la sezione «Gestione Controlli» con 4 card
+ * di avviso/controllo per il PM (DDP aggiornate, SAL fatturazione, Trasferte, Ore Commessa).
+ */
+const VIEW_STORAGE_KEY = "dashboard:view:v2"
+
+type DashboardView = "commesse" | "cartelle"
+
+function loadView(): DashboardView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === "cartelle"
+      ? "cartelle"
+      : "commesse"
+  } catch {
+    return "commesse"
+  }
 }
 
 export function DashboardPage() {
-  const query = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
-  })
+  const [view, setView] = React.useState<DashboardView>(loadView)
 
-  if (query.isLoading) {
-    return <DashboardSkeleton />
+  function changeView(value: string) {
+    const next = value as DashboardView
+    setView(next)
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next)
+    } catch {
+      // storage non disponibile: nessuna persistenza
+    }
   }
-
-  if (query.isError) {
-    return (
-      <p className="text-sm text-destructive">
-        {(query.error as Error).message || "Errore dashboard"}
-      </p>
-    )
-  }
-
-  const data = query.data!
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <DashboardSectionCards data={data} />
-      <DashboardHoursChart dailyHours={data.dailyHours ?? []} />
-      <DashboardProjectsTable projects={data.recentProjects} />
+      <Tabs value={view} onValueChange={changeView}>
+        <TabsList>
+          <TabsTrigger value="commesse">Commesse</TabsTrigger>
+          <TabsTrigger value="cartelle">Cartelle</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {view === "commesse" ? (
+        <div className="flex flex-col gap-6">
+          <DashboardCommesseTables />
+          <DashboardControlliSection />
+        </div>
+      ) : (
+        <DashboardFolders />
+      )}
     </div>
   )
 }

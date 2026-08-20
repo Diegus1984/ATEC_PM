@@ -1,351 +1,106 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import {
-  ArrowLeft,
-  ArrowLeftRight,
-  ChevronRight,
-  ChevronDown,
-  FileSpreadsheet,
-  Printer,
-} from "lucide-react"
+import { ArrowLeft, ArrowLeftRight, FileSpreadsheet, Printer } from "lucide-react"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Collapsible } from "@/components/ui/collapsible"
-import { Label } from "@/components/ui/label"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { fetchDdpSummary } from "@/lib/api/ddp-manager"
-import {
-  fetchDdpAggregations,
-  fetchDdpStatuses,
-} from "@/lib/api/ddp-config"
+import { fetchDdpAggregations, fetchDdpStatuses } from "@/lib/api/ddp-config"
 import { fetchDdpRows } from "@/lib/api/project-ddp"
 import type { DdpRowItem, DdpStatusItem } from "@/lib/api/types"
-import { euro } from "@/lib/format"
+import { formatDateFull } from "@/lib/date-iso"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
-import { cn } from "@/lib/utils"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
+import { buildSintesiModel, type DdpSintesiModel } from "./ddp-sintesi-logic"
+import { exportDdpExcel, printDdpTables } from "./ddp-export"
 import {
-  barWidthPercent,
-  buildSintesiModel,
-  type BarRow,
-  type DdpSintesiModel,
-} from "./ddp-sintesi-logic"
-import { exportDdpExcel, printDdpTables, type ExportTable } from "./ddp-export"
-import { DdpOverviewPie } from "./DdpOverviewPie"
-import { DdpStatusBreakdown } from "./DdpStatusBreakdown"
-import {
-  ddpRowToSintesiCells,
-  sintesiTableHeaders,
-} from "./ddp-sintesi-table"
+  buildPrintTable,
+  EMPTY_ROW,
+  type PrintKey,
+  type PrintTableCtx,
+} from "./ddp-print-tables"
+import { ddpRowToSintesiCells, sintesiTableHeaders } from "./ddp-sintesi-table"
+import type { DdpTabKey, DdpViewProps } from "./ddp-view-props"
+import { useDdpRowOff } from "./use-ddp-row-off"
+import { useMarkDdpSeen } from "./useDdpUpdatedList"
+import { DdpStatoView } from "./DdpStatoView"
+import { DdpAvanzamentoView } from "./DdpAvanzamentoView"
+import { DdpTop10View } from "./DdpTop10View"
+import { DdpDestinazioniView } from "./DdpDestinazioniView"
+import { DdpMancantiView } from "./DdpMancantiView"
+import { DdpDistintaView } from "./DdpDistintaView"
 
-const MULTI_OPEN_KEY = "ddp.sintesi.multiOpen"
+const TABS: { key: DdpTabKey; label: string }[] = [
+  { key: "stato", label: "Stato DDP" },
+  { key: "avanz", label: "Avanzamento" },
+  { key: "top10", label: "Top 10 Costi" },
+  { key: "dest", label: "Destinazioni" },
+  { key: "mancanti", label: "Dati Mancanti" },
+  { key: "distinta", label: "Dati Distinta" },
+]
 
-// ── Sotto-componenti ────────────────────────────────────────────
+const TAB_KEYS = TABS.map((tab) => tab.key)
 
-function KpiCard({
-  label,
-  value,
-  valueClassName,
-  small,
-  onOpen,
-}: {
-  label: string
-  value: React.ReactNode
-  valueClassName?: string
-  small?: boolean
-  /** Drill-down: apre la sezione di dettaglio corrispondente (card cliccabile). */
-  onOpen?: () => void
-}) {
-  const content = (
-    <>
-      <div
-        className={cn(
-          "font-bold tabular-nums",
-          small ? "text-sm" : "text-xl",
-          valueClassName
-        )}
-      >
-        {value}
-      </div>
-      <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-    </>
-  )
-  if (!onOpen) {
-    return (
-      <div className="w-[170px] rounded-xl border bg-card px-3.5 py-2.5 shadow-xs">
-        {content}
-      </div>
-    )
-  }
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title="Apri il dettaglio"
-      className="w-[170px] rounded-xl border bg-card px-3.5 py-2.5 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent"
-    >
-      {content}
-    </button>
-  )
-}
-
-function BarList({ bars }: { bars: BarRow[] }) {
-  if (bars.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nessuna riga.</p>
-  }
-  return (
-    <div className="space-y-2">
-      {bars.map((bar, index) => (
-        <div key={`${bar.key}-${bar.label}-${index}`} className="flex items-center gap-2">
-          {bar.key ? (
-            <span
-              className="inline-flex w-16 shrink-0 justify-center rounded-full px-2 py-0.5 text-xs font-bold"
-              style={{ backgroundColor: bar.bg, color: bar.fg }}
-            >
-              {bar.key}
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-sm">{bar.label}</span>
-          <div className="h-2 w-52 shrink-0 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${barWidthPercent(bar.fraction, bar.count)}%`,
-                backgroundColor: bar.bg,
-              }}
-            />
-          </div>
-          <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums">
-            {bar.count}
-          </span>
-          <span className="w-12 shrink-0 text-right text-xs text-muted-foreground">
-            {bar.pct}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function RowsTable({
-  rows,
-  statusDefs,
-  statoLabel,
-  officina,
-  markOverdue,
-  collapsedParentIds,
-  parentIdsWithChildren,
-  toggleParentCollapse,
-}: {
-  rows: DdpRowItem[]
-  statusDefs: Map<string, DdpStatusItem>
-  statoLabel: (key: string) => string
-  officina: boolean
-  markOverdue?: boolean
-  collapsedParentIds?: Set<number>
-  parentIdsWithChildren?: Set<number>
-  toggleParentCollapse?: (id: number) => void
-}) {
-  const headers = sintesiTableHeaders(officina)
-  if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nessuna riga.</p>
-  }
-
-  let visibleRows = rows
-  if (officina && collapsedParentIds) {
-    visibleRows = rows.filter((row) => {
-      if (row.parentOfficinaItemId != null) {
-        return !collapsedParentIds.has(row.parentOfficinaItemId)
-      }
-      return true
-    })
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table className="min-w-[1400px] text-xs">
-        <TableHeader className="bg-muted/50">
-          <TableRow>
-            {headers.map((header) => (
-              <TableHead key={header} className="h-8 whitespace-nowrap">
-                {header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleRows.map((row) => {
-            const def = statusDefs.get(row.itemStatus)
-            const style = def
-              ? { backgroundColor: def.colorBg, color: def.colorFg }
-              : undefined
-            const cells = ddpRowToSintesiCells(row, officina, statoLabel, {
-              markOverdue,
-            })
-            return (
-              <TableRow key={row.id} style={style}>
-                {cells.map((cell, index) => {
-                  if (officina && index === 0) {
-                    const isChild = row.parentOfficinaItemId != null
-                    return (
-                      <TableCell
-                        key={index}
-                        className={cn(
-                          isChild ? "pl-3 italic font-normal opacity-70" : "opacity-80 tabular-nums font-semibold",
-                          "whitespace-nowrap"
-                        )}
-                      >
-                        {row.rowNumber}
-                      </TableCell>
-                    )
-                  }
-                  if (officina && index === 3 && parentIdsWithChildren && toggleParentCollapse && collapsedParentIds) {
-                    const isChild = row.parentOfficinaItemId != null
-                    const hasChildren = parentIdsWithChildren.has(row.id)
-                    const isCollapsed = collapsedParentIds.has(row.id)
-                    return (
-                      <TableCell key={index} className="whitespace-nowrap">
-                        <span className="flex items-center gap-1 font-semibold">
-                          {isChild ? (
-                            <span
-                              className="mr-1 select-none text-muted-foreground"
-                              title={`Componente di composizione (${row.compositionQty ?? 1} per padre)`}
-                            >
-                              ↳
-                            </span>
-                          ) : hasChildren ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                toggleParentCollapse(row.id)
-                              }}
-                              className="mr-1 inline-flex size-5 items-center justify-center rounded hover:bg-muted"
-                            >
-                              {isCollapsed ? (
-                                <ChevronRight className="size-4" strokeWidth={2.5} />
-                              ) : (
-                                <ChevronDown className="size-4" strokeWidth={2.5} />
-                              )}
-                            </button>
-                          ) : null}
-                          {row.partNumber || "—"}
-                        </span>
-                      </TableCell>
-                    )
-                  }
-                  return (
-                    <TableCell
-                      key={index}
-                      className={cn(
-                        index === 4 || index === headers.length - 2
-                          ? "min-w-[160px]"
-                          : "whitespace-nowrap",
-                        index === 0 || index === 5 ? "tabular-nums" : undefined,
-                        index >= headers.length - 2 ? "tabular-nums" : undefined
-                      )}
-                    >
-                      {cell}
-                    </TableCell>
-                  )
-                })}
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
-
-function Section({
-  id,
-  title,
-  open,
-  onToggle,
-  onPrint,
-  children,
-}: {
-  id: string
-  title: string
-  open: boolean
-  onToggle: (id: string) => void
-  onPrint: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div id={`ddp-section-${id}`} className="rounded-lg border bg-card scroll-mt-16">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          className="flex flex-1 items-center gap-2 text-left text-sm font-semibold"
-          onClick={() => onToggle(id)}
-        >
-          <ChevronRight
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform duration-[var(--accordion-duration)] ease-[var(--accordion-ease)]",
-              open && "rotate-90"
-            )}
-          />
-          {title}
-        </button>
-        <Button variant="outline" size="xs" onClick={onPrint}>
-          <Printer className="size-3" />
-          PDF
-        </Button>
-      </div>
-      <Collapsible open={open}>
-        <div className="border-t p-3">{children}</div>
-      </Collapsible>
-    </div>
-  )
-}
-
-// ── Pagina ──────────────────────────────────────────────────────
-
+/**
+ * Sintesi DDP di una commessa — port delle schede di analisi del prototipo
+ * `Gestione_DDP_New_V41.html` (Stato DDP, Avanzamento con Stampa Aggregato, Top 10 Costi,
+ * Destinazioni, Dati Mancanti) sul modello dati del gestionale: stati della matrice v7 e
+ * insiemi presi dalle aggregazioni A1..A9 configurabili, mai da elenchi cablati.
+ */
 export function DdpSintesiPage() {
   const params = useParams<{ projectId: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const projectId = Number(params.projectId)
   const type = (searchParams.get("type") || "COMMERCIAL").toUpperCase()
   const officina = type === "OFFICINA"
 
-  const [collapsedParentIds, setCollapsedParentIds] = React.useState<Set<number>>(new Set())
+  const tabParam = (searchParams.get("tab") || "stato") as DdpTabKey
+  const tab: DdpTabKey = TAB_KEYS.includes(tabParam) ? tabParam : "stato"
+  // Sezione da aprire arrivando da una card KPI (drill-down fra schede).
+  const focusSection = searchParams.get("sez") ?? undefined
 
-  // Reset collapsed parents when commessa/type changes
+  const goTo = React.useCallback(
+    (nextTab: DdpTabKey, sectionId?: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set("tab", nextTab)
+          if (sectionId) next.set("sez", sectionId)
+          else next.delete("sez")
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams]
+  )
+
+  // Menu «Colonne» delle tabelle righe. Chiave separata per tipo di DDP (le colonne
+  // sono diverse) e versionata: cambiando le colonne una config vecchia nasconderebbe
+  // celle che non esistono più.
+  const sintesiHeaders = sintesiTableHeaders(officina)
+  const [visibleCols, setVisibleCols] = usePersistedColumnVisibility(
+    `ddp-sintesi-columns-${officina ? "OFFICINA" : "COMMERCIAL"}-v2`,
+    Object.fromEntries(sintesiHeaders.map((header) => [header, true]))
+  )
+  const columnToggles = sintesiHeaders.map((header) => ({
+    id: header,
+    label: header,
+    checked: visibleCols[header] ?? true,
+    onToggle: (value: boolean) =>
+      setVisibleCols((prev) => ({ ...prev, [header]: value })),
+  }))
+
+  const [collapsedParentIds, setCollapsedParentIds] = React.useState<Set<number>>(
+    new Set()
+  )
   React.useEffect(() => {
     setCollapsedParentIds(new Set())
   }, [projectId, type])
-
-  const rowsQuery = useQuery({
-    queryKey: ["ddp-rows", projectId, type],
-    queryFn: () => fetchDdpRows(projectId, type),
-    enabled: Number.isFinite(projectId),
-  })
-
-  const parentIdsWithChildren = React.useMemo(() => {
-    const set = new Set<number>()
-    const list = rowsQuery.data ?? []
-    for (const item of list) {
-      if (item.parentOfficinaItemId != null) {
-        set.add(item.parentOfficinaItemId)
-      }
-    }
-    return set
-  }, [rowsQuery.data])
 
   const toggleParentCollapse = React.useCallback((parentId: number) => {
     setCollapsedParentIds((prev) => {
@@ -355,23 +110,41 @@ export function DdpSintesiPage() {
       return next
     })
   }, [])
+
+  const rowsQuery = useQuery({
+    queryKey: ["ddp-rows", projectId, type],
+    queryFn: () => fetchDdpRows(projectId, type),
+    enabled: Number.isFinite(projectId),
+    staleTime: 0,
+  })
   const statusesQuery = useQuery({
     queryKey: ["ddp-statuses"],
     queryFn: fetchDdpStatuses,
+    staleTime: 0,
   })
   const aggregationsQuery = useQuery({
     queryKey: ["ddp-aggregations"],
     queryFn: fetchDdpAggregations,
+    staleTime: 0,
   })
   const summaryQuery = useQuery({
     queryKey: ["ddp-summary"],
     queryFn: fetchDdpSummary,
+    staleTime: 0,
   })
+
+  const rowOff = useDdpRowOff(projectId, type)
+
+  // Presa visione (#114): aprire la DDP la toglie dall'elenco «da verificare» della
+  // Dashboard di chi guarda. Torna se un collega la aggiorna ancora.
+  useMarkDdpSeen(projectId, type)
 
   useProjectHub(Number.isFinite(projectId) ? projectId : null, (change) => {
     void summaryQuery.refetch()
     if (change.ddpType && change.ddpType.toUpperCase() !== type) return
     void rowsQuery.refetch()
+    // Anche le righe spente sono un dato condiviso: vanno rilette come le righe.
+    rowOff.refetch()
   })
 
   const statusDefs = React.useMemo(() => {
@@ -421,146 +194,90 @@ export function DdpSintesiPage() {
       ),
     [summaryQuery.data, projectId, otherDdpType]
   )
-  const switchSintesiLabel = officina
-    ? "Sintesi commerciale"
-    : "Sintesi meccanica"
 
-  // ── Accordion ──
-  const [multiOpen, setMultiOpen] = React.useState(
-    () => localStorage.getItem(MULTI_OPEN_KEY) === "1"
+  // ── Stampe ──
+  const printCtx: PrintTableCtx = React.useMemo(
+    () => ({
+      model,
+      officina,
+      statoLabel,
+      statusDefs,
+      onlyOn: rowOff.onlyOn,
+    }),
+    [model, officina, statoLabel, statusDefs, rowOff.onlyOn]
   )
-  const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
-    rip: true,
-  })
 
-  function toggleSection(id: string) {
-    setOpenSections((prev) => {
-      const wasOpen = prev[id] ?? false
-      if (multiOpen) return { ...prev, [id]: !wasOpen }
-      return wasOpen ? {} : { [id]: true }
-    })
-  }
+  const printKey = React.useCallback(
+    (key: PrintKey) => {
+      const table = buildPrintTable(key, printCtx)
+      printDdpTables(
+        `${table.title} — ${code}`,
+        `${reportHeader} · data di riferimento ${formatDateFull(new Date())}`,
+        [table]
+      )
+    },
+    [printCtx, code, reportHeader]
+  )
 
-  function toggleMultiOpen(value: boolean) {
-    setMultiOpen(value)
-    localStorage.setItem(MULTI_OPEN_KEY, value ? "1" : "0")
-  }
+  const printAggregato = React.useCallback(
+    (keys: PrintKey[], reportTitle = "Report Aggregato Avanzamento") => {
+      const tables = keys.map((key) => buildPrintTable(key, printCtx))
+      // Le tabelle vuote stampano la riga segnaposto «Nessuna riga.»: non è un dato e
+      // non va contata, altrimenti il totale in testata non torna col dialogo.
+      const totRows = tables.reduce(
+        (sum, table) => sum + (table.rows[0] === EMPTY_ROW ? 0 : table.rows.length),
+        0
+      )
+      printDdpTables(
+        `${reportTitle} — ${code}`,
+        `${reportHeader} · ${tables.length} ${
+          tables.length === 1 ? "tabella" : "tabelle"
+        } · ${totRows} righe complessive · data di riferimento ${formatDateFull(
+          new Date()
+        )}`,
+        tables
+      )
+    },
+    [printCtx, code, reportHeader]
+  )
 
-  // Drill-down dalle KPI: apre la sezione di dettaglio e la porta a vista.
-  function openSection(id: string) {
-    setOpenSections((prev) => (multiOpen ? { ...prev, [id]: true } : { [id]: true }))
-    requestAnimationFrame(() => {
-      document
-        .getElementById(`ddp-section-${id}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-    })
-  }
-
-  // ── Export ──
-  const fullRow = (row: DdpRowItem): string[] =>
-    ddpRowToSintesiCells(row, officina, statoLabel)
-  const rowColors = (rows: DdpRowItem[]) =>
-    rows.map((row) => statusDefs.get(row.itemStatus)?.colorBg ?? null)
-
-  const barTable = (title: string, bars: BarRow[]): ExportTable => ({
-    title,
-    headers: ["Stato", "Descrizione", "N", "%"],
-    rows: bars.map((bar) => [bar.key, bar.label, String(bar.count), bar.pct]),
-  })
-  const fullTable = (title: string, rows: DdpRowItem[]): ExportTable => ({
-    title,
-    headers: [...sintesiTableHeaders(officina)],
-    rows: rows.map(fullRow),
-    rowColors: rowColors(rows),
-  })
-
-  const sectionTable: Record<string, () => ExportTable> = {
-    avanz: () => ({
-      title: "Stati Avanzamento",
-      headers: ["Stato", "N", "%"],
-      rows: model.avanzamento.map((card) => [
-        card.label,
-        String(card.count),
-        card.pctLabel,
-      ]),
-    }),
-    rip: () => barTable("Ripartizione per stato", model.ripartizione),
-    consegne: () => fullTable("Materiale in Consegna", model.consegne),
-    consegnato: () => fullTable("Materiale Consegnato", model.consegnato),
-    top10: () => ({
-      title: "Top 10 Costi",
-      headers: ["Pos.", ...sintesiTableHeaders(officina), "% tot."],
-      rows: model.top10.map((row) => [
-        String(row.rank),
-        ...fullRow(row.item),
-        row.pctLabel,
-      ]),
-    }),
-    dest: () => ({
-      title: "Destinazioni",
-      headers: ["Destinazione", "N", "%"],
-      rows: model.destinazioni.map((bar) => [bar.label, String(bar.count), bar.pct]),
-    }),
-    mancanti: () => ({
-      // Stampa di sezione: layout per-campo come BuildSectionDoc('mancanti') del WPF.
-      title: "Dati Mancanti",
-      headers: [
-        "Riga",
-        "Stato",
-        "Descrizione",
-        "Stato",
-        "Rif. Danea",
-        "Data prev.",
-        "Destinazione",
-        "Costo",
-      ],
-      rows: model.mancanti.map((row) => [
-        String(row.rowNo),
-        statoLabel(row.statoKey),
-        row.desc,
-        row.stato.text,
-        row.rif.text,
-        row.data.text,
-        row.dest.text,
-        row.costo.text,
-      ]),
-    }),
-    distinta: () => fullTable("Dati Distinta", model.distinta),
-    acq: () => barTable("Feedback Acquisti", model.feedbackAcquisti),
-    mag: () => barTable("Feedback Magazzino", model.feedbackMagazzino),
-  }
-
-  function printSection(key: string) {
-    printDdpTables(`DDP ${code} — ${key}`, reportHeader, [sectionTable[key]()])
-  }
-
+  /** Bottone «Stampa» di testata: riepilogo dell'intera Sintesi, non della sola scheda. */
   function printReport() {
-    // Nel report completo la sezione mancanti è condensata (come BuildReport del WPF).
-    const mancantiReport: ExportTable = {
-      title: "Dati mancanti",
-      headers: ["Riga", "Stato", "Descrizione", "Campi mancanti"],
-      rows: model.mancanti.map((row) => [
-        String(row.rowNo),
-        statoLabel(row.statoKey),
-        row.desc,
-        row.missingLabel,
-      ]),
-    }
-    printDdpTables(`Sintesi DDP — ${reportHeader}`, reportHeader, [
-      sectionTable.rip(),
-      sectionTable.top10(),
-      sectionTable.consegne(),
-      sectionTable.consegnato(),
-      sectionTable.dest(),
-      mancantiReport,
-    ])
+    printAggregato(
+      ["stato", "rip", "top10", "dest", "mancanti"],
+      officina ? "Riepilogo Sintesi DDP Meccanica" : "Riepilogo Sintesi DDP commerciali"
+    )
   }
 
   function exportExcel() {
-    exportDdpExcel(code, fullTable("Dati Distinta", model.distinta))
+    const fullRow = (row: DdpRowItem) =>
+      ddpRowToSintesiCells(row, officina, statoLabel)
+    exportDdpExcel(code, {
+      title: "Dati Distinta",
+      headers: [...sintesiHeaders],
+      rows: model.distinta.map(fullRow),
+      rowColors: model.distinta.map(
+        (row) => statusDefs.get(row.itemStatus)?.colorBg ?? null
+      ),
+    })
   }
 
-  const isOpen = (id: string) => openSections[id] ?? false
+  const viewProps: DdpViewProps = {
+    model,
+    officina,
+    statusDefs,
+    statoLabel,
+    visibleCols,
+    rowOff,
+    printKey,
+    goTo,
+    focusSection,
+    code,
+    reportHeader,
+    collapsedParentIds,
+    parentIdsWithChildren: model.parentIdsWithChildren,
+    toggleParentCollapse,
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -572,7 +289,10 @@ export function DdpSintesiPage() {
             Indietro
           </Button>
           <span className="text-base font-semibold">
-            {officina ? "Sintesi DDP Meccanica" : "Sintesi DDP"} · {reportHeader}
+            {officina
+              ? "Sintesi DDP Meccanica"
+              : "Sintesi DDP commerciali"}{" "}
+            · {reportHeader}
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -580,16 +300,13 @@ export function DdpSintesiPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                navigate(
-                  `/gestore-ddp/${projectId}?type=${otherDdpType}`
-                )
-              }
+              onClick={() => navigate(`/gestore-ddp/${projectId}?type=${otherDdpType}`)}
             >
               <ArrowLeftRight />
-              {switchSintesiLabel}
+              {officina ? "Sintesi commerciale" : "Sintesi meccanica"}
             </Button>
           ) : null}
+          <ColumnsMenu columns={columnToggles} />
           <Button variant="outline" size="sm" onClick={exportExcel}>
             <FileSpreadsheet />
             Esporta Excel
@@ -601,338 +318,35 @@ export function DdpSintesiPage() {
         </div>
       </div>
 
+      {/* Schede */}
+      <Tabs value={tab} onValueChange={(value) => goTo(value as DdpTabKey)}>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {TABS.map((item) => (
+            <TabsTrigger key={item.key} value={item.key}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       {rowsQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">Caricamento…</p>
       ) : rowsQuery.isError ? (
         <p className="text-sm text-destructive">
           {(rowsQuery.error as Error).message}
         </p>
+      ) : tab === "stato" ? (
+        <DdpStatoView {...viewProps} />
+      ) : tab === "avanz" ? (
+        <DdpAvanzamentoView {...viewProps} onPrintAggregato={printAggregato} />
+      ) : tab === "top10" ? (
+        <DdpTop10View {...viewProps} />
+      ) : tab === "dest" ? (
+        <DdpDestinazioniView {...viewProps} />
+      ) : tab === "mancanti" ? (
+        <DdpMancantiView {...viewProps} />
       ) : (
-        <>
-          {/* KPI (cliccabili: aprono la sezione di dettaglio) */}
-          <div className="flex flex-wrap gap-3">
-            <KpiCard
-              label="Tot. acquisti"
-              value={euro(model.kpi.totValue)}
-              valueClassName="text-red-700 dark:text-red-400"
-              onOpen={() => openSection("top10")}
-            />
-            <KpiCard
-              label="Inserimenti"
-              value={model.kpi.count}
-              onOpen={() => openSection("distinta")}
-            />
-            <KpiCard label="Finestra consegne" value={model.kpi.finestra} small />
-            <KpiCard
-              label="Mat. in consegna"
-              value={model.kpi.inConsegna}
-              onOpen={() => openSection("consegne")}
-            />
-            <KpiCard
-              label="Mat. in ritardo"
-              value={model.kpi.overdue}
-              valueClassName={model.kpi.overdue > 0 ? "text-amber-600" : ""}
-              onOpen={() => openSection("consegne")}
-            />
-            <KpiCard
-              label="Mat. consegnato"
-              value={model.kpi.consegnato}
-              onOpen={() => openSection("consegnato")}
-            />
-            <KpiCard
-              label="Mat. parziali"
-              value={model.kpi.parziali}
-              onOpen={() => openSection("consegne")}
-            />
-          </div>
-
-          {/* Igiene dati (refusi date / costi mancanti) */}
-          {model.kpi.refusiDate > 0 || model.kpi.costoZero > 0 ? (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Controllo dati:{" "}
-              {model.kpi.refusiDate > 0 ? (
-                <>
-                  <strong>{model.kpi.refusiDate}</strong> data/e di consegna con
-                  annualità implausibile (probabile refuso).{" "}
-                </>
-              ) : null}
-              {model.kpi.costoZero > 0 ? (
-                <>
-                  <strong>{model.kpi.costoZero}</strong> riga/e senza costo unitario
-                  in uno stato che dovrebbe averlo.
-                </>
-              ) : null}
-            </div>
-          ) : null}
-
-          <DdpOverviewPie
-            bars={model.ripartizione}
-            variant={officina ? "officina" : "commercial"}
-          />
-
-          {/* Stati Avanzamento */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold">Stati Avanzamento</h3>
-                <p className="text-xs text-muted-foreground">{model.avanzSub}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => printSection("avanz")}
-              >
-                <Printer className="size-3" />
-                PDF
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              {model.avanzamento.map((card) => (
-                <div
-                  key={card.label}
-                  className="w-[132px] rounded-xl border px-3 py-2.5"
-                  style={{ backgroundColor: card.bg, borderColor: card.border }}
-                >
-                  <div className="truncate text-[10px] font-semibold text-slate-600">
-                    {card.label}
-                  </div>
-                  <div className="mt-1 text-2xl font-bold text-slate-900 tabular-nums">
-                    {card.count}
-                  </div>
-                  <div className="mt-0.5 text-[10px] text-slate-500">
-                    {card.pctLabel}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Opzione locale */}
-          <Label className="ml-auto flex items-center gap-2 text-sm font-normal">
-            <Checkbox
-              checked={multiOpen}
-              onCheckedChange={(checked) => toggleMultiOpen(checked === true)}
-            />
-            Più sezioni aperte
-          </Label>
-
-          {/* Accordion */}
-          <div className="space-y-2">
-            <Section
-              id="rip"
-              title="Ripartizione per stato"
-              open={isOpen("rip")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("rip")}
-            >
-              <DdpStatusBreakdown
-                bars={model.ripartizione}
-                subtitle={model.ripSub}
-                sectionLabel="Ripartizione per stato"
-              />
-            </Section>
-
-            <Section
-              id="consegne"
-              title="Materiale in Consegna"
-              open={isOpen("consegne")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("consegne")}
-            >
-              <RowsTable
-                rows={model.consegne}
-                statusDefs={statusDefs}
-                statoLabel={statoLabel}
-                officina={officina}
-                markOverdue
-              />
-              <p className="mt-2 text-xs text-muted-foreground">{model.consegneSub}</p>
-            </Section>
-
-            <Section
-              id="consegnato"
-              title="Materiale Consegnato"
-              open={isOpen("consegnato")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("consegnato")}
-            >
-              <RowsTable
-                rows={model.consegnato}
-                statusDefs={statusDefs}
-                statoLabel={statoLabel}
-                officina={officina}
-              />
-              <p className="mt-2 text-xs text-muted-foreground">{model.consegnatoSub}</p>
-            </Section>
-
-            <Section
-              id="top10"
-              title="Top 10 Costi"
-              open={isOpen("top10")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("top10")}
-            >
-              <div className="overflow-x-auto rounded-lg border">
-                <Table className="min-w-[1500px] text-xs">
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead className="h-8">Pos.</TableHead>
-                      {sintesiTableHeaders(officina).map((header) => (
-                        <TableHead key={header} className="h-8 whitespace-nowrap">
-                          {header}
-                        </TableHead>
-                      ))}
-                      <TableHead className="h-8">% tot.</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {model.top10.map((row) => {
-                      const def = statusDefs.get(row.item.itemStatus)
-                      const style = def
-                        ? { backgroundColor: def.colorBg, color: def.colorFg }
-                        : undefined
-                      return (
-                        <TableRow key={row.item.id} style={style}>
-                          <TableCell className="tabular-nums">{row.rank}</TableCell>
-                          {fullRow(row.item).map((cell, index) => (
-                            <TableCell
-                              key={index}
-                              className={index === 4 || index === 14 ? "min-w-[160px]" : "whitespace-nowrap"}
-                            >
-                              {cell}
-                            </TableCell>
-                          ))}
-                          <TableCell className="whitespace-nowrap tabular-nums">
-                            {row.pctLabel}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </Section>
-
-            <Section
-              id="dest"
-              title="Destinazioni"
-              open={isOpen("dest")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("dest")}
-            >
-              <p className="mb-3 text-xs text-muted-foreground">{model.destSub}</p>
-              <BarList bars={model.destinazioni} />
-            </Section>
-
-            <Section
-              id="mancanti"
-              title="Dati Mancanti"
-              open={isOpen("mancanti")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("mancanti")}
-            >
-              <p className="mb-2 text-xs text-muted-foreground">{model.mancantiSub}</p>
-              {model.mancanti.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nessuna riga con dati mancanti.
-                </p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table className="min-w-[760px] text-xs">
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="h-8 w-14">Riga</TableHead>
-                        <TableHead className="h-8">Stato</TableHead>
-                        <TableHead className="h-8 min-w-[180px]">Descrizione</TableHead>
-                        <TableHead className="h-8 text-center">Stato</TableHead>
-                        <TableHead className="h-8 text-center">Rif. Danea</TableHead>
-                        <TableHead className="h-8 text-center">Data Prev.</TableHead>
-                        <TableHead className="h-8 text-center">Destinazione</TableHead>
-                        <TableHead className="h-8 text-center">Costo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {model.mancanti.map((row) => {
-                        const def = statusDefs.get(row.statoKey)
-                        const style = def
-                          ? { backgroundColor: def.colorBg, color: def.colorFg }
-                          : undefined
-                        const flag = (cell: { text: string; missing: boolean }) => (
-                          <span
-                            className="font-semibold"
-                            style={{ color: cell.missing ? row.flagColor : "#94A3B8" }}
-                          >
-                            {cell.text}
-                          </span>
-                        )
-                        return (
-                          <TableRow key={row.rowNo} style={style}>
-                            <TableCell className="tabular-nums">{row.rowNo}</TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              {statoLabel(row.statoKey)}
-                            </TableCell>
-                            <TableCell className="min-w-[180px]">{row.desc}</TableCell>
-                            <TableCell className="text-center">{flag(row.stato)}</TableCell>
-                            <TableCell className="text-center">{flag(row.rif)}</TableCell>
-                            <TableCell className="text-center">{flag(row.data)}</TableCell>
-                            <TableCell className="text-center">{flag(row.dest)}</TableCell>
-                            <TableCell className="text-center">{flag(row.costo)}</TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </Section>
-
-            <Section
-              id="distinta"
-              title="Dati Distinta"
-              open={isOpen("distinta")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("distinta")}
-            >
-              <RowsTable
-                rows={model.distinta}
-                statusDefs={statusDefs}
-                statoLabel={statoLabel}
-                officina={officina}
-                collapsedParentIds={collapsedParentIds}
-                parentIdsWithChildren={parentIdsWithChildren}
-                toggleParentCollapse={toggleParentCollapse}
-              />
-            </Section>
-
-            <Section
-              id="acq"
-              title="Feedback Acquisti"
-              open={isOpen("acq")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("acq")}
-            >
-              <DdpStatusBreakdown
-                bars={model.feedbackAcquisti}
-                subtitle={model.acqSub}
-                sectionLabel="Feedback acquisti"
-              />
-            </Section>
-
-            <Section
-              id="mag"
-              title="Feedback Magazzino"
-              open={isOpen("mag")}
-              onToggle={toggleSection}
-              onPrint={() => printSection("mag")}
-            >
-              <DdpStatusBreakdown
-                bars={model.feedbackMagazzino}
-                subtitle={model.magSub}
-                sectionLabel="Feedback magazzino"
-              />
-            </Section>
-          </div>
-        </>
+        <DdpDistintaView {...viewProps} />
       )}
     </div>
   )

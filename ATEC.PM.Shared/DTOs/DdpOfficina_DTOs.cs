@@ -2,6 +2,27 @@ using System;
 
 namespace ATEC.PM.Shared.DTOs;
 
+/// <summary>
+/// Natura della lavorazione di una riga officina (<c>ddp_officina_items.work_type</c>).
+/// <para>
+/// <see cref="Print3D"/> è arrivata con la segnalazione #87 e si comporta in tutto come
+/// <see cref="Internal"/> — stessi stati, stesse viste, stesso posto nel Bilancio: è lavoro
+/// fatto in casa. Quello che cambia è la tariffa oraria con cui se ne calcola il costo, ed è
+/// per quello che ha un tipo suo invece di essere «interna» e basta.
+/// </para>
+/// </summary>
+public static class OfficinaWorkTypes
+{
+    public const string Internal = "Internal";
+    public const string External = "External";
+    public const string Print3D = "Print3D";
+
+    /// <summary>Tipi lavorati in casa: dividono le stesse regole di stato e le stesse viste.</summary>
+    public static bool IsInHouse(string? workType) =>
+        string.Equals(workType, Internal, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(workType, Print3D, StringComparison.OrdinalIgnoreCase);
+}
+
 // Riga della DDP Officina (particolari meccanici, tabella dedicata ddp_officina_items).
 // I nomi proprietà ricalcano BomItemListItem così le viste condivise (es. Sintesi DDP)
 // possono deserializzare le righe officina nello stesso shape senza adattatori.
@@ -22,6 +43,19 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
 
     /// <summary>Pezzi già prodotti / costruiti (0 … Quantity).</summary>
     public decimal QuantityProduced { get; set; }
+
+    /// <summary>
+    /// Ore di lavorazione imputate a mano (officine interne): × tariffa oraria d'anagrafica
+    /// = costo unitario. NULL = non imputate (diverso da zero ore). Segnalazione #54.
+    /// </summary>
+    public decimal? WorkHours { get; set; }
+
+    /// <summary>
+    /// Tariffa oraria con cui è stato fatto il conto (#87). NULL = costo scritto a mano o
+    /// riga più vecchia della v95. Resta sulla riga perché le tariffe in anagrafica sono più
+    /// d'una: senza, riaprendo il particolare non si saprebbe quale è stata scelta.
+    /// </summary>
+    public decimal? HourlyRate { get; set; }
 
     private decimal _unitCost;
     public decimal UnitCost
@@ -44,6 +78,15 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
         set { _itemStatus = value; OnPropertyChanged(nameof(ItemStatus)); }
     }
 
+    /// <summary>
+    /// Natura della lavorazione: vedi <see cref="OfficinaWorkTypes"/> — "Internal" (officina
+    /// ATEC), "External" (fornitore), "Print3D" (stampa 3D, #87). Vuoto = non ancora
+    /// classificata. Serve al Bilancio, che scompone la voce «Lavorazioni Officine» in interne
+    /// ed esterne: lo stato DDP lo dice solo finché la riga è in corso, questa colonna lo
+    /// conserva anche dopo la chiusura.
+    /// </summary>
+    public string WorkType { get; set; } = "";
+
     public string RequestedBy { get; set; } = "";
     public string DaneaRef { get; set; } = "";
     public DateTime? DateNeeded { get; set; }
@@ -59,7 +102,16 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
     public int? ParentOfficinaItemId { get; set; }
     public decimal? CompositionQty { get; set; }
 
+    public int? CreatedById { get; set; }
+    public string CreatedByName { get; set; } = "";
     public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// «Consegnato il» (#82): data di consegna/disponibilità, editabile a mano in griglia.
+    /// Null = non ancora valorizzata. In migrazione v90 le righe già chiuse ereditano la data
+    /// dall'ultimo passaggio a CON/COS/DISP in cronistoria.
+    /// </summary>
+    public DateTime? DeliveredAt { get; set; }
 
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
@@ -77,16 +129,35 @@ public class OfficinaItemSaveRequest
     public decimal Quantity { get; set; } = 1;
     /// <summary>Pezzi già prodotti / costruiti (0 … Quantity).</summary>
     public decimal QuantityProduced { get; set; }
+    /// <summary>Ore di lavorazione (officine interne). NULL = non imputate. Segnalazione #54.</summary>
+    public decimal? WorkHours { get; set; }
+    /// <summary>
+    /// Tariffa oraria scelta per il calcolo (#87). Stessa regola di WorkHours: NULL = il
+    /// chiamante non gestisce il campo → tariffa invariata sulla riga.
+    /// </summary>
+    public decimal? HourlyRate { get; set; }
     public decimal UnitCost { get; set; }
     public string Material { get; set; } = "";
     public string Treatment { get; set; } = "";
     public int? SupplierId { get; set; }
     public string SupplierName { get; set; } = "";
     public string ItemStatus { get; set; } = "DO";   // DA ORDINARE (default officina; la commerciale parte da VER)
-    public string RequestedBy { get; set; } = "";
+    /// <summary>
+    /// "Internal" / "External" / "" (non classificata). Vedi OfficinaItemListItem.WorkType.
+    /// NULL (campo assente nel JSON) = non toccare la classificazione esistente: così i
+    /// chiamanti che non conoscono il campo non la cancellano.
+    /// </summary>
+    public string? WorkType { get; set; }
+    /// <summary>
+    /// «Inserito da» (segnalazione #61). Stessa regola di WorkType: NULL (campo assente nel
+    /// JSON) = non toccare l'autore già scritto; stringa vuota = svuotarlo.
+    /// </summary>
+    public string? RequestedBy { get; set; }
     public string DaneaRef { get; set; } = "";
     public DateTime? DateNeeded { get; set; }
     public DateTime? OrderDate { get; set; }
+    /// <summary>«Consegnato il» (#82), editabile in griglia.</summary>
+    public DateTime? DeliveredAt { get; set; }
     public string Destination { get; set; } = "";
     public string DestinationSpec { get; set; } = "";
     public string Notes { get; set; } = "";

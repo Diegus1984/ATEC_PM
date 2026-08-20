@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using MySqlConnector;
 
 namespace ATEC.PM.Server.Services;
@@ -18,18 +18,31 @@ public class NotificationService
 {
     private readonly DbService _db;
 
-    public NotificationService(DbService db) => _db = db;
+    private readonly AnagraficheCache _cache;
+    public NotificationService(DbService db, AnagraficheCache cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
 
     /// <summary>
     /// Crea una notifica e la invia a uno o più destinatari.
     /// </summary>
+    /// <param name="referenceDate">
+    /// Giornata a cui l'avviso si riferisce, per gli avvisi in cui il riferimento da solo non
+    /// identifica il fatto segnalato — oggi solo le anomalie ore, che sono (persona, giorno
+    /// lavorato). Fa parte della chiave di dedup: due giornate diverse sono due notifiche
+    /// distinte, la stessa giornata non nasce due volte (BUG-014). Per tutto il resto si lascia
+    /// null e il comportamento è quello di sempre.
+    /// </param>
     public void Create(string type, string severity, string title, string message,
-        string refType, int refId, int? projectId, int? createdBy, IEnumerable<int> recipientIds)
+        string refType, int refId, int? projectId, int? createdBy, IEnumerable<int> recipientIds,
+        DateTime? referenceDate = null)
     {
         using var c = _db.Open();
         int notifId = c.ExecuteScalar<int>(@"
-            INSERT INTO notifications (notification_type, severity, title, message, reference_type, reference_id, project_id, created_by)
-            VALUES (@Type, @Severity, @Title, @Message, @RefType, @RefId, @ProjectId, @CreatedBy);
+            INSERT INTO notifications (notification_type, severity, title, message, reference_type, reference_id, reference_date, project_id, created_by)
+            VALUES (@Type, @Severity, @Title, @Message, @RefType, @RefId, @RefDate, @ProjectId, @CreatedBy);
             SELECT LAST_INSERT_ID()",
             new
             {
@@ -39,6 +52,7 @@ public class NotificationService
                 Message = message,
                 RefType = refType,
                 RefId = refId,
+                RefDate = referenceDate?.Date,
                 ProjectId = projectId,
                 CreatedBy = createdBy
             });
@@ -106,6 +120,90 @@ public class NotificationService
     }
 
     /// <summary>
+    /// <b>Anomalia ore: più di 10 ore registrate in una sola giornata</b> (commesse attive,
+    /// finestra di 2 giorni indietro). Restituisce quante notifiche ha creato.
+    ///
+    /// <para><b>Perché sta qui e non nel BackgroundService</b>, dove è vissuta fino al
+    /// 16/08/2026 insieme agli altri controlli: il suo dedup è l'unico con una chiave a due
+    /// campi — persona <b>e</b> giornata — ed è quello che ha sbagliato per mesi (BUG-014).
+    /// Dentro un metodo privato di un <c>BackgroundService</c> non era raggiungibile da un test,
+    /// e infatti nessuno lo teneva fermo.</para>
+    ///
+    /// <para><b>La chiave è (persona, giorno lavorato)</b>, scritta in <c>reference_date</c>.
+    /// Prima il dedup cercava una notifica creata <i>nella giornata di <c>work_date</c></i>: ma
+    /// le ore si registrano quasi sempre il giorno dopo, quindi la notifica nasceva oggi, la
+    /// ricerca la cercava ieri e non la trovava mai — una copia nuova ogni 6 ore. Allinearlo a
+    /// «già segnalata oggi», come gli altri sette controlli, avrebbe tolto le copie e insieme
+    /// la seconda giornata anomala della stessa persona, che ha lo stesso riferimento.</para>
+    ///
+    /// <para><b>Nessuna finestra su <c>created_at</c>:</b> questo non è un promemoria che si
+    /// rinnova ogni mattina finché la cosa non è gestita — è il resoconto di una giornata già
+    /// chiusa, e una volta detto è detto. Non può risorgere: la scansione guarda 3 giorni e la
+    /// retention più corta ne tiene 5, quindi la notifica c'è ancora finché la sua giornata è
+    /// nella finestra. Il rovescio, dichiarato: un PM che riceve ore su una commessa nuova
+    /// <i>dopo</i> che l'avviso è nato non lo vedrà per quella giornata.</para>
+    /// </summary>
+    public int SegnalaOreGiornaliereAnomale()
+    {
+        using var c = _db.Open();
+
+        var anomale = c.Query<dynamic>(@"
+            SELECT te.employee_id, te.work_date, SUM(te.hours) AS total_hours,
+                   CONCAT(e.first_name, ' ', e.last_name) AS employee_name
+            FROM timesheet_entries te
+            JOIN employees e ON e.id = te.employee_id
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            JOIN projects p ON p.id = pp.project_id
+            WHERE te.work_date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+              AND p.status = 'ACTIVE'
+            GROUP BY te.employee_id, te.work_date
+            HAVING SUM(te.hours) > 10
+            AND NOT EXISTS (
+                SELECT 1 FROM notifications n
+                WHERE n.notification_type = 'TIMESHEET_ANOMALY'
+                  AND n.reference_type = 'EMPLOYEE'
+                  AND n.reference_id = te.employee_id
+                  AND n.reference_date = te.work_date
+            )").ToList();
+
+        if (anomale.Count == 0) return 0;
+
+        List<int> admins = GetAdminIds();
+        int creati = 0;
+
+        foreach (var row in anomale)
+        {
+            int empId = (int)row.employee_id;
+            DateTime workDate = (DateTime)row.work_date;
+            decimal totalHours = (decimal)row.total_hours;
+            string empName = (string)row.employee_name;
+
+            // Destinatari: PM delle commesse dove ha lavorato quel giorno + ADMIN
+            List<int> recipients = c.Query<int>(@"
+                SELECT DISTINCT p.pm_id
+                FROM timesheet_entries te
+                JOIN project_phases pp ON pp.id = te.project_phase_id
+                JOIN projects p ON p.id = pp.project_id
+                WHERE te.employee_id = @EmpId AND te.work_date = @WorkDate AND p.pm_id IS NOT NULL",
+                new { EmpId = empId, WorkDate = workDate }).ToList();
+
+            recipients.AddRange(admins);
+            recipients = recipients.Distinct().ToList();
+
+            if (recipients.Count == 0) continue;
+
+            Create(
+                "TIMESHEET_ANOMALY", "WARNING",
+                $"Ore anomale — {empName}",
+                $"{totalHours:N1}h registrate il {workDate:dd/MM/yyyy}",
+                "EMPLOYEE", empId, null, null, recipients, referenceDate: workDate);
+            creati++;
+        }
+
+        return creati;
+    }
+
+    /// <summary>
     /// Rimuove istantaneamente le notifiche relative a entità che sono state risolte/chiuse/pagate/consegnate.
     /// </summary>
     public int CleanResolvedNotifications()
@@ -115,26 +213,37 @@ public class NotificationService
 
         // 0. Promemoria superati: il giro giornaliero crea una notifica NUOVA per la stessa
         // scadenza ancora aperta ("scaduta da 2 g" ieri, "da 3 g" oggi) → per ogni
-        // (dipendente, tipo, riferimento) si tiene solo la più recente
+        // (dipendente, tipo, riferimento, giornata) si tiene solo la più recente.
+        //
+        // 🪤 La GIORNATA fa parte del raggruppamento dalla v93 (BUG-014), e non è un dettaglio:
+        // per le anomalie ore il riferimento è la persona, quindi senza `reference_date` questa
+        // pulizia cancellava l'anomalia del 13 nel momento in cui nasceva quella del 14 —
+        // in silenzio, e ben prima che qualcuno le leggesse entrambe. Vale anche per il futuro:
+        // chi aggiunge un avviso la cui chiave è «riferimento + giorno» lo valorizza in
+        // `Create(..., referenceDate:)` e questa pulizia lo rispetta da sé.
+        // `<=>` e non `=`: `reference_date` è NULL per tutti gli altri tipi, e con `=` il JOIN
+        // non sarebbe mai vero — cioè la pulizia smetterebbe di funzionare ovunque.
         totalDeleted += c.Execute(@"
             DELETE nr FROM notification_recipients nr
             JOIN notifications n ON n.id = nr.notification_id
             JOIN (
                 SELECT nr2.employee_id, n2.notification_type, n2.reference_type, n2.reference_id,
-                       MAX(n2.id) AS keep_id
+                       n2.reference_date, MAX(n2.id) AS keep_id
                 FROM notification_recipients nr2
                 JOIN notifications n2 ON n2.id = nr2.notification_id
                 WHERE n2.reference_id <> 0
-                GROUP BY nr2.employee_id, n2.notification_type, n2.reference_type, n2.reference_id
+                GROUP BY nr2.employee_id, n2.notification_type, n2.reference_type, n2.reference_id,
+                         n2.reference_date
                 HAVING COUNT(*) > 1
             ) dup ON dup.employee_id = nr.employee_id
                  AND dup.notification_type = n.notification_type
                  AND dup.reference_type = n.reference_type
                  AND dup.reference_id = n.reference_id
+                 AND dup.reference_date <=> n.reference_date
             WHERE n.id < dup.keep_id");
 
         // 1. DDP Articoli consegnati, annullati, o non più scaduti
-        string[] excludedDdp = DdpAggregationSet.Load(c, "A9");
+        string[] excludedDdp = DdpAggregationSet.Load(c, "A9", _cache);
         totalDeleted += c.Execute(@"
             DELETE nr FROM notification_recipients nr
             JOIN notifications n ON n.id = nr.notification_id
@@ -204,9 +313,13 @@ public class NotificationService
 }
 
 /// <summary>
-/// BackgroundService che ogni mattina:
-/// 1. Controlla articoli DDP scaduti (date_needed &lt; oggi, non in A2 consegnato né ANN)
-/// 2. Pulisce notifiche vecchie (retention 5gg lette, 30gg non lette)
+/// BackgroundService che a ogni giro (6 ore di default):
+/// 1. Passa gli otto controlli di scadenza (DDP, ore, check list, MoM, commesse, SAL, incassi,
+///    trattamenti) e crea gli avvisi mancanti
+/// 2. <b>Toglie gli avvisi che non servono più</b> — entità risolte e promemoria dei giorni
+///    scorsi (dal 16/08/2026: prima girava solo all'apertura della campanella, e a chi non la
+///    apriva si accumulava un avviso al giorno per ogni scadenza aperta)
+/// 3. Pulisce le notifiche vecchie per anzianità (5gg lette, 30gg non lette)
 /// </summary>
 public class NotificationBackgroundService : BackgroundService
 {
@@ -247,6 +360,11 @@ public class NotificationBackgroundService : BackgroundService
                 await CheckSalDeadlines();
                 await CheckSalIncassoDeadlines();
                 await CheckTreatmentDeadlines();
+                // DOPO i controlli, non prima: la pulizia dei promemoria superati tiene la riga
+                // PIÙ RECENTE per (destinatario, tipo, riferimento), e la più recente è quella
+                // appena creata qui sopra. Girando prima, le copie del giro corrente resterebbero
+                // in campanella fino al giro dopo.
+                await PuliziaRisolteESuperate();
                 await CleanupRetention();
             }
             catch (Exception ex)
@@ -256,6 +374,30 @@ public class NotificationBackgroundService : BackgroundService
 
             await Task.Delay(_interval, ct);
         }
+    }
+
+    /// <summary>
+    /// Toglie le notifiche che non hanno più ragione di esistere: entità risolte, chiuse,
+    /// pagate o consegnate, e i promemoria dei giorni scorsi per una scadenza ancora aperta
+    /// (di quelli resta il più recente).
+    ///
+    /// <para>Fino al 16/08/2026 questa pulizia esisteva ma <b>girava solo quando qualcuno
+    /// apriva la campanella</b> (auto-pulizia in <c>NotificationsBell</c>): chi non la apriva
+    /// si accumulava un promemoria al giorno per ogni scadenza aperta. In produzione si vedeva:
+    /// la stessa attività scaduta ripetuta per quattro giorni di fila, e 105 avvisi non letti
+    /// sull'utenza che la campanella non la apre mai. Ora gira nel giro periodico, insieme ai
+    /// controlli. Quella all'apertura resta: dà l'effetto immediato a chi guarda.</para>
+    /// </summary>
+    private async Task PuliziaRisolteESuperate()
+    {
+        using var scope = _sp.CreateScope();
+        var notifService = scope.ServiceProvider.GetRequiredService<NotificationService>();
+
+        int rimosse = notifService.CleanResolvedNotifications();
+        if (rimosse > 0)
+            _log.LogInformation("[Notifications] {Count} avvisi non più pertinenti rimossi.", rimosse);
+
+        await Task.CompletedTask;
     }
 
     private async Task CheckOverdueDdp()
@@ -268,7 +410,8 @@ public class NotificationBackgroundService : BackgroundService
 
         // Stati «esclusi da totale/conteggi» (aggregazione A9): un articolo in questi stati
         // (annullato/sospeso/rimesso/sostituito) non è "in ritardo" e non va notificato.
-        string[] excluded = DdpAggregationSet.Load(c, "A9");
+        string[] excluded = DdpAggregationSet.Load(c, "A9",
+            scope.ServiceProvider.GetRequiredService<AnagraficheCache>());
 
         // Rimuove notifiche "in ritardo" ormai risolte (consegnato, escluso da A9, o data non scaduta).
         c.Execute(@"
@@ -292,6 +435,7 @@ public class NotificationBackgroundService : BackgroundService
             FROM bom_items b
             JOIN projects p ON p.id = b.project_id
             WHERE b.date_needed < CURDATE()
+              AND p.status <> 'DRAFT'
               AND b.item_status NOT IN @Delivered
               AND COALESCE(b.item_status,'') NOT IN @Excluded
               AND b.date_needed IS NOT NULL
@@ -300,7 +444,7 @@ public class NotificationBackgroundService : BackgroundService
                   WHERE n.notification_type = 'DDP_OVERDUE'
                     AND n.reference_type = 'BOM'
                     AND n.reference_id = b.id
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Delivered = DdpDeliveredStatuses.Keys, Excluded = excluded }).ToList();
 
         foreach (var item in overdue)
@@ -332,59 +476,12 @@ public class NotificationBackgroundService : BackgroundService
         var notifService = scope.ServiceProvider.GetRequiredService<NotificationService>();
 
         using var c = db.Open();
-        int count = 0;
 
         // ── ANOMALIA 1: Ore giornaliere > 10h (ultimi 2 giorni) ─────────
-        var excessiveHours = c.Query<dynamic>(@"
-            SELECT te.employee_id, te.work_date, SUM(te.hours) AS total_hours,
-                   CONCAT(e.first_name, ' ', e.last_name) AS employee_name
-            FROM timesheet_entries te
-            JOIN employees e ON e.id = te.employee_id
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN projects p ON p.id = pp.project_id
-            WHERE te.work_date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY)
-              AND p.status = 'ACTIVE'
-            GROUP BY te.employee_id, te.work_date
-            HAVING SUM(te.hours) > 10
-            AND NOT EXISTS (
-                SELECT 1 FROM notifications n
-                WHERE n.notification_type = 'TIMESHEET_ANOMALY'
-                  AND n.reference_type = 'EMPLOYEE'
-                  AND n.reference_id = te.employee_id
-                  AND DATE(n.created_at) = te.work_date
-            )").ToList();
-
-        foreach (var row in excessiveHours)
-        {
-            int empId = (int)row.employee_id;
-            DateTime workDate = (DateTime)row.work_date;
-            decimal totalHours = (decimal)row.total_hours;
-            string empName = (string)row.employee_name;
-
-            // Destinatari: PM delle commesse dove ha lavorato quel giorno + ADMIN
-            List<int> recipients = c.Query<int>(@"
-                SELECT DISTINCT p.pm_id
-                FROM timesheet_entries te
-                JOIN project_phases pp ON pp.id = te.project_phase_id
-                JOIN projects p ON p.id = pp.project_id
-                WHERE te.employee_id = @EmpId AND te.work_date = @WorkDate AND p.pm_id IS NOT NULL",
-                new { EmpId = empId, WorkDate = workDate }).ToList();
-
-            // Aggiungi ADMIN
-            List<int> admins = c.Query<int>(
-                "SELECT id FROM employees WHERE user_role = 'ADMIN' AND status = 'ACTIVE'").ToList();
-            recipients.AddRange(admins);
-            recipients = recipients.Distinct().ToList();
-
-            if (recipients.Count == 0) continue;
-
-            notifService.Create(
-                "TIMESHEET_ANOMALY", "WARNING",
-                $"Ore anomale — {empName}",
-                $"{totalHours:N1}h registrate il {workDate:dd/MM/yyyy}",
-                "EMPLOYEE", empId, null, null, recipients);
-            count++;
-        }
+        // Sta in NotificationService.SegnalaOreGiornaliereAnomale: il suo dedup è (persona,
+        // giorno lavorato) — l'unico a due campi — e da qui dentro nessun test poteva tenerlo
+        // fermo. Vedi BUG-014.
+        int count = notifService.SegnalaOreGiornaliereAnomale();
 
         // ── ANOMALIA 2: Fase sfora budget > 150% ────────────────────────
         var overBudgetPhases = c.Query<dynamic>(@"
@@ -439,11 +536,16 @@ public class NotificationBackgroundService : BackgroundService
     // NOTIFICHE DI SCADENZA — attività (check list), azioni MoM, commesse
     // ───────────────────────────────────────────────────────────────
     // Regola comune (frequenza = promemoria giornaliero):
-    //   giorni = DATEDIFF(scadenza, oggi)
-    //     0 ≤ giorni ≤ N  → WARNING "in scadenza"
-    //     giorni < 0       → ALARM   "scaduta"
+    //   scadenza fra oggi e oggi+N  → WARNING "in scadenza"
+    //   scadenza prima di oggi      → ALARM   "scaduta"
     //   Dedup: al massimo un WARNING e un ALARM per entità AL GIORNO
-    //   (severità + DATE(created_at)=CURDATE()), così ri-avvisa ogni giorno finché non gestita.
+    //   (severità + created_at nella giornata di oggi), così ri-avvisa ogni giorno finché non gestita.
+    //
+    // 🪤 I confronti stanno sulla COLONNA nuda, con le funzioni tutte dal lato di CURDATE()
+    // (blocco E2, 15/08/2026). Scritti come `DATEDIFF(scadenza, CURDATE()) <= @Warn` o
+    // `DATE(created_at) = CURDATE()` davano lo stesso risultato ma rendevano inutilizzabile
+    // qualunque indice: `sal_rows` ha due indici costruiti apposta su `data_fatt` e nessuno dei
+    // due era raggiungibile. Il `DATEDIFF` resta solo nella SELECT, dove non filtra niente.
     //   Prima di creare, una pulizia rimuove le notifiche pendenti di entità ormai risolte
     //   (chiuse/eliminate/consegnate/senza data) o la cui severità non è più coerente
     //   (es. una WARNING quando l'entità è ora scaduta): al giro dopo nasce l'ALARM corretto.
@@ -471,26 +573,27 @@ public class NotificationBackgroundService : BackgroundService
             WHERE n.notification_type = 'CHECKLIST_DUE' AND n.reference_type = 'CHECKLIST'
               AND (
                   i.id IS NULL OR i.status = 'CLOSED' OR i.due_date IS NULL
-                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(i.due_date, CURDATE()) BETWEEN 0 AND @Warn))
-                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(i.due_date, CURDATE()) < 0))
+                  OR (n.severity = 'WARNING' AND NOT (i.due_date BETWEEN CURDATE() AND CURDATE() + INTERVAL @Warn DAY))
+                  OR (n.severity = 'ALARM'   AND NOT (i.due_date < CURDATE()))
               )", new { Warn = _warningDays });
 
         var rows = c.Query<dynamic>(@"
             SELECT i.id, i.project_id, i.description, i.due_date, i.created_by,
                    DATEDIFF(i.due_date, CURDATE()) AS days,
-                   CASE WHEN DATEDIFF(i.due_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev,
+                   CASE WHEN i.due_date < CURDATE() THEN 'ALARM' ELSE 'WARNING' END AS sev,
                    COALESCE(p.code, '') AS project_code
             FROM checklist_items i
             LEFT JOIN projects p ON p.id = i.project_id
             WHERE i.due_date IS NOT NULL
+              AND (p.id IS NULL OR p.status <> 'DRAFT')
               AND i.status <> 'CLOSED'
-              AND DATEDIFF(i.due_date, CURDATE()) <= @Warn
+              AND i.due_date <= CURDATE() + INTERVAL @Warn DAY
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
                   WHERE n.notification_type = 'CHECKLIST_DUE' AND n.reference_type = 'CHECKLIST'
                     AND n.reference_id = i.id
-                    AND n.severity = CASE WHEN DATEDIFF(i.due_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.severity = CASE WHEN i.due_date < CURDATE() THEN 'ALARM' ELSE 'WARNING' END
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Warn = _warningDays }).ToList();
 
         int count = 0;
@@ -541,28 +644,29 @@ public class NotificationBackgroundService : BackgroundService
             WHERE n.notification_type = 'MOM_DUE' AND n.reference_type = 'MOM_ACTION'
               AND (
                   a.id IS NULL OR a.status = 'CLOSED' OR a.data_check IS NULL
-                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(a.data_check, CURDATE()) BETWEEN 0 AND @Warn))
-                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(a.data_check, CURDATE()) < 0))
+                  OR (n.severity = 'WARNING' AND NOT (a.data_check BETWEEN CURDATE() AND CURDATE() + INTERVAL @Warn DAY))
+                  OR (n.severity = 'ALARM'   AND NOT (a.data_check < CURDATE()))
               )", new { Warn = _warningDays });
 
         var rows = c.Query<dynamic>(@"
             SELECT a.id, a.attivita, a.data_check, a.resp1_id, a.resp2_id, a.resp3_id,
                    m.project_id,
                    DATEDIFF(a.data_check, CURDATE()) AS days,
-                   CASE WHEN DATEDIFF(a.data_check, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev,
+                   CASE WHEN a.data_check < CURDATE() THEN 'ALARM' ELSE 'WARNING' END AS sev,
                    COALESCE(p.code, '') AS project_code
             FROM mom_action_items a
             JOIN mom_records m ON m.id = a.mom_id
             LEFT JOIN projects p ON p.id = m.project_id
             WHERE a.data_check IS NOT NULL
+              AND (p.id IS NULL OR p.status <> 'DRAFT')
               AND a.status <> 'CLOSED'
-              AND DATEDIFF(a.data_check, CURDATE()) <= @Warn
+              AND a.data_check <= CURDATE() + INTERVAL @Warn DAY
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
                   WHERE n.notification_type = 'MOM_DUE' AND n.reference_type = 'MOM_ACTION'
                     AND n.reference_id = a.id
-                    AND n.severity = CASE WHEN DATEDIFF(a.data_check, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.severity = CASE WHEN a.data_check < CURDATE() THEN 'ALARM' ELSE 'WARNING' END
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Warn = _warningDays }).ToList();
 
         int count = 0;
@@ -631,25 +735,25 @@ public class NotificationBackgroundService : BackgroundService
               AND (
                   p.id IS NULL OR p.status <> 'ACTIVE' OR p.end_date_planned IS NULL
                   OR p.end_date_actual IS NOT NULL
-                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(p.end_date_planned, CURDATE()) BETWEEN 0 AND @Warn))
-                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(p.end_date_planned, CURDATE()) < 0))
+                  OR (n.severity = 'WARNING' AND NOT (p.end_date_planned BETWEEN CURDATE() AND CURDATE() + INTERVAL @Warn DAY))
+                  OR (n.severity = 'ALARM'   AND NOT (p.end_date_planned < CURDATE()))
               )", new { Warn = _warningDays });
 
         var rows = c.Query<dynamic>(@"
             SELECT p.id, p.code, p.title, p.end_date_planned,
                    DATEDIFF(p.end_date_planned, CURDATE()) AS days,
-                   CASE WHEN DATEDIFF(p.end_date_planned, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+                   CASE WHEN p.end_date_planned < CURDATE() THEN 'ALARM' ELSE 'WARNING' END AS sev
             FROM projects p
             WHERE p.end_date_planned IS NOT NULL
               AND p.end_date_actual IS NULL
               AND p.status = 'ACTIVE'
-              AND DATEDIFF(p.end_date_planned, CURDATE()) <= @Warn
+              AND p.end_date_planned <= CURDATE() + INTERVAL @Warn DAY
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
                   WHERE n.notification_type = 'PROJECT_DUE' AND n.reference_type = 'PROJECT'
                     AND n.reference_id = p.id
-                    AND n.severity = CASE WHEN DATEDIFF(p.end_date_planned, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.severity = CASE WHEN p.end_date_planned < CURDATE() THEN 'ALARM' ELSE 'WARNING' END
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Warn = _warningDays }).ToList();
 
         int count = 0;
@@ -694,27 +798,28 @@ public class NotificationBackgroundService : BackgroundService
             WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
               AND (
                   sr.id IS NULL OR sr.data_fatt IS NULL OR sr.stato = 'emessa'
-                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) BETWEEN 0 AND @Warn))
-                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(sr.data_fatt, CURDATE()) < 0))
+                  OR (n.severity = 'WARNING' AND NOT (sr.data_fatt BETWEEN CURDATE() AND CURDATE() + INTERVAL @Warn DAY))
+                  OR (n.severity = 'ALARM'   AND NOT (sr.data_fatt < CURDATE()))
               )", new { Warn = _warningDays });
 
         // 2. Query per nuove scadenze SAL non ancora emesse ('' o 'daEmettere') da notificare
         var rows = c.Query<dynamic>(@"
             SELECT sr.id, sr.project_id, sr.step, sr.data_fatt, sr.perc, ps.valore, p.code,
                    DATEDIFF(sr.data_fatt, CURDATE()) AS days,
-                   CASE WHEN DATEDIFF(sr.data_fatt, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+                   CASE WHEN sr.data_fatt < CURDATE() THEN 'ALARM' ELSE 'WARNING' END AS sev
             FROM sal_rows sr
             JOIN projects p ON p.id = sr.project_id
             LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
             WHERE sr.data_fatt IS NOT NULL
+              AND p.status <> 'DRAFT'
               AND sr.stato <> 'emessa'
-              AND DATEDIFF(sr.data_fatt, CURDATE()) <= @Warn
+              AND sr.data_fatt <= CURDATE() + INTERVAL @Warn DAY
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
                   WHERE n.notification_type = 'SAL_DUE' AND n.reference_type = 'SAL_ROW'
                     AND n.reference_id = sr.id
-                    AND n.severity = CASE WHEN DATEDIFF(sr.data_fatt, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.severity = CASE WHEN sr.data_fatt < CURDATE() THEN 'ALARM' ELSE 'WARNING' END
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Warn = _warningDays }).ToList();
 
         int count = 0;
@@ -788,6 +893,7 @@ public class NotificationBackgroundService : BackgroundService
             JOIN projects p ON p.id = sr.project_id
             LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
             WHERE sr.data_fatt IS NOT NULL
+              AND p.status <> 'DRAFT'
               AND sr.gg_saldo IS NOT NULL
               AND sr.pagamento <> 'Pagata'
               AND DATE_ADD(sr.data_fatt, INTERVAL sr.gg_saldo DAY) < CURDATE()
@@ -796,7 +902,7 @@ public class NotificationBackgroundService : BackgroundService
                   WHERE n.notification_type = 'SAL_INCASSO_DUE' AND n.reference_type = 'SAL_ROW'
                     AND n.reference_id = sr.id
                     AND n.severity = 'ALARM'
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )").ToList();
 
         int count = 0;
@@ -837,7 +943,13 @@ public class NotificationBackgroundService : BackgroundService
 
     /// <summary>
     /// Trattamenti lavorazioni (project_work_requests.treatment_date) in scadenza o scaduti:
-    /// richiesti (has_treatment=1), non ancora confermati e non in staging.
+    /// richiesti (has_treatment=1) e non ancora confermati.
+    ///
+    /// <para>Dalla v92 (#83) riguarda le sole righe <b>manuali</b>: la data e la conferma del
+    /// trattamento esistono solo lì. Le righe di distinta non vengono più copiate in
+    /// <c>project_work_requests</c> — il loro trattamento si sorveglia dalla vista
+    /// «Trattamenti» di Lavorazioni Officine, dove ci sono anche quelle col materiale già
+    /// partito (stato MIT), che una data di scadenza non ce l'hanno mai avuta.</para>
     /// </summary>
     private async Task CheckTreatmentDeadlines()
     {
@@ -856,27 +968,28 @@ public class NotificationBackgroundService : BackgroundService
               AND (
                   wr.id IS NULL OR wr.has_treatment = 0 OR wr.is_treatment_confirmed = 1
                   OR wr.treatment_date IS NULL
-                  OR (n.severity = 'WARNING' AND NOT (DATEDIFF(wr.treatment_date, CURDATE()) BETWEEN 0 AND @Warn))
-                  OR (n.severity = 'ALARM'   AND NOT (DATEDIFF(wr.treatment_date, CURDATE()) < 0))
+                  OR (n.severity = 'WARNING' AND NOT (wr.treatment_date BETWEEN CURDATE() AND CURDATE() + INTERVAL @Warn DAY))
+                  OR (n.severity = 'ALARM'   AND NOT (wr.treatment_date < CURDATE()))
               )", new { Warn = _warningDays });
 
         var rows = c.Query<dynamic>(@"
             SELECT wr.id, wr.project_id, wr.description, wr.treatment_date, p.code,
                    DATEDIFF(wr.treatment_date, CURDATE()) AS days,
-                   CASE WHEN DATEDIFF(wr.treatment_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END AS sev
+                   CASE WHEN wr.treatment_date < CURDATE() THEN 'ALARM' ELSE 'WARNING' END AS sev
             FROM project_work_requests wr
             JOIN projects p ON p.id = wr.project_id
             WHERE wr.treatment_date IS NOT NULL
               AND wr.has_treatment = 1
               AND wr.is_treatment_confirmed = 0
-              AND wr.is_staging = 0
-              AND DATEDIFF(wr.treatment_date, CURDATE()) <= @Warn
+              -- Solo righe manuali: le bozze delle righe di distinta non esistono più (v92).
+              AND wr.ddp_officina_item_id IS NULL
+              AND wr.treatment_date <= CURDATE() + INTERVAL @Warn DAY
               AND NOT EXISTS (
                   SELECT 1 FROM notifications n
                   WHERE n.notification_type = 'WORKREQUEST_TREATMENT_DUE' AND n.reference_type = 'WORK_REQUEST'
                     AND n.reference_id = wr.id
-                    AND n.severity = CASE WHEN DATEDIFF(wr.treatment_date, CURDATE()) < 0 THEN 'ALARM' ELSE 'WARNING' END
-                    AND DATE(n.created_at) = CURDATE()
+                    AND n.severity = CASE WHEN wr.treatment_date < CURDATE() THEN 'ALARM' ELSE 'WARNING' END
+                    AND n.created_at >= CURDATE() AND n.created_at < CURDATE() + INTERVAL 1 DAY
               )", new { Warn = _warningDays }).ToList();
 
         int count = 0;

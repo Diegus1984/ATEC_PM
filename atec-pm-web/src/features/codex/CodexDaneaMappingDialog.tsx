@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   assignCatalogMapping,
   fetchCatalogByCodex,
@@ -136,9 +137,9 @@ export function CodexDaneaMappingDialog({
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
               Associati ({mapped.length}) — fornitori alternativi di questo codice
             </p>
-            <div className="max-h-48 overflow-y-auto rounded-md border">
+            <GridScroller className="rounded-md border" scrollerClassName="max-h-48">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-muted">
+                <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Cod. Danea</TableHead>
                     <TableHead>Descrizione</TableHead>
@@ -193,7 +194,7 @@ export function CodexDaneaMappingDialog({
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </GridScroller>
           </div>
 
           <div className="space-y-1.5">
@@ -210,7 +211,7 @@ export function CodexDaneaMappingDialog({
               />
             </div>
             {searchTerm.length >= 2 ? (
-              <div className="max-h-56 overflow-y-auto rounded-md border">
+              <GridScroller className="rounded-md border" scrollerClassName="max-h-56">
                 <Table>
                   <TableBody>
                     {searchQuery.isFetching && results.length === 0 ? (
@@ -269,7 +270,7 @@ export function CodexDaneaMappingDialog({
                     )}
                   </TableBody>
                 </Table>
-              </div>
+              </GridScroller>
             ) : null}
           </div>
         </div>

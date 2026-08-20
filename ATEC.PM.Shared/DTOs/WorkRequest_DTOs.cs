@@ -15,8 +15,19 @@ public class WorkRequestDto
     public int ProjectId { get; set; }
     public string ProjectName { get; set; } = "";
     public string ProjectCode { get; set; } = "";
+    /// <summary>Cliente della commessa: riga a sé nella colonna "Commessa" della griglia.</summary>
+    public string CustomerName { get; set; } = "";
     public string RequestDate { get; set; } = "";
     public string Description { get; set; } = "";
+    // Righe manuali di Lavorazioni Officine (#83): sulle righe da distinta questi campi
+    // stanno sulla riga officina, qui si compilano a mano.
+    public string PartNumber { get; set; } = "";
+    public decimal Quantity { get; set; }
+    public decimal QuantityProduced { get; set; }
+    public string Material { get; set; } = "";
+    public string Treatment { get; set; } = "";
+    public string Destination { get; set; } = "";
+    public string DestinationSpec { get; set; } = "";
     public string Type { get; set; } = ""; // 'Internal' (Interna) o 'External' (Esterna)
     public int? Priority { get; set; } // Livello di priorità: 0, 1, 2 o null
     public string AvailabilityDate { get; set; } = "";
@@ -53,9 +64,17 @@ public class WorkRequestDto
 public class WorkRequestSaveRequest
 {
     public int Id { get; set; }
+    /// <summary>0 = riga manuale senza commessa (#83): finisce a NULL sul database.</summary>
     public int ProjectId { get; set; }
     public string RequestDate { get; set; } = "";
     public string Description { get; set; } = "";
+    public string PartNumber { get; set; } = "";
+    public decimal Quantity { get; set; }
+    public decimal QuantityProduced { get; set; }
+    public string Material { get; set; } = "";
+    public string Treatment { get; set; } = "";
+    public string Destination { get; set; } = "";
+    public string DestinationSpec { get; set; } = "";
     public string Type { get; set; } = "";
     public int? Priority { get; set; }
     public string AvailabilityDate { get; set; } = "";

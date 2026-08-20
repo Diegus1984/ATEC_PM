@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
+// Anagrafica fornitori: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.fornitori».
 [ApiController]
 [Route("api/suppliers")]
 [Authorize]
@@ -33,6 +36,7 @@ public class SuppliersController : ControllerBase
         return Ok(ApiResponse<SupplierSaveRequest>.Ok(s));
     }
 
+    [RequireFeature("nav.fornitori")]
     [HttpPost]
     public IActionResult Create([FromBody] SupplierSaveRequest req)
     {
@@ -42,6 +46,7 @@ public class SuppliersController : ControllerBase
         return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
+    [RequireFeature("nav.fornitori")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] SupplierSaveRequest req)
     {
@@ -51,6 +56,7 @@ public class SuppliersController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
+    [RequireFeature("nav.fornitori")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
+import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -209,18 +210,16 @@ export function CatalogItemDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Costo acquisto (€)</Label>
-              <Input
-                inputMode="decimal"
+              <MoneyInput
                 value={form.unitCost}
-                onChange={(event) => set("unitCost", event.target.value)}
+                onChange={(value) => set("unitCost", value)}
               />
             </div>
             <div className="grid gap-2">
               <Label>Prezzo listino (€)</Label>
-              <Input
-                inputMode="decimal"
+              <MoneyInput
                 value={form.listPrice}
-                onChange={(event) => set("listPrice", event.target.value)}
+                onChange={(value) => set("listPrice", value)}
               />
             </div>
           </div>

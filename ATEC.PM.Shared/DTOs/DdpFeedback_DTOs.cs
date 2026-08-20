@@ -45,6 +45,9 @@ public class DdpFeedbackMagazzinoRow
 {
     public int ItemId { get; set; }
     public string RequestedBy { get; set; } = "";
+    public int? CreatedById { get; set; }
+    public string CreatedByName { get; set; } = "";
+    public DateTime? CreatedAt { get; set; }
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; }
     public string Unit { get; set; } = "";           // COMMERCIAL

@@ -10,6 +10,10 @@ export interface OfficinaItem {
   quantity: number
   /** Pezzi già prodotti / costruiti (0 … quantity). */
   quantityProduced: number
+  /** Ore di lavorazione (officine interne): × tariffa oraria = costo unitario. Null = non imputate. */
+  workHours: number | null
+  /** Tariffa oraria con cui è stato fatto il conto (#87). Null = costo scritto a mano. */
+  hourlyRate: number | null
   unitCost: number
   totalCost: number
   material: string
@@ -17,11 +21,20 @@ export interface OfficinaItem {
   supplierId: number | null
   supplierName: string
   itemStatus: string
+  /**
+   * Natura della lavorazione: "Internal" (officina ATEC) / "External" (fornitore) /
+   * "Print3D" (stampa 3D, #87) / "" non classificata. Stessi valori del Tipo delle
+   * Lavorazioni. Serve al Bilancio, che scompone la voce «Lavorazioni Officine» in interne
+   * (stampa 3D compresa) ed esterne.
+   */
+  workType: string
   requestedBy: string
   daneaRef: string
   dateNeeded: string | null
   /** Data In Ordine (auto al passaggio IO; editabile). */
   orderDate: string | null
+  /** «Consegnato il» (#82): editabile a mano; auto al primo passaggio CON/COS/DISP se vuota. */
+  deliveredAt?: string | null
   destination: string
   destinationSpec: string
   notes: string
@@ -29,6 +42,8 @@ export interface OfficinaItem {
   parentOfficinaItemId: number | null
   /** Quantità unitaria di composizione (per 1 padre); il server riallinea i figli al cambio Qtà del padre. */
   compositionQty: number | null
+  createdById?: number | null
+  createdByName?: string
   createdAt: string | null
   updatedAt: string | null
 }
@@ -53,16 +68,26 @@ export interface OfficinaItemSaveRequest {
   description: string
   quantity: number
   quantityProduced: number
+  /** Ore di lavorazione (officine interne). Null = non imputate. */
+  workHours?: number | null
+  /** Tariffa oraria scelta (#87). Omessa = il server lascia quella già scritta sulla riga. */
+  hourlyRate?: number | null
   unitCost: number
   material: string
   treatment: string
   supplierId?: number | null
   supplierName: string
   itemStatus: string
+  /** Omesso = il server lascia invariata la classificazione interna/esterna esistente. */
+  workType?: string
   requestedBy: string
+  createdByName?: string
+  createdAt?: string | null
   daneaRef: string
   dateNeeded: string | null
   orderDate: string | null
+  /** «Consegnato il» (#82). */
+  deliveredAt?: string | null
   destination: string
   destinationSpec: string
   notes: string

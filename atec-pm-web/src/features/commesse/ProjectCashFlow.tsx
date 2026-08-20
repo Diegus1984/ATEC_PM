@@ -12,11 +12,13 @@ import {
 } from "recharts"
 import { Plus, RefreshCw, Trash2 } from "lucide-react"
 
+import { GridScroller } from "@/components/shared/grid-scroller"
+import { MoneyInput } from "@/components/shared/money-input"
 import { useConfirm } from "@/components/shared/confirm"
+import { euro, parseDecimal } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
 import { DateField } from "@/components/shared/date-field"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError } from "@/lib/api/client"
 import {
@@ -32,11 +34,15 @@ import type { CashFlowCategory, CashFlowData } from "@/lib/api/types"
 
 const YELLOW = "#FFE699"
 const GREEN = "#92D050"
+/**
+ * Importo compatto per le celle mensili: intero, senza simbolo. La griglia ha 13
+ * colonne di mesi e con `4.000,00 €` in ognuna diventa illeggibile — il € completo
+ * resta sulla colonna «Totale» e sulle righe calcolate di riepilogo.
+ */
 const n0 = (v: number) => Math.round(v).toLocaleString("it-IT")
-const parseNum = (s: string) => {
-  const v = Number(s.replace(/\./g, "").replace(",", "."))
-  return Number.isFinite(v) ? v : 0
-}
+/** MoneyInput dentro una cella: niente bordo, altezza e padding del campo standard. */
+const cellInput =
+  "h-5 rounded-none border-0 bg-transparent px-0 py-0 text-[11px] shadow-none focus-visible:ring-0 md:text-[11px]"
 
 function monthLabel(startDate: string | null, monthNumber: number): string {
   if (!startDate) return `M${monthNumber}`
@@ -84,6 +90,12 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
   const [catPct, setCatPct] = React.useState<Record<number, number[]>>({})
   const [catAmount, setCatAmount] = React.useState<Record<number, number>>({})
   const [busy, setBusy] = React.useState(false)
+  // Testo del campo «Incasso totale»: MoneyInput è controllato, quindi serve una stringa
+  // che segua `pay` (che cambia anche quando arrivano i dati dal server).
+  const [payText, setPayText] = React.useState("0")
+  React.useEffect(() => {
+    setPayText(String(pay))
+  }, [pay])
 
   // (Re)inizializza lo stato editabile quando arrivano nuovi dati dal server.
   React.useEffect(() => {
@@ -186,7 +198,7 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
         <p className="text-base font-semibold">Flusso di cassa non inizializzato</p>
         <p className="mt-2 text-sm text-muted-foreground">
           Crea il piano a {cf.monthCount} mesi con incasso pari al ricavo commessa
-          ({n0(cf.projectRevenue)} €).
+          ({euro(cf.projectRevenue)}).
         </p>
         <Button
           className="mt-4"
@@ -225,12 +237,13 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs">
           <span className="block text-muted-foreground">Incasso totale (€)</span>
-          <Input
+          <MoneyInput
             className="h-8 w-36"
-            inputMode="decimal"
-            defaultValue={n0(pay)}
-            onBlur={(e) => {
-              const v = parseNum(e.target.value)
+            value={payText}
+            onChange={setPayText}
+            onCommit={() => {
+              const v = parseDecimal(payText)
+              if (v === pay) return
               setPay(v)
               void save(async () => {
                 await updateCashFlowHeader(projectId, {
@@ -291,12 +304,16 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
       </div>
 
       {/* Griglia */}
-      <div className="overflow-x-auto rounded-lg border">
+      <p className="text-xs text-muted-foreground">
+        Importi in €: le celle mensili sono arrotondate all'unità, i totali sono
+        esatti. Le righe «%» sono percentuali di ripartizione.
+      </p>
+      <GridScroller className="rounded-lg border">
         <table className="w-full border-collapse text-[11px]">
           <thead>
             <tr className="bg-muted/50">
               <th className="border px-2 py-1 text-left">Voce</th>
-              <th className="border px-2 py-1 text-right">Totale</th>
+              <th className="border px-2 py-1 text-right">Totale (€)</th>
               {months.map((m) => (
                 <th key={m} className="border px-1 py-1 text-center font-normal">
                   {m + 1}
@@ -323,6 +340,7 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
             <CalcRow label="ENTRATE MESE" total={calc.entrate.reduce((a, b) => a + b, 0)} values={calc.entrate} color={YELLOW} />
             <EditRow
               label="Aggiustam. Manu"
+              kind="money"
               total={adjust.reduce((a, b) => a + b, 0)}
               values={adjust}
               onCommit={(m, v) => {
@@ -374,7 +392,6 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
                       })
                   }}
                   cellCls={cell}
-                  inputCls={numInput}
                 />
                 <EditRow
                   label="%"
@@ -400,6 +417,7 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
             <CalcRow label="DIFFERENZA" total={calc.cumulative[mc - 1] ?? 0} values={calc.cumulative} color={YELLOW} />
             <EditRow
               label="BANCA"
+              kind="money"
               total={bank.reduce((a, b) => a + b, 0)}
               values={bank}
               onCommit={(m, v) => {
@@ -411,7 +429,7 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
             />
           </tbody>
         </table>
-      </div>
+      </GridScroller>
 
       {/* Grafico */}
       <div className="rounded-lg border p-3">
@@ -420,7 +438,7 @@ export function ProjectCashFlow({ projectId }: { projectId: number }) {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="label" fontSize={9} angle={-45} textAnchor="end" height={50} />
             <YAxis fontSize={9} />
-            <Tooltip />
+            <Tooltip formatter={(value) => euro(Number(value))} />
             <Bar dataKey="entrate" name="Entrate" fill="#059669" />
             <Bar dataKey="uscite" name="Uscite" fill="#DC2626" />
             <Line type="monotone" dataKey="saldo" name="Saldo cumulativo" stroke="#4F6EF7" strokeWidth={2} />
@@ -446,7 +464,7 @@ function CalcRow({
     <tr style={{ backgroundColor: color }}>
       <td className="border px-2 py-1 text-left font-medium">{label}</td>
       <td className="border px-2 py-1 text-right font-semibold tabular-nums">
-        {n0(total)}
+        {euro(total)}
       </td>
       {values.map((v, i) => (
         <td key={i} className="border px-1 py-0.5 text-right tabular-nums">
@@ -465,6 +483,7 @@ function EditRow({
   color,
   cellCls,
   inputCls,
+  kind = "percent",
 }: {
   label: string
   total: number
@@ -473,24 +492,53 @@ function EditRow({
   color?: string
   cellCls: string
   inputCls: string
+  /** `money`: celle con `MoneyInput` e totale in €. `percent`: input semplice, mai il €. */
+  kind?: "money" | "percent"
 }) {
+  // `MoneyInput` è controllato: serve una stringa per cella che segua `values`
+  // (che cambia anche quando arrivano i dati dal server). Tiene il numero grezzo,
+  // non il testo formattato: è `MoneyInput` a mostrarlo compatto quando è a riposo.
+  const [text, setText] = React.useState<string[]>(() => values.map(String))
+  React.useEffect(() => setText(values.map(String)), [values])
+
   return (
     <tr style={color ? { backgroundColor: color } : undefined}>
       <td className="border px-2 py-1 text-left text-muted-foreground">{label}</td>
-      <td className="border px-2 py-1 text-right tabular-nums">{n0(total)}</td>
-      {values.map((v, i) => (
-        <td key={i} className={cellCls}>
-          <input
-            className={inputCls}
-            defaultValue={n0(v)}
-            key={`${i}-${v}`}
-            onBlur={(e) => onCommit(i, parseNum(e.target.value))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur()
-            }}
-          />
-        </td>
-      ))}
+      <td className="border px-2 py-1 text-right tabular-nums">
+        {kind === "money" ? euro(total) : n0(total)}
+      </td>
+      {values.map((v, i) =>
+        kind === "money" ? (
+          <td key={i} className={cellCls}>
+            <MoneyInput
+              className={cellInput}
+              format={n0}
+              value={text[i] ?? ""}
+              onChange={(s) =>
+                setText((prev) => prev.map((x, k) => (k === i ? s : x)))
+              }
+              onCommit={() => {
+                // Solo al blur, e solo se il valore è davvero cambiato: `saveCell`
+                // parte a ogni commit.
+                const next = parseDecimal(text[i] ?? "")
+                if (next !== v) onCommit(i, next)
+              }}
+            />
+          </td>
+        ) : (
+          <td key={i} className={cellCls}>
+            <input
+              className={inputCls}
+              defaultValue={n0(v)}
+              key={`${i}-${v}`}
+              onBlur={(e) => onCommit(i, parseDecimal(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+              }}
+            />
+          </td>
+        )
+      )}
     </tr>
   )
 }
@@ -503,7 +551,6 @@ function CategoryAmountRow({
   onLabel,
   onDelete,
   cellCls,
-  inputCls,
 }: {
   category: CashFlowCategory
   values: number[]
@@ -512,8 +559,11 @@ function CategoryAmountRow({
   onLabel: (name: string) => void
   onDelete: () => void
   cellCls: string
-  inputCls: string
 }) {
+  // Come in `EditRow`: il totale editabile passa a `MoneyInput`, che è controllato.
+  const [amountText, setAmountText] = React.useState(() => String(amount))
+  React.useEffect(() => setAmountText(String(amount)), [amount])
+
   return (
     <tr style={{ backgroundColor: YELLOW }}>
       <td className="border px-2 py-1 text-left">
@@ -547,13 +597,17 @@ function CategoryAmountRow({
       </td>
       <td className="border px-1 py-0.5 text-right">
         {category.isLinked ? (
-          <span className="font-semibold tabular-nums">{n0(amount)}</span>
+          // Categoria collegata a un robot: il totale arriva da lì, non si edita.
+          <span className="font-semibold tabular-nums">{euro(amount)}</span>
         ) : (
-          <input
-            className={inputCls}
-            defaultValue={n0(amount)}
-            key={amount}
-            onBlur={(e) => onAmount(parseNum(e.target.value))}
+          <MoneyInput
+            className={cellInput}
+            value={amountText}
+            onChange={setAmountText}
+            onCommit={() => {
+              const next = parseDecimal(amountText)
+              if (next !== amount) onAmount(next)
+            }}
           />
         )}
       </td>

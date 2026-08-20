@@ -7,6 +7,7 @@ import { PageErrorAlert } from "@/components/shared/page-error-alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { fetchMilestones } from "@/lib/api/milestones"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { useMilestonesHub } from "@/lib/signalr/use-milestones-hub"
 import { avgAvanz, periodo } from "@/features/milestones/milestone-utils"
 import { MilestoneTable } from "@/features/milestones/milestone-table"
@@ -56,6 +57,10 @@ export function ProjectMilestones({
   projectTitle?: string
 }) {
   const queryClient = useQueryClient()
+  // Funzione concessa in sola lettura: la pianificazione si consulta ma non si tocca.
+  // A respingere davvero le scritture è l'API (`RequireFeature` su MilestonesController),
+  // qui si tolgono i comandi per non far cliccare pulsanti che tornano solo un 403.
+  const readOnly = !canWriteFeature("nav.milestones")
   const [preloadOpen, setPreloadOpen] = React.useState(false)
   const queryKey = React.useMemo(
     () => ["milestones", "project", projectId],
@@ -119,14 +124,16 @@ export function ProjectMilestones({
             )}
           </Stat>
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPreloadOpen(true)}
-            >
-              <ListChecks className="size-4 mr-1.5 text-primary" />
-              Precarica da catalogo
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPreloadOpen(true)}
+              >
+                <ListChecks className="size-4 mr-1.5 text-primary" />
+                Precarica da catalogo
+              </Button>
+            )}
 
             <Tabs value={viewMode} onValueChange={changeViewMode}>
               <TabsList className="h-9">
@@ -155,20 +162,24 @@ export function ProjectMilestones({
             <>
               {items.length === 0 ? (
                 <div className="mb-4 rounded-lg border border-dashed p-6 text-center">
+                  {/* In sola lettura l'invito a compilare sarebbe un vicolo cieco:
+                      resta il solo constatare che la pianificazione è vuota. */}
                   <p className="text-sm text-muted-foreground">
-                    Nessuna milestone per questa commessa. Puoi aggiungerne una
-                    manualmente nella tabella sottostante oppure precaricare le attività
-                    standard dal catalogo.
+                    {readOnly
+                      ? "Nessuna milestone per questa commessa."
+                      : "Nessuna milestone per questa commessa. Puoi aggiungerne una manualmente nella tabella sottostante oppure precaricare le attività standard dal catalogo."}
                   </p>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => setPreloadOpen(true)}
-                  >
-                    <ListChecks className="size-4 mr-1.5" />
-                    Precarica da catalogo
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setPreloadOpen(true)}
+                    >
+                      <ListChecks className="size-4 mr-1.5" />
+                      Precarica da catalogo
+                    </Button>
+                  )}
                 </div>
               ) : null}
               {viewMode === "table" ? (
@@ -177,6 +188,9 @@ export function ProjectMilestones({
                     projectId={projectId}
                     items={items}
                     onMutated={invalidate}
+                    projectCode={projectCode}
+                    projectTitle={projectTitle}
+                    readOnly={readOnly}
                   />
                 </div>
               ) : (
@@ -186,6 +200,7 @@ export function ProjectMilestones({
                     items={items}
                     projectCode={projectCode}
                     projectTitle={projectTitle}
+                    readOnly={readOnly}
                   />
                 </div>
               )}
@@ -194,8 +209,10 @@ export function ProjectMilestones({
         </CardContent>
       </Card>
 
+      {/* Il precarico crea milestone in blocco: in sola lettura la finestra non si apre
+          nemmeno se qualcuno arrivasse a `preloadOpen` per altra via. */}
       <PreloadMilestonesDialog
-        open={preloadOpen}
+        open={!readOnly && preloadOpen}
         projectId={projectId}
         onClose={() => setPreloadOpen(false)}
         onPreloaded={invalidate}

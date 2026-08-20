@@ -39,7 +39,7 @@ public class CodexGeneratorService
                 new { LockKey = $"codex_reserve_{prefix}" }, tx);
 
             // Pulisci prenotazioni con data precedente a oggi
-            conn.Execute("DELETE FROM codex_reservations WHERE DATE(reserved_at) < CURDATE()", transaction: tx);
+            conn.Execute("DELETE FROM codex_reservations WHERE reserved_at < CURDATE()", transaction: tx);
 
             // Calcola prossimo codice considerando codex_items (ENTRAMBE le colonne: la
             // ricodifica manuale assegna codici nuovi della stessa famiglia+giorno in
@@ -120,7 +120,7 @@ public class CodexGeneratorService
 
             // Pulisci prenotazioni di giorni precedenti o scadute (TTL passato).
             conn.Execute(@"DELETE FROM codex_reservations
-                WHERE DATE(reserved_at) < CURDATE()
+                WHERE reserved_at < CURDATE()
                    OR (status = 'RESERVED' AND expires_at < NOW())", transaction: tx);
 
             string codePrefix = $"{family}{DateTime.Now:ddMMyy}";
@@ -197,7 +197,7 @@ public class CodexGeneratorService
                 new { LockKey = $"codex_reserve_{family}" }, tx);
 
             conn.Execute(@"DELETE FROM codex_reservations
-                WHERE DATE(reserved_at) < CURDATE()
+                WHERE reserved_at < CURDATE()
                    OR (status = 'RESERVED' AND expires_at < NOW())", transaction: tx);
 
             // Selezionate ma già ricodificate → saltate (il conteggio torna all'operatore).

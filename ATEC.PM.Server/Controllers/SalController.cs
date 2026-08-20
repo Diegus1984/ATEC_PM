@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -10,30 +10,101 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Hubs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/sal")]
 [Authorize]
+// SAL / Fatturazione: dati economici, stessa chiave della voce di menu.
+[RequireFeature("nav.sal")]
 public class SalController : ControllerBase
 {
     private readonly DbService _db;
     private readonly IHubContext<ProjectHub> _hub;
 
-    public SalController(DbService db, IHubContext<ProjectHub> hub)
+    private readonly FeatureAccessService _access;
+    private readonly ProjectWriteGuard _guard;
+
+    public SalController(
+        DbService db, IHubContext<ProjectHub> hub, FeatureAccessService access, ProjectWriteGuard guard)
     {
         _db = db;
         _hub = hub;
+        _access = access;
+        _guard = guard;
     }
+
+    /// <summary>Chiave della funzione «dati economici del SAL» (pagina «Permessi»).</summary>
+    public const string EconomicsFeature = "sal.economics";
+
+    /// <summary>
+    /// Il chiamante può vedere gli importi? È una FUNZIONE, non un livello: l'ufficio
+    /// amministrazione deve vedere il fatturato senza essere promosso a Project Manager.
+    /// Si valuta sulla PERSONA (<c>CanAccessUser</c>): la variante per solo RUOLO
+    /// (<c>CanAccess</c>) non guarda <c>employee_feature_access</c>, quindi qui i permessi
+    /// individuali venivano ignorati e a decidere restava il vecchio <c>min_level</c>.
+    /// </summary>
+    private bool CanSeeEconomics() =>
+        _access.CanAccessUser(CurrentEmployeeId, User.FindFirst(ClaimTypes.Role)?.Value, EconomicsFeature);
+
+    /// <summary>
+    /// Il chiamante può mettere mano al foglio SAL di una commessa CHIUSA? Prima era il
+    /// livello ADMIN, ora è la chiave «Modifica SAL di commessa chiusa» sulla persona:
+    /// è una scrittura, quindi <c>CanWriteUser</c> (una concessione in sola lettura non basta).
+    /// <para>⚠️ Vale <b>anche</b> il permesso generale della #88 («Opera su commesse sospese o
+    /// chiuse»): senza questo OR un PM si troverebbe respinto proprio dove la segnalazione gli
+    /// promette di «operare come se la commessa fosse attiva» — passerebbe il cancello nuovo e
+    /// verrebbe fermato da questo, che è più vecchio e più stretto.</para>
+    /// </summary>
+    private bool CanEditClosedSal() =>
+        _access.CanWriteUser(CurrentEmployeeId, User.FindFirst(ClaimTypes.Role)?.Value, "action.sal_edit_closed")
+        || _guard.PuoScavalcare(User);
 
     private int CurrentEmployeeId =>
         int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
-    public const string ConflictMessage = "CONFLITTO: record SAL modificato da un altro utente";
+    /// <summary>
+    /// Commessa chiusa (COMPLETED/CANCELLED) = foglio SAL in sola lettura per chi non ha la
+    /// chiave <c>action.sal_edit_closed</c>. È l'unico lock del SAL: lo stato «Pagata» non
+    /// blocca più nulla, altrimenti un incasso segnato per sbaglio resterebbe lì per sempre.
+    /// </summary>
+    private static bool IsProjectClosed(MySqlConnector.MySqlConnection c, int projectId) =>
+        ATEC.PM.Shared.ProjectStatuses.IsClosed(c.ExecuteScalar<string>(
+            "SELECT status FROM projects WHERE id=@Id", new { Id = projectId }));
 
-    // Periodo del controllo periodico del prospetto (giorni)
-    private const int ProspettoCheckPeriodDays = 15;
+    /// <summary>
+    /// Perimetro delle viste SAL aggregate (Prospetto, Cash Flow, Analisi, riepilogo).
+    /// <para>
+    /// Prima era il solo <c>p.status = 'ACTIVE'</c>: una commessa che passava a COMPLETED o
+    /// ON_HOLD spariva da tutto, comprese le fatture ancora da emettere o da incassare —
+    /// cioè proprio i soldi che restano da vedere. Ora entra anche la commessa chiusa che ha
+    /// ancora almeno una riga aperta (non emessa, oppure emessa e non ancora «Pagata»).
+    /// <list type="bullet">
+    ///   <item><description><b>CANCELLED</b> resta fuori: lì il lavoro è stato annullato, non sospeso.</description></item>
+    ///   <item><description><b>DRAFT</b> resta fuori: è una commessa non ancora avviata, un piano di
+    ///   fatturazione abbozzato non deve finire negli allarmi di fatturazione e incasso.</description></item>
+    ///   <item><description>Le <b>Altre Attività</b> (codice libero: INTERNA, SERVICE _ SANGRATO…)
+    ///   restano fuori dal SAL: «non entrano nella gestione Sal Fatturazione» (segnalazione #85).</description></item>
+    /// </list>
+    /// (Decisione dell'utente del 04/08/2026; l'esclusione delle bozze è arrivata dopo la prova
+    /// a runtime, dove si è visto che con il solo filtro su CANCELLED entravano anche le DRAFT.)
+    /// </para>
+    /// </summary>
+    private static readonly string ProjectScope = $@"(
+        {ProjectSorting.IsCommessa("p")}
+        AND (
+            p.status = 'ACTIVE'
+            OR (p.status NOT IN ('CANCELLED', 'DRAFT') AND EXISTS (
+                SELECT 1 FROM sal_rows sr_open
+                WHERE sr_open.project_id = p.id
+                  AND (sr_open.stato <> 'emessa' OR COALESCE(sr_open.pagamento, '') <> 'Pagata')
+            ))
+        )
+    )";
+
+    public const string ConflictMessage = "CONFLITTO: record SAL modificato da un altro utente";
 
     // N° fattura: solo cifre (stringa per preservare gli zeri iniziali)
     private static string SanitizeNFatt(string? nFatt) => Regex.Replace(nFatt ?? "", @"\D", "");
@@ -75,6 +146,7 @@ public class SalController : ControllerBase
         _ = _hub.Clients.All.SendAsync("GlobalSalChanged", new { action = "lookup", projectId = 0 });
     }
 
+    [RequireProjectVisible]
     [HttpGet]
     public IActionResult GetBundle([FromQuery] int projectId)
     {
@@ -109,6 +181,15 @@ public class SalController : ControllerBase
                 ?? header;
         }
 
+        // Commessa chiusa → foglio in sola lettura (l'unico lock del SAL, vedi IsProjectClosed).
+        header.IsProjectClosed = IsProjectClosed(c, projectId);
+
+        // #91: l'Importo Ordine è un dato economico — a chi non ha `sal.economics` non esce
+        // nemmeno da qui (il client nasconde il campo, ma nel tab Network si leggerebbe).
+        // Il salvataggio è protetto in UpdateHeader: il null rispedito non azzera niente.
+        if (!CanSeeEconomics())
+            header.Valore = null;
+
         // 2. Carica le righe SAL ordinate per sort_order, id
         var rows = c.Query<SalRowDto>(@"
             SELECT id AS Id, project_id AS ProjectId, step AS Step, perc AS Perc,
@@ -129,6 +210,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<SalBundleDto>.Ok(bundle));
     }
 
+    [RequireProjectWritable]
     [HttpPut("header")]
     public IActionResult UpdateHeader([FromQuery] int projectId, [FromBody] SalHeaderSaveRequest req)
     {
@@ -138,15 +220,19 @@ public class SalController : ControllerBase
         // Po/RifOfferta: null = campo non inviato dal client (pre-Fase 3) → COALESCE preserva il valore corrente;
         // stringa vuota = svuota il campo.
         // Il cliente non si modifica dal foglio SAL: proviene dall'anagrafica commessa.
+        // Valore (#91): chi non ha `sal.economics` riceve dal bundle Valore=null e lo
+        // rispedirebbe tale e quale — scriverlo azzererebbe l'Importo Ordine a ogni suo
+        // salvataggio di PO/Rif. Offerta. Quindi il campo lo scrive solo chi lo vede.
         int rows = c.Execute(@"
             UPDATE project_sal SET
-                valore=@Valore,
+                valore = IF(@Economics, @Valore, valore),
                 po=COALESCE(@Po, po), rif_offerta=COALESCE(@RifOfferta, rif_offerta),
                 row_version = row_version + 1, updated_at = CURRENT_TIMESTAMP
              WHERE project_id=@Pid AND (@RowVersion IS NULL OR row_version=@RowVersion)",
             new
             {
                 req.Valore,
+                Economics = CanSeeEconomics(),
                 Po = req.Po == null ? null : Trunc(req.Po, 150),
                 RifOfferta = req.RifOfferta == null ? null : Trunc(req.RifOfferta, 200),
                 Pid = projectId,
@@ -163,6 +249,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(projectId, "Header SAL aggiornato"));
     }
 
+    [RequireProjectWritable]
     [HttpPost("rows")]
     public IActionResult CreateRow([FromQuery] int projectId, [FromBody] SalRowSaveRequest req)
     {
@@ -238,11 +325,11 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Step SAL aggiunto"));
     }
 
+    [RequireProjectWritable(Tabella = "sal_rows")]
     [HttpPut("rows/{id}")]
     public IActionResult UpdateRow(int id, [FromBody] SalRowSaveRequest req)
     {
         using var c = _db.Open();
-        string? role = User.FindFirst(ClaimTypes.Role)?.Value;
 
         // Recupera la riga attuale: lock su pagamento='Pagata', audit paid_by/paid_at
         // e valori correnti dei campi testo (da preservare se il client non li invia)
@@ -272,12 +359,15 @@ public class SalController : ControllerBase
         if (stato != "" && stato != "daEmettere" && stato != "emessa")
             return Ok(ApiResponse<int>.Fail("Stato fatturazione non valido"));
 
-        // Lock: riga con fattura pagata modificabile solo da ADMIN (confronto case-insensitive,
-        // coerente con la collation MySQL)
+        // «Pagata» NON blocca più la riga: da uno stato di pagamento si deve poter tornare
+        // indietro (un incasso segnato per errore va corretto). L'unico lock è la commessa
+        // CHIUSA: lì il SAL è storia, e ci mette mano solo chi ha `action.sal_edit_closed`.
         bool wasPagata = string.Equals(currentPagamento, "Pagata", StringComparison.OrdinalIgnoreCase);
-        if (wasPagata && role != "ADMIN")
+        if (current != null && !CanEditClosedSal()
+            && IsProjectClosed(c, (int)current.project_id))
         {
-            return Ok(ApiResponse<int>.Fail("Riga bloccata: fattura pagata (solo ADMIN può modificarla)"));
+            return Ok(ApiResponse<int>.Fail(
+                "Commessa chiusa: il foglio SAL è in sola lettura (serve il permesso «Modifica SAL di commessa chiusa»)"));
         }
 
         // Transizioni paid_by/paid_at pilotate dal campo Pagamento effettivo (non più dallo stato)
@@ -344,23 +434,20 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Step SAL aggiornato"));
     }
 
+    [RequireProjectWritable(Tabella = "sal_rows")]
     [HttpDelete("rows/{id}")]
     public IActionResult DeleteRow(int id, [FromQuery] int? rowVersion = null)
     {
         using var c = _db.Open();
-        string? role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-        // Lock: riga con fattura pagata eliminabile solo da ADMIN
+        // Lock unico: commessa chiusa (una riga pagata resta eliminabile — vedi UpdateRow)
         var current = c.QueryFirstOrDefault<dynamic>(
             "SELECT pagamento, project_id FROM sal_rows WHERE id=@Id", new { Id = id });
-        if (current != null)
+        if (current != null && !CanEditClosedSal()
+            && IsProjectClosed(c, (int)current.project_id))
         {
-            // Confronto case-insensitive, coerente con la collation MySQL
-            string? currentPagamento = (string?)current.pagamento;
-            if (string.Equals(currentPagamento, "Pagata", StringComparison.OrdinalIgnoreCase) && role != "ADMIN")
-            {
-                return Ok(ApiResponse<bool>.Fail("Riga bloccata: fattura pagata (solo ADMIN può eliminarla)"));
-            }
+            return Ok(ApiResponse<bool>.Fail(
+                "Commessa chiusa: il foglio SAL è in sola lettura (serve il permesso «Modifica SAL di commessa chiusa»)"));
         }
 
         int projectId = current != null ? (int)current.project_id : 0;
@@ -377,6 +464,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Step SAL eliminato"));
     }
 
+    [RequireProjectWritable]
     [HttpPost("rows/reorder")]
     public IActionResult Reorder([FromQuery] int projectId, [FromBody] SalReorderRequest req)
     {
@@ -392,6 +480,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Ordine step aggiornato"));
     }
 
+    [RequireProjectWritable]
     [HttpPost("project/{projectId}/seed-template")]
     public IActionResult SeedTemplate(int projectId)
     {
@@ -402,14 +491,18 @@ public class SalController : ControllerBase
         int existing = c.ExecuteScalar<int>("SELECT COUNT(*) FROM sal_rows WHERE project_id=@Pid", new { Pid = projectId });
         if (existing > 0) return Ok(ApiResponse<int>.Fail("La commessa contiene già degli step SAL"));
 
+        // Modello a 6 step allineato al prototipo Gestione_Commesse_V32 (04/08/2026):
+        // le percentuali erano già le stesse (15/15/10/20/20/20), cambiano i testi e tre
+        // condizioni di pagamento (step 2 e 3 passano da «A Vista» a «30 gg. dffm.»).
+        // Vale solo per i SAL creati da qui in avanti: le commesse già compilate non si toccano.
         var steps = new[]
         {
-            new { Step = "1° acconto all'ordine", Perc = 15.0m, Cond = "A Vista" },
-            new { Step = "2° acconto ad approvazione disegni", Perc = 15.0m, Cond = "A Vista" },
-            new { Step = "3° acconto ad avviso merce pronta", Perc = 10.0m, Cond = "A Vista" },
-            new { Step = "4° acconto a consegna/installazione", Perc = 20.0m, Cond = "30 gg. dffm." },
-            new { Step = "5° acconto a collaudo", Perc = 20.0m, Cond = "30 gg. dffm." },
-            new { Step = "Saldo a 30 gg. fine collaudo", Perc = 20.0m, Cond = "30 gg. dffm." }
+            new { Step = "1° acconto all'ordine per inizio progettazione", Perc = 15.0m, Cond = "A Vista" },
+            new { Step = "2° acconto dall'ordine", Perc = 15.0m, Cond = "30 gg. dffm." },
+            new { Step = "Alla consegna ed accettazione del progetto e benestare per ordini materiali presso i fornitori", Perc = 10.0m, Cond = "30 gg. dffm." },
+            new { Step = "Al sito pilota in ATEC – collaudo in bianco AT", Perc = 20.0m, Cond = "30 gg. dffm." },
+            new { Step = "Alla consegna materiali", Perc = 20.0m, Cond = "30 gg. dffm." },
+            new { Step = "Al collaudo presso sede Cliente", Perc = 20.0m, Cond = "30 gg. dffm." }
         };
 
         int sortOrder = 0;
@@ -455,6 +548,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<List<SalConditionDto>>.Ok(rows));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("conditions")]
     public IActionResult CreateCondition([FromBody] SalConditionSaveRequest req)
     {
@@ -477,6 +571,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Condizione creata"));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("conditions/{id}")]
     public IActionResult UpdateCondition(int id, [FromBody] SalConditionSaveRequest req)
     {
@@ -490,6 +585,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Condizione aggiornata"));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("conditions/{id}/toggle-active")]
     public IActionResult ToggleActiveCondition(int id, [FromQuery] bool active)
     {
@@ -501,6 +597,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Condizione aggiornata"));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpDelete("conditions/{id}")]
     public IActionResult DeleteCondition(int id)
     {
@@ -511,6 +608,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Condizione eliminata"));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("conditions/reorder")]
     public IActionResult ReorderConditions([FromBody] SalReorderRequest req)
     {
@@ -526,6 +624,7 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Ordine condizioni aggiornato"));
     }
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("conditions/reset")]
     public IActionResult ResetConditions()
     {
@@ -764,21 +863,27 @@ public class SalController : ControllerBase
     [HttpGet("sap-causali/active")]
     public IActionResult GetActiveSapCausali() => GetLookupRows(TableSapCausali, activeOnly: true);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("sap-causali")]
     public IActionResult CreateSapCausale([FromBody] SalConditionSaveRequest req) => CreateLookupRow(TableSapCausali, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("sap-causali/{id}")]
     public IActionResult UpdateSapCausale(int id, [FromBody] SalConditionSaveRequest req) => UpdateLookupRow(TableSapCausali, id, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("sap-causali/{id}/toggle-active")]
     public IActionResult ToggleActiveSapCausale(int id, [FromQuery] bool active) => ToggleActiveLookupRow(TableSapCausali, id, active);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpDelete("sap-causali/{id}")]
     public IActionResult DeleteSapCausale(int id) => DeleteLookupRow(TableSapCausali, id);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("sap-causali/reorder")]
     public IActionResult ReorderSapCausali([FromBody] SalReorderRequest req) => ReorderLookupRows(TableSapCausali, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("sap-causali/reset")]
     public IActionResult ResetSapCausali() =>
         ResetLookupRows(TableSapCausali, new[] { "Acconto", "Ricavo" }, "Causali Conto SAP ripristinate allo standard");
@@ -791,21 +896,27 @@ public class SalController : ControllerBase
     [HttpGet("payment-states/active")]
     public IActionResult GetActivePaymentStates() => GetLookupRows(TablePaymentStates, activeOnly: true);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("payment-states")]
     public IActionResult CreatePaymentState([FromBody] SalConditionSaveRequest req) => CreateLookupRow(TablePaymentStates, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("payment-states/{id}")]
     public IActionResult UpdatePaymentState(int id, [FromBody] SalConditionSaveRequest req) => UpdateLookupRow(TablePaymentStates, id, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPut("payment-states/{id}/toggle-active")]
     public IActionResult ToggleActivePaymentState(int id, [FromQuery] bool active) => ToggleActiveLookupRow(TablePaymentStates, id, active);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpDelete("payment-states/{id}")]
     public IActionResult DeletePaymentState(int id) => DeleteLookupRow(TablePaymentStates, id);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("payment-states/reorder")]
     public IActionResult ReorderPaymentStates([FromBody] SalReorderRequest req) => ReorderLookupRows(TablePaymentStates, req);
 
+    [ScritturaNonDiCommessa("Anagrafica del SAL condivisa da tutte le commesse, non dati di una commessa")]
     [HttpPost("payment-states/reset")]
     public IActionResult ResetPaymentStates()
     {
@@ -838,7 +949,7 @@ public class SalController : ControllerBase
         using var c = _db.Open();
         // Regola inclusione v10: ipotesi non ancora emesse + fatture emesse in attesa di incasso
         // (tutte le righe, non più le prime 2 per commessa). Data prevista saldo derivata, mai persistita.
-        var rows = c.Query<SalProspettoRowDto>(@"
+        var rows = c.Query<SalProspettoRowDto>($@"
             SELECT t.project_id AS ProjectId, p.code AS Code,
                    COALESCE(cu.company_name, ps.cliente, '') AS Cliente,
                    t.step AS Step, t.perc AS Perc, t.condizione AS Condizione, t.data_fatt AS DataFatt,
@@ -864,80 +975,41 @@ public class SalController : ControllerBase
             JOIN projects p ON p.id = t.project_id
             LEFT JOIN project_sal ps ON ps.project_id = t.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            WHERE p.status = 'ACTIVE'
-            ORDER BY p.code, t.data_fatt ASC").ToList();
+            WHERE {ProjectScope}
+            ORDER BY {ProjectSorting.OrderBy("p")}, t.data_fatt ASC").ToList();
+
+        // #91: gli importi (ps.valore × perc) sono dati economici — azzerati QUI per chi
+        // non ha `sal.economics`, come nel summary: il client nasconde le colonne, ma la
+        // risposta di rete deve essere pulita comunque.
+        if (!CanSeeEconomics())
+            foreach (SalProspettoRowDto r in rows)
+                r.Importo = null;
 
         return Ok(ApiResponse<List<SalProspettoRowDto>>.Ok(rows));
-    }
-
-    [HttpGet("prospetto/check")]
-    public IActionResult GetProspettoCheck()
-    {
-        using var c = _db.Open();
-        return Ok(ApiResponse<SalProspettoCheckDto>.Ok(LoadProspettoCheck(c)));
-    }
-
-    [HttpPost("prospetto/check")]
-    public IActionResult ConfirmProspettoCheck()
-    {
-        using var c = _db.Open();
-        // Registra la conferma del controllo periodico (storico: chi + quando)
-        c.Execute("INSERT INTO sal_prospetto_checks (checked_by) VALUES (@By)",
-            new { By = CurrentEmployeeId > 0 ? CurrentEmployeeId : (int?)null });
-
-        // Broadcast globale (stesso meccanismo di NotifyChanged, senza commessa specifica):
-        // il banner del controllo periodico degli altri client si aggiorna subito.
-        _ = _hub.Clients.All.SendAsync("GlobalSalChanged", new { action = "prospetto_check", projectId = 0 });
-
-        return Ok(ApiResponse<SalProspettoCheckDto>.Ok(LoadProspettoCheck(c), "Controllo prospetto registrato"));
-    }
-
-    // Stato del controllo periodico del prospetto: ultima conferma registrata + scadenza a 15 giorni
-    private SalProspettoCheckDto LoadProspettoCheck(MySqlConnector.MySqlConnection c)
-    {
-        var check = c.QueryFirstOrDefault<SalProspettoCheckDto>(@"
-            SELECT pc.checked_at AS CheckedAt,
-                   COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CheckedByName,
-                   DATEDIFF(CURDATE(), DATE(pc.checked_at)) AS Days
-            FROM sal_prospetto_checks pc
-            LEFT JOIN employees e ON e.id = pc.checked_by
-            ORDER BY pc.id DESC
-            LIMIT 1");
-
-        if (check == null)
-        {
-            // Nessun controllo mai registrato: il controllo è dovuto subito
-            return new SalProspettoCheckDto { Due = true };
-        }
-
-        check.Due = check.Days.HasValue && check.Days.Value >= ProspettoCheckPeriodDays;
-        check.NextDue = check.CheckedAt?.AddDays(ProspettoCheckPeriodDays);
-        return check;
     }
 
     [HttpGet("economics")]
     public IActionResult GetEconomics()
     {
-        // Dati economici globali: visibili solo ai ruoli PM/ADMIN → 403 esplicito (pattern TimesheetController)
-        string? role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (role != "ADMIN" && role != "PM")
+        // Dati economici globali: serve la funzione `sal.economics` → 403 esplicito
+        if (!CanSeeEconomics())
             return StatusCode(403, ApiResponse<SalEconomicsDto>.Fail("Non autorizzato"));
 
         using var c = _db.Open();
 
         // Headers: TUTTI i project_sal delle commesse attive, anche senza righe SAL
         // (servono al totale Ordini del Cash Flow — card v10 "Totale Ordini commesse Attive")
-        var headers = c.Query<SalEconomicsHeaderDto>(@"
+        var headers = c.Query<SalEconomicsHeaderDto>($@"
             SELECT ps.project_id AS ProjectId, p.code AS Code,
                    COALESCE(cu.company_name, ps.cliente, '') AS Cliente, ps.valore AS Valore
             FROM project_sal ps
             JOIN projects p ON p.id = ps.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            WHERE p.status = 'ACTIVE'
-            ORDER BY p.code").ToList();
+            WHERE {ProjectScope}
+            ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
 
         // Rows: dettaglio step delle sole commesse attive (coerenza col Prospetto)
-        var rows = c.Query<SalEconomicsRowDto>(@"
+        var rows = c.Query<SalEconomicsRowDto>($@"
             SELECT sr.project_id AS ProjectId, p.code AS Code,
                    COALESCE(cu.company_name, ps.cliente, '') AS Cliente,
                    ps.valore AS Valore, sr.step AS Step, sr.perc AS Perc,
@@ -952,8 +1024,8 @@ public class SalController : ControllerBase
             JOIN projects p ON p.id = sr.project_id
             LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
-            WHERE p.status = 'ACTIVE'
-            ORDER BY p.code, sr.data_fatt").ToList();
+            WHERE {ProjectScope}
+            ORDER BY {ProjectSorting.OrderBy("p")}, sr.data_fatt").ToList();
 
         return Ok(ApiResponse<SalEconomicsDto>.Ok(new SalEconomicsDto { Headers = headers, Rows = rows }));
     }
@@ -966,8 +1038,11 @@ public class SalController : ControllerBase
         // Warn/Pre/Incasso: classificazione per riga MUTUAMENTE ESCLUSIVA con la stessa
         // priorità del prospetto (incasso > warn > pre) via CASE unico — una riga con
         // saldo scaduto conta SOLO come incasso. Solo commesse ACTIVE (coerenza /prospetto).
-        var rows = c.Query<SalSummaryDto>(@"
+        var rows = c.Query<SalSummaryDto>($@"
             SELECT p.id AS ProjectId, p.code AS Code, p.title AS Title,
+                   COALESCE(ps.po, '') AS Po,
+                   COALESCE(ps.rif_offerta, '') AS RifOfferta,
+                   ps.valore AS Valore,
                    COUNT(*) AS Total,
                    COALESCE(SUM(t.data_fatt IS NOT NULL AND t.stato <> 'emessa'), 0) AS Open,
                    COALESCE(SUM(t.cls = 'warn'), 0) AS Warn,
@@ -990,10 +1065,19 @@ public class SalController : ControllerBase
                 FROM sal_rows
             ) t
             JOIN projects p ON p.id = t.project_id
-            WHERE p.status = 'ACTIVE'
-            GROUP BY p.id, p.code, p.title
+            LEFT JOIN project_sal ps ON ps.project_id = p.id
+            WHERE {ProjectScope}
+            GROUP BY p.id, p.code, p.title, ps.po, ps.rif_offerta, ps.valore
             HAVING COUNT(*) > 0
-            ORDER BY p.code").ToList();
+            ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
+
+        // L'Importo Ordine è un dato economico: chi non ha `sal.economics` riceve Valore
+        // null (azzerato QUI, mai lasciato al client). Contatori e percentuali restano
+        // visibili a chiunque abbia nav.sal, come prima della #91.
+        if (!CanSeeEconomics())
+            foreach (var r in rows)
+                r.Valore = null;
+
         return Ok(ApiResponse<List<SalSummaryDto>>.Ok(rows));
     }
 }

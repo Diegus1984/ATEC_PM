@@ -186,6 +186,11 @@ public static class CostingDataService
         string materialItemsTable = scope == CostingScope.Quote ? "quote_material_items" : "project_material_items";
         string ownerFilter = scope == CostingScope.Quote ? " AND quote_id=@qid" : " AND project_id=@qid";
 
+        // Le righe materiale non hanno la colonna del proprietario: ci arrivano attraverso la
+        // sezione. Serve comunque un vincolo di appartenenza — vedi BUG-015 qui sotto.
+        string materialSectionsTable = scope == CostingScope.Quote ? "quote_material_sections" : "project_material_sections";
+        string materialOwnerColumn = scope == CostingScope.Quote ? "quote_id" : "project_id";
+
         foreach (BatchDistributionItem s in req.Sections ?? new())
         {
             c.Execute($@"UPDATE {costSectionsTable}
@@ -194,12 +199,23 @@ public static class CostingDataService
                 new { ContPct = s.ContingencyPct, MargPct = s.MarginPct, ContPin = s.ContingencyPinned, MargPin = s.MarginPinned, Shadowed = s.IsShadowed, s.Id, qid = ownerId }, tx);
         }
 
+        // 🔒 BUG-015 (15/08/2026). Qui c'era `WHERE id=@Id` e basta, mentre la UPDATE delle
+        // sezioni, tre righe sopra, il vincolo di appartenenza ce l'aveva: chiunque potesse
+        // aprire un preventivo poteva riscrivere contingenza, margine e ombreggiatura delle righe
+        // materiale di QUALUNQUE altro preventivo, semplicemente mettendo i loro id nel corpo
+        // della richiesta. Sono percentuali che entrano nel prezzo d'offerta, e non lasciavano
+        // traccia da nessuna parte.
+        //
+        // Il vincolo passa dalla sezione perché la riga materiale non ha una colonna propria che
+        // dica a chi appartiene. La subquery è su un'ALTRA tabella, quindi MySQL la accetta dentro
+        // una UPDATE (il divieto vale solo quando si rilegge la tabella che si sta scrivendo).
         foreach (BatchDistributionItem m in req.MaterialItems ?? new())
         {
             c.Execute($@"UPDATE {materialItemsTable}
                 SET contingency_pct=@ContPct, margin_pct=@MargPct, contingency_pinned=@ContPin, margin_pinned=@MargPin, is_shadowed=@Shadowed
-                WHERE id=@Id",
-                new { ContPct = m.ContingencyPct, MargPct = m.MarginPct, ContPin = m.ContingencyPinned, MargPin = m.MarginPinned, Shadowed = m.IsShadowed, m.Id }, tx);
+                WHERE id=@Id
+                  AND section_id IN (SELECT id FROM {materialSectionsTable} WHERE {materialOwnerColumn}=@qid)",
+                new { ContPct = m.ContingencyPct, MargPct = m.MarginPct, ContPin = m.ContingencyPinned, MargPin = m.MarginPinned, Shadowed = m.IsShadowed, m.Id, qid = ownerId }, tx);
         }
     }
 

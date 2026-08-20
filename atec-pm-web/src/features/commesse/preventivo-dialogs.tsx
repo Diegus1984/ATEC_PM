@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
+import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,13 +13,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   addProjectCostSection,
@@ -89,8 +83,15 @@ export function ResourceDialog({
   const isClient = section.sectionType === "DA_CLIENTE"
 
   const employeesQuery = useQuery({
-    queryKey: ["project-costing", "section-employees", projectId, section.sectionId],
-    queryFn: () => fetchProjectSectionEmployees(projectId, section.sectionId),
+    queryKey: [
+      "project-costing",
+      "section-employees",
+      projectId,
+      section.sectionId,
+      editing?.id ?? null,
+    ],
+    queryFn: () =>
+      fetchProjectSectionEmployees(projectId, section.sectionId, editing?.id ?? null),
     enabled: open,
   })
   const employees: EmployeeCostLookup[] = employeesQuery.data ?? []
@@ -101,14 +102,6 @@ export function ResourceDialog({
   const [hoursPerDay, setHoursPerDay] = React.useState("8")
   const [hourlyCost, setHourlyCost] = React.useState("0")
   const [markup, setMarkup] = React.useState("1.450")
-  // Trasferta
-  const [numTrips, setNumTrips] = React.useState("0")
-  const [kmPerTrip, setKmPerTrip] = React.useState("0")
-  const [costPerKm, setCostPerKm] = React.useState("0.90")
-  const [dailyFood, setDailyFood] = React.useState("0")
-  const [dailyHotel, setDailyHotel] = React.useState("0")
-  const [allowanceDays, setAllowanceDays] = React.useState("0")
-  const [dailyAllowance, setDailyAllowance] = React.useState("0")
 
   React.useEffect(() => {
     if (!open) return
@@ -119,13 +112,6 @@ export function ResourceDialog({
     setHoursPerDay(String(r?.hoursPerDay ?? 8))
     setHourlyCost(String(r?.hourlyCost ?? 0))
     setMarkup(String(r?.markupValue ?? 1.45))
-    setNumTrips(String(r?.numTrips ?? 0))
-    setKmPerTrip(String(r?.kmPerTrip ?? 0))
-    setCostPerKm(String(r?.costPerKm ?? 0.9))
-    setDailyFood(String(r?.dailyFood ?? 0))
-    setDailyHotel(String(r?.dailyHotel ?? 0))
-    setAllowanceDays(String(r?.allowanceDays ?? 0))
-    setDailyAllowance(String(r?.dailyAllowance ?? 0))
   }, [open, editing?.id])
 
   function onPickEmployee(value: string) {
@@ -152,13 +138,17 @@ export function ResourceDialog({
         hoursPerDay: num(hoursPerDay),
         hourlyCost: num(hourlyCost),
         markupValue: num(markup),
-        numTrips: isClient ? Math.round(num(numTrips)) : 0,
-        kmPerTrip: isClient ? num(kmPerTrip) : 0,
-        costPerKm: isClient ? num(costPerKm) : 0,
-        dailyFood: isClient ? num(dailyFood) : 0,
-        dailyHotel: isClient ? num(dailyHotel) : 0,
-        allowanceDays: isClient ? num(allowanceDays) : 0,
-        dailyAllowance: isClient ? num(dailyAllowance) : 0,
+        // I 7 campi trasferta non si digitano più qui (segnalazione #33): la trasferta
+        // si compila nella tabella a righe della sezione. Restano nel payload — e in
+        // tabella — perché li leggono ancora il Commerciale e il fallback del Bilancio
+        // sulle sezioni mai convertite: si rimandano invariati, senza toccarli.
+        numTrips: isClient ? (editing?.numTrips ?? 0) : 0,
+        kmPerTrip: isClient ? (editing?.kmPerTrip ?? 0) : 0,
+        costPerKm: isClient ? (editing?.costPerKm ?? 0) : 0,
+        dailyFood: isClient ? (editing?.dailyFood ?? 0) : 0,
+        dailyHotel: isClient ? (editing?.dailyHotel ?? 0) : 0,
+        allowanceDays: isClient ? (editing?.allowanceDays ?? 0) : 0,
+        dailyAllowance: isClient ? (editing?.dailyAllowance ?? 0) : 0,
         sortOrder: editing?.sortOrder ?? section.resourcesCount + 1,
       }
       if (editing && editing.id) await updateProjectResource(projectId, editing.id, payload)
@@ -184,22 +174,18 @@ export function ResourceDialog({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label>Dipendente (opzionale, precompila €/h e K)</Label>
-            <Select
-              value={employeeId != null ? String(employeeId) : "__manual__"}
-              onValueChange={onPickEmployee}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Manuale…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__manual__">Manuale (nome libero)</SelectItem>
-                {employees.map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>
-                    {e.fullName} — {e.departmentCode} · {euro(e.hourlyCost)}/h
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LookupCombobox
+              options={employees.map((e) => ({
+                id: String(e.id),
+                name: `${e.fullName} — ${e.departmentCode} · ${euro(e.hourlyCost)}/h`,
+              }))}
+              value={employeeId != null ? String(employeeId) : null}
+              onValueChange={(id) => onPickEmployee(id ?? "__manual__")}
+              placeholder="Manuale (nome libero)"
+              noneLabel="Manuale (nome libero)"
+              searchPlaceholder="Cerca dipendente…"
+              emptyText="Nessun dipendente trovato"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -218,25 +204,15 @@ export function ResourceDialog({
             <NumField label="K (markup)" value={markup} onChange={setMarkup} />
           </div>
 
+          {/* Il riquadro «Trasferta (sezione da cliente)» a 7 campi non c'è più:
+              la trasferta si compila nella tabella a righe della sezione, con le
+              calcolatrici e il K di ricarico (segnalazione #33). Dalla #99 la tabella
+              non sta più distesa nella sezione: si apre dal pulsante. */}
           {isClient ? (
-            <div className="rounded-md border bg-amber-50/40 p-2.5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                Trasferta (sezione da cliente)
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <NumField label="N° viaggi" value={numTrips} onChange={setNumTrips} />
-                <NumField label="Km/viaggio" value={kmPerTrip} onChange={setKmPerTrip} />
-                <NumField label="€/km" value={costPerKm} onChange={setCostPerKm} />
-                <NumField label="Vitto/g" value={dailyFood} onChange={setDailyFood} />
-                <NumField label="Hotel/g" value={dailyHotel} onChange={setDailyHotel} />
-                <NumField label="GG indennità" value={allowanceDays} onChange={setAllowanceDays} />
-                <NumField
-                  label="Indennità/g"
-                  value={dailyAllowance}
-                  onChange={setDailyAllowance}
-                />
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              La trasferta si compila dal pulsante «Trasferta preventivo», accanto a
+              «+ Risorsa» nella sezione.
+            </p>
           ) : null}
         </div>
 
@@ -345,18 +321,17 @@ export function AddSectionDialog({
             Tutte le sezioni disponibili sono già presenti nel preventivo.
           </p>
         ) : (
-          <Select value={choice} onValueChange={setChoice}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleziona sezione…" />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.groupName} · {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LookupCombobox
+            options={templates.map((t) => ({
+              id: String(t.id),
+              name: `${t.groupName} · ${t.name}`,
+            }))}
+            value={choice || null}
+            onValueChange={(id) => setChoice(id ?? "")}
+            placeholder="Seleziona sezione…"
+            searchPlaceholder="Cerca sezione…"
+            emptyText="Nessuna sezione trovata"
+          />
         )}
 
         <DialogFooter>

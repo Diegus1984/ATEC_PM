@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
+// Categorie materiale: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.catalogo».
 [ApiController]
 [Route("api/material-categories")]
 [Authorize]
@@ -28,6 +31,7 @@ public class MaterialCategoriesController : ControllerBase
         return Ok(ApiResponse<List<MaterialCategoryDto>>.Ok(rows));
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpPost]
     public IActionResult Create([FromBody] MaterialCategorySaveRequest req)
     {
@@ -42,6 +46,7 @@ public class MaterialCategoriesController : ControllerBase
         return Ok(ApiResponse<int>.Ok(id, "Categoria creata"));
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] MaterialCategorySaveRequest req)
     {
@@ -58,6 +63,7 @@ public class MaterialCategoriesController : ControllerBase
         return Ok(ApiResponse<string>.Ok("", "Categoria aggiornata"));
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpPatch("{id}/field")]
     public IActionResult UpdateField(int id, [FromBody] FieldUpdateRequest req)
     {
@@ -67,6 +73,7 @@ public class MaterialCategoriesController : ControllerBase
         return Ok(ApiResponse<string>.Ok("", "Aggiornato"));
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {

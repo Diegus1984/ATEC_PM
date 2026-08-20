@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
 [ApiController]
 [Route("api/project-templates")]
-[Authorize(Roles = "ADMIN,PM")]
+[Authorize]
+[RequireFeature("nav.project_templates")]
 public class TemplateController : ControllerBase
 {
     private readonly DbService _db;

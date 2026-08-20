@@ -5,6 +5,7 @@ using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Hubs;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -135,7 +136,8 @@ public class CatalogMappingController : ControllerBase
     }
 
     [HttpPost("assign")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.assign_atec_code")]
     public IActionResult Assign([FromBody] CatalogMappingAssignRequest req)
     {
         using var c = _db.Open();
@@ -147,7 +149,8 @@ public class CatalogMappingController : ControllerBase
     // l'articolo Danea (link catalogo o match ESATTO sul codice — niente ricerche
     // paginate dal client) e a successo aggiorna snapshot e link della riga.
     [HttpPost("assign-from-bom")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.assign_atec_code")]
     public IActionResult AssignFromBom([FromBody] CatalogMappingAssignFromBomRequest req)
     {
         using var c = _db.Open();
@@ -258,7 +261,8 @@ public class CatalogMappingController : ControllerBase
     }
 
     [HttpPost("unassign")]
-    [Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+    [Authorize]
+    [RequireFeature("action.assign_atec_code")]
     public IActionResult Unassign([FromBody] CatalogMappingUnassignRequest req)
     {
         using var c = _db.Open();

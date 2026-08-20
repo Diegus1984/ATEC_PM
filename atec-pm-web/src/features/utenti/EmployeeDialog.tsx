@@ -16,10 +16,13 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { fetchAuthLevels } from "@/lib/api/auth-levels"
 import { fetchDepartments } from "@/lib/api/departments"
 import {
   createEmployee,
@@ -40,7 +43,11 @@ import type {
 } from "@/lib/api/types"
 
 
-const ROLE_OPTIONS = [
+/**
+ * Ruoli della gerarchia, usati finché l'elenco vero non arriva dal server (o se la chiamata
+ * fallisce): la tendina non deve mai restare vuota, o non si può più salvare una scheda.
+ */
+const ROLE_FALLBACK = [
   { value: "TECH", label: "TECH — Tecnico operativo" },
   { value: "RESP_REPARTO", label: "RESP — Responsabile reparto" },
   { value: "PM", label: "PM — Project Manager" },
@@ -107,6 +114,34 @@ export function EmployeeDialog({
     queryFn: fetchDepartments,
     enabled: open,
   })
+
+  // I ruoli si leggono dal server: oltre ai quattro della gerarchia ci sono i PROFILI
+  // (`accessMode = "GRANTS"`, segnalazione #63), che nascono da una migrazione e non possono
+  // stare in un elenco scritto a mano — altrimenti si creano profili che nessuno può assegnare.
+  const authLevelsQuery = useQuery({
+    queryKey: ["auth-levels"],
+    queryFn: fetchAuthLevels,
+    enabled: open,
+  })
+
+  /** Ruoli divisi in due gruppi: la gerarchia di sempre e i profili a lista bianca. */
+  const roleGroups = React.useMemo(() => {
+    const levels = authLevelsQuery.data ?? []
+    if (levels.length === 0) {
+      return [{ titolo: "Ruoli", opzioni: ROLE_FALLBACK }]
+    }
+    const ordinati = [...levels].sort((a, b) => a.sortOrder - b.sortOrder)
+    const toOption = (l: (typeof ordinati)[number]) => ({
+      value: l.roleName,
+      label: l.displayName || l.roleName,
+    })
+    const gerarchia = ordinati.filter((l) => l.accessMode !== "GRANTS").map(toOption)
+    const profili = ordinati.filter((l) => l.accessMode === "GRANTS").map(toOption)
+    return [
+      { titolo: "Gerarchia", opzioni: gerarchia },
+      ...(profili.length > 0 ? [{ titolo: "Profili", opzioni: profili }] : []),
+    ]
+  }, [authLevelsQuery.data])
 
   const activeDepartments = React.useMemo(
     () =>
@@ -335,10 +370,15 @@ export function EmployeeDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROLE_OPTIONS.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
-                      </SelectItem>
+                    {roleGroups.map((gruppo) => (
+                      <SelectGroup key={gruppo.titolo}>
+                        <SelectLabel>{gruppo.titolo}</SelectLabel>
+                        {gruppo.opzioni.map((role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            {role.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>

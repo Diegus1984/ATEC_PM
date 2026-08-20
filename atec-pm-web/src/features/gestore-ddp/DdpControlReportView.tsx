@@ -2,6 +2,7 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, ArrowUp, Printer, ChevronDown, ChevronRight } from "lucide-react"
 
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchDdpControlReport,
 } from "@/lib/api/ddp-manager"
@@ -21,6 +23,7 @@ import type { DdpControlReportRow, DdpStatusItem } from "@/lib/api/types"
 import { dateToIso, formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
 import { type ControlReportDef } from "./ddp-control-defs"
@@ -61,7 +64,8 @@ function reportColumns(officina: boolean, withCommessa: boolean): ReportColumn[]
       value: (row) => formatDateShort(row.dateNeeded),
       due: true,
     },
-    { id: "rich", label: "Rich.", value: (row) => row.requestedBy },
+    // Stesso nome delle DDP di commessa (segnalazione #61).
+    { id: "rich", label: "Inserito da", value: (row) => row.requestedBy },
     {
       id: "codice",
       label: officina ? "Codice 101" : "Codice",
@@ -252,7 +256,21 @@ export function DdpControlReportView({
   }, [statusesQuery.data])
 
   // Solo il report per giorno mescola più commesse nella stessa tabella.
-  const columns = reportColumns(officina, def.groupedByDay === true)
+  const allColumns = reportColumns(officina, def.groupedByDay === true)
+  // Menu «Colonne»: chiave unica per tutti i report (le colonne sono le stesse),
+  // stampa inclusa — si stampa quello che si vede.
+  const [visibleCols, setVisibleCols] = usePersistedColumnVisibility(
+    "ddp-control-report-columns-v1",
+    Object.fromEntries(allColumns.map((col) => [col.id, true]))
+  )
+  const columns = allColumns.filter((col) => visibleCols[col.id] ?? true)
+  const columnToggles = allColumns.map((col) => ({
+    id: col.id,
+    label: col.label,
+    checked: visibleCols[col.id] ?? true,
+    onToggle: (value: boolean) =>
+      setVisibleCols((prev) => ({ ...prev, [col.id]: value })),
+  }))
 
   const parentIdsWithChildren = React.useMemo(() => {
     const set = new Set<number>()
@@ -369,7 +387,7 @@ export function DdpControlReportView({
   }, [rowsQuery.data, officina, parentIdsWithChildren])
 
   const rows = processedRows
-  const sortCol = sort ? columns.find((col) => col.id === sort.col) : undefined
+  const sortCol = sort ? allColumns.find((col) => col.id === sort.col) : undefined
   const sorted =
     sort && sortCol
       ? [...rows].sort((a, b) => {
@@ -565,7 +583,7 @@ export function DdpControlReportView({
                 key={col.id}
                 className={cn(
                   "whitespace-nowrap",
-                  col.id === "desc" && "max-w-[280px] truncate whitespace-normal",
+                  col.id === "desc" && "max-w-[280px] whitespace-normal break-words",
                   col.numeric && "text-right tabular-nums",
                   col.due && (def.dueRed || overdue) && row.dateNeeded
                     ? "font-semibold text-destructive"
@@ -598,6 +616,7 @@ export function DdpControlReportView({
           </h2>
           <p className="text-sm text-muted-foreground">{def.description}</p>
         </div>
+        <ColumnsMenu columns={columnToggles} />
         <Button variant="outline" size="sm" onClick={print} disabled={activeCount === 0}>
           <Printer className="mr-1.5 size-4" />
           Stampa PDF
@@ -674,12 +693,12 @@ export function DdpControlReportView({
                       {allOff ? "Attiva giorno" : "Disattiva giorno"}
                     </Button>
                   </div>
-                  <div className="overflow-x-auto">
+                  <GridScroller>
                     <Table>
                       <TableHeader>{headerRow}</TableHeader>
                       <TableBody>{bodyRows(group.rows)}</TableBody>
                     </Table>
-                  </div>
+                  </GridScroller>
                 </CardContent>
               </Card>
             )
@@ -716,12 +735,12 @@ export function DdpControlReportView({
                       {allOff ? "Attiva commessa" : "Disattiva commessa"}
                     </Button>
                   </div>
-                  <div className="overflow-x-auto">
+                  <GridScroller>
                     <Table>
                       <TableHeader>{headerRow}</TableHeader>
                       <TableBody>{bodyRows(group.rows)}</TableBody>
                     </Table>
-                  </div>
+                  </GridScroller>
                 </CardContent>
               </Card>
             )

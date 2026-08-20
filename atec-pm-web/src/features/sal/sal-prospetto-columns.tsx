@@ -5,6 +5,7 @@ import { Link } from "react-router-dom"
 import { ReadonlyDateField } from "@/components/shared/date-field"
 import { Button } from "@/components/ui/button"
 import type { SalProspettoRow } from "@/lib/api/types"
+import { canAccessFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -120,14 +121,18 @@ export function buildSalProspettoColumns(
           <span className="font-mono text-xs font-bold bg-muted px-1.5 py-0.5 rounded border">
             {row.original.code}
           </span>
-          <Button asChild variant="ghost" size="icon" className="size-6 print:hidden" title="Apri commessa">
-            <Link
-              to={`/commesse/${row.original.projectId}/sal`}
-              state={{ fromGlobal: "/sal-prospetto" }}
-            >
-              <ExternalLink className="size-3" />
-            </Link>
-          </Button>
+          {/* Nascosto a chi non ha accesso alle Commesse (ruoli di reparto): li porterebbe
+              su «Accesso negato». */}
+          {canAccessFeature("nav.commesse") ? (
+            <Button asChild variant="ghost" size="icon" className="size-6 print:hidden" title="Apri commessa">
+              <Link
+                to={`/commesse/${row.original.projectId}/sal`}
+                state={{ fromGlobal: "/sal?view=prospetto" }}
+              >
+                <ExternalLink className="size-3" />
+              </Link>
+            </Button>
+          ) : null}
         </div>
       ),
     },

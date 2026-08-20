@@ -4,6 +4,18 @@ import type { ActiveTechSummary, RecentTimesheetEntry, UpcomingDeadline, WeeklyH
 import type { DeptSummary } from "./employees"
 import type { PhaseGanttItem } from "./phases"
 
+/**
+ * Evento SignalR `ProjectsChanged` (gruppo globale `projects-all`): l'anagrafica commesse
+ * è cambiata e gli elenchi vanno ricaricati. `delete` arriva anche dall'eliminazione, che
+ * è un soft delete → stato ANNULLATA, quindi la commessa sparisce dalle liste.
+ */
+export interface ProjectChange {
+  projectId: number
+  /** "create" | "update" | "delete" */
+  action: string
+  code: string
+}
+
 export interface ProjectListItem {
   id: number
   code: string
@@ -104,8 +116,12 @@ export interface CashFlowData {
 
 export interface ChatListItem {
   id: number
-  projectId: number
+  /** Commessa o «altra attività» di riferimento. `null` = chat senza commessa (#78). */
+  projectId: number | null
+  projectCode: string
+  projectTitle: string
   title: string
+  createdById: number
   createdByName: string
   createdAt: string
   participantCount: number
@@ -113,6 +129,7 @@ export interface ChatListItem {
   lastMessageAt: string | null
   lastMessagePreview: string
   unreadCount: number
+  isParticipant: boolean
 }
 
 export interface ChatMessage {
@@ -126,6 +143,20 @@ export interface ChatMessage {
   hasAttachment: boolean
   attachmentName: string
   attachmentPath: string
+  replyToMessageId: number | null
+  replyToPreview: string
+  replyToEmployeeName: string
+  readByCount: number
+  otherParticipantCount: number
+}
+
+export interface ChatMessagesPage {
+  messages: ChatMessage[]
+  hasMore: boolean
+}
+
+export interface ChatInboxBadge {
+  unreadCount: number
 }
 
 export interface ChatParticipant {
@@ -161,7 +192,27 @@ export interface DocumentsChange {
 
 /** Notifica real-time (SignalR `ChatChanged`) su una chat di commessa. */
 export interface ChatChange {
+  /** `null` per le chat senza commessa: arrivano solo dal gruppo inbox globale. */
+  projectId: number | null
+  chatId: number
+  action: string // create | message | delete_message | delete_chat | leave | read | participants
+}
+
+/** Avviso real-time (SignalR `ChatMessageReceived`) ai soli partecipanti: apre il riquadro. */
+export interface ChatMessageAlert {
+  chatId: number
+  projectId: number | null
+  chatTitle: string
+  contextLabel: string
+  senderId: number
+  senderName: string
+  preview: string
+}
+
+/** Notifica real-time (SignalR `ChatTyping`). */
+export interface ChatTyping {
   projectId: number
   chatId: number
-  action: string // create | message | delete_message | delete_chat
+  employeeId: number
+  employeeName: string
 }

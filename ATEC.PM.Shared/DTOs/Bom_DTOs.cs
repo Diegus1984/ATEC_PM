@@ -51,7 +51,15 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
     public string DdpType { get; set; } = "COMMERCIAL";
     // Snapshot codice ATEC (nuova codifica); vuoto = riga senza mapping.
     public string AtecCode { get; set; } = "";
+    public int? CreatedById { get; set; }
+    public string CreatedByName { get; set; } = "";
     public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// Quando la riga è passata a DISPONIBILE / CONSEGNATO l'ultima volta: ricavata dalla
+    /// cronistoria (ddp_item_events), non è un campo scritto a mano. Null = mai consegnata.
+    /// </summary>
+    public DateTime? DeliveredAt { get; set; }
 
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
@@ -73,7 +81,14 @@ public class BomItemSaveRequest
     public int? SupplierId { get; set; }
     public string Manufacturer { get; set; } = "";
     public string ItemStatus { get; set; } = "VER";
-    public string RequestedBy { get; set; } = "";
+    /// <summary>
+    /// «Inserito da» (segnalazione #61): lo compila il client alla nascita della riga col nome
+    /// di chi è collegato, e da lì è correggibile a mano dalla griglia o dal dialogo.
+    /// NULL (campo assente nel JSON) = non toccare — stessa regola di WorkType/WorkHours in
+    /// officina: parecchi punti salvano una riga senza conoscere tutti i campi e non devono
+    /// cancellare l'autore. Per svuotarlo si manda la stringa vuota.
+    /// </summary>
+    public string? RequestedBy { get; set; }
     public string DaneaRef { get; set; } = "";
     public DateTime? DateNeeded { get; set; }
     public string Destination { get; set; } = "";
@@ -112,6 +127,8 @@ public class AcquistiInboxItem : BomItemListItem
     /// <summary>RDO viva che contiene la riga (per il link «in gara — RDO #x» nel pannello).</summary>
     public int? ActiveRfqId { get; set; }
     public string ActiveRfqStatus { get; set; } = "";
+    /// <summary>Oggetto della RDO (titolo della gara): va in tooltip, NON nella descrizione riga.</summary>
+    public string ActiveRfqSubject { get; set; } = "";
 }
 
 // Notifica real-time (SignalR) di modifica della distinta (DDP) di una commessa.
@@ -135,6 +152,16 @@ public class DocumentsChange
     public string Action { get; set; } = ""; // "upload" | "create" | "rename" | "move" | "delete"
 }
 
+// Notifica real-time (SignalR) sull'ANAGRAFICA commesse: creata, modificata o eliminata.
+// Inviata al gruppo globale "projects-all": chi ha davanti un elenco di commesse ricarica
+// la lista (una commessa eliminata da un collega sparisce senza ricaricare la pagina).
+public class ProjectChange
+{
+    public int ProjectId { get; set; }
+    public string Action { get; set; } = ""; // "create" | "update" | "delete"
+    public string Code { get; set; } = "";
+}
+
 public static class DdpStatusMap
 {
     // Fallback per le notifiche cambio-stato. Gli stati "veri" stanno in ddp_statuses (editabili);
@@ -146,6 +173,8 @@ public static class DdpStatusMap
         ["RAM"] = "RIMESSO A MAGAZZINO",
         ["SOST"] = "SOSTITUITO",
         ["DISP"] = "DISPONIBILE / CONSEGNATO",
+        ["CON"] = "CONSEGNATO",
+        ["COS"] = "COSTRUITO",
         ["MIT"] = "MATERIALE IN TRATTAMENTO",
         ["DC"] = "DA COSTRUIRE",
         ["DO"] = "DA ORDINARE",

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Paperclip, Send } from "lucide-react"
+import { Paperclip, Send, X } from "lucide-react"
 
 import {
   getActiveMentionFilter,
@@ -13,25 +13,41 @@ import { cn } from "@/lib/utils"
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
+export type ChatReplyTarget = {
+  employeeName: string
+  preview: string
+}
+
 export function ChatComposer({
   disabled,
   mentionCandidates,
+  participantIds,
   sending,
   uploading,
+  replyTo,
+  onClearReply,
   onSend,
   onAttach,
+  onTyping,
 }: {
   disabled?: boolean
+  /** TUTTI i colleghi, non solo chi è già nella chat: menzionarne uno lo fa entrare (#78). */
   mentionCandidates: ChatParticipant[]
+  /** Chi è già dentro: serve solo a marcare gli altri nella tendina del «@». */
+  participantIds?: number[]
   sending?: boolean
   uploading?: boolean
+  replyTo?: ChatReplyTarget | null
+  onClearReply?: () => void
   onSend: (text: string) => void
   onAttach: (file: File) => void
+  onTyping?: () => void
 }) {
   const [draft, setDraft] = React.useState("")
   const [caret, setCaret] = React.useState(0)
   const [mentionOpen, setMentionOpen] = React.useState(false)
   const [mentionIndex, setMentionIndex] = React.useState(0)
+  const [dragging, setDragging] = React.useState(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileRef = React.useRef<HTMLInputElement>(null)
 
@@ -75,15 +91,40 @@ export function ChatComposer({
     setMentionOpen(false)
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ""
+  function takeFile(file: File | undefined | null) {
     if (!file) return
     if (file.size > MAX_ATTACHMENT_BYTES) {
       notifyError("File troppo grande (max 20 MB).")
       return
     }
     onAttach(file)
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    takeFile(file)
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile()
+        if (file) {
+          e.preventDefault()
+          takeFile(file)
+          return
+        }
+      }
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    takeFile(e.dataTransfer.files?.[0])
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -119,25 +160,67 @@ export function ChatComposer({
   const busy = sending || uploading
 
   return (
-    <div className="relative border-t p-2">
+    <div
+      className={cn("relative border-t p-2", dragging && "bg-accent/40")}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+    >
+      {dragging ? (
+        <p className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center text-sm font-medium">
+          Rilascia per allegare
+        </p>
+      ) : null}
+
+      {replyTo ? (
+        <div className="mb-1.5 flex items-start gap-2 rounded-md border-l-2 border-primary bg-muted/60 px-2 py-1">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold">{replyTo.employeeName}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{replyTo.preview}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            aria-label="Annulla risposta"
+            onClick={onClearReply}
+          >
+            <X />
+          </Button>
+        </div>
+      ) : null}
+
       {mentionOpen ? (
         <div className="absolute bottom-full left-2 right-2 z-10 mb-1 max-h-40 overflow-y-auto rounded-md border bg-popover shadow-md">
-          {filtered.map((p, idx) => (
-            <button
-              key={p.id}
-              type="button"
-              className={cn(
-                "flex w-full px-3 py-1.5 text-left text-sm hover:bg-accent",
-                idx === mentionIndex && "bg-accent"
-              )}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                insertMention(p)
-              }}
-            >
-              {p.employeeName}
-            </button>
-          ))}
+          {filtered.map((p, idx) => {
+            const fuori =
+              participantIds != null && !participantIds.includes(p.employeeId)
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent",
+                  idx === mentionIndex && "bg-accent"
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  insertMention(p)
+                }}
+              >
+                <span className="truncate">{p.employeeName}</span>
+                {fuori ? (
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    lo aggiungi alla chat
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       ) : null}
 
@@ -169,7 +252,9 @@ export function ChatComposer({
           onChange={(e) => {
             setDraft(e.target.value)
             setCaret(e.target.selectionStart ?? e.target.value.length)
+            onTyping?.()
           }}
+          onPaste={handlePaste}
           onClick={syncCaret}
           onKeyUp={syncCaret}
           onKeyDown={handleKeyDown}

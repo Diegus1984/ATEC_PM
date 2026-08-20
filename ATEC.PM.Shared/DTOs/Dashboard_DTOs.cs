@@ -1,36 +1,54 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ATEC.PM.Shared.DTOs;
 
-public class DashboardData
-{
-    public int ActiveProjects { get; set; }
-    public int DraftProjects { get; set; }
-    public int CompletedProjects { get; set; }
-    public int TotalEmployees { get; set; }
-    public int TotalCustomers { get; set; }
-    public decimal HoursThisMonth { get; set; }
-    public decimal HoursThisWeek { get; set; }
-    public decimal TotalRevenue { get; set; }
-    public List<DashboardProjectRow> RecentProjects { get; set; } = new();
-    public List<DashboardDailyHours> DailyHours { get; set; } = new();
-}
+// #88: DashboardData / DashboardProjectRow / DashboardDailyHours rimossi con la vecchia
+// «Panoramica» (card + grafico ore): la pagina d'ingresso sono le tabelle Commesse / Altre
+// Attività, che leggono ProjectListItem da GET /api/projects.
 
-public class DashboardDailyHours
-{
-    public DateTime WorkDate { get; set; }
-    public decimal Hours { get; set; }
-}
+// ── Dashboard a cartelle (blocco 7) ────────────────────────────────────────
+// La pagina d'ingresso: una cartella per commessa con le tre statistiche già a
+// video (milestone, avanzamento medio, periodo). La spunta «In dashboard» è un
+// flag CONDIVISO su `projects`, non una preferenza personale: chi la toglie la
+// toglie a tutti, esattamente come nel prototipo.
 
-public class DashboardProjectRow
+/// <summary>Cartella-commessa della dashboard d'ingresso.</summary>
+public class DashboardFolderDto
 {
+    public int ProjectId { get; set; }
     public string Code { get; set; } = "";
     public string Title { get; set; } = "";
     public string CustomerName { get; set; } = "";
+    public string PmName { get; set; } = "";
     public string Status { get; set; } = "";
-    public decimal HoursWorked { get; set; }
-    public decimal BudgetHours { get; set; }
+    public bool InDashboard { get; set; }
+    /// <summary>Milestone attive (spente escluse), come il contatore della scheda commessa.</summary>
+    public int MilestoneCount { get; set; }
+    /// <summary>Media degli avanzamenti delle righe attive; null = nessuna milestone (→ «—»).</summary>
+    public int? AvgProgress { get; set; }
+    public DateTime? PeriodStart { get; set; }
+    public DateTime? PeriodEnd { get; set; }
+}
+
+public class DashboardFoldersResponse
+{
+    /// <summary>Numero massimo di cartelle mostrate (DASH_MAX del prototipo, qui governabile).</summary>
+    public int MaxCards { get; set; }
+    /// <summary>Commesse in dashboard, in ordine di codice.</summary>
+    public List<DashboardFolderDto> Projects { get; set; } = new();
+    /// <summary>Commesse escluse a mano: la fascia di chip in fondo alla pagina.</summary>
+    public List<DashboardFolderDto> Hidden { get; set; } = new();
+}
+
+public class DashboardSettingsDto
+{
+    public int MaxCards { get; set; }
+}
+
+public class DashboardFolderFlagRequest
+{
+    public bool InDashboard { get; set; }
 }
 
 public class ProjectDashboardData
@@ -57,6 +75,13 @@ public class ProjectDashboardData
     public decimal MaterialCost { get; set; }
     public decimal MaterialCostCommercial { get; set; }
     public decimal MaterialCostOfficina { get; set; }
+    /// <summary>Trasferta a consuntivo (projects.actual_travel_cost). Entra in TotalCost dal 04/08/2026.</summary>
+    public decimal TravelCost { get; set; }
+    /// <summary>
+    /// Costo totale a consuntivo = ore + materiali + trasferta. Fino al 04/08/2026 la trasferta
+    /// era esclusa, e il MARGINE del tab Dettagli non coincideva con la Redditività del conto
+    /// economico (che l'ha sempre inclusa).
+    /// </summary>
     public decimal TotalCost { get; set; }
 
     public List<DeptSummary> DepartmentSummaries { get; set; } = new();

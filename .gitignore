@@ -86,3 +86,18 @@ Desktop.ini
 !/graphify-out/GRAPH_REPORT.md
 !/graphify-out/.graphify_labels.json
 !/graphify-out/.graphify_labels.json.sig
+
+# ── Temporanei di lavoro e allegati segnalazioni (20/08/2026) ──
+_bug_atts/
+_tmp/
+_tmp_*.png
+__pycache__/
+seq_tmp.txt
+
+# Pacchetto di deploy generato (327 MB, rigenerabile con carica-installazione)
+deploy/out/
+
+# One-off import/audit del catalogo robot Gamma: password MySQL locale cablata,
+# già eseguiti, restano solo su questo PC. L'unico tool vivo è segnalazioni.py.
+tools/*.py
+!tools/segnalazioni.py

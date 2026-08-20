@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -11,7 +12,8 @@ namespace ATEC.PM.Server.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/danea-migration")]
-[Authorize(Roles = "ADMIN,PM,RESP_REPARTO")]
+[Authorize]
+[RequireFeature("nav.danea_migration")]
 public class DaneaMigrationController : ControllerBase
 {
     private readonly DaneaMigrationService _svc;

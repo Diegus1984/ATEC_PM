@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ATEC.PM.Shared.DTOs;
@@ -37,6 +37,12 @@ public class SalHeaderDto
     public string RifOfferta { get; set; } = "";  // Riferimento Offerta ATEC
     /// <summary>Ragione sociale cliente dalla commessa (sola lettura, da anagrafica).</summary>
     public string CustomerName { get; set; } = "";
+    /// <summary>
+    /// Commessa chiusa (COMPLETED/CANCELLED): il foglio SAL diventa di sola lettura.
+    /// È l'UNICO lock del SAL — una riga «Pagata» resta modificabile, altrimenti un
+    /// errore di battitura sull'incasso non si potrebbe più correggere.
+    /// </summary>
+    public bool IsProjectClosed { get; set; }
 }
 
 // Bundle completo che raccoglie header e righe SAL di una singola commessa.
@@ -125,16 +131,6 @@ public class SalProspettoRowDto
     public string Pagamento { get; set; } = "";   // Stato pagamento
 }
 
-// Stato del controllo periodico del prospetto SAL (ultima conferma registrata).
-public class SalProspettoCheckDto
-{
-    public DateTime? CheckedAt { get; set; }      // Data/ora ultimo controllo (NULL se mai fatto)
-    public string CheckedByName { get; set; } = ""; // Nome di chi ha confermato l'ultimo controllo
-    public int? Days { get; set; }                // Giorni trascorsi dall'ultimo controllo
-    public bool Due { get; set; }                 // true = controllo dovuto (mai fatto o periodo scaduto)
-    public DateTime? NextDue { get; set; }        // Prossima scadenza del controllo
-}
-
 // Riga economica SAL globale (base per Cash Flow / Analisi / drill-down, calcoli in SQL).
 public class SalEconomicsRowDto
 {
@@ -186,5 +182,9 @@ public class SalSummaryDto
     public int Incasso { get; set; }  // fatture con incasso scaduto (non pagate, data prevista saldo < oggi)
     public decimal PercTotal { get; set; }  // Σ % SAL di tutte le righe (denominatore avanzamento incasso)
     public decimal PercPaid { get; set; }   // Σ % delle righe con Pagamento = «Pagata»
+    // Dati d'intestazione del foglio SAL (#91), per card e tabella della pagina /sal
+    public string Po { get; set; } = "";          // PO - Ordine cliente
+    public string RifOfferta { get; set; } = "";  // Riferimento Offerta ATEC
+    public decimal? Valore { get; set; }          // Importo ordine — il server lo azzera per chi non ha `sal.economics`
 }
 

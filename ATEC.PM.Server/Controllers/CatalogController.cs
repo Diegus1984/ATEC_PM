@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
+// Catalogo articoli: lettura libera (serve ai picker e alle griglie di ogni livello),
+// scrittura riservata al livello della feature «nav.catalogo».
 [ApiController]
 [Route("api/catalog")]
 [Authorize]
@@ -190,6 +193,7 @@ public class CatalogController : ControllerBase
         }
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpPost]
     public IActionResult Create(CatalogItem item)
     {
@@ -212,6 +216,7 @@ public class CatalogController : ControllerBase
         }
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpPut("{id}")]
     public IActionResult Update(int id, CatalogItem item)
     {
@@ -245,6 +250,7 @@ public class CatalogController : ControllerBase
         }
     }
 
+    [RequireFeature("nav.catalogo")]
     [HttpDelete("{id}")]
     public IActionResult Delete(int id)
     {

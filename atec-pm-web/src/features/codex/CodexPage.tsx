@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   deleteCodex,
   fetchCodex,
@@ -46,7 +47,7 @@ import {
 } from "@/lib/api/codex"
 import type { CodexListItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
-import { getSession } from "@/lib/auth/session"
+import { canWriteFeature } from "@/lib/auth/permissions"
 import { decodeHtmlEntities, euro } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 
@@ -207,9 +208,9 @@ function loadVisibility(): Record<string, boolean> {
 export function CodexPage() {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
-  const userRole = getSession()?.user.userRole
-  const isAdmin = userRole === "ADMIN"
-  const canRecode = canRecodeCodex(userRole)
+  // Sincronizza / genera / modifica / elimina articolo: governo dell'anagrafica Codex.
+  const canManage = canWriteFeature("action.manage_codex")
+  const canRecode = canRecodeCodex()
 
   const [page, setPage] = React.useState(1)
   const [searchInput, setSearchInput] = React.useState("")
@@ -317,12 +318,12 @@ export function CodexPage() {
   const items = listQuery.data?.items ?? []
   const totalCount = listQuery.data?.totalCount ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-  const showActions = isAdmin || canRecode
+  const showActions = canManage || canRecode
   const colSpan = visibleColumns.length + (showActions ? 1 : 0)
 
   return (
     <div className="space-y-4">
-      {showGenerate && isAdmin ? (
+      {showGenerate && canManage ? (
         <CodexGeneratePanel
           onClose={() => setShowGenerate(false)}
           onGenerated={async () => {
@@ -347,7 +348,7 @@ export function CodexPage() {
                 status={syncQuery.data}
                 loading={syncQuery.isLoading}
               />
-              {isAdmin ? (
+              {canManage ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -362,7 +363,7 @@ export function CodexPage() {
                   Sincronizza
                 </Button>
               ) : null}
-              {isAdmin ? (
+              {canManage ? (
                 <Button size="sm" onClick={() => setShowGenerate(true)}>
                   <Plus />
                   Genera Codice
@@ -441,7 +442,7 @@ export function CodexPage() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-lg border">
+          <GridScroller className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
@@ -502,9 +503,9 @@ export function CodexPage() {
                   items.map((item) => (
                     <TableRow
                       key={item.id}
-                      className={isAdmin ? "cursor-pointer" : undefined}
+                      className={canManage ? "cursor-pointer" : undefined}
                       onDoubleClick={
-                        isAdmin ? () => setEditItem(item) : undefined
+                        canManage ? () => setEditItem(item) : undefined
                       }
                     >
                       {visibleColumns.map((column) => (
@@ -542,7 +543,7 @@ export function CodexPage() {
                                     },
                                   ]
                                 : []),
-                              ...(isAdmin
+                              ...(canManage
                                 ? [
                                     {
                                       label: "Modifica",
@@ -569,7 +570,7 @@ export function CodexPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+          </GridScroller>
 
           <ServerPagination
             page={page}

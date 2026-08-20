@@ -24,80 +24,76 @@ Copia il blocco sotto e compila. Una riga per campo, niente romanzi.
 
 ## Elenco
 
-### BUG-006 — Conversione preventivo→commessa porta dietro le opzioni materiali disattivate
-- **Stato:** [x]
-- **Data:** 2026-06-03
-- **Modulo:** Server (`PreventiviController.ConvertToProject`)
-- **Passi:** 1. Preventivo IMPIANTO con varianti materiale disattivate (toggle off → `is_active=0`) 2. Converti in commessa 3. Apri il foglio di calcolo costing della commessa
-- **Atteso:** In commessa compaiono solo le opzioni selezionate (attive)
-- **Ottenuto:** Compaiono anche tutte le varianti disattivate (righe a qta 0 / vendita 0) che intasano il foglio
-- **Note fix:** Lo step 5 (copia `quote_material_items`) selezionava tutti gli item senza filtro. Aggiunto `AND COALESCE(is_active,1)=1` alla SELECT: copia solo le opzioni attive. Il toggle UI mappa su `quote_material_items.is_active` (cfr. `PreventiviCostingController` "Toggle is_active"). Le risorse (`quote_cost_resources`) non hanno flag di disattivazione → non serve filtro lì. Verificato sul preventivo id 39: 22 item totali → 6 copiati (3 header + 3 varianti selezionate, coppie parent/figlio complete, nessun orfano), 16 disattivati esclusi.
+### BUG-016 — Chat: «Aggiungi partecipanti…» dal menu contestuale non fa niente
+- **Stato:** [x] corretto il 16/08/2026, riprodotto e riverificato a runtime, **IN PRODUZIONE dal 16/08/2026** (build `index-Cbvn1rJg.js`, 138 test verdi, `health/ready` ok)
+- **Data:** 2026-08-16
+- **Modulo:** Client web (`features/chat/ChatWorkspace.tsx`, `ChatListRow`)
+- **Passi:** 1. Aprire la pagina Chat 2. Tasto destro su una riga della lista 3. Scegliere «Aggiungi partecipanti…»
+- **Atteso:** si apre il pannello «Partecipanti» della chat
+- **Ottenuto:** non succede niente. Nessun errore, nessuna richiesta al server. Le altre due voci dello stesso menu («Esci dalla chat», «Cancella») funzionano.
+- **Errore/log:** nessuno.
+- **Note fix:** il pannello **si apre davvero, e si richiude un decimo di secondo dopo** — troppo in fretta perché si veda, e per giunta lontano dal punto del clic (è ancorato al pulsante «N partecipanti» dell'intestazione, non alla riga). La catena: `onSelect` gira *prima* che il menu si chiuda (Radix lo esegue in `dispatchDiscreteCustomEvent`, flush sincrono), quindi il Popover monta a menu ancora aperto; subito dopo il menu si chiude e il suo `FocusScope`, allo smontaggio, **rimette il fuoco dove stava prima del tasto destro** — la riga della lista; quel `focusin` arriva a pannello già aperto e il `DismissableLayer` del Popover, che è **non modale**, lo legge come «interazione fuori» → `onDismiss()` → pannello chiuso. La guardia scritta a mano in `ChatParticipantsPopover.tsx:104` non para il colpo: cerca `[data-slot=popover-content]`, ma il bersaglio è il `<button>` della riga.
+  **Perché le altre due voci si salvano:** aprono un `AlertDialog` (`useConfirm`), e Radix gli impone `preventDefault()` su `onInteractOutside`. È l'unica voce di menu del progetto che apre un **popover** invece di un dialogo — da qui l'asimmetria.
+  **Correzione:** in `ChatListRow`, `ContextMenuContent onCloseAutoFocus` sopprime il ripristino del fuoco **solo** quando è stata quella voce ad aprire il pannello (ref alzato nell'`onSelect`). Con Esc o con le altre voci il fuoco torna alla riga come prima.
+  **Verifica a runtime** (app vera, dati di prova in locale): prima della correzione il pannello passava a `data-state=closed` da solo entro ~500 ms; dopo, resta `open` a 100/300/600/1000 ms. Riprovate anche le altre due voci: `POST /leave` e `DELETE /api/chat/{id}` con la chat giusta, conferma col titolo giusto, riga via dalla lista. Provato sia col dev server sia col **bundle di produzione** (`index-C_u9fb0o.js`, quello servito da 192.168.2.150), che si comporta identico.
+  🪤 Per chi verificherà cose simili: senza il pannello Browser a video Chrome non compone frame, quindi i menu Radix chiusi **non vengono mai smontati** e restano nel DOM. Un `querySelector('[role=menu]')` pesca il menu *vecchio*: così si arriva a cancellare la chat sbagliata credendo di aver trovato un bug che non esiste. Azzerare le animazioni con uno `<style>` iniettato e prendere sempre l'ultimo layer con `data-state=open`.
 
-### BUG-001 — Conversione da Preventivi senza andare su Commesse
-- **Stato:** [x]
-- **Data:** 2026-05-22
-- **Modulo:** Preventivi (`QuotesHomePage`, `QuoteDetailPage`) + Commesse (`MainWindow` / `ProjectsPage`)
-- **Passi:** 1. Preventivi → «Converti in Commessa» (griglia o dettaglio) 2. Conferma PM 3. Vai su Commesse
-- **Atteso:** Flusso guidato: dopo conversione l’utente trova la nuova commessa in Commesse (albero aggiornato / selezionata)
-- **Ottenuto:** Solo MessageBox + refresh lista preventivi; Commesse può restare con cache vecchia, commessa non visibile/selezionata
-- **Errore/log:** API restituisce `projectId` in `data` ma il client non lo usa (`RowBtnConvert_Click`, `BtnConvert_Click`)
-- **Note fix:** Dopo convert OK → `NavigateToProject(projectId, reloadTree: true)`; `ProjectsPage.RefreshTreeAndNavigateToSection`. Parser in `ConvertQuoteDialog.TryParseConvertResponse`. ~~Voce «Convertito» nel menu stato riga~~ → rimossa.
+### BUG-015 — Distribuzione preventivi: si possono modificare le righe materiale di un preventivo altrui
+- **Stato:** [x] corretto, verificato il 15/08/2026 e **IN PRODUZIONE dal 16/08/2026** (deploy delle 11:4x)
+- **Data:** 2026-08-15
+- **Modulo:** Server (`Services/CostingDataService.cs:201`, `Controllers/QuoteCostingController.cs:370`)
+- **Passi:** 1. Autenticarsi come un utente qualsiasi che possa aprire i preventivi 2. Chiamare `PUT /api/quotes/{unPreventivoQualsiasi}/material-items/{id}/distribution` (o l'equivalente `distributions/batch`) passando l'**id di una riga materiale che appartiene a un ALTRO preventivo** 3. Riaprire il preventivo della vittima
+- **Atteso:** la riga non viene toccata: l'id non appartiene al preventivo indicato nell'indirizzo
+- **Ottenuto:** la riga viene aggiornata (contingenza, margine, pin, ombreggiatura), e l'endpoint risponde comunque «Salvate N distribuzioni» senza controllare quante righe abbia toccato davvero. Sono percentuali che concorrono al prezzo di offerta: cambiate di nascosto su un preventivo altrui, non se ne accorge nessuno.
+- **Errore/log:** nessuno.
+- **Note fix:** trovato dal censimento N+1 di E3 (15/08/2026) e **verificato a mano**. La prova che è una dimenticanza e non una scelta sta nella riga sopra, nello stesso metodo: le *sezioni* filtrano con `WHERE id=@Id{ownerFilter}` (`CostingDataService.cs:193`) e la sezione singola con `AND quote_id=@quoteId` (`QuoteCostingController.cs:362`); solo le due query sulle *righe materiale* si fermano a `WHERE id=@Id`. Correzione: vincolo di appartenenza via la sezione madre — `AND section_id IN (SELECT id FROM quote_material_sections WHERE quote_id=@qid)` — con la variante `project_material_sections`/`project_id` per lo scope Project. ⚠️ Da fare con un test: sbagliare la relazione fa smettere di salvare il pannello Distribuzione, che è peggio del buco. Va chiuso **insieme** all'accorpamento N+1 di quelle stesse righe (vedi [CENSIMENTO-N1-E3.md](CENSIMENTO-N1-E3.md)), non prima e non dopo.
+- **Correzione applicata (15/08/2026, da verificare):** vincolo di appartenenza via sezione madre in
+  `CostingDataService.SaveDistributionsBatch` (`AND section_id IN (SELECT id FROM {materialSectionsTable} WHERE {owner}=@qid)`,
+  con le varianti quote/project) e in `QuoteCostingController.UpdateMaterialItemDistribution`
+  (`AND section_id IN (SELECT id FROM quote_material_sections WHERE quote_id=@quoteId)`). Compila.
+  Due test in `Permessi/AppartenenzaPreventivoTests.cs`: (1) la riga di un altro preventivo resta
+  intatta; (2) **la riga del proprio preventivo continua a salvarsi** — il secondo è quello che
+  conta di più, perché una relazione sbagliata farebbe smettere di salvare il pannello Distribuzione.
+  **Verificato**: i due test passano, e la correzione è stata provata **al contrario** — rimesso il
+  filtro com'era (`WHERE id=@Id`), il test di sicurezza torna rosso mentre quello del salvataggio
+  resta verde, che è esattamente il comportamento atteso: il buco non impediva di salvare le proprie
+  righe, permetteva di toccare quelle altrui.
+  *(La verifica si era fermata un'ora perché MySQL locale era caduto — crash di `mysqld` su
+  `ALTER TABLE project_chats MODIFY COLUMN project_id INT NULL`, `DIEGO_PC.err`; riavviato il
+  servizio, lo schema era integro.)*
+  **Deployato il 16/08/2026** insieme alle modifiche della chat.
 
-### BUG-005 — Dashboard "Ore per Reparto" tutto in TRASV
-- **Stato:** [x]
-- **Data:** 2026-05-26
-- **Modulo:** Server (`ProjectsController.GetDashboardData`)
-- **Passi:** 1. Apri dashboard commessa con ore timbrate 2. Guarda grafico "Ore per Reparto"
-- **Atteso:** Donut con i veri reparti (PM, OFF, PLC…)
-- **Ottenuto:** 100% "TRASV"
-- **Note fix:** Cause concorrenti:
-  - Le fasi locali (`phase_template_id=NULL`) non venivano matchate dalle JOIN su `phase_templates`
-  - Tutti i 18 dipendenti ACTIVE non avevano `is_primary=1` → la query `WHERE is_primary=1` ritornava NULL
-  Fix: (1) le query snapshot-aware usano `COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)` con LEFT JOIN. (2) Sostituito `WHERE is_primary=1` con `ROW_NUMBER() OVER (ORDER BY is_primary DESC, is_responsible DESC, id)` — fallback robusto. (3) Auto-assign primary a 14 dipendenti single-dept + 4 multi-dept (manuali). (4) Query trasversale ora preferisce il reparto della sezione di costo della fase, poi reparto dipendente, poi 'TRASV'.
-
-### BUG-004 — Conversione preventivo→commessa ignora fasi nuove di template
-- **Stato:** [x]
-- **Data:** 2026-05-26
-- **Modulo:** Server (`PreventiviController.ConvertToProject`)
-- **Passi:** 1. Crea una fase template nuova sotto una sezione (CostSectionsTreePage) 2. Converti un preventivo in commessa 3. Apri il BVA della commessa
-- **Atteso:** La nuova fase compare nella sezione corrispondente
-- **Ottenuto:** Solo le fasi storiche (`is_default=1`) sono visibili, le nuove (`is_default=0`) ignorate
-- **Note fix:** Lo step "Crea fasi di default" filtrava `WHERE is_default=1`. Riscritto step 4c (dopo copia sezioni): copia tutte le fasi con `cost_section_template_id IN (template delle sezioni copiate)` + fasi trasversali con `is_default=1 AND cost_section_template_id IS NULL` per retrocompatibilità.
-
-### BUG-003 — Sezioni duplicate in commessa dopo ConvertToProject
-- **Stato:** [x]
-- **Data:** 2026-05-26
-- **Modulo:** Server (`PreventiviController.ConvertToProject` step 4b)
-- **Passi:** 1. Preventivo con sezione ad-hoc (template_id=NULL) con stesso nome di un template `is_default_project=1` 2. Convert
-- **Atteso:** Una sola sezione nella commessa
-- **Ottenuto:** Due sezioni omonime: una dal preventivo (template_id=NULL, con risorse) + una dal template default (template_id valorizzato, vuota). Le fasi si attaccano alla seconda → la prima sembra vuota nel BVA.
-- **Note fix:** Step 4b confrontava solo `template_id` per saltare i template già copiati. Aggiunto check anche per **nome** (case-insensitive, trim) usando `copiedNamesLower`. Riparo retroattivo per la commessa 17 con script `fix_dup_program_manager.py` (downgrade sezione null + delete duplicato vuoto).
-
-### BUG-002 — Duplica preventivo IMPIANTO mostra prezzi a 0.00 €
-- **Stato:** [x]
-- **Data:** 2026-05-26
-- **Modulo:** Server (`PreventiviController.Duplicate`) + Preventivi (`QuotesHomePage` lista)
-- **Passi:** 1. Preventivi → pulsante «Duplica» su un preventivo di tipo IMPIANTO con costing valorizzato 2. Vai sulla lista preventivi
-- **Atteso:** Il duplicato mostra gli stessi totali (`Totale`, `Utile`) dell'originale, perché è una copia identica.
-- **Ottenuto:** Il duplicato mostra `0,00 € / 0,00 €` mentre l'originale ha valori corretti. Anche se il costing è stato copiato in `quote_cost_*` e `quote_material_*`, i campi denormalizzati `quotes.total / quotes.profit` letti dalla lista restano a NULL/0.
-- **Errore/log:** Nessuno (silent: il record viene creato ma con campi totali vuoti).
-- **Note fix:** Per i preventivi IMPIANTO i totali in `quotes.total / quotes.profit / cost_total` sono campi denormalizzati scritti dal client (`QuoteDetailPage:210-213` → `PATCH /api/quotes/{id}/field`) dopo l'elaborazione del costing. `RecalcTotals` somma `quote_items`, ma per IMPIANTO contengono solo testi/clausole con `line_total=0` → restituirebbe 0. Fix in `PreventiviController.Duplicate`:
-  - **SERVICE** → `RecalcTotals(c, newId, tx)` come prima
-  - **IMPIANTO** → `UPDATE quotes dst JOIN quotes src ON src.id = @OrigId SET dst.subtotal = src.subtotal, dst.total = src.total, dst.profit = src.profit, ...` (eredita totali dall'originale)
-- **Lezione (anti-pattern):** in un duplicate, se un campo è "calcolato lato client e patchato sul server", **non ri-derivarlo lato server, copialo dall'originale**. Vale per tutti i campi cached/denormalizzati.
-- **Pulizia codice contestuale:** rimosso anche `QuotesController.Duplicate` (dead code, mai chiamato dal client) e `PreventiviController.GetAll` (dead, la lista è in `/api/quotes`). Vedi voce "Audit endpoint server dead-code" in `ATEC_PM_ATTIVITA.txt` sez. H.
-
----
-
-## Già risolti in sessione (riferimento)
-
-| ID | Sintesi | Fix |
-|----|---------|-----|
-| — | `product_id` mancante su `quote_material_items` | Migrazione `QuoteDbService` |
-| — | Preventivo `converted` non riconvertibile | Reset DB → `accepted` (PRV-2026-0001) |
-| — | Porta 5100 occupata | Kill processo server duplicato |
-| — | Totale gruppo materiali resta 0 dopo prezzo manuale | `ParentGroup` + `NotifyTotals()` in `RecalcTotals` |
+### BUG-014 — Anomalie ore: la stessa notifica «Ore anomale» rinasce a ogni giro (fino a 8 volte)
+- **Stato:** [x] corretto il 16/08/2026, 138 test verdi, **IN PRODUZIONE dal 16/08/2026** (v93 applicata in 26 ms).
+  Il backfill non ha ricostruito nessuna giornata perché in produzione le notifiche `TIMESHEET_ANOMALY`
+  erano **zero**: la correzione è arrivata prima che le copie si vedessero.
+- **Data:** 2026-08-15
+- **Modulo:** Server (`Services/NotificationService.cs`, `CheckTimesheetAnomalies`, dedup ~riga 360)
+- **Passi:** 1. Registrare più di 10 ore su un giorno **diverso da oggi** (es. il 13/08, compilando il timesheet la mattina del 14/08 — il caso normale) 2. Lasciare girare il controllo notifiche (ogni 6 ore) 3. Guardare la campanella
+- **Atteso:** una sola notifica «Ore anomale — Mario Rossi» al giorno, come per tutte le altre scadenze
+- **Ottenuto:** una notifica **a ogni giro**. Il dedup di questo controllo — unico fra gli otto — cerca una notifica esistente creata **nel giorno lavorato** (`created_at` nella giornata di `te.work_date`), non nella giornata di oggi: se le ore sono state registrate il giorno dopo, non trova mai la propria notifica e ne crea un'altra. La finestra è `work_date >= CURDATE()-2` e il giro è ogni 6 ore → fino a ~8 copie identiche.
+- **Errore/log:** nessuno: dal punto di vista del server è tutto riuscito.
+- **Note fix:** difetto **preesistente**, trovato dalla revisione avversariale del blocco E2 il 15/08/2026 (la riscrittura E2 di quel punto è equivalente al `DATE(n.created_at) = te.work_date` di prima — verificato su 259.201 istanti a cavallo di mezzanotte, 0 divergenze — quindi non l'ha introdotto né peggiorato). Correzione non banale: allinearlo agli altri sette usando `CURDATE()` **richiede prima di portare il giorno dentro il riferimento** (es. `reference_type = 'EMPLOYEE_DAY'` con una chiave che contiene la data), altrimenti due giorni anomali della stessa persona si annullerebbero a vicenda e ne comparirebbe uno solo.
+- **Correzione applicata (16/08/2026):** la giornata segnalata è entrata nel riferimento con una
+  colonna, non con un tipo nuovo: `notifications.reference_date DATE NULL` (migrazione
+  `M093_AnomalieOrePerGiorno`, valorizzata solo da questo avviso). Il dedup ora è
+  «(persona, giorno lavorato) già segnalata?», **senza finestra su `created_at`**: non è un
+  promemoria che si rinnova ogni mattina, è il resoconto di una giornata chiusa. Il controllo è
+  uscito dal `BackgroundService` ed è diventato `NotificationService.SegnalaOreGiornaliereAnomale()`
+  — dentro un metodo privato non era raggiungibile da nessun test, ed è il motivo per cui il
+  difetto è vissuto indisturbato.
+  🪤 **Il pezzo che mancava all'analisi.** La pulizia dei promemoria superati
+  (`CleanResolvedNotifications`, punto 0, che parte da sola all'apertura della campanella) tiene una
+  riga per (destinatario, tipo, riferimento): con il riferimento «persona», cancellava l'anomalia del
+  13 nel momento in cui nasceva quella del 14 — cioè la perdita temuta come rischio della correzione
+  **c'era già in produzione**. Quel raggruppamento ora include la giornata (`<=>` e non `=`, o con
+  `reference_date` NULL la pulizia avrebbe smesso di funzionare su tutti gli altri tipi).
+  La v93 ricostruisce anche la giornata delle copie già nate leggendola dal testo del messaggio
+  (forma fissa «12,5h registrate il 13/08/2026») e ne tiene una per giornata; quelle di forma diversa
+  restano a NULL e si comportano come prima. Sei test in `Notifiche/AnomalieOreTests.cs`, più il
+  guardiano di E2 aggiornato (`IlDedupDelleNotifiche_restaUnaFinestraDiUnGiornoInSettePunti`), che
+  ora **vieta esplicitamente** la finestra ancorata a `work_date`.
 
 ---
 
-*Ultimo aggiornamento: 2026-05-26 — BUG-003 (sezioni duplicate post-conversione), BUG-004 (fasi nuove ignorate da convert), BUG-005 (dashboard 100% TRASV) tutti risolti*
+*Ultimo aggiornamento: 2026-08-16 — nessun bug aperto: BUG-014 (v93), BUG-015 e BUG-016 sono tutti in produzione.*

@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { GridScroller } from "@/components/shared/grid-scroller"
 import { fetchDaneaOrder } from "@/lib/api/danea-orders"
 import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
@@ -110,6 +111,7 @@ export function DaneaOrderDialog({
               </div>
             </section>
 
+            <GridScroller className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -153,6 +155,7 @@ export function DaneaOrderDialog({
                 ))}
               </TableBody>
             </Table>
+            </GridScroller>
 
             <section className="ml-auto w-full max-w-xs space-y-1 text-sm">
               <div className="flex justify-between">

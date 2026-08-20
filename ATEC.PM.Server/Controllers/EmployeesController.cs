@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -12,7 +13,12 @@ namespace ATEC.PM.Server.Controllers;
 public class EmployeesController : ControllerBase
 {
     private readonly DbService _db;
-    public EmployeesController(DbService db) => _db = db;
+    private readonly FeatureAccessService _access;
+    public EmployeesController(DbService db, FeatureAccessService access)
+    {
+        _db = db;
+        _access = access;
+    }
 
     [HttpGet]
     public IActionResult GetAll()
@@ -76,14 +82,15 @@ public class EmployeesController : ControllerBase
         // Eredita reparti dalla SEZIONE DI COSTO DELLA COMMESSA (project_cost_sections),
         // non dal template globale. Così se i reparti della sezione sono stati modificati
         // localmente nella commessa, la fase rispetta quei reparti.
-        // Snapshot-aware: phase locale → pp.cost_section_template_id ; legacy → pt.cost_section_template_id
+        // v74: la sezione è quella scritta sulla riga della fase di commessa. Il vecchio ripiego
+        // su phase_templates darebbe una sola delle N sezioni della fase di anagrafica, quindi i
+        // tecnici eleggibili di una sezione a caso.
         List<LookupItem> rows = c.Query<LookupItem>(@"
-            SELECT DISTINCT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name
+            SELECT DISTINCT e.id, CONCAT(e.first_name,' ',e.last_name) AS Name, e.last_name AS SortKey
             FROM project_phases pp
-            LEFT JOIN phase_templates pt ON pt.id = pp.phase_template_id
             JOIN project_cost_sections pcs
                  ON pcs.project_id = pp.project_id
-                AND pcs.template_id = COALESCE(pp.cost_section_template_id, pt.cost_section_template_id)
+                AND pcs.template_id = pp.cost_section_template_id
             JOIN project_cost_section_departments pcsd
                  ON pcsd.project_cost_section_id = pcs.id
             JOIN employee_departments ed ON ed.department_id = pcsd.department_id
@@ -94,6 +101,10 @@ public class EmployeesController : ControllerBase
               -- Fasi assegnate = SOLO persone reali: esclude i wildcard reparto ([PM] Generico, …),
               -- che sono usati solo a sinistra nel preventivo (risorse fittizie).
               AND e.first_name NOT LIKE '[%'
+            -- Si ordina per cognome, ma con DISTINCT la colonna deve stare anche nella
+            -- SELECT: MySQL in ONLY_FULL_GROUP_BY rifiuta l'ORDER BY su una colonna
+            -- fuori dalla SELECT (in produzione era un 500). SortKey non arriva al
+            -- client: LookupItem ha solo id e name.
             ORDER BY e.last_name",
             new { PhaseId = phaseId }).ToList();
 
@@ -130,36 +141,75 @@ public class EmployeesController : ControllerBase
         return Ok(ApiResponse<EmployeeSaveRequest>.Ok(emp));
     }
 
-    // Anagrafica dipendenti in scrittura: solo ADMIN (cfr. PermissionEngine.CanEditEmployee).
+    // Anagrafica dipendenti in scrittura: solo a chi ha la funzione «Utenti». Le GET qui sopra
+    // restano aperte a ogni autenticato perché alimentano le tendine di mezzo gestionale.
     [HttpPost]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.utenti")]
     public IActionResult Create([FromBody] EmployeeSaveRequest req)
     {
         using var c = _db.Open();
+        if (NameTaken(c, req, excludeId: null))
+            return Ok(ApiResponse<int>.Fail(DuplicateMessage(req)));
+
         var newId = c.ExecuteScalar<int>(
             "INSERT INTO employees (first_name,last_name,email,emp_type,supplier_id,status) VALUES (@FirstName,@LastName,@Email,@EmpType,@SupplierId,@Status); SELECT LAST_INSERT_ID()",
             req);
         return Ok(ApiResponse<int>.Ok(newId, "Creato"));
     }
 
+    /// <summary>
+    /// Esiste già un dipendente NON cessato con lo stesso nome e cognome?
+    /// <para>
+    /// `employees` non ha un indice UNIQUE sul nominativo: senza questa guardia si possono creare
+    /// due "Mario Rossi" indistinguibili in tutte le combo risorse (che filtrano solo
+    /// <c>status &lt;&gt; 'TERMINATED'</c>). Il confronto ignora maiuscole e spazi ai bordi.
+    /// I cessati non bloccano: un omonimo assunto dopo una cessazione deve poter entrare.
+    /// </para>
+    /// </summary>
+    private static bool NameTaken(System.Data.IDbConnection c, EmployeeSaveRequest req, int? excludeId) =>
+        c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM employees
+            WHERE status <> 'TERMINATED'
+              AND LOWER(TRIM(first_name)) = LOWER(TRIM(@FirstName))
+              AND LOWER(TRIM(last_name))  = LOWER(TRIM(@LastName))
+              AND (@ExcludeId IS NULL OR id <> @ExcludeId)",
+            new { req.FirstName, req.LastName, ExcludeId = excludeId }) > 0;
+
+    private static string DuplicateMessage(EmployeeSaveRequest req) =>
+        $"Esiste già un dipendente attivo di nome {(req.FirstName ?? "").Trim()} {(req.LastName ?? "").Trim()}: "
+        + "usa quello esistente oppure distingui il nominativo.";
+
     [HttpPut("{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.utenti")]
     public IActionResult Update(int id, [FromBody] EmployeeSaveRequest req)
     {
         using var c = _db.Open();
         req.Id = id;
+        // Stessa guardia della POST: senza di questa una rinomina crea l'omonimo che la POST impedisce.
+        if (NameTaken(c, req, excludeId: id))
+            return Ok(ApiResponse<int>.Fail(DuplicateMessage(req)));
+
         c.Execute(
             "UPDATE employees SET first_name=@FirstName,last_name=@LastName,email=@Email,emp_type=@EmpType,supplier_id=@SupplierId,status=@Status WHERE id=@Id",
             req);
+        // Qui si scrive anche `status`, che è la cosa guardata a ogni richiesta autenticata:
+        // senza svuotare la cache, una disattivazione dall'anagrafica resterebbe senza effetto
+        // per mezzo minuto.
+        _access.DimenticaPersona(id);
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize]
+    [RequireFeature("nav.utenti")]
     public IActionResult Delete(int id)
     {
         using var c = _db.Open();
         c.Execute("UPDATE employees SET status='TERMINATED' WHERE id=@Id", new { Id = id });
+        // Cessazione: fuori subito, senza aspettare la scadenza della cache dello stato.
+        _access.DimenticaPersona(id);
         return Ok(ApiResponse<bool>.Ok(true));
     }
 }

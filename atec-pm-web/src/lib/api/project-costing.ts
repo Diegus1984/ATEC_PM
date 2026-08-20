@@ -43,12 +43,20 @@ export async function fetchProjectAvailableTemplates(
   return unwrapApi(response)
 }
 
+/**
+ * Risorse proponibili per la sezione: wildcard di reparto in testa, poi le persone,
+ * in ordine alfabetico italiano. Il server toglie i nomi già usati nella sezione —
+ * `excludeResourceId` è la riga che si sta modificando, che deve restare selezionabile.
+ */
 export async function fetchProjectSectionEmployees(
   projectId: number,
-  sectionId: number
+  sectionId: number,
+  excludeResourceId?: number | null
 ): Promise<EmployeeCostLookup[]> {
+  const query =
+    excludeResourceId != null ? `?excludeResourceId=${excludeResourceId}` : ""
   const response = await apiGet<ApiResponse<EmployeeCostLookup[]>>(
-    `${base(projectId)}/sections/${sectionId}/employees`
+    `${base(projectId)}/sections/${sectionId}/employees${query}`
   )
   return unwrapApi(response)
 }
