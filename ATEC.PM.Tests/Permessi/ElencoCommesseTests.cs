@@ -47,12 +47,15 @@ public class ElencoCommesseTests
     [Fact]
     public void L_elenco_commesse_con_gli_importi_sta_dietro_nav_commesse()
     {
-        foreach (string metodo in new[] { "GetAll", "GetTree", "GetById", "NextCode" })
+        // GetDashboard è in questo elenco per una ragione imparata a caro prezzo: il primo giro
+        // chiuse l'elenco e lasciò aperta la Dashboard, che dei soldi ne porta anche di più
+        // (costo consuntivo, materiali, trasferta, totale). Chiudere UNA strada non basta.
+        foreach (string metodo in new[] { "GetAll", "GetTree", "GetById", "NextCode", "GetDashboard" })
         {
             string[] chiavi = ChiaviDi(typeof(ProjectsController), metodo);
             Assert.True(chiavi.Contains("nav.commesse"),
                 $"ProjectsController.{metodo} ha perso [RequireFeature(\"nav.commesse\")]: " +
-                "l'elenco commesse (revenue e ore a budget compresi) tornerebbe leggibile a chiunque.");
+                "i numeri della commessa (revenue, budget, costo consuntivo) tornerebbero leggibili a chiunque.");
         }
     }
 

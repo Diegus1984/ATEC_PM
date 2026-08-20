@@ -2170,7 +2170,24 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// La Dashboard della commessa: <c>revenue</c>, budget, costo consuntivo, materiali,
+    /// trasferta e totale. È la stessa roba che <see cref="GetAll"/> tiene dietro
+    /// <c>nav.commesse</c>, quindi sta dietro la stessa chiave.
+    ///
+    /// <para>🪤 Trovata da una revisione il 20/08, un'ora dopo aver chiuso l'elenco: qui non
+    /// c'era nessun <c>[RequireFeature]</c>, e gli attributi di classe non coprono
+    /// (<c>RequireProjectWritable</c> esce sulle letture, <c>RequireProjectVisible</c> filtra
+    /// solo le bozze). Chiusa la porta principale, i soldi uscivano da quella di servizio: un
+    /// ciclo su <c>{id}</c> e si riprendeva il valore di ogni commessa, margine compreso.
+    /// La lezione: quando si chiude un dato, si chiudono TUTTE le strade che lo portano, non
+    /// quella da cui lo si è visto passare.</para>
+    ///
+    /// <para>Unico chiamante: <c>ProjectDetailsSection</c> dentro <c>CommessePage</c>, già
+    /// dietro <c>nav.commesse</c> — chiuderla non toglie niente a nessuno che l'usasse.</para>
+    /// </summary>
     [HttpGet("{id}/dashboard")]
+    [RequireFeature("nav.commesse")]
     public IActionResult GetDashboard(int id)
     {
         try
