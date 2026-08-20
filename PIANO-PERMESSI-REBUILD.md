@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** in implementazione — **passi 1 e 2 FATTI il 20/08/2026** (catalogo unico + generatore TS + censimento; EnsureCatalogo + M102, 197/197 test verdi). Passi successivi su richiesta esplicita.  
+**Stato:** in implementazione — **passi 1, 2 e 3 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split fotografico M103 con matrice runtime a zero divergenze, 198/198 test). Passi successivi su richiesta esplicita.  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -556,8 +556,15 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    solo dal bootstrap, mai usata → registrata come ritirata). 197/197 verdi.
    Le migrazioni non registrano più chiavi: restano per i **grant** (chi riceve cosa), che sono
    decisioni.
-3. Split delle 5 chiavi condivise (migrazione-fotografia, §12.4) + diff a zero + matrice
-   runtime utente × endpoint prima/dopo (§12.8, falla 4).
+3. ✅ **FATTO 20/08/2026** — migrazione **M103**: `project.{mom,checklist,milestones,sal,
+   work_requests}` fotografate da `nav.*` (righe persona con accesso E origine, dinieghi
+   compresi, pacchetti di classe, liste motore vecchio, `min_level`). I 5 controller in **OR**
+   (`project.X`, `nav.X`) — §12.8.4; albero client su `project.*`, menu su `nav.*`;
+   `FeatureGuard`/rotte accettano più chiavi in OR (`mom/:id`). Chat resta volutamente
+   condivisa (funzione unica, per tutti dalla v88). **Matrice runtime: 324 controlli su 36
+   utenti veri, 0 divergenze** (`project.X ⟺ nav.X` per tutti + endpoint OR coerenti).
+   198/198 test (fotografia provata anche su dati pregressi, diniego NO compreso).
+   Da qui il caso #77 (albero senza menu) è un gesto admin, non una migrazione.
 4. Semina fotografica dei micro `.prices` (§12.8, falla 1), poi `[DatoSensibile]` + filtro
    risposta **in lettura e scrittura** (§12.3) + censimento prezzi.
 5. UI matrioska della scheda persona (rende il catalogo, §12.2).

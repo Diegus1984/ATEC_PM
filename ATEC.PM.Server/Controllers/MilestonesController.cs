@@ -17,7 +17,8 @@ namespace ATEC.PM.Server.Controllers;
 [Route("api/milestones")]
 [Authorize]
 // Milestone: stessa chiave della voce di menu e del tab commessa.
-[RequireFeature("nav.milestones")]
+// OR albero/menu (split passo 3, §12.8.4): grant fotografati da M103, nessuno cambia.
+[RequireFeature("project.milestones", "nav.milestones")]
 public class MilestonesController : ControllerBase
 {
     private readonly DbService _db;

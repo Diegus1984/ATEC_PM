@@ -17,7 +17,11 @@ namespace ATEC.PM.Server.Controllers;
 [Route("api/mom")]
 [Authorize]
 // Verbali e Note MoM: stessa chiave della voce di menu e del tab commessa.
-[RequireFeature("nav.mom")]
+// OR fra chiave d'albero e chiave del menu PM (split passo 3, §12.8.4): questi endpoint
+// servono sia la sezione della commessa sia le pagine globali — con una sola chiave, una
+// delle due si svuoterebbe senza errore a video. I grant di project.mom nascono fotografati
+// da nav.mom (M103): al cutover nessuno cambia.
+[RequireFeature("project.mom", "nav.mom")]
 public class MoMController : ControllerBase
 {
     private readonly MoMDbService _mdb;

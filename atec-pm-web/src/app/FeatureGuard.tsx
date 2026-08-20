@@ -38,10 +38,12 @@ export function FeatureGuard({
   featureKey,
   children,
 }: {
-  featureKey?: string
+  /** Più chiavi = OR (come `RequireFeature` sul server): basta averne una. */
+  featureKey?: string | string[]
   children: ReactNode
 }) {
-  if (!featureKey || !canAccessFeature(featureKey)) {
+  const chiavi = Array.isArray(featureKey) ? featureKey : featureKey ? [featureKey] : []
+  if (chiavi.length === 0 || !chiavi.some(canAccessFeature)) {
     return <AccessDenied />
   }
   return <>{children}</>

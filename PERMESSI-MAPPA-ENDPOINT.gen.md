@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 11:57.
+> Fotografia del 20/08/2026 12:11.
 
 ## Chiavi con endpoint
 
@@ -588,6 +588,22 @@
 - `POST /api/chat/{chatId}/messages/with-attachment` (ChatController.SendMessageWithAttachment)
 - `POST /api/chat/{chatId}/participants` (ChatController.AddParticipant)
 
+### `project.checklist` — Check list
+- `DELETE /api/checklist/groups/{id}` (CheckListController.DeleteGroup)
+- `DELETE /api/checklist/inbox/{id}` (CheckListController.DeleteInbox)
+- `DELETE /api/checklist/items/{id}` (CheckListController.DeleteItem)
+- `GET /api/checklist/board` (CheckListController.GetBoard)
+- `GET /api/checklist/inbox` (CheckListController.GetInbox)
+- `GET /api/checklist/lookups/projects` (CheckListController.GetProjectLookups)
+- `GET /api/checklist/project/{projectId}` (CheckListController.GetProjectItems)
+- `POST /api/checklist/groups` (CheckListController.AddGroup)
+- `POST /api/checklist/inbox` (CheckListController.AddInbox)
+- `POST /api/checklist/inbox/{id}/assign` (CheckListController.AssignInbox)
+- `POST /api/checklist/items` (CheckListController.AddItem)
+- `PUT /api/checklist/groups/{id}` (CheckListController.UpdateGroup)
+- `PUT /api/checklist/inbox/{id}` (CheckListController.UpdateInbox)
+- `PUT /api/checklist/items/{id}` (CheckListController.UpdateItem)
+
 ### `project.ddp_commerciale` — DDP Commerciali
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
@@ -616,6 +632,85 @@
 - `POST /api/projects/{id}/rename` (ProjectsController.RenameItem)
 - `POST /api/projects/{id}/upload` (ProjectsController.UploadFile)
 - `POST /api/projects/{id}/upload-multiple` (ProjectsController.UploadMultiple)
+
+### `project.milestones` — Milestone
+- `DELETE /api/milestones/{id}` (MilestonesController.Delete)
+- `DELETE /api/milestones/project/{projectId}/views/{name}` (MilestonesController.DeleteView)
+- `GET /api/milestones` (MilestonesController.GetForProject)
+- `GET /api/milestones//api/projects/{projectId}/milestones` (MilestonesController.GetForProject)
+- `GET /api/milestones/project/{projectId}/views` (MilestonesController.GetViews)
+- `GET /api/milestones/summary` (MilestonesController.GetSummary)
+- `POST /api/milestones` (MilestonesController.Create)
+- `POST /api/milestones//api/projects/{projectId}/milestones/preload` (MilestonesController.SeedFromCatalog)
+- `POST /api/milestones/project/{projectId}/seed-from-catalog` (MilestonesController.SeedFromCatalog)
+- `POST /api/milestones/reorder` (MilestonesController.Reorder)
+- `PUT /api/milestones/{id}` (MilestonesController.Update)
+- `PUT /api/milestones/project/{projectId}/views/{name}` (MilestonesController.SaveView)
+
+### `project.mom` — Verbali (MoM)
+- `DELETE /api/mom/{id}` (MoMController.Delete)
+- `DELETE /api/mom/items/{id}` (MoMController.DeleteItem)
+- `DELETE /api/mom/notes/{id}` (MoMController.DeleteNote)
+- `GET /api/mom/{id}` (MoMController.GetDetail)
+- `GET /api/mom/list` (MoMController.GetList)
+- `GET /api/mom/lookups/employees` (MoMController.GetEmployeeLookups)
+- `GET /api/mom/lookups/projects` (MoMController.GetProjectLookups)
+- `GET /api/mom/lookups/wildcards` (MoMController.GetWildcardLookups)
+- `GET /api/mom/notes` (MoMController.GetNotes)
+- `POST /api/mom` (MoMController.Create)
+- `POST /api/mom/{momId}/items` (MoMController.AddItem)
+- `POST /api/mom/{momId}/items/reorder` (MoMController.ReorderItems)
+- `POST /api/mom/notes` (MoMController.AddNote)
+- `POST /api/mom/notes/{id}/assign` (MoMController.AssignNote)
+- `PUT /api/mom/{id}` (MoMController.Update)
+- `PUT /api/mom/items/{id}` (MoMController.UpdateItem)
+- `PUT /api/mom/notes/{id}` (MoMController.UpdateNote)
+
+### `project.sal` — SAL / Fatturazione
+- `DELETE /api/sal/conditions/{id}` (SalController.DeleteCondition)
+- `DELETE /api/sal/payment-states/{id}` (SalController.DeletePaymentState)
+- `DELETE /api/sal/rows/{id}` (SalController.DeleteRow)
+- `DELETE /api/sal/sap-causali/{id}` (SalController.DeleteSapCausale)
+- `GET /api/sal` (SalController.GetBundle)
+- `GET /api/sal/conditions` (SalController.GetConditions)
+- `GET /api/sal/conditions/active` (SalController.GetActiveConditions)
+- `GET /api/sal/economics` (SalController.GetEconomics)
+- `GET /api/sal/payment-states` (SalController.GetPaymentStates)
+- `GET /api/sal/payment-states/active` (SalController.GetActivePaymentStates)
+- `GET /api/sal/prospetto` (SalController.GetProspetto)
+- `GET /api/sal/sap-causali` (SalController.GetSapCausali)
+- `GET /api/sal/sap-causali/active` (SalController.GetActiveSapCausali)
+- `GET /api/sal/summary` (SalController.GetSummary)
+- `POST /api/sal/conditions` (SalController.CreateCondition)
+- `POST /api/sal/conditions/reorder` (SalController.ReorderConditions)
+- `POST /api/sal/conditions/reset` (SalController.ResetConditions)
+- `POST /api/sal/payment-states` (SalController.CreatePaymentState)
+- `POST /api/sal/payment-states/reorder` (SalController.ReorderPaymentStates)
+- `POST /api/sal/payment-states/reset` (SalController.ResetPaymentStates)
+- `POST /api/sal/project/{projectId}/seed-template` (SalController.SeedTemplate)
+- `POST /api/sal/rows` (SalController.CreateRow)
+- `POST /api/sal/rows/reorder` (SalController.Reorder)
+- `POST /api/sal/sap-causali` (SalController.CreateSapCausale)
+- `POST /api/sal/sap-causali/reorder` (SalController.ReorderSapCausali)
+- `POST /api/sal/sap-causali/reset` (SalController.ResetSapCausali)
+- `PUT /api/sal/conditions/{id}` (SalController.UpdateCondition)
+- `PUT /api/sal/conditions/{id}/toggle-active` (SalController.ToggleActiveCondition)
+- `PUT /api/sal/header` (SalController.UpdateHeader)
+- `PUT /api/sal/payment-states/{id}` (SalController.UpdatePaymentState)
+- `PUT /api/sal/payment-states/{id}/toggle-active` (SalController.ToggleActivePaymentState)
+- `PUT /api/sal/rows/{id}` (SalController.UpdateRow)
+- `PUT /api/sal/sap-causali/{id}` (SalController.UpdateSapCausale)
+- `PUT /api/sal/sap-causali/{id}/toggle-active` (SalController.ToggleActiveSapCausale)
+
+### `project.work_requests` — Lavorazioni
+- `DELETE /api/work-requests/{id}` (WorkRequestsController.Delete)
+- `GET /api/work-requests/officina` (WorkRequestsController.GetOfficinaRows)
+- `GET /api/work-requests/priorities` (WorkRequestsController.GetByPriorities)
+- `GET /api/work-requests/project/{projectId}` (WorkRequestsController.GetByProject)
+- `PATCH /api/work-requests/{id}/field` (WorkRequestsController.UpdateField)
+- `PATCH /api/work-requests/officina/{itemId}/field` (WorkRequestsController.PatchOfficinaField)
+- `POST /api/work-requests` (WorkRequestsController.Create)
+- `PUT /api/work-requests/{id}` (WorkRequestsController.Update)
 
 ### `resources.edit` — Modifica il planner risorse
 - `DELETE /api/resource-planner/assignments/{id}` (ResourcesController.DeleteAssignment)
@@ -661,11 +756,6 @@
 - `data.hourly_cost` — MORTA: nessun uso nel codice al censimento del 20/08/2026. Resta registrata per le righe storiche; il passo 2 la marca ritirata anche a DB.
 
 ## Chiavi condivise menu/albero (da sdoppiare al passo 3, §12.4)
-- `nav.checklist` — Check list
-- `nav.milestones` — Milestone
-- `nav.mom` — Verbali (MoM)
-- `nav.sal` — SAL / Fatturazione
-- `nav.work_requests` — Lavorazioni
 - `project.chat` — Chat
 
 ## Controller con endpoint senza nessuna chiave (solo [Authorize])

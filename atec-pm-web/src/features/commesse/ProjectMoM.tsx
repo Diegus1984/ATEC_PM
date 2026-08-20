@@ -34,7 +34,7 @@ export function ProjectMoM({ projectId }: { projectId: number }) {
   // Funzione concessa in sola lettura: i verbali si aprono e si leggono, ma niente
   // creazione o eliminazione. A respingere davvero le scritture è l'API; qui si
   // tolgono i comandi, altrimenti ogni clic finirebbe in un errore rosso.
-  const readOnly = !canWriteFeature("nav.mom")
+  const readOnly = !canWriteFeature("project.mom")
 
   const query = useQuery({
     queryKey: ["mom-list", "project", projectId],

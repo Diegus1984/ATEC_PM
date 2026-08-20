@@ -70,11 +70,16 @@ export type ChiaveCatalogo =
   | "nav.utenti"
   | "nav.work_requests"
   | "project.chat"
+  | "project.checklist"
   | "project.ddp_commerciale"
   | "project.ddp_officina"
   | "project.dettagli"
   | "project.documenti"
   | "project.flusso_cassa"
+  | "project.milestones"
+  | "project.mom"
+  | "project.sal"
+  | "project.work_requests"
   | "resources.edit"
   | "sal.economics"
 
@@ -151,27 +156,23 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
           },
           {
             "kind": "sezione-commessa",
-            "chiave": "nav.mom",
-            "label": "Verbali (MoM)",
-            "chiaveCondivisa": true
+            "chiave": "project.mom",
+            "label": "Verbali (MoM)"
           },
           {
             "kind": "sezione-commessa",
-            "chiave": "nav.checklist",
-            "label": "Check list",
-            "chiaveCondivisa": true
+            "chiave": "project.checklist",
+            "label": "Check list"
           },
           {
             "kind": "sezione-commessa",
-            "chiave": "nav.milestones",
-            "label": "Milestone",
-            "chiaveCondivisa": true
+            "chiave": "project.milestones",
+            "label": "Milestone"
           },
           {
             "kind": "sezione-commessa",
-            "chiave": "nav.sal",
-            "label": "SAL / Fatturazione",
-            "chiaveCondivisa": true
+            "chiave": "project.sal",
+            "label": "SAL / Fatturazione"
           },
           {
             "kind": "sezione-commessa",
@@ -185,9 +186,8 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
           },
           {
             "kind": "sezione-commessa",
-            "chiave": "nav.work_requests",
-            "label": "Lavorazioni",
-            "chiaveCondivisa": true
+            "chiave": "project.work_requests",
+            "label": "Lavorazioni"
           },
           {
             "kind": "sezione-commessa",
@@ -670,11 +670,16 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "nav.utenti",
   "nav.work_requests",
   "project.chat",
+  "project.checklist",
   "project.ddp_commerciale",
   "project.ddp_officina",
   "project.dettagli",
   "project.documenti",
   "project.flusso_cassa",
+  "project.milestones",
+  "project.mom",
+  "project.sal",
+  "project.work_requests",
   "resources.edit",
   "sal.economics",
 ]

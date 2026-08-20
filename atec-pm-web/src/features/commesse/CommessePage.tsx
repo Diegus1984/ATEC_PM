@@ -458,7 +458,7 @@ export function CommessePage() {
           // non lo vede resta sulla scheda della commessa.
           if (newProjectId) {
             navigate(
-              canAccessFeature("nav.sal")
+              canAccessFeature("project.sal")
                 ? `/commesse/${newProjectId}/sal`
                 : `/commesse/${newProjectId}`
             )

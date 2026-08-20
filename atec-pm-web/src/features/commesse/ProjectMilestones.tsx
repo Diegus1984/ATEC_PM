@@ -60,7 +60,7 @@ export function ProjectMilestones({
   // Funzione concessa in sola lettura: la pianificazione si consulta ma non si tocca.
   // A respingere davvero le scritture è l'API (`RequireFeature` su MilestonesController),
   // qui si tolgono i comandi per non far cliccare pulsanti che tornano solo un 403.
-  const readOnly = !canWriteFeature("nav.milestones")
+  const readOnly = !canWriteFeature("project.milestones")
   const [preloadOpen, setPreloadOpen] = React.useState(false)
   const queryKey = React.useMemo(
     () => ["milestones", "project", projectId],

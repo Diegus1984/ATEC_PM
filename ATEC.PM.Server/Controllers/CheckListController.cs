@@ -17,7 +17,8 @@ namespace ATEC.PM.Server.Controllers;
 [Route("api/checklist")]
 [Authorize]
 // Modulo Check list: stessa chiave della voce di menu e del tab commessa.
-[RequireFeature("nav.checklist")]
+// OR albero/menu (split passo 3, §12.8.4): grant fotografati da M103, nessuno cambia.
+[RequireFeature("project.checklist", "nav.checklist")]
 public class CheckListController : ControllerBase
 {
     private readonly CheckListDbService _cdb;

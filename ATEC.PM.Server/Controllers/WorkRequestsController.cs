@@ -18,7 +18,8 @@ namespace ATEC.PM.Server.Controllers;
 [Route("api/work-requests")]
 [Authorize]
 // Lavorazioni: stessa chiave della voce di menu e del tab commessa.
-[RequireFeature("nav.work_requests")]
+// OR albero/menu (split passo 3, §12.8.4): grant fotografati da M103, nessuno cambia.
+[RequireFeature("project.work_requests", "nav.work_requests")]
 public class WorkRequestsController : ControllerBase
 {
     private readonly DbService _db;

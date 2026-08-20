@@ -47,20 +47,23 @@ export const COMMESSA_SECTIONS: CommessaSection[] = [
     economicsOnly: true,
   },
   { key: "chat", label: "Chat", icon: "💬", featureKey: "project.chat" },
-  { key: "mom", label: "Verbali (MoM)", icon: "📝", featureKey: "nav.mom" },
+  // Dal passo 3 dello split (20/08/2026) l'albero ha chiavi proprie `project.*`,
+  // fotografate dalle `nav.*` del menu PM dalla M103: da qui in poi menu e albero
+  // si concedono separatamente (caso #77).
+  { key: "mom", label: "Verbali (MoM)", icon: "📝", featureKey: "project.mom" },
   {
     key: "checklist",
     label: "Check list",
     icon: "✅",
-    featureKey: "nav.checklist",
+    featureKey: "project.checklist",
   },
   {
     key: "milestones",
     label: "Milestone",
     icon: "📅",
-    featureKey: "nav.milestones",
+    featureKey: "project.milestones",
   },
-  { key: "sal", label: "SAL / Fatturazione", icon: "💶", featureKey: "nav.sal" },
+  { key: "sal", label: "SAL / Fatturazione", icon: "💶", featureKey: "project.sal" },
   {
     key: "ddp_commercial",
     label: "DDP Commerciali",
@@ -77,7 +80,7 @@ export const COMMESSA_SECTIONS: CommessaSection[] = [
     key: "work_requests",
     label: "Lavorazioni",
     icon: "⚙️",
-    featureKey: "nav.work_requests",
+    featureKey: "project.work_requests",
   },
   { key: "documents", label: "Documenti", icon: "📁", featureKey: "project.documenti" },
 ]

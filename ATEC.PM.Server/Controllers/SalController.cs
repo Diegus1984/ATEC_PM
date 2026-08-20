@@ -18,7 +18,8 @@ namespace ATEC.PM.Server.Controllers;
 [Route("api/sal")]
 [Authorize]
 // SAL / Fatturazione: dati economici, stessa chiave della voce di menu.
-[RequireFeature("nav.sal")]
+// OR albero/menu (split passo 3, §12.8.4): grant fotografati da M103, nessuno cambia.
+[RequireFeature("project.sal", "nav.sal")]
 public class SalController : ControllerBase
 {
     private readonly DbService _db;

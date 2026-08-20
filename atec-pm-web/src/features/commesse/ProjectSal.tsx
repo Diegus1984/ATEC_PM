@@ -72,7 +72,7 @@ export function ProjectSal({
   const canSeeEconomics = canAccessFeature("sal.economics")
   // Funzione concessa in sola lettura (tecnico del reparto Contabilità): il foglio si
   // consulta ma non si tocca. A respingere davvero le scritture è l'API.
-  const readOnly = !canWriteFeature("nav.sal")
+  const readOnly = !canWriteFeature("project.sal")
 
   const queryKey = React.useMemo(() => ["sal", "project", projectId], [projectId])
   const query = useQuery({
