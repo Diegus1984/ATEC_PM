@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** accordo di progetto (design). Implementazione solo su richiesta esplicita.  
+**Stato:** in implementazione — **passo 1 FATTO il 20/08/2026** (catalogo unico + generatore TS + censimento, 193/193 test verdi). Passi successivi su richiesta esplicita.  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -539,8 +539,12 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
 
 ### 12.6 Ordine di implementazione (dedotto dalle dipendenze)
 
-1. `catalogo-permessi.json` + `genera-catalogo.mjs` + test di censimento — zero cambi runtime;
-   il primo run del test emette gli stub: **la mappa chiave → casa si riempie qui**.
+1. ✅ **FATTO 20/08/2026** — `ATEC.PM.Shared/catalogo-permessi.json` (73 chiavi, embedded) +
+   `PermessiCatalogo.cs` (lettore/validatore) + `genera-catalogo.mjs` → `catalogo.gen.ts`
+   (tipo unione, agganciato a predev/prebuild, `featureKey` tipizzato nei due file client) +
+   `CensimentoCatalogoTests` (4 garanzie) + artefatto `PERMESSI-MAPPA-ENDPOINT.gen.md`.
+   Zero cambi runtime; 193/193 test verdi, build web verde. 9 chiavi marcate soloClient,
+   1 ritirata (`data.hourly_cost`), 6 condivise menu/albero marcate per il passo 3.
 2. `EnsureCatalogo` all'avvio (stesso pattern di `EnsureViews`): `auth_features` si allinea dal
    JSON — registra le chiavi nuove, marca le ritirate. Le migrazioni non registrano più chiavi:
    restano per i **grant** (chi riceve cosa), che sono decisioni.

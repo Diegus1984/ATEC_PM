@@ -1,0 +1,229 @@
+{
+  "commento": "CATALOGO UNICO DEI PERMESSI (PIANO-PERMESSI-REBUILD.md §12) — unica fonte: da qui si generano il tipo TypeScript (genera-catalogo.mjs), il censimento (ATEC.PM.Tests) e, dal passo 2, le righe di auth_features (EnsureCatalogo). Le chiavi sono IMMUTABILI: per rinominare si usa `alias` (§12.8.2). `chiaveCondivisa: true` = stessa chiave usata da menu e albero commessa, da sdoppiare al passo 3 (§12.4). I micro `prices` arrivano al passo 4 con la semina fotografica (§12.8.1).",
+  "versione": 1,
+  "fotografia": "chiavi rilevate il 20/08/2026: codice server (no Migrations), client web, auth_features locale (schema v100)",
+  "albero": [
+    {
+      "kind": "sezione",
+      "label": "Principale",
+      "figli": [
+        {
+          "kind": "voce",
+          "chiave": "nav.dashboard",
+          "label": "Dashboard",
+          "soloClient": true,
+          "motivo": "Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.",
+          "figli": [
+            { "kind": "azione", "chiave": "data.revenue", "label": "Vede il fatturato (globale)", "nota": "Chiave prezzi globale: al passo 4 diventa micro prices delle voci che ereditano." },
+            { "kind": "azione", "chiave": "action.edit_dashboard_settings", "label": "Modifica impostazioni Dashboard" },
+            { "kind": "azione", "chiave": "action.toggle_dashboard_folder", "label": "Aggiunge/toglie cartelle Dashboard" }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.commesse",
+          "label": "Commesse",
+          "figli": [
+            { "kind": "sezione-commessa", "chiave": "project.dettagli", "label": "Dashboard Commessa", "soloClient": true, "motivo": "Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize])." },
+            { "kind": "sezione-commessa", "chiave": "project.flusso_cassa", "label": "Flusso di Cassa", "soloClient": true, "motivo": "Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize])." },
+            { "kind": "sezione-commessa", "chiave": null, "label": "Preventivo vs Consuntivo", "nota": "Oggi senza chiave: visibilità decisa dal flag client economicsOnly (§12.8.9); i dati passano da data.budget. Al cutover diventa chiave propria." },
+            { "kind": "sezione-commessa", "chiave": "project.chat", "label": "Chat", "chiaveCondivisa": true, "nota": "Stessa chiave della voce di menu Chat (v88 l'ha concessa a tutti)." },
+            { "kind": "sezione-commessa", "chiave": "nav.mom", "label": "Verbali (MoM)", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3 (caso #77)." },
+            { "kind": "sezione-commessa", "chiave": "nav.checklist", "label": "Check list", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3." },
+            { "kind": "sezione-commessa", "chiave": "nav.milestones", "label": "Milestone", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3 (caso #77)." },
+            { "kind": "sezione-commessa", "chiave": "nav.sal", "label": "SAL / Fatturazione", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3." },
+            { "kind": "sezione-commessa", "chiave": "project.ddp_commerciale", "label": "DDP Commerciali" },
+            { "kind": "sezione-commessa", "chiave": "project.ddp_officina", "label": "DDP Officina" },
+            { "kind": "sezione-commessa", "chiave": "nav.work_requests", "label": "Lavorazioni", "chiaveCondivisa": true, "nota": "Condivisa col menu PM: da sdoppiare al passo 3." },
+            { "kind": "sezione-commessa", "chiave": "project.documenti", "label": "Documenti" },
+            { "kind": "azione", "chiave": "action.edit_project", "label": "Modifica commessa" },
+            { "kind": "azione", "chiave": "action.delete_project", "label": "Elimina commessa" },
+            { "kind": "azione", "chiave": "action.project_locked_write", "label": "Scrive su commesse non attive", "nota": "Cancello del ProjectWriteGuard (#88)." },
+            { "kind": "azione", "chiave": "data.project_drafts", "label": "Vede le bozze di commessa", "nota": "Bozze invisibili senza chiave (#88)." },
+            { "kind": "azione", "chiave": "data.costs", "label": "Vede i costi (globale)", "nota": "Chiave prezzi globale (ProjectCosting/QuoteCosting): al passo 4 diventa micro prices delle voci che ereditano." },
+            { "kind": "azione", "chiave": "data.budget", "label": "Preventivo vs Consuntivo (dati)", "nota": "Governa BudgetVsActualController; è la chiave dietro la sezione senza chiave qui sopra." },
+            { "kind": "azione", "chiave": "action.import_project_phases", "label": "Importa fasi da libreria", "soloClient": true, "motivo": "Gate solo client (bottone import fasi): endpoint da censire al passo 3." },
+            { "kind": "azione", "chiave": "action.sync_project_phases", "label": "Sincronizza fasi da libreria", "soloClient": true, "motivo": "Gate solo client (bottone sync fasi): endpoint da censire al passo 3." }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.timesheet",
+          "label": "Timesheet",
+          "figli": [
+            { "kind": "azione", "chiave": "action.timesheet_for_others", "label": "Compila il timesheet di altri" },
+            { "kind": "azione", "chiave": "action.timesheet_any_employee", "label": "Sceglie qualunque dipendente" },
+            { "kind": "azione", "chiave": "data.timesheet_all_phases", "label": "Vede tutte le fasi (vista timesheet)" },
+            { "kind": "azione", "chiave": "data.hourly_cost", "label": "Vede il costo orario", "ritirata": true, "nota": "MORTA: nessun uso nel codice al censimento del 20/08/2026. Resta registrata per le righe storiche; il passo 2 la marca ritirata anche a DB." }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "project.chat",
+          "label": "Chat",
+          "nota": "Concessa a tutti gli utenti del gestionale dalla v88 (#78). È anche sezione dell'albero commessa (duplicato marcato chiaveCondivisa).",
+          "figli": [
+            { "kind": "azione", "chiave": "action.moderate_chat", "label": "Modera le chat (elimina messaggi altrui)" }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.risorse",
+          "label": "Risorse",
+          "figli": [
+            { "kind": "azione", "chiave": "resources.edit", "label": "Modifica il planner risorse" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "PM",
+      "nota": "Raccoglitore di viste globali: dal #77 è solo dei PM (e Admin). Le sezioni dentro la commessa hanno flag separati — oggi 5 chiavi sono ancora condivise (vedi albero sotto Commesse).",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.mom", "label": "Verbali (MoM)", "nota": "Due voci di menu (Note MoM + Verbali) usano questa stessa chiave." },
+        {
+          "kind": "voce",
+          "chiave": "nav.gestore_ddp",
+          "label": "Gestore DDP",
+          "figli": [
+            { "kind": "azione", "chiave": "action.delete_ddp_row", "label": "Elimina righe DDP" }
+          ]
+        },
+        { "kind": "voce", "chiave": "nav.checklist", "label": "Check list" },
+        { "kind": "voce", "chiave": "nav.milestones", "label": "Milestones" },
+        {
+          "kind": "voce",
+          "chiave": "nav.sal",
+          "label": "SAL / Fatturazione",
+          "figli": [
+            { "kind": "azione", "chiave": "sal.economics", "label": "Vede gli importi SAL (globale)", "nota": "Chiave prezzi globale: al passo 4 diventa micro prices delle voci che ereditano." },
+            { "kind": "azione", "chiave": "action.sal_edit_closed", "label": "Modifica SAL chiusi" }
+          ]
+        },
+        { "kind": "voce", "chiave": "nav.trasferta", "label": "Trasferta" },
+        { "kind": "voce", "chiave": "nav.ore_commessa", "label": "Ore Commessa" },
+        {
+          "kind": "voce",
+          "chiave": "nav.bilancio",
+          "label": "Bilancio",
+          "figli": [
+            { "kind": "azione", "chiave": "action.edit_bilancio_settings", "label": "Modifica soglia/impostazioni Bilancio" }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.work_requests",
+          "label": "Lavorazioni Officine",
+          "figli": [
+            { "kind": "azione", "chiave": "nav.officina_inbox", "label": "Inbox Officina (endpoint)", "nota": "Ex pagina Inbox Officina, tolta con la #83: la chiave governa ancora le GET /inbox usate dai flussi officina." }
+          ]
+        },
+        { "kind": "voce", "chiave": "nav.scadenze", "label": "Scadenze" }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Acquisti",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.acquisti_inbox", "label": "Inbox Acquisti" }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Commerciale",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.preventivi", "label": "Preventivi" },
+        { "kind": "voce", "chiave": "nav.cat_preventivi", "label": "Cat. Preventivi" },
+        {
+          "kind": "voce",
+          "chiave": "nav.gamma_robot",
+          "label": "Gamma Robot",
+          "soloClient": true,
+          "motivo": "Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.",
+          "figli": [
+            { "kind": "azione", "chiave": "action.edit_gamma_robot", "label": "Modifica Gamma Robot" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Gestione",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.clienti", "label": "Clienti" },
+        { "kind": "voce", "chiave": "nav.fornitori", "label": "Fornitori" },
+        { "kind": "voce", "chiave": "nav.catalogo", "label": "Catalogo Articoli" },
+        {
+          "kind": "voce",
+          "chiave": "nav.codex",
+          "label": "Codex Articoli",
+          "soloClient": true,
+          "motivo": "Pagina: le azioni Codex hanno chiavi proprie (manage/recode/assegna Codice ATEC).",
+          "figli": [
+            { "kind": "azione", "chiave": "action.manage_codex", "label": "Gestisce il Codex (sync, genera codice)" },
+            { "kind": "azione", "chiave": "action.recode_codex", "label": "Ricodifica Codex" },
+            { "kind": "azione", "chiave": "action.assign_atec_code", "label": "Assegna il Codice ATEC" }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.codex_composizione",
+          "label": "Composizione Codex",
+          "soloClient": true,
+          "motivo": "Pagina: le scritture passano da action.edit_codex_composition.",
+          "figli": [
+            { "kind": "azione", "chiave": "action.edit_codex_composition", "label": "Modifica composizione Codex" }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.danea_migration",
+          "label": "Trasferimento Danea",
+          "figli": [
+            { "kind": "azione", "chiave": "action.import_easyfatt", "label": "Importa da Easyfatt" },
+            { "kind": "azione", "chiave": "data.danea_explore", "label": "Esplora l'archivio Danea" }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Amministrazione",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.utenti", "label": "Utenti" },
+        { "kind": "voce", "chiave": "nav.permessi", "label": "Permessi" },
+        { "kind": "azione", "chiave": "action.app_config", "label": "Modifica configurazione applicativa", "nota": "ConfigController: chiavi/valori di app_config." }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Gestione avanzata",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.config_sezioni", "label": "Config. Sezioni di costo" },
+        { "kind": "voce", "chiave": "nav.anagrafica_attivita", "label": "Anagrafica attività" },
+        { "kind": "voce", "chiave": "nav.sal_condizioni", "label": "Condizioni pagamento SAL", "soloClient": true, "motivo": "Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize])." },
+        { "kind": "voce", "chiave": "nav.ddp_destinazioni", "label": "Conf. DDP" },
+        { "kind": "voce", "chiave": "nav.ddp_aggregazioni", "label": "Aggregazioni DDP" },
+        { "kind": "voce", "chiave": "nav.backup", "label": "Backup DB" },
+        { "kind": "voce", "chiave": "nav.project_templates", "label": "Template Commesse" },
+        { "kind": "voce", "chiave": "nav.digest_email", "label": "Digest Email" }
+      ]
+    },
+    {
+      "kind": "sezione",
+      "label": "Supporto",
+      "figli": [
+        {
+          "kind": "voce",
+          "chiave": "nav.bug_reports",
+          "label": "Segnalazioni",
+          "figli": [
+            { "kind": "azione", "chiave": "action.manage_bug_reports", "label": "Gestisce le segnalazioni (stati, risposte)" },
+            { "kind": "azione", "chiave": "data.bug_reports_all", "label": "Vede le segnalazioni di tutti" }
+          ]
+        }
+      ]
+    }
+  ]
+}

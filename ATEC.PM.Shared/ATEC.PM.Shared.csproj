@@ -4,4 +4,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <!-- Catalogo unico dei permessi (PIANO-PERMESSI-REBUILD.md §12): embedded così il
+       binario e il catalogo non possono divergere nel deploy differenziale. -->
+  <ItemGroup>
+    <EmbeddedResource Include="catalogo-permessi.json" />
+  </ItemGroup>
 </Project>

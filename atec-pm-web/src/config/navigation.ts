@@ -10,6 +10,7 @@
  * Dettagli: .cursor/rules/permessi-catalogo-sensitive.mdc
  */
 import type { LucideIcon } from "lucide-react"
+import type { ChiaveCatalogo } from "./catalogo.gen"
 import {
   AlarmClock,
   Archive,
@@ -50,7 +51,8 @@ export interface NavItemConfig {
   id: string
   label: string
   path: string
-  featureKey: string
+  /** Chiusa sul catalogo unico: una chiave fuori da catalogo-permessi.json non compila. */
+  featureKey: ChiaveCatalogo
   icon: LucideIcon
   status: ModuleStatus
   description?: string

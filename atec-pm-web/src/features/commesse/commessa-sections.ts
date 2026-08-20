@@ -9,6 +9,8 @@
  * catalogo unico del rebuild la sezione dichiarerà `sensitive: ["prices"]`.
  * Dettagli: .cursor/rules/permessi-catalogo-sensitive.mdc
  */
+import type { ChiaveCatalogo } from "@/config/catalogo.gen"
+
 export interface CommessaSection {
   key: string
   label: string
@@ -20,8 +22,9 @@ export interface CommessaSection {
    * Permesso richiesto per vedere la sezione, stesse chiavi del menu principale
    * (pagina «Permessi»): chi non ha il livello minimo non la vede nell'albero e
    * non può aprirla nemmeno scrivendo l'indirizzo a mano.
+   * Chiusa sul catalogo unico: una chiave fuori da catalogo-permessi.json non compila.
    */
-  featureKey?: string
+  featureKey?: ChiaveCatalogo
 }
 
 /**

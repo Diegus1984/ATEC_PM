@@ -1,0 +1,694 @@
+﻿# Mappa chiave → endpoint (GENERATA)
+
+> Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
+> NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
+> Fotografia del 20/08/2026 11:29.
+
+## Chiavi con endpoint
+
+### `action.app_config` — Modifica configurazione applicativa
+- `GET /api/config` (ConfigController.GetAll)
+- `GET /api/config/{key}` (ConfigController.GetByKey)
+- `PUT /api/config` (ConfigController.Save)
+
+### `action.assign_atec_code` — Assegna il Codice ATEC
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
+- `POST /api/codex/confirm` (CodexController.ConfirmReservation)
+- `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
+- `POST /api/codex/reserve` (CodexController.ReserveCode)
+
+### `action.delete_ddp_row` — Elimina righe DDP
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+
+### `action.delete_project` — Elimina commessa
+- `DELETE /api/projects/{id}/hard` (ProjectsController.HardDelete)
+
+### `action.edit_bilancio_settings` — Modifica soglia/impostazioni Bilancio
+- `PUT /api/bilancio/settings` (BilancioController.SaveSettings)
+
+### `action.edit_codex_composition` — Modifica composizione Codex
+- `DELETE /api/codex/compositions/{id}` (CodexController.DeleteComposition)
+- `POST /api/codex/compositions` (CodexController.AddComposition)
+- `PUT /api/codex/compositions/{id}` (CodexController.UpdateComposition)
+
+### `action.edit_dashboard_settings` — Modifica impostazioni Dashboard
+- `PUT /api/dashboard/settings` (DashboardController.SaveSettings)
+
+### `action.edit_gamma_robot` — Modifica Gamma Robot
+- `DELETE /api/gamma-robot/distinta/{id}` (GammaRobotController.DeleteDistinta)
+- `DELETE /api/gamma-robot/quadri/{id}` (GammaRobotController.DeleteQuadro)
+- `DELETE /api/gamma-robot/robots/{id}` (GammaRobotController.DeleteRobot)
+- `POST /api/gamma-robot/distinta` (GammaRobotController.AddDistinta)
+- `POST /api/gamma-robot/robots` (GammaRobotController.CreateRobot)
+- `POST /api/gamma-robot/robots/{robotId}/quadri` (GammaRobotController.CreateQuadro)
+- `PUT /api/gamma-robot/distinta/{id}` (GammaRobotController.UpdateDistinta)
+- `PUT /api/gamma-robot/quadri/{id}` (GammaRobotController.UpdateQuadro)
+- `PUT /api/gamma-robot/robots/{id}` (GammaRobotController.UpdateRobot)
+
+### `action.edit_project` — Modifica commessa
+- `PUT /api/projects/{id}` (ProjectsController.Update)
+
+### `action.import_easyfatt` — Importa da Easyfatt
+- `GET /api/import/easyfatt/articles` (ImportController.GetEasyfattArticles)
+- `GET /api/import/easyfatt/columns` (ImportController.GetColumns)
+- `GET /api/import/easyfatt/customers` (ImportController.GetEasyfattCustomers)
+- `GET /api/import/easyfatt/preview` (ImportController.PreviewTable)
+- `GET /api/import/easyfatt/suppliers` (ImportController.GetEasyfattSuppliers)
+- `POST /api/import/easyfatt/articles` (ImportController.ImportArticles)
+- `POST /api/import/easyfatt/customers` (ImportController.ImportCustomers)
+- `POST /api/import/easyfatt/suppliers` (ImportController.ImportSuppliers)
+
+### `action.manage_bug_reports` — Gestisce le segnalazioni (stati, risposte)
+- `POST /api/bug-reports/{id}/archive` (BugReportsController.Archive)
+- `POST /api/bug-reports/{id}/unarchive` (BugReportsController.Unarchive)
+- `PUT /api/bug-reports/{id}/status` (BugReportsController.UpdateStatus)
+
+### `action.manage_codex` — Gestisce il Codex (sync, genera codice)
+- `DELETE /api/codex/{id}` (CodexController.Delete)
+- `POST /api/codex/confirm` (CodexController.ConfirmReservation)
+- `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
+- `POST /api/codex/reserve` (CodexController.ReserveCode)
+- `POST /api/codex/sync` (CodexController.StartSync)
+- `PUT /api/codex/{id}` (CodexController.Update)
+
+### `action.project_locked_write` — Scrive su commesse non attive
+- `PATCH /api/projects/{id}/status` (ProjectsController.UpdateStatus)
+- `POST /api/projects/{id}/promote-to-commessa` (ProjectsController.PromoteToCommessa)
+
+### `action.recode_codex` — Ricodifica Codex
+- `POST /api/codex/new-code/bulk-commit` (CodexController.BulkCommitNewCodes)
+- `POST /api/codex/new-code/bulk-release` (CodexController.BulkReleaseNewCodes)
+- `POST /api/codex/new-code/bulk-remove` (CodexController.BulkRemoveNewCodes)
+- `POST /api/codex/new-code/bulk-reserve` (CodexController.BulkReserveNewCodes)
+- `POST /api/codex/new-code/reserve` (CodexController.ReserveNewCode)
+- `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
+- `PUT /api/codex/{id}/new-code` (CodexController.SetNewCode)
+
+### `action.toggle_dashboard_folder` — Aggiunge/toglie cartelle Dashboard
+- `PUT /api/dashboard/folders/{projectId}` (DashboardController.SetFolderFlag)
+
+### `data.budget` — Preventivo vs Consuntivo (dati)
+- `DELETE /api/projects/{projectId}/budget-vs-actual/order-lines/{lineId}` (BudgetVsActualController.DeleteOrderLine)
+- `GET /api/projects/{projectId}/budget-vs-actual` (BudgetVsActualController.Get)
+- `GET /api/projects/{projectId}/budget-vs-actual/calc/{calcKey}` (BudgetVsActualController.GetCalcSheet)
+- `PATCH /api/projects/{projectId}/budget-vs-actual/actual-travel-cost` (BudgetVsActualController.UpdateActualTravelCost)
+- `PATCH /api/projects/{projectId}/budget-vs-actual/final-price-override` (BudgetVsActualController.UpdateFinalPriceOverride)
+- `PATCH /api/projects/{projectId}/budget-vs-actual/sale-total` (BudgetVsActualController.UpdateSaleTotal)
+- `POST /api/projects/{projectId}/budget-vs-actual/order-lines` (BudgetVsActualController.CreateOrderLine)
+- `PUT /api/projects/{projectId}/budget-vs-actual/calc/{calcKey}` (BudgetVsActualController.SaveCalcSheet)
+- `PUT /api/projects/{projectId}/budget-vs-actual/order-lines/{lineId}` (BudgetVsActualController.UpdateOrderLine)
+
+### `data.costs` — Vede i costi (globale)
+- `DELETE /api/projects/{projectId}/costing/material-items/{id}` (ProjectCostingController.DeleteMaterialItem)
+- `DELETE /api/projects/{projectId}/costing/material-sections/{id}` (ProjectCostingController.DeleteMaterialSection)
+- `DELETE /api/projects/{projectId}/costing/resources/{id}` (ProjectCostingController.DeleteResource)
+- `DELETE /api/projects/{projectId}/costing/sections/{id}` (ProjectCostingController.DeleteSection)
+- `DELETE /api/projects/{projectId}/costing/travel-rows/{rowId}` (ProjectCostingController.DeleteTravelRow)
+- `DELETE /api/quotes/{quoteId}/costing/material-items/{id}` (QuoteCostingController.DeleteMaterialItem)
+- `DELETE /api/quotes/{quoteId}/costing/material-sections/{id}` (QuoteCostingController.DeleteMaterialSection)
+- `DELETE /api/quotes/{quoteId}/costing/resources/{id}` (QuoteCostingController.DeleteResource)
+- `DELETE /api/quotes/{quoteId}/costing/sections/{id}` (QuoteCostingController.DeleteSection)
+- `GET /api/projects/{projectId}/costing` (ProjectCostingController.GetAll)
+- `GET /api/projects/{projectId}/costing/available-templates` (ProjectCostingController.GetAvailableTemplates)
+- `GET /api/projects/{projectId}/costing/material-items/suggestions` (ProjectCostingController.GetMaterialSuggestions)
+- `GET /api/projects/{projectId}/costing/sections/{sectionId}/employees` (ProjectCostingController.GetEmployeesForSection)
+- `GET /api/projects/{projectId}/costing/sections/{sectionId}/travel-rows` (ProjectCostingController.GetTravelRows)
+- `GET /api/projects/{projectId}/costing/travel-rows/{rowId}/calc/{kind}` (ProjectCostingController.GetTravelRowCalc)
+- `GET /api/quotes/{quoteId}/costing` (QuoteCostingController.GetAll)
+- `GET /api/quotes/{quoteId}/costing/available-templates` (QuoteCostingController.GetAvailableTemplates)
+- `GET /api/quotes/{quoteId}/costing/pricing-distribution` (QuoteCostingController.GetPricingDistribution)
+- `GET /api/quotes/{quoteId}/costing/sections/{sectionId}/employees` (QuoteCostingController.GetEmployeesForSection)
+- `PATCH /api/projects/{projectId}/costing/material-sections/{id}/field` (ProjectCostingController.UpdateMaterialSectionField)
+- `PATCH /api/projects/{projectId}/costing/sections/{id}/field` (ProjectCostingController.UpdateSectionField)
+- `PATCH /api/quotes/{quoteId}/costing/material-items/{id}/toggle-active` (QuoteCostingController.ToggleMaterialItemActive)
+- `PATCH /api/quotes/{quoteId}/costing/material-sections/{id}/field` (QuoteCostingController.UpdateMaterialSectionField)
+- `PATCH /api/quotes/{quoteId}/costing/sections/{id}/field` (QuoteCostingController.UpdateSectionField)
+- `POST /api/projects/{projectId}/costing/init` (ProjectCostingController.Initialize)
+- `POST /api/projects/{projectId}/costing/material-items` (ProjectCostingController.AddMaterialItem)
+- `POST /api/projects/{projectId}/costing/material-sections` (ProjectCostingController.AddMaterialSection)
+- `POST /api/projects/{projectId}/costing/resources` (ProjectCostingController.AddResource)
+- `POST /api/projects/{projectId}/costing/sections` (ProjectCostingController.AddSection)
+- `POST /api/projects/{projectId}/costing/sections/{sectionId}/travel-rows` (ProjectCostingController.CreateTravelRow)
+- `POST /api/quotes/{quoteId}/costing/material-items` (QuoteCostingController.AddMaterialItem)
+- `POST /api/quotes/{quoteId}/costing/material-items/{id}/clone` (QuoteCostingController.CloneMaterialItem)
+- `POST /api/quotes/{quoteId}/costing/material-items/{id}/push-to-catalog` (QuoteCostingController.PushToCatalog)
+- `POST /api/quotes/{quoteId}/costing/material-items/{id}/refresh-from-catalog` (QuoteCostingController.RefreshFromCatalog)
+- `POST /api/quotes/{quoteId}/costing/material-items/{parentId}/variant` (QuoteCostingController.AddMaterialVariant)
+- `POST /api/quotes/{quoteId}/costing/material-sections` (QuoteCostingController.AddMaterialSection)
+- `POST /api/quotes/{quoteId}/costing/pricing-distribution/generate` (QuoteCostingController.GeneratePricingDistribution)
+- `POST /api/quotes/{quoteId}/costing/resources` (QuoteCostingController.AddResource)
+- `POST /api/quotes/{quoteId}/costing/sections` (QuoteCostingController.AddSection)
+- `PUT /api/projects/{projectId}/costing/material-items/{id}` (ProjectCostingController.UpdateMaterialItem)
+- `PUT /api/projects/{projectId}/costing/material-items/{id}/distribution` (ProjectCostingController.UpdateMaterialItemDistribution)
+- `PUT /api/projects/{projectId}/costing/pricing` (ProjectCostingController.UpdatePricing)
+- `PUT /api/projects/{projectId}/costing/resources/{id}` (ProjectCostingController.UpdateResource)
+- `PUT /api/projects/{projectId}/costing/sections/{id}/distribution` (ProjectCostingController.UpdateSectionDistribution)
+- `PUT /api/projects/{projectId}/costing/sections/{sectionId}/departments` (ProjectCostingController.SetSectionDepartments)
+- `PUT /api/projects/{projectId}/costing/travel-rows/{rowId}` (ProjectCostingController.UpdateTravelRow)
+- `PUT /api/projects/{projectId}/costing/travel-rows/{rowId}/calc/{kind}` (ProjectCostingController.SaveTravelRowCalc)
+- `PUT /api/quotes/{quoteId}/costing/distributions/batch` (QuoteCostingController.SaveAllDistributionsBatch)
+- `PUT /api/quotes/{quoteId}/costing/material-items/{id}` (QuoteCostingController.UpdateMaterialItem)
+- `PUT /api/quotes/{quoteId}/costing/material-items/{id}/distribution` (QuoteCostingController.UpdateMaterialItemDistribution)
+- `PUT /api/quotes/{quoteId}/costing/pricing` (QuoteCostingController.UpdatePricing)
+- `PUT /api/quotes/{quoteId}/costing/pricing-distribution/{id}` (QuoteCostingController.UpdatePricingDistribution)
+- `PUT /api/quotes/{quoteId}/costing/pricing-distribution/rebalance` (QuoteCostingController.RebalancePricingDistribution)
+- `PUT /api/quotes/{quoteId}/costing/resources/{id}` (QuoteCostingController.UpdateResource)
+- `PUT /api/quotes/{quoteId}/costing/sections/{id}/distribution` (QuoteCostingController.UpdateSectionDistribution)
+- `PUT /api/quotes/{quoteId}/costing/sections/{sectionId}/departments` (QuoteCostingController.SetSectionDepartments)
+
+### `data.danea_explore` — Esplora l'archivio Danea
+- `GET /api/danea-sync/explore/tables` (DaneaSyncController.GetTables)
+- `GET /api/danea-sync/explore/tables/{tableName}/columns` (DaneaSyncController.GetColumns)
+- `GET /api/danea-sync/explore/tables/{tableName}/data` (DaneaSyncController.GetData)
+- `GET /api/danea-sync/explore/tables/{tableName}/search` (DaneaSyncController.SearchData)
+
+### `data.revenue` — Vede il fatturato (globale)
+- `DELETE /api/projects/{projectId}/cashflow/categories/{catId}` (CashFlowController.DeleteCategory)
+- `GET /api/projects/{projectId}/cashflow` (CashFlowController.Get)
+- `POST /api/projects/{projectId}/cashflow/categories` (CashFlowController.AddCategory)
+- `POST /api/projects/{projectId}/cashflow/init` (CashFlowController.Initialize)
+- `PUT /api/projects/{projectId}/cashflow/categories/{catId}` (CashFlowController.UpdateCategory)
+- `PUT /api/projects/{projectId}/cashflow/data` (CashFlowController.SaveData)
+- `PUT /api/projects/{projectId}/cashflow/header` (CashFlowController.UpdateHeader)
+
+### `nav.acquisti_inbox` — Inbox Acquisti
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
+- `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
+- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `GET /api/purchase-rfqs` (PurchaseRfqController.List)
+- `GET /api/purchase-rfqs/{id}` (PurchaseRfqController.Get)
+- `GET /api/purchase-rfqs/email-candidates` (PurchaseRfqController.EmailCandidates)
+- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
+- `POST /api/purchase-rfqs` (PurchaseRfqController.Create)
+- `POST /api/purchase-rfqs/{id}/cancel` (PurchaseRfqController.Cancel)
+- `POST /api/purchase-rfqs/{id}/create-danea-order` (PurchaseRfqController.CreateDaneaOrder)
+- `POST /api/purchase-rfqs/{id}/select-winner` (PurchaseRfqController.SelectWinner)
+- `POST /api/purchase-rfqs/{id}/send` (PurchaseRfqController.Send)
+- `POST /api/purchase-rfqs/create-danea-order-multi` (PurchaseRfqController.CreateDaneaOrderMulti)
+- `POST /api/purchase-rfqs/mark-emailed` (PurchaseRfqController.MarkEmailed)
+- `POST /api/purchase-rfqs/offer-plan` (PurchaseRfqController.OfferPlan)
+- `POST /api/purchase-rfqs/request-offers` (PurchaseRfqController.RequestOffers)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+- `PUT /api/purchase-rfqs/{id}/offers/{offerId}` (PurchaseRfqController.SaveOffer)
+
+### `nav.anagrafica_attivita` — Anagrafica attività
+- `DELETE /api/activity-catalog/{id}` (ActivityCatalogController.Delete)
+- `POST /api/activity-catalog` (ActivityCatalogController.Create)
+- `POST /api/activity-catalog/reorder` (ActivityCatalogController.Reorder)
+- `POST /api/activity-catalog/reset` (ActivityCatalogController.Reset)
+- `PUT /api/activity-catalog/{id}` (ActivityCatalogController.Update)
+
+### `nav.backup` — Backup DB
+- `DELETE /api/backup/{fileName}` (BackupController.DeleteBackup)
+- `DELETE /api/backup/full/{fileName}` (BackupController.EliminaPacchetto)
+- `GET /api/backup/download/{fileName}` (BackupController.DownloadBackup)
+- `GET /api/backup/full/download/{fileName}` (BackupController.ScaricaPacchetto)
+- `GET /api/backup/full/list` (BackupController.ListaPacchetti)
+- `GET /api/backup/full/stato-corrente` (BackupController.OperazioneCorrente)
+- `GET /api/backup/full/stato/{jobId}` (BackupController.StatoOperazione)
+- `GET /api/backup/full/stima` (BackupController.StimaPacchetto)
+- `GET /api/backup/list` (BackupController.ListBackups)
+- `POST /api/backup/full/restore/{fileName}` (BackupController.RipristinaPacchetto)
+- `POST /api/backup/full/start` (BackupController.AvviaPacchetto)
+- `POST /api/backup/full/upload` (BackupController.CaricaPacchetto)
+- `POST /api/backup/now` (BackupController.RunBackup)
+- `POST /api/backup/restore/{fileName}` (BackupController.RestoreBackup)
+
+### `nav.bilancio` — Bilancio
+- `GET /api/bilancio/settings` (BilancioController.GetSettings)
+- `GET /api/bilancio/summary` (BilancioController.GetSummary)
+- `PUT /api/bilancio/settings` (BilancioController.SaveSettings)
+
+### `nav.bug_reports` — Segnalazioni
+- `DELETE /api/bug-reports/{id}` (BugReportsController.Delete)
+- `DELETE /api/bug-reports/attachments/{attachmentId}` (BugReportsController.DeleteAttachment)
+- `GET /api/bug-reports` (BugReportsController.GetAll)
+- `GET /api/bug-reports/attachments/{attachmentId}` (BugReportsController.DownloadAttachment)
+- `GET /api/bug-reports/counts` (BugReportsController.GetCounts)
+- `POST /api/bug-reports` (BugReportsController.Create)
+- `POST /api/bug-reports/{id}/archive` (BugReportsController.Archive)
+- `POST /api/bug-reports/{id}/attachments` (BugReportsController.UploadAttachment)
+- `POST /api/bug-reports/{id}/unarchive` (BugReportsController.Unarchive)
+- `PUT /api/bug-reports/{id}` (BugReportsController.Update)
+- `PUT /api/bug-reports/{id}/status` (BugReportsController.UpdateStatus)
+
+### `nav.cat_preventivi` — Cat. Preventivi
+- `DELETE /api/quote-catalog/categories/{id}` (QuoteCatalogController.DeleteCategory)
+- `DELETE /api/quote-catalog/groups/{id}` (QuoteCatalogController.DeleteGroup)
+- `DELETE /api/quote-catalog/price-lists/{id}` (QuoteCatalogController.DeletePriceList)
+- `DELETE /api/quote-catalog/products/{id}` (QuoteCatalogController.DeleteProduct)
+- `GET /api/quote-catalog/categories` (QuoteCatalogController.GetCategories)
+- `GET /api/quote-catalog/groups` (QuoteCatalogController.GetGroups)
+- `GET /api/quote-catalog/price-lists` (QuoteCatalogController.GetPriceLists)
+- `GET /api/quote-catalog/products` (QuoteCatalogController.GetProducts)
+- `GET /api/quote-catalog/products/{id}` (QuoteCatalogController.GetProduct)
+- `GET /api/quote-catalog/tree` (QuoteCatalogController.GetTree)
+- `POST /api/quote-catalog/categories` (QuoteCatalogController.CreateCategory)
+- `POST /api/quote-catalog/groups` (QuoteCatalogController.CreateGroup)
+- `POST /api/quote-catalog/import` (QuoteCatalogController.ImportCatalog)
+- `POST /api/quote-catalog/price-lists` (QuoteCatalogController.CreatePriceList)
+- `POST /api/quote-catalog/products` (QuoteCatalogController.CreateProduct)
+- `POST /api/quote-catalog/products/{id}/duplicate` (QuoteCatalogController.DuplicateProduct)
+- `POST /api/quote-catalog/products/cleanup-images` (QuoteCatalogController.CleanupOldImages)
+- `POST /api/quote-catalog/products/upload` (QuoteCatalogController.UploadProductAttachment)
+- `PUT /api/quote-catalog/categories/{id}` (QuoteCatalogController.UpdateCategory)
+- `PUT /api/quote-catalog/categories/{id}/move` (QuoteCatalogController.MoveCategory)
+- `PUT /api/quote-catalog/groups/{id}` (QuoteCatalogController.UpdateGroup)
+- `PUT /api/quote-catalog/price-lists/{id}` (QuoteCatalogController.UpdatePriceList)
+- `PUT /api/quote-catalog/products/{id}` (QuoteCatalogController.UpdateProduct)
+- `PUT /api/quote-catalog/products/{id}/move` (QuoteCatalogController.MoveProduct)
+
+### `nav.catalogo` — Catalogo Articoli
+- `DELETE /api/catalog/{id}` (CatalogController.Delete)
+- `DELETE /api/material-categories/{id}` (MaterialCategoriesController.Delete)
+- `PATCH /api/material-categories/{id}/field` (MaterialCategoriesController.UpdateField)
+- `POST /api/catalog` (CatalogController.Create)
+- `POST /api/material-categories` (MaterialCategoriesController.Create)
+- `PUT /api/catalog/{id}` (CatalogController.Update)
+- `PUT /api/material-categories/{id}` (MaterialCategoriesController.Update)
+
+### `nav.checklist` — Check list
+- `DELETE /api/checklist/groups/{id}` (CheckListController.DeleteGroup)
+- `DELETE /api/checklist/inbox/{id}` (CheckListController.DeleteInbox)
+- `DELETE /api/checklist/items/{id}` (CheckListController.DeleteItem)
+- `GET /api/checklist/board` (CheckListController.GetBoard)
+- `GET /api/checklist/inbox` (CheckListController.GetInbox)
+- `GET /api/checklist/lookups/projects` (CheckListController.GetProjectLookups)
+- `GET /api/checklist/project/{projectId}` (CheckListController.GetProjectItems)
+- `POST /api/checklist/groups` (CheckListController.AddGroup)
+- `POST /api/checklist/inbox` (CheckListController.AddInbox)
+- `POST /api/checklist/inbox/{id}/assign` (CheckListController.AssignInbox)
+- `POST /api/checklist/items` (CheckListController.AddItem)
+- `PUT /api/checklist/groups/{id}` (CheckListController.UpdateGroup)
+- `PUT /api/checklist/inbox/{id}` (CheckListController.UpdateInbox)
+- `PUT /api/checklist/items/{id}` (CheckListController.UpdateItem)
+
+### `nav.clienti` — Clienti
+- `DELETE /api/customers/{id}` (CustomersController.Delete)
+- `GET /api/customers` (CustomersController.GetAll)
+- `GET /api/customers/{id}` (CustomersController.GetById)
+- `POST /api/customers` (CustomersController.Create)
+- `PUT /api/customers/{id}` (CustomersController.Update)
+
+### `nav.config_sezioni` — Config. Sezioni di costo
+- `DELETE /api/cost-sections/groups/{id}` (CostSectionsController.DeleteGroup)
+- `DELETE /api/cost-sections/templates/{id}` (CostSectionsController.DeleteTemplate)
+- `DELETE /api/phases/templates/{id}` (PhasesController.DeleteTemplate)
+- `DELETE /api/phases/templates/{id}/sections/{sectionId}` (PhasesController.RemoveTemplateSection)
+- `DELETE /api/tariff-options/{id}` (TravelTariffsController.Delete)
+- `PATCH /api/cost-sections/groups/{id}/field` (CostSectionsController.UpdateGroupField)
+- `PATCH /api/cost-sections/templates/{id}/field` (CostSectionsController.UpdateTemplateField)
+- `PATCH /api/phases/templates/{id}/field` (PhasesController.UpdateTemplateField)
+- `PATCH /api/phases/templates/{id}/sections/{sectionId}` (PhasesController.UpdateTemplateSection)
+- `POST /api/cost-sections/groups` (CostSectionsController.CreateGroup)
+- `POST /api/cost-sections/templates` (CostSectionsController.CreateTemplate)
+- `POST /api/phases/{phaseId}/promote-to-template` (PhasesController.PromoteToTemplate)
+- `POST /api/phases/templates` (PhasesController.CreateTemplate)
+- `POST /api/phases/templates/{id}/sections` (PhasesController.AddTemplateSection)
+- `POST /api/tariff-options` (TravelTariffsController.Add)
+- `PUT /api/cost-sections/groups/{id}` (CostSectionsController.UpdateGroup)
+- `PUT /api/cost-sections/templates/{id}` (CostSectionsController.UpdateTemplate)
+- `PUT /api/cost-sections/templates/{id}/departments` (CostSectionsController.UpdateTemplateDepartments)
+- `PUT /api/tariff-options/{id}` (TravelTariffsController.Update)
+
+### `nav.danea_migration` — Trasferimento Danea
+- `GET /api/danea-migration/filter-options` (DaneaMigrationController.GetFilterOptions)
+- `GET /api/danea-migration/old-articles` (DaneaMigrationController.GetOldArticles)
+- `GET /api/danea-migration/status` (DaneaMigrationController.GetStatus)
+- `POST /api/danea-migration/transfer` (DaneaMigrationController.Transfer)
+
+### `nav.ddp_aggregazioni` — Aggregazioni DDP
+- `PUT /api/ddp-aggregations/{id}` (DdpAggregationsController.Update)
+
+### `nav.ddp_destinazioni` — Conf. DDP
+- `DELETE /api/ddp-destinations/{id}` (DdpDestinationsController.Delete)
+- `DELETE /api/ddp-treatments/{id}` (DdpTreatmentsController.Delete)
+- `POST /api/ddp-destinations` (DdpDestinationsController.Create)
+- `POST /api/ddp-statuses` (DdpStatusesController.Create)
+- `POST /api/ddp-treatments` (DdpTreatmentsController.Create)
+- `PUT /api/ddp-destinations/{id}` (DdpDestinationsController.Update)
+- `PUT /api/ddp-statuses/{id}` (DdpStatusesController.Update)
+- `PUT /api/ddp-statuses/transitions` (DdpStatusesController.SaveTransitions)
+- `PUT /api/ddp-treatments/{id}` (DdpTreatmentsController.Update)
+
+### `nav.digest_email` — Digest Email
+- `GET /api/resource-planner/digest/settings` (ResourcesController.GetDigestSettings)
+- `GET /api/resource-planner/digest/status` (ResourcesController.GetDigestStatus)
+- `GET /api/settings/email` (SettingsController.GetEmail)
+- `POST /api/settings/email` (SettingsController.SaveEmail)
+- `POST /api/settings/email/test` (SettingsController.TestEmail)
+- `PUT /api/resource-planner/digest/settings` (ResourcesController.SaveDigestSettings)
+
+### `nav.fornitori` — Fornitori
+- `DELETE /api/suppliers/{id}` (SuppliersController.Delete)
+- `POST /api/suppliers` (SuppliersController.Create)
+- `PUT /api/suppliers/{id}` (SuppliersController.Update)
+
+### `nav.gestore_ddp` — Gestore DDP
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/ddp-feedback/acquisti` (DdpFeedbackController.GetAcquisti)
+- `GET /api/ddp-feedback/magazzino` (DdpFeedbackController.GetMagazzino)
+- `GET /api/ddp-manager/{projectId:int}` (DdpManagerController.GetDetail)
+- `GET /api/ddp-manager//api/ddp-manager/updated-count` (DdpManagerController.GetUpdatedCount)
+- `GET /api/ddp-manager//api/ddp-manager/updated-list` (DdpManagerController.GetUpdatedList)
+- `GET /api/ddp-manager/control-report` (DdpManagerController.GetControlReport)
+- `GET /api/ddp-manager/control-summary` (DdpManagerController.GetControlSummary)
+- `GET /api/ddp-manager/deliveries-by-day` (DdpManagerController.GetDeliveriesByDay)
+- `GET /api/ddp-manager/summary` (DdpManagerController.GetSummary)
+- `GET /api/ddp-row-off/{projectId:int}/{ddpType}` (DdpRowOffController.Get)
+- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `POST /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/reset` (DdpFeedbackController.ResetAcquistiHidden)
+- `POST /api/ddp-feedback/magazzino/{projectId:int}/{ddpType}/reset` (DdpFeedbackController.ResetMagazzinoHidden)
+- `POST /api/ddp-manager/{projectId:int}/seen` (DdpManagerController.MarkSeen)
+- `POST /api/ddp-row-off/{projectId:int}/{ddpType}/{sectionKey}/bulk` (DdpRowOffController.SetBulk)
+- `POST /api/ddp-row-off/{projectId:int}/{ddpType}/reset` (DdpRowOffController.Reset)
+- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
+- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/hidden` (DdpFeedbackController.SetAcquistiHidden)
+- `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/note` (DdpFeedbackController.SetAcquistiNote)
+- `PUT /api/ddp-feedback/magazzino/{projectId:int}/{ddpType}/{itemId:int}/hidden` (DdpFeedbackController.SetMagazzinoHidden)
+- `PUT /api/ddp-row-off/{projectId:int}/{ddpType}/{sectionKey}/{itemId:int}` (DdpRowOffController.SetOne)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+
+### `nav.milestones` — Milestones
+- `DELETE /api/milestones/{id}` (MilestonesController.Delete)
+- `DELETE /api/milestones/project/{projectId}/views/{name}` (MilestonesController.DeleteView)
+- `GET /api/milestones` (MilestonesController.GetForProject)
+- `GET /api/milestones//api/projects/{projectId}/milestones` (MilestonesController.GetForProject)
+- `GET /api/milestones/project/{projectId}/views` (MilestonesController.GetViews)
+- `GET /api/milestones/summary` (MilestonesController.GetSummary)
+- `POST /api/milestones` (MilestonesController.Create)
+- `POST /api/milestones//api/projects/{projectId}/milestones/preload` (MilestonesController.SeedFromCatalog)
+- `POST /api/milestones/project/{projectId}/seed-from-catalog` (MilestonesController.SeedFromCatalog)
+- `POST /api/milestones/reorder` (MilestonesController.Reorder)
+- `PUT /api/milestones/{id}` (MilestonesController.Update)
+- `PUT /api/milestones/project/{projectId}/views/{name}` (MilestonesController.SaveView)
+
+### `nav.mom` — Verbali (MoM)
+- `DELETE /api/mom/{id}` (MoMController.Delete)
+- `DELETE /api/mom/items/{id}` (MoMController.DeleteItem)
+- `DELETE /api/mom/notes/{id}` (MoMController.DeleteNote)
+- `GET /api/mom/{id}` (MoMController.GetDetail)
+- `GET /api/mom/list` (MoMController.GetList)
+- `GET /api/mom/lookups/employees` (MoMController.GetEmployeeLookups)
+- `GET /api/mom/lookups/projects` (MoMController.GetProjectLookups)
+- `GET /api/mom/lookups/wildcards` (MoMController.GetWildcardLookups)
+- `GET /api/mom/notes` (MoMController.GetNotes)
+- `POST /api/mom` (MoMController.Create)
+- `POST /api/mom/{momId}/items` (MoMController.AddItem)
+- `POST /api/mom/{momId}/items/reorder` (MoMController.ReorderItems)
+- `POST /api/mom/notes` (MoMController.AddNote)
+- `POST /api/mom/notes/{id}/assign` (MoMController.AssignNote)
+- `PUT /api/mom/{id}` (MoMController.Update)
+- `PUT /api/mom/items/{id}` (MoMController.UpdateItem)
+- `PUT /api/mom/notes/{id}` (MoMController.UpdateNote)
+
+### `nav.officina_inbox` — Inbox Officina (endpoint)
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
+
+### `nav.ore_commessa` — Ore Commessa
+- `GET /api/projects/{projectId:int}/hours` (ProjectHoursController.Get)
+- `GET /api/projects/{projectId:int}/hours//api/project-hours/pending-count` (ProjectHoursController.PendingCount)
+- `GET /api/projects/{projectId:int}/hours//api/project-hours/summary` (ProjectHoursController.Summary)
+- `PATCH /api/projects/{projectId:int}/hours/extra-work/{entryId:int}/counts` (ProjectHoursController.SetCounts)
+- `POST /api/projects/{projectId:int}/hours/extra-work` (ProjectHoursController.MoveToExtra)
+- `POST /api/projects/{projectId:int}/hours/extra-work/back` (ProjectHoursController.BackToProject)
+- `POST /api/projects/{projectId:int}/hours/verify` (ProjectHoursController.Verify)
+
+### `nav.permessi` — Permessi
+- `DELETE /api/auth-levels/features/{id}` (AuthLevelController.DeleteFeature)
+- `GET /api/auth-levels/migrazione/diff` (AuthLevelController.DiffPermessi)
+- `GET /api/permessi` (PermessiController.Elenco)
+- `GET /api/permessi/{employeeId:int}` (PermessiController.Scheda)
+- `GET /api/permessi/classe/{classe}` (PermessiController.Pacchetto)
+- `POST /api/auth-levels/features` (AuthLevelController.CreateFeature)
+- `POST /api/auth-levels/migrazione/seed` (AuthLevelController.SeedPermessi)
+- `POST /api/permessi/applica-classe` (PermessiController.ApplicaClasse)
+- `POST /api/permessi/copia` (PermessiController.Copia)
+- `POST /api/permessi/riallinea` (PermessiController.Riallinea)
+- `PUT /api/auth-levels/features/{id}` (AuthLevelController.UpdateFeature)
+- `PUT /api/auth-levels/role-features` (AuthLevelController.SetRoleFeature)
+- `PUT /api/permessi/combo` (PermessiController.Imposta)
+
+### `nav.preventivi` — Preventivi
+- `DELETE /api/quotes/{id}` (QuotesController.Delete)
+- `DELETE /api/quotes/{quoteId}/items/{itemId}` (QuotesController.DeleteItem)
+- `GET /api/quotes` (QuotesController.GetAll)
+- `GET /api/quotes/{id}` (QuotesController.GetById)
+- `GET /api/quotes/{id}/pdf` (QuotesController.GeneratePdf)
+- `GET /api/quotes/chains` (QuotesController.GetRevisionChains)
+- `GET /api/quotes/stats` (QuotesController.GetStats)
+- `PATCH /api/quotes/{id}/field` (QuotesController.UpdateQuoteField)
+- `PATCH /api/quotes/{quoteId}/items/{itemId}/field` (QuotesController.UpdateItemField)
+- `POST /api/quotes` (QuotesController.Create)
+- `POST /api/quotes/{id}/convert` (QuotesController.ConvertToProject)
+- `POST /api/quotes/{id}/duplicate` (QuotesController.Duplicate)
+- `POST /api/quotes/{id}/items` (QuotesController.AddItem)
+- `POST /api/quotes/{id}/items/product/{productId}` (QuotesController.AddProductWithAllVariants)
+- `POST /api/quotes/{id}/reload-auto-includes` (QuotesController.ReloadAutoIncludes)
+- `POST /api/quotes/{id}/revision` (QuotesController.CreateRevision)
+- `POST /api/quotes/{quoteId}/items/{itemId}/clone` (QuotesController.CloneItem)
+- `POST /api/quotes/{quoteId}/items/{parentItemId}/variant` (QuotesController.AddLocalVariant)
+- `PUT /api/quotes/{id}` (QuotesController.Update)
+- `PUT /api/quotes/{id}/items/reorder` (QuotesController.ReorderItems)
+- `PUT /api/quotes/{id}/status` (QuotesController.ChangeStatus)
+- `PUT /api/quotes/{quoteId}/items/{itemId}` (QuotesController.UpdateItem)
+
+### `nav.project_templates` — Template Commesse
+- `DELETE /api/project-templates/files/{id}` (TemplateController.DeleteFile)
+- `DELETE /api/project-templates/folders/{id}` (TemplateController.DeleteFolder)
+- `GET /api/project-templates/tree` (TemplateController.GetTree)
+- `POST /api/project-templates/files/{id}/copy` (TemplateController.CopyFile)
+- `POST /api/project-templates/files/{id}/move` (TemplateController.MoveFile)
+- `POST /api/project-templates/folders` (TemplateController.CreateFolder)
+- `POST /api/project-templates/folders/{id}/copy` (TemplateController.CopyFolder)
+- `POST /api/project-templates/folders/{id}/upload` (TemplateController.UploadFile)
+- `PUT /api/project-templates/files/{id}` (TemplateController.UpdateFile)
+- `PUT /api/project-templates/folders/{id}` (TemplateController.UpdateFolder)
+- `PUT /api/project-templates/folders/reorder` (TemplateController.ReorderFolders)
+
+### `nav.sal` — SAL / Fatturazione
+- `DELETE /api/sal/conditions/{id}` (SalController.DeleteCondition)
+- `DELETE /api/sal/payment-states/{id}` (SalController.DeletePaymentState)
+- `DELETE /api/sal/rows/{id}` (SalController.DeleteRow)
+- `DELETE /api/sal/sap-causali/{id}` (SalController.DeleteSapCausale)
+- `GET /api/sal` (SalController.GetBundle)
+- `GET /api/sal/conditions` (SalController.GetConditions)
+- `GET /api/sal/conditions/active` (SalController.GetActiveConditions)
+- `GET /api/sal/economics` (SalController.GetEconomics)
+- `GET /api/sal/payment-states` (SalController.GetPaymentStates)
+- `GET /api/sal/payment-states/active` (SalController.GetActivePaymentStates)
+- `GET /api/sal/prospetto` (SalController.GetProspetto)
+- `GET /api/sal/sap-causali` (SalController.GetSapCausali)
+- `GET /api/sal/sap-causali/active` (SalController.GetActiveSapCausali)
+- `GET /api/sal/summary` (SalController.GetSummary)
+- `POST /api/sal/conditions` (SalController.CreateCondition)
+- `POST /api/sal/conditions/reorder` (SalController.ReorderConditions)
+- `POST /api/sal/conditions/reset` (SalController.ResetConditions)
+- `POST /api/sal/payment-states` (SalController.CreatePaymentState)
+- `POST /api/sal/payment-states/reorder` (SalController.ReorderPaymentStates)
+- `POST /api/sal/payment-states/reset` (SalController.ResetPaymentStates)
+- `POST /api/sal/project/{projectId}/seed-template` (SalController.SeedTemplate)
+- `POST /api/sal/rows` (SalController.CreateRow)
+- `POST /api/sal/rows/reorder` (SalController.Reorder)
+- `POST /api/sal/sap-causali` (SalController.CreateSapCausale)
+- `POST /api/sal/sap-causali/reorder` (SalController.ReorderSapCausali)
+- `POST /api/sal/sap-causali/reset` (SalController.ResetSapCausali)
+- `PUT /api/sal/conditions/{id}` (SalController.UpdateCondition)
+- `PUT /api/sal/conditions/{id}/toggle-active` (SalController.ToggleActiveCondition)
+- `PUT /api/sal/header` (SalController.UpdateHeader)
+- `PUT /api/sal/payment-states/{id}` (SalController.UpdatePaymentState)
+- `PUT /api/sal/payment-states/{id}/toggle-active` (SalController.ToggleActivePaymentState)
+- `PUT /api/sal/rows/{id}` (SalController.UpdateRow)
+- `PUT /api/sal/sap-causali/{id}` (SalController.UpdateSapCausale)
+- `PUT /api/sal/sap-causali/{id}/toggle-active` (SalController.ToggleActiveSapCausale)
+
+### `nav.scadenze` — Scadenze
+- `GET /api/deadlines` (DeadlinesController.GetAll)
+
+### `nav.timesheet` — Timesheet
+- `DELETE /api/timesheet/{id}` (TimesheetController.Delete)
+- `GET /api/timesheet/day-total` (TimesheetController.DayTotal)
+- `GET /api/timesheet/phases-for-employee` (TimesheetController.GetPhasesForEmployee)
+- `GET /api/timesheet/projects-for-employee` (TimesheetController.GetProjectsForEmployee)
+- `GET /api/timesheet/range` (TimesheetController.GetRange)
+- `GET /api/timesheet/registrable-employees` (TimesheetController.GetRegistrableEmployees)
+- `GET /api/timesheet/summary` (TimesheetController.Summary)
+- `GET /api/timesheet/week` (TimesheetController.GetWeek)
+- `POST /api/timesheet` (TimesheetController.Save)
+
+### `nav.trasferta` — Trasferta
+- `DELETE /api/projects/{projectId}/travel/rows/{rowId}` (TravelController.DeleteRow)
+- `DELETE /api/projects/{projectId}/travel/steps/{stepId}` (TravelController.DeleteStep)
+- `GET /api/projects/{projectId}/travel` (TravelController.Get)
+- `GET /api/projects/{projectId}/travel//api/travel/pending-count` (TravelController.PendingCount)
+- `GET /api/projects/{projectId}/travel//api/travel/people` (TravelController.People)
+- `GET /api/projects/{projectId}/travel//api/travel/summary` (TravelController.Summary)
+- `GET /api/projects/{projectId}/travel/rows/{rowId}/calc/{kind}` (TravelController.GetRowCalc)
+- `POST /api/projects/{projectId}/travel/rebuild-from-timesheet` (TravelController.RebuildFromTimesheet)
+- `POST /api/projects/{projectId}/travel/steps` (TravelController.CreateStep)
+- `POST /api/projects/{projectId}/travel/steps/{stepId}/rows` (TravelController.CreateRow)
+- `POST /api/projects/{projectId}/travel/verify` (TravelController.Verify)
+- `PUT /api/projects/{projectId}/travel/rows/{rowId}` (TravelController.UpdateRow)
+- `PUT /api/projects/{projectId}/travel/rows/{rowId}/calc/{kind}` (TravelController.SaveRowCalc)
+- `PUT /api/projects/{projectId}/travel/rows/apply-costs` (TravelController.ApplyCosts)
+- `PUT /api/projects/{projectId}/travel/steps/{stepId}` (TravelController.UpdateStep)
+- `PUT /api/projects/{projectId}/travel/steps/{stepId}/rows/reorder` (TravelController.ReorderRows)
+- `PUT /api/projects/{projectId}/travel/steps/reorder` (TravelController.ReorderSteps)
+
+### `nav.utenti` — Utenti
+- `DELETE /api/employees/{id}` (EmployeesController.Delete)
+- `GET /api/users` (UsersController.GetAll)
+- `GET /api/users/{id}` (UsersController.GetById)
+- `POST /api/auth/set-credentials` (AuthController.SetCredentials)
+- `POST /api/employees` (EmployeesController.Create)
+- `POST /api/users/reset-password` (UsersController.ResetPassword)
+- `PUT /api/employees/{id}` (EmployeesController.Update)
+- `PUT /api/users/competences` (UsersController.SaveCompetences)
+- `PUT /api/users/departments` (UsersController.SaveDepartments)
+- `PUT /api/users/role` (UsersController.SetRole)
+- `PUT /api/users/status` (UsersController.SetStatus)
+
+### `nav.work_requests` — Lavorazioni Officine
+- `DELETE /api/work-requests/{id}` (WorkRequestsController.Delete)
+- `GET /api/work-requests/officina` (WorkRequestsController.GetOfficinaRows)
+- `GET /api/work-requests/priorities` (WorkRequestsController.GetByPriorities)
+- `GET /api/work-requests/project/{projectId}` (WorkRequestsController.GetByProject)
+- `PATCH /api/work-requests/{id}/field` (WorkRequestsController.UpdateField)
+- `PATCH /api/work-requests/officina/{itemId}/field` (WorkRequestsController.PatchOfficinaField)
+- `POST /api/work-requests` (WorkRequestsController.Create)
+- `PUT /api/work-requests/{id}` (WorkRequestsController.Update)
+
+### `project.chat` — Chat
+- `DELETE /api/chat/{chatId}` (ChatController.DeleteChat)
+- `DELETE /api/chat/{chatId}/participants/{employeeId}` (ChatController.RemoveParticipant)
+- `DELETE /api/chat/messages/{messageId}` (ChatController.DeleteMessage)
+- `GET /api/chat/{chatId}/messages` (ChatController.GetMessages)
+- `GET /api/chat/{chatId}/participants` (ChatController.GetParticipants)
+- `GET /api/chat/inbox` (ChatController.GetInbox) · AccessOnly
+- `GET /api/chat/inbox/badge` (ChatController.GetInboxBadge) · AccessOnly
+- `GET /api/chat/messages/{messageId}/attachment` (ChatController.DownloadAttachment)
+- `GET /api/chat/project/{projectId}` (ChatController.GetChats)
+- `POST /api/chat` (ChatController.CreateChat)
+- `POST /api/chat/{chatId}/leave` (ChatController.LeaveChat)
+- `POST /api/chat/{chatId}/mark-read` (ChatController.MarkAsRead) · AccessOnly
+- `POST /api/chat/{chatId}/messages` (ChatController.SendMessage)
+- `POST /api/chat/{chatId}/messages/with-attachment` (ChatController.SendMessageWithAttachment)
+- `POST /api/chat/{chatId}/participants` (ChatController.AddParticipant)
+
+### `project.ddp_commerciale` — DDP Commerciali
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+
+### `project.ddp_officina` — DDP Officina
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `POST /api/codex/confirm` (CodexController.ConfirmReservation)
+- `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
+- `POST /api/codex/reserve` (CodexController.ReserveCode)
+- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
+
+### `project.documenti` — Documenti
+- `GET /api/projects/{id}/download` (ProjectsController.DownloadFile)
+- `GET /api/projects/{id}/file-tree` (ProjectsController.GetFileTree)
+- `GET /api/projects/{id}/files` (ProjectsController.GetFiles)
+- `GET /api/projects/{id}/preview` (ProjectsController.PreviewFile)
+- `POST /api/projects/{id}/create-folder` (ProjectsController.CreateFolder)
+- `POST /api/projects/{id}/create-subfolder` (ProjectsController.CreateSubfolder)
+- `POST /api/projects/{id}/delete-item` (ProjectsController.DeleteItem)
+- `POST /api/projects/{id}/move-item` (ProjectsController.MoveItem)
+- `POST /api/projects/{id}/rename` (ProjectsController.RenameItem)
+- `POST /api/projects/{id}/upload` (ProjectsController.UploadFile)
+- `POST /api/projects/{id}/upload-multiple` (ProjectsController.UploadMultiple)
+
+### `resources.edit` — Modifica il planner risorse
+- `DELETE /api/resource-planner/assignments/{id}` (ResourcesController.DeleteAssignment)
+- `DELETE /api/resource-planner/others/{id}` (ResourcesController.DeleteOther)
+- `DELETE /api/resource-planner/services/{id}` (ResourcesController.DeleteService)
+- `GET /api/resource-planner/digest/preview` (ResourcesController.PreviewDigest)
+- `GET /api/resource-planner/digest/preview-selective` (ResourcesController.PreviewSelective)
+- `GET /api/resource-planner/notify/pending` (ResourcesController.GetNotifyPending)
+- `POST /api/resource-planner/assignments` (ResourcesController.CreateAssignment)
+- `POST /api/resource-planner/digest/run-now` (ResourcesController.RunDigestNow)
+- `POST /api/resource-planner/digest/send-selected` (ResourcesController.SendSelected)
+- `POST /api/resource-planner/others` (ResourcesController.CreateOther)
+- `POST /api/resource-planner/services` (ResourcesController.CreateService)
+- `PUT /api/resource-planner/assignments/{id}` (ResourcesController.UpdateAssignment)
+- `PUT /api/resource-planner/others/{id}` (ResourcesController.UpdateOther)
+- `PUT /api/resource-planner/services/{id}` (ResourcesController.UpdateService)
+
+## Chiavi usate solo inline (CanAccessUser/CanWriteUser, senza attributo)
+- `action.moderate_chat` — ATEC.PM.Server/Controllers/ChatController.cs
+- `action.sal_edit_closed` — ATEC.PM.Server/Controllers/SalController.cs
+- `action.timesheet_any_employee` — ATEC.PM.Server/Controllers/TimesheetController.cs
+- `action.timesheet_for_others` — ATEC.PM.Server/Controllers/TimesheetController.cs
+- `data.bug_reports_all` — ATEC.PM.Server/Controllers/BugReportsController.cs
+- `data.project_drafts` — ATEC.PM.Server/Services/ProjectWriteGuard.cs
+- `data.timesheet_all_phases` — ATEC.PM.Server/Controllers/TimesheetController.cs
+- `nav.commesse` — ATEC.PM.Server/Services/PermissionAdminService.cs
+- `nav.risorse` — ATEC.PM.Server/Services/PermissionAdminService.cs
+- `sal.economics` — ATEC.PM.Server/Controllers/SalController.cs, ATEC.PM.Server/Services/FeatureAccessService.cs
+
+## Chiavi solo client (motivo dichiarato a catalogo)
+- `action.import_project_phases` — Gate solo client (bottone import fasi): endpoint da censire al passo 3.
+- `action.sync_project_phases` — Gate solo client (bottone sync fasi): endpoint da censire al passo 3.
+- `nav.codex` — Pagina: le azioni Codex hanno chiavi proprie (manage/recode/assegna Codice ATEC).
+- `nav.codex_composizione` — Pagina: le scritture passano da action.edit_codex_composition.
+- `nav.dashboard` — Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.
+- `nav.gamma_robot` — Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.
+- `nav.sal_condizioni` — Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize]).
+- `project.dettagli` — Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize]).
+- `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).
+
+## Chiavi ritirate
+- `data.hourly_cost` — MORTA: nessun uso nel codice al censimento del 20/08/2026. Resta registrata per le righe storiche; il passo 2 la marca ritirata anche a DB.
+
+## Chiavi condivise menu/albero (da sdoppiare al passo 3, §12.4)
+- `nav.checklist` — Check list
+- `nav.milestones` — Milestone
+- `nav.mom` — Verbali (MoM)
+- `nav.sal` — SAL / Fatturazione
+- `nav.work_requests` — Lavorazioni
+- `project.chat` — Chat
+
+## Controller con endpoint senza nessuna chiave (solo [Authorize])
+- ActivityCatalogController: 2 endpoint
+- AuthController: 4 endpoint
+- AuthLevelController: 4 endpoint
+- CatalogController: 3 endpoint
+- CatalogMappingController: 3 endpoint
+- CodexController: 12 endpoint
+- CostSectionsController: 2 endpoint
+- DaneaSyncController: 2 endpoint
+- DashboardController: 2 endpoint
+- DdpAggregationsController: 1 endpoint
+- DdpDestinationsController: 2 endpoint
+- DdpItemEventsController: 1 endpoint
+- DdpStatusesController: 3 endpoint
+- DdpTreatmentsController: 2 endpoint
+- DepartmentsController: 6 endpoint
+- EmployeesController: 6 endpoint
+- GammaRobotController: 5 endpoint
+- MaterialCategoriesController: 1 endpoint
+- NotificationsController: 7 endpoint
+- PhasesController: 14 endpoint
+- ProjectsController: 12 endpoint
+- ResourcesController: 5 endpoint
+- SuppliersController: 2 endpoint
+- TravelTariffsController: 1 endpoint
