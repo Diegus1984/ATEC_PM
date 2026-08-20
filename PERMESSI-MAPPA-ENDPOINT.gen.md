@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 13:58.
+> Fotografia del 20/08/2026 14:29.
 
 ## Chiavi con endpoint
 
@@ -294,6 +294,12 @@
 - `POST /api/customers` (CustomersController.Create)
 - `PUT /api/customers/{id}` (CustomersController.Update)
 
+### `nav.commesse` — Commesse
+- `GET /api/projects` (ProjectsController.GetAll)
+- `GET /api/projects/{id}` (ProjectsController.GetById)
+- `GET /api/projects/next-code` (ProjectsController.NextCode)
+- `GET /api/projects/tree` (ProjectsController.GetTree)
+
 ### `nav.config_sezioni` — Config. Sezioni di costo
 - `DELETE /api/cost-sections/groups/{id}` (CostSectionsController.DeleteGroup)
 - `DELETE /api/cost-sections/templates/{id}` (CostSectionsController.DeleteTemplate)
@@ -478,6 +484,13 @@
 - `PUT /api/project-templates/files/{id}` (TemplateController.UpdateFile)
 - `PUT /api/project-templates/folders/{id}` (TemplateController.UpdateFolder)
 - `PUT /api/project-templates/folders/reorder` (TemplateController.ReorderFolders)
+
+### `nav.risorse` — Risorse
+- `GET /api/resource-planner/assignments` (ResourcesController.GetAssignments)
+- `GET /api/resource-planner/lookups/projects` (ResourcesController.GetProjectLookups)
+- `GET /api/resource-planner/lookups/resources` (ResourcesController.GetResourceLookups)
+- `GET /api/resource-planner/others` (ResourcesController.GetOthers)
+- `GET /api/resource-planner/services` (ResourcesController.GetServices)
 
 ### `nav.sal` — SAL / Fatturazione
 - `DELETE /api/sal/conditions/{id}` (SalController.DeleteCondition)
@@ -743,10 +756,8 @@
 - `action.sync_project_phases` — Gate solo client (bottone sync fasi): endpoint da censire al passo 3.
 - `nav.codex` — Pagina: le azioni Codex hanno chiavi proprie (manage/recode/assegna Codice ATEC).
 - `nav.codex_composizione` — Pagina: le scritture passano da action.edit_codex_composition.
-- `nav.commesse` — Voce di menu: ProjectsController non usa questa chiave (solo [Authorize]). GET /api/projects è l'elenco commesse di TUTTO il gestionale — lo leggono le combo di MoM, Timesheet, Check list, Chat, Trasferta — quindi metterci il gate chiuderebbe mezze pagine a chi non ha il menu Commesse. Le scritture hanno le loro chiavi (action.edit_project, action.delete_project, sezioni project.*). 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.
 - `nav.dashboard` — Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.
 - `nav.gamma_robot` — Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.
-- `nav.risorse` — Voce di menu: in ResourcesController la LETTURA del planner è di tutti gli autenticati per scelta (le allocazioni si guardano fra colleghi), e la scrittura ha la sua chiave resources.edit. 🪤 Fino al passo 7 la chiave sembrava usata: compariva come stringa nell'elenco delle «9 aree» in PermissionAdminService, non in un gate.
 - `nav.sal_condizioni` — Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize]).
 - `project.dettagli` — Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize]).
 - `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).
@@ -779,7 +790,6 @@
 - MaterialCategoriesController: 1 endpoint
 - NotificationsController: 7 endpoint
 - PhasesController: 14 endpoint
-- ProjectsController: 12 endpoint
-- ResourcesController: 5 endpoint
+- ProjectsController: 9 endpoint
 - SuppliersController: 2 endpoint
 - TravelTariffsController: 1 endpoint

@@ -11,7 +11,10 @@ using ATEC.PM.Server.Hubs;
 namespace ATEC.PM.Server.Controllers;
 
 // API del modulo Gestione Risorse: allocazioni (op/flex/ferie) su dipendenti, con conflitti.
-// Lettura: tutti gli autenticati. Scrittura: gating per chiave sulla persona con
+// Lettura: [RequireFeature("nav.risorse")], cioe' chi ha la voce di menu (basta il livello READ:
+// i 26 che ce l'hanno in lettura continuano a guardare il planner). Prima era "tutti gli
+// autenticati": la voce si poteva negare a qualcuno e lui leggeva lo stesso il planner dall'API
+// - il menu spariva, il dato no. Scrittura: gating per chiave sulla persona con
 // [RequireFeature("resources.edit")] (seminata a RESP_REPARTO/PM/ADMIN), che copre anche il digest
 // manuale; la configurazione del digest ha la sua, [RequireFeature("nav.digest_email")].
 // Le modifiche registrano autore+timestamp (audit collaborazione multi-utente)
@@ -48,6 +51,7 @@ public class ResourcesController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("assignments")]
+    [RequireFeature("nav.risorse")]
     public IActionResult GetAssignments([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
         try
@@ -192,6 +196,7 @@ public class ResourcesController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("services")]
+    [RequireFeature("nav.risorse")]
     public IActionResult GetServices()
     {
         try
@@ -257,6 +262,7 @@ public class ResourcesController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("others")]
+    [RequireFeature("nav.risorse")]
     public IActionResult GetOthers()
     {
         try
@@ -321,6 +327,7 @@ public class ResourcesController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     [HttpGet("lookups/resources")]
+    [RequireFeature("nav.risorse")]
     public IActionResult GetResourceLookups()
     {
         try
@@ -334,6 +341,7 @@ public class ResourcesController : ControllerBase
     }
 
     [HttpGet("lookups/projects")]
+    [RequireFeature("nav.risorse")]
     public IActionResult GetProjectLookups()
     {
         try

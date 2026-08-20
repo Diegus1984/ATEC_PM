@@ -636,11 +636,30 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    editabili: sono le manopole del rollback).
    🪤 **Il censimento ha trovato un buco vero appena tolte le 9 aree**: `nav.commesse` e
    `nav.risorse` risultavano «usate» solo perché comparivano come stringhe in quell'array —
-   sul server nessun `[RequireFeature]` le nomina. Marcate `soloClient` col motivo (§12.8.6):
-   `GET /api/projects` è l'elenco commesse di tutto il gestionale (lo leggono MoM, Timesheet,
-   Check list, Chat, Trasferta) e metterci il gate chiuderebbe mezze pagine; la lettura del
-   planner risorse è di tutti per scelta e la scrittura ha già `resources.edit`. 205/205 test,
-   tsc/eslint/build verdi.
+   sul server nessun `[RequireFeature]` le nominava. Marcate `soloClient` per un'ora, poi
+   **chiuse davvero** (sotto). 205/205 test, tsc/eslint/build verdi.
+
+7-bis. ✅ **FATTO 20/08/2026 — Commesse e Risorse chiuse per davvero.**
+   **Risorse**: `[RequireFeature("nav.risorse")]` sulle 5 letture del planner (assignments,
+   services, others, i due lookup). Basta il livello READ, quindi i 26 che l'hanno in lettura
+   non perdono niente; la scrittura resta su `resources.edit`. Effetto reale: le 2 persone a
+   cui la voce è negata smettono di leggere il planner dall'API.
+   **Commesse**: qui il gate in OR (`nav.commesse` OR le pagine che usano l'elenco) sarebbe
+   stato **teatro** — misurato sul DB di produzione: *non avrebbe escluso nessuno*, perché i 3
+   a cui Commesse è negata hanno tutti SAL e Chat. Il buco vero era un altro: `ProjectListItem`
+   porta **`revenue` e `budgetHoursTotal`**, e siccome le tendine di SAL/MoM/Chat/Milestones/
+   Lavorazioni/Dashboard usavano lo stesso `GET /api/projects`, il valore di ogni commessa
+   arrivava a chiunque fosse autenticato. Nessuna di quelle pagine lo mostrava — ma stava nel
+   JSON, e «non lo mostriamo» non è un permesso. Quindi: **`GET /api/projects/lookup`** nuovo
+   (id, codice, titolo, cliente, PM, stato — niente altro), aperto a tutti gli autenticati e
+   usato dalle 6 pagine; **`GET /api/projects`, `/tree`, `/{id}`, `/next-code`** dietro
+   `nav.commesse`. Il filtro (chiuse, `includeId`, ricerca e soprattutto **le bozze della #88**)
+   è UNO solo, `CostruisciFiltroElenco`, condiviso dai due endpoint: due liste con le stesse
+   regole scritte due volte divergono al primo che si dimentica. `soloClient` tolto da entrambe
+   le voci, così il censimento le sorveglia come tutte le altre.
+   Test nuovi (`ElencoCommesseTests`, 4): la tendina non può crescere di campi (elenco bianco
+   sui membri di `ProjectLookupItem`), i 4 endpoint dell'elenco tengono il gate, il lookup resta
+   aperto **di proposito**, il planner tiene `nav.risorse`. 209/209 verdi.
    **Non toccato di proposito**: il ramo OLD di `FeatureAccessService` e l'interruttore
    `PermissionsEngine` (§6 «secondo passo») — è la strada del rollback e resta finché NEW non
    è definitivo in produzione.

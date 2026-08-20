@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { ApiError } from "@/lib/api/client"
 import { fetchDdpStatuses } from "@/lib/api/ddp-config"
-import { fetchProjects } from "@/lib/api/projects"
+import { fetchProjectsLookup } from "@/lib/api/projects"
 import {
   createWorkRequest,
   deleteWorkRequest,
@@ -72,7 +72,7 @@ export function WorkRequestsPage() {
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
-    queryFn: () => fetchProjects({ pageSize: 1000 }),
+    queryFn: () => fetchProjectsLookup({ pageSize: 1000 }),
   })
   const projects = React.useMemo(
     () => projectsQuery.data?.items ?? [],

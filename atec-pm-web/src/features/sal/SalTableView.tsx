@@ -9,14 +9,14 @@ import { ProjectSal } from "@/features/commesse/ProjectSal"
 import { printSalSheet } from "@/features/commesse/sal-sheet-print"
 import { SalIncassoProgress } from "./SalIncassoProgress"
 import { fetchSal } from "@/lib/api/sal"
-import type { ProjectListItem, SalSummary } from "@/lib/api/types"
+import type { ProjectLookupItem, SalSummary } from "@/lib/api/types"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
 export interface SalTableViewProps {
-  projects: ProjectListItem[]
+  projects: ProjectLookupItem[]
   summaryData?: SalSummary[]
   expandedProjects: Record<number, boolean>
   onToggleExpanded: (projectId: number) => void
@@ -61,7 +61,7 @@ export function SalTableView({
     return map
   }, [summaryData])
 
-  const handlePrintPdf = async (project: ProjectListItem, e: React.MouseEvent) => {
+  const handlePrintPdf = async (project: ProjectLookupItem, e: React.MouseEvent) => {
     e.stopPropagation()
     if (printingProjectId !== null) return
     setPrintingProjectId(project.id)
@@ -79,7 +79,7 @@ export function SalTableView({
     }
   }
 
-  const columns = React.useMemo<ColumnDef<ProjectListItem>[]>(
+  const columns = React.useMemo<ColumnDef<ProjectLookupItem>[]>(
     () => [
       {
         id: "expand",
@@ -158,7 +158,7 @@ export function SalTableView({
                   {euro(summaryMap.get(row.original.id)?.valore)}
                 </span>
               ),
-            } satisfies ColumnDef<ProjectListItem>,
+            } satisfies ColumnDef<ProjectLookupItem>,
           ]
         : []),
       {

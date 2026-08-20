@@ -28,8 +28,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectDialog } from "@/features/commesse/ProjectDialog"
 import { ProjectStatusCell } from "@/features/commesse/ProjectStatusCell"
-import { fetchProjects, patchProjectStatus } from "@/lib/api/projects"
-import type { ProjectListItem } from "@/lib/api/types"
+import { fetchProjectsLookup, patchProjectStatus } from "@/lib/api/projects"
+import type { ProjectLookupItem } from "@/lib/api/types"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { partitionCommesseAltreAttivita } from "@/lib/project-code"
 import { useProjectsHub } from "@/lib/signalr/use-projects-hub"
@@ -116,10 +116,10 @@ function DashboardSection({
 }
 
 function buildColumns(
-  onChangeStatus: (row: ProjectListItem, next: string) => void,
-  onPromote: ((row: ProjectListItem) => void) | null
-): ColumnDef<ProjectListItem>[] {
-  const columns: ColumnDef<ProjectListItem>[] = [
+  onChangeStatus: (row: ProjectLookupItem, next: string) => void,
+  onPromote: ((row: ProjectLookupItem) => void) | null
+): ColumnDef<ProjectLookupItem>[] {
+  const columns: ColumnDef<ProjectLookupItem>[] = [
     {
       accessorKey: "code",
       header: "Codice",
@@ -187,8 +187,8 @@ function ProjectsPanel({
   emptyMessage,
   storageKey,
 }: {
-  rows: ProjectListItem[]
-  columns: ColumnDef<ProjectListItem>[]
+  rows: ProjectLookupItem[]
+  columns: ColumnDef<ProjectLookupItem>[]
   emptyMessage: string
   storageKey: string
 }) {
@@ -291,8 +291,8 @@ function StatusTabs({
   storageKey,
   noun,
 }: {
-  rows: ProjectListItem[]
-  columns: ColumnDef<ProjectListItem>[]
+  rows: ProjectLookupItem[]
+  columns: ColumnDef<ProjectLookupItem>[]
   storageKey: string
   noun: string
 }) {
@@ -341,10 +341,10 @@ export function DashboardCommesseTables() {
   const projectsQuery = useQuery({
     queryKey: ["projects", "dashboard-tables"],
     queryFn: async () => {
-      const items: ProjectListItem[] = []
+      const items: ProjectLookupItem[] = []
       let page = 1
       for (;;) {
-        const result = await fetchProjects({ page, pageSize: 200, includeClosed: true })
+        const result = await fetchProjectsLookup({ page, pageSize: 200, includeClosed: true })
         items.push(...result.items)
         if (!result.hasMore || page >= 25) break
         page += 1
@@ -362,7 +362,7 @@ export function DashboardCommesseTables() {
   useProjectsHub(true, invalidate)
 
   const statusMutation = useMutation({
-    mutationFn: ({ row, next }: { row: ProjectListItem; next: string }) =>
+    mutationFn: ({ row, next }: { row: ProjectLookupItem; next: string }) =>
       patchProjectStatus(row.id, next),
     onSuccess: invalidate,
     onError: (err: Error) => notifyError(err),
@@ -372,7 +372,7 @@ export function DashboardCommesseTables() {
 
   // #89: la promozione passa dal dialog di configurazione commessa, precompilato
   // dall'attività. Qui resta solo la riga scelta; il resto lo fa ProjectDialog.
-  const [promoteRow, setPromoteRow] = React.useState<ProjectListItem | null>(null)
+  const [promoteRow, setPromoteRow] = React.useState<ProjectLookupItem | null>(null)
 
   const { commesse, commesseChiuse, altreAttivita, altreChiuse } = React.useMemo(() => {
     const items = (projectsQuery.data ?? []).filter(

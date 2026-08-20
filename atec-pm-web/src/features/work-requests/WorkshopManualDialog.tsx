@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type {
-  ProjectListItem,
+  ProjectLookupItem,
   WorkRequestSaveRequest,
   WorkshopRow,
 } from "@/lib/api/types"
@@ -39,7 +39,7 @@ export function WorkshopManualDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  projects: ProjectListItem[]
+  projects: ProjectLookupItem[]
   /** Riga da modificare; assente = nuova. */
   row?: WorkshopRow | null
   /** Tipo proposto: quello della vista da cui si apre. */

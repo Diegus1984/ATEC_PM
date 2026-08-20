@@ -22,13 +22,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { fetchProjects } from "@/lib/api/projects"
+import { fetchProjectsLookup } from "@/lib/api/projects"
 import { fetchMilestones, fetchMilestonesSummary } from "@/lib/api/milestones"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 import { formatDateShort } from "@/lib/date-iso"
 import { useMilestonesHub } from "@/lib/signalr/use-milestones-hub"
-import type { MilestoneSummary, ProjectListItem } from "@/lib/api/types"
+import type { MilestoneSummary, ProjectLookupItem } from "@/lib/api/types"
 import { avgAvanz, periodo, summaryStatusDots } from "@/features/milestones/milestone-utils"
 import { MilestoneTable } from "@/features/milestones/milestone-table"
 import { MilestoneGantt } from "@/features/milestones/MilestoneGantt"
@@ -154,7 +154,7 @@ export function MilestonesPage() {
   // Caricamento elenco commesse (per l'area principale) e riepilogo milestone (per la sidebar).
   const projectsQuery = useQuery({
     queryKey: ["pm-milestones-projects"],
-    queryFn: () => fetchProjects({ page: 1, pageSize: 250 }),
+    queryFn: () => fetchProjectsLookup({ page: 1, pageSize: 250 }),
   })
 
   const summaryQuery = useQuery({
@@ -406,7 +406,7 @@ export function MilestonesPage() {
 }
 
 interface ProjectMilestoneCardProps {
-  project: ProjectListItem
+  project: ProjectLookupItem
   /** Riepilogo aggregato (#90): sintesi in header a scheda chiusa, senza caricare le milestone. */
   summary: MilestoneSummary | undefined
   viewMode: ViewMode
@@ -614,7 +614,7 @@ function MilestoneProjectCard({
   project,
   summary,
 }: {
-  project: ProjectListItem
+  project: ProjectLookupItem
   summary: MilestoneSummary | undefined
 }) {
   return (

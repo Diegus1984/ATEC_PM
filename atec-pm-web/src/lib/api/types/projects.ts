@@ -16,6 +16,11 @@ export interface ProjectChange {
   code: string
 }
 
+/**
+ * Riga dell'elenco commesse **della pagina Commesse**: ci sono dentro i soldi (`revenue`) e le
+ * ore a budget, quindi `GET /api/projects` sta dietro `nav.commesse`.
+ * Per una tendina serve `ProjectLookupItem`, non questo.
+ */
 export interface ProjectListItem {
   id: number
   code: string
@@ -29,6 +34,20 @@ export interface ProjectListItem {
   revenue: number
   budgetHoursTotal: number
   linkedQuoteId: number
+}
+
+/**
+ * La commessa come la mostra una **tendina** (`GET /api/projects/lookup`): quel tanto che basta
+ * a riconoscerla. Nessun importo, nessuna ora a budget, nessuna data — ed è per questo che
+ * l'endpoint può restare aperto a tutti gli autenticati.
+ */
+export interface ProjectLookupItem {
+  id: number
+  code: string
+  title: string
+  customerName: string
+  pmName: string
+  status: string
 }
 
 /** Richiesta crea/modifica commessa (POST /api/projects, PUT /api/projects/{id}) e

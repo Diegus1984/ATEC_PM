@@ -13,6 +13,7 @@ import type {
   PagedResult,
   ProjectDashboardData,
   ProjectListItem,
+  ProjectLookupItem,
   ProjectSaveRequest,
 } from "@/lib/api/types"
 
@@ -32,9 +33,8 @@ export interface FetchProjectsParams {
   includeId?: number
 }
 
-export async function fetchProjects(
-  params: FetchProjectsParams = {}
-): Promise<PagedResult<ProjectListItem>> {
+/** I parametri comuni ai due elenchi, in querystring. */
+function queryElenco(params: FetchProjectsParams): string {
   const page = params.page ?? 1
   const pageSize = params.pageSize ?? 50
   const search = params.search?.trim()
@@ -53,9 +53,35 @@ export async function fetchProjects(
   if (!params.includeClosed && params.includeId) {
     query.set("includeId", String(params.includeId))
   }
+  return query.toString()
+}
 
+/**
+ * Le commesse per una **tendina**: id, codice, titolo, cliente, PM, stato — e basta.
+ *
+ * È questa che usano SAL, MoM, Chat, Milestones, Lavorazioni e Dashboard: aperta a tutti gli
+ * autenticati, perché la commessa si sceglie da mezzo gestionale. `fetchProjects` invece porta
+ * anche gli importi e sta dietro `nav.commesse`: usarla per riempire una combo vuol dire
+ * spedire il valore di ogni commessa a chi sta solo scegliendo un nome.
+ */
+export async function fetchProjectsLookup(
+  params: FetchProjectsParams = {}
+): Promise<PagedResult<ProjectLookupItem>> {
+  const response = await apiGet<ApiResponse<PagedResult<ProjectLookupItem>>>(
+    `/api/projects/lookup?${queryElenco(params)}`
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * L'elenco commesse **della pagina Commesse**, importi compresi. Richiede `nav.commesse`.
+ * Per riempire una tendina si usa `fetchProjectsLookup`.
+ */
+export async function fetchProjects(
+  params: FetchProjectsParams = {}
+): Promise<PagedResult<ProjectListItem>> {
   const response = await apiGet<ApiResponse<PagedResult<ProjectListItem>>>(
-    `/api/projects?${query.toString()}`
+    `/api/projects?${queryElenco(params)}`
   )
 
   return unwrapApi(response)

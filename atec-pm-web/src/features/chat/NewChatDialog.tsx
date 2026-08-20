@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { fetchMoMEmployees } from "@/lib/api/mom"
 import { createChat } from "@/lib/api/project-chat"
-import { fetchProjects } from "@/lib/api/projects"
+import { fetchProjectsLookup } from "@/lib/api/projects"
 import {
   ALTRE_ATTIVITA_SECTION_LABEL,
   COMMESSE_SECTION_LABEL,
@@ -62,7 +62,7 @@ export function NewChatDialog({
   const projectsQuery = useQuery({
     queryKey: ["chat-context-projects", defaultProjectId],
     queryFn: () =>
-      fetchProjects({
+      fetchProjectsLookup({
         page: 1,
         pageSize: PROJECTS_PAGE_SIZE,
         // La commessa di partenza deve esserci anche se è chiusa, o il campo si aprirebbe vuoto.

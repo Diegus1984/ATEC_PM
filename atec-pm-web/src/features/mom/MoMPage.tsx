@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { deleteMoM, fetchMoMList, updateMoM } from "@/lib/api/mom"
-import { fetchProjects } from "@/lib/api/projects"
+import { fetchProjectsLookup } from "@/lib/api/projects"
 import { formatDateShort } from "@/lib/date-iso"
 import { getSession } from "@/lib/auth/session"
 import { useMoMHub } from "@/lib/signalr/use-mom-hub"
@@ -178,7 +178,7 @@ export function MoMPage() {
   // prima del primo verbale (una commessa appena creata si trova subito).
   const projectsQuery = useQuery({
     queryKey: ["mom-projects"],
-    queryFn: () => fetchProjects({ page: 1, pageSize: 500 }),
+    queryFn: () => fetchProjectsLookup({ page: 1, pageSize: 500 }),
   })
 
   // Realtime: la lista si aggiorna quando un altro utente modifica i verbali.

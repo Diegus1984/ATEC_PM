@@ -112,7 +112,80 @@ public class ProjectsController : ControllerBase
     }
 
     /// <summary>
-    /// Elenco commesse paginato.
+    /// Il filtro dell'elenco commesse, costruito UNA volta sola per i due endpoint che lo usano
+    /// (<see cref="GetAll"/> con i soldi, <see cref="GetLookup"/> senza). Due liste con le
+    /// stesse regole scritte in due punti divergono al primo che si dimentica — e qui in mezzo
+    /// c'è il filtro delle bozze, cioè roba che deve restare invisibile a chi non ha la chiave.
+    /// </summary>
+    private sealed record FiltroElenco(
+        string Where, string OrderBy, DynamicParameters CountParams, DynamicParameters ListParams,
+        int Page, int PageSize);
+
+    private FiltroElenco CostruisciFiltroElenco(
+        int page, int pageSize, string? search, bool includeClosed, int includeId)
+    {
+        (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
+
+        string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+
+        var conditions = new List<string>();
+        if (term != null)
+        {
+            conditions.Add(@"(p.code LIKE @Term OR p.title LIKE @Term OR cu.company_name LIKE @Term
+                OR CONCAT(e.first_name,' ',e.last_name) LIKE @Term)");
+        }
+        if (!includeClosed)
+        {
+            conditions.Add(includeId > 0
+                ? $"(p.status NOT IN {ClosedStatusesSql} OR p.id = @IncludeId)"
+                : $"p.status NOT IN {ClosedStatusesSql}");
+        }
+        // #88: le bozze si vedono solo con la chiave. Il filtro vince anche su includeClosed
+        // e includeId: quelle due porte servono al deep-link sulle commesse chiuse, non a
+        // far comparire una bozza a chi non deve saperne l'esistenza.
+        string filtroBozze = _guard.FiltroBozzeSql(User);
+        if (filtroBozze.Length > 0)
+            conditions.Add(filtroBozze[" AND ".Length..]);
+        string whereClause = conditions.Count == 0
+            ? ""
+            : " WHERE " + string.Join(" AND ", conditions);
+
+        var countParams = new DynamicParameters();
+        var listParams = new DynamicParameters();
+        listParams.Add("Limit", pageSize);
+        listParams.Add("Offset", offset);
+        if (term != null)
+        {
+            countParams.Add("Term", $"%{term}%");
+            listParams.Add("Term", $"%{term}%");
+        }
+        if (!includeClosed && includeId > 0)
+        {
+            countParams.Add("IncludeId", includeId);
+            listParams.Add("IncludeId", includeId);
+        }
+
+        // Le chiuse (quando richieste) finiscono in fondo: le aperte restano a portata di clic.
+        // Dentro ai gruppi comanda la DATA letta dal codice (vedi `CodeDateSql`), non
+        // l'ordine alfabetico: i due formati di codice in uso non si ordinano fra loro.
+        // La riga iniettata dal deep-link (`includeId`) va IN TESTA: ordinata da chiusa
+        // finirebbe nelle ultime pagine dello scroll infinito e l'albero resterebbe
+        // senza il nodo di ciò che si vede a destra — proprio il caso che includeId copre.
+        string orderBy = !includeClosed && includeId > 0
+            ? $"(p.id = @IncludeId) DESC, {ProjectOrderBySql}"
+            : ProjectOrderBySql;
+
+        return new FiltroElenco(whereClause, orderBy, countParams, listParams, page, pageSize);
+    }
+
+    private const string ElencoFromSql = @"
+        FROM projects p
+        LEFT JOIN customers cu ON cu.id = p.customer_id
+        LEFT JOIN employees e ON e.id = p.pm_id";
+
+    /// <summary>
+    /// Elenco commesse paginato <b>per la pagina Commesse</b>: dentro ci sono i soldi
+    /// (<c>revenue</c>) e le ore a budget, quindi sta dietro <c>nav.commesse</c>.
     /// <para>
     /// Di default ritorna solo le commesse <b>aperte</b> (DRAFT · ACTIVE · ON_HOLD): le
     /// COMPLETED/CANCELLED si accumulano negli anni e sommergerebbero le liste (l'eliminazione
@@ -121,71 +194,22 @@ public class ProjectsController : ControllerBase
     /// <paramref name="includeId"/> forza l'inclusione di una singola commessa anche se chiusa
     /// (serve al deep-link: la commessa aperta a destra deve esistere nell'albero a sinistra).
     /// </para>
+    /// <para>Chi gli serve solo il nome della commessa per una tendina usa
+    /// <see cref="GetLookup"/>: è la ragione per cui questa può essere chiusa.</para>
     /// </summary>
     [HttpGet]
+    [RequireFeature("nav.commesse")]
     public IActionResult GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 0,
         [FromQuery] string? search = null, [FromQuery] bool includeClosed = false,
         [FromQuery] int includeId = 0)
     {
         try
         {
-            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
-
-            string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
-
-            var conditions = new List<string>();
-            if (term != null)
-            {
-                conditions.Add(@"(p.code LIKE @Term OR p.title LIKE @Term OR cu.company_name LIKE @Term
-                    OR CONCAT(e.first_name,' ',e.last_name) LIKE @Term)");
-            }
-            if (!includeClosed)
-            {
-                conditions.Add(includeId > 0
-                    ? $"(p.status NOT IN {ClosedStatusesSql} OR p.id = @IncludeId)"
-                    : $"p.status NOT IN {ClosedStatusesSql}");
-            }
-            // #88: le bozze si vedono solo con la chiave. Il filtro vince anche su includeClosed
-            // e includeId: quelle due porte servono al deep-link sulle commesse chiuse, non a
-            // far comparire una bozza a chi non deve saperne l'esistenza.
-            string filtroBozze = _guard.FiltroBozzeSql(User);
-            if (filtroBozze.Length > 0)
-                conditions.Add(filtroBozze[" AND ".Length..]);
-            string whereClause = conditions.Count == 0
-                ? ""
-                : " WHERE " + string.Join(" AND ", conditions);
-
-            var countParams = new DynamicParameters();
-            var listParams = new DynamicParameters();
-            listParams.Add("Limit", pageSize);
-            listParams.Add("Offset", offset);
-            if (term != null)
-            {
-                countParams.Add("Term", $"%{term}%");
-                listParams.Add("Term", $"%{term}%");
-            }
-            if (!includeClosed && includeId > 0)
-            {
-                countParams.Add("IncludeId", includeId);
-                listParams.Add("IncludeId", includeId);
-            }
+            FiltroElenco f = CostruisciFiltroElenco(page, pageSize, search, includeClosed, includeId);
 
             using var c = _db.Open();
-            int total = c.ExecuteScalar<int>($@"
-                SELECT COUNT(*)
-                FROM projects p
-                LEFT JOIN customers cu ON cu.id = p.customer_id
-                LEFT JOIN employees e ON e.id = p.pm_id{whereClause}", countParams);
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*){ElencoFromSql}{f.Where}", f.CountParams);
 
-            // Le chiuse (quando richieste) finiscono in fondo: le aperte restano a portata di clic.
-            // Dentro ai gruppi comanda la DATA letta dal codice (vedi `CodeDateSql`), non
-            // l'ordine alfabetico: i due formati di codice in uso non si ordinano fra loro.
-            // La riga iniettata dal deep-link (`includeId`) va IN TESTA: ordinata da chiusa
-            // finirebbe nelle ultime pagine dello scroll infinito e l'albero resterebbe
-            // senza il nodo di ciò che si vede a destra — proprio il caso che includeId copre.
-            string orderBy = !includeClosed && includeId > 0
-                ? $"(p.id = @IncludeId) DESC, {ProjectOrderBySql}"
-                : ProjectOrderBySql;
             var rows = c.Query<ProjectListItem>($@"
             SELECT p.id, p.code, p.title,
                    COALESCE(cu.company_name, 'CLIENTE MANCANTE') AS CustomerName,
@@ -193,22 +217,12 @@ public class ProjectsController : ControllerBase
                    p.status, p.priority, p.start_date AS StartDate, p.end_date_planned AS EndDatePlanned,
                    p.revenue, p.budget_hours_total AS BudgetHoursTotal,
                    COALESCE((SELECT q.id FROM quotes q WHERE q.project_id = p.id LIMIT 1), 0) AS LinkedQuoteId
-            FROM projects p
-            LEFT JOIN customers cu ON cu.id = p.customer_id
-            LEFT JOIN employees e ON e.id = p.pm_id{whereClause}
-            ORDER BY {orderBy}
-            LIMIT @Limit OFFSET @Offset", listParams).ToList();
+            {ElencoFromSql}{f.Where}
+            ORDER BY {f.OrderBy}
+            LIMIT @Limit OFFSET @Offset", f.ListParams).ToList();
 
-            int loaded = (page - 1) * pageSize + rows.Count;
-            var result = new PagedResult<ProjectListItem>
-            {
-                Items = rows,
-                TotalCount = total,
-                Page = page,
-                PageSize = pageSize,
-                HasMore = loaded < total
-            };
-            return Ok(ApiResponse<PagedResult<ProjectListItem>>.Ok(result));
+            return Ok(ApiResponse<PagedResult<ProjectListItem>>.Ok(
+                Impagina(rows, total, f.Page, f.PageSize)));
         }
         catch (Exception ex)
         {
@@ -216,7 +230,64 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Le commesse per una <b>tendina</b>: id, codice, titolo, cliente, PM, stato. Nient'altro —
+    /// niente importi, niente ore a budget, niente date.
+    ///
+    /// <para>Aperta a tutti gli autenticati, e per un motivo dichiarato: la commessa si sceglie
+    /// da mezzo gestionale (SAL, verbali, chat, milestone, lavorazioni, dashboard), quindi
+    /// chiuderla dietro <c>nav.commesse</c> spegnerebbe quelle pagine a chi la commessa la deve
+    /// solo nominare. Filtri identici a <see cref="GetAll"/> (bozze comprese) perché il filtro
+    /// è lo stesso codice.</para>
+    ///
+    /// <para>🪤 Prima esisteva solo <see cref="GetAll"/> e la usavano anche le tendine: il
+    /// <c>revenue</c> di ogni commessa arrivava così a chiunque fosse autenticato, comprese le
+    /// tre persone a cui la voce Commesse è negata apposta. Nessuna pagina lo mostrava — ma
+    /// stava nel JSON, e «non lo mostriamo» non è un permesso.</para>
+    /// </summary>
+    [HttpGet("lookup")]
+    public IActionResult GetLookup([FromQuery] int page = 1, [FromQuery] int pageSize = 0,
+        [FromQuery] string? search = null, [FromQuery] bool includeClosed = false,
+        [FromQuery] int includeId = 0)
+    {
+        try
+        {
+            FiltroElenco f = CostruisciFiltroElenco(page, pageSize, search, includeClosed, includeId);
+
+            using var c = _db.Open();
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*){ElencoFromSql}{f.Where}", f.CountParams);
+
+            var rows = c.Query<ProjectLookupItem>($@"
+            SELECT p.id, p.code, p.title,
+                   COALESCE(cu.company_name, 'CLIENTE MANCANTE') AS CustomerName,
+                   COALESCE(CONCAT(e.first_name,' ',e.last_name), 'NON ASSEGNATO') AS PmName,
+                   p.status
+            {ElencoFromSql}{f.Where}
+            ORDER BY {f.OrderBy}
+            LIMIT @Limit OFFSET @Offset", f.ListParams).ToList();
+
+            return Ok(ApiResponse<PagedResult<ProjectLookupItem>>.Ok(
+                Impagina(rows, total, f.Page, f.PageSize)));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<PagedResult<ProjectLookupItem>>.Fail($"Errore DB: {ex.Message}"));
+        }
+    }
+
+    private static PagedResult<T> Impagina<T>(List<T> righe, int total, int page, int pageSize) =>
+        new()
+        {
+            Items = righe,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize,
+            HasMore = (page - 1) * pageSize + righe.Count < total,
+        };
+
+    /// <summary>L'albero delle commesse della pagina Commesse (stessa casa di GetAll).</summary>
     [HttpGet("tree")]
+    [RequireFeature("nav.commesse")]
     public IActionResult GetTree()
     {
         try
@@ -238,7 +309,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>Una commessa intera, coi suoi importi: la scheda della pagina Commesse.</summary>
     [HttpGet("{id}")]
+    [RequireFeature("nav.commesse")]
     public IActionResult GetById(int id)
     {
         using var c = _db.Open();
@@ -754,6 +827,7 @@ public class ProjectsController : ControllerBase
     // --- CODICE AUTO ---
     /// <summary>Codice proposto per una nuova commessa: C{aaaammgg}.{progressivo del giorno}.</summary>
     [HttpGet("next-code")]
+    [RequireFeature("nav.commesse")]
     public IActionResult NextCode()
     {
         using var c = _db.Open();

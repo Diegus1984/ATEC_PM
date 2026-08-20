@@ -28,9 +28,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { fetchProjects } from "@/lib/api/projects"
+import { fetchProjectsLookup } from "@/lib/api/projects"
 import { fetchSal, fetchSalSummary } from "@/lib/api/sal"
-import type { ProjectListItem, SalSummary } from "@/lib/api/types"
+import type { ProjectLookupItem, SalSummary } from "@/lib/api/types"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 import { notifyError } from "@/lib/toast"
@@ -152,7 +152,7 @@ export function SalPage() {
   // Carica i progetti per l'area principale e il summary per la sidebar
   const projectsQuery = useQuery({
     queryKey: ["pm-sal-projects"],
-    queryFn: () => fetchProjects({ page: 1, pageSize: 250 }),
+    queryFn: () => fetchProjectsLookup({ page: 1, pageSize: 250 }),
   })
 
   const summaryQuery = useQuery({
@@ -446,7 +446,7 @@ export function SalPage() {
 }
 
 interface ProjectSalCardProps {
-  project: ProjectListItem
+  project: ProjectLookupItem
   salSummary?: SalSummary
   expanded: boolean
   onToggleExpanded: () => void
