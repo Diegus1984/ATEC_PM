@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 12:59.
+> Fotografia del 20/08/2026 13:14.
 
 ## Chiavi con endpoint
 
@@ -433,6 +433,7 @@
 - `GET /api/permessi` (PermessiController.Elenco)
 - `GET /api/permessi/{employeeId:int}` (PermessiController.Scheda)
 - `GET /api/permessi/classe/{classe}` (PermessiController.Pacchetto)
+- `GET /api/permessi/classi` (PermessiController.Classi)
 - `POST /api/auth-levels/features` (AuthLevelController.CreateFeature)
 - `POST /api/auth-levels/migrazione/seed` (AuthLevelController.SeedPermessi)
 - `POST /api/permessi/applica-classe` (PermessiController.ApplicaClasse)
@@ -441,6 +442,7 @@
 - `PUT /api/auth-levels/features/{id}` (AuthLevelController.UpdateFeature)
 - `PUT /api/auth-levels/role-features` (AuthLevelController.SetRoleFeature)
 - `PUT /api/permessi/combo` (PermessiController.Imposta)
+- `PUT /api/permessi/pacchetto` (PermessiController.ImpostaPacchetto)
 
 ### `nav.preventivi` — Preventivi
 - `DELETE /api/quotes/{id}` (QuotesController.Delete)

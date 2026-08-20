@@ -77,6 +77,7 @@ export function SchedaPersonaPage() {
   const [anteprima, setAnteprima] = React.useState<EsitoApplicaClasseDto | null>(null)
   const [copiaAperta, setCopiaAperta] = React.useState(false)
   const [copiaDa, setCopiaDa] = React.useState<string>("")
+  const [copiaAnteprima, setCopiaAnteprima] = React.useState<EsitoApplicaClasseDto | null>(null)
 
   const schedaQuery = useQuery({
     queryKey: SCHEDA_KEY(id),
@@ -144,14 +145,47 @@ export function SchedaPersonaPage() {
 
   const copiaMutation = useMutation({
     mutationFn: copiaPermessi,
-    onSuccess: () => {
-      ricarica()
-      setCopiaAperta(false)
-      setCopiaDa("")
-      notifySuccess("Scheda copiata dal collega")
-    },
     onError: (e) => notifyError(e, "Copia non riuscita"),
   })
+
+  function chiudiCopia() {
+    setCopiaAperta(false)
+    setCopiaDa("")
+    setCopiaAnteprima(null)
+  }
+
+  /** L'anteprima è obbligatoria (§3.6): si conferma l'elenco dei cambi, non il pulsante. */
+  async function chiediAnteprimaCopia() {
+    try {
+      const esito = await copiaMutation.mutateAsync({
+        daEmployeeId: Number(copiaDa),
+        aEmployeeId: id,
+        anteprima: true,
+      })
+      setCopiaAnteprima(esito)
+    } catch {
+      /* già segnalato */
+    }
+  }
+
+  async function confermaCopia() {
+    try {
+      const esito = await copiaMutation.mutateAsync({
+        daEmployeeId: Number(copiaDa),
+        aEmployeeId: id,
+        anteprima: false,
+      })
+      ricarica()
+      chiudiCopia()
+      notifySuccess(
+        esito.combo === 0
+          ? "Era già identica alla scheda del collega"
+          : `Scheda copiata: ${esito.combo} ${esito.combo === 1 ? "voce cambiata" : "voci cambiate"}`
+      )
+    } catch {
+      /* già segnalato */
+    }
+  }
 
   /** Chiede l'anteprima e la mostra: si conferma quella, non «Applica». */
   async function chiediAnteprima() {
@@ -447,50 +481,91 @@ export function SchedaPersonaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* «Copia scheda da»: clona tutto e marca tutto a mano — «voglio esattamente le sue». */}
-      <Dialog open={copiaAperta} onOpenChange={setCopiaAperta}>
-        <DialogContent>
+      {/* «Copia scheda da»: un CLONE, origin compresi (§3.6) — le righe da template restano
+          template, le eccezioni restano eccezioni. Anteprima obbligatoria. */}
+      <Dialog open={copiaAperta} onOpenChange={(o) => !o && chiudiCopia()}>
+        <DialogContent className={copiaAnteprima ? "max-w-2xl" : undefined}>
           <DialogHeader>
             <DialogTitle>Copia la scheda di un collega</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Arriva esattamente quello che ha lui, e resta marcato «a mano»: applicare un
-              template in futuro non lo sovrascriverà.
-            </p>
-            <Select value={copiaDa} onValueChange={setCopiaDa}>
-              <SelectTrigger>
-                <SelectValue placeholder="Scegli il collega…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(elencoQuery.data ?? [])
-                  // Si copia da un COLLEGA. Fuori: sé stessi, le utenze segnaposto di reparto
-                  // (`[ACQ] Generico`… non sono persone) e chi ha il jolly — copiare da lui
-                  // vorrebbe dire copiargli il «vede tutto», cioè dare tutto senza accorgersene.
-                  .filter((r) => r.employeeId !== id && !r.segnaposto && !r.jolly)
-                  .map((r) => (
-                    <SelectItem key={r.employeeId} value={String(r.employeeId)}>
-                      {r.nome} · {r.classeDisplay}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {copiaAnteprima == null ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                La scheda diventa un clone della sua: stesse voci, stesse eccezioni. Quello che
+                viene dal suo template resta «da template», così i futuri «Applica template»
+                continuano a funzionare anche sul clone.
+              </p>
+              <Select value={copiaDa} onValueChange={setCopiaDa}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Scegli il collega…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(elencoQuery.data ?? [])
+                    // Si copia da un COLLEGA. Fuori: sé stessi, le utenze segnaposto di reparto
+                    // (`[ACQ] Generico`… non sono persone) e chi ha il jolly — copiare da lui
+                    // vorrebbe dire copiargli il «vede tutto», cioè dare tutto senza accorgersene.
+                    .filter((r) => r.employeeId !== id && !r.segnaposto && !r.jolly)
+                    .map((r) => (
+                      <SelectItem key={r.employeeId} value={String(r.employeeId)}>
+                        {r.nome} · {r.classeDisplay}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm">
+                {copiaAnteprima.combo === 0 ? (
+                  <span>Le due schede sono già identiche: non cambierebbe niente.</span>
+                ) : (
+                  <span>
+                    <strong>{copiaAnteprima.combo}</strong>{" "}
+                    {copiaAnteprima.combo === 1 ? "voce cambierebbe" : "voci cambierebbero"} su
+                    questa scheda.
+                  </span>
+                )}
+              </div>
+              {copiaAnteprima.cambi.length > 0 ? (
+                <GridScroller>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Funzione</TableHead>
+                        <TableHead className="w-[200px]">Da → a</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {copiaAnteprima.cambi.map((cambio) => (
+                        <TableRow key={cambio.featureKey}>
+                          <TableCell className="text-sm">{cambio.displayName}</TableCell>
+                          <TableCell className="text-sm">
+                            {etichettaStato(cambio.da)} → {etichettaStato(cambio.a)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </GridScroller>
+              ) : null}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCopiaAperta(false)}>
+            <Button variant="outline" onClick={chiudiCopia}>
               Annulla
             </Button>
-            <Button
-              disabled={!copiaDa || copiaMutation.isPending}
-              onClick={() =>
-                copiaMutation.mutate({
-                  daEmployeeId: Number(copiaDa),
-                  aEmployeeId: id,
-                })
-              }
-            >
-              Copia
-            </Button>
+            {copiaAnteprima == null ? (
+              <Button disabled={!copiaDa || copiaMutation.isPending} onClick={chiediAnteprimaCopia}>
+                Vedi l'anteprima
+              </Button>
+            ) : (
+              <Button
+                disabled={copiaMutation.isPending || copiaAnteprima.combo === 0}
+                onClick={confermaCopia}
+              >
+                Copia queste modifiche
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

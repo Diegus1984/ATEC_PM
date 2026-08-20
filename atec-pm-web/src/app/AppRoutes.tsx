@@ -27,6 +27,7 @@ import { MoMDetailPage } from "@/features/mom/MoMDetailPage"
 import { MoMNotePage } from "@/features/mom/MoMNotePage"
 import { MoMPage } from "@/features/mom/MoMPage"
 import { CatalogoFunzioniPage } from "@/features/permessi/CatalogoFunzioniPage"
+import { MasterTemplatesPage } from "@/features/permessi/MasterTemplatesPage"
 import { PermessiPage } from "@/features/permessi/PermessiPage"
 import { SchedaPersonaPage } from "@/features/permessi/SchedaPersonaPage"
 import { QuoteDetailPage } from "@/features/preventivi/QuoteDetailPage"
@@ -185,6 +186,10 @@ export function AppRoutes() {
       <Route
         path="permessi/persona/:employeeId"
         element={guarded("permessi/persona/:employeeId", <SchedaPersonaPage />)}
+      />
+      <Route
+        path="permessi/master"
+        element={guarded("permessi/master", <MasterTemplatesPage />)}
       />
       <Route
         path="permessi/catalogo"

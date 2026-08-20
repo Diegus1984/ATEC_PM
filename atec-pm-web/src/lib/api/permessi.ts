@@ -1,7 +1,9 @@
 import { apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   ApiResponse,
+  ClasseDto,
   EsitoApplicaClasseDto,
+  PacchettoRigaDto,
   RigaPermessiDto,
   SchedaPermessiDto,
   StatoCombo,
@@ -49,6 +51,8 @@ export async function impostaPermesso(request: {
 export async function applicaClasse(request: {
   employeeIds: number[]
   anteprima: boolean
+  /** Template esplicito (pagina Master): vuoto = la classe di ciascuno. */
+  classe?: string
 }): Promise<EsitoApplicaClasseDto> {
   const response = await apiPost<ApiResponse<EsitoApplicaClasseDto>>(
     "/api/permessi/applica-classe",
@@ -57,12 +61,47 @@ export async function applicaClasse(request: {
   return unwrapApi(response)
 }
 
-/** Copia i permessi di un collega: arriva tutto, marcato `MANO`. */
+/**
+ * Copia la scheda di un collega: un CLONE, origin compresi (§3.6) — le righe da template
+ * restano CLASSE, le eccezioni restano MANO, e i futuri «Applica template» sul clonato
+ * funzionano come sull'originale. Con `anteprima: true` non scrive niente.
+ */
 export async function copiaPermessi(request: {
   daEmployeeId: number
   aEmployeeId: number
+  anteprima: boolean
+}): Promise<EsitoApplicaClasseDto> {
+  const response = await apiPost<ApiResponse<EsitoApplicaClasseDto>>(
+    "/api/permessi/copia",
+    request
+  )
+  return unwrapApi(response)
+}
+
+/** I profili della pagina Master: classi con pacchetto riassunto. */
+export async function fetchClassi(): Promise<ClasseDto[]> {
+  const response = await apiGet<ApiResponse<ClasseDto[]>>("/api/permessi/classi")
+  return unwrapApi(response)
+}
+
+/** Il pacchetto di un template, riga per riga. */
+export async function fetchPacchetto(classe: string): Promise<PacchettoRigaDto[]> {
+  const response = await apiGet<ApiResponse<PacchettoRigaDto[]>>(
+    `/api/permessi/classe/${encodeURIComponent(classe)}`
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * Scrive una voce del template (pagina Master). `NO` = la voce esce dal pacchetto (§3.7).
+ * Salvare il master non cambia nessuno: i grant si muovono solo con «Applica template».
+ */
+export async function impostaPacchetto(request: {
+  classe: string
+  featureKey: string
+  stato: StatoCombo
 }): Promise<void> {
-  const response = await apiPost<ApiResponse<null>>("/api/permessi/copia", request)
+  const response = await apiPut<ApiResponse<null>>("/api/permessi/pacchetto", request)
   unwrapApi(response)
 }
 

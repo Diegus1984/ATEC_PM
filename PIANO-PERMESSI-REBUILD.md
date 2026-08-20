@@ -1,6 +1,6 @@
 # Rebuild gestione permessi — piano
 
-**Stato:** in implementazione — **passi 1-5 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split M103; micro prezzi M104 + filtro unico; **scheda persona = matrioska** con anteprima live, 202/202 test). Restano i passi 6 (pagina Master) e 7 (pulizia) su richiesta esplicita.  
+**Stato:** in implementazione — **passi 1-6 FATTI il 20/08/2026** (catalogo unico + censimento; EnsureCatalogo + M102; split M103; micro prezzi M104 + filtro unico; scheda persona = matrioska; **pagina Master + copia-clone**, 205/205 test). Resta il passo 7 (pulizia: gergo vecchio, layer 9 aree lato server, motore OLD quando NEW è definitivo) su richiesta esplicita. **Nota: tutto ancora da deployare in produzione.**  
 **Simulazione UI:** canvas Cursor `permessi-simulazione-v2`.  
 **Regola agent:** `.cursor/rules/permessi-catalogo-sensitive.mdc` (creata 15/08/2026)  
 **Documento precedente (motore classi):** `PIANO-PERMESSI.md` — resta storico; questo file è la direzione nuova.
@@ -597,7 +597,17 @@ speciale e nessuna decisione sul nome del ruolo (il vincolo del §3.4). Resta ap
    template»); l'elenco mostra «Eccezioni a mano» (campo `AMano` nuovo) al posto di «diverso
    dalla classe». API server invariate (Imposta/riallinea/applica/copia di Fase B). tsc,
    eslint, build e 202/202 test verdi.
-6. Pagina Master + Applica/Copia adeguati (origin §3.6, dinieghi §3.7).
+6. ✅ **FATTO 20/08/2026** — pagina **Master / Template** (`/permessi/master`): un tab per
+   profilo, la STESSA matrioska della scheda persona (senza anteprima utente), pacchetto
+   editabile dall'app («spenta» nel master = la voce ESCE dal pacchetto, §3.7; il jolly del
+   template non si tocca; salvare NON muove nessuno). **«Applica a…»** con selezione persone,
+   template ESPLICITO (`ApplicaClasseRequest.Classe`, validato) e anteprima obbligatoria.
+   **Copia = clone con gli origin del sorgente** (§3.6/§12.8.5): le righe da template restano
+   CLASSE (i futuri Applica funzionano sul clone), le righe in più SPARISCONO, e anche la
+   copia passa dall'anteprima. Endpoint nuovi: GET classi, PUT pacchetto; 3 test su DB
+   (template senza effetti collaterali, override rispettoso delle eccezioni, clone con
+   origin). 205/205 test, tsc/eslint/build verdi. Prima di questa pagina un ritocco al
+   pacchetto era una migrazione (la #77 fu la M089).
 7. Pulizia §6 (gergo vecchio, layer 9 aree; ramo OLD del motore quando NEW è definitivo).
 
 Ogni passo è deployabile da solo; fino al 5 **non cambia niente per gli utenti**.

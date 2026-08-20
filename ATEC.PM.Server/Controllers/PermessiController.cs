@@ -67,10 +67,24 @@ public class PermessiController : ControllerBase
     public IActionResult Scheda(int employeeId) =>
         Esegui(() => _permessi.Scheda(employeeId), "");
 
-    /// <summary>Il pacchetto di una classe (in Fase D diventerà modificabile da qui).</summary>
+    /// <summary>I profili della pagina Master: classi con pacchetto riassunto (§5.4 rebuild).</summary>
+    [HttpGet("classi")]
+    public IActionResult Classi() =>
+        Ok(ApiResponse<List<ClasseDto>>.Ok(_permessi.Classi()));
+
+    /// <summary>Il pacchetto di una classe (lo legge la pagina Master).</summary>
     [HttpGet("classe/{classe}")]
     public IActionResult Pacchetto(string classe) =>
         Ok(ApiResponse<List<AuthRoleFeatureDto>>.Ok(_permessi.Pacchetto(classe)));
+
+    /// <summary>
+    /// Scrive una voce del template (pagina Master). Salvare il master aggiorna SOLO il
+    /// template: nessun utente cambia finché non si preme «Applica template» (§3.5).
+    /// </summary>
+    [HttpPut("pacchetto")]
+    public IActionResult ImpostaPacchetto([FromBody] ImpostaPacchettoRequest req) =>
+        Esegui<object?>(() => { _permessi.ImpostaPacchetto(req); return null; },
+            "Template aggiornato: nessun utente cambia finché non lo applichi");
 
     /// <summary>
     /// Cambia una combo — una delle 9 aree o una singola funzione avanzata. Quello che si tocca
@@ -90,10 +104,14 @@ public class PermessiController : ControllerBase
         Esegui(() => _permessi.ApplicaClasse(req, UtenteCorrente),
             req.Anteprima ? "" : "Classe applicata");
 
-    /// <summary>Copia i permessi di un collega. Tutto quello che arriva è marcato <c>MANO</c>.</summary>
+    /// <summary>
+    /// Copia la scheda di un collega — un CLONE, origin compresi (§3.6). Con
+    /// <c>anteprima = true</c> non scrive niente e torna l'elenco esatto dei cambi.
+    /// </summary>
     [HttpPost("copia")]
     public IActionResult Copia([FromBody] CopiaPermessiRequest req) =>
-        Esegui<object?>(() => { _permessi.CopiaDa(req, UtenteCorrente); return null; }, "Permessi copiati");
+        Esegui(() => _permessi.CopiaDa(req, UtenteCorrente),
+            req.Anteprima ? "" : "Scheda copiata");
 
     /// <summary>Riporta una funzione (o tutte) al valore della classe.</summary>
     [HttpPost("riallinea")]

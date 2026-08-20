@@ -570,15 +570,26 @@ public class PermissionAdminService
     /// </summary>
     public EsitoApplicaClasseDto ApplicaClasse(ApplicaClasseRequest req, int? changedBy)
     {
+        // Template esplicito (pagina Master): deve esistere, o un refuso applicherebbe un
+        // pacchetto VUOTO — cioè toglierebbe tutto a tutti i selezionati, con anteprima
+        // convincente perché coerente col nulla.
+        if (!string.IsNullOrWhiteSpace(req.Classe))
+        {
+            using var v = _db.Open();
+            bool esiste = v.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM auth_levels WHERE UPPER(role_name) = UPPER(@C)", new { C = req.Classe }) > 0;
+            if (!esiste) throw new KeyNotFoundException($"Template '{req.Classe}' inesistente");
+        }
+
         if (req.Anteprima)
         {
             using var c = _db.Open();
-            return CalcolaApplicaClasse(c, null, req.EmployeeIds, null, null);
+            return CalcolaApplicaClasse(c, null, req.EmployeeIds, null, null, req.Classe);
         }
 
         return EseguiConGaranzia(
-            (c, tx, daAvvisare) => CalcolaApplicaClasse(c, tx, req.EmployeeIds, changedBy, daAvvisare),
-            "Applicare la classe a queste persone toglierebbe l'ultimo amministratore dei permessi.");
+            (c, tx, daAvvisare) => CalcolaApplicaClasse(c, tx, req.EmployeeIds, changedBy, daAvvisare, req.Classe),
+            "Applicare il template a queste persone toglierebbe l'ultimo amministratore dei permessi.");
     }
 
     /// <summary>
@@ -587,7 +598,8 @@ public class PermissionAdminService
     /// da un'altra strada è un'anteprima che prima o poi mente.
     /// </summary>
     private EsitoApplicaClasseDto CalcolaApplicaClasse(
-        IDbConnection c, IDbTransaction? tx, List<int> employeeIds, int? changedBy, ISet<int>? daAvvisare = null)
+        IDbConnection c, IDbTransaction? tx, List<int> employeeIds, int? changedBy,
+        ISet<int>? daAvvisare = null, string? classeOverride = null)
     {
         var esito = new EsitoApplicaClasseDto();
         var visti = new HashSet<int>();
@@ -600,7 +612,7 @@ public class PermissionAdminService
 
             esito.Persone++;
             var righe = RighePersona(c, id, tx);
-            var pacchetto = PacchettoClasse(c, p.Classe, tx);
+            var pacchetto = PacchettoClasse(c, classeOverride ?? p.Classe, tx);
             var chiavi = c.Query<(string FeatureKey, string DisplayName)>(
                 "SELECT feature_key AS FeatureKey, display_name AS DisplayName FROM auth_features", transaction: tx).ToList();
 
@@ -669,34 +681,147 @@ public class PermissionAdminService
     }
 
     /// <summary>
-    /// Copia i permessi di un collega. Tutto quello che arriva è marcato <c>MANO</c>: chi lo fa
-    /// sta dicendo «voglio esattamente le sue», non «voglio la sua classe» — e infatti i due
-    /// possono avere classi diverse.
+    /// Copia la scheda di un collega: il destinatario diventa un CLONE (§3.6 rebuild) — stesse
+    /// righe, stessi accessi e <b>stessi origin</b>. Marcare tutto <c>MANO</c>, come si faceva
+    /// prima, rendeva inerte ogni «Applica template» futuro sul clonato: tutte le righe
+    /// risultavano eccezioni e il template non toccava più niente (§12.8, falla 5).
+    ///
+    /// <para>Le righe in più del destinatario vengono TOLTE (via il diniego incluso): «copia da»
+    /// vuol dire «come lui», non «come lui più quello che avevo già». Con <c>Anteprima</c> non
+    /// scrive niente e torna l'elenco esatto dei cambi — è quello che si conferma (§3.6).</para>
     /// </summary>
-    public void CopiaDa(CopiaPermessiRequest req, int? changedBy)
+    public EsitoApplicaClasseDto CopiaDa(CopiaPermessiRequest req, int? changedBy)
     {
-        EseguiConGaranzia<object?>((c, tx, daAvvisare) =>
+        EsitoApplicaClasseDto Calcola(IDbConnection c, IDbTransaction? tx, ISet<int>? daAvvisare)
         {
-            if (LeggiPersona(c, req.DaEmployeeId, tx) == null || LeggiPersona(c, req.AEmployeeId, tx) == null)
+            Persona destinatario = LeggiPersona(c, req.AEmployeeId, tx)
+                ?? throw new KeyNotFoundException("Dipendente non trovato");
+            if (LeggiPersona(c, req.DaEmployeeId, tx) == null)
                 throw new KeyNotFoundException("Dipendente non trovato");
 
             var sorgente = RighePersona(c, req.DaEmployeeId, tx);
             var destinazione = RighePersona(c, req.AEmployeeId, tx);
+            var nomi = c.Query<(string FeatureKey, string DisplayName)>(
+                    "SELECT feature_key AS FeatureKey, display_name AS DisplayName FROM auth_features", transaction: tx)
+                .ToDictionary(x => x.FeatureKey, x => x.DisplayName, StringComparer.OrdinalIgnoreCase);
+
+            var esito = new EsitoApplicaClasseDto { Persone = 1 };
             bool cambiato = false;
 
-            foreach ((string chiave, RigaAccesso r) in sorgente)
-                cambiato |= ScriviRiga(c, tx, req.AEmployeeId, chiave, r.Access.ToUpperInvariant(),
-                    PermissionChangeService.OriginMano, changedBy);
+            foreach (string chiave in sorgente.Keys.Union(destinazione.Keys, StringComparer.OrdinalIgnoreCase).ToList())
+            {
+                sorgente.TryGetValue(chiave, out RigaAccesso? sua);
 
-            // Le righe che il collega NON ha vanno tolte: «copia da» vuol dire «come lui», non
-            // «come lui più quello che avevo già» — altrimenti non si può usare per ridurre.
-            foreach (string chiave in destinazione.Keys.Where(k => !sorgente.ContainsKey(k)).ToList())
-                cambiato |= ScriviRiga(c, tx, req.AEmployeeId, chiave, StatoCombo.No,
-                    PermissionChangeService.OriginMano, changedBy);
+                string ora = StatoRigaEsplicita(destinazione, chiave);
+                string dopo = sua?.Access.ToUpperInvariant() ?? StatoCombo.No;
+                if (!string.Equals(ora, dopo, StringComparison.OrdinalIgnoreCase))
+                {
+                    esito.Combo++;
+                    esito.Cambi.Add(new CambioPrevistoDto
+                    {
+                        EmployeeId = destinatario.Id,
+                        Nome = destinatario.Nome,
+                        FeatureKey = chiave,
+                        DisplayName = chiave == FeatureAccessService.JollyKey
+                            ? "Tutte le funzioni (jolly)"
+                            : (nomi.TryGetValue(chiave, out string? n) ? n : chiave),
+                        Da = ora,
+                        A = dopo,
+                    });
+                }
 
-            if (cambiato) daAvvisare.Add(req.AEmployeeId);
-            return null;
-        }, "Copiare questi permessi toglierebbe l'ultimo amministratore dei permessi.");
+                if (tx == null) continue;
+
+                // Origin del SORGENTE. La riga in più del destinatario si toglie davvero:
+                // ScriviRiga con NO + origin CLASSE cancella la riga (un diniego a mano qui
+                // sarebbe un'eccezione che il clone non ha).
+                cambiato |= sua != null
+                    ? ScriviRiga(c, tx, req.AEmployeeId, chiave, sua.Access.ToUpperInvariant(),
+                        sua.Origin.ToUpperInvariant(), changedBy)
+                    : ScriviRiga(c, tx, req.AEmployeeId, chiave, StatoCombo.No,
+                        PermissionChangeService.OriginClasse, changedBy);
+            }
+
+            if (tx != null && cambiato) daAvvisare?.Add(req.AEmployeeId);
+            return esito;
+        }
+
+        if (req.Anteprima)
+        {
+            using var c = _db.Open();
+            return Calcola(c, null, null);
+        }
+
+        return EseguiConGaranzia(
+            (c, tx, daAvvisare) => Calcola(c, tx, daAvvisare),
+            "Copiare questa scheda toglierebbe l'ultimo amministratore dei permessi.");
+    }
+
+    /// <summary>
+    /// I profili della pagina Master (§5.4 rebuild): le classi di <c>auth_levels</c> col loro
+    /// pacchetto riassunto. Il template col jolly (Admin) non si configura voce per voce.
+    /// </summary>
+    public List<ClasseDto> Classi()
+    {
+        using var c = _db.Open();
+        var pacchetti = c.Query<(string Classe, string FeatureKey)>(
+                "SELECT class_name AS Classe, feature_key AS FeatureKey FROM auth_class_features")
+            .GroupBy(x => x.Classe, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.FeatureKey).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        return c.Query<(string Classe, string Display)>(
+                "SELECT role_name AS Classe, display_name AS Display FROM auth_levels ORDER BY level_value")
+            .Select(x =>
+            {
+                pacchetti.TryGetValue(x.Classe, out List<string>? chiavi);
+                bool jolly = chiavi?.Contains(FeatureAccessService.JollyKey) == true;
+                return new ClasseDto
+                {
+                    Classe = x.Classe,
+                    Display = x.Display,
+                    Jolly = jolly,
+                    Voci = chiavi?.Count(k => k != FeatureAccessService.JollyKey) ?? 0,
+                };
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Scrive UNA voce del template (pagina Master, §3.5): il pacchetto si edita, nessun utente
+    /// cambia — i grant si muovono solo con «Applica template». <c>NO</c> = la voce esce dal
+    /// pacchetto (§3.7: nel master «spenta» è un'assenza; il diniego è delle persone). Prima di
+    /// questa pagina un ritocco al pacchetto era una MIGRAZIONE (la #77 è stata la M089).
+    /// </summary>
+    public void ImpostaPacchetto(ImpostaPacchettoRequest req)
+    {
+        string stato = Normalizza(req.Stato);
+
+        if (string.Equals(req.FeatureKey, FeatureAccessService.JollyKey, StringComparison.Ordinal))
+            throw new ArgumentException(
+                "Il jolly di un template non si tocca da qui: è ciò che tiene amministrabile il gestionale.");
+
+        using var c = _db.Open();
+
+        bool classeEsiste = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM auth_levels WHERE UPPER(role_name) = UPPER(@C)", new { C = req.Classe }) > 0;
+        if (!classeEsiste) throw new KeyNotFoundException($"Template '{req.Classe}' inesistente");
+
+        bool chiaveEsiste = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM auth_features WHERE feature_key = @K AND retired_at IS NULL", new { K = req.FeatureKey }) > 0;
+        if (!chiaveEsiste) throw new KeyNotFoundException($"Funzione '{req.FeatureKey}' inesistente o ritirata");
+
+        if (string.Equals(stato, StatoCombo.No, StringComparison.OrdinalIgnoreCase))
+        {
+            c.Execute("DELETE FROM auth_class_features WHERE UPPER(class_name) = UPPER(@C) AND feature_key = @K",
+                new { C = req.Classe, K = req.FeatureKey });
+        }
+        else
+        {
+            c.Execute(@"INSERT INTO auth_class_features (class_name, feature_key, access)
+                        VALUES ((SELECT role_name FROM auth_levels WHERE UPPER(role_name) = UPPER(@C)), @K, @A)
+                        ON DUPLICATE KEY UPDATE access = VALUES(access)",
+                new { C = req.Classe, K = req.FeatureKey, A = stato });
+        }
     }
 
     /// <summary>

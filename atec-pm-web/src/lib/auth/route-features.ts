@@ -24,7 +24,8 @@ export const ROUTE_FEATURE_KEYS: Record<string, ChiaveCatalogo | ChiaveCatalogo[
   "gestore-ddp/controllo/:view": "nav.gestore_ddp",
   "gestore-ddp/:projectId": "nav.gestore_ddp",
   "preventivi/:id": "nav.preventivi",
-  // Scheda permessi di una persona e catalogo delle funzioni: sotto-pagine di «Permessi».
+  // Scheda persona, Master/Template e catalogo funzioni: sotto-pagine di «Permessi».
   "permessi/persona/:employeeId": "nav.permessi",
+  "permessi/master": "nav.permessi",
   "permessi/catalogo": "nav.permessi",
 }

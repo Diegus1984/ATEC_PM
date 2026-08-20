@@ -156,6 +156,34 @@ public class ApplicaClasseRequest
     public List<int> EmployeeIds { get; set; } = new();
     /// <summary>true = non scrive niente, torna solo l'anteprima di cosa cambierebbe.</summary>
     public bool Anteprima { get; set; }
+    /// <summary>
+    /// Template da applicare al posto della classe di ciascuno (pagina Master, §5.4 rebuild):
+    /// vuoto = ognuno riceve il pacchetto della PROPRIA gerarchia (comportamento storico).
+    /// </summary>
+    public string? Classe { get; set; }
+}
+
+/// <summary>Un profilo/template della pagina Master (§5.4 rebuild).</summary>
+public class ClasseDto
+{
+    public string Classe { get; set; } = "";
+    public string Display { get; set; } = "";
+    /// <summary>Il pacchetto è la riga jolly <c>*</c>: si applica com'è, non si configura voce per voce.</summary>
+    public bool Jolly { get; set; }
+    /// <summary>Voci che il pacchetto concede (jolly escluso).</summary>
+    public int Voci { get; set; }
+}
+
+/// <summary>
+/// Scrive una voce del template (pagina Master). <c>Stato = NO</c> = la voce ESCE dal
+/// pacchetto (§3.7: nel master «spenta» è un'assenza, il diniego serve alle persone).
+/// Salvare il template non cambia nessuno: i grant si muovono solo con «Applica template».
+/// </summary>
+public class ImpostaPacchettoRequest
+{
+    public string Classe { get; set; } = "";
+    public string FeatureKey { get; set; } = "";
+    public string Stato { get; set; } = StatoCombo.No;
 }
 
 /// <summary>Una modifica che «Applica classe» farebbe (o ha fatto) su una persona.</summary>
@@ -179,11 +207,18 @@ public class EsitoApplicaClasseDto
     public int RispettateAMano { get; set; }
 }
 
-/// <summary>Copia tutti i permessi di un collega. Tutto quello che arriva viene marcato MANO.</summary>
+/// <summary>
+/// Copia tutta la scheda di un collega: il destinatario diventa un CLONE (§3.6 rebuild) —
+/// stesse righe, stessi accessi e <b>stessi origin</b> (riga da template resta CLASSE,
+/// eccezione resta MANO: così i futuri «Applica template» sul clonato funzionano come
+/// sull'originale). Le righe in più del destinatario vengono tolte.
+/// </summary>
 public class CopiaPermessiRequest
 {
     public int DaEmployeeId { get; set; }
     public int AEmployeeId { get; set; }
+    /// <summary>true = non scrive niente, torna l'elenco esatto di cosa cambierebbe (§3.6: anteprima obbligatoria).</summary>
+    public bool Anteprima { get; set; }
 }
 
 /// <summary>Riporta una funzione al valore della classe (toglie la decisione a mano).</summary>

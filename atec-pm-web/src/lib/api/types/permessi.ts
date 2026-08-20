@@ -81,6 +81,23 @@ export interface RigaPermessiDto {
   segnaposto: boolean
 }
 
+/** Un profilo/template della pagina Master (§5.4 rebuild). */
+export interface ClasseDto {
+  classe: string
+  display: string
+  /** Il pacchetto è la riga jolly `*`: si applica com'è, non si configura voce per voce. */
+  jolly: boolean
+  /** Voci che il pacchetto concede (jolly escluso). */
+  voci: number
+}
+
+/** Una riga del pacchetto di un template: chiave concessa e a che livello. */
+export interface PacchettoRigaDto {
+  roleName: string
+  featureKey: string
+  access: StatoCombo
+}
+
 export interface CambioPrevistoDto {
   employeeId: number
   nome: string

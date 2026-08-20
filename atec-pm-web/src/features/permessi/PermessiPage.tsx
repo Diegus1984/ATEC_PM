@@ -174,6 +174,12 @@ export function PermessiPage() {
                 Aggiorna
               </Button>
               <Button variant="outline" size="sm" asChild>
+                <Link to="/permessi/master">
+                  <Wand2 />
+                  Master / Template
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
                 <Link to="/permessi/catalogo">
                   <BookOpen />
                   Catalogo funzioni
