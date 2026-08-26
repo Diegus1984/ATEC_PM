@@ -703,7 +703,10 @@ export function CodexCompositionPage() {
 
   return (
     <div className="space-y-4">
-      <Card>
+      {/* Pagina a tutta altezza (pattern ConfigSectionsPage): il Card riempie la
+          finestra e le tre griglie si spartiscono lo spazio, invece delle vecchie
+          altezze fisse da 26rem che lasciavano mezzo schermo vuoto sui monitor grandi. */}
+      <Card className="flex h-[calc(100vh-7rem)] flex-col">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -766,12 +769,13 @@ export function CodexCompositionPage() {
           </div>
         </CardHeader>
 
-        <CardContent>
-          <div className="grid gap-4 lg:grid-cols-2">
+        <CardContent className="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
             {/* ── SINISTRA: Compositi + Articoli disponibili ── */}
-            <div className="flex flex-col gap-4">
-              {/* Griglia superiore: Compositi */}
-              <div className="flex h-[26rem] flex-col overflow-hidden rounded-md border">
+            <div className="flex min-h-0 flex-col gap-4">
+              {/* Griglia superiore: Compositi. Sotto lg restano le altezze fisse:
+                  in colonna singola le righe flex-1 collasserebbero a zero. */}
+              <div className="flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-md border lg:h-auto lg:flex-1">
                 <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
                   <span
                     className="text-xs font-semibold tracking-wide"
@@ -868,7 +872,7 @@ export function CodexCompositionPage() {
               </div>
 
               {/* Griglia inferiore: Articoli disponibili */}
-              <div className="flex h-[26rem] flex-col overflow-hidden rounded-md border">
+              <div className="flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-md border lg:h-auto lg:flex-1">
                 <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2">
                   <span
                     className="text-xs font-semibold tracking-wide"
@@ -1028,7 +1032,7 @@ export function CodexCompositionPage() {
             </div>
 
             {/* ── DESTRA: Composizione (albero) ── */}
-            <div className="flex h-[26rem] flex-col overflow-hidden rounded-md border lg:h-[53rem]">
+            <div className="flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-md border lg:h-auto">
               <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
                 <span
                   className="text-xs font-semibold tracking-wide"
