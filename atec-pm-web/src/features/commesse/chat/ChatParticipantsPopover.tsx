@@ -10,7 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { fetchMoMEmployees } from "@/lib/api/mom"
+import { fetchRealEmployees } from "@/lib/api/employees"
 import {
   addChatParticipant,
   fetchChatParticipants,
@@ -49,8 +49,8 @@ export function ChatParticipantsPopover({
   })
 
   const employeesQuery = useQuery({
-    queryKey: ["mom-employees"],
-    queryFn: fetchMoMEmployees,
+    queryKey: ["employees-real"],
+    queryFn: fetchRealEmployees,
     enabled: open,
   })
 

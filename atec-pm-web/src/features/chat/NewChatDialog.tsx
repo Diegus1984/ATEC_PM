@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { fetchMoMEmployees } from "@/lib/api/mom"
+import { fetchRealEmployees } from "@/lib/api/employees"
 import { createChat } from "@/lib/api/project-chat"
 import { fetchProjectsLookup } from "@/lib/api/projects"
 import {
@@ -54,8 +54,8 @@ export function NewChatDialog({
   const [filter, setFilter] = React.useState("")
 
   const employeesQuery = useQuery({
-    queryKey: ["mom-employees"],
-    queryFn: fetchMoMEmployees,
+    queryKey: ["employees-real"],
+    queryFn: fetchRealEmployees,
     enabled: open,
   })
 

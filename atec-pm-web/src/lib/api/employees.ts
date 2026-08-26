@@ -1,5 +1,22 @@
 import { apiDelete, apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
-import type { ApiResponse, EmployeeSaveRequest } from "@/lib/api/types"
+import type {
+  ApiResponse,
+  EmployeeSaveRequest,
+  LookupItem,
+} from "@/lib/api/types"
+
+/**
+ * Tendina «solo utenti reali» (niente ADMIN, cessati o wildcard reparto), aperta a
+ * chiunque sia loggato. La chat DEVE usare questa e non il lookup di MoM, che sta
+ * dietro `nav.mom`/`project.mom`: chi ha la chat ma non i verbali vedrebbe l'elenco
+ * partecipanti vuoto (#121).
+ */
+export async function fetchRealEmployees(): Promise<LookupItem[]> {
+  const response = await apiGet<ApiResponse<LookupItem[]>>(
+    "/api/employees/real"
+  )
+  return unwrapApi(response)
+}
 
 export async function fetchEmployee(id: number): Promise<EmployeeSaveRequest> {
   const response = await apiGet<ApiResponse<EmployeeSaveRequest>>(

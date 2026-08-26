@@ -38,7 +38,7 @@ import {
   groupOfChat,
   type ChatGroupKey,
 } from "@/features/chat/chat-context"
-import { fetchMoMEmployees } from "@/lib/api/mom"
+import { fetchRealEmployees } from "@/lib/api/employees"
 import {
   deleteChat,
   deleteChatMessage,
@@ -297,8 +297,8 @@ export function ChatWorkspace({
   // Il «@» elenca TUTTI i colleghi, non i soli partecipanti (#78): serve proprio a tirare
   // dentro chi non era stato messo alla creazione — ci pensa il server, all'invio.
   const employeesQuery = useQuery({
-    queryKey: ["mom-employees"],
-    queryFn: fetchMoMEmployees,
+    queryKey: ["employees-real"],
+    queryFn: fetchRealEmployees,
   })
 
   const currentEmployeeId = getSession()?.user.employeeId
