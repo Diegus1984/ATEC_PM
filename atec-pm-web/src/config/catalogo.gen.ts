@@ -591,11 +591,6 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.digest_email",
         "label": "Digest Email"
-      },
-      {
-        "kind": "voce",
-        "chiave": "nav.changelog",
-        "label": "Changelog versioni"
       }
     ]
   },
@@ -620,6 +615,11 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
             "label": "Vede le segnalazioni di tutti"
           }
         ]
+      },
+      {
+        "kind": "voce",
+        "chiave": "nav.changelog",
+        "label": "Changelog versioni"
       }
     ]
   }

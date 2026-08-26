@@ -456,16 +456,6 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         description:
           "Configurazione SMTP + digest giornaliero automatico delle modifiche al piano risorse (dipendenti, responsabili, PM).",
       },
-      {
-        id: "changelog",
-        label: "Changelog versioni",
-        path: "/changelog",
-        featureKey: "nav.changelog",
-        icon: History,
-        status: "live",
-        description:
-          "Storia delle versioni pubblicate: per ogni build le modifiche (dai commit del deploy) e le segnalazioni chiuse.",
-      },
     ],
   },
   {
@@ -483,6 +473,16 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         status: "live",
         description:
           "Bug e richieste di miglioramento su ATEC PM, con allegati (screenshot): ognuno vede e gestisce le proprie (#93, elenco completo solo a chi ha la vista), l'ADMIN cambia stato e risponde. Notifica agli ADMIN a ogni nuova segnalazione.",
+      },
+      {
+        id: "changelog",
+        label: "Changelog versioni",
+        path: "/changelog",
+        featureKey: "nav.changelog",
+        icon: History,
+        status: "live",
+        description:
+          "Storia delle versioni pubblicate: per ogni build le modifiche (dai commit del deploy) e le segnalazioni chiuse.",
       },
     ],
   },
