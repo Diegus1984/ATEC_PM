@@ -270,7 +270,9 @@ function Update-Changelog {
         }
         finally { [Console]::OutputEncoding = $vecchiaEnc }
 
-        $modifiche = @($modifiche | Where-Object { $_ -and $_.Trim() })
+        # I commit di servizio del changelog stesso (convenzione: prima riga che inizia
+        # con «Changelog:») non sono modifiche del gestionale: fuori dalle voci.
+        $modifiche = @($modifiche | Where-Object { $_ -and $_.Trim() -and $_ -notmatch '^(?i)changelog:' })
         if ($modifiche.Count -eq 0) {
             Write-Host '[Changelog] Nessun commit nuovo dall''ultima voce: niente da registrare.' -ForegroundColor DarkGray
             return

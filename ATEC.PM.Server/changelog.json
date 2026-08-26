@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1225",
+                     "data":  "2026-08-26T12:25:57",
+                     "hash":  "9f33589c0296b679c60a52a60c32ba9e8fa7c2a8",
+                     "modifiche":  [
+                                       "Pagina \"Changelog versioni\" (nav.changelog, di default solo Admin)"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1202",
                      "data":  "2026-08-26T12:11:45",
                      "hash":  "1332b72a41f3a4ffb00e8f9ea3db398ae03d7f67",
