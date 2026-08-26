@@ -553,6 +553,7 @@ export function CatalogoPage() {
                                 setAtecItem(item)
                               }}
                             >
+                              <Link2 className="size-3" />
                               Codifica
                             </Button>
                           ) : (

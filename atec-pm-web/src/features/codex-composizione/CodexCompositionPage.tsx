@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Link2, Pencil, Plus, RefreshCw, X } from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -714,6 +714,7 @@ export function CodexCompositionPage() {
               setAtecTarget(cat ?? null)
             }}
           >
+            <Link2 className="size-3" />
             Codifica
           </Button>
         )

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus } from "lucide-react"
+import { Link2, Plus } from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -707,6 +707,7 @@ export function CodexPickerDialog({
               setAtecTarget(item)
             }}
           >
+            <Link2 className="size-3" />
             Codifica
           </Button>
         )
