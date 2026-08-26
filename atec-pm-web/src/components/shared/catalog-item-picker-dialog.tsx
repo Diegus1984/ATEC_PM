@@ -85,9 +85,9 @@ const COLUMNS: PickerColumn[] = [
 ]
 
 /**
- * Picker di SELEZIONE di un articolo di catalogo (Danea): a differenza di
- * `CatalogPickerDialog` (che aggiunge righe alla distinta) qui la riga scelta
- * viene solo restituita al chiamante via `onSelect`.
+ * Picker di SELEZIONE di un articolo di catalogo (Danea): a differenza dei picker
+ * della DDP (`CodexPickerDialog`/`AtecPickerDialog`, che aggiungono righe alla
+ * distinta) qui la riga scelta viene solo restituita al chiamante via `onSelect`.
  *
  * Ricerca e paginazione sono server-side con scroll infinito: il catalogo è
  * grande e non va mai scaricato tutto (regola di progetto).

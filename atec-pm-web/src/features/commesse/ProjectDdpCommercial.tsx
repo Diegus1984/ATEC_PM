@@ -35,7 +35,7 @@ import { canWriteFeature } from "@/lib/auth/permissions"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 
 import { AtecPickerDialog } from "./AtecPickerDialog"
-import { CatalogPickerDialog } from "./CatalogPickerDialog"
+import { CodexPickerDialog } from "./CodexPickerDialog"
 import { DdpAtecAlternativesDialog } from "./DdpAtecAlternativesDialog"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
 import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
@@ -1204,7 +1204,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                 </Button>
                 <Button size="sm" onClick={() => setPickerOpen(true)}>
                   <Plus />
-                  Aggiungi da Catalogo
+                  Aggiungi da Codex
                 </Button>
               </>
             )}
@@ -1245,7 +1245,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         }
       />
 
-      <CatalogPickerDialog
+      <CodexPickerDialog
         open={!readOnly && pickerOpen}
         projectId={projectId}
         onClose={() => setPickerOpen(false)}

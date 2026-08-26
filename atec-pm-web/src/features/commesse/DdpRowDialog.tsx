@@ -58,7 +58,7 @@ type EditableState = typeof EDITABLE
 
 /**
  * Modifica di una riga DDP commerciale esistente. Le nuove righe si inseriscono
- * dal picker Catalogo (CatalogPickerDialog); qui il server persiste quantità,
+ * dai picker Codex (CodexPickerDialog / AtecPickerDialog); qui il server persiste quantità,
  * stato, fornitore, rif. Danea, data, destinazione e note — codice, descrizione,
  * UM, costo e produttore restano in sola lettura (provengono dal catalogo).
  */
