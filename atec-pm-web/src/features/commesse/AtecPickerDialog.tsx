@@ -129,7 +129,9 @@ export function AtecPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col gap-3 overflow-hidden">
+      {/* #128: la finestra era stretta e le due griglie finivano a scroll orizzontale —
+          larghezza piena e altezza minima vera, così codici e fornitori si leggono. */}
+      <DialogContent className="flex max-h-[90vh] min-h-[60vh] flex-col gap-3 overflow-hidden sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Aggiungi per codice ATEC</DialogTitle>
           <DialogDescription>
@@ -148,7 +150,7 @@ export function AtecPickerDialog({
           />
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
+        <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[5fr_6fr]">
           <GridScroller fill className="rounded-lg border">
             <Table>
               <TableHeader className="bg-muted/50">
@@ -228,6 +230,7 @@ export function AtecPickerDialog({
                     <TableRow>
                       <TableHead>Fornitore</TableHead>
                       <TableHead>Codice</TableHead>
+                      <TableHead>Produttore</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead />
                     </TableRow>
@@ -235,13 +238,13 @@ export function AtecPickerDialog({
                   <TableBody>
                     {altsQuery.isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-muted-foreground">
+                        <TableCell colSpan={5} className="text-muted-foreground">
                           Caricamento alternative…
                         </TableCell>
                       </TableRow>
                     ) : alts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-muted-foreground">
+                        <TableCell colSpan={5} className="text-muted-foreground">
                           Nessun articolo Danea associato. Usa «Solo ATEC» oppure
                           completa il mapping dal Catalogo/Codex.
                         </TableCell>
@@ -249,10 +252,13 @@ export function AtecPickerDialog({
                     ) : (
                       alts.map((alt) => (
                         <TableRow key={alt.id}>
-                          <TableCell className="max-w-[140px] truncate">
+                          <TableCell className="max-w-[180px] truncate">
                             {alt.supplierName || "—"}
                           </TableCell>
                           <TableCell className="font-medium">{alt.code}</TableCell>
+                          <TableCell className="max-w-[140px] truncate">
+                            {alt.manufacturer || "—"}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {euro(alt.unitCost)}
                           </TableCell>

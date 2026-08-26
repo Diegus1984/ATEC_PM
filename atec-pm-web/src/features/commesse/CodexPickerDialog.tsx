@@ -31,8 +31,11 @@ import {
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
-import { fetchCatalogByCodex, fetchCatalogItems } from "@/lib/api/catalog"
-import { fetchCodex } from "@/lib/api/codex"
+import { fetchCatalogItems } from "@/lib/api/catalog"
+import {
+  fetchCodexPickerRows,
+  type CodexPickerRow,
+} from "@/lib/api/codex-picker"
 import { fetchCompositionChildren } from "@/lib/api/codex-compositions"
 import { createDdpRow, fetchDdpRows, updateDdpRow } from "@/lib/api/project-ddp"
 import {
@@ -43,7 +46,6 @@ import {
 } from "@/lib/api/project-ddp-officina"
 import type {
   CatalogItemListItem,
-  CodexListItem,
   CompositionChildItem,
   OfficinaImportCompositionResult,
 } from "@/lib/api/types"
@@ -87,10 +89,6 @@ function formatCodice(codice: string): string {
   return raw.length > 3 ? `${raw.slice(0, raw.length - 3)}.${raw.slice(-3)}` : raw
 }
 
-/** Codice ATEC di una riga Codex: il codice nuovo se ricodificata, altrimenti il codice. */
-function atecDiCodex(item: CodexListItem): string {
-  return (item.codiceNuovo || item.codice || "").replace(/\./g, "").trim()
-}
 
 /**
  * Specchio client di `DdpSmistamento` (server): dove finisce un codice, dalla prima
@@ -135,20 +133,22 @@ const CATALOG_COLUMNS_DEFAULTS: Record<string, boolean> = Object.fromEntries(
   CATALOG_COLUMNS.map((column) => [column.key, true])
 )
 
-// Vista Codex (Tutte le famiglie, 101/301/5xx/6xx/7xx): le colonne del vecchio picker
-// officina + il codice fornitore, per cercare col codice commerciale anche da qui.
+// Vista Codex (Tutte le famiglie, 101/301/5xx/6xx/7xx): righe dall'endpoint dedicato
+// /api/codex/picker (#128) — un abbinamento Danea = una riga, così codice articolo e
+// produttore si CERCANO e si SCELGONO direttamente anche da qui.
 const CODEX_COLUMNS: PickerColumn[] = [
   { key: "codice", label: "Cod. ATEC", filterParam: "codice" },
   { key: "descr", label: "Descrizione", filterParam: "descr" },
-  { key: "codeForn", label: "Cod. fornitore", filterParam: "codeForn" },
-  { key: "um", label: "UM" },
+  { key: "articolo", label: "Cod. articolo", filterParam: "articolo" },
   { key: "fornitore", label: "Fornitore", filterParam: "fornitore" },
-  { key: "prezzoForn", label: "Costo", align: "right" },
+  { key: "produttore", label: "Produttore", filterParam: "produttore" },
+  { key: "um", label: "UM" },
+  { key: "costo", label: "Costo", align: "right" },
 ]
 
 type PickEntry =
   | { kind: "catalog"; item: CatalogItemListItem }
-  | { kind: "codex"; item: CodexListItem }
+  | { kind: "codex"; item: CodexPickerRow }
 
 /**
  * Picker UNICO delle due DDP di commessa (`ddpType` = la distinta da cui è aperto).
@@ -235,8 +235,8 @@ export function CodexPickerDialog({
   }, [open])
 
   // Chevron dei gruppi: apre/chiude e carica i figli diretti alla prima apertura.
-  async function toggleGroup(item: CodexListItem) {
-    const id = item.id
+  async function toggleGroup(row: CodexPickerRow) {
+    const id = row.codexId
     if (expandedGroups[id] !== undefined) {
       setExpandedGroups((prev) => {
         const next = { ...prev }
@@ -333,15 +333,15 @@ export function CodexPickerDialog({
     enabled: open && vista === "catalog",
   })
 
-  // ── Vista Codex: filtro server per prefisso. NB «Tutte» mostra i codici in formato
-  //    ATEC (i vecchi articoli ricodificati si cercano dalla loro famiglia 2xx, che
-  //    apre la vista Catalogo).
+  // ── Vista Codex: endpoint dedicato (#128) — i prefissi valgono sul codice ATEC
+  //    effettivo, quindi anche i vecchi ricodificati compaiono nella loro famiglia,
+  //    e ogni abbinamento Danea è una riga con codice articolo e produttore cercabili.
   const codexPrefixes =
     family === ALL_FAMILIES ? ["1", "2", "3", "5", "6", "7"] : [family]
   const codexQuery = useInfiniteQuery({
     queryKey: ["ddp-picker-codex", codexPrefixes, debouncedFilters],
     queryFn: ({ pageParam }) =>
-      fetchCodex({
+      fetchCodexPickerRows({
         page: pageParam,
         pageSize: PAGE_SIZE,
         codicePrefixes: codexPrefixes,
@@ -414,59 +414,84 @@ export function CodexPickerDialog({
       return { code: formatCodice(atecRaw), testo: "Qtà aggiornata" }
     }
 
-    // Articolo Danea di partenza: quello scelto (vista Catalogo) oppure, da un codice
-    // Codex, l'UNICO associato; con zero o più d'uno la riga nasce «da definire»
-    // (il fornitore è una scelta d'acquisto).
-    let cat: CatalogItemListItem | null = null
-    let descrizione = ""
-    if (entry.kind === "catalog") {
-      cat = entry.item
-      descrizione = entry.item.description
-    } else {
-      descrizione = entry.item.descr
-      try {
-        const alts = await fetchCatalogByCodex(entry.item.id)
-        cat = alts.length === 1 ? alts[0] : null
-      } catch {
-        cat = null
-      }
+    // Articolo Danea di partenza: nella vista Catalogo è la riga scelta; nella vista
+    // Codex ogni riga È già un abbinamento preciso (#128) — un codice senza articolo
+    // nasce «da definire» col prezzo del Codex (come l'import server).
+    let art: {
+      catalogItemId: number | null
+      partNumber: string
+      description: string
+      unit: string
+      unitCost: number
+      supplierId: number | null
+      manufacturer: string
     }
+    if (entry.kind === "catalog") {
+      const i = entry.item
+      art = {
+        catalogItemId: i.id,
+        partNumber: i.code,
+        description: i.description,
+        unit: i.unit || "PZ",
+        unitCost: i.unitCost ?? 0,
+        supplierId: i.supplierId,
+        manufacturer: i.manufacturer,
+      }
+    } else {
+      const r = entry.item
+      art = r.catalogItemId
+        ? {
+            catalogItemId: r.catalogItemId,
+            partNumber: r.codiceArticolo,
+            description: r.descr,
+            unit: r.unitArticolo || "PZ",
+            unitCost: r.costoArticolo ?? r.prezzoCodex ?? 0,
+            supplierId: r.supplierId,
+            manufacturer: r.produttore,
+          }
+        : {
+            catalogItemId: null,
+            partNumber: "",
+            description: r.descr,
+            unit: "PZ",
+            unitCost: r.prezzoCodex ?? 0,
+            supplierId: null,
+            manufacturer: "",
+          }
+    }
+    const daDefinire = art.catalogItemId == null
     await createDdpRow(projectId, {
       id: 0,
       projectId,
-      catalogItemId: cat?.id ?? null,
-      partNumber: cat?.code ?? "",
-      description: cat?.description || descrizione,
-      unit: cat?.unit || "PZ",
+      catalogItemId: art.catalogItemId,
+      partNumber: art.partNumber,
+      description: art.description,
+      unit: art.unit,
       quantity: 1,
-      // Senza articolo Danea univoco vale il prezzo del Codex (stessa regola
-      // dell'import server, RisolviArticoloCommerciale).
-      unitCost:
-        cat?.unitCost ??
-        (entry.kind === "codex" ? (entry.item.prezzoForn ?? 0) : 0),
-      supplierId: cat?.supplierId ?? null,
-      manufacturer: cat?.manufacturer ?? "",
+      unitCost: art.unitCost,
+      supplierId: art.supplierId,
+      manufacturer: art.manufacturer,
       itemStatus: DDP_STATUS_VERIFY,
       requestedBy,
       daneaRef: "",
       dateNeeded: null,
       destination: "",
       destinationSpec: "",
-      notes: cat ? "" : "Fornitore da definire",
+      notes: daDefinire ? "Fornitore da definire" : "",
       ddpType: "COMMERCIAL",
       atecCode: atecRaw,
       expectedUpdatedAt: null,
     })
     return {
       code: formatCodice(atecRaw),
-      testo: cat
-        ? "aggiunto alla DDP Commerciale"
-        : "aggiunto alla DDP Commerciale (fornitore da definire)",
+      testo: daDefinire
+        ? "aggiunto alla DDP Commerciale (fornitore da definire)"
+        : "aggiunto alla DDP Commerciale",
     }
   }
 
   // ── Inserimento nella DDP OFFICINA (1xx) — il flusso del picker officina storico ──
-  async function aggiungiOfficina(item: CodexListItem) {
+  async function aggiungiOfficina(item: CodexPickerRow) {
     let existing
     try {
       existing = await fetchOfficinaItems(projectId)
@@ -478,12 +503,13 @@ export function CodexPickerDialog({
     const duplicate =
       existing.find(
         (r) =>
-          r.partNumber === item.codice && r.itemStatus === DDP_STATUS_TO_ORDER
+          r.partNumber === item.codiceAtec &&
+          r.itemStatus === DDP_STATUS_TO_ORDER
       ) ?? null
     if (duplicate) {
       const ok = await confirm({
         title: "Articolo già presente",
-        description: `L'articolo ${item.codice} è già nella DDP Officina in stato Da Ordinare (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
+        description: `L'articolo ${formatCodice(item.codiceAtec)} è già nella DDP Officina in stato Da Ordinare (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
         confirmLabel: "Aggiungi +1",
         destructive: false,
       })
@@ -510,20 +536,20 @@ export function CodexPickerDialog({
         notes: duplicate.notes,
         expectedUpdatedAt: null,
       })
-      return { code: item.codice, testo: "Qtà aggiornata" }
+      return { code: formatCodice(item.codiceAtec), testo: "Qtà aggiornata" }
     }
 
     await addOfficinaItem(projectId, {
       id: 0,
       projectId,
-      partNumber: item.codice,
+      partNumber: item.codiceAtec,
       description: item.descr,
       quantity: 1,
       quantityProduced: 0,
-      unitCost: item.prezzoForn,
+      unitCost: item.prezzoCodex ?? 0,
       material: "",
       treatment: "",
-      supplierName: item.fornitore,
+      supplierName: item.fornitoreCodex,
       itemStatus: DDP_STATUS_TO_ORDER,
       requestedBy,
       daneaRef: "",
@@ -533,7 +559,10 @@ export function CodexPickerDialog({
       destinationSpec: "",
       notes: "",
     })
-    return { code: item.codice, testo: "aggiunto alla DDP Officina" }
+    return {
+      code: formatCodice(item.codiceAtec),
+      testo: "aggiunto alla DDP Officina",
+    }
   }
 
   // ── Gruppo di SOLI componenti commerciali (fix 26/08/2026): nella DDP Officina non
@@ -542,8 +571,9 @@ export function CodexPickerDialog({
   //    L'intestazione vive solo nella Commerciale (la crea il server alla prima riga
   //    commerciale) ed è lei il «padre che comanda»: un cambio quantità passa da
   //    ComposizioneDdp.PropagaQuantita come per gli altri gruppi. ──────────────────
-  async function importaGruppoSoloCommerciale(item: CodexListItem) {
-    const parentKey = (item.codice ?? "").replace(/\./g, "").trim()
+  async function importaGruppoSoloCommerciale(item: CodexPickerRow) {
+    const codeVis = formatCodice(item.codiceAtec)
+    const parentKey = (item.codiceAtec ?? "").replace(/\./g, "").trim()
     let existing: Awaited<ReturnType<typeof fetchDdpRows>>
     try {
       existing = await fetchDdpRows(projectId, "COMMERCIAL")
@@ -564,12 +594,12 @@ export function CodexPickerDialog({
       // negli altri il server rifiuterebbe comunque la nuova quantità.
       if (!isCommercialQtyEditable(header.itemStatus)) {
         throw new Error(
-          `${item.codice} è già nella DDP Commerciale in stato ${header.itemStatus}: lì la quantità è bloccata, gestiscilo dalla distinta.`
+          `${codeVis} è già nella DDP Commerciale in stato ${header.itemStatus}: lì la quantità è bloccata, gestiscilo dalla distinta.`
         )
       }
       const okPiu = await confirm({
         title: "Gruppo già presente",
-        description: `${item.codice} è già nella DDP Commerciale (Qtà attuale: ${header.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
+        description: `${codeVis} è già nella DDP Commerciale (Qtà attuale: ${header.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
         confirmLabel: "Aggiungi +1",
         destructive: false,
       })
@@ -603,7 +633,7 @@ export function CodexPickerDialog({
       let imported: OfficinaImportCompositionResult | null = null
       if (!hasLinkedChildren) {
         imported = await importOfficinaComposition(projectId, {
-          codexParentId: item.id,
+          codexParentId: item.codexId,
           requestedBy,
         })
       }
@@ -614,15 +644,15 @@ export function CodexPickerDialog({
       const compo = imported
         ? ` + componenti importati${mult} (${imported.added} nuovi, ${imported.updated} aggiornati)`
         : " (componenti allineati all'intestazione)"
-      return { code: item.codice, testo: `Qtà aggiornata${compo}` }
+      return { code: codeVis, testo: `Qtà aggiornata${compo}` }
     }
 
     const imported = await importOfficinaComposition(projectId, {
-      codexParentId: item.id,
+      codexParentId: item.codexId,
       requestedBy,
     })
     return {
-      code: item.codice,
+      code: codeVis,
       testo: `importato nella sola DDP Commerciale: ${imported.added} componenti nuovi, ${imported.updated} aggiornati${imported.skipped ? `, ${imported.skipped} saltati` : ""}`,
     }
   }
@@ -630,12 +660,13 @@ export function CodexPickerDialog({
   // ── Import di un gruppo/assieme (5xx/6xx/7xx): componenti smistati dal server
   //    (#119) e intestazione solo dove il gruppo ha componenti. SENZA figli non si
   //    importa. ──────────
-  async function importaGruppo(item: CodexListItem) {
-    const children = await fetchCompositionChildren(item.id)
+  async function importaGruppo(item: CodexPickerRow) {
+    const codeVis = formatCodice(item.codiceAtec)
+    const children = await fetchCompositionChildren(item.codexId)
     const codexChildren = children.filter((ch) => ch.source === "codex")
     if (codexChildren.length === 0) {
       throw new Error(
-        `${item.codice} non ha componenti in composizione: un gruppo o assieme si importa solo coi suoi figli. Completa prima la distinta in Composizione Codex.`
+        `${codeVis} non ha componenti in composizione: un gruppo o assieme si importa solo coi suoi figli. Completa prima la distinta in Composizione Codex.`
       )
     }
     const pieces = codexChildren.reduce((sum, ch) => sum + ch.quantity, 0)
@@ -652,7 +683,7 @@ export function CodexPickerDialog({
       : "I componenti sono tutti commerciali (2xx/3xx): finiranno nella DDP Commerciale con l'intestazione del gruppo. Nella DDP Officina non entrerà nulla."
     const ok = await confirm({
       title: "Importare il gruppo?",
-      description: `${item.codice} è un gruppo con ${codexChildren.length} componenti (${pieces} pezzi).\n\n${smistamento}`,
+      description: `${codeVis} è un gruppo con ${codexChildren.length} componenti (${pieces} pezzi).\n\n${smistamento}`,
       confirmLabel: "Importa",
       destructive: false,
     })
@@ -676,12 +707,14 @@ export function CodexPickerDialog({
       )
     }
     const duplicate = existing.find(
-      (r) => r.partNumber === item.codice && r.itemStatus === DDP_STATUS_TO_ORDER
+      (r) =>
+        r.partNumber === item.codiceAtec &&
+        r.itemStatus === DDP_STATUS_TO_ORDER
     )
     if (duplicate) {
       const okPiu = await confirm({
         title: "Gruppo già presente",
-        description: `${item.codice} è già nella DDP Officina in stato Da Ordinare (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
+        description: `${codeVis} è già nella DDP Officina in stato Da Ordinare (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
         confirmLabel: "Aggiungi +1",
         destructive: false,
       })
@@ -712,7 +745,7 @@ export function CodexPickerDialog({
       )
       if (!hasLinkedChildren) {
         imported = await importOfficinaComposition(projectId, {
-          codexParentId: item.id,
+          codexParentId: item.codexId,
           requestedBy,
         })
       }
@@ -723,20 +756,20 @@ export function CodexPickerDialog({
       const compo = imported
         ? ` + componenti smistati${mult} (${imported.added} nuovi, ${imported.updated} aggiornati)`
         : " (componenti allineati al padre)"
-      return { code: item.codice, testo: `Qtà aggiornata${compo}` }
+      return { code: codeVis, testo: `Qtà aggiornata${compo}` }
     }
 
     await addOfficinaItem(projectId, {
       id: 0,
       projectId,
-      partNumber: item.codice,
+      partNumber: item.codiceAtec,
       description: item.descr,
       quantity: 1,
       quantityProduced: 0,
-      unitCost: item.prezzoForn,
+      unitCost: item.prezzoCodex ?? 0,
       material: "",
       treatment: "",
-      supplierName: item.fornitore,
+      supplierName: item.fornitoreCodex,
       itemStatus: DDP_STATUS_TO_ORDER,
       requestedBy,
       daneaRef: "",
@@ -747,13 +780,13 @@ export function CodexPickerDialog({
       notes: "",
     })
     imported = await importOfficinaComposition(projectId, {
-      codexParentId: item.id,
+      codexParentId: item.codexId,
       requestedBy,
     })
     const multNuovo =
       imported.parentQuantity !== 1 ? ` ×${imported.parentQuantity}` : ""
     return {
-      code: item.codice,
+      code: codeVis,
       testo: `importato${multNuovo}: ${imported.added} componenti nuovi, ${imported.updated} aggiornati${imported.skipped ? `, ${imported.skipped} saltati` : ""}`,
     }
   }
@@ -764,7 +797,7 @@ export function CodexPickerDialog({
 
       // Codice ATEC e destinazione: senza codice non si entra in nessuna distinta.
       let atecRaw: string
-      let codexItem: CodexListItem | null = null
+      let codexItem: CodexPickerRow | null = null
       if (entry.kind === "catalog") {
         atecRaw = (entry.item.atecCode || "").replace(/\./g, "").trim()
         if (!atecRaw || !entry.item.codexItemId) {
@@ -773,17 +806,12 @@ export function CodexPickerDialog({
           )
         }
       } else {
+        // I codici storici commerciali non ricodificati non arrivano qui: li esclude
+        // già l'endpoint del picker (vedi CodexPickerController).
         codexItem = entry.item
-        atecRaw = atecDiCodex(entry.item)
+        atecRaw = (entry.item.codiceAtec ?? "").replace(/\./g, "").trim()
         if (!atecRaw) {
-          throw new Error(`${entry.item.codice}: codice non riconosciuto.`)
-        }
-        // Vecchio codice commerciale MAI ricodificato: la prima cifra (2/3) combacia
-        // per caso col vecchio schema, ma NON è un codice ATEC — prima la ricodifica.
-        if (!entry.item.codiceNuovo && /^[23]/.test(atecRaw)) {
-          throw new Error(
-            `${entry.item.codice} è un codice storico non ricodificato: assegnagli il codice ATEC (Ricodifica Codex) prima di metterlo in distinta.`
-          )
+          throw new Error(`${entry.item.codiceAtec}: codice non riconosciuto.`)
         }
       }
 
@@ -837,16 +865,19 @@ export function CodexPickerDialog({
     addMutation.mutate(entry)
   }
 
-  // Codice appena generato: riletto dal Codex (per codice esatto) e aggiunto subito.
+  // Codice appena generato: riletto dal picker (per codice esatto) e aggiunto subito.
   async function handleGenerated(codice: string) {
     setShowGenerate(false)
     try {
-      const page = await fetchCodex({ filters: { codice }, pageSize: 50 })
-      // Il server risponde col codice FORMATTATO (col punto), il Codex lo salva
-      // senza: il confronto va fatto a punti tolti o non si ritrova mai.
+      // Il server risponde col codice FORMATTATO (col punto), il DB lo salva senza:
+      // il confronto va fatto a punti tolti o non si ritrova mai.
       const raw = codice.replace(/\./g, "")
+      const page = await fetchCodexPickerRows({
+        filters: { codice: raw },
+        pageSize: 50,
+      })
       const created = page.items.find(
-        (i) => (i.codice ?? "").replace(/\./g, "") === raw
+        (r) => (r.codiceAtec ?? "").replace(/\./g, "") === raw
       )
       if (!created) {
         setError(`Codice ${codice} generato ma non ritrovato nel Codex.`)
@@ -914,32 +945,45 @@ export function CodexPickerDialog({
     }
   }
 
-  function renderCodexCell(column: PickerColumn, item: CodexListItem) {
+  function renderCodexCell(column: PickerColumn, row: CodexPickerRow) {
     switch (column.key) {
       case "codice":
         return (
           <span className="font-medium tabular-nums text-primary">
-            {formatCodice(atecDiCodex(item)) || item.codice}
+            {formatCodice(row.codiceAtec)}
           </span>
         )
       case "descr":
         return (
-          <span className="block max-w-[320px] truncate" title={item.descr}>
-            {dash(item.descr)}
+          <span className="block max-w-[320px] truncate" title={row.descr}>
+            {dash(row.descr)}
           </span>
         )
-      case "codeForn":
-        return dash(item.codeForn)
-      case "um":
-        return dash(item.um)
+      case "articolo":
+        return (
+          <span className="font-medium" title={row.codiceArticolo}>
+            {dash(row.codiceArticolo)}
+          </span>
+        )
       case "fornitore":
         return (
-          <span className="block max-w-[180px] truncate" title={item.fornitore}>
-            {dash(item.fornitore)}
+          <span
+            className="block max-w-[180px] truncate"
+            title={row.fornitoreNome || row.fornitoreCodex}
+          >
+            {dash(row.fornitoreNome || row.fornitoreCodex)}
           </span>
         )
-      case "prezzoForn":
-        return <span className="tabular-nums">{euro(item.prezzoForn)}</span>
+      case "produttore":
+        return dash(row.produttore)
+      case "um":
+        return dash(row.unitArticolo || row.umCodex)
+      case "costo":
+        return (
+          <span className="tabular-nums">
+            {euro(row.costoArticolo ?? row.prezzoCodex)}
+          </span>
+        )
       default:
         return null
     }
@@ -1126,10 +1170,12 @@ export function CodexPickerDialog({
                 })
               ) : (
                 codexItems.map((item) => {
-                  const isGruppo = /^[567]/.test(atecDiCodex(item))
-                  const figli = expandedGroups[item.id]
+                  const isGruppo = /^[567]/.test(item.codiceAtec)
+                  const figli = expandedGroups[item.codexId]
                   return (
-                    <React.Fragment key={`cx-${item.id}`}>
+                    <React.Fragment
+                      key={`cx-${item.codexId}-${item.catalogItemId ?? 0}`}
+                    >
                       <TableRow
                         className="cursor-pointer"
                         onDoubleClick={() => handleAdd({ kind: "codex", item })}
@@ -1185,7 +1231,9 @@ export function CodexPickerDialog({
                             onClick={() => handleAdd({ kind: "codex", item })}
                           >
                             <Plus />
-                            <span className="sr-only">Aggiungi {item.codice}</span>
+                            <span className="sr-only">
+                              Aggiungi {item.codiceAtec}
+                            </span>
                           </Button>
                         </TableCell>
                       </TableRow>
