@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1657",
+                     "data":  "2026-08-26T16:58:15",
+                     "hash":  "8ada79181e9fc252e5492bfaed2a2874c2c23e71",
+                     "modifiche":  [
+                                       "Codice ATEC dal Catalogo: nuovo codice in tutte le famiglie (#127)"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1541",
                      "data":  "2026-08-26T15:41:54",
                      "hash":  "8f71f973d140699a7e0452cad3642f2bdf885dc4",
@@ -14,8 +22,8 @@
                      "data":  "2026-08-26T15:27:49",
                      "hash":  "85987c60779085148cbae6c5a271a97cac364200",
                      "modifiche":  [
-                                       "DDP: un gruppo di soli commerciali non lascia piÃ¹ il padre orfano in Officina",
-                                       "Codex: codifica rapida dalla griglia e voce Â«Codice originaleÂ» nella ricodifica"
+                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÂ¹ il padre orfano in Officina",
+                                       "Codex: codifica rapida dalla griglia e voce Ã‚Â«Codice originaleÃ‚Â» nella ricodifica"
                                    ]
                  },
                  {
