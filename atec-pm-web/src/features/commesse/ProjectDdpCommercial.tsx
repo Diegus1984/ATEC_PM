@@ -1204,7 +1204,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                 </Button>
                 <Button size="sm" onClick={() => setPickerOpen(true)}>
                   <Plus />
-                  Aggiungi da Codex
+                  Aggiungi da Catalogo
                 </Button>
               </>
             )}
