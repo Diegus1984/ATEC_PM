@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1454",
+                     "data":  "2026-08-26T14:55:02",
+                     "hash":  "895ed775a66f8d8bfa46b6409615be16dbe692bf",
+                     "modifiche":  [
+                                       "Picker DDP: chevron sui gruppi 5xx/6xx/7xx con anteprima dei componenti"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1442",
                      "data":  "2026-08-26T14:42:44",
                      "hash":  "6e681c9fd09c491a95af3b9e40f232a53d99b565",
