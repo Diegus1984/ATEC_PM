@@ -61,12 +61,18 @@ import { dash } from "@/lib/format"
 const PAGE_SIZE = 50
 const COLUMN_STORAGE_KEY = "atec_pm_codex_columns"
 
+interface CodexCellContext {
+  /** Ruoli ricodifica: scelta rapida di codifica sulle righe senza codice nuovo. */
+  canRecode: boolean
+  onAssignNewCode: (item: CodexListItem) => void
+}
+
 interface CodexColumn {
   key: string
   label: string
   defaultHidden?: boolean
   align?: "right"
-  cell: (item: CodexListItem) => React.ReactNode
+  cell: (item: CodexListItem, ctx: CodexCellContext) => React.ReactNode
 }
 
 function formatCodexDate(value: string): string {
@@ -87,11 +93,29 @@ const COLUMNS: CodexColumn[] = [
   {
     key: "codiceNuovo",
     label: "Codice nuovo",
-    cell: (item) =>
+    cell: (item, ctx) =>
       item.codiceNuovo ? (
         <span className="font-medium tabular-nums text-primary">
           {item.codiceNuovo}
         </span>
+      ) : ctx.canRecode ? (
+        // Scelta rapida dove il codice non c'è: apre lo stesso dialog di
+        // «Assegna codice nuovo…» (genera dalla famiglia o codice originale).
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="-my-1 text-muted-foreground hover:text-foreground"
+          title="Assegna codice nuovo (genera o codice originale)"
+          onClick={(event) => {
+            event.stopPropagation()
+            ctx.onAssignNewCode(item)
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <Tag />
+          <span className="sr-only">Assegna codice nuovo</span>
+        </Button>
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
@@ -314,6 +338,11 @@ export function CodexPage() {
     [confirm, deleteMutation]
   )
 
+  const cellContext = React.useMemo<CodexCellContext>(
+    () => ({ canRecode, onAssignNewCode: setNewCodeItem }),
+    [canRecode]
+  )
+
   const visibleColumns = COLUMNS.filter((c) => visibility[c.key])
   const items = listQuery.data?.items ?? []
   const totalCount = listQuery.data?.totalCount ?? 0
@@ -515,7 +544,7 @@ export function CodexPage() {
                             column.align === "right" ? "text-right" : undefined
                           }
                         >
-                          {column.cell(item)}
+                          {column.cell(item, cellContext)}
                         </TableCell>
                       ))}
                       {showActions ? (

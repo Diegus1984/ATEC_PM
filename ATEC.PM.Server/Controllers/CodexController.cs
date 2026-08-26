@@ -250,7 +250,9 @@ public class CodexController : ControllerBase
     // Colonna codice_nuovo: di proprietà di ATEC PM (il sync remoto non la tocca),
     // compilata SOLO a mano. Formato = solo cifre come il codice attuale (il punto di
     // display viene rimosso), unicità contro ENTRAMBE le colonne (mai un nuovo uguale
-    // a un vecchio esistente). Chi può ricodificare: chiave «action.recode_codex».
+    // a un vecchio esistente — unica eccezione: il codice storico della riga STESSA,
+    // voce «Codice originale» del 26/08/2026). Chi può ricodificare: chiave
+    // «action.recode_codex».
 
     [HttpPut("{id}/new-code")]
     [Authorize]
@@ -269,6 +271,26 @@ public class CodexController : ControllerBase
             // Rimozione del codice nuovo (torna "non ricodificato").
             c.Execute("UPDATE codex_items SET codice_nuovo = NULL WHERE id=@Id", new { Id = id });
             return Ok(ApiResponse<string>.Ok("", "Codice nuovo rimosso"));
+        }
+
+        // VOCE «Codice originale» (26/08/2026): la riga può tenere il SUO codice
+        // storico come codifica, senza ricodificare. Qui la prenotazione non serve
+        // (il codice esiste già ed è di questa riga); resta la rete di sicurezza
+        // che nessun'ALTRA riga lo usi, come codice vecchio o come codice nuovo.
+        if (string.Equals(raw, oldCode.Replace(".", "").Trim(), StringComparison.Ordinal))
+        {
+            int clashOriginale = c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM codex_items
+                WHERE id <> @Id AND (codice = @Code OR codice_nuovo = @Code)",
+                new { Code = raw, Id = id });
+            if (clashOriginale > 0)
+                return Ok(ApiResponse<string>.Fail(
+                    $"Il codice {CodexListItem.FormatCodice(raw)} risulta già usato da un'altra riga."));
+
+            c.Execute("UPDATE codex_items SET codice_nuovo = @Code WHERE id=@Id",
+                new { Code = raw, Id = id });
+            return Ok(ApiResponse<string>.Ok(
+                CodexListItem.FormatCodice(raw), "Codice originale confermato come codifica"));
         }
 
         // REGOLA (21/07/2026): il codice NON si digita a mano. Deve arrivare da una

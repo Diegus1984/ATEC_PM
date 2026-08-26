@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
-import { Lock, Wand2 } from "lucide-react"
+import { Link2, Lock, Wand2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,12 @@ const NEW_CODE_FAMILIES = [
   { prefix: "221", label: "Pneumatici" },
 ]
 
+/** Codice scelto per la riga: generato dal sistema (prenotato) o codice originale. */
+interface CodeChoice {
+  code: string
+  original: boolean
+}
+
 /**
  * Dialog di ricodifica: il codice NON si digita a mano (regola 21/07/2026).
  * L'operatore sceglie la famiglia, il sistema PRENOTA il prossimo codice
@@ -33,7 +39,10 @@ const NEW_CODE_FAMILIES = [
  * meccanica del generatore: più operatori in parallelo non ricevono mai lo stesso
  * codice) e l'operatore lo accetta con Salva. Annulla/chiusura liberano la
  * prenotazione (TTL 10 min come rete di sicurezza). Il server rifiuta qualunque
- * salvataggio senza prenotazione valida. Ruoli: ADMIN / PM / RESP_REPARTO.
+ * salvataggio senza prenotazione valida. In alternativa la voce «Codice originale»
+ * (26/08/2026) assegna come codifica il codice storico della riga stessa, senza
+ * ricodificare (niente prenotazione: il codice esiste già ed è suo).
+ * Ruoli: ADMIN / PM / RESP_REPARTO.
  */
 export function CodexNewCodeDialog({
   item,
@@ -47,23 +56,27 @@ export function CodexNewCodeDialog({
   const confirm = useConfirm()
   const [error, setError] = React.useState<string | null>(null)
   const [reserving, setReserving] = React.useState(false)
-  const [reservedCode, setReservedCode] = React.useState<string | null>(null)
+  const [choice, setChoice] = React.useState<CodeChoice | null>(null)
   // Id prenotazione attiva (ref: serve anche nei cleanup senza re-render).
   const reservationRef = React.useRef<number | null>(null)
 
-  const releaseCurrent = React.useCallback(() => {
+  const releaseReservation = React.useCallback(() => {
     const id = reservationRef.current
     if (id != null) {
       reservationRef.current = null
-      setReservedCode(null)
       // Fire-and-forget: se fallisce, la prenotazione scade da sola (TTL 10 min).
       void releaseCodexReservation(id).catch(() => {})
     }
   }, [])
 
+  const clearChoice = React.useCallback(() => {
+    releaseReservation()
+    setChoice(null)
+  }, [releaseReservation])
+
   React.useEffect(() => {
     if (item) {
-      releaseCurrent()
+      clearChoice()
       setError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,7 +88,7 @@ export function CodexNewCodeDialog({
     onSuccess: () => {
       // Il server ha già liberato la prenotazione insieme al salvataggio.
       reservationRef.current = null
-      setReservedCode(null)
+      setChoice(null)
       onSaved()
     },
     onError: (err: Error) => setError(err.message),
@@ -85,10 +98,10 @@ export function CodexNewCodeDialog({
     setReserving(true)
     setError(null)
     try {
-      releaseCurrent()
+      clearChoice()
       const res = await reserveCodexNewCode(family)
       reservationRef.current = res.reservationId
-      setReservedCode(res.codice)
+      setChoice({ code: res.codice, original: false })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -97,7 +110,7 @@ export function CodexNewCodeDialog({
   }
 
   const handleClose = () => {
-    releaseCurrent()
+    clearChoice()
     onClose()
   }
 
@@ -159,20 +172,49 @@ export function CodexNewCodeDialog({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              Oppure assegna come codifica il codice originale della riga, senza
+              ricodificare:
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={reserving || saveMutation.isPending || !item.codice}
+              onClick={() => {
+                setError(null)
+                releaseReservation()
+                setChoice({ code: item.codice, original: true })
+              }}
+            >
+              <Link2 className="size-3.5" />
+              Codice originale{item.codice ? ` — ${item.codice}` : ""}
+            </Button>
+          </div>
+
           <div className="rounded-md border bg-muted/40 px-3 py-2.5">
-            {reservedCode ? (
+            {choice ? (
               <div className="space-y-1">
                 <p className="font-mono text-lg font-semibold tabular-nums">
-                  {reservedCode}
+                  {choice.code}
                 </p>
-                <p className="flex items-center gap-1 text-xs text-emerald-600">
-                  <Lock className="size-3" />
-                  Prenotato per te — Salva per confermarlo, Annulla lo libera.
-                </p>
+                {choice.original ? (
+                  <p className="flex items-center gap-1 text-xs text-primary">
+                    <Link2 className="size-3" />
+                    Codice originale — Salva lo conferma come codifica della riga.
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-1 text-xs text-emerald-600">
+                    <Lock className="size-3" />
+                    Prenotato per te — Salva per confermarlo, Annulla lo libera.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Nessun codice generato — scegli una famiglia qui sopra.
+                Nessun codice scelto — genera dalla famiglia o usa il codice
+                originale.
               </p>
             )}
           </div>
@@ -198,8 +240,8 @@ export function CodexNewCodeDialog({
               Annulla
             </Button>
             <Button
-              disabled={!reservedCode || saveMutation.isPending}
-              onClick={() => reservedCode && saveMutation.mutate(reservedCode)}
+              disabled={!choice || saveMutation.isPending}
+              onClick={() => choice && saveMutation.mutate(choice.code)}
             >
               Salva
             </Button>
