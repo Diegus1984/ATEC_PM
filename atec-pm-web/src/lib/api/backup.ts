@@ -2,16 +2,44 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  apiPut,
   buildApiUrl,
   unwrapApi,
 } from "@/lib/api/client"
 import type {
   ApiResponse,
+  BackupDestination,
   BackupFileInfo,
   FullBackupEstimate,
   FullBackupJob,
   FullBackupPackage,
 } from "@/lib/api/types"
+
+/** Destinazione dei pacchetti completi (percorso, origine, utente share). */
+export async function fetchBackupDestination(): Promise<BackupDestination> {
+  const response = await apiGet<ApiResponse<BackupDestination>>(
+    "/api/backup/full/destinazione"
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * Salva la destinazione dei pacchetti. Il server la PROVA prima di salvarla
+ * (sessione SMB + scrittura di un file di prova): se non funziona rifiuta e
+ * l'impostazione resta quella di prima. Percorso vuoto = torna a quella del server.
+ * Ritorna anche il messaggio del server (dice cosa è successo davvero).
+ */
+export async function saveBackupDestination(body: {
+  percorso: string
+  shareUser?: string
+  sharePassword?: string
+}): Promise<{ destinazione: BackupDestination; messaggio: string }> {
+  const response = await apiPut<ApiResponse<BackupDestination>>(
+    "/api/backup/full/destinazione",
+    body
+  )
+  return { destinazione: unwrapApi(response), messaggio: response.message ?? "" }
+}
 
 export async function fetchBackupList(): Promise<BackupFileInfo[]> {
   const response = await apiGet<ApiResponse<BackupFileInfo[]>>("/api/backup/list")

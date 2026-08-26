@@ -157,6 +157,146 @@ public class BackupController : ControllerBase
     [HttpGet("full/stima")]
     public IActionResult StimaPacchetto() => Ok(ApiResponse<object>.Ok(_full.StimaDimensione()));
 
+    /// <summary>
+    /// Dove finiscono i pacchetti e da dove viene l'impostazione (pagina Backup,
+    /// appsettings del server o cartella predefinita). La password non esce mai:
+    /// si dice solo SE ce n'è una salvata.
+    /// </summary>
+    [HttpGet("full/destinazione")]
+    public IActionResult Destinazione() => Ok(ApiResponse<object>.Ok(LeggiDestinazione()));
+
+    private object LeggiDestinazione()
+    {
+        (string percorso, string origine) = _full.DestinazionePacchetti();
+        bool inRete = NetworkShareConnector.ShareRoot(percorso) != null;
+        (string? utente, _) = _full.CredenzialiShare();
+        return new
+        {
+            Percorso = percorso,
+            Origine = origine,
+            InRete = inRete,
+            // L'utente si mostra solo quando serve (percorso di rete): dice con che
+            // identità il servizio bussa alla share, che è la prima cosa da guardare
+            // quando un backup risponde «accesso negato».
+            ShareUser = inRete ? (utente ?? "") : "",
+            PasswordSalvata = _db.GetConfig(FullBackupService.ChiaveSharePassword).Length > 0,
+        };
+    }
+
+    /// <summary>
+    /// Cambia la destinazione dei pacchetti (il PC di backup può cambiare nel tempo).
+    /// Percorso vuoto = si torna a quella del server (appsettings o predefinita).
+    /// La destinazione si salva SOLO se la prova di scrittura riesce — mai salvare
+    /// un percorso che non funziona: il primo backup fallito se ne accorgerebbe
+    /// qualcun altro, magari il giorno che serve il ripristino.
+    /// </summary>
+    [HttpPut("full/destinazione")]
+    public IActionResult SalvaDestinazione([FromBody] BackupDestinationSaveRequest req)
+    {
+        string percorso = (req.Percorso ?? "").Trim();
+        string utente = (req.ShareUser ?? "").Trim();
+        string password = req.SharePassword ?? "";
+
+        using var c = _db.Open();
+        if (percorso.Length == 0)
+        {
+            c.Execute("DELETE FROM app_config WHERE config_key IN @Chiavi", new
+            {
+                Chiavi = new[]
+                {
+                    FullBackupService.ChiavePercorso,
+                    FullBackupService.ChiaveShareUser,
+                    FullBackupService.ChiaveSharePassword,
+                },
+            });
+            return Ok(ApiResponse<object>.Ok(LeggiDestinazione(),
+                "Impostazione della pagina rimossa: vale di nuovo la destinazione del server."));
+        }
+
+        bool inRete = NetworkShareConnector.ShareRoot(percorso) != null;
+
+        // Una password senza utente non ha nessun significato: ignorarla in silenzio
+        // lascerebbe l'utente convinto di aver impostato qualcosa che non esiste.
+        if (utente.Length == 0 && password.Length > 0)
+            return Ok(ApiResponse<object>.Fail(
+                "È indicata una password ma non l'utente. Per usare le credenziali del " +
+                "server lascia vuoti entrambi i campi; per un utente dedicato compila anche l'utente."));
+
+        // Credenziali per la PROVA — devono essere ESATTAMENTE quelle che resteranno
+        // attive dopo il salvataggio, o si valida una configurazione e se ne attiva
+        // un'altra. Utente digitato: la sua password (o quella già salvata, solo se
+        // l'utente non è cambiato). Utente vuoto: la catena del SERVER (appsettings /
+        // share Danea), MAI le credenziali di pagina che questo stesso salvataggio
+        // sta per cancellare. Percorso locale: nessuna credenziale, non c'entrano.
+        string? provaUtente = null;
+        string? provaPassword = null;
+        string notaCredenziali = "";
+        if (!inRete)
+        {
+            if (utente.Length > 0)
+                notaCredenziali = " Utente e password non servono per un percorso locale: non sono stati salvati.";
+        }
+        else if (utente.Length > 0)
+        {
+            provaUtente = utente;
+            provaPassword = password.Length > 0 ? password : null;
+            if (provaPassword == null)
+            {
+                string salvataCifrata = _db.GetConfig(FullBackupService.ChiaveSharePassword);
+                string utenteSalvato = _db.GetConfig(FullBackupService.ChiaveShareUser).Trim();
+                if (OperatingSystem.IsWindows() && salvataCifrata.Length > 0 &&
+                    string.Equals(utenteSalvato, provaUtente, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { provaPassword = ProtectedConfigHelper.Decrypt(salvataCifrata); }
+                    catch { }
+                }
+                if (provaPassword == null)
+                    return Ok(ApiResponse<object>.Fail(
+                        $"Manca la password di {provaUtente}: per un percorso di rete con utente dedicato va indicata."));
+            }
+        }
+        else
+        {
+            (provaUtente, provaPassword) = _full.CredenzialiShareDelServer();
+        }
+
+        string? errore = _full.ProvaDestinazione(percorso, provaUtente, provaPassword);
+        if (errore != null)
+            return Ok(ApiResponse<object>.Fail($"Destinazione NON salvata: {errore}"));
+
+        void Scrivi(string chiave, string valore, string descrizione) =>
+            c.Execute(@"INSERT INTO app_config (config_key, config_value, description)
+                        VALUES (@K, @V, @D)
+                        ON DUPLICATE KEY UPDATE config_value=@V, description=@D",
+                new { K = chiave, V = valore, D = descrizione });
+
+        Scrivi(FullBackupService.ChiavePercorso, percorso,
+            "Destinazione dei pacchetti di backup completo (pagina Backup)");
+        if (inRete && utente.Length > 0)
+        {
+            Scrivi(FullBackupService.ChiaveShareUser, utente,
+                "Utente per la share di rete dei pacchetti di backup");
+            if (password.Length > 0 && OperatingSystem.IsWindows())
+                Scrivi(FullBackupService.ChiaveSharePassword, ProtectedConfigHelper.Encrypt(password),
+                    "Password (cifrata DPAPI, valida solo su questa macchina) per la share dei pacchetti");
+        }
+        else
+        {
+            // Percorso locale, o utente tolto: le credenziali di pagina non hanno più
+            // senso e una coppia utente/password orfana (magari mai verificata, o la
+            // password di un utente PRECEDENTE) resterebbe lì a ingannare il prossimo.
+            c.Execute("DELETE FROM app_config WHERE config_key IN @Chiavi", new
+            {
+                Chiavi = new[] { FullBackupService.ChiaveShareUser, FullBackupService.ChiaveSharePassword },
+            });
+        }
+
+        _log.LogInformation("[Backup] Destinazione pacchetti cambiata in {Percorso} da {Utente}.",
+            percorso, User.Identity?.Name ?? "");
+        return Ok(ApiResponse<object>.Ok(LeggiDestinazione(),
+            $"Destinazione salvata (prova di scrittura riuscita): {percorso}.{notaCredenziali}"));
+    }
+
     [HttpGet("full/list")]
     public IActionResult ListaPacchetti() => Ok(ApiResponse<List<object>>.Ok(_full.ListaPacchetti()));
 

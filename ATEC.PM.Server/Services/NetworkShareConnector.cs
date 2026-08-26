@@ -55,18 +55,33 @@ public class NetworkShareConnector
     /// Restituisce <c>null</c> se è tutto a posto (o se non c'è nulla da fare: percorso locale,
     /// nessuna credenziale configurata, sistema non Windows), altrimenti il messaggio d'errore
     /// già in italiano, pronto da mostrare.
+    ///
+    /// <para><paramref name="forza"/> = la sessione esistente viene CHIUSA e riaperta con le
+    /// credenziali indicate. Serve a chi VERIFICA delle credenziali (pagina Backup): con una
+    /// sessione già in piedi Windows ignora la password nuova e la «prova» passerebbe anche
+    /// con una password sbagliata — che verrebbe salvata come buona e fallirebbe al primo
+    /// riavvio. Se la riconnessione forzata fallisce, la voce esce dalla cache e il prossimo
+    /// <c>Connect</c> normale rimette in piedi la sessione con le credenziali di sempre.</para>
     /// </summary>
-    public string? Connect(string? path, string? utente, string? password)
+    public string? Connect(string? path, string? utente, string? password, bool forza = false)
     {
         if (!OperatingSystem.IsWindows()) return null;
         string? root = ShareRoot(path);
         if (root == null) return null;
         if (string.IsNullOrWhiteSpace(utente)) return null;
 
-        if (_connesse.TryGetValue(root, out DateTime quando) &&
+        if (!forza &&
+            _connesse.TryGetValue(root, out DateTime quando) &&
             DateTime.UtcNow - quando < Validita &&
             Directory.Exists(root))
             return null;
+
+        if (forza)
+        {
+            _connesse.TryRemove(root, out _);
+            Cancella(root);
+            Cancella(@"\\" + NomeServer(root));
+        }
 
         int esito = Aggiungi(root, utente, password);
 

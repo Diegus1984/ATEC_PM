@@ -97,28 +97,130 @@ public class FullBackupService
     // PERCORSI
     // ══════════════════════════════════════════════════════════════
 
+    // Chiavi in app_config: la destinazione si cambia dalla pagina Backup (il PC di
+    // backup può cambiare nel tempo) e la scelta deve sopravvivere ai deploy — che
+    // NON toccano l'appsettings.json del server ma nemmeno lo aggiornano da soli.
+    public const string ChiavePercorso = "backup_package_path";
+    public const string ChiaveShareUser = "backup_share_user";
+    public const string ChiaveSharePassword = "backup_share_password";
+
+    /// <summary>
+    /// Percorso dei pacchetti e da dove viene, SENZA effetti collaterali (niente sessioni
+    /// SMB, niente cartelle create): è la versione da MOSTRARE. Ordine: impostazione della
+    /// pagina Backup (app_config) → appsettings.json → cartella locale predefinita.
+    /// </summary>
+    public (string Percorso, string Origine) DestinazionePacchetti()
+    {
+        string daPagina = _db.GetConfig(ChiavePercorso).Trim();
+        if (daPagina.Length > 0) return (daPagina, "pagina");
+        string daFile = (_config["Backup:PackagePath"] ?? "").Trim();
+        if (daFile.Length > 0) return (daFile, "appsettings");
+        return (Path.Combine(_config["Backup:Path"] ?? @"C:\ATEC_Backups", "Pacchetti"), "predefinita");
+    }
+
+    /// <summary>
+    /// Credenziali per una destinazione in rete: quelle della pagina Backup (password
+    /// cifrata DPAPI in app_config), poi Backup:ShareUser/SharePassword da appsettings,
+    /// poi quelle della share immagini Danea (stesso file server, caso tipico).
+    /// </summary>
+    public (string? Utente, string? Password) CredenzialiShare()
+    {
+        string utentePagina = _db.GetConfig(ChiaveShareUser).Trim();
+        if (utentePagina.Length > 0)
+        {
+            string password = "";
+            string cifrata = _db.GetConfig(ChiaveSharePassword);
+            if (OperatingSystem.IsWindows() && cifrata.Length > 0)
+            {
+                // Cifrata su un'ALTRA macchina (es. database ripristinato altrove):
+                // non si decifra — come non averla, e l'errore del connettore lo dirà.
+                try { password = ProtectedConfigHelper.Decrypt(cifrata); }
+                catch { }
+            }
+            return (utentePagina, password);
+        }
+        return CredenzialiShareDelServer();
+    }
+
+    /// <summary>
+    /// La catena di ripiego SENZA l'impostazione di pagina: appsettings, poi share Danea.
+    /// È quella con cui va PROVATA una destinazione salvata a utente vuoto — provare con
+    /// le credenziali di pagina che il salvataggio sta per cancellare validerebbe una
+    /// configurazione diversa da quella che resterà attiva.
+    /// </summary>
+    public (string? Utente, string? Password) CredenzialiShareDelServer()
+    {
+        if (!string.IsNullOrWhiteSpace(_config["Backup:ShareUser"]))
+            return (_config["Backup:ShareUser"], _config["Backup:SharePassword"]);
+        return (_config["DaneaSync:SmbUser"], _config["DaneaSync:SmbPassword"]);
+    }
+
+    /// <summary>
+    /// Prova che la destinazione sia USABILE adesso: sessione SMB se serve, creazione
+    /// della cartella e un file di prova scritto e cancellato. Torna null se tutto ok,
+    /// altrimenti l'errore in italiano. La usa il salvataggio dalla pagina Backup:
+    /// una destinazione si salva solo se funziona (stessa regola dello script share).
+    /// </summary>
+    public string? ProvaDestinazione(string percorso, string? utente, string? password)
+    {
+        if (NetworkShareConnector.ShareRoot(percorso) != null)
+        {
+            // `forza: true` — con una sessione già in piedi verso quella share, Windows
+            // ignorerebbe le credenziali nuove e la prova passerebbe anche con una
+            // password sbagliata, che verrebbe salvata come buona.
+            string? errore = _share.Connect(percorso, utente, password, forza: true);
+            if (errore != null) return errore;
+        }
+        // Tre passi con tre diagnosi: «scrittura fallita» quando è fallita la CARTELLA
+        // manderebbe a caccia del problema sbagliato.
+        try
+        {
+            Directory.CreateDirectory(percorso);
+        }
+        catch (Exception ex)
+        {
+            return $"Impossibile creare o raggiungere la cartella {percorso}: {ex.Message}";
+        }
+        string prova = Path.Combine(percorso, $".prova-scrittura-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(prova, "prova scrittura ATEC PM");
+        }
+        catch (Exception ex)
+        {
+            return $"Scrittura di prova fallita in {percorso}: {ex.Message}";
+        }
+        try
+        {
+            File.Delete(prova);
+        }
+        catch (Exception ex)
+        {
+            // Scrivibile ma non cancellabile: per FARE i backup basta, ma la pulizia
+            // «tieni gli ultimi 3» non potrà eliminare i pacchetti vecchi — si accetta
+            // e si lascia traccia (il .tmp residuo dice da solo cos'è).
+            _log.LogWarning("[Backup] Il file di prova {File} non si cancella ({Errore}): " +
+                "destinazione scrivibile ma senza permesso di eliminazione — la pulizia dei " +
+                "pacchetti vecchi non funzionerà.", prova, ex.Message);
+        }
+        return null;
+    }
+
     /// <summary>Cartella dei pacchetti completi. Può puntare a un NAS: in quel caso la
     /// copia nasce già fuori dal server, che è lo scopo del backup.</summary>
     public string GetPackageDir()
     {
-        string dir = _config["Backup:PackagePath"]
-            ?? Path.Combine(_config["Backup:Path"] ?? @"C:\ATEC_Backups", "Pacchetti");
+        (string dir, _) = DestinazionePacchetti();
         // Destinazione UNC (NAS): il servizio gira come account LOCALE e una share in
         // workgroup risponde «accesso negato» senza sessione autenticata — stessa storia
-        // della cartella immagini Danea. Credenziali dedicate Backup:ShareUser/SharePassword
-        // se un giorno il NAS sarà un'altra macchina; oggi si ripiega su quelle della share
-        // Danea (stesso file server). Se la sessione non si apre si RIFIUTA con l'errore
-        // parlante del connettore: proseguire scriverebbe il pacchetto chissà dove o
-        // fallirebbe a metà con un «accesso negato» che non spiega niente.
+        // della cartella immagini Danea. Se la sessione non si apre si RIFIUTA con
+        // l'errore parlante del connettore. Con TUTTA la catena di credenziali vuota il
+        // connettore non fa nulla (comportamento storico: sui PC di sviluppo la share è
+        // già raggiungibile con le credenziali di Windows) e a decidere è il primo
+        // accesso al disco qui sotto.
         if (NetworkShareConnector.ShareRoot(dir) != null)
         {
-            string? utente = _config["Backup:ShareUser"];
-            string? password = _config["Backup:SharePassword"];
-            if (string.IsNullOrWhiteSpace(utente))
-            {
-                utente = _config["DaneaSync:SmbUser"];
-                password = _config["DaneaSync:SmbPassword"];
-            }
+            (string? utente, string? password) = CredenzialiShare();
             string? errore = _share.Connect(dir, utente, password);
             if (errore != null)
                 throw new InvalidOperationException(errore);

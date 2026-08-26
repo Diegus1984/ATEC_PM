@@ -32,6 +32,7 @@ import { canAccessFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 
 import { FullBackupCard } from "./FullBackupCard"
+import { PackageDestinationCard } from "./PackageDestinationCard"
 
 export function BackupPage() {
   const queryClient = useQueryClient()
@@ -247,6 +248,8 @@ export function BackupPage() {
       </Card>
 
       <FullBackupCard />
+
+      <PackageDestinationCard />
     </div>
   )
 }

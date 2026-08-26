@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 26/08/2026 08:50.
+> Fotografia del 26/08/2026 09:16.
 
 ## Chiavi con endpoint
 
@@ -228,6 +228,7 @@
 - `DELETE /api/backup/{fileName}` (BackupController.DeleteBackup)
 - `DELETE /api/backup/full/{fileName}` (BackupController.EliminaPacchetto)
 - `GET /api/backup/download/{fileName}` (BackupController.DownloadBackup)
+- `GET /api/backup/full/destinazione` (BackupController.Destinazione)
 - `GET /api/backup/full/download/{fileName}` (BackupController.ScaricaPacchetto)
 - `GET /api/backup/full/list` (BackupController.ListaPacchetti)
 - `GET /api/backup/full/stato-corrente` (BackupController.OperazioneCorrente)
@@ -239,6 +240,7 @@
 - `POST /api/backup/full/upload` (BackupController.CaricaPacchetto)
 - `POST /api/backup/now` (BackupController.RunBackup)
 - `POST /api/backup/restore/{fileName}` (BackupController.RestoreBackup)
+- `PUT /api/backup/full/destinazione` (BackupController.SalvaDestinazione)
 
 ### `nav.bilancio` — Bilancio
 - `GET /api/bilancio/settings` (BilancioController.GetSettings)

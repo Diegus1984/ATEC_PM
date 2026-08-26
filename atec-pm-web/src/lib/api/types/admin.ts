@@ -23,6 +23,18 @@ export interface FullBackupEstimate {
   destinazione: string
 }
 
+/** Dove finiscono i pacchetti completi e da dove viene l'impostazione. */
+export interface BackupDestination {
+  percorso: string
+  /** "pagina" (app_config, da questa pagina) | "appsettings" (file del server) | "predefinita". */
+  origine: "pagina" | "appsettings" | "predefinita"
+  inRete: boolean
+  /** Con che utente il servizio bussa alla share (vuoto per i percorsi locali). */
+  shareUser: string
+  /** true = in app_config c'è una password salvata (mai restituita in chiaro). */
+  passwordSalvata: boolean
+}
+
 /** Avanzamento di un backup/ripristino completo (girano in background). */
 export interface FullBackupJob {
   id: string
