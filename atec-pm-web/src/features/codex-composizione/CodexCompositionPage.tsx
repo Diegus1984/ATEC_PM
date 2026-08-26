@@ -2,6 +2,8 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, X } from "lucide-react"
 
+import { ColumnFilterInput } from "@/components/shared/column-filter-input"
+import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import {
@@ -45,8 +47,10 @@ import type {
   CompositionTreeNode,
 } from "@/lib/api/types"
 import { canWriteFeature } from "@/lib/auth/permissions"
+import { euro, dash } from "@/lib/format"
 import { useCodexHub } from "@/lib/signalr/use-codex-hub"
 import { useDebounced } from "@/lib/use-debounced"
+import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
 import { CodexImportDialog } from "./CodexImportDialog"
@@ -110,6 +114,31 @@ const NODE_COLORS: Record<string, string> = {
 }
 
 const ALL = "__all__"
+
+// Colonne della sorgente Catalogo: le stesse del picker DDP («la stessa cosa»,
+// richiesta 26/08/2026) — si cerca anche per codice commerciale/fornitore/produttore
+// quando il codice Codex non lo si ricorda. Visibilità scelta dal menu «Colonne».
+interface CatalogColumn {
+  key: string
+  label: string
+  align?: "right"
+  /** Parametro server per il filtro per colonna (assente = non filtrabile). */
+  filterParam?: string
+}
+
+const CATALOG_COLUMNS: CatalogColumn[] = [
+  { key: "atecCode", label: "Cod. ATEC", filterParam: "atecCode" },
+  { key: "code", label: "Codice", filterParam: "code" },
+  { key: "description", label: "Descrizione", filterParam: "description" },
+  { key: "unit", label: "UM" },
+  { key: "supplierName", label: "Fornitore", filterParam: "supplier" },
+  { key: "manufacturer", label: "Produttore", filterParam: "manufacturer" },
+  { key: "unitCost", label: "Costo", align: "right" },
+]
+
+const CATALOG_COLUMNS_DEFAULTS: Record<string, boolean> = Object.fromEntries(
+  CATALOG_COLUMNS.map((column) => [column.key, true])
+)
 
 interface AvailableItem {
   id: number
@@ -462,6 +491,16 @@ export function CodexCompositionPage() {
   // Combo sotto-tipo + sorgente della griglia inferiore.
   const [childType, setChildType] = React.useState(ALL)
   const [source, setSource] = React.useState<"codex" | "catalog">("codex")
+  // Filtri per colonna della sorgente Catalogo (la sorgente Codex tiene i due
+  // campi Codice/Descrizione di sempre) + visibilità colonne persistita.
+  const [catFilters, setCatFilters] = React.useState<Record<string, string>>({})
+  const [catVisibility, setCatVisibility] = usePersistedColumnVisibility(
+    "codex-comp-catalog-cols-v1",
+    CATALOG_COLUMNS_DEFAULTS
+  )
+  const visibleCatalogColumns = CATALOG_COLUMNS.filter(
+    (column) => catVisibility[column.key] !== false
+  )
   // Sorgente Catalogo: si vede TUTTO il catalogo, codificato e non. Filtrare via i non
   // codificati sembrava pulito ma nascondeva proprio le righe su cui si deve agire:
   // quelle senza codice mostrano il pulsante «Codifica» e si sistemano sul posto.
@@ -499,6 +538,7 @@ export function CodexCompositionPage() {
     pendingSelectRef.current = null
     setChildType(ALL)
     setSource("codex")
+    setCatFilters({})
   }, [typeCode])
 
   // Compositi del tipo selezionato: filtrati server-side per prefisso (es. 501%),
@@ -534,11 +574,12 @@ export function CodexCompositionPage() {
     enabled: effectiveSource === "codex",
   })
 
+  const debCatFilters = useDebounced(catFilters, 300)
   const catalogQuery = useQuery({
-    queryKey: ["catalog-available", debAvailCode, debAvailDescr],
+    queryKey: ["catalog-available", debCatFilters],
     queryFn: () =>
       fetchCatalogItems({
-        filters: { code: debAvailCode, description: debAvailDescr },
+        filters: debCatFilters,
         pageSize: 100,
       }),
     enabled: effectiveSource === "catalog",
@@ -631,9 +672,10 @@ export function CodexCompositionPage() {
       : codexAvailableQuery.data?.totalCount ?? 0
   const availableLoading =
     effectiveSource === "catalog" ? catalogQuery.isLoading : codexAvailableQuery.isLoading
-  // La colonna «Codice Codex» esiste solo sulla sorgente Catalogo: il colSpan delle
-  // righe di stato va calcolato, non cablato (regola BLOCKS-RULES §6).
-  const availableColSpan = effectiveSource === "catalog" ? 3 : 2
+  // Il colSpan delle righe di stato va calcolato, non cablato (regola BLOCKS-RULES §6):
+  // sulla sorgente Catalogo dipende dalle colonne accese nel menu «Colonne».
+  const availableColSpan =
+    effectiveSource === "catalog" ? Math.max(visibleCatalogColumns.length, 1) : 2
 
   async function handleRemove(node: CompositionTreeNode) {
     const ok = await confirm({
@@ -647,6 +689,60 @@ export function CodexCompositionPage() {
   // Drop su un nodo/radice → apre il dialog quantità (validazione già fatta a monte).
   function handleDropTo(parentCodexId: number, _parentCodice: string, child: AvailableItem) {
     setPendingAdd({ parentId: parentCodexId, child })
+  }
+
+  // Celle della sorgente Catalogo: stesse colonne del picker DDP («la stessa cosa»).
+  function renderCatalogCell(column: CatalogColumn, item: AvailableItem) {
+    const cat = item.catalogItem
+    switch (column.key) {
+      case "atecCode":
+        return item.atecCode && item.codexId ? (
+          <span
+            className="font-mono text-primary"
+            title="Codice Codex associato: è questo che entra in distinta"
+          >
+            {formatCodice(item.atecCode)}
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            disabled={!canEdit}
+            onClick={(event) => {
+              event.stopPropagation()
+              setAtecTarget(cat ?? null)
+            }}
+          >
+            Codifica
+          </Button>
+        )
+      case "code":
+        return <span className="font-mono font-medium">{item.codice}</span>
+      case "description":
+        return (
+          <span
+            className="block max-w-[320px] truncate text-muted-foreground"
+            title={item.descr}
+          >
+            {dash(item.descr)}
+          </span>
+        )
+      case "unit":
+        return dash(cat?.unit)
+      case "supplierName":
+        return (
+          <span className="block max-w-[160px] truncate" title={cat?.supplierName}>
+            {dash(cat?.supplierName)}
+          </span>
+        )
+      case "manufacturer":
+        return dash(cat?.manufacturer)
+      case "unitCost":
+        return <span className="tabular-nums">{euro(cat?.unitCost ?? null)}</span>
+      default:
+        return null
+    }
   }
 
   // Doppio click su un articolo → aggiunta rapida (quantità 1) alla radice, come il WPF.
@@ -929,31 +1025,84 @@ export function CodexCompositionPage() {
                       <SelectItem value="catalog">Catalogo</SelectItem>
                     </SelectContent>
                   </Select>
+                  {effectiveSource === "catalog" ? (
+                    <ColumnsMenu
+                      className="ml-auto h-7 px-2 text-xs"
+                      columns={CATALOG_COLUMNS.map((column) => ({
+                        id: column.key,
+                        label: column.label,
+                        checked: catVisibility[column.key] !== false,
+                        onToggle: (checked) =>
+                          setCatVisibility((prev) => ({
+                            ...prev,
+                            [column.key]: checked,
+                          })),
+                      }))}
+                    />
+                  ) : null}
                 </div>
-                <div className="flex gap-2 border-b p-2">
-                  <Input
-                    value={availCode}
-                    placeholder="Codice"
-                    className="h-8 w-32"
-                    onChange={(event) => setAvailCode(event.target.value)}
-                  />
-                  <Input
-                    value={availDescr}
-                    placeholder="Descrizione"
-                    className="h-8 flex-1"
-                    onChange={(event) => setAvailDescr(event.target.value)}
-                  />
-                </div>
+                {effectiveSource === "codex" ? (
+                  <div className="flex gap-2 border-b p-2">
+                    <Input
+                      value={availCode}
+                      placeholder="Codice"
+                      className="h-8 w-32"
+                      onChange={(event) => setAvailCode(event.target.value)}
+                    />
+                    <Input
+                      value={availDescr}
+                      placeholder="Descrizione"
+                      className="h-8 flex-1"
+                      onChange={(event) => setAvailDescr(event.target.value)}
+                    />
+                  </div>
+                ) : null}
                 <GridScroller fill>
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-36">Codice</TableHead>
-                        {effectiveSource === "catalog" ? (
-                          <TableHead className="w-40">Codice Codex</TableHead>
-                        ) : null}
-                        <TableHead>Descrizione</TableHead>
-                      </TableRow>
+                      {effectiveSource === "catalog" ? (
+                        <>
+                          <TableRow className="hover:bg-transparent">
+                            {visibleCatalogColumns.map((column) => (
+                              <TableHead
+                                key={column.key}
+                                className={
+                                  column.align === "right" ? "text-right" : undefined
+                                }
+                              >
+                                {column.label}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                          <TableRow className="hover:bg-transparent">
+                            {visibleCatalogColumns.map((column) => (
+                              <TableHead
+                                key={column.key}
+                                className="h-auto px-2 py-2 align-middle"
+                              >
+                                {column.filterParam ? (
+                                  <ColumnFilterInput
+                                    value={catFilters[column.filterParam] ?? ""}
+                                    onChange={(value) =>
+                                      setCatFilters((prev) => {
+                                        const next = { ...prev }
+                                        if (value) next[column.filterParam!] = value
+                                        else delete next[column.filterParam!]
+                                        return next
+                                      })
+                                    }
+                                  />
+                                ) : null}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </>
+                      ) : (
+                        <TableRow>
+                          <TableHead className="w-36">Codice</TableHead>
+                          <TableHead>Descrizione</TableHead>
+                        </TableRow>
+                      )}
                     </TableHeader>
                     <TableBody>
                       {availableLoading ? (
@@ -1002,37 +1151,29 @@ export function CodexCompositionPage() {
                                 trascinabile && "cursor-grab active:cursor-grabbing"
                               )}
                             >
-                              <TableCell className="font-mono font-medium">
-                                {item.codice}
-                              </TableCell>
                               {effectiveSource === "catalog" ? (
-                                <TableCell>
-                                  {item.atecCode && item.codexId ? (
-                                    <span
-                                      className="font-mono text-primary"
-                                      title="Codice Codex associato: è questo che entra in distinta"
-                                    >
-                                      {formatCodice(item.atecCode)}
-                                    </span>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-6 px-2 text-xs"
-                                      disabled={!canEdit}
-                                      onClick={(event) => {
-                                        event.stopPropagation()
-                                        setAtecTarget(item.catalogItem ?? null)
-                                      }}
-                                    >
-                                      Codifica
-                                    </Button>
-                                  )}
-                                </TableCell>
-                              ) : null}
-                              <TableCell className="whitespace-normal break-words text-muted-foreground">
-                                {item.descr || "—"}
-                              </TableCell>
+                                visibleCatalogColumns.map((column) => (
+                                  <TableCell
+                                    key={column.key}
+                                    className={
+                                      column.align === "right"
+                                        ? "text-right"
+                                        : undefined
+                                    }
+                                  >
+                                    {renderCatalogCell(column, item)}
+                                  </TableCell>
+                                ))
+                              ) : (
+                                <>
+                                  <TableCell className="font-mono font-medium">
+                                    {item.codice}
+                                  </TableCell>
+                                  <TableCell className="whitespace-normal break-words text-muted-foreground">
+                                    {item.descr || "—"}
+                                  </TableCell>
+                                </>
+                              )}
                             </TableRow>
                           )
                         })

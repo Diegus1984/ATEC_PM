@@ -38,6 +38,7 @@ export function ColumnsMenu({
   align = "end",
   className,
   onToggleAll,
+  modal = true,
 }: {
   columns: ColumnToggle[]
   triggerLabel?: string
@@ -48,6 +49,11 @@ export function ColumnsMenu({
   className?: string
   /** Handler batch opzionale per «Seleziona/Deseleziona tutti». */
   onToggleAll?: (checked: boolean) => void
+  /**
+   * Dentro un Dialog modale passare `false`: due layer modali Radix si contendono
+   * il fuoco e la spunta richiude il menu a ogni selezione (visto nel picker DDP).
+   */
+  modal?: boolean
 }) {
   if (columns.length === 0) {
     return null
@@ -69,7 +75,7 @@ export function ColumnsMenu({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={modal}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className={cn("justify-between gap-2", className)}>
           <span className="flex items-center gap-1.5">

@@ -375,6 +375,7 @@ export function CodexPickerDialog({
           </Select>
           <ColumnsMenu
             className="ml-auto"
+            modal={false}
             columns={COLUMNS.map((column) => ({
               id: column.key,
               label: column.label,
