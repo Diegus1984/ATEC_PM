@@ -45,6 +45,7 @@ import {
   bulkRemoveCodexNewCodes,
   bulkReserveCodexNewCodes,
   fetchCodex,
+  fetchCodexPrefixes,
   fetchCodexRecodeStats,
 } from "@/lib/api/codex"
 import type { CodexBulkReserveResult, CodexListItem } from "@/lib/api/types"
@@ -56,12 +57,6 @@ import { CodexDaneaMappingDialog } from "./CodexDaneaMappingDialog"
 import { CodexNewCodeDialog } from "./CodexNewCodeDialog"
 import { canRecodeCodex } from "./codex-roles"
 
-/** Famiglie della nuova codifica (come i pulsanti del dialog singolo). */
-const BULK_FAMILIES = [
-  { prefix: "201", label: "Generici" },
-  { prefix: "211", label: "Elettrici" },
-  { prefix: "221", label: "Pneumatici" },
-]
 
 const PAGE_SIZE = 50
 
@@ -127,6 +122,14 @@ export function CodexRecodePage() {
   }, [])
 
   const hasColumnFilters = Object.keys(columnFilters).length > 0
+
+  // TUTTE le famiglie del generatore per l'assegnazione massiva (#127, come il
+  // dialog singolo): la lista la governa il server (/api/codex/prefixes).
+  const prefixesQuery = useQuery({
+    queryKey: ["codex-prefixes"],
+    queryFn: fetchCodexPrefixes,
+  })
+  const bulkFamilies = prefixesQuery.data ?? []
 
   React.useEffect(() => {
     setPage(1)
@@ -389,18 +392,18 @@ export function CodexRecodePage() {
                 ) : null}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                {BULK_FAMILIES.map((family) => (
+                {bulkFamilies.map((family) => (
                   <Button
-                    key={family.prefix}
+                    key={family.codice}
                     size="sm"
                     variant="outline"
                     disabled={bulkBusy || selectedToAssign === 0}
                     onClick={() =>
-                      bulkReserveMutation.mutate({ family: family.prefix })
+                      bulkReserveMutation.mutate({ family: family.codice })
                     }
                   >
                     <Wand2 className="size-3.5" />
-                    Assegna {family.prefix} {family.label}
+                    Assegna {family.codice} — {family.descrizione}
                   </Button>
                 ))}
                 <Button

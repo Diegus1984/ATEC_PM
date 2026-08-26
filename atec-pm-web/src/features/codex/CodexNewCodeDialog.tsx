@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { Link2, Lock, Wand2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
@@ -12,19 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  fetchCodexPrefixes,
   releaseCodexReservation,
   reserveCodexNewCode,
   updateCodexNewCode,
 } from "@/lib/api/codex"
 import type { CodexListItem } from "@/lib/api/types"
 import { decodeHtmlEntities } from "@/lib/format"
-
-/** Famiglie della nuova codifica (ampliamento Codex 21/07/2026): 201/211/221. */
-const NEW_CODE_FAMILIES = [
-  { prefix: "201", label: "Generici" },
-  { prefix: "211", label: "Elettrici" },
-  { prefix: "221", label: "Pneumatici" },
-]
 
 /** Codice scelto per la riga: generato dal sistema (prenotato) o codice originale. */
 interface CodeChoice {
@@ -59,6 +53,15 @@ export function CodexNewCodeDialog({
   const [choice, setChoice] = React.useState<CodeChoice | null>(null)
   // Id prenotazione attiva (ref: serve anche nei cleanup senza re-render).
   const reservationRef = React.useRef<number | null>(null)
+
+  // TUTTE le famiglie del generatore (#127, come il dialogo del Catalogo): la lista
+  // la governa il server (/api/codex/prefixes — la 401 ritirata è già esclusa lì).
+  const prefixesQuery = useQuery({
+    queryKey: ["codex-prefixes"],
+    queryFn: fetchCodexPrefixes,
+    enabled: item != null,
+  })
+  const families = prefixesQuery.data ?? []
 
   const releaseReservation = React.useCallback(() => {
     const id = reservationRef.current
@@ -127,7 +130,8 @@ export function CodexNewCodeDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      {/* max-w-lg: con tutte le famiglie del generatore (#127) i pulsanti sono 8+. */}
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Codice nuovo — {item.codice}</DialogTitle>
         </DialogHeader>
@@ -156,19 +160,25 @@ export function CodexNewCodeDialog({
               scegli la famiglia, poi conferma con Salva.
             </p>
             <div className="flex flex-wrap gap-2">
-              {NEW_CODE_FAMILIES.map((family) => (
-                <Button
-                  key={family.prefix}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={reserving || saveMutation.isPending}
-                  onClick={() => void reserve(family.prefix)}
-                >
-                  <Wand2 className="size-3.5" />
-                  {family.prefix} {family.label}
-                </Button>
-              ))}
+              {families.length === 0 && prefixesQuery.isLoading ? (
+                <span className="text-xs text-muted-foreground">
+                  Caricamento famiglie…
+                </span>
+              ) : (
+                families.map((family) => (
+                  <Button
+                    key={family.codice}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={reserving || saveMutation.isPending}
+                    onClick={() => void reserve(family.codice)}
+                  >
+                    <Wand2 className="size-3.5" />
+                    {family.codice} — {family.descrizione}
+                  </Button>
+                ))
+              )}
             </div>
           </div>
 
