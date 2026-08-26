@@ -146,9 +146,26 @@ export function salRowVisualState(
 }
 
 /**
- * Classi Tailwind (tenuità colore + anello inset) per lo stato visivo di una riga.
+ * Classi Tailwind (tinta di fondo + anello inset) per lo stato visivo di una riga.
  * Accetta anche gli alert del prospetto ('incasso', 'attesa'): valori sconosciuti
  * ricadono senza crash sul default neutro.
+ *
+ * **Segnalazione #116 (24/08/2026): giallo e rosso alzati per davvero.** Erano `-50` a
+ * opacità 35%: su fondo bianco quasi invisibili, e nel foglio SAL di commessa anche
+ * peggio, perché lì la regola «riga piatta a riposo» spegne l'anello inset
+ * (`shadow-none` in sal-row.tsx) e resta il solo fondo a dire che la riga è in allarme.
+ * Ora la scala parte da `-200` piena e sale di un gradino al passaggio del mouse — il
+ * metro è il `#FFC000` che «Parzialm.Evasa» ha configurato in anagrafica: là dove il
+ * colore lo sceglie l'utente, lo sceglie pieno.
+ *
+ * L'ordine di gravità si legge dal colore, dal più chiaro al più scuro: `pre` (giallo)
+ * < `emessa` (ambra) < `warn`/`parziale` (rosso) < `incasso` (rosa, l'unico che parla di
+ * soldi già fatturati e non arrivati). A riposo restano tutti sopra l'80% di luminosità
+ * (rosa incasso 81%, rosso 88,5%, ambra 92,4%, giallo 94,5%): è quanto serve perché il
+ * testo nero della riga si legga senza doverlo cambiare di colore.
+ *
+ * Verde «Pagata» e azzurro «attesa» restano tenui <b>apposta</b>: non sono allarmi, e
+ * alzarli toglierebbe stacco proprio alle righe che devono saltare all'occhio.
  */
 export function salRowClass(s: string): string {
   switch (s) {
@@ -159,15 +176,15 @@ export function salRowClass(s: string): string {
     case "pagata":
       return "bg-emerald-50/35 hover:bg-emerald-50/55 shadow-[inset_0_0_0_1px_theme(colors.emerald.200),inset_3px_0_0_0_theme(colors.emerald.300)]"
     case "parziale":
-      return "bg-red-50/35 hover:bg-red-50/55 shadow-[inset_0_0_0_1px_theme(colors.red.200),inset_3px_0_0_0_theme(colors.red.300)]"
+      return "bg-red-200 hover:bg-red-300 shadow-[inset_0_0_0_1px_theme(colors.red.400),inset_3px_0_0_0_theme(colors.red.500)]"
     case "emessa":
-      return "bg-amber-50/35 hover:bg-amber-50/55 shadow-[inset_0_0_0_1px_theme(colors.amber.200),inset_3px_0_0_0_theme(colors.amber.300)]"
+      return "bg-amber-200 hover:bg-amber-300 shadow-[inset_0_0_0_1px_theme(colors.amber.400),inset_3px_0_0_0_theme(colors.amber.500)]"
     case "warn":
-      return "bg-red-50/35 hover:bg-red-50/55 shadow-[inset_0_0_0_1px_theme(colors.red.200),inset_3px_0_0_0_theme(colors.red.300)]"
+      return "bg-red-200 hover:bg-red-300 shadow-[inset_0_0_0_1px_theme(colors.red.400),inset_3px_0_0_0_theme(colors.red.500)]"
     case "pre":
-      return "bg-yellow-50/35 hover:bg-yellow-50/55 shadow-[inset_0_0_0_1px_theme(colors.yellow.200),inset_3px_0_0_0_theme(colors.yellow.300)]"
+      return "bg-yellow-200 hover:bg-yellow-300 shadow-[inset_0_0_0_1px_theme(colors.yellow.400),inset_3px_0_0_0_theme(colors.yellow.500)]"
     case "incasso":
-      return "bg-rose-50/45 hover:bg-rose-50/65 shadow-[inset_0_0_0_1px_theme(colors.rose.300),inset_3px_0_0_0_theme(colors.rose.400)]"
+      return "bg-rose-300 hover:bg-rose-400 shadow-[inset_0_0_0_1px_theme(colors.rose.500),inset_3px_0_0_0_theme(colors.rose.600)]"
     case "attesa":
       return "bg-sky-50/35 hover:bg-sky-50/55 shadow-[inset_0_0_0_1px_theme(colors.sky.200),inset_3px_0_0_0_theme(colors.sky.300)]"
     default:

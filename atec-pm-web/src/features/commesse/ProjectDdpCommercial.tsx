@@ -1,7 +1,15 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { ColumnDef } from "@tanstack/react-table"
-import { History, Link2, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  ChevronDown,
+  ChevronRight,
+  History,
+  Link2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
@@ -46,6 +54,10 @@ import { DdpStatusMenu } from "./DdpStatusMenu"
 import { ddpCommercialRowToSaveRequest } from "./ddp-commercial-row"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { isCommercialQtyEditable } from "./ddp-constants"
+import {
+  buildCompositionRows,
+  collectParentIds,
+} from "./ddp-composition-rows"
 import { useDdpQuantityAdjust } from "./use-ddp-quantity-adjust"
 import { toDateOnly } from "@/lib/date-iso"
 
@@ -527,7 +539,35 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
     onApply: applyQuantityPatch,
   })
 
-  const rows = rowsQuery.data ?? []
+  // #119 — composizione: le righe importate da un gruppo Codex stanno sotto la loro
+  // intestazione, che ne somma i costi. Stessa meccanica della DDP Officina, condivisa in
+  // `ddp-composition-rows`: qui cambia solo il campo padre (`parentBomItemId`).
+  const rawRows = React.useMemo(() => rowsQuery.data ?? [], [rowsQuery.data])
+  const parentIdsWithChildren = React.useMemo(
+    () => collectParentIds(rawRows, (r) => r.parentBomItemId),
+    [rawRows]
+  )
+  const rows = React.useMemo(
+    () =>
+      buildCompositionRows(
+        rawRows,
+        (r) => r.parentBomItemId,
+        parentIdsWithChildren,
+        (r) => r.unitCost
+      ),
+    [rawRows, parentIdsWithChildren]
+  )
+  const [collapsedParentIds, setCollapsedParentIds] = React.useState<Set<number>>(
+    () => new Set()
+  )
+  const toggleParentCollapse = React.useCallback((parentId: number) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(parentId)) next.delete(parentId)
+      else next.add(parentId)
+      return next
+    })
+  }, [])
 
   const statusFilterItems = React.useMemo(() => {
     const counts = new Map<string, number>()
@@ -555,13 +595,17 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   }, [rows, statusMap])
 
   const statusFilteredRows = React.useMemo(() => {
-    if (selectedStatusKeys.size === 0) {
-      return rows
-    }
-    return rows.filter((row) =>
-      selectedStatusKeys.has(row.itemStatus ?? "")
+    const perStato =
+      selectedStatusKeys.size === 0
+        ? rows
+        : rows.filter((row) => selectedStatusKeys.has(row.itemStatus ?? ""))
+    // I componenti spariscono quando il loro padre è collassato.
+    return perStato.filter((row) =>
+      row.parentBomItemId != null
+        ? !collapsedParentIds.has(row.parentBomItemId)
+        : true
     )
-  }, [rows, selectedStatusKeys])
+  }, [rows, selectedStatusKeys, collapsedParentIds])
 
   const columns = React.useMemo<ColumnDef<DdpRowItem>[]>(
     () => [
@@ -653,9 +697,41 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       {
         accessorKey: "partNumber",
         header: "Codice",
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.partNumber || "—"}</span>
-        ),
+        cell: ({ row }) => {
+          const item = row.original
+          const isChild = item.parentBomItemId != null
+          const hasChildren = parentIdsWithChildren.has(item.id)
+          const isCollapsed = collapsedParentIds.has(item.id)
+          return (
+            <span className="flex items-center gap-1 font-medium">
+              {isChild ? (
+                <span
+                  className="mr-1 select-none"
+                  title={`Componente di composizione (${item.compositionQty ?? 1} per padre): segue la quantità del padre`}
+                >
+                  ↳
+                </span>
+              ) : hasChildren ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleParentCollapse(item.id)
+                  }}
+                  className="mr-1 inline-flex size-5 items-center justify-center rounded hover:bg-muted"
+                  title={isCollapsed ? "Espandi componenti" : "Collassa componenti"}
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="size-4" strokeWidth={2.5} />
+                  ) : (
+                    <ChevronDown className="size-4" strokeWidth={2.5} />
+                  )}
+                </button>
+              ) : null}
+              {item.partNumber || "—"}
+            </span>
+          )
+        },
       },
       {
         accessorKey: "description",
@@ -684,19 +760,23 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
             )
           }
           const canEditQty = isCommercialQtyEditable(item.itemStatus)
+          // #119: un componente non ha quantità propria, segue quella del padre.
+          const isChild = item.parentBomItemId != null
           const atMin =
             item.quantity <= 1 && item.itemStatus === DDP_STATUS_CANCELLED
           return (
             <span
               title={
-                canEditQty
-                  ? undefined
-                  : "La quantità è modificabile solo in stato Da Ordinare"
+                isChild
+                  ? "Componente di composizione: la quantità segue quella del padre"
+                  : canEditQty
+                    ? undefined
+                    : "La quantità è modificabile solo in stato Da Ordinare"
               }
             >
               <DdpQuantityStepper
                 quantity={item.quantity}
-                disabled={quantityMutation.isPending || !canEditQty}
+                disabled={quantityMutation.isPending || !canEditQty || isChild}
                 decrementDisabled={atMin}
                 onIncrement={() => void handleQuantityAdjust(item, 1)}
                 onDecrement={() => void handleQuantityAdjust(item, -1)}
@@ -955,12 +1035,16 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               onClick: () => setAltsTarget(item),
             })
           }
+          // #119: un componente non si annulla e non si elimina da solo — se ne va col
+          // padre, altrimenti la composizione resterebbe monca senza che nessuno lo veda.
+          const isChild = item.parentBomItemId != null
           if (!readOnly && item.itemStatus !== DDP_STATUS_CANCELLED) {
             actions.push({
               label: "Elimina",
               icon: Trash2,
               destructive: true,
               separatorBefore: true,
+              disabled: isChild,
               onClick: () => void handleAnnulRow(item),
             })
           }
@@ -970,6 +1054,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               icon: Trash2,
               destructive: true,
               separatorBefore: item.itemStatus === DDP_STATUS_CANCELLED,
+              disabled: isChild,
               onClick: () => void handleDeleteRow(item),
             })
           }
@@ -983,6 +1068,11 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       },
     ],
     [
+      // #119: senza queste tre le colonne non si ricostruiscono al collasso e il
+      // chevron resta girato dalla parte sbagliata.
+      collapsedParentIds,
+      parentIdsWithChildren,
+      toggleParentCollapse,
       statusMap,
       statuses,
       destinations,
@@ -1017,11 +1107,18 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   )
 
   // Il totale include solo le righe non escluse (aggregazione A9). Le escluse sono contate a parte.
+  // #119: i componenti NON sommano — il loro costo è già arrotolato nell'intestazione del
+  // gruppo, contarli di nuovo raddoppierebbe il valore della distinta.
   const totalValue = rows.reduce(
-    (s, r) => (excludedSet.has(r.itemStatus) ? s : s + (r.totalCost || 0)),
+    (s, r) =>
+      r.parentBomItemId != null || excludedSet.has(r.itemStatus)
+        ? s
+        : s + (r.totalCost || 0),
     0
   )
-  const excludedRows = rows.filter((r) => excludedSet.has(r.itemStatus))
+  const excludedRows = rows.filter(
+    (r) => r.parentBomItemId == null && excludedSet.has(r.itemStatus)
+  )
   const excludedValue = excludedRows.reduce((s, r) => s + (r.totalCost || 0), 0)
 
   const rowStyle = React.useCallback(

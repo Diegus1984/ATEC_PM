@@ -8,9 +8,10 @@ import { canAccessFeature } from "@/lib/auth/permissions"
 export const DDP_UPDATED_QUERY_KEY = ["ddp-manager", "updated-list"] as const
 
 /**
- * Elenco delle DDP aggiornate dai colleghi negli ultimi N giorni e non ancora aperte
- * da chi guarda (#113, #114). Alimenta la card «DDP Commesse» della sezione
- * «Gestione Controlli» in Dashboard.
+ * Elenco delle DDP aggiornate negli ultimi N giorni e non ancora aperte da chi guarda
+ * (#113, #114; dalla #115 ci sono anche i propri aggiornamenti, con la firma di chi ha
+ * messo le mani). Alimenta la card «DDP Commesse» della sezione «Gestione Controlli»
+ * in Dashboard.
  *
  * Polling ogni 60 secondi, solo se l'utente ha accesso a `nav.gestore_ddp`: l'endpoint
  * risponde 403 a chi non ce l'ha, e sarebbe un 403 al minuto.

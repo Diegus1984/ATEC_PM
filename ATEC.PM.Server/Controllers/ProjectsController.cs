@@ -168,11 +168,13 @@ public class ProjectsController : ControllerBase
         // Le chiuse (quando richieste) finiscono in fondo: le aperte restano a portata di clic.
         // Dentro ai gruppi comanda la DATA letta dal codice (vedi `CodeDateSql`), non
         // l'ordine alfabetico: i due formati di codice in uso non si ordinano fra loro.
-        // La riga iniettata dal deep-link (`includeId`) va IN TESTA: ordinata da chiusa
-        // finirebbe nelle ultime pagine dello scroll infinito e l'albero resterebbe
+        // La riga iniettata dal deep-link (`includeId`) va IN TESTA solo se è CHIUSA: ordinata
+        // da chiusa finirebbe nelle ultime pagine dello scroll infinito e l'albero resterebbe
         // senza il nodo di ciò che si vede a destra — proprio il caso che includeId copre.
+        // Una commessa APERTA no: è già nell'elenco al suo posto cronologico (vedi
+        // `ProjectSorting.DeepLinkChiusaInTesta`).
         string orderBy = !includeClosed && includeId > 0
-            ? $"(p.id = @IncludeId) DESC, {ProjectOrderBySql}"
+            ? $"{ProjectSorting.DeepLinkChiusaInTesta()}, {ProjectOrderBySql}"
             : ProjectOrderBySql;
 
         return new FiltroElenco(whereClause, orderBy, countParams, listParams, page, pageSize);
@@ -1434,6 +1436,8 @@ public class ProjectsController : ControllerBase
                    b.created_by AS CreatedById,
                    COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
                    b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,
+                   -- #119: raggruppamento per composizione, gemello di quello dell'officina.
+                   b.parent_bom_item_id AS ParentBomItemId, b.composition_qty AS CompositionQty,
                    -- «Consegnato il»: ultimo passaggio a DISP nella cronistoria della riga.
                    (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
                      WHERE ev.item_type = 'COMMERCIAL' AND ev.item_id = b.id
@@ -1587,6 +1591,23 @@ public class ProjectsController : ControllerBase
             DdpItemEvents.Registra(c, DdpItemEvents.Commerciale, itemId, id,
                 oldStatus, req.ItemStatus, User, log: _logger);
 
+            // «Comanda il padre» (#119): anche da questa griglia. Se la riga toccata è
+            // l'intestazione di un gruppo, i componenti la seguono in TUTTE E DUE le DDP e
+            // la copia gemella si riallinea. Gira solo sulle intestazioni: un componente ha
+            // la quantità bloccata in UI e non arriva mai qui con una quantità diversa.
+            if (req.Quantity != before.Quantity)
+            {
+                int? firma = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
+                var toccati = ComposizioneDdp.PropagaQuantita(
+                    c, id, req.PartNumber, req.Quantity - before.Quantity, req.Quantity,
+                    firma, ComposizioneDdp.StatiEsclusi(c));
+                if (toccati.Count > 0)
+                {
+                    NotifyWorkRequestsChanged("update", id);
+                    NotifyDdpChange(id, conn, "update", 0, "OFFICINA");
+                }
+            }
+
             // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
             string projStatus = c.ExecuteScalar<string?>(
                 "SELECT status FROM projects WHERE id = @Id", new { Id = id }) ?? "";
@@ -1651,10 +1672,35 @@ public class ProjectsController : ControllerBase
         try
         {
             using var c = _db.Open();
+
+            // #119, stesse due regole della griglia officina: un componente non si cancella
+            // da solo (la composizione lo rimetterebbe fuori posto), e cancellare
+            // l'intestazione porta via i componenti di ENTRAMBE le DDP più la copia gemella.
+            var isChild = c.ExecuteScalar<int?>(
+                "SELECT parent_bom_item_id FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            if (isChild.HasValue)
+                return BadRequest(ApiResponse<bool>.Fail(
+                    "Impossibile eliminare direttamente un componente figlio. Eliminare il padre."));
+
+            string partNumber = c.ExecuteScalar<string?>(
+                "SELECT part_number FROM bom_items WHERE id = @ItemId", new { ItemId = itemId }) ?? "";
+            (int figliOfficina, int figliCommerciale) =
+                ComposizioneDdp.EliminaComponenti(c, id, partNumber, itemId);
+
             c.Execute("DELETE FROM bom_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
             NotifyDdpChange(id, conn, "delete", itemId);
-            return Ok(ApiResponse<bool>.Ok(true, "Eliminato"));
+            if (figliOfficina > 0)
+            {
+                NotifyDdpChange(id, conn, "delete", 0, "OFFICINA");
+                NotifyWorkRequestsChanged("delete", id);
+            }
+
+            int figli = figliOfficina + figliCommerciale;
+            return Ok(ApiResponse<bool>.Ok(true, figli > 0
+                ? $"Eliminata riga + {figli} componenti collegati"
+                : "Eliminato"));
         }
         catch (Exception ex)
         {
@@ -1767,11 +1813,19 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    // Import composizione Codex → distinta officina: aggiunto un codice padre (es. assieme 5xx),
-    // i suoi figli DIRETTI (solo articoli Codex, niente ricorsione sui sotto-assiemi) diventano
-    // righe della DDP officina con snapshot codice/descrizione/costo/fornitore, stato DO.
-    // Dedup per codice normalizzato (senza punti): se il figlio è già in distinta si somma la
-    // quantità della composizione alla riga esistente. I figli da Catalogo vengono saltati e contati.
+    // Import composizione Codex → DDP di commessa: aggiunto un codice padre (gruppo 5xx),
+    // i suoi figli DIRETTI (solo articoli Codex, niente ricorsione sui sotto-gruppi) diventano
+    // righe di DDP con snapshot codice/descrizione/costo/fornitore, stato DO.
+    //
+    // #119 (25/08/2026): i figli NON finiscono più tutti in officina. Ognuno va dove dice
+    // DdpSmistamento — 2xx/3xx nella DDP Commerciale, il resto in officina — e la riga del
+    // padre fa da intestazione collassabile in ENTRAMBE le griglie, ciascuna coi propri figli.
+    // La rotta resta sotto `ddp-officina` per non rompere i client: è cambiato cosa fa, non
+    // da dove la si chiama.
+    //
+    // Dedup per codice normalizzato (senza punti) e PER TABELLA: se il figlio è già in quella
+    // distinta si somma la quantità della composizione alla riga esistente. I figli da Catalogo
+    // vengono saltati e contati (dal 25/08 non possono più nemmeno esistere in composizione).
     [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
     [HttpPost("{id}/ddp-officina/import-composition")]
     public IActionResult ImportOfficinaComposition(int id, [FromBody] OfficinaImportCompositionRequest req, [FromQuery] string? conn = null)
@@ -1782,6 +1836,9 @@ public class ProjectsController : ControllerBase
             var children = c.Query<OfficinaCompositionChild>(@"
             SELECT ci.codice AS RawCode, ci.descr AS Descr, ci.fornitore AS Fornitore,
                    ci.prezzo_forn AS PrezzoForn, cc.quantity AS Quantity,
+                   -- Il codice NUOVO (ricodifica 201/211/221) è l'unico che vale come «Cod. ATEC»:
+                   -- vuoto = quell'articolo non è ancora codificato. Vedi RisolviArticoloCommerciale.
+                   COALESCE(ci.codice_nuovo,'') AS CodiceNuovo,
                    (cc.child_catalog_id IS NOT NULL) AS IsCatalog
             FROM codex_compositions cc
             LEFT JOIN codex_items ci ON ci.id = cc.child_codex_id
@@ -1792,13 +1849,14 @@ public class ProjectsController : ControllerBase
                 return Ok(ApiResponse<OfficinaImportCompositionResult>.Fail("L'articolo non ha una composizione."));
 
             // Riga del padre in distinta: la sua quantità è il moltiplicatore dell'import
-            // (es. 4 assiemi → ogni componente ×4) e il suo id collega i figli, che da qui
+            // (es. 4 gruppi → ogni componente ×4) e il suo id collega i figli, che da qui
             // in poi seguono i cambi di quantità del padre («comanda il padre»).
             decimal parentQty = 1;
             int? parentRowId = null;
-            string parentKey = (c.ExecuteScalar<string?>(
-                "SELECT codice FROM codex_items WHERE id = @Id", new { Id = req.CodexParentId }) ?? "")
-                .Replace(".", "").Trim();
+            var codexPadre = c.QueryFirstOrDefault<(string Codice, string Descr)>(
+                "SELECT codice, COALESCE(descr,'') FROM codex_items WHERE id = @Id",
+                new { Id = req.CodexParentId });
+            string parentKey = (codexPadre.Codice ?? "").Replace(".", "").Trim();
             if (parentKey.Length > 0)
             {
                 (int Id, decimal Quantity) parentRow = c.QueryFirstOrDefault<(int, decimal)>(@"
@@ -1812,23 +1870,128 @@ public class ProjectsController : ControllerBase
                 }
             }
 
-            // Righe già in distinta, indicizzate per codice normalizzato (il part_number è salvato col punto).
-            var existingByCode = new Dictionary<string, int>();
-            foreach ((int rowId, string partNumber) in c.Query<(int, string)>(
-                "SELECT id, part_number FROM ddp_officina_items WHERE project_id = @Id ORDER BY id", new { Id = id }))
+            // Righe già in distinta, indicizzate per codice normalizzato (il part_number è
+            // salvato col punto). Un indice PER TABELLA: lo stesso codice può stare in
+            // entrambe le DDP ed è giusto così, sono due distinte diverse.
+            var existingByCode = LeggiIndiceCodici(c, "ddp_officina_items", id);
+            var existingCommerciale = LeggiIndiceCodici(c, "bom_items", id);
+
+            // Intestazione nella DDP Commerciale: creata alla PRIMA riga commerciale, non
+            // prima — un gruppo di soli particolari a disegno non deve lasciare un padre
+            // orfano in una griglia dove non ha figli.
+            int? parentBomId = null;
+            int PadreCommerciale()
             {
-                string key = (partNumber ?? "").Replace(".", "").Trim();
-                if (key.Length > 0 && !existingByCode.ContainsKey(key)) existingByCode[key] = rowId;
+                if (parentBomId != null) return parentBomId.Value;
+                parentBomId = c.ExecuteScalar<int?>(@"
+                    SELECT id FROM bom_items
+                    WHERE project_id = @Id AND REPLACE(COALESCE(part_number,''), '.', '') = @Key
+                      AND parent_bom_item_id IS NULL
+                    ORDER BY id LIMIT 1", new { Id = id, Key = parentKey }) ?? 0;
+                if (parentBomId == 0)
+                {
+                    // Costo a zero: il costo del gruppo sono i suoi componenti, che qui sono
+                    // righe vere. Metterlo anche sull'intestazione lo conterebbe due volte.
+                    parentBomId = c.ExecuteScalar<int>(@"
+                        INSERT INTO bom_items
+                            (project_id, part_number, description, unit, quantity, unit_cost,
+                             item_status, requested_by, ddp_type, created_by, updated_at)
+                        VALUES
+                            (@ProjectId, @PartNumber, @Description, 'PZ', @Quantity, 0,
+                             'DO', @RequestedBy, 'COMMERCIAL', @CreatedBy, NOW());
+                        SELECT LAST_INSERT_ID()",
+                        new
+                        {
+                            ProjectId = id,
+                            PartNumber = CodexListItem.FormatCodice(codexPadre.Codice ?? ""),
+                            Description = codexPadre.Descr ?? "",
+                            Quantity = parentQty,
+                            RequestedBy = req.RequestedBy,
+                            CreatedBy = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : (int?)null
+                        });
+                }
+                return parentBomId.Value;
             }
 
             var result = new OfficinaImportCompositionResult { ParentQuantity = parentQty };
             int? createdByComp = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
             foreach (OfficinaCompositionChild child in children)
             {
-                // I figli da Catalogo (preventivi) non sono particolari d'officina: saltati e contati.
+                // I figli da Catalogo non hanno famiglia, quindi non saprebbero dove andare:
+                // saltati e contati (dal 25/08 la composizione non li accetta più).
                 if (child.IsCatalog || string.IsNullOrWhiteSpace(child.RawCode)) { result.Skipped++; continue; }
 
                 string key = child.RawCode.Replace(".", "").Trim();
+
+                // ── Componente COMMERCIALE (2xx/3xx): va nella DDP Commerciale ──────────
+                if (DdpSmistamento.VaInCommerciale(key))
+                {
+                    int padreBom = PadreCommerciale();
+                    // 🪤 Si somma SOLO su righe nate da una composizione (`composition_qty`
+                    // valorizzata). Da quando il componente può assumere il codice Danea
+                    // dell'articolo, può coincidere col codice di una riga che Acquisti ha
+                    // inserito a mano: adottarla la renderebbe figlia del gruppo, cioè non più
+                    // cancellabile, con la quantità comandata dal padre e — se il padre viene
+                    // eliminato — cancellata in cascata insieme alla sua riga di RDO
+                    // (`purchase_rfq_items.bom_item_id` è ON DELETE CASCADE). Meglio due righe
+                    // distinte: quella comprata e quella richiesta dalla distinta.
+                    if (existingCommerciale.TryGetValue(key, out int esistenteBom)
+                        && c.ExecuteScalar<int>(
+                            "SELECT COUNT(*) FROM bom_items WHERE id = @Id AND composition_qty IS NOT NULL",
+                            new { Id = esistenteBom }) > 0)
+                    {
+                        c.Execute(@"UPDATE bom_items SET
+                                    quantity = quantity + @Add,
+                                    parent_bom_item_id = COALESCE(parent_bom_item_id, @ParentRowId),
+                                    composition_qty = COALESCE(composition_qty, @CompQty),
+                                    updated_at = NOW(), updated_by = @UpdatedBy
+                                    WHERE id = @Id",
+                            new { Add = child.Quantity * parentQty, ParentRowId = padreBom, CompQty = (decimal)child.Quantity, Id = esistenteBom, UpdatedBy = createdByComp });
+                        result.Updated++;
+                    }
+                    else
+                    {
+                        // Codice commerciale, Cod. ATEC e link al catalogo: la regola sta in
+                        // RisolviArticoloCommerciale, che sa cosa può finire in atec_code.
+                        var art = RisolviArticoloCommerciale(c, child);
+                        int nuovoBom = c.ExecuteScalar<int>(@"
+                        INSERT INTO bom_items
+                            (project_id, catalog_item_id, part_number, description, unit, quantity, unit_cost,
+                             supplier_id, manufacturer, item_status, requested_by, danea_ref,
+                             destination, destination_spec, notes, ddp_type, atec_code,
+                             parent_bom_item_id, composition_qty, created_by, updated_at)
+                        VALUES
+                            (@ProjectId, @CatalogItemId, @PartNumber, @Description, 'PZ', @Quantity, @UnitCost,
+                             @SupplierId, '', 'DO', @RequestedBy, '',
+                             '', '', '', 'COMMERCIAL', NULLIF(@AtecCode,''),
+                             @ParentRowId, @CompQty, @CreatedBy, NOW());
+                        SELECT LAST_INSERT_ID()", new
+                        {
+                            ProjectId = id,
+                            art.CatalogItemId,
+                            art.PartNumber,
+                            AtecCode = art.AtecCode,
+                            Description = child.Descr,
+                            Quantity = child.Quantity * parentQty,
+                            // Col prezzo dell'articolo Danea si resta omogenei al resto della
+                            // distinta commerciale; senza articolo vale quello del Codex.
+                            UnitCost = art.UnitCost ?? child.PrezzoForn,
+                            // Il fornitore del Codex è testo, qui serve la FK: stessa regola
+                            // di aggancio della migrazione M105, in un posto solo.
+                            SupplierId = art.SupplierId ?? FornitoreLookup.TrovaPerNome(c, child.Fornitore),
+                            RequestedBy = req.RequestedBy,
+                            ParentRowId = padreBom,
+                            CompQty = (decimal)child.Quantity,
+                            CreatedBy = createdByComp
+                        });
+                        existingCommerciale[key] = nuovoBom;
+                        result.Added++;
+                        result.AddedCommerciale++;
+                    }
+                    continue;
+                }
+
+                // ── Componente d'OFFICINA (1xx e gruppi annidati) ───────────────────────
                 if (existingByCode.TryGetValue(key, out int existingId))
                 {
                     // Riga già in distinta: somma la quantità e, se libera, la collega al padre
@@ -1872,17 +2035,24 @@ public class ProjectsController : ControllerBase
                     OfficinaRowSync.CongelaTipoDaStato(c, newId);
                     existingByCode[key] = newId;
                     result.Added++;
+                    result.AddedOfficina++;
                 }
             }
 
             if (result.Added + result.Updated > 0)
             {
                 NotifyWorkRequestsChanged("create", id);
+                // Due griglie toccate, due notifiche: chi ha aperta solo la Commerciale non
+                // riceverebbe nulla da un avviso marcato OFFICINA e vedrebbe righe vecchie.
                 NotifyDdpChange(id, conn, "create", 0, "OFFICINA");
+                if (parentBomId != null) NotifyDdpChange(id, conn, "create", 0, "COMMERCIAL");
             }
             string mult = parentQty != 1 ? $" ×{parentQty:0.###}" : "";
+            string dove = result.AddedCommerciale > 0 && result.AddedOfficina > 0
+                ? $" ({result.AddedOfficina} in officina, {result.AddedCommerciale} in commerciale)"
+                : result.AddedCommerciale > 0 ? " (in commerciale)" : "";
             return Ok(ApiResponse<OfficinaImportCompositionResult>.Ok(result,
-                $"Composizione importata{mult}: {result.Added} nuove righe, {result.Updated} aggiornate"));
+                $"Composizione importata{mult}: {result.Added} nuove righe{dove}, {result.Updated} aggiornate"));
         }
         catch (Exception ex)
         {
@@ -1890,10 +2060,76 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Come si presenta in DDP Commerciale un componente che arriva dalla composizione Codex.
+    ///
+    /// <para>La convenzione della griglia è: colonna <b>Codice</b> = codice commerciale Danea
+    /// (<c>catalog_items.code</c>), colonna <b>Cod. ATEC</b> = codice Codex della NUOVA codifica.
+    /// Un componente di composizione però nasce da un codice Codex, non da un articolo Danea,
+    /// e i due campi vanno riempiti solo se c'è davvero qualcosa da metterci.</para>
+    ///
+    /// <para>🪤 <b>In <c>atec_code</c> può finire SOLO <c>codex_items.codice_nuovo</c>, mai il
+    /// codice storico.</b> Non è una preferenza: <c>AssignCore</c> rifiuta esplicitamente le
+    /// righe senza codice nuovo («in Extra1 vanno SOLO codici nuovi»), quindi
+    /// <c>catalog_items.atec_code</c> contiene per costruzione solo codici nuovi, e
+    /// <c>/catalog-mapping/orphans</c> classifica come <b>refuso</b> ogni <c>atec_code</c> che
+    /// non corrisponde a nessun <c>codice_nuovo</c>. Scriverci il codice storico riempirebbe la
+    /// colonna con un valore che nessuna query può agganciare — e siccome la griglia mostra
+    /// l'icona «Assegna codice ATEC» <b>solo quando il campo è vuoto</b>, toglierebbe pure
+    /// l'unico comando che su quelle righe serve. Sembrerebbe sistemato, e sarebbe peggio.</para>
+    ///
+    /// <para>Quindi: niente codice nuovo → <c>atec_code</c> resta vuoto (stato «da codificare»,
+    /// che è la verità) e in <c>part_number</c> resta il codice Codex, che è l'unico
+    /// identificatore che quel pezzo ha — serve alla richiesta d'offerta, che stampa un codice
+    /// per riga, e tiene viva l'icona di assegnazione, che pretende un <c>part_number</c> non
+    /// vuoto oppure un articolo collegato.</para>
+    /// </summary>
+    private static (string PartNumber, string AtecCode, int? CatalogItemId, int? SupplierId, decimal? UnitCost)
+        RisolviArticoloCommerciale(IDbConnection c, OfficinaCompositionChild child)
+    {
+        string codexFormattato = CodexListItem.FormatCodice(child.RawCode);
+        string atec = (child.CodiceNuovo ?? "").Replace(".", "").Trim();
+        if (atec.Length == 0)
+            return (codexFormattato, "", null, null, null);
+
+        // Articolo Danea associato a quel codice ATEC. Si aggancia solo se ce n'è ESATTAMENTE
+        // uno: con due fornitori mappati sullo stesso codice la scelta è dell'utente, non nostra.
+        var articoli = c.Query<(int Id, string Code, decimal? UnitCost, int? SupplierId)>(@"
+            SELECT id, COALESCE(code,''), unit_cost, supplier_id
+            FROM catalog_items
+            WHERE is_active = 1 AND REPLACE(COALESCE(atec_code,''), '.', '') = @Atec
+            ORDER BY id", new { Atec = atec }).ToList();
+
+        if (articoli.Count != 1)
+            return (codexFormattato, atec, null, null, null);
+
+        var art = articoli[0];
+        return (art.Code.Length > 0 ? art.Code : codexFormattato, atec, art.Id, art.SupplierId, art.UnitCost);
+    }
+
+    /// <summary>
+    /// Codici già presenti in una distinta di commessa, indicizzati senza punti (il
+    /// <c>part_number</c> è salvato col punto, il Codex no). Prima riga vince: se lo stesso
+    /// codice compare più volte, la composizione somma sulla più vecchia.
+    /// </summary>
+    private static Dictionary<string, int> LeggiIndiceCodici(IDbConnection c, string tabella, int projectId)
+    {
+        var indice = new Dictionary<string, int>();
+        foreach ((int rowId, string? partNumber) in c.Query<(int, string?)>(
+            $"SELECT id, part_number FROM {tabella} WHERE project_id = @Id ORDER BY id", new { Id = projectId }))
+        {
+            string key = (partNumber ?? "").Replace(".", "").Trim();
+            if (key.Length > 0 && !indice.ContainsKey(key)) indice[key] = rowId;
+        }
+        return indice;
+    }
+
     /// <summary>Figlio della composizione Codex proiettato per l'import in DDP officina.</summary>
     private sealed class OfficinaCompositionChild
     {
         public string RawCode { get; set; } = "";
+        /// <summary>Codice NUOVO della ricodifica commerciale (201/211/221); vuoto = non ricodificato.</summary>
+        public string CodiceNuovo { get; set; } = "";
         public string Descr { get; set; } = "";
         public string Fornitore { get; set; } = "";
         public decimal PrezzoForn { get; set; }
@@ -2048,28 +2284,14 @@ public class ProjectsController : ControllerBase
             // (fuori dai conteggi, quantità bloccata anche in UI).
             if (!string.IsNullOrEmpty(oldStatus) && req.Quantity != before.Quantity)
             {
-                decimal delta = req.Quantity - before.Quantity;
                 int? firmaFiglio = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
-                var excluded = c.Query<string>(@"
-                    SELECT s.status_key FROM ddp_aggregation_states s
-                    JOIN ddp_aggregations a ON a.id = s.aggregation_id
-                    WHERE a.code = 'A9'").ToList();
-                if (excluded.Count == 0) excluded.Add("");   // IN su lista vuota non è SQL valido
-                var childIds = c.Query<int>(@"
-                    SELECT id FROM ddp_officina_items
-                    WHERE parent_officina_item_id = @ParentId AND composition_qty IS NOT NULL
-                      AND item_status NOT IN @Excluded",
-                    new { ParentId = itemId, Excluded = excluded }).ToList();
-                foreach (int childId in childIds)
-                {
-                    c.Execute(@"UPDATE ddp_officina_items
-                        SET quantity = GREATEST(0, quantity + composition_qty * @Delta),
-                            updated_at = NOW(), updated_by = @UpdatedBy
-                        WHERE id = @Id",
-                        new { Delta = delta, Id = childId, UpdatedBy = firmaFiglio });
-                    OfficinaRowSync.CongelaTipoDaStato(c, childId);
-                }
-                if (childIds.Count > 0) NotifyWorkRequestsChanged("update", id);
+                // #119: la propagazione attraversa le due DDP e allinea la copia gemella
+                // dell'intestazione. Regola in un posto solo, condivisa con la commerciale.
+                var toccati = ComposizioneDdp.PropagaQuantita(
+                    c, id, req.PartNumber, req.Quantity - before.Quantity, req.Quantity,
+                    firmaFiglio, ComposizioneDdp.StatiEsclusi(c));
+                if (toccati.Count > 0) NotifyWorkRequestsChanged("update", id);
+                NotifyDdpChange(id, conn, "update", 0, "COMMERCIAL");
             }
 
             // Trigger notifica se lo stato è cambiato (solo se commessa ACTIVE)
@@ -2147,11 +2369,13 @@ public class ProjectsController : ControllerBase
             if (isChild.HasValue)
                 return BadRequest(ApiResponse<bool>.Fail("Impossibile eliminare direttamente un componente figlio. Eliminare il padre."));
 
-            var childIds = c.Query<int>(
-                "SELECT id FROM ddp_officina_items WHERE parent_officina_item_id = @Pid AND project_id = @Id",
-                new { Pid = itemId, Id = id }).ToList();
-            foreach (int childId in childIds)
-                c.Execute("DELETE FROM ddp_officina_items WHERE id = @Id", new { Id = childId });
+            // #119: i componenti del gruppo stanno su DUE tabelle, e l'intestazione esiste in
+            // entrambe le griglie. Portarsi via solo i figli d'officina lascerebbe metà
+            // composizione viva sotto un padre che non c'è più.
+            string partNumber = c.ExecuteScalar<string?>(
+                "SELECT part_number FROM ddp_officina_items WHERE id = @ItemId", new { ItemId = itemId }) ?? "";
+            (int figliOfficina, int figliCommerciale) =
+                ComposizioneDdp.EliminaComponenti(c, id, partNumber, itemId);
 
             // Niente bozze da portarsi dietro (#83): la riga eliminata sparisce da Lavorazioni
             // Officine perché non esiste più. Le eventuali lavorazioni storiche collegate
@@ -2160,8 +2384,11 @@ public class ProjectsController : ControllerBase
                 new { ItemId = itemId, Id = id });
             NotifyWorkRequestsChanged("delete", id);
             NotifyDdpChange(id, conn, "delete", itemId, "OFFICINA");
-            return Ok(ApiResponse<bool>.Ok(true, childIds.Count > 0
-                ? $"Eliminata riga + {childIds.Count} componenti collegati"
+            if (figliCommerciale > 0) NotifyDdpChange(id, conn, "delete", 0, "COMMERCIAL");
+
+            int figli = figliOfficina + figliCommerciale;
+            return Ok(ApiResponse<bool>.Ok(true, figli > 0
+                ? $"Eliminata riga + {figli} componenti collegati"
                 : "Eliminato"));
         }
         catch (Exception ex)

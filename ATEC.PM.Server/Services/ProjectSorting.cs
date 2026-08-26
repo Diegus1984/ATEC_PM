@@ -83,4 +83,25 @@ public static class ProjectSorting
             : $"({statusColumn} IN {ClosedStatusesSql}) ASC, ";
         return $"{closedFirst}({date} = '') ASC, {date} ASC, {code} ASC";
     }
+
+    /// <summary>
+    /// Il pezzo di <c>ORDER BY</c> che tiene in testa la commessa <b>chiusa</b> iniettata dal
+    /// deep-link (<c>includeId</c>): ordinata da chiusa finirebbe nelle ultime pagine dello
+    /// scroll infinito, e l'albero resterebbe senza il nodo della commessa che si vede a destra.
+    /// <para>
+    /// Vale <b>solo per le chiuse</b>, e la condizione sullo stato è tutto il senso di questo
+    /// metodo. Una commessa <b>aperta</b> sta già nell'elenco al suo posto cronologico:
+    /// spingerla in testa la sposta e basta. È così che la commessa <b>appena creata</b>
+    /// compariva in cima all'albero — il client la passa come <c>includeId</c> appena ci
+    /// atterra sopra — invece che in fondo, dove la mette la sua data (segnalazione 24/08/2026).
+    /// </para>
+    /// </summary>
+    /// <param name="alias">Alias della tabella <c>projects</c> (vuoto = nessun alias).</param>
+    /// <param name="idParam">Nome del parametro SQL con l'id da tenere in testa.</param>
+    public static string DeepLinkChiusaInTesta(string alias = "p", string idParam = "@IncludeId")
+    {
+        string id = string.IsNullOrWhiteSpace(alias) ? "id" : $"{alias}.id";
+        string status = string.IsNullOrWhiteSpace(alias) ? "status" : $"{alias}.status";
+        return $"({id} = {idParam} AND {status} IN {ClosedStatusesSql}) DESC";
+    }
 }

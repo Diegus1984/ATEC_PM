@@ -25,6 +25,20 @@ public static class ProjectEconomics
         "id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)";
 
     /// <summary>
+    /// Gemella di <see cref="OfficinaParentDedup"/> per la DDP Commerciale, obbligatoria da
+    /// quando i componenti di una composizione si dividono fra le due distinte (#119).
+    ///
+    /// <para>🪤 Attenzione a come funziona, perché è il contrario della griglia: <b>si buttano
+    /// via i padri e si contano i figli</b>. In griglia il costo del gruppo si arrotola
+    /// nell'intestazione e i componenti non sommano; qui i componenti sono righe di costo
+    /// vere e l'intestazione è solo un'etichetta. Senza questa esclusione l'intestazione
+    /// creata in <c>bom_items</c> conterebbe una seconda volta il costo dei suoi figli — che
+    /// è esattamente l'errore che la dedup dell'officina evita dal blocco 4.</para>
+    /// </summary>
+    public const string CommercialeParentDedup =
+        "id NOT IN (SELECT DISTINCT parent_bom_item_id FROM bom_items WHERE parent_bom_item_id IS NOT NULL)";
+
+    /// <summary>
     /// Natura della lavorazione officina in SQL, con ripiego a cascata (alias di tabella `o`,
     /// LEFT JOIN opzionale `wr` su project_work_requests):
     ///  1. <c>o.work_type</c> — classificazione congelata sulla riga (migrazione v61 +
@@ -114,12 +128,16 @@ public static class ProjectEconomics
     public const string ExtraWorkCounts =
         "COALESCE(ew.counts_in_project, 1) = 1";
 
-    /// <summary>Costo dei soli materiali commerciali (bom_items), stesse esclusioni A9.</summary>
+    /// <summary>
+    /// Costo dei soli materiali commerciali (bom_items), stesse esclusioni A9 e dedup dei
+    /// padri di composizione (#119, vedi <see cref="CommercialeParentDedup"/>).
+    /// </summary>
     public static decimal GetCommercialMaterialCost(IDbConnection c, int projectId, string[] excludedStates) =>
-        c.ExecuteScalar<decimal?>(@"
+        c.ExecuteScalar<decimal?>($@"
             SELECT COALESCE(SUM(quantity * unit_cost), 0)
             FROM bom_items
-            WHERE project_id = @Pid AND COALESCE(item_status,'') NOT IN @Excluded",
+            WHERE project_id = @Pid AND COALESCE(item_status,'') NOT IN @Excluded
+              AND {CommercialeParentDedup}",
             new { Pid = projectId, Excluded = excludedStates }) ?? 0;
 
     // ═══════════════════════════════════════════════════════════════

@@ -1,9 +1,18 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDown, ChevronUp, RefreshCw, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, RefreshCw, X } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
-import { notifyError } from "@/lib/toast"
+import { GridScroller } from "@/components/shared/grid-scroller"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { notifyError, notifyInfo } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,13 +37,19 @@ import {
   updateCompositionQuantity,
 } from "@/lib/api/codex-compositions"
 import { fetchAllCodex, fetchCodex } from "@/lib/api/codex"
-import type { CodexListItem, CompositionTreeNode } from "@/lib/api/types"
+import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
+import type {
+  CatalogItemListItem,
+  CodexListItem,
+  CompositionTreeNode,
+} from "@/lib/api/types"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { useCodexHub } from "@/lib/signalr/use-codex-hub"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
 
 import { CodexImportDialog } from "./CodexImportDialog"
+import { NewCompositeDialog } from "./NewCompositeDialog"
 import { QuantityDialog } from "./QuantityDialog"
 import { wildcardMatch } from "@/lib/wildcard"
 
@@ -47,19 +62,33 @@ interface CompositionTypeConfig {
   allowCatalog: boolean
 }
 
+// Dal 25/08/2026 in composizione finiscono SOLO codici Codex: il server rifiuta
+// `ChildCatalogId` (CodexController.AddComposition). `allowCatalog` non vuol più dire
+// «si possono mettere articoli di catalogo», vuol dire «si può CERCARE per codice
+// fornitore»: la sorgente Catalogo è una lente sul Codex, perché in officina il codice
+// che si conosce è quello del fornitore (0026106), non il Codex (211240726.004).
+// L'articolo aggiunto è comunque il Codex associato; quelli non ancora codificati si
+// codificano al volo dalla stessa griglia.
 const COMPOSITION_TYPES: CompositionTypeConfig[] = [
-  { code: "501", label: "Gruppo meccanico", childPrefixes: ["1", "2", "3", "4"], allowCatalog: true },
+  { code: "501", label: "Gruppo meccanico", childPrefixes: ["1", "2", "3"], allowCatalog: true },
+  // 511 = clone del 501 per i gruppi non meccanici (es. colonnina luminosa di soli 211):
+  // stesse regole, stesso comportamento in DDP. Vive accanto al 501, non dentro.
+  { code: "511", label: "Gruppo custom", childPrefixes: ["1", "2", "3"], allowCatalog: true },
   { code: "601", label: "Assieme meccanico", childPrefixes: ["5"], allowCatalog: false },
   { code: "701", label: "Layout meccanico", childPrefixes: ["6"], allowCatalog: false },
 ]
 
 // Etichette per la combo sotto-tipo della griglia "Articoli disponibili".
+// Corrette il 25/08/2026: erano rimaste quelle della codifica VECCHIA ereditata dal port
+// WPF («1xx — Commerciale», «2xx — Elettrico», «3xx — Pneumatico», «4xx — Meccanico») e
+// mentivano su tutta la linea rispetto alle famiglie vere del generatore Codex
+// (CodexGeneratorService.GetAvailablePrefixes). Chi compila una distinta sceglie il
+// componente leggendo queste etichette: devono dire il vero.
 const PREFIX_LABELS: Record<string, string> = {
-  "1": "1xx — Commerciale",
-  "2": "2xx — Elettrico",
-  "3": "3xx — Pneumatico",
-  "4": "4xx — Meccanico",
-  "5": "5xx — Gruppo mecc.",
+  "1": "1xx — Particolari a disegno",
+  "2": "2xx — Commerciale (generico/elettrico/pneumatico)",
+  "3": "3xx — Elementi di fissaggio",
+  "5": "5xx — Gruppi (501 mecc. / 511 custom)",
   "6": "6xx — Assieme mecc.",
 }
 
@@ -86,6 +115,12 @@ interface AvailableItem {
   codice: string
   descr: string
   source: "codex" | "catalog"
+  /** Solo per le righe di catalogo: codice Codex associato (Extra1), "" se da codificare. */
+  atecCode?: string
+  /** Solo per le righe di catalogo: id Codex da usare come figlio al posto dell'id catalogo. */
+  codexId?: number | null
+  /** Riga catalogo originale: serve al dialog di codifica al volo. */
+  catalogItem?: CatalogItemListItem
 }
 
 interface PendingAdd {
@@ -126,15 +161,21 @@ function nodeIcon(node: { source: string; codice: string }): string {
 
 /**
  * Validazione gerarchia lato client (anteprima del drop). Il server riapplica le
- * stesse regole all'aggiunta. Gli articoli di catalogo sono sempre ammessi.
+ * stesse regole all'aggiunta. Dal 25/08/2026 una riga di catalogo vale per il suo
+ * codice Codex associato: se non ce l'ha non entra in distinta (si codifica prima,
+ * col pulsante «Codifica» della stessa griglia), perché un figlio senza codice Codex
+ * non saprebbe nemmeno in quale DDP finire.
  */
 function validateDropLocal(targetCodice: string, child: AvailableItem): string | null {
-  if (child.source === "catalog") return null
+  // Servono ENTRAMBI: il codice per la regola gerarchica, l'id per scrivere il figlio.
+  if (child.source === "catalog" && (!child.atecCode || !child.codexId))
+    return "Articolo senza codice Codex: codificalo (201/211/221) prima di metterlo in distinta"
   const target = targetCodice.charAt(0)
-  const childPrefix = child.codice.charAt(0)
+  const childPrefix = (child.source === "catalog" ? child.atecCode! : child.codice).charAt(0)
   switch (target) {
     case "5":
-      return ["1", "2", "3", "4"].includes(childPrefix) ? null : "5xx accetta solo 1xx-4xx"
+      // 4xx fuori dal 25/08/2026: famiglia 401 «Materia prima» ritirata.
+      return ["1", "2", "3"].includes(childPrefix) ? null : "5xx accetta solo 1xx-3xx"
     case "6":
       return childPrefix === "5" ? null : "6xx accetta solo 5xx"
     case "7":
@@ -404,6 +445,9 @@ export function CodexCompositionPage() {
 
   const confirm = useConfirm()
   const canEdit = canWriteFeature("action.edit_codex_composition")
+  // Creare il composito è creare un articolo Codex: chiave del Codex, non della
+  // composizione (stessa che governa «Genera Codice» nella pagina Codex Articoli).
+  const canCreateComposite = canWriteFeature("action.manage_codex")
 
   const [typeCode, setTypeCode] = React.useState("501")
   const [selectedParent, setSelectedParent] = React.useState<CodexListItem | null>(null)
@@ -417,6 +461,13 @@ export function CodexCompositionPage() {
   // Combo sotto-tipo + sorgente della griglia inferiore.
   const [childType, setChildType] = React.useState(ALL)
   const [source, setSource] = React.useState<"codex" | "catalog">("codex")
+  // Sorgente Catalogo: si vede TUTTO il catalogo, codificato e non. Filtrare via i non
+  // codificati sembrava pulito ma nascondeva proprio le righe su cui si deve agire:
+  // quelle senza codice mostrano il pulsante «Codifica» e si sistemano sul posto.
+  const [atecTarget, setAtecTarget] = React.useState<CatalogItemListItem | null>(null)
+  // Creazione di un composito nuovo dalla pagina stessa: senza, una famiglia vuota
+  // («Nessun composito 511») sarebbe un vicolo cieco.
+  const [newComposite, setNewComposite] = React.useState(false)
 
   // Stato drag&drop.
   const dragItem = React.useRef<AvailableItem | null>(null)
@@ -498,11 +549,15 @@ export function CodexCompositionPage() {
 
   const addMutation = useMutation({
     mutationFn: (vars: { parentId: number; child: AvailableItem; quantity: number }) =>
+      // Una riga di catalogo entra in distinta col suo CODEX associato, mai come
+      // `childCatalogId` (il server lo rifiuta): la sorgente Catalogo è solo un modo
+      // di cercare per codice fornitore.
       addComposition(
         {
           parentCodexId: vars.parentId,
-          childCodexId: vars.child.source === "codex" ? vars.child.id : null,
-          childCatalogId: vars.child.source === "catalog" ? vars.child.id : null,
+          childCodexId:
+            vars.child.source === "codex" ? vars.child.id : vars.child.codexId ?? null,
+          childCatalogId: null,
           quantity: vars.quantity,
         },
         connectionIdRef.current
@@ -554,6 +609,9 @@ export function CodexCompositionPage() {
         codice: item.code,
         descr: item.description,
         source: "catalog" as const,
+        atecCode: (item.atecCode || "").replace(/\./g, "").trim(),
+        codexId: item.codexItemId,
+        catalogItem: item,
       }))
     }
     return (codexAvailableQuery.data?.items ?? []).map((item) => ({
@@ -570,6 +628,9 @@ export function CodexCompositionPage() {
       : codexAvailableQuery.data?.totalCount ?? 0
   const availableLoading =
     effectiveSource === "catalog" ? catalogQuery.isLoading : codexAvailableQuery.isLoading
+  // La colonna «Codice Codex» esiste solo sulla sorgente Catalogo: il colSpan delle
+  // righe di stato va calcolato, non cablato (regola BLOCKS-RULES §6).
+  const availableColSpan = effectiveSource === "catalog" ? 3 : 2
 
   async function handleRemove(node: CompositionTreeNode) {
     const ok = await confirm({
@@ -588,6 +649,12 @@ export function CodexCompositionPage() {
   // Doppio click su un articolo → aggiunta rapida (quantità 1) alla radice, come il WPF.
   function handleQuickAdd(child: AvailableItem) {
     if (!canEdit || !selectedParent) return
+    // Stessa guardia del drop: senza codice Codex l'articolo non entra in distinta.
+    const error = validateDropLocal(selectedParent.codice, child)
+    if (error) {
+      notifyInfo(error)
+      return
+    }
     addMutation.mutate({ parentId: selectedParent.id, child, quantity: 1 })
   }
 
@@ -712,6 +779,17 @@ export function CodexCompositionPage() {
                   >
                     COMPOSITI
                   </span>
+                  {canCreateComposite ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-auto h-7 px-2 text-xs"
+                      onClick={() => setNewComposite(true)}
+                    >
+                      <Plus className="size-3.5" />
+                      Nuovo {typeCode}
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="flex gap-2 border-b p-2">
                   <Input
@@ -727,34 +805,66 @@ export function CodexCompositionPage() {
                     onChange={(event) => setCompDescr(event.target.value)}
                   />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {compositesQuery.isLoading ? (
-                    <p className="p-4 text-center text-sm text-muted-foreground">Caricamento…</p>
-                  ) : composites.length === 0 ? (
-                    <p className="p-4 text-center text-sm text-muted-foreground">
-                      Nessun composito {typeCode}.
-                    </p>
-                  ) : (
-                    composites.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={cn(
-                          "flex w-full items-center gap-2 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted",
-                          selectedParent?.id === item.id && "bg-muted"
-                        )}
-                        onClick={() => setSelectedParent(item)}
-                      >
-                        <span className="shrink-0 font-mono text-sm font-medium">
-                          {item.codice}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {item.descr || "—"}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
+                <GridScroller fill>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-40">Codice</TableHead>
+                        <TableHead>Descrizione</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {compositesQuery.isLoading ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={2}
+                            className="h-24 text-center text-muted-foreground"
+                          >
+                            Caricamento…
+                          </TableCell>
+                        </TableRow>
+                      ) : composites.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="h-24 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <span className="text-muted-foreground">
+                                Nessun composito {typeCode}.
+                              </span>
+                              {canCreateComposite ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setNewComposite(true)}
+                                >
+                                  <Plus className="size-4" />
+                                  Crea il primo {typeCode}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        composites.map((item) => (
+                          <TableRow
+                            key={item.id}
+                            data-state={
+                              selectedParent?.id === item.id ? "selected" : undefined
+                            }
+                            className="cursor-pointer"
+                            onClick={() => setSelectedParent(item)}
+                          >
+                            <TableCell className="font-mono font-medium">
+                              {item.codice}
+                            </TableCell>
+                            <TableCell className="whitespace-normal break-words text-muted-foreground">
+                              {item.descr || "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </GridScroller>
               </div>
 
               {/* Griglia inferiore: Articoli disponibili */}
@@ -811,46 +921,102 @@ export function CodexCompositionPage() {
                     onChange={(event) => setAvailDescr(event.target.value)}
                   />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {availableLoading ? (
-                    <p className="p-4 text-center text-sm text-muted-foreground">Caricamento…</p>
-                  ) : available.length === 0 ? (
-                    <p className="p-4 text-center text-sm text-muted-foreground">
-                      Nessun articolo.
-                    </p>
-                  ) : (
-                    available.map((item) => (
-                      <div
-                        key={`${item.source}-${item.id}`}
-                        draggable={canEdit}
-                        onDragStart={(event) => {
-                          dragItem.current = item
-                          event.dataTransfer.effectAllowed = "copy"
-                          event.dataTransfer.setData("text/plain", item.codice)
-                        }}
-                        onDragEnd={() => {
-                          dragItem.current = null
-                          setHoverKey(null)
-                        }}
-                        onDoubleClick={() => handleQuickAdd(item)}
-                        title={
-                          canEdit ? "Trascina sull'albero o doppio click per aggiungere" : undefined
-                        }
-                        className={cn(
-                          "flex items-center gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-muted",
-                          canEdit && "cursor-grab active:cursor-grabbing"
-                        )}
-                      >
-                        <span className="shrink-0 font-mono text-sm font-medium">
-                          {item.codice}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {item.descr || "—"}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <GridScroller fill>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-36">Codice</TableHead>
+                        {effectiveSource === "catalog" ? (
+                          <TableHead className="w-40">Codice Codex</TableHead>
+                        ) : null}
+                        <TableHead>Descrizione</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availableLoading ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={availableColSpan}
+                            className="h-24 text-center text-muted-foreground"
+                          >
+                            Caricamento…
+                          </TableCell>
+                        </TableRow>
+                      ) : available.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={availableColSpan}
+                            className="h-24 text-center text-muted-foreground"
+                          >
+                            Nessun articolo.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        available.map((item) => {
+                          // Senza codice Codex non è trascinabile: prima si codifica.
+                          const trascinabile =
+                            canEdit && !(item.source === "catalog" && !item.codexId)
+                          return (
+                            <TableRow
+                              key={`${item.source}-${item.id}`}
+                              draggable={trascinabile}
+                              onDragStart={(event) => {
+                                dragItem.current = item
+                                event.dataTransfer.effectAllowed = "copy"
+                                event.dataTransfer.setData("text/plain", item.codice)
+                              }}
+                              onDragEnd={() => {
+                                dragItem.current = null
+                                setHoverKey(null)
+                              }}
+                              onDoubleClick={() => handleQuickAdd(item)}
+                              title={
+                                trascinabile
+                                  ? "Trascina sull'albero o doppio click per aggiungere"
+                                  : undefined
+                              }
+                              className={cn(
+                                trascinabile && "cursor-grab active:cursor-grabbing"
+                              )}
+                            >
+                              <TableCell className="font-mono font-medium">
+                                {item.codice}
+                              </TableCell>
+                              {effectiveSource === "catalog" ? (
+                                <TableCell>
+                                  {item.atecCode && item.codexId ? (
+                                    <span
+                                      className="font-mono text-primary"
+                                      title="Codice Codex associato: è questo che entra in distinta"
+                                    >
+                                      {formatCodice(item.atecCode)}
+                                    </span>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 px-2 text-xs"
+                                      disabled={!canEdit}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        setAtecTarget(item.catalogItem ?? null)
+                                      }}
+                                    >
+                                      Codifica
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              ) : null}
+                              <TableCell className="whitespace-normal break-words text-muted-foreground">
+                                {item.descr || "—"}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </GridScroller>
                 {available.length > 0 ? (
                   <div className="border-t px-3 py-1 text-[11px] text-muted-foreground">
                     {availableTotal > available.length
@@ -961,6 +1127,39 @@ export function CodexCompositionPage() {
           if (node && quantity !== node.quantity) {
             quantityMutation.mutate({ compositionId: node.compositionId, quantity })
           }
+        }}
+      />
+
+      <NewCompositeDialog
+        open={newComposite}
+        typeCode={typeCode}
+        typeLabel={activeType.label}
+        onClose={() => setNewComposite(false)}
+        onCreated={async (created) => {
+          setNewComposite(false)
+          // Filtri azzerati: il composito appena creato deve comparire, anche se
+          // l'elenco era filtrato su altro.
+          setCompCode("")
+          setCompDescr("")
+          await queryClient.invalidateQueries({ queryKey: ["codex-by-prefix", typeCode] })
+          const lista = queryClient.getQueryData<CodexListItem[]>([
+            "codex-by-prefix",
+            typeCode,
+          ])
+          const nuovo = lista?.find((item) => item.id === created.id)
+          if (nuovo) setSelectedParent(nuovo)
+        }}
+      />
+
+      {/* Codifica al volo: stesso dialog del Catalogo Articoli (cerca un Codex esistente
+          o ne crea uno generico 201/211/221). Dopo il salvataggio l'elenco si ricarica e
+          l'articolo compare tra i «Con codice Codex», pronto da trascinare. */}
+      <CatalogAtecAssignDialog
+        item={atecTarget}
+        onClose={() => setAtecTarget(null)}
+        onSaved={() => {
+          setAtecTarget(null)
+          void queryClient.invalidateQueries({ queryKey: ["catalog-available"] })
         }}
       />
     </div>

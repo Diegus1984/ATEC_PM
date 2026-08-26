@@ -18,6 +18,12 @@ namespace ATEC.PM.Tests.Infrastruttura;
 ///
 /// <para>Ogni istanza crea un database col proprio nome e lo <b>elimina alla fine</b>, anche se
 /// il test fallisce. Il database di lavoro (<c>atec_pm</c>) non viene mai toccato.</para>
+///
+/// <para>«Alla fine» però vale solo se il processo ci arriva: se l'host dei test va in crash o
+/// lo si interrompe, il <c>Dispose</c> non gira e il database resta. Per questo alla prima
+/// creazione parte anche uno <b>spazzino</b> (<c>PuliziaResidui</c>) che raccoglie i residui
+/// delle corse morte, e solo quelli fermi da almeno <see cref="EtaMinimaResiduo"/>: così una
+/// corsa viva non viene mai toccata.</para>
 /// </summary>
 public sealed class DatabaseDiProva : IDisposable
 {
@@ -29,10 +35,27 @@ public sealed class DatabaseDiProva : IDisposable
     public DatabaseDiProva(string suffisso)
     {
         _csServer = LeggiConnectionStringServer();
-        Nome = $"atec_pm_test_{suffisso}_{DateTime.UtcNow:HHmmssfff}";
+        Nome = ComponiNome(suffisso, DateTime.UtcNow);
         ConnectionString = new MySqlConnectionStringBuilder(_csServer) { Database = Nome }.ConnectionString;
+        _ = _spazzino.Value;   // una volta sola per processo, prima di aggiungerne un altro
         Elimina();
     }
+
+    /// <summary>
+    /// Nome del database di prova: prefisso riconoscibile, suffisso del test, orario.
+    ///
+    /// <para><b>TRAPPOLA: resta corto apposta, solo l'orario e niente data.</b> Il lock delle
+    /// migrazioni è <c>atec_pm_migrate:</c> + nome del database, e MySQL rifiuta i nomi di lock
+    /// oltre i 64 caratteri: per questo <see cref="DbService.NomeLockMigrazioni"/> <b>tronca</b>.
+    /// Col suffisso più lungo in casa (<c>ordine_commesse_chiusa</c>, 22 caratteri) si sta a 61
+    /// su 64; aggiungendo la data si arriverebbe a 70, il troncamento si mangerebbe proprio i
+    /// millisecondi finali e due corse parallele dello stesso test finirebbero sullo <b>stesso
+    /// lock</b>, cioè una delle due non riuscirebbe a migrare e si fermerebbe. Per sapere di
+    /// quando è un residuo il nome non serve: lo spazzino legge la data vera di creazione delle
+    /// tabelle. Sorvegliato da <c>NomeDatabaseDiProvaTests</c>.</para>
+    /// </summary>
+    public static string ComponiNome(string suffisso, DateTime quando) =>
+        $"atec_pm_test_{suffisso}_{quando:HHmmssfff}";
 
     /// <summary>Il servizio vero, puntato al database di prova.</summary>
     public DbService Servizio(bool stopOnError = true, int lockTimeoutSeconds = 60)
@@ -138,7 +161,126 @@ public sealed class DatabaseDiProva : IDisposable
             c.Open();
             c.Execute($"DROP DATABASE IF EXISTS `{Nome.Replace("`", "``")}`");
         }
-        catch { /* la pulizia non deve mai far fallire un test */ }
+        catch (Exception ex)
+        {
+            // La pulizia non deve mai far fallire un test, ma nemmeno sparire in silenzio: un
+            // DROP che non riesce e non dice niente è il modo in cui i residui diventano decine
+            // senza che nessuno se ne accorga. Lo spazzino lo riprenderà alla prossima corsa;
+            // intanto almeno resta scritto a video.
+            Console.Error.WriteLine($"[DatabaseDiProva] non sono riuscito a eliminare {Nome}: {ex.Message}");
+        }
+    }
+
+    // ── spazzino dei residui ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Ogni istanza si cancella da sola nel <see cref="Dispose"/>, ma quando il <b>processo
+    /// muore</b> (host dei test in crash, corsa interrotta a mano) quel Dispose non gira mai e
+    /// il database resta lì per sempre. Nessuno lo raccoglieva: il 24/08/2026 se n'erano
+    /// accumulati <b>71</b>, il più vecchio del 16/08, ~119 tabelle l'uno. Un processo morto non
+    /// può ripulire dopo di sé: a raccogliere deve essere quello dopo.
+    ///
+    /// <para><c>Lazy</c> statico: gira <b>una volta sola per processo</b>, alla creazione del
+    /// primo database di prova, e non rifà il giro a ogni test.</para>
+    /// </summary>
+    private static readonly Lazy<bool> _spazzino =
+        new(() => { PuliziaResidui(EtaMinimaResiduo); return true; }, isThreadSafe: true);
+
+    /// <summary>
+    /// Quanto deve essere vecchio un residuo prima di poterlo togliere di mezzo. La suite intera
+    /// dura ~3 minuti: due ore sono un margine tale che <b>una corsa viva non viene mai
+    /// toccata</b>, nemmeno quando due sessioni provano i test insieme sulla stessa macchina
+    /// (succede: è successo il 24/08/2026).
+    /// </summary>
+    public static readonly TimeSpan EtaMinimaResiduo = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Decide se un database di prova è un residuo da togliere. Sta a parte, pura e pubblica,
+    /// perché la regola che conta è quella di sicurezza (<b>mai toccare roba recente</b>) e si
+    /// prova senza database.
+    /// </summary>
+    /// <param name="ultimaTabella">Creazione della tabella più recente dello schema; <c>null</c>
+    /// se lo schema non ha (ancora) tabelle.</param>
+    /// <remarks>
+    /// L'età si legge dalle <b>tabelle</b>, non dal nome: il nome porta il solo orario, senza
+    /// data (vedi <see cref="ComponiNome"/>), e comunque un residuo lasciato da una versione
+    /// diversa dei test deve restare riconoscibile. Schema senza tabelle: si lascia stare, è la
+    /// finestra di pochi millisecondi fra CREATE DATABASE e la prima tabella, cioè molto
+    /// probabilmente una corsa appena nata.
+    /// </remarks>
+    public static bool ResiduoDaTogliere(DateTime? ultimaTabella, DateTime adesso, TimeSpan etaMinima)
+    {
+        if (ultimaTabella is null) return false;
+        return adesso - ultimaTabella.Value >= etaMinima;
+    }
+
+    /// <summary>
+    /// Toglie i database <c>atec_pm_test_*</c> lasciati indietro da corse morte e ritorna
+    /// quanti ne ha tolti. Non fallisce mai: se MySQL non c'è, o un DROP non riesce, i test
+    /// devono partire lo stesso.
+    /// </summary>
+    /// <param name="etaMinima">Da quanto deve essere fermo un residuo per poterlo togliere.</param>
+    /// <param name="soloPrefisso">Se valorizzato, guarda i soli schemi che cominciano così.
+    /// Serve ai test dello spazzino, che devono poter usare una soglia corta senza rischiare
+    /// di passare sopra ai database delle altre collection in corso.</param>
+    /// <exception cref="ArgumentException">Soglia più corta di <see cref="EtaMinimaResiduo"/>
+    /// senza un prefisso che limiti il campo: è la combinazione che cancellerebbe il lavoro di
+    /// una corsa viva, e non deve essere possibile scriverla per sbaglio.</exception>
+    public static int PuliziaResidui(TimeSpan etaMinima, string? soloPrefisso = null)
+    {
+        if (etaMinima < EtaMinimaResiduo && soloPrefisso is null)
+            throw new ArgumentException(
+                $"soglia {etaMinima} sotto il minimo di sicurezza ({EtaMinimaResiduo}) senza un " +
+                "prefisso: così si cancellano i database delle corse ancora vive.", nameof(etaMinima));
+
+        try
+        {
+            using var c = new MySqlConnection(LeggiConnectionStringServer());
+            c.Open();
+
+            // Una riga per schema di prova con la data dell'ultima tabella creata (NULL se non
+            // ne ha). LEFT JOIN e non IN (...): serve anche lo schema vuoto, per saperlo.
+            // Alias `NomeSchema` e non `Schema`: SCHEMA è parola chiave di MySQL, ed è il tipo
+            // di dettaglio che fa fallire la query solo su certe versioni.
+            // Il prefisso si confronta con LEFT(...) e non con LIKE: un nome di schema è pieno
+            // di underscore, che in LIKE valgono «un carattere qualsiasi».
+            List<(string NomeSchema, DateTime? Ultima)> candidati = c.Query<(string NomeSchema, DateTime? Ultima)>(@"
+                SELECT s.schema_name AS NomeSchema, MAX(t.create_time) AS Ultima
+                FROM information_schema.schemata s
+                LEFT JOIN information_schema.tables t ON t.table_schema = s.schema_name
+                WHERE s.schema_name LIKE 'atec\_pm\_test\_%'
+                  AND (@Prefisso IS NULL OR LEFT(s.schema_name, CHAR_LENGTH(@Prefisso)) = @Prefisso)
+                GROUP BY s.schema_name", new { Prefisso = soloPrefisso }).ToList();
+
+            // «Adesso» lo dà MySQL, non l'orologio del processo: create_time è nel fuso del
+            // server, e confrontarlo con un DateTime.Now locale sarebbe giusto solo finché
+            // database e test stanno sulla stessa macchina.
+            DateTime adesso = c.ExecuteScalar<DateTime>("SELECT NOW()");
+            int tolti = 0;
+            foreach ((string schema, DateTime? ultima) in candidati)
+            {
+                if (!ResiduoDaTogliere(ultima, adesso, etaMinima)) continue;
+                try
+                {
+                    c.Execute($"DROP DATABASE IF EXISTS `{schema.Replace("`", "``")}`");
+                    tolti++;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[DatabaseDiProva] residuo {schema} non eliminato: {ex.Message}");
+                }
+            }
+
+            if (tolti > 0)
+                Console.WriteLine($"[DatabaseDiProva] tolti {tolti} database di prova rimasti da corse interrotte.");
+            return tolti;
+        }
+        catch
+        {
+            // Nessun MySQL raggiungibile (i test che lo richiedono si salteranno da soli), o
+            // permessi insufficienti: non è un motivo per non far partire la suite.
+            return 0;
+        }
     }
 
     // ── configurazione ────────────────────────────────────────────────────────

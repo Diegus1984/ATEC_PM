@@ -154,7 +154,7 @@ function ControlCard({ title, icon: Icon, count, description, path, items }: Con
  * Sezione «Gestione Controlli» della Dashboard principale (#113, elenchi dalla #114).
  *
  * Mostra sotto le commesse le quattro card di avviso/controllo per il PM:
- * 1. DDP Commesse — elenco delle distinte aggiornate dai colleghi e non ancora aperte
+ * 1. DDP Commesse — elenco delle distinte aggiornate di recente e non ancora aperte
  * 2. SAL / Fatturazione — elenco dei warning di fatturazione e incasso attivi
  * 3. Trasferte (persone con ore di cantiere non verificate)
  * 4. Ore Commessa (persone con ore commessa non verificate)
@@ -248,9 +248,9 @@ export function DashboardControlliSection() {
             description={
               ddpItems.length > 0
                 ? ddpItems.length === 1
-                  ? "1 DDP aggiornata dai colleghi da verificare"
-                  : `${ddpItems.length} DDP aggiornate dai colleghi da verificare`
-                : "Nessuna DDP aggiornata dai colleghi negli ultimi 7 giorni"
+                  ? "1 DDP aggiornata da verificare"
+                  : `${ddpItems.length} DDP aggiornate da verificare`
+                : "Nessuna DDP aggiornata negli ultimi 7 giorni"
             }
             path="/gestore-ddp"
             items={ddpItems}

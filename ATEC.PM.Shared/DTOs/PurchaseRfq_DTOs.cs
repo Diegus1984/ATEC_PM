@@ -53,6 +53,11 @@ public class PurchaseRfqItemDto
     public DateTime? DateNeeded { get; set; }
     public string DaneaRef { get; set; } = "";
     public int? DaneaOrderIdDoc { get; set; }
+    /// <summary>
+    /// Codice ATEC della riga di distinta. Serve all'aggiudicazione per non riscrivere
+    /// l'identità di una riga che è di un ALTRO articolo (gare nate miste).
+    /// </summary>
+    public string AtecCode { get; set; } = "";
 }
 
 public class PurchaseRfqOfferDto

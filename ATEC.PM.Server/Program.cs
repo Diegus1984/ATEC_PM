@@ -276,6 +276,9 @@ if (svcCodexSync)
 
 builder.Services.AddSingleton<DaneaSyncService>();
 builder.Services.AddSingleton<DaneaMappingService>();
+// Sessioni SMB autenticate verso le share di rete (cartella immagini Danea): il servizio
+// gira come account locale, che il server della share non conosce.
+builder.Services.AddSingleton<NetworkShareConnector>();
 builder.Services.AddSingleton<DaneaMigrationService>();
 builder.Services.AddSingleton<DaneaOrderService>();
 if (svcDaneaSync)

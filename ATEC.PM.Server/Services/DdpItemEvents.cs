@@ -30,10 +30,11 @@ public static class DdpItemEvents
     /// La transazione in corso, se chi chiama ne ha una. <b>Va passata</b>: su una connessione con
     /// una transazione aperta, MySqlConnector rifiuta il comando che non la dichiara, e qui il
     /// rifiuto finisce nel <c>catch</c> — cioè la riga di storia non viene scritta.
-    /// Oggi nessun chiamante è dentro una transazione (verificato il 14/08/2026 su tutti e quattro:
-    /// PurchaseRfqController.SelectWinner, ProjectsController.UpdateItem/UpdateOfficinaItem,
-    /// WorkRequestDdpSync.MarkOfficinaBuilt), ma il parametro c'è perché il giorno che qualcuno ne
-    /// aprirà una il «Consegnato il» smetterebbe di comparire senza nessun errore visibile.
+    /// Dal 26/08/2026 <c>PurchaseRfqController.SelectWinner</c> chiama DENTRO una transazione
+    /// (e infatti passa <c>tx:</c> e <c>log:</c>); gli altri chiamanti (ProjectsController
+    /// UpdateItem/UpdateOfficinaItem, WorkRequestDdpSync.MarkOfficinaBuilt) restano fuori
+    /// transazione. Chi apre una tx e non passa <c>tx:</c> perde il «Consegnato il» senza
+    /// nessun errore visibile.
     /// </param>
     /// <param name="log">
     /// Se c'è, un fallimento viene scritto nel log del server. Prima non lo era: il <c>catch</c> era

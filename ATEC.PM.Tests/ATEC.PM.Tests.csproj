@@ -15,6 +15,19 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Tetto al parallelismo (24/08/2026). Senza, xUnit apre una collection per CPU logica —
+    su questo PC sono 24 — e ogni collection che tocca il database si crea il suo MySQL
+    usa-e-getta: con la macchina occupata da altro il processo host dei test moriva a metà
+    corsa ("Arresto anomalo del processo host di test"), lasciando dietro i database di
+    prova (ne erano rimasti 71, il più vecchio del 16/08). Con 6 la suite regge; i test
+    falliti in quel modo passavano tutti se rilanciati da soli, quindi era contesa, non
+    codice rotto. Il file va copiato accanto alla dll, altrimenti il runner non lo legge.
+  -->
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />

@@ -141,18 +141,25 @@ public class DdpManagerController : ControllerBase
     /// <summary>
     /// Elenco per la card «DDP Commesse» della sezione Gestione Controlli (#113, #114):
     /// le distinte — commerciali e d'officina — toccate negli ultimi N giorni (default 7)
-    /// <b>da qualcun altro</b> e <b>non ancora aperte</b> da chi sta guardando.
+    /// e <b>non ancora aperte</b> da chi sta guardando.
     ///
     /// <para>Una voce per (commessa, tipo distinta): è la granularità con cui si apre la DDP
     /// dal Gestore (<c>/gestore-ddp/{projectId}?type=</c>), quindi anche quella con cui la
     /// presa visione ha senso. Contano come aggiornamento l'inserimento e la modifica di una
     /// riga e i cambi di stato in cronistoria.</para>
     ///
-    /// <para><b>«Da colleghi»</b>: si esclude chi ha in mano la sessione, guardando l'ultima
-    /// firma sulla riga (<c>updated_by</c>, o <c>created_by</c> se non è mai stata modificata)
-    /// e l'autore dell'evento di stato. Una modifica <i>senza</i> firma — riga storica, o
-    /// passaggio fatto dal programma — resta nell'elenco: nessuno l'ha rivendicata, quindi
-    /// va vista.</para>
+    /// <para><b>Anche i propri aggiornamenti</b> (segnalazione #115): la #114 escludeva chi
+    /// aveva in mano la sessione, e chi aggiornava una DDP non vedeva la card muoversi —
+    /// l'elenco è invece il registro di che cosa è stato toccato di recente, non solo di che
+    /// cosa hanno toccato gli altri. Chi ha firmato resta scritto nella voce
+    /// (<c>updated_by</c>, o <c>created_by</c> se la riga non è mai stata modificata; per la
+    /// cronistoria l'autore dell'evento), così si distingue a colpo d'occhio il proprio
+    /// lavoro da quello di un collega. Una modifica <i>senza</i> firma — riga storica, o
+    /// passaggio fatto dal programma — è sempre stata in elenco e ci resta.</para>
+    ///
+    /// <para>Resta lo svuotamento per persona: la voce esce quando <b>chi guarda</b> apre
+    /// quella distinta nel Gestore, e torna al primo aggiornamento successivo, da chiunque
+    /// arrivi.</para>
     /// </summary>
     [HttpGet("/api/ddp-manager/updated-list")]
     public IActionResult GetUpdatedList([FromQuery] int days = 7)
@@ -175,9 +182,9 @@ public class DdpManagerController : ControllerBase
     /// <summary>
     /// Presa visione di una DDP (#114): chi apre la distinta di una commessa se la toglie
     /// dall'elenco della Dashboard. È <b>personale</b> — non una filigrana condivisa come la
-    /// verifica dello scarico ore — e non chiude niente: se un collega tocca ancora quella
-    /// distinta, la voce ricompare, perché l'elenco confronta l'ultimo aggiornamento con
-    /// questa data.
+    /// verifica dello scarico ore — e non chiude niente: se quella distinta viene toccata
+    /// ancora, da un collega o da sé stessi (#115), la voce ricompare, perché l'elenco
+    /// confronta l'ultimo aggiornamento con questa data.
     /// </summary>
     [RequireProjectVisible]
     [HttpPost("{projectId:int}/seen")]
@@ -219,7 +226,10 @@ public class DdpManagerController : ControllerBase
     /// i test la eseguono <b>così com'è</b> invece di ricopiarla: una regola riscritta a mano nel
     /// test è una regola che smette di sorvegliare quella vera appena una delle due cambia.</para>
     ///
-    /// <para>Parametri: <c>@Me</c> (dipendente che guarda, 0 = nessuno) e <c>@Days</c> (finestra).</para>
+    /// <para>Parametri: <c>@Me</c> (dipendente che guarda) e <c>@Days</c> (finestra). Dalla
+    /// #115 <c>@Me</c> serve <b>solo</b> alla presa visione — quale riga di
+    /// <c>ddp_review_acks</c> è la mia — e non filtra più chi ha firmato l'aggiornamento:
+    /// anche il proprio lavoro va in elenco.</para>
     /// </summary>
     public const string AggiornamentiDaVerificareSql = @"
             SELECT p.id AS ProjectId, p.code AS Code, p.title AS Title,
@@ -239,7 +249,6 @@ public class DdpManagerController : ControllerBase
                 FROM bom_items b
                 LEFT JOIN employees e ON e.id = COALESCE(b.updated_by, b.created_by)
                 WHERE COALESCE(b.ddp_type, 'COMMERCIAL') = 'COMMERCIAL'
-                  AND COALESCE(b.updated_by, b.created_by, 0) <> @Me
                   AND GREATEST(COALESCE(b.updated_at, b.created_at),
                                COALESCE(b.created_at, b.updated_at)) >= DATE_SUB(NOW(), INTERVAL @Days DAY)
 
@@ -251,8 +260,7 @@ public class DdpManagerController : ControllerBase
                        COALESCE(CONCAT(e2.first_name, ' ', e2.last_name), '')
                 FROM ddp_officina_items o
                 LEFT JOIN employees e2 ON e2.id = COALESCE(o.updated_by, o.created_by)
-                WHERE COALESCE(o.updated_by, o.created_by, 0) <> @Me
-                  AND GREATEST(COALESCE(o.updated_at, o.created_at),
+                WHERE GREATEST(COALESCE(o.updated_at, o.created_at),
                                COALESCE(o.created_at, o.updated_at)) >= DATE_SUB(NOW(), INTERVAL @Days DAY)
 
                 UNION ALL
@@ -262,8 +270,7 @@ public class DdpManagerController : ControllerBase
                        ev.changed_at,
                        COALESCE(ev.changed_by_name, '')
                 FROM ddp_item_events ev
-                WHERE COALESCE(ev.changed_by_id, 0) <> @Me
-                  AND ev.changed_at >= DATE_SUB(NOW(), INTERVAL @Days DAY)
+                WHERE ev.changed_at >= DATE_SUB(NOW(), INTERVAL @Days DAY)
             ) u
             JOIN projects p ON p.id = u.ProjectId
             LEFT JOIN customers cu ON cu.id = p.customer_id
@@ -278,8 +285,10 @@ public class DdpManagerController : ControllerBase
     private List<DdpUpdatedItem> LoadUpdated(System.Data.IDbConnection c, int days)
     {
         if (days <= 0) days = 7;
-        // Token senza dipendente → -1, non 0: 0 è il valore con cui la query rappresenta
-        // «riga senza firma», e coinciderebbe, nascondendo proprio quelle da guardare.
+        // Token senza dipendente → -1, non 0: nessuna presa visione è sua, quindi vede
+        // l'elenco intero. (Con la #114 il -1 serviva anche a non confondersi con lo 0 di
+        // «riga senza firma»: quel filtro non c'è più, il -1 resta perché è un id che in
+        // ddp_review_acks non può esistere.)
         int me = CurrentEmployeeId > 0 ? CurrentEmployeeId : -1;
         return c.Query<DdpUpdatedItem>(
             string.Format(AggiornamentiDaVerificareSql, _guard.FiltroBozzeSql(User)),

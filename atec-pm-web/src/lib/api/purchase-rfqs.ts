@@ -116,16 +116,22 @@ export async function savePurchaseRfqOffer(
   unwrapApi(response)
 }
 
+/**
+ * Aggiudica l'offerta. Torna il messaggio del server invece di buttarlo: l'aggiudicazione
+ * può dire cose che l'operatore deve leggere (es. quante righe ha toccato), e con un testo
+ * fisso lato client quelle informazioni non arrivavano a nessuno.
+ */
 export async function selectPurchaseRfqWinner(
   rfqId: number,
   offerId: number,
   targetStatus = "RO"
-): Promise<void> {
+): Promise<string> {
   const response = await apiPost<ApiResponse<boolean>>(
     `/api/purchase-rfqs/${rfqId}/select-winner`,
     { offerId, targetStatus }
   )
   unwrapApi(response)
+  return response.message ?? ""
 }
 
 /**

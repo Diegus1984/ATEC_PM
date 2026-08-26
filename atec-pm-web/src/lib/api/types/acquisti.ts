@@ -58,6 +58,13 @@ export interface PurchaseRfqItemDto {
   dateNeeded?: string | null
   daneaRef?: string
   daneaOrderIdDoc?: number | null
+  /**
+   * Codice ATEC EFFICACE della riga (snapshot, altrimenti mapping vivo dell'articolo).
+   * Serve a far vedere QUALE riga rende mista una gara: il server rifiuta di aggiudicare
+   * una RDO con articoli diversi, e senza questo campo l'operatore non saprebbe dove
+   * guardare.
+   */
+  atecCode?: string
 }
 
 export interface PurchaseRfqOfferDto {
@@ -80,11 +87,13 @@ export interface PurchaseRfqDetail extends PurchaseRfqListItem {
   offers: PurchaseRfqOfferDto[]
 }
 
-/** Fornitore interpellabile per le righe selezionate (piano richiesta offerta). */
+/** Fornitore interpellabile per le righe selezionate (piano richiesta offerta).
+ *  Senza email, di proposito: il server l'ha tolta dal DTO (l'indirizzo serve a
+ *  MANDARE la richiesta, e quel percorso usa PurchaseRfqOfferDto) — dichiararla
+ *  qui farebbe scrivere `mailto:undefined` al primo che si fida del tipo. */
 export interface OfferPlanSupplier {
   supplierId: number
   supplierName: string
-  supplierEmail: string
   items: OfferPlanItem[]
 }
 

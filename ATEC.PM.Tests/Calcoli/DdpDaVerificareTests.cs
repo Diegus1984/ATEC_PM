@@ -6,14 +6,15 @@ using MySqlConnector;
 namespace ATEC.PM.Tests.Calcoli;
 
 /// <summary>
-/// Segnalazione #114 — la card «DDP Commesse» della Dashboard elenca le distinte aggiornate
-/// <b>dai colleghi</b> e le lascia andare quando chi guarda le ha aperte.
+/// Segnalazioni #114 e #115 — la card «DDP Commesse» della Dashboard elenca le distinte
+/// aggiornate di recente e le lascia andare quando chi guarda le ha aperte.
 ///
 /// <para>Sono due regole che nessuna schermata mostra mentre sbaglia:</para>
 /// <list type="bullet">
-/// <item>senza il filtro sull'autore l'elenco rimanda indietro <b>il lavoro di chi lo sta
-/// guardando</b>: si apre la DDP, si trova quello che si è appena scritto, e dopo due volte
-/// la card diventa rumore che nessuno legge più;</item>
+/// <item><b>#115</b>: in elenco ci va <b>anche il proprio lavoro</b>. La #114 filtrava
+/// sull'autore e chi aggiornava una DDP vedeva la card ferma — sembrava rotta, ed è la
+/// segnalazione che è arrivata. Il nome di chi ha firmato resta nella voce, che è quello
+/// che serve davvero per distinguere;</item>
 /// <item>la presa visione non deve <b>chiudere</b> niente: se sparisse per sempre, la modifica
 /// che un collega fa cinque minuti dopo non la vedrebbe più nessuno. Sparisce finché quella
 /// distinta resta ferma, e torna appena viene toccata di nuovo.</item>
@@ -63,18 +64,38 @@ public class DdpDaVerificareTests
     }
 
     /// <summary>
-    /// «DDP aggiornate <b>da colleghi</b>»: quello che ho scritto io non me lo ritrovo da
-    /// verificare. Vale anche quando la riga l'ho solo modificata — l'autore che conta è
-    /// l'ultima firma, non chi l'aveva inserita.
+    /// Segnalazione #115 — <b>anche quello che ho aggiornato io</b> finisce in elenco: chi
+    /// tocca una DDP deve vedere la card muoversi, altrimenti sembra rotta. La firma che si
+    /// mostra è l'<b>ultima mano</b> sulla riga, non chi l'aveva inserita: qui la riga è del
+    /// collega ma l'ho modificata io, e in elenco compare il mio nome.
     /// </summary>
     [FactRichiedeMySql]
-    public void LeMieModifiche_nonMiTornanoIndietro()
+    public void LeMieModifiche_finisconoInElenco_conLaMiaFirma()
     {
         using MySqlConnection c = _schema.Apri();
         var (commessa, collega) = SeminaCommessa(c);
 
         // Inserita dal collega, ma l'ultima mano sopra è la mia.
         RigaCommerciale(c, commessa, autore: collega, ultimaMano: _io);
+
+        DdpUpdatedItem voce = Assert.Single(Elenco(c));
+        Assert.Equal("COMMERCIAL", voce.DdpType);
+        Assert.Equal("Mario Rossi", voce.UpdatedBy);
+    }
+
+    /// <summary>
+    /// …e la presa visione continua a valere anche sul proprio lavoro: aperta la DDP, la voce
+    /// se ne va. È la differenza fra «l'elenco non filtra più per autore» (#115) e «l'elenco
+    /// non si svuota più», che sarebbe una card rossa fissa.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void DopoLaPresaVisione_spariscono_ancheLeMieModifiche()
+    {
+        using MySqlConnection c = _schema.Apri();
+        var (commessa, _) = SeminaCommessa(c);
+
+        RigaCommerciale(c, commessa, autore: _io);
+        PresaVisione(c, commessa, "COMMERCIAL", minutiFa: 0);
 
         Assert.Empty(Elenco(c));
     }
@@ -145,6 +166,10 @@ public class DdpDaVerificareTests
     /// <summary>
     /// Anche il solo cambio di stato registrato in cronistoria è un aggiornamento da vedere:
     /// la riga non cambia di una virgola, ma il materiale ora è ordinato (o consegnato).
+    ///
+    /// <para>La riga è <b>vecchia di un mese</b> apposta: fuori dalla finestra non entra da
+    /// sola, quindi se l'elenco smettesse di guardare la cronistoria questo test diventerebbe
+    /// rosso. Dalla #115 non basta più intestarla a chi guarda per tenerla fuori.</para>
     /// </summary>
     [FactRichiedeMySql]
     public void IlCambioDiStatoDelCollega_valeComeAggiornamento()
@@ -152,8 +177,7 @@ public class DdpDaVerificareTests
         using MySqlConnection c = _schema.Apri();
         var (commessa, collega) = SeminaCommessa(c);
 
-        // La riga è mia (non deve comparire da sola), il cambio di stato è del collega.
-        int riga = RigaOfficina(c, commessa, autore: _io);
+        int riga = RigaOfficina(c, commessa, autore: _io, giorniFa: 30);
         c.Execute(@"
             INSERT INTO ddp_item_events
                 (item_type, item_id, project_id, from_status, to_status, changed_at, changed_by_id, changed_by_name)

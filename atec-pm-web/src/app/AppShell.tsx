@@ -49,6 +49,8 @@ import { useChatInboxBadge } from "@/features/commesse/chat/useChatInboxBadge"
 import { useOreCommessaBadge } from "@/features/ore-commessa/useOreCommessaBadge"
 import { useTravelBadge } from "@/features/trasferta/useTravelBadge"
 import { useDeadlinesCount } from "@/features/scadenze/useDeadlinesCount"
+import { useSalWarnings } from "@/features/sal/useSalWarnings"
+import { useDdpUpdatedList } from "@/features/gestore-ddp/useDdpUpdatedList"
 import { APP_BUILD } from "@/lib/app-version"
 import { cn } from "@/lib/utils"
 import {
@@ -121,6 +123,18 @@ export function AppShell() {
   // ha ancora dichiarato di aver guardato. Accendono la voce di menu, non solo il pallino.
   const travelPending = useTravelBadge()
   const oreCommessaPending = useOreCommessaBadge()
+  // Warning SAL (#117): stessa sorgente delle viste «Warning Fatturazione» e «Warning
+  // incasso fattura» della pagina /sal, cioè gli alert del prospetto. Prima il pallino
+  // veniva dalle scadenze a 7 giorni e diceva un numero diverso da quello delle viste —
+  // lo stesso disallineamento che la #114 aveva già corretto per la card della Dashboard,
+  // lasciando però indietro la voce di menu.
+  const salWarningsCount = useSalWarnings().length
+  // DDP da verificare (#118): stessa lista della card «DDP Commesse» in Dashboard, stessa
+  // chiave di cache — nessuna richiesta in più. Prende il posto del vecchio conteggio dalle
+  // scadenze (materiale con data entro 7 giorni): erano due cose diverse sullo stesso
+  // pallino, e quella che serve al PM è «qualcuno ha toccato una DDP e non l'ho ancora
+  // aperta». Il materiale in scadenza resta nella campanella «Scadenze».
+  const ddpDaVerificare = useDdpUpdatedList(7).length
   // Anagrafica commesse in tempo reale: una commessa creata/eliminata da un collega
   // compare o sparisce da tutti gli elenchi aperti senza ricaricare la pagina.
   useProjectsRealtime()
@@ -188,6 +202,8 @@ export function AppShell() {
                       chat: chatUnreadCount,
                       trasferta: travelPending,
                       "ore-commessa": oreCommessaPending,
+                      sal: salWarningsCount,
+                      "gestore-ddp": ddpDaVerificare,
                     }
                     const badgeCount =
                       badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0

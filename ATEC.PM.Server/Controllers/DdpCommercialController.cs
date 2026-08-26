@@ -108,6 +108,12 @@ public class DdpCommercialController : ControllerBase
                 WHERE b.ddp_type = 'COMMERCIAL'
                   AND COALESCE(p.status,'') <> 'CANCELLED'{_guard.FiltroBozzeSql(User)}
                   AND (@ProjectId IS NULL OR b.project_id = @ProjectId)
+                  -- #119: l'intestazione di un gruppo (5xx) NON è una riga da comprare — è
+                  -- l'etichetta che raggruppa i componenti, che qui ci sono già uno per uno,
+                  -- e ha costo 0. Lasciarla passare metterebbe ad Acquisti una voce da
+                  -- ordinare che non corrisponde a nessun articolo. Stesso principio della
+                  -- dedup dei costi (ProjectEconomics.CommercialeParentDedup).
+                  AND b.{ProjectEconomics.CommercialeParentDedup}
                 ORDER BY
                   CASE WHEN b.date_needed IS NULL THEN 1 ELSE 0 END,
                   b.date_needed ASC,

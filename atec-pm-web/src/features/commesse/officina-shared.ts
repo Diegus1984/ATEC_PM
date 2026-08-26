@@ -1,6 +1,7 @@
 // ── DDP Officina: conversioni, etichette e costruzione righe (nessun React) ──
 
 import type { OfficinaItem, OfficinaItemSaveRequest } from "@/lib/api/types"
+import { buildCompositionRows, collectParentIds } from "./ddp-composition-rows"
 
 export const COLUMN_LABELS: Record<string, string> = {
   rowNumber: "#",
@@ -77,11 +78,7 @@ export type OfficinaRow = OfficinaItem & {
 
 /** Padri che hanno almeno un componente importato dalla composizione. */
 export function collectParentIdsWithChildren(list: OfficinaItem[]): Set<number> {
-  const set = new Set<number>()
-  for (const item of list) {
-    if (item.parentOfficinaItemId != null) set.add(item.parentOfficinaItemId)
-  }
-  return set
+  return collectParentIds(list, (item) => item.parentOfficinaItemId)
 }
 
 /**
@@ -93,65 +90,17 @@ export function buildOfficinaRows(
   list: OfficinaItem[],
   parentIdsWithChildren: Set<number>
 ): OfficinaRow[] {
-  const parents = list.filter((it) => it.parentOfficinaItemId == null)
-  const children = list.filter((it) => it.parentOfficinaItemId != null)
-
-  const childrenMap: Record<number, OfficinaItem[]> = {}
-  for (const child of children) {
-    const pid = child.parentOfficinaItemId!
-    if (!childrenMap[pid]) childrenMap[pid] = []
-    childrenMap[pid].push(child)
-  }
-  for (const pid of Object.keys(childrenMap)) {
-    childrenMap[Number(pid)].sort((a, b) =>
-      (a.partNumber || "").localeCompare(b.partNumber || "", undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    )
-  }
-
-  // Lookup separato dei figli: serve al rollup dei costi anche dopo lo svuotamento
-  // di childrenMap fatto durante l'ordinamento.
-  const childrenByParent: Record<number, OfficinaItem[]> = {}
-  for (const child of children) {
-    const pid = child.parentOfficinaItemId!
-    if (!childrenByParent[pid]) childrenByParent[pid] = []
-    childrenByParent[pid].push(child)
-  }
-
-  const sortedList: OfficinaItem[] = []
-  for (const parent of parents) {
-    sortedList.push(parent)
-    const pChildren = childrenMap[parent.id]
-    if (pChildren) {
-      sortedList.push(...pChildren)
-      delete childrenMap[parent.id]
-    }
-  }
-  for (const orphans of Object.values(childrenMap)) sortedList.push(...orphans)
-
-  let parentCount = 0
-  return sortedList.map((item) => {
-    let displayIndex = "•"
-    if (item.parentOfficinaItemId == null) {
-      parentCount++
-      displayIndex = String(parentCount)
-    }
-
-    let unitCost = item.unitCost
-    if (parentIdsWithChildren.has(item.id)) {
-      unitCost = (childrenByParent[item.id] ?? []).reduce(
-        (sum, child) => sum + child.unitCost * (child.compositionQty ?? 1),
-        0
-      )
-    }
-
-    return {
-      ...item,
-      rowNumber: displayIndex,
-      unitCost,
-      totalCost: unitCost * item.quantity,
-    }
-  })
+  // La meccanica sta in `ddp-composition-rows`, condivisa con la DDP Commerciale (#119):
+  // qui si passa solo il campo padre di questa tabella. In officina il costo non è mai
+  // nullo (niente filtro prezzi su questa griglia), quindi i null si richiudono a 0.
+  return buildCompositionRows(
+    list,
+    (item) => item.parentOfficinaItemId,
+    parentIdsWithChildren,
+    (item) => item.unitCost
+  ).map((row) => ({
+    ...row,
+    unitCost: row.unitCost ?? 0,
+    totalCost: row.totalCost ?? 0,
+  }))
 }

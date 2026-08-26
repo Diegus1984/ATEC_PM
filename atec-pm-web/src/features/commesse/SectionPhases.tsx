@@ -109,7 +109,13 @@ export function SectionPhases({
     mutationFn: ({ id, done }: { id: number; done: boolean }) =>
       setProjectPhaseStatus(id, done ? "COMPLETED" : "IN_PROGRESS"),
     onSuccess: (_r, vars) => {
-      notifySuccess(vars.done ? "Fase completata" : "Fase riaperta")
+      // La conferma prende il colore del pulsante che l'ha fatta partire: rosso quando la
+      // fase viene chiusa, verde quando torna in corso. Una notifica verde sopra un comando
+      // rosso si legge come se fosse successo il contrario.
+      notifySuccess(
+        vars.done ? "Fase Completata" : "Fase riaperta",
+        vars.done ? "rosso" : "verde"
+      )
       onChanged()
     },
     onError: (err: Error) => notifyError(err),
@@ -318,8 +324,13 @@ export function SectionPhases({
                   ) : null}
                 </div>
 
-                {/* #110: Comando fase completata al centro — carattere nero, fondo rosso pastello
-                    gradiente. `order-last basis-full`: la card della fase è stretta (~390 px) e
+                {/* #110: comando di stato fase al centro, carattere nero su fondo pastello.
+                    24/08/2026 (richiesta di Diego, screenshot alla mano): il pulsante dice lo
+                    STATO in cui la fase è adesso, non l'azione — «Fase in Corso» in verde,
+                    «Fase Completata» in rosso. Prima diceva «Fase completata» in tutti e due
+                    gli stati, quindi in corso mostrava la scritta sbagliata, e i due colori
+                    erano al contrario.
+                    `order-last basis-full`: la card della fase è stretta (~390 px) e
                     le tre parti dell'intestazione vanno a capo comunque; senza questo il comando
                     finiva in fondo alla prima riga, cioè a destra e non al centro (misurato:
                     112 px fuori asse). Così si prende una riga sua e sta al centro davvero,
@@ -339,8 +350,8 @@ export function SectionPhases({
                       phase.isOff
                         ? "cursor-not-allowed opacity-50 bg-muted text-muted-foreground border-transparent"
                         : phase.status === "COMPLETED"
-                          ? "bg-gradient-to-r from-emerald-100 via-green-50 to-emerald-100 border-emerald-300 text-black hover:from-emerald-200 hover:to-green-100 dark:from-emerald-950/70 dark:via-green-900/50 dark:to-emerald-950/70 dark:border-emerald-800 dark:text-neutral-100 cursor-pointer"
-                          : "bg-gradient-to-r from-red-200 via-rose-100 to-red-200 border-red-300 text-black hover:from-red-300 hover:via-rose-200 hover:to-red-300 dark:from-red-950/70 dark:via-rose-900/50 dark:to-red-950/70 dark:border-red-800 dark:text-neutral-100 cursor-pointer"
+                          ? "bg-gradient-to-r from-red-200 via-rose-100 to-red-200 border-red-300 text-black hover:from-red-300 hover:via-rose-200 hover:to-red-300 dark:from-red-950/70 dark:via-rose-900/50 dark:to-red-950/70 dark:border-red-800 dark:text-neutral-100 cursor-pointer"
+                          : "bg-gradient-to-r from-emerald-100 via-green-50 to-emerald-100 border-emerald-300 text-black hover:from-emerald-200 hover:to-green-100 dark:from-emerald-950/70 dark:via-green-900/50 dark:to-emerald-950/70 dark:border-emerald-800 dark:text-neutral-100 cursor-pointer"
                     )}
                     title={
                       phase.isOff
@@ -352,14 +363,14 @@ export function SectionPhases({
                   >
                     {phase.status === "COMPLETED" ? (
                       <>
-                        <CheckCircle2 className="size-3.5 text-emerald-700 dark:text-emerald-400" />
-                        <span>Fase completata</span>
+                        <CheckCircle2 className="size-3.5 text-red-700 dark:text-red-400" />
+                        <span>Fase Completata</span>
                         <RotateCcw className="size-3 text-neutral-600 opacity-60 ml-0.5" />
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="size-3.5 text-red-700 dark:text-red-400" />
-                        <span>Fase completata</span>
+                        <CheckCircle2 className="size-3.5 text-emerald-700 dark:text-emerald-400" />
+                        <span>Fase in Corso</span>
                       </>
                     )}
                   </button>

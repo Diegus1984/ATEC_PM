@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 20/08/2026 17:45.
+> Fotografia del 26/08/2026 08:33.
 
 ## Chiavi con endpoint
 
@@ -12,6 +12,9 @@
 - `PUT /api/config` (ConfigController.Save)
 
 ### `action.assign_atec_code` — Assegna il Codice ATEC
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
@@ -68,6 +71,12 @@
 
 ### `action.manage_codex` — Gestisce il Codex (sync, genera codice)
 - `DELETE /api/codex/{id}` (CodexController.Delete)
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/codex/confirm` (CodexController.ConfirmReservation)
 - `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
@@ -79,6 +88,12 @@
 - `POST /api/projects/{id}/promote-to-commessa` (ProjectsController.PromoteToCommessa)
 
 ### `action.recode_codex` — Ricodifica Codex
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/codex/new-code/bulk-commit` (CodexController.BulkCommitNewCodes)
 - `POST /api/codex/new-code/bulk-release` (CodexController.BulkReleaseNewCodes)
 - `POST /api/codex/new-code/bulk-remove` (CodexController.BulkRemoveNewCodes)
@@ -177,12 +192,18 @@
 ### `nav.acquisti_inbox` — Inbox Acquisti
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
 - `GET /api/catalog` (CatalogController.GetAll)
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `GET /api/purchase-rfqs` (PurchaseRfqController.List)
 - `GET /api/purchase-rfqs/{id}` (PurchaseRfqController.Get)
 - `GET /api/purchase-rfqs/email-candidates` (PurchaseRfqController.EmailCandidates)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `POST /api/purchase-rfqs` (PurchaseRfqController.Create)
 - `POST /api/purchase-rfqs/{id}/cancel` (PurchaseRfqController.Cancel)
@@ -267,10 +288,16 @@
 - `DELETE /api/catalog/{id}` (CatalogController.Delete)
 - `DELETE /api/material-categories/{id}` (MaterialCategoriesController.Delete)
 - `GET /api/catalog` (CatalogController.GetAll)
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/catalog/{id}` (CatalogController.GetById)
 - `GET /api/catalog/filter-meta` (CatalogController.GetFilterMeta)
 - `PATCH /api/material-categories/{id}/field` (MaterialCategoriesController.UpdateField)
 - `POST /api/catalog` (CatalogController.Create)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/material-categories` (MaterialCategoriesController.Create)
 - `PUT /api/catalog/{id}` (CatalogController.Update)
 - `PUT /api/material-categories/{id}` (MaterialCategoriesController.Update)
@@ -641,7 +668,13 @@
 ### `project.ddp_commerciale` — DDP Commerciali
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
 - `GET /api/catalog` (CatalogController.GetAll)
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
@@ -795,7 +828,6 @@
 - ActivityCatalogController: 2 endpoint
 - AuthController: 4 endpoint
 - AuthLevelController: 4 endpoint
-- CatalogMappingController: 3 endpoint
 - CodexController: 12 endpoint
 - CostSectionsController: 2 endpoint
 - DaneaSyncController: 2 endpoint

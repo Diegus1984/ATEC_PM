@@ -399,7 +399,7 @@ robocopy \\192.168.2.150\C$\ATEC_Backups D:\CopieAtecPm\Backups /MIR /R:1 /W:1
 | Il servizio parte e si ferma subito | MySQL non pronto o credenziali sbagliate | Log in `C:\ATEC_PM\Logs`; controlla che il servizio MySQL sia avviato |
 | Dopo un riavvio della macchina il gestionale non c'è | Il server è partito prima di MySQL | L'installazione imposta la dipendenza; se manca: `sc.exe config AtecPmServer depend= MySQL84` |
 | Login rifiutato per tutti | `appsettings.json` di produzione sovrascritto | Rimetti la chiave JWT da `C:\ATEC_PM\Config\appsettings.originale.json` e riavvia |
-| Errori "accesso negato" sui documenti o allegati Danea | L'utente `atec` non ha accesso a quella cartella di rete (o il servizio gira come LocalSystem) | Dai i permessi a `atec` sulla share; verifica l'account del servizio in Servizi → ATEC PM Server → Accesso |
+| Errori "accesso negato" sui documenti o allegati Danea | L'utente `atec` non ha accesso a quella cartella di rete (o il servizio gira come LocalSystem) | Vedi §8.2: si danno al programma credenziali valide **sul server della share** |
 | Il servizio non parte dopo aver cambiato la password di `atec` | Il servizio usa ancora quella vecchia | Servizi → ATEC PM Server → Accesso → rimetti la password, poi riavvia |
 | Pagina vecchia dopo un aggiornamento | Cache del browser | Ctrl+F5 |
 | Aggiornamento fallito | Lo script ha già rimesso la versione precedente | Leggi i log stampati, correggi, rilancia `aggiorna-server.bat` |
@@ -487,6 +487,38 @@ dopo un rollback) può lasciare il registro delle migrazioni vuoto: il pacchetto
 che la versione vecchia non conosce, e quelle righe vengono scartate. Se succede, il server
 successivo si ferma con «schema_migrations è vuota». Ripristinare sempre su una versione **pari o
 più recente** di quella che ha prodotto il pacchetto.
+
+### 8.2 «Gli articoli Danea passano ma le immagini no» (cartelle di rete)
+
+Sintomo: nella pagina **Trasferimento catalogo Danea** il report dice «N trasferiti · 0 errori ·
+**0 file immagine copiati**» e in alto c'è il badge rosso «Cartella immagini non raggiungibile».
+Gli articoli sono passati davvero: fallisce solo la copia dei file, che stanno su
+`\\Server-maga\d\DANEA\...\<archivio> - Allegati\Prod`.
+
+**Perché.** Il servizio gira come account **locale** `ATEC-FC\atec`. ATEC-FC e Server-maga sono in
+WORKGROUP: Server-maga non conosce quell'utente, l'SMB ripiega su `guest` e Windows lo blocca.
+Il database Danea invece funziona perché lì ci si connette in TCP con utente e password espliciti.
+Dal PC di sviluppo sembra tutto a posto: là le credenziali di Server-maga sono in Gestione
+credenziali di Windows.
+
+**Rimedio (25/08/2026).** Si dà al programma un utente valido **sul server della share**, come già
+si fa per Firebird. Sul server, in PowerShell da amministratore:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ATEC_PM\Strumenti\imposta-credenziali-share.ps1
+```
+
+Chiede utente e password, li **prova davvero sulla share**, li salva **cifrati** (DPAPI, ambito
+macchina) in `appsettings.Secrets.json` e riavvia il servizio. Da lì in poi il programma apre da
+solo una sessione SMB autenticata prima di leggere e scrivere i file: non serve nessun `cmdkey`,
+nessun profilo utente, e regge ai riavvii.
+
+L'utente va creato **su Server-maga** (Gestione computer → Utenti locali), con **lettura** su
+`Srl-2020-2021 - Allegati` e **scrittura** su `Atec_PM - Allegati`. Va bene un account dedicato
+tipo `atec_pm`: non serve che sia amministratore.
+
+Se le credenziali non sono impostate il programma si comporta come prima e il badge rosso spiega
+in chiaro qual è il problema.
 
 ---
 

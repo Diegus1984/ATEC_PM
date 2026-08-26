@@ -9,15 +9,18 @@ const mapTypeToMenuId = (type: string): string | null => {
   switch (type) {
     case "MOM":
       return "mom"
-    case "DDP":
-      return "gestore-ddp"
     case "CHECKLIST":
       return "checklist"
-    // Il Prospetto SAL non è più una voce di menu a sé (03/08/2026): anche gli
-    // incassi scaduti si contano sulla voce «SAL / Fatturazione», che lo contiene.
-    case "SAL":
-    case "SAL_INCASSO":
-      return "sal"
+    // 🪤 DDP non sta più qui (#118, 24/08/2026): il pallino di «Gestore DDP» conta le DDP
+    // «da verificare» — quelle toccate di recente e non ancora aperte, la stessa lista
+    // della card in Dashboard — non il materiale con data entro 7 giorni. Erano due cose
+    // diverse sullo stesso pallino. Anche il materiale in scadenza resta in `pendingCount`.
+    // 🪤 SAL e SAL_INCASSO NON stanno più qui (#117, 24/08/2026). Il pallino di
+    // «SAL / Fatturazione» si conta dagli alert del prospetto — la stessa sorgente delle
+    // viste «Warning Fatturazione» e «Warning incasso fattura» — non dalle scadenze, che
+    // usano una soglia fissa a 7 giorni e davano un numero diverso da quello scritto
+    // dentro la pagina (9 contro 6). Vedi `useSalWarnings` e `AppShell`.
+    // Restano invece dentro `pendingCount`: nella campanella «Scadenze» ci vanno eccome.
     default:
       return null
   }
@@ -43,9 +46,7 @@ export function useDeadlinesCount() {
 
   const sectionCounts: Record<string, number> = {
     mom: 0,
-    "gestore-ddp": 0,
     checklist: 0,
-    sal: 0,
   }
 
   pendingDeadlines.forEach((d) => {

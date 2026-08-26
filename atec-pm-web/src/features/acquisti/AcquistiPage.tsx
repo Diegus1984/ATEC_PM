@@ -40,6 +40,7 @@ import {
   isToBuy,
   isVisible,
   normalizeAtec,
+  rowHasDaneaOrder,
   sortAcquistiByProjectAndAction,
   statusOf,
 } from "./acquisti-shared"
@@ -167,7 +168,10 @@ export function AcquistiPage() {
       }
       if ((i.daysLate ?? 0) > 0) lateCount++
       if (!normalizeAtec(i.atecCode)) unmappedCount++
-      if (statusOf(i) === "IO") orderedCount++
+      // Stesso predicato della colonna «Prossimo Passo» (rowHasDaneaOrder): l'ordine
+      // Danea avanza lo stato a IO solo se la matrice lo ammette, ma Rif. Danea/IDDoc
+      // arrivano comunque — contare il solo stato IO farebbe divergere card e griglia.
+      if (rowHasDaneaOrder(i)) orderedCount++
     }
     return { toBuyCount, toBuyCost, lateCount, unmappedCount, orderedCount }
   }, [visibleItems])

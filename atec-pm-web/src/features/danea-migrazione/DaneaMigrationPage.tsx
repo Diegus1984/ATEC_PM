@@ -240,10 +240,17 @@ export function DaneaMigrationPage() {
           </p>
         </div>
         {status && (!status.imagesSourceReachable || !status.imagesTargetReachable) ? (
-          <Badge variant="destructive" className="gap-1">
-            <TriangleAlert className="size-3.5" />
-            Cartella immagini non raggiungibile: gli articoli passano senza foto
-          </Badge>
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <Badge variant="destructive" className="gap-1">
+              <TriangleAlert className="size-3.5" />
+              Cartella immagini non raggiungibile: gli articoli passano senza foto
+            </Badge>
+            {status.imagesError ? (
+              <p className="max-w-md text-xs text-muted-foreground sm:text-right">
+                {status.imagesError}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -505,6 +512,15 @@ function TransferReportDialog({
             {report.errors} errori · {report.imagesCopied} file immagine copiati
           </DialogDescription>
         </DialogHeader>
+        {report.catalogWarning ? (
+          <p className="text-sm text-amber-700">{report.catalogWarning}</p>
+        ) : report.catalogAligned ? (
+          <p className="text-sm text-muted-foreground">
+            Catalogo articoli già aggiornato ({report.catalogAligned}{" "}
+            {report.catalogAligned === 1 ? "riga" : "righe"}): li trovi subito in
+            elenco, non serve «Sincronizza Danea».
+          </p>
+        ) : null}
         {problems.length > 0 ? (
           <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2 text-sm">
             {problems.map((r) => (

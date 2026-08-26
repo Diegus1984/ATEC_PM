@@ -78,6 +78,7 @@ public class BilancioController : ControllerBase
                            FROM bom_items b
                            WHERE b.project_id = p.id
                              AND COALESCE(b.item_status,'') NOT IN @Excluded
+                             AND b.{ProjectEconomics.CommercialeParentDedup}
                        ), 0) AS ActualMaterialCost,
                        COALESCE((
                            SELECT SUM(o.quantity * o.unit_cost)

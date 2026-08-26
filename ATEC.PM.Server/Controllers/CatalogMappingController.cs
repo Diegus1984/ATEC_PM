@@ -18,6 +18,15 @@ namespace ATEC.PM.Server.Controllers;
 [ApiController]
 [Route("api/catalog-mapping")]
 [Authorize]
+// Le letture di questo controller portano COSTI e LISTINI (unit_cost, list_price di
+// catalog_items): senza serratura erano di qualunque utente autenticato, timesheet
+// compresi. Più chiavi = OR: bastano i profili che usano davvero questi dati — Catalogo,
+// ricodifica/gestione Codex, DDP commerciale di commessa (picker/alternative), Inbox
+// Acquisti e chi assegna i codici. Le scritture restano dietro la loro chiave dedicata
+// (`action.assign_atec_code`, sugli endpoint), che qui compare perché i due filtri sono
+// in AND: senza, chi ha SOLO la chiave di assegnazione non passerebbe la porta di classe.
+[RequireFeature("nav.catalogo", "nav.acquisti_inbox", "action.assign_atec_code",
+    "action.manage_codex", "action.recode_codex", "project.ddp_commerciale")]
 public class CatalogMappingController : ControllerBase
 {
     private readonly DbService _db;
@@ -172,9 +181,21 @@ public class CatalogMappingController : ControllerBase
                 "SELECT id FROM catalog_items WHERE is_active = 1 AND code = @Code ORDER BY id LIMIT 1",
                 new { Code = partNumber });
         if (!catalogId.HasValue)
-            return Ok(ApiResponse<CatalogMappingAssignResult>.Fail(partNumber.Length > 0
-                ? $"Articolo «{partNumber}» non trovato nel catalogo Danea: sincronizzare Danea o correggere il codice."
-                : "Riga senza articolo Danea (né link catalogo né codice): impossibile associare."));
+        {
+            // #119: sulle righe nate da una composizione il «codice» è un codice Codex, non un
+            // CodArticolo Danea — cercarlo a catalogo non lo troverà mai. Il messaggio storico
+            // («sincronizzare Danea») manderebbe a caccia della cosa sbagliata: qui si dice
+            // quella vera, cioè che l'articolo commerciale per quel pezzo non esiste ancora.
+            bool eCodiceCodex = partNumber.Length > 0 && c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM codex_items WHERE REPLACE(codice,'.','') = @Code",
+                new { Code = partNumber.Replace(".", "").Trim() }) > 0;
+            return Ok(ApiResponse<CatalogMappingAssignResult>.Fail(
+                eCodiceCodex
+                    ? $"«{partNumber}» è un codice Codex, non un articolo Danea: questo pezzo non ha ancora un articolo commerciale. Va creato a catalogo e ricodificato (201/211/221), poi la riga si aggancia da sola."
+                    : partNumber.Length > 0
+                        ? $"Articolo «{partNumber}» non trovato nel catalogo Danea: sincronizzare Danea o correggere il codice."
+                        : "Riga senza articolo Danea (né link catalogo né codice): impossibile associare."));
+        }
 
         var (response, newCode) = AssignCore(c, catalogId.Value, req.CodexItemId, req.Force);
         if (response.Success && response.Data?.Assigned == true && newCode != null)

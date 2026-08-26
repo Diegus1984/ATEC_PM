@@ -22,11 +22,14 @@ public class DaneaMigrationService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<DaneaMigrationService> _log;
+    private readonly NetworkShareConnector _share;
 
-    public DaneaMigrationService(IConfiguration config, ILogger<DaneaMigrationService> log)
+    public DaneaMigrationService(
+        IConfiguration config, ILogger<DaneaMigrationService> log, NetworkShareConnector share)
     {
         _config = config;
         _log = log;
+        _share = share;
     }
 
     private string ConnStr(bool old)
@@ -60,10 +63,54 @@ public class DaneaMigrationService
     private string? AllegatiDir(bool old) =>
         _config[old ? "DaneaSync:AllegatiPathOld" : "DaneaSync:AllegatiPathNew"];
 
+    /// <summary>
+    /// Apre la sessione SMB autenticata verso la share degli allegati (vedi
+    /// <see cref="NetworkShareConnector"/>). Il servizio gira come account locale, che il
+    /// server della share non conosce: senza credenziali esplicite ogni accesso ai file
+    /// finisce in "accesso negato" anche se il database Danea risponde benissimo.
+    /// Restituisce il messaggio d'errore, o null se va tutto bene o non c'e' nulla da fare.
+    /// </summary>
+    private string? EnsureAllegatiShare()
+    {
+        string? utente = _config["DaneaSync:SmbUser"];
+        if (string.IsNullOrWhiteSpace(utente)) return null;   // non configurate: come prima
+        string? password = _config["DaneaSync:SmbPassword"];
+
+        string? errore = null;
+        foreach (bool old in new[] { true, false })
+            errore ??= _share.Connect(AllegatiDir(old), utente, password);
+        return errore;
+    }
+
+    /// <summary>
+    /// Perche' le cartelle immagini non si raggiungono: la pagina mostrava solo il badge
+    /// rosso, e la causa (sessione SMB anonima rifiutata) si scopriva solo sul server.
+    /// </summary>
+    private string DiagnosiImmagini(string? shareError, string? src, string? dst, bool srcOk, bool dstOk)
+    {
+        if (!string.IsNullOrEmpty(shareError)) return shareError;
+        if (srcOk && dstOk) return "";
+        if (string.IsNullOrWhiteSpace(src) || string.IsNullOrWhiteSpace(dst))
+            return "Cartelle allegati non configurate (DaneaSync:AllegatiPathOld/New).";
+
+        bool rete = NetworkShareConnector.ShareRoot(src) != null ||
+                    NetworkShareConnector.ShareRoot(dst) != null;
+        bool credenziali = !string.IsNullOrWhiteSpace(_config["DaneaSync:SmbUser"]);
+        string quali = !srcOk && !dstOk ? "sorgente e destinazione"
+                     : !srcOk ? "sorgente" : "destinazione";
+
+        return rete && !credenziali
+            ? $"Share di rete ({quali}) non raggiungibile dal servizio e nessuna credenziale " +
+              @"configurata: impostare DaneaSync:SmbUser/SmbPassword con deploy\imposta-credenziali-share.ps1."
+            : $"Cartella allegati {quali} non raggiungibile: verificare percorso e permessi.";
+    }
+
     // ── STATO ─────────────────────────────────────────────────────────────
 
     public DaneaMigrationStatus GetStatus()
     {
+        string? shareError = EnsureAllegatiShare();
+
         using var src = new FbConnection(ConnStr(old: true));
         src.Open();
         using var dst = new FbConnection(ConnStr(old: false));
@@ -72,7 +119,7 @@ public class DaneaMigrationService
         var filters = ReadFilterOptions(src);
         string? srcImg = AllegatiDir(old: true);
         string? dstImg = AllegatiDir(old: false);
-        return new DaneaMigrationStatus
+        var status = new DaneaMigrationStatus
         {
             OldArticles = Count(src, "TArticoli"),
             NewArticles = Count(dst, "TArticoli"),
@@ -87,6 +134,9 @@ public class DaneaMigrationService
             Suppliers = filters.Suppliers,
             Manufacturers = filters.Manufacturers,
         };
+        status.ImagesError = DiagnosiImmagini(
+            shareError, srcImg, dstImg, status.ImagesSourceReachable, status.ImagesTargetReachable);
+        return status;
     }
 
     public DaneaFilterOptions GetFilterOptions()
@@ -281,6 +331,10 @@ public class DaneaMigrationService
 
     public DaneaTransferReport Transfer(List<int> articleIds)
     {
+        // Sessione autenticata una volta per lotto: le immagini si copiano fuori transazione,
+        // ma se la share non si apre gli articoli passano lo stesso (senza foto).
+        string? shareError = EnsureAllegatiShare();
+
         using var src = new FbConnection(ConnStr(old: true));
         src.Open();
         using var dst = new FbConnection(ConnStr(old: false));
@@ -331,7 +385,7 @@ public class DaneaMigrationService
                 // Immagini FUORI transazione: un file mancante non annulla l'articolo.
                 string img = (Convert.ToString(row.GetValueOrDefault("PathImmagine_Import")) ?? "").Trim();
                 if (img.Length > 0)
-                    (res.ImagesCopied, res.ImageWarning) = CopyImages(img);
+                    (res.ImagesCopied, res.ImageWarning) = CopyImages(img, shareError);
 
                 report.Ok++;
                 report.ImagesCopied += res.ImagesCopied;
@@ -366,12 +420,14 @@ public class DaneaMigrationService
     // ── IMMAGINI ──────────────────────────────────────────────────────────
 
     /// <summary>Copia il jpg riferito da PathImmagine_Import + l'eventuale miniatura " Small.bmp".</summary>
-    private (int Copied, string Warning) CopyImages(string fileName)
+    private (int Copied, string Warning) CopyImages(string fileName, string? shareError)
     {
         string? srcBase = AllegatiDir(old: true);
         string? dstBase = AllegatiDir(old: false);
         if (string.IsNullOrEmpty(srcBase) || string.IsNullOrEmpty(dstBase))
             return (0, "Cartelle allegati non configurate (AllegatiPathOld/New): immagine non copiata.");
+        if (!string.IsNullOrEmpty(shareError))
+            return (0, $"Share immagini non accessibile: {shareError}");
 
         string dstProd = Path.Combine(dstBase, "Prod");
         try

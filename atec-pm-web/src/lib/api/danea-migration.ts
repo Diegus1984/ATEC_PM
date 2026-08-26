@@ -8,6 +8,8 @@ export interface DaneaMigrationStatus {
   newArticles: number
   imagesSourceReachable: boolean
   imagesTargetReachable: boolean
+  /** Perche' le immagini non si copiano (vuoto se si copiano). */
+  imagesError?: string
   oldArchive: string
   newArchive: string
   /** Valori distinti per i filtri colonna (arrivano con lo status). */
@@ -43,6 +45,10 @@ export interface DaneaTransferResult {
 }
 
 export interface DaneaTransferReport {
+  /** Righe allineate nel Catalogo articoli subito dopo il lotto. */
+  catalogAligned?: number
+  /** Se l'allineamento non e' riuscito (gli articoli sono passati lo stesso). */
+  catalogWarning?: string
   ok: number
   skipped: number
   errors: number

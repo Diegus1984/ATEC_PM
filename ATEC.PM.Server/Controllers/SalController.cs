@@ -105,6 +105,71 @@ public class SalController : ControllerBase
         )
     )";
 
+    /// <summary>
+    /// Le due query che alimentano la pagina SAL, in due costanti <c>public</c> — come
+    /// <c>DdpManagerController.AggiornamentiDaVerificareSql</c> — <b>perché i test eseguono
+    /// queste, non una copia</b>. Una regola riscritta a mano nel test smette di sorvegliare
+    /// quella vera appena una delle due cambia, ed è esattamente il difetto che questa
+    /// unificazione chiude.
+    ///
+    /// <para>Sono <c>static readonly</c> e non <c>const</c> perché si compongono da
+    /// <see cref="SalAlert"/>, <see cref="ProjectScope"/> e <see cref="ProjectSorting"/>:
+    /// dichiarate <b>dopo</b> ProjectScope, che gli inizializzatori statici girano nell'ordine
+    /// in cui stanno scritti.</para>
+    /// </summary>
+    public static readonly string ProspettoSql = $@"
+            SELECT t.project_id AS ProjectId, p.code AS Code,
+                   COALESCE(cu.company_name, ps.cliente, '') AS Cliente,
+                   t.step AS Step, t.perc AS Perc, t.condizione AS Condizione, t.data_fatt AS DataFatt,
+                   (ps.valore * t.perc / 100) AS Importo,
+                   t.row_num AS Ord,
+                   t.gg_saldo AS GgSaldo, t.data_saldo AS DataSaldo,
+                   t.stato AS Stato, t.pagamento AS Pagamento,
+                   {SalAlert.CaseSql("t")} AS Alert
+            FROM (
+                SELECT id, project_id, step, perc, condizione, data_fatt, stato, pagamento, gg_saldo,
+                       DATE_ADD(data_fatt, INTERVAL gg_saldo DAY) AS data_saldo,
+                       ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY data_fatt ASC, id ASC) AS row_num
+                FROM sal_rows
+                WHERE data_fatt IS NOT NULL
+                  AND (stato <> 'emessa' OR (pagamento <> 'Pagata' AND gg_saldo IS NOT NULL))
+            ) t
+            JOIN projects p ON p.id = t.project_id
+            LEFT JOIN project_sal ps ON ps.project_id = t.project_id
+            LEFT JOIN customers cu ON cu.id = p.customer_id
+            WHERE {ProjectScope}
+            ORDER BY {ProjectSorting.OrderBy("p")}, t.data_fatt ASC";
+
+    /// <summary>
+    /// Riepilogo per commessa. <c>Open</c> = non ancora emesse (include il futuro
+    /// 'daEmettere'); warn/pre/incasso vengono dalla classificazione di <see cref="SalAlert"/>,
+    /// <b>la stessa</b> che usa <see cref="ProspettoSql"/>, e sono mutuamente esclusivi: una
+    /// riga col saldo scaduto conta SOLO come incasso.
+    /// </summary>
+    public static readonly string SummarySql = $@"
+            SELECT p.id AS ProjectId, p.code AS Code, p.title AS Title,
+                   COALESCE(ps.po, '') AS Po,
+                   COALESCE(ps.rif_offerta, '') AS RifOfferta,
+                   ps.valore AS Valore,
+                   COUNT(*) AS Total,
+                   COALESCE(SUM(t.data_fatt IS NOT NULL AND t.stato <> 'emessa'), 0) AS Open,
+                   COALESCE(SUM(t.cls = 'warn'), 0) AS Warn,
+                   COALESCE(SUM(t.cls = 'pre'), 0) AS Pre,
+                   COALESCE(SUM(t.cls = 'incasso'), 0) AS Incasso,
+                   COALESCE(SUM(t.perc), 0) AS PercTotal,
+                   COALESCE(SUM(CASE WHEN t.pagamento = 'Pagata' THEN t.perc ELSE 0 END), 0) AS PercPaid
+            FROM (
+                SELECT project_id, stato, data_fatt, perc, pagamento,
+                       {SalAlert.CaseSql()} AS cls
+                FROM sal_rows
+            ) t
+            JOIN projects p ON p.id = t.project_id
+            LEFT JOIN project_sal ps ON ps.project_id = p.id
+            WHERE {ProjectScope}
+            GROUP BY p.id, p.code, p.title, ps.po, ps.rif_offerta, ps.valore
+            HAVING COUNT(*) > 0
+            ORDER BY {ProjectSorting.OrderBy("p")}";
+
     public const string ConflictMessage = "CONFLITTO: record SAL modificato da un altro utente";
 
     // N° fattura: solo cifre (stringa per preservare gli zeri iniziali)
@@ -944,40 +1009,18 @@ public class SalController : ControllerBase
     }
 
 
+    /// <summary>
+    /// Prospetto SAL: una riga per step da fatturare o da incassare, col semaforo.
+    ///
+    /// <para>Regola di inclusione v10: ipotesi non ancora emesse + fatture emesse in attesa di
+    /// incasso (tutte le righe, non più le prime 2 per commessa). La data prevista di saldo è
+    /// derivata, mai persistita.</para>
+    /// </summary>
     [HttpGet("prospetto")]
     public IActionResult GetProspetto()
     {
         using var c = _db.Open();
-        // Regola inclusione v10: ipotesi non ancora emesse + fatture emesse in attesa di incasso
-        // (tutte le righe, non più le prime 2 per commessa). Data prevista saldo derivata, mai persistita.
-        var rows = c.Query<SalProspettoRowDto>($@"
-            SELECT t.project_id AS ProjectId, p.code AS Code,
-                   COALESCE(cu.company_name, ps.cliente, '') AS Cliente,
-                   t.step AS Step, t.perc AS Perc, t.condizione AS Condizione, t.data_fatt AS DataFatt,
-                   (ps.valore * t.perc / 100) AS Importo,
-                   t.row_num AS Ord,
-                   t.gg_saldo AS GgSaldo, t.data_saldo AS DataSaldo,
-                   t.stato AS Stato, t.pagamento AS Pagamento,
-                   CASE
-                       WHEN t.pagamento <> 'Pagata' AND t.data_saldo IS NOT NULL AND t.data_saldo < CURDATE() THEN 'incasso'
-                       WHEN t.stato <> 'emessa' AND t.data_fatt <= CURDATE() THEN 'warn'
-                       WHEN t.stato <> 'emessa' AND CURDATE() >= DATE_SUB(DATE_SUB(t.data_fatt, INTERVAL WEEKDAY(t.data_fatt) DAY), INTERVAL 7 DAY) THEN 'pre'
-                       WHEN t.stato = 'emessa' THEN 'attesa'
-                       ELSE ''
-                   END AS Alert
-            FROM (
-                SELECT id, project_id, step, perc, condizione, data_fatt, stato, pagamento, gg_saldo,
-                       DATE_ADD(data_fatt, INTERVAL gg_saldo DAY) AS data_saldo,
-                       ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY data_fatt ASC, id ASC) AS row_num
-                FROM sal_rows
-                WHERE data_fatt IS NOT NULL
-                  AND (stato <> 'emessa' OR (pagamento <> 'Pagata' AND gg_saldo IS NOT NULL))
-            ) t
-            JOIN projects p ON p.id = t.project_id
-            LEFT JOIN project_sal ps ON ps.project_id = t.project_id
-            LEFT JOIN customers cu ON cu.id = p.customer_id
-            WHERE {ProjectScope}
-            ORDER BY {ProjectSorting.OrderBy("p")}, t.data_fatt ASC").ToList();
+        var rows = c.Query<SalProspettoRowDto>(ProspettoSql).ToList();
 
         // #91: gli importi (ps.valore × perc) sono dati economici — azzerati QUI per chi
         // non ha `sal.economics`, come nel summary: il client nasconde le colonne, ma la
@@ -1035,42 +1078,7 @@ public class SalController : ControllerBase
     public IActionResult GetSummary()
     {
         using var c = _db.Open();
-        // Aperte = non ancora emesse (include il futuro 'daEmettere').
-        // Warn/Pre/Incasso: classificazione per riga MUTUAMENTE ESCLUSIVA con la stessa
-        // priorità del prospetto (incasso > warn > pre) via CASE unico — una riga con
-        // saldo scaduto conta SOLO come incasso. Solo commesse ACTIVE (coerenza /prospetto).
-        var rows = c.Query<SalSummaryDto>($@"
-            SELECT p.id AS ProjectId, p.code AS Code, p.title AS Title,
-                   COALESCE(ps.po, '') AS Po,
-                   COALESCE(ps.rif_offerta, '') AS RifOfferta,
-                   ps.valore AS Valore,
-                   COUNT(*) AS Total,
-                   COALESCE(SUM(t.data_fatt IS NOT NULL AND t.stato <> 'emessa'), 0) AS Open,
-                   COALESCE(SUM(t.cls = 'warn'), 0) AS Warn,
-                   COALESCE(SUM(t.cls = 'pre'), 0) AS Pre,
-                   COALESCE(SUM(t.cls = 'incasso'), 0) AS Incasso,
-                   COALESCE(SUM(t.perc), 0) AS PercTotal,
-                   COALESCE(SUM(CASE WHEN t.pagamento = 'Pagata' THEN t.perc ELSE 0 END), 0) AS PercPaid
-            FROM (
-                SELECT project_id, stato, data_fatt, perc, pagamento,
-                       CASE
-                           WHEN pagamento <> 'Pagata' AND data_fatt IS NOT NULL AND gg_saldo IS NOT NULL
-                                AND DATE_ADD(data_fatt, INTERVAL gg_saldo DAY) < CURDATE() THEN 'incasso'
-                           WHEN stato <> 'emessa' AND data_fatt IS NOT NULL
-                                AND data_fatt <= CURDATE() THEN 'warn'
-                           WHEN stato <> 'emessa' AND data_fatt IS NOT NULL
-                                AND CURDATE() >= DATE_SUB(DATE_SUB(data_fatt,
-                                     INTERVAL WEEKDAY(data_fatt) DAY), INTERVAL 7 DAY) THEN 'pre'
-                           ELSE ''
-                       END AS cls
-                FROM sal_rows
-            ) t
-            JOIN projects p ON p.id = t.project_id
-            LEFT JOIN project_sal ps ON ps.project_id = p.id
-            WHERE {ProjectScope}
-            GROUP BY p.id, p.code, p.title, ps.po, ps.rif_offerta, ps.valore
-            HAVING COUNT(*) > 0
-            ORDER BY {ProjectSorting.OrderBy("p")}").ToList();
+        var rows = c.Query<SalSummaryDto>(SummarySql).ToList();
 
         // L'Importo Ordine è un dato economico: chi non ha `sal.economics` riceve Valore
         // null (azzerato QUI, mai lasciato al client). Contatori e percentuali restano

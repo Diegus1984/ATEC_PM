@@ -188,6 +188,8 @@ export interface DdpRowItem {
   material?: string
   treatment?: string
   parentOfficinaItemId?: number | null
+  /** #119 — gemello di `parentOfficinaItemId` sulla DDP Commerciale (tabella `bom_items`). */
+  parentBomItemId?: number | null
   compositionQty?: number | null
 }
 

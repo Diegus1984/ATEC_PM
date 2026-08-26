@@ -721,12 +721,13 @@ public class CodexController : ControllerBase
         }
         else if (req.ChildCatalogId.HasValue)
         {
-            // Verifica che l'articolo catalogo esista
-            int exists = c.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM catalog_items WHERE id=@Id",
-                new { Id = req.ChildCatalogId.Value });
-            if (exists == 0)
-                return BadRequest(ApiResponse<string>.Fail("Articolo catalogo non trovato"));
+            // Chiuso il 25/08/2026: in composizione entrano SOLO codici Codex. Fino a ieri qui
+            // si controllava soltanto che l'articolo di catalogo esistesse — nessuna regola di
+            // gerarchia — quindi bastava chiamare l'API per attaccare qualunque cosa a qualunque
+            // padre. Ora i commerciali sono tutti codificati (201/211/221) e un figlio senza
+            // codice Codex non saprebbe nemmeno in quale DDP finire.
+            return BadRequest(ApiResponse<string>.Fail(
+                "In composizione entrano solo codici Codex: l'articolo di catalogo va prima codificato (201/211/221)."));
         }
 
         int qty = Math.Max(1, req.Quantity);
@@ -859,8 +860,11 @@ public class CodexController : ControllerBase
                         Descr = catalogItem.Description,
                         Id = catalogItem.Id,
                         Source = "catalog",
-                        IsValid = true, // Articoli catalogo sempre ammessi
-                        Error = null
+                        // Dal 25/08/2026 il catalogo è fuori dalle composizioni: l'anteprima lo
+                        // mostra (così si vede QUALE riga del file è da codificare) ma lo segna
+                        // non valido, e l'import lo rifiuta.
+                        IsValid = false,
+                        Error = "Solo codici Codex: articolo da codificare (201/211/221)"
                     });
                 }
                 else
@@ -931,18 +935,17 @@ public class CodexController : ControllerBase
                 }
                 else
                 {
-                    var catalogItem = c.QueryFirstOrDefault<(int Id, string Description)>(
-                        "SELECT id, description FROM catalog_items WHERE code = @Code",
+                    // Il codice non è nel Codex. Dal 25/08/2026 il ripiego a catalogo non c'è
+                    // più: in composizione entrano solo codici Codex. Si distingue comunque il
+                    // caso «esiste ma non è codificato» da «non esiste», perché il primo dice
+                    // all'operatore cosa deve fare (codificarlo) e il secondo no.
+                    int aCatalogo = c.ExecuteScalar<int>(
+                        "SELECT COUNT(*) FROM catalog_items WHERE code = @Code",
                         new { Code = cleanCode }, tx);
 
-                    if (catalogItem.Id > 0)
-                    {
-                        childCatalogId = catalogItem.Id;
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Articolo {item.Code} non trovato a sistema");
-                    }
+                    throw new InvalidOperationException(aCatalogo > 0
+                        ? $"L'articolo {item.Code} è solo a catalogo: va prima codificato (201/211/221)."
+                        : $"Articolo {item.Code} non trovato a sistema");
                 }
 
                 int qty = Math.Max(1, item.Quantity);
@@ -987,8 +990,9 @@ public class CodexController : ControllerBase
     {
         return parentPrefix switch
         {
-            "5" => childPrefix is "1" or "2" or "3" or "4"
-                ? null : "Gruppo meccanico (5xx) può contenere solo articoli 1xx-4xx",
+            // 4xx («Materia prima») fuori dal 25/08/2026 con la famiglia 401 ritirata.
+            "5" => childPrefix is "1" or "2" or "3"
+                ? null : "Gruppo meccanico (5xx) può contenere solo articoli 1xx-3xx",
             "6" => childPrefix is "5"
                 ? null : "Assieme meccanico (6xx) può contenere solo gruppi 5xx",
             "7" => childPrefix is "6"

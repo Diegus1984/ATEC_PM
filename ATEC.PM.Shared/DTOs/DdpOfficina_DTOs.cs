@@ -185,10 +185,14 @@ public class OfficinaImportCompositionRequest
 
     public class OfficinaImportCompositionResult
 {
-    public int Added { get; set; }      // nuove righe inserite
+    public int Added { get; set; }      // nuove righe inserite (totale sulle due DDP)
     public int Updated { get; set; }    // righe esistenti con quantità sommata
     public int Skipped { get; set; }    // figli non importabili (articoli da Catalogo)
     public decimal ParentQuantity { get; set; } = 1;  // moltiplicatore applicato (Qtà del padre in distinta)
+    // #119: i componenti si dividono fra le due distinte, e chi importa deve sapere dove
+    // sono finiti — altrimenti «14 nuove righe» in una griglia che ne mostra 9 sembra un bug.
+    public int AddedOfficina { get; set; }
+    public int AddedCommerciale { get; set; }
 }
 
 /// <summary>

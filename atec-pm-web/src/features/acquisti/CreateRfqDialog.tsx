@@ -46,18 +46,78 @@ export function CreateRfqDialog({
     if (!items || items.length === 0) return
     setSubmitting(true)
     try {
-      const bomItemIds = items.map((i) => i.id)
-      const atecCode = items.find((i) => i.atecCode)?.atecCode || "GENERICO"
+      // Una gara = UN articolo. Prima si prendeva il codice ATEC della PRIMA riga e ci si
+      // infilavano dentro tutte le altre: articoli diversi nella stessa gara, fornitori
+      // invitati che c'entravano con un pezzo solo, e in aggiudicazione la riga di un altro
+      // pezzo veniva riscritta come quella del vincitore. Ora si raggruppa per codice ATEC
+      // e nasce una RDO per gruppo; le righe senza codice restano fuori (vedi sotto).
+      const gruppi = new Map<string, number[]>()
+      const senzaCodice: string[] = []
+      for (const item of items) {
+        const chiave = (item.atecCode || "").replace(/\./g, "").trim()
+        // Senza codice ATEC il server non sa chi invitare: cercherebbe i fornitori con
+        // `WHERE atec_code = 'GENERICO'` e non ne troverebbe nessuno, creando una RDO MUTA
+        // — zero offerte, nessuna mail possibile, e le righe bloccate dentro perché per la
+        // guardia anti-doppione risultano già in gara. Meglio non crearla e dirlo.
+        if (!chiave) {
+          senzaCodice.push(item.partNumber || item.description || `#${item.id}`)
+          continue
+        }
+        const ids = gruppi.get(chiave)
+        if (ids) ids.push(item.id)
+        else gruppi.set(chiave, [item.id])
+      }
 
-      const createdIds = await createPurchaseRfq({
-        atecCode,
-        description,
-        notes,
-        bomItemIds,
-      })
+      if (gruppi.size === 0) {
+        notifyError(
+          "Nessuna riga ha il codice ATEC: senza, non si sa quali fornitori invitare. " +
+            "Assegna il codice dalla colonna «Cod. ATEC» e riprova."
+        )
+        return
+      }
 
-      notifyInfo(`RDO creata con successo! (${createdIds.length} commessa/e)`)
-      onCreated(createdIds)
+      // Un gruppo che fallisce non deve fermare gli altri, e soprattutto non deve far
+      // saltare `onCreated`: senza quello le liste non si aggiornano e le RDO gia create
+      // restano invisibili, mentre al secondo tentativo la guardia anti-doppione le
+      // rifiuta tutte («righe gia in RDO non annullate»). Cosi invece i gruppi riusciti
+      // si vedono e quelli falliti restano ritentabili, perche le loro righe sono libere.
+      const createdIds: number[] = []
+      const falliti: string[] = []
+      for (const [atecCode, bomItemIds] of gruppi) {
+        try {
+          const ids = await createPurchaseRfq({
+            atecCode,
+            description,
+            notes,
+            bomItemIds,
+          })
+          createdIds.push(...ids)
+        } catch (err) {
+          falliti.push(
+            `${atecCode}: ${err instanceof Error ? err.message : String(err)}`
+          )
+        }
+      }
+
+      const escluse = senzaCodice.length
+        ? ` ${senzaCodice.length} righe senza Cod. ATEC NON sono state messe in gara: ${senzaCodice.slice(0, 3).join(", ")}${senzaCodice.length > 3 ? " …" : ""}.`
+        : ""
+      if (createdIds.length > 0) {
+        notifyInfo(
+          (gruppi.size > 1
+            ? `${createdIds.length} RDO create su ${gruppi.size} articoli selezionati.`
+            : `RDO creata con successo! (${createdIds.length} commessa/e)`) + escluse
+        )
+        onCreated(createdIds)
+      }
+      if (falliti.length > 0) {
+        // `escluse` va ripetuto qui: se TUTTI i gruppi falliscono il toast di successo non
+        // esce, e le righe senza Cod. ATEC sparirebbero dalla gara senza dirlo a nessuno.
+        notifyError(
+          `${falliti.length} gare non create: ${falliti.slice(0, 2).join(" · ")}${falliti.length > 2 ? " …" : ""}` +
+            (createdIds.length === 0 ? escluse : "")
+        )
+      }
     } catch (err) {
       notifyError(
         `Errore creazione RDO: ${err instanceof Error ? err.message : String(err)}`

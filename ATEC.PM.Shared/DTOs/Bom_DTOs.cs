@@ -66,6 +66,16 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// </summary>
     public DateTime? DeliveredAt { get; set; }
 
+    /// <summary>
+    /// #119 — «comanda il padre» anche in DDP Commerciale: riga dell'intestazione di gruppo
+    /// (5xx) da cui questo componente è stato importato. Null = riga normale.
+    /// Gemelli di <c>ParentOfficinaItemId</c>/<c>CompositionQty</c> della distinta officina.
+    /// </summary>
+    public int? ParentBomItemId { get; set; }
+
+    /// <summary>Quantità unitaria in composizione: al cambio Qtà del padre il figlio segue con questo passo.</summary>
+    public decimal? CompositionQty { get; set; }
+
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
 

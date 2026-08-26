@@ -88,13 +88,6 @@ export function RfqDetailDialog({
   const rfqIsOpen =
     !!rfqDetail && rfqDetail.status !== "CLOSED" && rfqDetail.status !== "CANCELLED"
 
-  // Prezzo di ripiego per l'aggiudicazione: primo costo di riga valorizzato della
-  // RDO. Uguale per tutte le offerte, quindi calcolato una volta sola.
-  const rfqFallbackUnitCost = React.useMemo(
-    () => rfqDetail?.items.find((it) => (it.unitCost ?? 0) > 0)?.unitCost,
-    [rfqDetail]
-  )
-
   // Il dialog è montato una volta a livello pagina: la data consegna va azzerata
   // al cambio RDO, altrimenti una consegna prevista stantia finisce nell'ordine reale.
   React.useEffect(() => {
@@ -124,6 +117,31 @@ export function RfqDetailDialog({
     onError: (err: Error) => notifyError(err.message),
   })
 
+  /** Contatore che rimonta gli input non controllati (chiave) DOPO un salvataggio
+   *  fallito: senza, il campo continuerebbe a mostrare il valore digitato mentre a
+   *  DB c'è quello vecchio — divergenza invisibile. */
+  const [resetTick, setResetTick] = React.useState(0)
+
+  // 🪤 Base per il PUT completo: NON lo snapshot del render (cache react-query), che fra
+  // un salvataggio e il refetch successivo è stantio — due blur ravvicinati (prezzo, poi
+  // note) farebbero ripartire il secondo dal prezzo VECCHIO della closure, cancellando
+  // quello appena salvato. Qui si tiene l'ultimo stato INVIATO per offerta, così i blur
+  // si compongono qualunque sia la latenza del refetch.
+  const offerBaseRef = React.useRef(
+    new Map<
+      number,
+      {
+        catalogItemId: number | null
+        unitPrice: number | null
+        validUntil: string | null
+        notes: string
+      }
+    >()
+  )
+  React.useEffect(() => {
+    offerBaseRef.current.clear()
+  }, [rfqId])
+
   /**
    * Salvataggio offerta con TUTTI i campi. Il PUT server sovrascrive senza COALESCE:
    * mandare solo il prezzo azzerava `catalogItemId` (l'articolo Danea), e senza quello
@@ -139,16 +157,44 @@ export function RfqDetailDialog({
         validUntil: string | null
         notes: string
       }>
-    ) =>
-      savePurchaseRfqOffer(id, offer.id, {
-        supplierId: offer.supplierId,
-        catalogItemId: offer.catalogItemId,
-        unitPrice: offer.unitPrice,
-        validUntil: offer.validUntil,
+    ) => {
+      const base = offerBaseRef.current.get(offer.id) ?? {
+        catalogItemId: offer.catalogItemId ?? null,
+        unitPrice: offer.unitPrice ?? null,
+        validUntil: offer.validUntil ?? null,
         notes: offer.notes ?? "",
-        ...patch,
-      }),
+      }
+      const merged = { ...base, ...patch }
+      offerBaseRef.current.set(offer.id, merged)
+      return savePurchaseRfqOffer(id, offer.id, {
+        supplierId: offer.supplierId,
+        ...merged,
+      })
+    },
     []
+  )
+
+  /** Salvataggio da onBlur: l'errore NON può restare muto (l'input non controllato
+   *  continuerebbe a mostrare il valore non salvato) — si avvisa, si butta la base
+   *  locale e si rimonta il campo sul dato vero. */
+  const saveOfferDaBlur = React.useCallback(
+    (
+      id: number,
+      offer: PurchaseRfqOfferDto,
+      patch: Parameters<typeof saveOffer>[2]
+    ) => {
+      saveOffer(id, offer, patch)
+        .then(() => refetchRfqDetail())
+        .catch((err) => {
+          offerBaseRef.current.delete(offer.id)
+          notifyError(
+            `Offerta NON salvata: ${err instanceof Error ? err.message : String(err)}`
+          )
+          setResetTick((t) => t + 1)
+          void refetchRfqDetail()
+        })
+    },
+    [saveOffer, refetchRfqDetail]
   )
 
   const handlePickCatalogItem = async (item: CatalogItemListItem) => {
@@ -161,6 +207,9 @@ export function RfqDetailDialog({
         `Articolo ${item.code} collegato all'offerta ${offerPickerTarget.supplierName}`
       )
     } catch (err) {
+      // La base locale ha già l'articolo che il server ha rifiutato: via, o il
+      // prossimo blur lo rispedirebbe.
+      offerBaseRef.current.delete(offerPickerTarget.id)
       notifyError(err instanceof Error ? err.message : String(err))
     } finally {
       setOfferPickerTarget(null)
@@ -168,11 +217,19 @@ export function RfqDetailDialog({
   }
 
   const handleCancelRfq = async (detail: PurchaseRfqDetail) => {
+    // Anche una RDO CHIUSA (aggiudicata) ma senza ordine Danea si può annullare: è la
+    // via d'uscita da un'aggiudicazione sbagliata — prima le righe restavano murate
+    // (occupate dalla gara chiusa, non rimettibili in gara). Con l'ordine generato no:
+    // l'ordine è irreversibile e la RDO gli fa da pezza d'appoggio.
+    const eraAggiudicata = detail.status === "CLOSED"
     const ok = await confirm({
-      title: "Annullare la RDO?",
-      description:
-        `La RDO #${detail.id} passa in Annullata e non sarà più modificabile. ` +
-        "Le righe distinta non vengono toccate: restano da ordinare e potrai rimetterle in gara.",
+      title: eraAggiudicata ? "Annullare la RDO aggiudicata?" : "Annullare la RDO?",
+      description: eraAggiudicata
+        ? `La RDO #${detail.id} è già aggiudicata (senza ordine Danea): annullandola le ` +
+          "righe tornano disponibili per una nuova gara. Prezzo e fornitore scritti " +
+          "sulla distinta restano finché una nuova aggiudicazione non li riscrive."
+        : `La RDO #${detail.id} passa in Annullata e non sarà più modificabile. ` +
+          "Le righe distinta non vengono toccate: restano da ordinare e potrai rimetterle in gara.",
       confirmLabel: "Annulla RDO",
       destructive: true,
     })
@@ -205,19 +262,31 @@ export function RfqDetailDialog({
 
     // Si apre Outlook per OGNI fornitore in gara: se l'email non è in anagrafica
     // il destinatario resta vuoto e lo mette l'ufficio acquisti prima di inviare.
-    const itemsText = detail.items
-      .map(
-        (it) =>
-          `• ${it.description}\n  - Codice Fornitore: ${it.partNumber || "N.D."}\n  - Riferimento ATEC: ${detail.atecCode || "N.D."}\n  - Quantità: ${it.quantity}`
-      )
-      .join("\n\n")
+    //
+    // Il codice va scritto DENTRO il ciclo, non fuori: «Codice Fornitore» deve essere il
+    // codice con cui QUEL fornitore chiama l'articolo (`offer.catalogCode`), non il codice
+    // della nostra riga di distinta. Prima il testo era calcolato una volta sola e mandava
+    // a tutti e tre lo stesso codice — quello di casa nostra, che il fornitore non riconosce.
+    const testoArticoli = (offer: PurchaseRfqOfferDto) =>
+      detail.items
+        .map((it) => {
+          const codiceFornitore = offer.catalogCode?.trim() || it.partNumber || "N.D."
+          return `• ${it.description}\n  - Codice Fornitore: ${codiceFornitore}\n  - Riferimento ATEC: ${detail.atecCode || "N.D."}\n  - Quantità: ${it.quantity}`
+        })
+        .join("\n\n")
 
     // Offerte per cui la mail è stata davvero aperta: solo queste vanno marcate
     // come contattate (una RDO mai partita non deve risultare inviata).
     const opened: PurchaseRfqOfferDto[] = []
+    // 🪤 Il corpo NON è uguale per tutti: `offer.catalogCode` (ripetuto una volta per
+    // riga) e il nome del fornitore cambiano la lunghezza — vicino alla soglia un
+    // fornitore può sforare e un altro no. Chi sfora va NOMINATO, non saltato in
+    // silenzio: la sua offerta non viene marcata e resterebbe «da contattare» senza
+    // che nessuno sappia perché.
+    const troppoLunghe: string[] = []
     for (const offer of detail.offers) {
       const subject = `Richiesta Offerta — Commessa ${detail.projectCode}`
-      const body = `Gentile ${offer.supplierName},\n\nvi chiediamo la vs. migliore offerta per la Commessa ${detail.projectCode}:\n\nArticoli richiesti:\n${itemsText}\n\n${detail.notes ? `Note aggiuntive:\n${detail.notes}\n\n` : ""}In attesa di un vostro riscontro, porgiamo cordiali saluti.\nATEC PM`
+      const body = `Gentile ${offer.supplierName},\n\nvi chiediamo la vs. migliore offerta per la Commessa ${detail.projectCode}:\n\nArticoli richiesti:\n${testoArticoli(offer)}\n\n${detail.notes ? `Note aggiuntive:\n${detail.notes}\n\n` : ""}In attesa di un vostro riscontro, porgiamo cordiali saluti.\nATEC PM`
 
       const to = offer.supplierEmail?.trim()
         ? encodeURIComponent(offer.supplierEmail.trim())
@@ -225,7 +294,10 @@ export function RfqDetailDialog({
       const mailtoUrl = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 
       // Meglio nessuna mail che una mail troncata a metà lista articoli.
-      if (mailtoUrl.length > MAILTO_MAX_URL) continue
+      if (mailtoUrl.length > MAILTO_MAX_URL) {
+        troppoLunghe.push(offer.supplierName)
+        continue
+      }
 
       const position = opened.length
       if (position === 0) window.open(mailtoUrl, "_self")
@@ -233,7 +305,6 @@ export function RfqDetailDialog({
       opened.push(offer)
     }
 
-    // Il corpo è lo stesso per tutti i fornitori: se sfora, sfora per tutti.
     if (opened.length === 0) {
       notifyError(
         "Richiesta troppo lunga per l'apertura automatica di Outlook: Windows la " +
@@ -243,12 +314,33 @@ export function RfqDetailDialog({
       return
     }
 
-    // Registra l'invio nel backend e avanza lo stato a SENT
-    await markPurchaseRfqEmailed(opened.map((o) => o.id))
+    // Registra l'invio nel backend e avanza lo stato a SENT.
+    // Se la registrazione fallisce (VPN caduta, errore server) le mail sono GIÀ aperte
+    // in Outlook: l'utente deve saperlo, o la RDO resta «da inviare» con le mail partite
+    // e un collega la rispedirebbe ai fornitori una seconda volta.
+    try {
+      await markPurchaseRfqEmailed(opened.map((o) => o.id))
+    } catch (err) {
+      notifyError(
+        `Le email sono aperte in Outlook ma la registrazione dell'invio NON è riuscita ` +
+          `(${err instanceof Error ? err.message : String(err)}): la RDO risulta ancora da ` +
+          "inviare. Quando la rete torna, ripremi il pulsante e CHIUDI le finestre di " +
+          "Outlook già inviate senza rispedirle."
+      )
+      return
+    }
 
     onChanged()
     refetchRfqDetail()
 
+    if (troppoLunghe.length > 0) {
+      notifyError(
+        `${troppoLunghe.length} fornitori NON contattati (richiesta troppo lunga per ` +
+          `Outlook): ${troppoLunghe.join(", ")}. Riduci le note della RDO e ripremi ` +
+          "«Ricomponi Email»: le finestre dei fornitori già contattati si possono " +
+          "chiudere senza rispedire."
+      )
+    }
     const missing = opened.filter((o) => !o.supplierEmail?.trim()).length
     notifyInfo(
       missing > 0
@@ -324,8 +416,10 @@ export function RfqDetailDialog({
               ) : (
                 <div className="space-y-3 mt-1">
                   {rfqDetail.offers.map((offer) => {
-                    const effectivePrice = offer.unitPrice ?? rfqFallbackUnitCost
-                    const hasPrice = effectivePrice != null && effectivePrice > 0
+                    // Solo il prezzo VERO dell'offerta abilita l'aggiudicazione: il ripiego
+                    // sul costo di riga rendeva «Scegli Vincitore» attivo su tutte e tre le
+                    // offerte anche senza aver digitato niente, e si aggiudicava a un prezzo
+                    // che nessun fornitore aveva proposto (ora anche il server lo rifiuta).
                     return (
                       <div
                         key={offer.id}
@@ -371,28 +465,99 @@ export function RfqDetailDialog({
                                 {offer.catalogItemId ? "Cambia" : "Collega articolo"}
                               </Button>
                             </div>
+
+                            {/* Il prezzo è UNO per offerta (`purchase_rfq_offers.unit_price`),
+                                quindi sta qui, nell'intestazione del fornitore. Stava dentro
+                                l'elenco righe: con una RDO di N righe comparivano N campi
+                                identici che salvavano tutti sullo stesso valore, e bastava
+                                uscire da uno di quelli rimasti indietro per riscrivere in
+                                silenzio il prezzo appena inserito — quello che poi finisce
+                                nell'ordine Danea vero. */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <Label
+                                htmlFor={`offer-price-${offer.id}`}
+                                className="text-[11px] font-semibold text-muted-foreground uppercase"
+                              >
+                                Prezzo unitario offerto
+                              </Label>
+                              <div className="relative w-32">
+                                <Input
+                                  id={`offer-price-${offer.id}`}
+                                  // 🪤 La chiave NON deve contenere il prezzo: cambierebbe
+                                  // all'atterraggio del refetch e React rimonterebbe l'input
+                                  // MENTRE l'utente ci scrive dentro — testo e focus persi
+                                  // senza onBlur, quindi senza salvataggio. Il valore digitato
+                                  // è già quello salvato (lo scrive questo stesso campo); il
+                                  // riallineamento forzato serve solo dopo un salvataggio
+                                  // FALLITO, ed è il lavoro di resetTick.
+                                  key={`offer-${offer.id}-price-${resetTick}`}
+                                  type="number"
+                                  step="0.01"
+                                  defaultValue={offer.unitPrice ?? ""}
+                                  placeholder="0.00"
+                                  // 🪤 Bloccato all'aggiudicazione, NON alla generazione dell'ordine.
+                                  // Provato e ritirato: lasciandolo aperto su una RDO già chiusa si
+                                  // corregge solo `purchase_rfq_offers.unit_price`, perché il costo
+                                  // sulla riga di distinta lo scrive unicamente SelectWinner, che le
+                                  // RDO chiuse le rifiuta. L'ordine Danea però rilegge il prezzo
+                                  // fresco: sarebbe partito col numero corretto lasciando distinta e
+                                  // Bilancio su quello sbagliato, per sempre e senza dirlo a nessuno.
+                                  // Un'aggiudicazione sbagliata si ripara a monte, non qui.
+                                  disabled={!rfqIsOpen}
+                                  className="h-8 text-xs font-mono bg-background text-right pr-6"
+                                  onBlur={(e) => {
+                                    // 🪤 `<input type="number">` restituisce stringa vuota per
+                                    // QUALUNQUE valore che il browser non sa leggere («12.»,
+                                    // separatore decimale sbagliato, incolla sporco): senza
+                                    // questo controllo il campo interpreterebbe quel vuoto come
+                                    // «togli il prezzo» e cancellerebbe un'offerta valida.
+                                    if (e.target.validity?.badInput) {
+                                      notifyError(
+                                        "Prezzo non leggibile: usa il punto come separatore decimale (es. 12.50)."
+                                      )
+                                      return
+                                    }
+                                    // Campo davvero svuotato = offerta senza prezzo (si toglie
+                                    // un numero messo per sbaglio).
+                                    const testo = e.target.value.trim()
+                                    const val = testo === "" ? null : parseFloat(testo)
+                                    if (val !== null && isNaN(val)) return
+                                    // Confronto con l'ultimo valore INVIATO (base locale),
+                                    // non con la cache: il `?? null` conta — il server toglie
+                                    // le chiavi null dal JSON, quindi un'offerta senza prezzo
+                                    // arriva come undefined e un confronto stretto con null
+                                    // farebbe partire un PUT a vuoto a ogni passaggio di focus.
+                                    const prezzoAttuale =
+                                      offerBaseRef.current.get(offer.id)?.unitPrice ??
+                                      offer.unitPrice ??
+                                      null
+                                    if (val !== prezzoAttuale) {
+                                      saveOfferDaBlur(rfqDetail.id, offer, {
+                                        unitPrice: val,
+                                      })
+                                    }
+                                  }}
+                                />
+                                <span className="absolute right-2 top-2 text-xs text-muted-foreground font-mono">
+                                  €
+                                </span>
+                              </div>
+                            </div>
                           </div>
 
                           {!offer.isWinner && (
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={!hasPrice || !rfqIsOpen}
-                              title={
-                                !rfqIsOpen
-                                  ? "RDO non più aperta"
-                                  : !hasPrice
-                                    ? "Inserisci prima il prezzo dell'offerta"
-                                    : undefined
-                              }
+                              // Niente `disabled` sul prezzo: `hasPrice` legge la cache, che si
+                              // aggiorna solo dopo il salvataggio scatenato dall'onBlur — passando
+                              // dal campo al pulsante il primo clic andava perso e bisognava
+                              // cliccare due volte. A fermare l'aggiudicazione senza prezzo ci
+                              // pensa il server, che ora la rifiuta.
+                              disabled={!rfqIsOpen}
+                              title={!rfqIsOpen ? "RDO non più aperta" : undefined}
                               className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-100 disabled:opacity-50"
                               onClick={async () => {
-                                if (!hasPrice) {
-                                  notifyError(
-                                    "Inserisci prima il prezzo dell'offerta, poi scegli il vincitore."
-                                  )
-                                  return
-                                }
                                 if (
                                   await confirm({
                                     title: "Assegna Vincitore",
@@ -400,15 +565,17 @@ export function RfqDetailDialog({
                                   })
                                 ) {
                                   try {
-                                    if (offer.unitPrice == null && effectivePrice) {
-                                      await saveOffer(rfqDetail.id, offer, {
-                                        unitPrice: effectivePrice,
-                                      })
-                                    }
-                                    await selectPurchaseRfqWinner(rfqDetail.id, offer.id)
+                                    const esito = await selectPurchaseRfqWinner(
+                                      rfqDetail.id,
+                                      offer.id
+                                    )
                                     await refetchRfqDetail()
                                     onChanged()
-                                    notifyInfo(`Offerta aggiudicata a ${offer.supplierName}`)
+                                    notifyInfo(
+                                      esito
+                                        ? `Aggiudicata a ${offer.supplierName}. ${esito}`
+                                        : `Offerta aggiudicata a ${offer.supplierName}`
+                                    )
                                   } catch (err) {
                                     notifyError(
                                       err instanceof Error ? err.message : String(err)
@@ -425,10 +592,9 @@ export function RfqDetailDialog({
                         <div className="space-y-3 pt-2 border-t">
                           <div className="space-y-2">
                             <div className="grid grid-cols-12 gap-3 text-[11px] font-semibold text-muted-foreground uppercase px-1">
-                              <div className="col-span-5">Articolo / Descrizione & Codice</div>
-                              <div className="col-span-1 text-center">Qtà</div>
-                              <div className="col-span-3 text-center">Prezzo Unitario €</div>
-                              <div className="col-span-3 text-center">Data Prev. Consegna</div>
+                              <div className="col-span-6">Articolo / Descrizione & Codice</div>
+                              <div className="col-span-2 text-center">Qtà</div>
+                              <div className="col-span-4 text-center">Data Prev. Consegna</div>
                             </div>
                             <div className="space-y-2">
                               {rfqDetail.items.map((item) => (
@@ -436,7 +602,7 @@ export function RfqDetailDialog({
                                   key={item.id}
                                   className="grid grid-cols-12 gap-3 items-center p-3 border rounded-lg bg-muted/20 text-xs"
                                 >
-                                  <div className="col-span-5 min-w-0">
+                                  <div className="col-span-6 min-w-0">
                                     <div className="font-semibold text-foreground text-xs whitespace-normal break-words">
                                       {item.description}
                                     </div>
@@ -445,39 +611,20 @@ export function RfqDetailDialog({
                                       <span className="text-foreground font-medium">
                                         {item.partNumber || "N.D."}
                                       </span>
-                                    </div>
-                                  </div>
-                                  <div className="col-span-1 text-center font-mono font-bold text-sm text-foreground">
-                                    {item.quantity}
-                                  </div>
-                                  <div className="col-span-3">
-                                    <div className="relative">
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        defaultValue={item.unitCost ?? ""}
-                                        placeholder="0.00"
-                                        className="h-9 text-xs font-mono bg-background text-right pr-6"
-                                        onBlur={(e) => {
-                                          const val = parseFloat(e.target.value)
-                                          if (!isNaN(val)) {
-                                            onUpdateRow({
-                                              projectId: item.projectId,
-                                              rowId: item.bomItemId,
-                                              unitCost: val,
-                                            })
-                                            saveOffer(rfqDetail.id, offer, {
-                                              unitPrice: val,
-                                            }).then(() => refetchRfqDetail())
-                                          }
-                                        }}
-                                      />
-                                      <span className="absolute right-2.5 top-2.5 text-xs text-muted-foreground font-mono">
-                                        €
+                                      {" · "}
+                                      {/* Il codice ATEC per riga: se una gara è mista il server
+                                          rifiuta di aggiudicarla, e da qui si vede subito quale
+                                          riga è l'intrusa invece di doverlo indovinare. */}
+                                      Cod. ATEC:{" "}
+                                      <span className="text-foreground font-medium">
+                                        {item.atecCode || "—"}
                                       </span>
                                     </div>
                                   </div>
-                                  <div className="col-span-3">
+                                  <div className="col-span-2 text-center font-mono font-bold text-sm text-foreground">
+                                    {item.quantity}
+                                  </div>
+                                  <div className="col-span-4">
                                     <DateField
                                       value={item.dateNeeded ? item.dateNeeded.slice(0, 10) : null}
                                       onChange={(val) => {
@@ -503,13 +650,20 @@ export function RfqDetailDialog({
                               Note Offerta / Condizioni Fornitore
                             </Label>
                             <Input
+                              key={`offer-${offer.id}-notes-${resetTick}`}
                               defaultValue={offer.notes ?? ""}
                               placeholder="Tempi di consegna generali, sconti, note..."
                               className="h-9 text-xs mt-1"
                               onBlur={(e) => {
-                                saveOffer(rfqDetail.id, offer, {
-                                  notes: e.target.value,
-                                }).then(() => refetchRfqDetail())
+                                const noteAttuali =
+                                  offerBaseRef.current.get(offer.id)?.notes ??
+                                  offer.notes ??
+                                  ""
+                                if (e.target.value !== noteAttuali) {
+                                  saveOfferDaBlur(rfqDetail.id, offer, {
+                                    notes: e.target.value,
+                                  })
+                                }
                               }}
                             />
                           </div>
@@ -536,7 +690,11 @@ export function RfqDetailDialog({
                 onOpen={onOpenDaneaOrder}
               />
             ) : rfqDetail &&
+              rfqDetail.status !== "CANCELLED" &&
               (rfqDetail.status === "CLOSED" || rfqDetail.offers.some((o) => o.isWinner)) ? (
+              // ^ mai su una ANNULLATA: l'annullo non azzera is_winner (resta come storia
+              //   dell'aggiudicazione), e senza questo controllo il ramo isWinner offrirebbe
+              //   un «Genera Ordine Danea» che il server rifiuta sempre.
               <>
                 <DateField
                   value={expectedDate}
@@ -559,8 +717,17 @@ export function RfqDetailDialog({
               </>
             ) : null}
 
-            {/* Annullamento: solo su RDO ancora aperte (il server rifiuta le chiuse). */}
-            {rfqDetail && rfqIsOpen ? (
+            {/* Annullamento: RDO aperte, più le CHIUSE senza ordine Danea (la via
+                d'uscita da un'aggiudicazione sbagliata — il server rifiuta le altre).
+                Qui contano SOLO i campi di testata (daneaOrderNum/IdDoc), non
+                rfqOrder.exists: quello guarda anche i marcatori di riga (Rif. Danea
+                scritto a mano, stato IO), e una riga ordinata fuori ciclo RDO
+                nasconderebbe proprio la via d'uscita che questo pulsante apre. */}
+            {rfqDetail &&
+            (rfqIsOpen ||
+              (rfqDetail.status === "CLOSED" &&
+                rfqDetail.daneaOrderNum == null &&
+                rfqDetail.daneaOrderIdDoc == null)) ? (
               <Button
                 size="sm"
                 variant="destructive"

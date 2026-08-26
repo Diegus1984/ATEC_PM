@@ -66,11 +66,12 @@ public static class ProtectedConfigHelper
 
     public static void GenerateSecretsFile(string connectionString, string jwtKey)
     {
-        Dictionary<string, string> secrets = new()
-        {
-            ["ConnectionStrings:Default"] = Encrypt(connectionString),
-            ["Jwt:Key"] = Encrypt(jwtKey)
-        };
+        // Si riparte da quello che c'e' gia': nel file possono esserci segreti aggiunti dopo
+        // l'installazione (es. DaneaSync:SmbPassword, messa da deploy\imposta-credenziali-share.ps1).
+        // Riscrivendo il dizionario da zero sparirebbero senza che nessuno se ne accorga.
+        Dictionary<string, string> secrets = ReadRawSecrets();
+        secrets["ConnectionStrings:Default"] = Encrypt(connectionString);
+        secrets["Jwt:Key"] = Encrypt(jwtKey);
 
         string json = JsonSerializer.Serialize(secrets, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(SecretsPath, json, Encoding.UTF8);
@@ -79,6 +80,22 @@ public static class ProtectedConfigHelper
     // ============================================================
     // CARICAMENTO SEGRETI (sovrascrive appsettings.json)
     // ============================================================
+
+    /// <summary>Segreti come stanno sul disco (ancora cifrati); vuoto se il file non c'e'.</summary>
+    private static Dictionary<string, string> ReadRawSecrets()
+    {
+        if (!File.Exists(SecretsPath)) return new Dictionary<string, string>();
+        try
+        {
+            string json = File.ReadAllText(SecretsPath, Encoding.UTF8);
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                   ?? new Dictionary<string, string>();
+        }
+        catch
+        {
+            return new Dictionary<string, string>();
+        }
+    }
 
     public static Dictionary<string, string?> LoadSecrets()
     {

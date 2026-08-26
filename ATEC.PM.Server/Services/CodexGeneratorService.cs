@@ -338,6 +338,9 @@ public class CodexGeneratorService
     {
         // 201/211/221 = famiglie della NUOVA codifica commerciale (ampliamento 21/07/2026):
         // gli articoli nuovi nascono direttamente con queste famiglie dal generatore standard.
+        // 401 «Materia prima» RITIRATA il 25/08/2026: non si generano più codici di quella
+        // famiglia. I 99 articoli 401 già in archivio restano leggibili (nessuno li usava:
+        // zero in composizioni, DDP e catalogo), ma non possono più nascere né entrare in distinta.
         return new List<(string, string)>
         {
             ("101", "Particolari a disegno"),
@@ -345,8 +348,12 @@ public class CodexGeneratorService
             ("211", "Commerciale elettrico"),
             ("221", "Commerciale pneumatico"),
             ("301", "Elemento di fissaggio"),
-            ("401", "Materia prima"),
             ("501", "Gruppo meccanico"),
+            // 511 «Gruppo custom» (25/08/2026): stesse identiche regole del 501 — nasce per
+            // raggruppare fuori dal meccanico (es. una colonnina luminosa fatta di 211) senza
+            // sporcare il 501, che resta dei meccanici. Nessuna regola da aggiungere altrove:
+            // gerarchia e smistamento DDP ragionano sulla prima cifra, e 511 è un «5».
+            ("511", "Gruppo custom"),
             ("601", "Assieme meccanico"),
             ("701", "Layout meccanico")
         };

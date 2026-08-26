@@ -9,6 +9,8 @@ public class DaneaMigrationStatus
     public int NewArticles { get; set; }
     public bool ImagesSourceReachable { get; set; }
     public bool ImagesTargetReachable { get; set; }
+    /// <summary>Perche' le immagini non si copiano (vuoto se si copiano): lo mostra il badge.</summary>
+    public string ImagesError { get; set; } = "";
     public string OldArchive { get; set; } = "";
     public string NewArchive { get; set; } = "";
     /// <summary>Valori distinti per i filtri colonna (stesso payload dello status: un solo round-trip).</summary>
@@ -65,5 +67,9 @@ public class DaneaTransferReport
     public int Skipped { get; set; }
     public int Errors { get; set; }
     public int ImagesCopied { get; set; }
+    /// <summary>Righe allineate nel Catalogo articoli di ATEC PM (specchio) subito dopo il lotto.</summary>
+    public int CatalogAligned { get; set; }
+    /// <summary>Se l'allineamento non e' riuscito: gli articoli SONO passati lo stesso.</summary>
+    public string CatalogWarning { get; set; } = "";
     public List<DaneaTransferResult> Results { get; set; } = new();
 }

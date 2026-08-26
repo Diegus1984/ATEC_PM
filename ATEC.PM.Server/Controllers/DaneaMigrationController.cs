@@ -17,7 +17,13 @@ namespace ATEC.PM.Server.Controllers;
 public class DaneaMigrationController : ControllerBase
 {
     private readonly DaneaMigrationService _svc;
-    public DaneaMigrationController(DaneaMigrationService svc) => _svc = svc;
+    private readonly DaneaSyncService _sync;
+
+    public DaneaMigrationController(DaneaMigrationService svc, DaneaSyncService sync)
+    {
+        _svc = svc;
+        _sync = sync;
+    }
 
     [HttpGet("status")]
     public IActionResult GetStatus()
@@ -72,7 +78,7 @@ public class DaneaMigrationController : ControllerBase
     }
 
     [HttpPost("transfer")]
-    public IActionResult Transfer([FromBody] DaneaTransferRequest req)
+    public async Task<IActionResult> Transfer([FromBody] DaneaTransferRequest req)
     {
         if (req.ArticleIds.Count == 0)
             return Ok(ApiResponse<DaneaTransferReport>.Fail("Nessun articolo selezionato."));
@@ -81,7 +87,33 @@ public class DaneaMigrationController : ControllerBase
                 "Massimo 500 articoli per lotto: dividere la selezione."));
         try
         {
-            return Ok(ApiResponse<DaneaTransferReport>.Ok(_svc.Transfer(req.ArticleIds)));
+            DaneaTransferReport report = _svc.Transfer(req.ArticleIds);
+
+            // Il Catalogo articoli di ATEC PM e' uno SPECCHIO di Danea: finche' non gira il sync
+            // l'articolo appena trasferito resta spento e la pagina non lo mostra, cosi' il
+            // trasferimento sembra fallito anche quando e' andato benissimo (25/08/2026).
+            // Si allineano SOLO le righe di questo lotto, PRIMA di rispondere: quando la finestra
+            // di esito compare, il catalogo e' gia' a posto. Il giro completo resta al sync.
+            // Anche gli "skipped" vanno allineati: erano gia' nell'archivio ma potevano essere
+            // rimasti spenti nello specchio, ed e' proprio il caso che sembra un guasto.
+            var daAllineare = report.Results
+                .Where(r => r.Outcome != "error")
+                .Select(r => r.IdArticolo)
+                .ToList();
+            if (daAllineare.Count > 0)
+            {
+                try
+                {
+                    report.CatalogAligned = await _sync.AllineaArticoli(daAllineare);
+                }
+                catch (Exception ex)
+                {
+                    // Gli articoli SONO passati: un intoppo qui non rende fallito il trasferimento.
+                    report.CatalogWarning =
+                        $"Catalogo articoli non aggiornato ({ex.Message}): usare «Sincronizza Danea».";
+                }
+            }
+            return Ok(ApiResponse<DaneaTransferReport>.Ok(report));
         }
         catch (Exception ex)
         {

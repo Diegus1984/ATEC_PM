@@ -56,8 +56,10 @@ export async function fetchDdpDeliveriesByDay(): Promise<DdpDeliveriesDay[]> {
 }
 
 /**
- * Elenco delle DDP aggiornate negli ultimi N giorni **da altri** e non ancora aperte
- * da chi chiede (#113, #114). È la sorgente della card «DDP Commesse» in Dashboard.
+ * Elenco delle DDP aggiornate negli ultimi N giorni e non ancora aperte da chi chiede
+ * (#113, #114). Dalla #115 comprende **anche i propri aggiornamenti**: il filtro
+ * sull'autore c'era e faceva sembrare la card ferma a chi aveva appena toccato una DDP.
+ * È la sorgente della card «DDP Commesse» in Dashboard.
  */
 export async function fetchDdpUpdatedList(days: number = 7): Promise<DdpUpdatedItem[]> {
   const response = await apiGet<ApiResponse<DdpUpdatedItem[]>>(

@@ -226,7 +226,40 @@ public class DaneaSyncService : BackgroundService
         _log.LogInformation($"[DaneaSync] Clienti: {count} sincronizzati");
     }
 
-    private async Task SyncArticles(FbConnection fb, DbService db)
+    /// <summary>
+    /// Riallinea nello specchio SOLO gli articoli indicati (IDArticolo dell'archivio
+    /// sincronizzato), senza il giro completo e senza spegnere nient'altro.
+    ///
+    /// <para>Serve al trasferimento catalogo Danea: <c>catalog_items</c> e' uno specchio, e
+    /// finche' non gira il sync l'articolo appena trasferito resta spento — la pagina Catalogo
+    /// articoli non lo mostra e il trasferimento sembra fallito anche quando e' andato benissimo
+    /// (25/08/2026). Il giro completo sono ~10.000 righe: qui se ne toccano N, quindi si puo'
+    /// fare prima di rispondere alla richiesta invece di sperare nel giro delle 6 ore.</para>
+    /// </summary>
+    public async Task<int> AllineaArticoli(IReadOnlyCollection<int> idArticoli)
+    {
+        if (idArticoli.Count == 0) return 0;
+
+        string connStr = BuildConnectionString();
+        if (string.IsNullOrEmpty(connStr))
+            throw new InvalidOperationException("DaneaSync:EftFilePath non configurato.");
+
+        using var fb = new FbConnection(connStr);
+        await fb.OpenAsync();
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DbService>();
+        return await UpsertArticoli(fb, db, idArticoli);
+    }
+
+    private Task<int> SyncArticles(FbConnection fb, DbService db) => UpsertArticoli(fb, db, null);
+
+    /// <summary>
+    /// Porta nello specchio gli articoli dell'archivio Danea. Con <paramref name="soloQuestiId"/>
+    /// null e' il giro COMPLETO (spegne tutto e riaccende quello che trova); con una lista tocca
+    /// solo quelle righe. Il mapping delle colonne sta qui una volta sola.
+    /// </summary>
+    private async Task<int> UpsertArticoli(
+        FbConnection fb, DbService db, IReadOnlyCollection<int>? soloQuestiId)
     {
         // Scopri colonne di TArticoli per capire se esiste IDFornitore
         var artCols = (await fb.QueryAsync<string>(@"
@@ -287,6 +320,11 @@ public class DaneaSyncService : BackgroundService
                        ""Produttore"", ""CodBarre"", ""Note"", ""Extra1""
                 FROM ""TArticoli""";
 
+        // Giro mirato: gli id arrivano dal trasferimento, sono interi, nessuna concatenazione
+        // pericolosa (e Firebird non gradisce liste come parametro singolo).
+        if (soloQuestiId != null)
+            artQuery += " WHERE \"IDArticolo\" IN (" + string.Join(",", soloQuestiId) + ")";
+
         var remote = (await fb.QueryAsync(artQuery)).ToList();
 
         using var local = db.Open();
@@ -322,13 +360,19 @@ public class DaneaSyncService : BackgroundService
         // remoto è vuoto non si tocca niente (archivio sbagliato ≠ svuotare lo specchio).
         if (remote.Count == 0)
         {
-            _log.LogWarning("[DaneaSync] Archivio senza articoli: specchio locale NON toccato");
-            ArticlesCount = 0;
-            return;
+            if (soloQuestiId == null)
+            {
+                _log.LogWarning("[DaneaSync] Archivio senza articoli: specchio locale NON toccato");
+                ArticlesCount = 0;
+            }
+            return 0;
         }
         using var artTx = local.BeginTransaction();
-        await local.ExecuteAsync(
-            "UPDATE catalog_items SET is_active = 0 WHERE is_active = 1", transaction: artTx);
+        // Lo svuotamento vale SOLO per il giro completo: in modalita' mirata si allineano le
+        // righe richieste e basta, senza spegnere il resto del catalogo.
+        if (soloQuestiId == null)
+            await local.ExecuteAsync(
+                "UPDATE catalog_items SET is_active = 0 WHERE is_active = 1", transaction: artTx);
 
         int count = 0;
         foreach (var a in remote)
@@ -391,10 +435,17 @@ public class DaneaSyncService : BackgroundService
             count++;
         }
         artTx.Commit();
+        if (soloQuestiId != null)
+        {
+            _log.LogInformation("[DaneaSync] Allineati {Count} articoli mirati (trasferimento catalogo).", count);
+            return count;
+        }
+
         int inactive = await local.QuerySingleAsync<int>(
             "SELECT COUNT(*) FROM catalog_items WHERE is_active = 0");
         ArticlesCount = count;
         _log.LogInformation("[DaneaSync] Articoli: {Count} sincronizzati (specchio: {Inactive} disattivati perché assenti dall'archivio)",
             count, inactive);
+        return count;
     }
 }

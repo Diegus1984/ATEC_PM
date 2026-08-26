@@ -108,7 +108,8 @@ public class DdpDeliveriesDay
 }
 
 // Voce dell'elenco «DDP aggiornate da verificare» della card Gestione Controlli (#114):
-// una per (commessa, tipo distinta) toccata da un collega e non ancora aperta da chi guarda.
+// una per (commessa, tipo distinta) toccata di recente — da un collega o da chi guarda
+// (#115) — e non ancora aperta da chi guarda.
 // Title = nome della commessa (projects.title); UpdatedBy = chi ha fatto l'ultimo intervento
 // ("" quando la modifica non porta la firma: righe storiche o passaggi automatici).
 public class DdpUpdatedItem
