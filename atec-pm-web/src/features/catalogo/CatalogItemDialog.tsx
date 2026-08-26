@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
+import { Link2 } from "lucide-react"
 
 import { MoneyInput } from "@/components/shared/money-input"
 import { Button } from "@/components/ui/button"
@@ -45,11 +46,18 @@ export function CatalogItemDialog({
   itemId,
   onClose,
   onSaved,
+  onAssignAtec,
 }: {
   open: boolean
   itemId: number | "new" | null
   onClose: () => void
   onSaved: () => Promise<void>
+  /**
+   * #122: l'associazione del Codice ATEC anche dalla finestra Modifica, non solo dal
+   * menu a 3 puntini. Il chiamante chiude questo dialog e apre quello di associazione;
+   * assente (permesso mancante o articolo nuovo) = pulsante non mostrato.
+   */
+  onAssignAtec?: () => void
 }) {
   const isNew = itemId === "new"
   const editId = typeof itemId === "number" ? itemId : null
@@ -275,20 +283,28 @@ export function CatalogItemDialog({
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={
-              !form.code.trim() ||
-              !form.description.trim() ||
-              saveMutation.isPending
-            }
-          >
-            {saveMutation.isPending ? "Salvataggio…" : "Salva"}
-          </Button>
+        <DialogFooter className={onAssignAtec && !isNew ? "sm:justify-between" : undefined}>
+          {onAssignAtec && !isNew ? (
+            <Button variant="outline" onClick={onAssignAtec}>
+              <Link2 />
+              Codice ATEC…
+            </Button>
+          ) : null}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Annulla
+            </Button>
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={
+                !form.code.trim() ||
+                !form.description.trim() ||
+                saveMutation.isPending
+              }
+            >
+              {saveMutation.isPending ? "Salvataggio…" : "Salva"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

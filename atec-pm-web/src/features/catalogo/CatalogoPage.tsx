@@ -538,7 +538,26 @@ export function CatalogoPage() {
                             column.align === "right" ? "text-right" : undefined
                           }
                         >
-                          {column.cell(item)}
+                          {column.key === "atecCode" &&
+                          !item.atecCode &&
+                          canMapAtec ? (
+                            // #122: la codifica anche dalla riga, come nel picker DDP —
+                            // il trattino muto obbligava al giro dal menu a 3 puntini.
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              title="Associa (o crea) il codice Codex di questo articolo"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setAtecItem(item)
+                              }}
+                            >
+                              Codifica
+                            </Button>
+                          ) : (
+                            column.cell(item)
+                          )}
                         </TableCell>
                       ))}
                       <TableCell className="text-right">
@@ -612,6 +631,17 @@ export function CatalogoPage() {
           setDialogItem(null)
           await invalidate()
         }}
+        // #122: «Codice ATEC…» anche dalla finestra Modifica — chiude questa e apre
+        // l'associazione sull'articolo aperto (che è per forza una riga della pagina).
+        onAssignAtec={
+          canMapAtec && typeof dialogItem === "number"
+            ? () => {
+                const it = items.find((x) => x.id === dialogItem)
+                setDialogItem(null)
+                if (it) setAtecItem(it)
+              }
+            : undefined
+        }
       />
 
       <CatalogAtecAssignDialog
