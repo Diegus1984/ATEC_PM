@@ -297,9 +297,13 @@ public class CodexGeneratorService
 
             // Inserisci in codex_items. remote_id NULL = non ancora presente sul Codex remoto:
             // il sync lo riaggancerà per codice quando comparirà sul remoto (vedi CodexSyncService).
-            // Famiglie nuove (201/211/221): codice_nuovo = codice fin dalla nascita — invariante
-            // «codice ATEC = codice_nuovo» per mapping Danea / orfani / picker (migrazione v46).
-            bool newFamily = reservation.prefix is "201" or "211" or "221";
+            // OGNI codice nato dal generatore è un codice ATEC: codice_nuovo = codice fin dalla
+            // nascita, per TUTTE le famiglie (#127, 26/08/2026) — invariante «codice ATEC =
+            // codice_nuovo» per mapping Danea / orfani / picker (migrazione v46). Prima valeva
+            // solo per 201/211/221: un 301 appena generato non era associabile a Danea (il
+            // mapping pretende codice_nuovo) né ammesso in distinta (la guardia del picker
+            // blocca i 2xx/3xx senza codice nuovo). I nati PRIMA di oggi senza codice_nuovo
+            // si sistemano a mano con la voce «Codice originale» della ricodifica.
             int newId = conn.ExecuteScalar<int>(@"
                 INSERT INTO codex_items
                 (remote_id, codice, codice_nuovo, descr, code_forn, fornitore, prezzo_forn, iva,
@@ -311,7 +315,7 @@ public class CodexGeneratorService
                 new
                 {
                     Code = reservation.reserved_code,
-                    CodiceNuovo = newFamily ? reservation.reserved_code : null,
+                    CodiceNuovo = reservation.reserved_code,
                     Descr = description,
                     Date = DateTime.Today,
                 }, tx);

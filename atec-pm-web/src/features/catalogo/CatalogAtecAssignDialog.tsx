@@ -36,8 +36,6 @@ import { decodeHtmlEntities } from "@/lib/format"
 import { notifyError, notifyInfo } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 
-/** Famiglie della nuova codifica commerciale: i generici nascono qui. */
-const NEW_FAMILIES = new Set(["201", "211", "221"])
 
 /** Riga distinta (Inbox Acquisti): l'articolo Danea lo risolve il server. */
 export interface AtecAssignBomTarget {
@@ -51,10 +49,11 @@ export interface AtecAssignBomTarget {
  * - dal Catalogo (`item`): associazione diretta dell'articolo;
  * - dalla Inbox Acquisti (`bomTarget`): il server risolve l'articolo dalla riga
  *   distinta (link catalogo o match esatto sul codice Danea).
- * Cerca tra le righe Codex con codice ATEC (ricodificate o nate nelle famiglie
- * nuove) oppure CREA un codice generico al volo (famiglia → prenotazione →
- * descrizione → crea e associa), senza uscire dal dialog. Riassegnazione solo
- * con conferma esplicita; scrittura prima su Danea, poi sullo specchio locale.
+ * Cerca tra le righe Codex con codice ATEC (ricodificate o nate nuove) oppure
+ * CREA un codice al volo in QUALUNQUE famiglia del generatore (#127: famiglia →
+ * prenotazione → descrizione → crea e associa), senza uscire dal dialog.
+ * Riassegnazione solo con conferma esplicita; scrittura prima su Danea, poi
+ * sullo specchio locale.
  */
 export function CatalogAtecAssignDialog({
   item,
@@ -125,14 +124,15 @@ export function CatalogAtecAssignDialog({
     enabled: open && searchTerm.length >= 2,
   })
 
+  // TUTTE le famiglie del generatore (#127): la lista la governa il server
+  // (/api/codex/prefixes — 401 ritirata già esclusa lì). Il codice nato qui ha
+  // codice_nuovo = codice per qualunque famiglia, quindi l'associazione funziona.
   const prefixesQuery = useQuery({
     queryKey: ["codex-prefixes"],
     queryFn: fetchCodexPrefixes,
     enabled: open,
   })
-  const families = (prefixesQuery.data ?? []).filter((p) =>
-    NEW_FAMILIES.has(p.codice)
-  )
+  const families = prefixesQuery.data ?? []
 
   const assignMutation = useMutation({
     mutationFn: ({
@@ -189,13 +189,13 @@ export function CatalogAtecAssignDialog({
     },
   })
 
-  // Crea l'articolo Codex generico (conferma prenotazione) e associa subito.
+  // Crea l'articolo Codex (conferma prenotazione) e associa subito.
   const createAndAssignMutation = useMutation({
     mutationFn: async () => {
       setError(null)
       if (!reserved) throw new Error("Nessun codice prenotato")
       const descr = genDescription.trim()
-      if (!descr) throw new Error("Inserire la descrizione del codice generico")
+      if (!descr) throw new Error("Inserire la descrizione del nuovo codice")
       const created = await confirmCodexReservation(
         reserved.reservationId,
         descr
@@ -273,8 +273,8 @@ export function CatalogAtecAssignDialog({
                   ) : results.length === 0 ? (
                     <TableRow>
                       <TableCell className="h-14 text-center text-sm text-muted-foreground">
-                        Nessun codice ATEC corrisponde: crealo qui sotto come
-                        generico, oppure ricodifica la riga dal Codex.
+                        Nessun codice ATEC corrisponde: crealo qui sotto nella
+                        famiglia giusta, oppure ricodifica la riga dal Codex.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -322,12 +322,13 @@ export function CatalogAtecAssignDialog({
             </GridScroller>
           ) : null}
 
-          {/* Codice generico al volo: famiglia → prenotazione → descrizione → crea e associa. */}
+          {/* Codice nuovo al volo (#127, tutte le famiglie): famiglia → prenotazione →
+              descrizione → crea e associa. */}
           <div className="rounded-md border p-3">
             {reserved === null ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  Il codice non esiste ancora? Nuovo generico:
+                  Il codice non esiste ancora? Crealo nuovo:
                 </span>
                 {families.map((f) => (
                   <Button
@@ -355,7 +356,7 @@ export function CatalogAtecAssignDialog({
                   </span>
                 </p>
                 <div className="space-y-1">
-                  <Label htmlFor="gen-descr">Descrizione del codice generico</Label>
+                  <Label htmlFor="gen-descr">Descrizione del nuovo codice</Label>
                   <Input
                     id="gen-descr"
                     value={genDescription}
