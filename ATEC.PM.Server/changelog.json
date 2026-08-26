@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1710",
+                     "data":  "2026-08-26T17:10:54",
+                     "hash":  "253d9a77b3f448dfc783062f895d1c299049cbea",
+                     "modifiche":  [
+                                       "Ricodifica Codex: tutte le famiglie anche nel dialogo e nell\u0027assegnazione massiva"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1657",
                      "data":  "2026-08-26T16:58:15",
                      "hash":  "8ada79181e9fc252e5492bfaed2a2874c2c23e71",
@@ -22,8 +30,8 @@
                      "data":  "2026-08-26T15:27:49",
                      "hash":  "85987c60779085148cbae6c5a271a97cac364200",
                      "modifiche":  [
-                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÂ¹ il padre orfano in Officina",
-                                       "Codex: codifica rapida dalla griglia e voce Ã‚Â«Codice originaleÃ‚Â» nella ricodifica"
+                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã‚Â¹ il padre orfano in Officina",
+                                       "Codex: codifica rapida dalla griglia e voce Ãƒâ€šÃ‚Â«Codice originaleÃƒâ€šÃ‚Â» nella ricodifica"
                                    ]
                  },
                  {
