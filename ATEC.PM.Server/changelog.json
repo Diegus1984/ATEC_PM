@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1419",
+                     "data":  "2026-08-26T14:19:31",
+                     "hash":  "78f24b6980d31b9c6bd099019f3d5614e4fc8956",
+                     "modifiche":  [
+                                       "Picker unico delle due DDP: tutte le famiglie, smistamento con conferma"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1232",
                      "data":  "2026-08-26T12:32:56",
                      "hash":  "d2deb282319fc3e38aff3ddfb2a73eb50f5c9385",
