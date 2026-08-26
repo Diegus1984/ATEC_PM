@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1232",
+                     "data":  "2026-08-26T12:32:56",
+                     "hash":  "d2deb282319fc3e38aff3ddfb2a73eb50f5c9385",
+                     "modifiche":  [
+                                       "Changelog versioni spostata sotto Supporto"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1225",
                      "data":  "2026-08-26T12:25:57",
                      "hash":  "9f33589c0296b679c60a52a60c32ba9e8fa7c2a8",
