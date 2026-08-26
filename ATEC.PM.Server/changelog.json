@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-2134",
+                     "data":  "2026-08-26T21:35:18",
+                     "hash":  "476df9c20b7e868ef027c2541b7270c7536b6f6f",
+                     "modifiche":  [
+                                       "#128: nel picker DDP si cerca (e si sceglie) per codice articolo/produttore"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1710",
                      "data":  "2026-08-26T17:10:54",
                      "hash":  "253d9a77b3f448dfc783062f895d1c299049cbea",
@@ -30,8 +38,8 @@
                      "data":  "2026-08-26T15:27:49",
                      "hash":  "85987c60779085148cbae6c5a271a97cac364200",
                      "modifiche":  [
-                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã‚Â¹ il padre orfano in Officina",
-                                       "Codex: codifica rapida dalla griglia e voce Ãƒâ€šÃ‚Â«Codice originaleÃƒâ€šÃ‚Â» nella ricodifica"
+                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¹ il padre orfano in Officina",
+                                       "Codex: codifica rapida dalla griglia e voce ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«Codice originaleÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â» nella ricodifica"
                                    ]
                  },
                  {
