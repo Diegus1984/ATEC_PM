@@ -24,13 +24,14 @@ export interface SalCashAmount {
   conIva: number
 }
 
-/** I 5 totali del Cash Flow SAL (Ordini / Incassate / Emesse / da Fatturare / Avere). */
+/** I 5 totali del Cash Flow SAL (Ordini / Incassate / Emesse / da Fatturare / Avere) + Totale Emesso cumulativo. */
 export interface SalCashFlowTotals {
   ordini: SalCashAmount
   incassate: SalCashAmount
   emesse: SalCashAmount
   daFatturare: SalCashAmount
   avere: SalCashAmount
+  totaleEmesso: SalCashAmount
 }
 
 /** Punto mensile della serie del grafico Analisi (barre impilate + linea prev). */
@@ -166,6 +167,10 @@ export function cashFlowTotals(data: SalEconomics): SalCashFlowTotals {
     avere: {
       netto: bucketTotals.em.netto + bucketTotals.daf.netto,
       conIva: bucketTotals.em.conIva + bucketTotals.daf.conIva,
+    },
+    totaleEmesso: {
+      netto: bucketTotals.inc.netto + bucketTotals.em.netto,
+      conIva: bucketTotals.inc.conIva + bucketTotals.em.conIva,
     },
   }
 }

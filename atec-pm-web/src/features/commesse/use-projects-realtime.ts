@@ -20,6 +20,10 @@ const PROJECT_LIST_QUERY_KEYS: readonly (readonly unknown[])[] = [
   ["checklist", "lookups", "projects"], // Check list (barra laterale + combo)
   ["checklist", "board"], // Check list (tabelle per commessa)
   ["sal-summary"], // sidebar SAL
+  // Cash Flow / Analisi SAL (#126): il perimetro è l'insieme delle commesse ATTIVE,
+  // quindi un cambio di stato commessa deve rinfrescare anche i totali economici
+  // (le mutazioni SAL vere passano già da GlobalSalChanged).
+  ["sal", "economics"],
   ["milestones-summary"], // sidebar Milestones
   ["dashboard"], // riquadro commesse in home
   ["dashboard-folders"], // cartelle della home (anche la spunta «In dashboard» passa di qui)

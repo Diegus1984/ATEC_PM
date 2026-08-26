@@ -19,12 +19,13 @@ import {
 // Cash Flow SAL (Fase 5 v10): 5 totali globali su tutte le commesse ATTIVE,
 // ciascuno Netto e Con IVA. Dati da GET /api/sal/economics (solo PM/ADMIN,
 // il server risponde 403 agli altri ruoli).
+// Aggiornamento real-time gestito da SalPage tramite SignalR (GlobalSalChanged).
 
 const CARDS: {
   key: keyof SalCashFlowTotals
   title: string
   accent: string
-  note?: string
+  note?: string | ((totals: SalCashFlowTotals) => string)
 }[] = [
   {
     key: "ordini",
@@ -38,8 +39,9 @@ const CARDS: {
   },
   {
     key: "emesse",
-    title: "Totale Fatture Emesse",
+    title: "Fatture Emesse (Attesa Incasso)",
     accent: "border-l-amber-500",
+    note: (totals) => `Totale emesso ad oggi: ${euro(totals.totaleEmesso.netto)} (incluse incassate)`,
   },
   {
     key: "daFatturare",
@@ -50,7 +52,7 @@ const CARDS: {
     key: "avere",
     title: "Totale Avere",
     accent: "border-l-primary",
-    note: "Corrisponde a Totale Fatture Emesse + Totale da Fatturare.",
+    note: "Corrisponde a Fatture in attesa + Totale da Fatturare.",
   },
 ]
 
@@ -58,8 +60,9 @@ const CARDS: {
 function printCashFlow(totals: SalCashFlowTotals): void {
   const body = CARDS.map((c) => {
     const v = totals[c.key]
-    const note = c.note
-      ? `<div style="font-size:9px;color:#666">${c.note}</div>`
+    const noteText = typeof c.note === "function" ? c.note(totals) : c.note
+    const note = noteText
+      ? `<div style="font-size:9px;color:#666">${noteText}</div>`
       : ""
     return (
       `<tr><td>${c.title}${note}</td>` +
@@ -101,8 +104,6 @@ export function SalCashFlowView() {
   const query = useQuery({
     queryKey: ["sal", "economics"],
     queryFn: fetchSalEconomics,
-    // Vista aggregata cross-commessa: refresh automatico come il Prospetto SAL.
-    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   })
 
@@ -156,6 +157,7 @@ export function SalCashFlowView() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {CARDS.map((c) => {
           const v = totals[c.key]
+          const noteText = typeof c.note === "function" ? c.note(totals) : c.note
           return (
             <Card key={c.key} size="sm" className={cn("border-l-4", c.accent)}>
               <CardHeader className="pb-0">
@@ -174,9 +176,9 @@ export function SalCashFlowView() {
                     {euro(v.conIva)}
                   </span>
                 </div>
-                {c.note && (
+                {noteText && (
                   <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                    {c.note}
+                    {noteText}
                   </p>
                 )}
               </CardContent>

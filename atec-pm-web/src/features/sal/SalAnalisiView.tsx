@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Printer, RefreshCw } from "lucide-react"
+import { Calendar, ChevronLeft, ChevronRight, Printer, RefreshCw } from "lucide-react"
 import {
   Bar,
   CartesianGrid,
@@ -200,8 +200,6 @@ export function SalAnalisiView() {
   const query = useQuery({
     queryKey: ["sal", "economics"],
     queryFn: fetchSalEconomics,
-    // Vista aggregata cross-commessa: refresh automatico come il Prospetto SAL.
-    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   })
 
@@ -209,8 +207,38 @@ export function SalAnalisiView() {
   const { series, truncated } = React.useMemo(() => monthlySeries(rows ?? []), [rows])
   const todayIso = React.useMemo(() => dateToIso(new Date()), [])
 
-  // Ref sul wrapper del ChartContainer: serve alla stampa per clonare l'SVG renderizzato.
+  // Ref sul contenitore scrollabile e sul wrapper del ChartContainer
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<HTMLDivElement>(null)
+
+  const scrollToMonth = React.useCallback(
+    (targetYm?: string, smooth = true) => {
+      const container = scrollContainerRef.current
+      if (!container || series.length === 0) return
+      const ym = targetYm ?? todayIso.slice(0, 7)
+      let idx = series.findIndex((p) => p.ym === ym)
+      if (idx === -1) {
+        idx = series.findIndex((p) => p.ym > ym)
+        if (idx === -1) idx = series.length - 1
+      }
+      const monthOffset = idx * MONTH_MIN_WIDTH + 72
+      const targetScroll = Math.max(
+        0,
+        monthOffset - container.clientWidth / 2 + MONTH_MIN_WIDTH / 2
+      )
+      container.scrollTo({ left: targetScroll, behavior: smooth ? "smooth" : "auto" })
+    },
+    [series, todayIso]
+  )
+
+  const hasAutoScrolledRef = React.useRef(false)
+  React.useEffect(() => {
+    if (series.length > 0 && !hasAutoScrolledRef.current) {
+      hasAutoScrolledRef.current = true
+      const t = setTimeout(() => scrollToMonth(undefined, false), 60)
+      return () => clearTimeout(t)
+    }
+  }, [series, scrollToMonth])
 
   // Righe con importo ma senza Ipotesi di Fatturazione: non compaiono tra le
   // barre del grafico → nota informativa sotto la legenda.
@@ -364,7 +392,44 @@ export function SalAnalisiView() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground mr-1">Centra grafico:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2.5"
+            onClick={() => scrollToMonth(todayIso.slice(0, 7))}
+            title="Centra sul mese corrente"
+          >
+            <Calendar className="size-3.5 mr-1" />
+            Mese Corrente
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => scrollContainerRef.current?.scrollTo({ left: 0, behavior: "smooth" })}
+            title="Vai al primo mese della serie"
+          >
+            <ChevronLeft className="size-3.5 mr-0.5" />
+            Inizio
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => {
+              const c = scrollContainerRef.current
+              if (c) c.scrollTo({ left: c.scrollWidth, behavior: "smooth" })
+            }}
+            title="Vai all'ultimo mese della serie"
+          >
+            Fine
+            <ChevronRight className="size-3.5 ml-0.5" />
+          </Button>
+        </div>
+
         <Button
           variant="outline"
           size="sm"
@@ -387,7 +452,7 @@ export function SalAnalisiView() {
             Serie limitata agli ultimi 600 mesi: i mesi più vecchi non sono mostrati.
           </p>
         )}
-        <div className="overflow-x-auto">
+        <div ref={scrollContainerRef} className="overflow-x-auto">
           <div
             ref={chartRef}
             style={{
