@@ -374,13 +374,26 @@ ripristina come gli altri. Tre cose da sapere prima di farlo:
 ### 7.4 La copia FUORI dal server (indispensabile)
 
 Un pacchetto che resta sul server non protegge da niente: se la macchina muore, muore
-con lei. Due modi, si possono combinare:
+con lei.
+
+> ✅ **FATTO il 26/08/2026 — i pacchetti nascono direttamente su Server-maga.**
+> In produzione `Backup:PackagePath` punta a `\\Server-maga\d\ATEC_Backups\Pacchetti`:
+> ogni backup completo creato dal gestionale finisce già fuori dal server, e la card
+> Backup lo elenca/scarica/ripristina da lì come prima. Il servizio apre da solo la
+> sessione SMB autenticata (stesso `NetworkShareConnector` della cartella immagini
+> Danea, credenziali `DaneaSync:SmbUser/SmbPassword`; per un NAS DIVERSO da Server-maga
+> impostare `Backup:ShareUser`/`Backup:SharePassword` con lo stesso meccanismo).
+> Se la share non risponde, il backup si RIFIUTA con un errore parlante invece di
+> scrivere chissà dove. Copia di sicurezza della config in
+> `appsettings.json.prima-nas-20260826`.
+
+Due modi, si possono combinare:
 
 - **Scarica** il pacchetto dal gestionale e mettilo su NAS/disco esterno
-- **Punta i pacchetti direttamente su una cartella di rete**: in
-  `C:\ATEC_PM\Server\appsettings.json` aggiungi
-  `"Backup": { "Path": "C:\\ATEC_Backups", "AutoHour": 2, "PackagePath": "\\\\NAS\\atec\\backup-pm" }`
-  e riavvia il servizio (l'account `atec` deve avere accesso in scrittura a quella cartella)
+- **Punta i pacchetti direttamente su una cartella di rete** (è la configurazione
+  attuale, vedi riquadro): in `C:\ATEC_PM\Server\appsettings.json`
+  `"Backup": { "Path": "C:\\ATEC_Backups", "AutoHour": 2, "PackagePath": "\\\\Server-maga\\d\\ATEC_Backups\\Pacchetti" }`
+  e riavvia il servizio
 
 In alternativa, da un altro PC, una copia periodica pianificata:
 

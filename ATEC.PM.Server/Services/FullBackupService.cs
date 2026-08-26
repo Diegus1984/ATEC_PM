@@ -27,6 +27,7 @@ public class FullBackupService
     private readonly ILogger<FullBackupService> _log;
     private readonly AnagraficheCache _cache;
     private readonly FeatureAccessService _access;
+    private readonly NetworkShareConnector _share;
     private readonly ConcurrentDictionary<string, BackupJob> _jobs = new();
 
     // Comprimere di nuovo ciò che è già compresso (foto, video, PDF-immagine, archivi)
@@ -39,13 +40,14 @@ public class FullBackupService
     };
 
     public FullBackupService(DbService db, IConfiguration config, ILogger<FullBackupService> log,
-        AnagraficheCache cache, FeatureAccessService access)
+        AnagraficheCache cache, FeatureAccessService access, NetworkShareConnector share)
     {
         _db = db;
         _config = config;
         _log = log;
         _cache = cache;
         _access = access;
+        _share = share;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -101,6 +103,26 @@ public class FullBackupService
     {
         string dir = _config["Backup:PackagePath"]
             ?? Path.Combine(_config["Backup:Path"] ?? @"C:\ATEC_Backups", "Pacchetti");
+        // Destinazione UNC (NAS): il servizio gira come account LOCALE e una share in
+        // workgroup risponde «accesso negato» senza sessione autenticata — stessa storia
+        // della cartella immagini Danea. Credenziali dedicate Backup:ShareUser/SharePassword
+        // se un giorno il NAS sarà un'altra macchina; oggi si ripiega su quelle della share
+        // Danea (stesso file server). Se la sessione non si apre si RIFIUTA con l'errore
+        // parlante del connettore: proseguire scriverebbe il pacchetto chissà dove o
+        // fallirebbe a metà con un «accesso negato» che non spiega niente.
+        if (NetworkShareConnector.ShareRoot(dir) != null)
+        {
+            string? utente = _config["Backup:ShareUser"];
+            string? password = _config["Backup:SharePassword"];
+            if (string.IsNullOrWhiteSpace(utente))
+            {
+                utente = _config["DaneaSync:SmbUser"];
+                password = _config["DaneaSync:SmbPassword"];
+            }
+            string? errore = _share.Connect(dir, utente, password);
+            if (errore != null)
+                throw new InvalidOperationException(errore);
+        }
         Directory.CreateDirectory(dir);
         return dir;
     }

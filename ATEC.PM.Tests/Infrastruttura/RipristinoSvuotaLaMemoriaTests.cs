@@ -35,7 +35,8 @@ public class RipristinoSvuotaLaMemoriaTests
         IConfiguration cfg = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?> { ["ConnectionStrings:Default"] = db.ConnectionString }).Build();
 
-        return new FullBackupService(db.Servizio(), cfg, NullLogger<FullBackupService>.Instance, cache, access);
+        return new FullBackupService(db.Servizio(), cfg, NullLogger<FullBackupService>.Instance, cache, access,
+            new NetworkShareConnector(NullLogger<NetworkShareConnector>.Instance));
     }
 
     [FactRichiedeMySql]
