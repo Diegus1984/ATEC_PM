@@ -224,6 +224,75 @@ function Invoke-TestAutomatici {
     Set-Content -LiteralPath $fileEsito -Value $impronta -Encoding ascii
 }
 
+function Update-Changelog {
+    <#
+      Arricchisce ATEC.PM.Server\changelog.json con i commit dall'ultima voce: è la
+      fonte della pagina «Changelog versioni» (chiave nav.changelog, di default solo
+      Admin). Va chiamata DOPO la build del client — il build id si legge da
+      wwwroot\version.json — e PRIMA di dotnet publish, che spedisce il file insieme
+      alle DLL. Un errore qui NON ferma il deploy: il changelog è cronaca, non funzione.
+    #>
+    param([string]$Radice)
+    try {
+        $percorso    = Join-Path $Radice 'ATEC.PM.Server\changelog.json'
+        $versionFile = Join-Path $Radice 'ATEC.PM.Server\wwwroot\version.json'
+
+        $build = ''
+        if (Test-Path $versionFile) {
+            $v = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
+            if ($v -and $v.build) { $build = [string]$v.build }
+        }
+        if (-not $build) {
+            Write-Host '[Changelog] version.json senza build id: voce saltata.' -ForegroundColor Yellow
+            return
+        }
+
+        $voci = @()
+        if (Test-Path $percorso) {
+            $doc = Get-Content -LiteralPath $percorso -Raw | ConvertFrom-Json
+            if ($doc -and $doc.voci) { $voci = @($doc.voci) }
+        }
+        $ultimoHash = ''
+        if ($voci.Count -gt 0 -and $voci[0].hash) { $ultimoHash = [string]$voci[0].hash }
+
+        # I messaggi dei commit sono UTF-8: senza questo, gli accenti arrivano rotti
+        # (PowerShell 5.1 decodifica l'output dei comandi esterni con la codepage OEM).
+        $vecchiaEnc = [Console]::OutputEncoding
+        try {
+            [Console]::OutputEncoding = [Text.Encoding]::UTF8
+            # Solo la prima riga di ogni commit, niente merge: è la riga "da changelog".
+            # Prima voce in assoluto: gli ultimi 15 commit come storia di partenza.
+            $intervallo = if ($ultimoHash) { "$ultimoHash..HEAD" } else { '-15' }
+            $modifiche = @(& git -C $Radice log $intervallo --no-merges --format='%s')
+            if ($LASTEXITCODE -ne 0) { throw "git log fallito su '$intervallo'" }
+            $head = [string](& git -C $Radice rev-parse HEAD)
+            if ($LASTEXITCODE -ne 0) { throw 'git rev-parse HEAD fallito' }
+        }
+        finally { [Console]::OutputEncoding = $vecchiaEnc }
+
+        $modifiche = @($modifiche | Where-Object { $_ -and $_.Trim() })
+        if ($modifiche.Count -eq 0) {
+            Write-Host '[Changelog] Nessun commit nuovo dall''ultima voce: niente da registrare.' -ForegroundColor DarkGray
+            return
+        }
+
+        $nuova = [pscustomobject]@{
+            build     = $build
+            data      = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+            hash      = $head.Trim()
+            modifiche = $modifiche
+        }
+        $tutte = @($nuova) + $voci
+        $json = ConvertTo-Json @{ voci = $tutte } -Depth 6
+        # UTF-8 SENZA BOM: il file lo rilegge System.Text.Json sul server.
+        [IO.File]::WriteAllText($percorso, $json, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host ("[Changelog] Registrata la build {0} ({1} modifiche)." -f $build, $modifiche.Count) -ForegroundColor Cyan
+    }
+    catch {
+        Write-Host ("[Changelog] Aggiornamento saltato: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
 function Publish-Server {
     <#
       Compila client web + server e lascia il risultato in deploy\out\server.
@@ -299,6 +368,10 @@ function Publish-Server {
     if ($LASTEXITCODE -ge 8) { throw "Copia dist -> wwwroot fallita (robocopy $LASTEXITCODE)." }
 
     Add-Tappa 'copia in wwwroot'
+
+    # Changelog versioni: si arricchisce QUI — dopo la build del client (per il build id)
+    # e prima del publish, che lo spedisce insieme alle DLL.
+    Update-Changelog -Radice $radice
 
     Write-Host '[3/6] Pubblico il server (win-x64 self-contained)...' -ForegroundColor Cyan
     if (Test-Path $outDir) { Remove-Item $outDir -Recurse -Force }

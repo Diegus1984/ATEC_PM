@@ -45,6 +45,7 @@ import { DdpAggregationsPage } from "@/features/admin/ddp/DdpAggregationsPage"
 import { DdpConfigPage } from "@/features/admin/ddp/DdpConfigPage"
 import { ProjectTemplatesPage } from "@/features/admin/templates/ProjectTemplatesPage"
 import { DigestEmailPage } from "@/features/admin/digest/DigestEmailPage"
+import { ChangelogPage } from "@/features/admin/changelog/ChangelogPage"
 import { TimesheetPage } from "@/features/timesheet/TimesheetPage"
 import { UtentiPage } from "@/features/utenti/UtentiPage"
 import ScadenzePage from "@/features/scadenze/ScadenzePage"
@@ -80,6 +81,7 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   backup: <BackupPage />,
   "template-commesse": <ProjectTemplatesPage />,
   "digest-email": <DigestEmailPage />,
+  changelog: <ChangelogPage />,
   clienti: <ClientiPage />,
   fornitori: <FornitoriPage />,
   catalogo: <CatalogoPage />,

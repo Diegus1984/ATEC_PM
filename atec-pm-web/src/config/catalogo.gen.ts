@@ -40,6 +40,7 @@ export type ChiaveCatalogo =
   | "nav.bug_reports"
   | "nav.cat_preventivi"
   | "nav.catalogo"
+  | "nav.changelog"
   | "nav.checklist"
   | "nav.clienti"
   | "nav.codex"
@@ -590,6 +591,11 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
         "kind": "voce",
         "chiave": "nav.digest_email",
         "label": "Digest Email"
+      },
+      {
+        "kind": "voce",
+        "chiave": "nav.changelog",
+        "label": "Changelog versioni"
       }
     ]
   },
@@ -658,6 +664,7 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "nav.bug_reports",
   "nav.cat_preventivi",
   "nav.catalogo",
+  "nav.changelog",
   "nav.checklist",
   "nav.clienti",
   "nav.codex",

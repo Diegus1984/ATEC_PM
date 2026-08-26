@@ -1,0 +1,26 @@
+{
+    "voci":  [
+                 {
+                     "build":  "20260826-1202",
+                     "data":  "2026-08-26T12:11:45",
+                     "hash":  "1332b72a41f3a4ffb00e8f9ea3db398ae03d7f67",
+                     "modifiche":  [
+                                       "#122: associazione Codice ATEC anche dalla riga e dalla finestra Modifica",
+                                       "Composizione Codex: colonne commerciali sul Catalogo + fix menu Colonne",
+                                       "Picker DDP: vista Catalogo + colonna Cod. ATEC + menu Colonne",
+                                       "DDP commerciale: il picker aggiunge SOLO codici ATEC (Codex)",
+                                       "Composizione Codex: rinomina descrizione del composito",
+                                       "Composizione Codex a tutta altezza",
+                                       "#121: la chat carica i partecipanti dal lookup aperto, non da quello MoM",
+                                       "Il notturno crea il pacchetto completo; pulizia a tempo dei backup vecchi",
+                                       "Selezione multipla e cancellazione in blocco nelle due griglie dei backup",
+                                       "Destinazione dei pacchetti di backup configurabile dalla pagina Backup",
+                                       "Pacchetti di backup direttamente sul NAS (Server-maga)",
+                                       "Lavori 21-26/08: split DDP #119, famiglie Codex, immagini Danea, ciclo RDO blindato",
+                                       "I due rigagnoli: costo orario fuori dalla Trasferta, mail di troppo fuori dal piano RDO",
+                                       "Le altre quattro tendine: catalogo, fornitori, reparti, dipendenti",
+                                       "Dashboard commessa dietro nav.commesse: i soldi uscivano dalla porta di servizio"
+                                   ]
+                 }
+             ]
+}

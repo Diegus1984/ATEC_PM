@@ -29,6 +29,9 @@
 	</ItemGroup>
 	<ItemGroup>
 		<None Include="Firebird\**\*" CopyToOutputDirectory="PreserveNewest" />
+		<!-- Changelog delle versioni: lo aggiorna aggiorna-server.ps1 a ogni deploy
+		     (voci dai commit git), lo serve ChangelogController dietro nav.changelog. -->
+		<None Include="changelog.json" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<!-- Publish client React (atec-pm-web) in wwwroot — come ATEC Risorse con Blazor.

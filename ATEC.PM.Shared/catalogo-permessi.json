@@ -214,7 +214,8 @@
         { "kind": "voce", "chiave": "nav.ddp_aggregazioni", "label": "Aggregazioni DDP" },
         { "kind": "voce", "chiave": "nav.backup", "label": "Backup DB" },
         { "kind": "voce", "chiave": "nav.project_templates", "label": "Template Commesse" },
-        { "kind": "voce", "chiave": "nav.digest_email", "label": "Digest Email" }
+        { "kind": "voce", "chiave": "nav.digest_email", "label": "Digest Email" },
+        { "kind": "voce", "chiave": "nav.changelog", "label": "Changelog versioni" }
       ]
     },
     {
