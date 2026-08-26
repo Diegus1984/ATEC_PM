@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Link2, Plus } from "lucide-react"
+import { ChevronDown, ChevronRight, Link2, Plus } from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -44,6 +44,7 @@ import {
 import type {
   CatalogItemListItem,
   CodexListItem,
+  CompositionChildItem,
   OfficinaImportCompositionResult,
 } from "@/lib/api/types"
 import { canWriteFeature } from "@/lib/auth/permissions"
@@ -195,6 +196,11 @@ export function CodexPickerDialog({
   const [showGenerate, setShowGenerate] = React.useState(false)
   // Codifica al volo dell'articolo Danea senza codice ATEC (vista Catalogo).
   const [atecTarget, setAtecTarget] = React.useState<CatalogItemListItem | null>(null)
+  // Gruppi (5xx/6xx/7xx) aperti col chevron: id → figli (o "loading"). La chiave
+  // assente = riga chiusa; i figli si caricano alla prima apertura e restano in cache.
+  const [expandedGroups, setExpandedGroups] = React.useState<
+    Record<number, CompositionChildItem[] | "loading">
+  >({})
 
   const [visibility, setVisibility] = usePersistedColumnVisibility(
     "ddp-catalog-picker-cols-v1",
@@ -219,8 +225,52 @@ export function CodexPickerDialog({
       setMessage(null)
       setError(null)
       setShowGenerate(false)
+      setExpandedGroups({})
     }
   }, [open])
+
+  // Chevron dei gruppi: apre/chiude e carica i figli diretti alla prima apertura.
+  async function toggleGroup(item: CodexListItem) {
+    const id = item.id
+    if (expandedGroups[id] !== undefined) {
+      setExpandedGroups((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      return
+    }
+    setExpandedGroups((prev) => ({ ...prev, [id]: "loading" }))
+    try {
+      const children = await fetchCompositionChildren(id)
+      setExpandedGroups((prev) =>
+        id in prev
+          ? { ...prev, [id]: children.filter((ch) => ch.source === "codex") }
+          : prev
+      )
+    } catch (err) {
+      setExpandedGroups((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setError((err as Error).message)
+    }
+  }
+
+  /** Etichetta della DDP in cui finirà un componente (anteprima dello smistamento). */
+  function etichettaDestinazione(codice: string): string {
+    switch (destinazioneDi((codice ?? "").replace(/\./g, ""))) {
+      case "COMMERCIAL":
+        return "→ DDP Commerciale"
+      case "OFFICINA":
+        return "→ DDP Officina"
+      case "GRUPPO":
+        return "→ sotto-gruppo (Officina)"
+      default:
+        return ""
+    }
+  }
 
   // I parametri filtro delle due viste sono diversi: cambiando famiglia (e quindi
   // eventualmente vista) i filtri ripartono puliti.
@@ -947,36 +997,117 @@ export function CodexPickerDialog({
                   )
                 })
               ) : (
-                codexItems.map((item) => (
-                  <TableRow
-                    key={`cx-${item.id}`}
-                    className="cursor-pointer"
-                    onDoubleClick={() => handleAdd({ kind: "codex", item })}
-                  >
-                    {visibleColumns.map((column) => (
-                      <TableCell
-                        key={column.key}
-                        className={
-                          column.align === "right" ? "text-right" : undefined
-                        }
+                codexItems.map((item) => {
+                  const isGruppo = /^[567]/.test(atecDiCodex(item))
+                  const figli = expandedGroups[item.id]
+                  return (
+                    <React.Fragment key={`cx-${item.id}`}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onDoubleClick={() => handleAdd({ kind: "codex", item })}
                       >
-                        {renderCodexCell(column, item)}
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Aggiungi alla distinta"
-                        disabled={addMutation.isPending}
-                        onClick={() => handleAdd({ kind: "codex", item })}
-                      >
-                        <Plus />
-                        <span className="sr-only">Aggiungi {item.codice}</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        {visibleColumns.map((column) => (
+                          <TableCell
+                            key={column.key}
+                            className={
+                              column.align === "right" ? "text-right" : undefined
+                            }
+                          >
+                            {column.key === "codice" ? (
+                              <span className="flex items-center gap-1">
+                                {isGruppo ? (
+                                  <button
+                                    type="button"
+                                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    title={
+                                      figli !== undefined
+                                        ? "Nascondi i componenti"
+                                        : "Mostra i componenti"
+                                    }
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void toggleGroup(item)
+                                    }}
+                                    onDoubleClick={(event) =>
+                                      event.stopPropagation()
+                                    }
+                                  >
+                                    {figli !== undefined ? (
+                                      <ChevronDown className="size-4" />
+                                    ) : (
+                                      <ChevronRight className="size-4" />
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="inline-block w-5 shrink-0" />
+                                )}
+                                {renderCodexCell(column, item)}
+                              </span>
+                            ) : (
+                              renderCodexCell(column, item)
+                            )}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            title="Aggiungi alla distinta"
+                            disabled={addMutation.isPending}
+                            onClick={() => handleAdd({ kind: "codex", item })}
+                          >
+                            <Plus />
+                            <span className="sr-only">Aggiungi {item.codice}</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      {figli !== undefined ? (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell
+                            colSpan={visibleColumns.length + 1}
+                            className="py-2"
+                          >
+                            {figli === "loading" ? (
+                              <span className="ml-8 text-xs text-muted-foreground">
+                                Caricamento componenti…
+                              </span>
+                            ) : figli.length === 0 ? (
+                              <span className="ml-8 text-xs text-destructive">
+                                Nessun componente in composizione: questo gruppo
+                                non è importabile finché non ha i figli.
+                              </span>
+                            ) : (
+                              <ul className="ml-8 space-y-0.5">
+                                {figli.map((f) => (
+                                  <li
+                                    key={f.id}
+                                    className="flex items-center gap-2 text-xs"
+                                  >
+                                    <span className="font-mono tabular-nums">
+                                      {formatCodice(f.childCodice)}
+                                    </span>
+                                    <span
+                                      className="max-w-[320px] truncate text-muted-foreground"
+                                      title={f.childDescr}
+                                    >
+                                      {f.childDescr || "—"}
+                                    </span>
+                                    <span className="tabular-nums">
+                                      ×{f.quantity}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {etichettaDestinazione(f.childCodice)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </React.Fragment>
+                  )
+                })
               )}
             </TableBody>
           </Table>
