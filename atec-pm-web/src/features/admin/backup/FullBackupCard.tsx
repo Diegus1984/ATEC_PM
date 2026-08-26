@@ -30,8 +30,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   deleteFullBackup,
+  deleteFullBackupBatch,
   downloadFullBackup,
   fetchFullBackupCurrentJob,
   fetchFullBackupEstimate,
@@ -42,6 +44,7 @@ import {
   uploadFullBackup,
 } from "@/lib/api/backup"
 import { getSession } from "@/lib/auth/session"
+import { notifyError, notifyInfo } from "@/lib/toast"
 import type { FullBackupPackage } from "@/lib/api/types"
 
 /**
@@ -159,6 +162,44 @@ export function FullBackupCard() {
     ripristina.mutate({ fileName: row.fileName, database, file })
   }
 
+  // Selezione multipla per la cancellazione in blocco dei pacchetti.
+  const [selezionati, setSelezionati] = useState<Set<string>>(new Set())
+  const righe = pacchetti.data ?? []
+  const tuttiSelezionati =
+    righe.length > 0 && righe.every((r) => selezionati.has(r.fileName))
+
+  const toggleUno = (fileName: string, on: boolean) =>
+    setSelezionati((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(fileName)
+      else next.delete(fileName)
+      return next
+    })
+
+  const eliminaBatch = useMutation({
+    mutationFn: deleteFullBackupBatch,
+    onSuccess: async (messaggio) => {
+      notifyInfo(messaggio || "Pacchetti eliminati")
+      setSelezionati(new Set())
+      await queryClient.invalidateQueries({ queryKey: ["full-backup-list"] })
+    },
+    onError: (err: Error) => notifyError(err.message),
+  })
+
+  const handleEliminaSelezionati = async () => {
+    const nomi = righe.filter((r) => selezionati.has(r.fileName)).map((r) => r.fileName)
+    if (nomi.length === 0) return
+    const ok = await confirm({
+      title: `Elimina ${nomi.length} pacchetti`,
+      description:
+        `Verranno eliminati definitivamente ${nomi.length} pacchetti completi. ` +
+        "Un pacchetto eliminato non si può più ripristinare: controlla di averne " +
+        "una copia da un'altra parte se ti serve.",
+      confirmLabel: "Elimina selezionati",
+    })
+    if (ok) eliminaBatch.mutate(nomi)
+  }
+
   const errore =
     avvia.error ||
     ripristina.error ||
@@ -183,6 +224,18 @@ export function FullBackupCard() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {selezionati.size > 0 ? (
+              <Button
+                variant="destructive"
+                onClick={() => void handleEliminaSelezionati()}
+                disabled={eliminaBatch.isPending || inCorso}
+              >
+                <Trash2 />
+                {eliminaBatch.isPending
+                  ? "Elimino…"
+                  : `Elimina selezionati (${righe.filter((r) => selezionati.has(r.fileName)).length})`}
+              </Button>
+            ) : null}
             {/* Pacchetto creato su un'altra macchina (es. il PC di sviluppo): si carica
                 qui e poi si ripristina come gli altri. */}
             <input
@@ -315,6 +368,23 @@ export function FullBackupCard() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={
+                    tuttiSelezionati
+                      ? true
+                      : selezionati.size > 0
+                        ? "indeterminate"
+                        : false
+                  }
+                  onCheckedChange={(on) =>
+                    setSelezionati(
+                      on ? new Set(righe.map((r) => r.fileName)) : new Set()
+                    )
+                  }
+                  aria-label="Seleziona tutti i pacchetti"
+                />
+              </TableHead>
               <TableHead>Pacchetto</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Dimensione</TableHead>
@@ -326,7 +396,7 @@ export function FullBackupCard() {
             {!pacchetti.data || pacchetti.data.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-24 text-center text-muted-foreground"
                 >
                   {pacchetti.isLoading
@@ -336,7 +406,17 @@ export function FullBackupCard() {
               </TableRow>
             ) : (
               pacchetti.data.map((row) => (
-                <TableRow key={row.fileName}>
+                <TableRow
+                  key={row.fileName}
+                  data-state={selezionati.has(row.fileName) ? "selected" : undefined}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={selezionati.has(row.fileName)}
+                      onCheckedChange={(on) => toggleUno(row.fileName, on === true)}
+                      aria-label={`Seleziona ${row.fileName}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{row.fileName}</TableCell>
                   <TableCell>{row.date}</TableCell>
                   <TableCell>{row.sizeMB} MB</TableCell>

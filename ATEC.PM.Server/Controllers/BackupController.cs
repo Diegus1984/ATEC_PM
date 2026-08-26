@@ -133,6 +133,51 @@ public class BackupController : ControllerBase
     }
 
     /// <summary>
+    /// Elimina in blocco i backup selezionati. Un file che non si cancella non ferma
+    /// gli altri: si va fino in fondo e si RIFERISCE cosa è andato e cosa no — il
+    /// «tutto o niente» qui costringerebbe a rifare la selezione da capo per un solo
+    /// file bloccato.
+    /// </summary>
+    [HttpPost("delete-batch")]
+    public IActionResult DeleteBackupBatch([FromBody] BackupDeleteBatchRequest req)
+    {
+        var nomi = (req.FileNames ?? new List<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
+        if (nomi.Count == 0)
+            return Ok(ApiResponse<object>.Fail("Nessun backup selezionato."));
+
+        string dir = GetBackupDir();
+        int eliminati = 0;
+        var errori = new List<string>();
+        foreach (string nome in nomi)
+        {
+            // Stessa guardia del DELETE singolo: il nome è un nome, non un percorso.
+            if (nome.Contains("..") || nome.Contains('/') || nome.Contains('\\'))
+            {
+                errori.Add($"{nome}: nome non valido");
+                continue;
+            }
+            try
+            {
+                string percorso = Path.Combine(dir, nome);
+                if (!System.IO.File.Exists(percorso)) { errori.Add($"{nome}: non trovato"); continue; }
+                System.IO.File.Delete(percorso);
+                eliminati++;
+            }
+            catch (Exception ex)
+            {
+                errori.Add($"{nome}: {ex.Message}");
+            }
+        }
+
+        string messaggio = eliminati == 1 ? "1 backup eliminato" : $"{eliminati} backup eliminati";
+        if (errori.Count > 0)
+            messaggio += $" — {errori.Count} non riusciti: {string.Join("; ", errori.Take(3))}" +
+                (errori.Count > 3 ? " …" : "");
+        return Ok(ApiResponse<object>.Ok(new { Eliminati = eliminati, Errori = errori }, messaggio));
+    }
+
+    /// <summary>
     /// Scarica un file di backup.
     /// </summary>
     [HttpGet("download/{fileName}")]
@@ -427,6 +472,41 @@ public class BackupController : ControllerBase
 
         System.IO.File.Delete(percorso);
         return Ok(ApiResponse<string>.Ok("", "Pacchetto eliminato"));
+    }
+
+    /// <summary>Come delete-batch, ma sui pacchetti completi (.zip, anche su NAS).</summary>
+    [HttpPost("full/delete-batch")]
+    public IActionResult EliminaPacchettiBatch([FromBody] BackupDeleteBatchRequest req)
+    {
+        var nomi = (req.FileNames ?? new List<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
+        if (nomi.Count == 0)
+            return Ok(ApiResponse<object>.Fail("Nessun pacchetto selezionato."));
+
+        string dir = _full.GetPackageDir();
+        int eliminati = 0;
+        var errori = new List<string>();
+        foreach (string nome in nomi)
+        {
+            if (!NomeFileValido(nome, ".zip")) { errori.Add($"{nome}: nome non valido"); continue; }
+            try
+            {
+                string percorso = Path.Combine(dir, nome);
+                if (!System.IO.File.Exists(percorso)) { errori.Add($"{nome}: non trovato"); continue; }
+                System.IO.File.Delete(percorso);
+                eliminati++;
+            }
+            catch (Exception ex)
+            {
+                errori.Add($"{nome}: {ex.Message}");
+            }
+        }
+
+        string messaggio = eliminati == 1 ? "1 pacchetto eliminato" : $"{eliminati} pacchetti eliminati";
+        if (errori.Count > 0)
+            messaggio += $" — {errori.Count} non riusciti: {string.Join("; ", errori.Take(3))}" +
+                (errori.Count > 3 ? " …" : "");
+        return Ok(ApiResponse<object>.Ok(new { Eliminati = eliminati, Errori = errori }, messaggio));
     }
 
     /// <summary>Scarica il pacchetto. In streaming: può pesare GB, caricarlo in memoria

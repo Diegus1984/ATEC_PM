@@ -15,3 +15,9 @@ public class BackupDestinationSaveRequest
     /// <summary>Password dell'utente. Non viene mai restituita dalle letture.</summary>
     public string SharePassword { get; set; } = "";
 }
+
+/// <summary>Cancellazione in blocco di backup selezionati (dump .sql o pacchetti .zip).</summary>
+public class BackupDeleteBatchRequest
+{
+    public List<string> FileNames { get; set; } = new();
+}

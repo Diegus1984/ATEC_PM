@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 26/08/2026 09:16.
+> Fotografia del 26/08/2026 09:33.
 
 ## Chiavi con endpoint
 
@@ -235,6 +235,8 @@
 - `GET /api/backup/full/stato/{jobId}` (BackupController.StatoOperazione)
 - `GET /api/backup/full/stima` (BackupController.StimaPacchetto)
 - `GET /api/backup/list` (BackupController.ListBackups)
+- `POST /api/backup/delete-batch` (BackupController.DeleteBackupBatch)
+- `POST /api/backup/full/delete-batch` (BackupController.EliminaPacchettiBatch)
 - `POST /api/backup/full/restore/{fileName}` (BackupController.RipristinaPacchetto)
 - `POST /api/backup/full/start` (BackupController.AvviaPacchetto)
 - `POST /api/backup/full/upload` (BackupController.CaricaPacchetto)

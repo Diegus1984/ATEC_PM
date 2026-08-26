@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Download, HardDriveDownload, RefreshCw, Trash2 } from "lucide-react"
 
@@ -12,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
@@ -23,11 +25,13 @@ import {
 import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   deleteBackup,
+  deleteBackupBatch,
   downloadBackup,
   fetchBackupList,
   restoreBackup,
   runBackupNow,
 } from "@/lib/api/backup"
+import { notifyError, notifyInfo } from "@/lib/toast"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 
@@ -70,6 +74,45 @@ export function BackupPage() {
     },
   })
 
+  // Selezione multipla per la cancellazione in blocco (i backup si accumulano ogni
+  // notte: toglierli uno alla volta dal menu era una punizione).
+  const [selezionati, setSelezionati] = useState<Set<string>>(new Set())
+  const files = query.data ?? []
+  const tuttiSelezionati = files.length > 0 && files.every((f) => selezionati.has(f.fileName))
+
+  const toggleUno = (fileName: string, on: boolean) =>
+    setSelezionati((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(fileName)
+      else next.delete(fileName)
+      return next
+    })
+
+  const deleteBatchMutation = useMutation({
+    mutationFn: deleteBackupBatch,
+    onSuccess: async (messaggio) => {
+      notifyInfo(messaggio || "Backup eliminati")
+      setSelezionati(new Set())
+      await queryClient.invalidateQueries({ queryKey: ["backup-list"] })
+    },
+    onError: (err: Error) => notifyError(err.message),
+  })
+
+  const handleDeleteSelected = async () => {
+    // Solo i nomi ancora in elenco: una selezione può contenere file già spariti
+    // (cancellati da un collega, lista ricaricata) e i loro errori confonderebbero.
+    const nomi = files.filter((f) => selezionati.has(f.fileName)).map((f) => f.fileName)
+    if (nomi.length === 0) return
+    const ok = await confirm({
+      title: `Elimina ${nomi.length} backup`,
+      description:
+        `Verranno eliminati definitivamente ${nomi.length} file di backup dal server. ` +
+        "L'operazione non è reversibile.",
+      confirmLabel: "Elimina selezionati",
+    })
+    if (ok) deleteBatchMutation.mutate(nomi)
+  }
+
   if (!canManageBackup) {
     return (
       <Card>
@@ -111,6 +154,18 @@ export function BackupPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              {selezionati.size > 0 ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleDeleteSelected()}
+                  disabled={deleteBatchMutation.isPending}
+                >
+                  <Trash2 />
+                  {deleteBatchMutation.isPending
+                    ? "Elimino…"
+                    : `Elimina selezionati (${files.filter((f) => selezionati.has(f.fileName)).length})`}
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 onClick={() => query.refetch()}
@@ -174,6 +229,23 @@ export function BackupPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={
+                        tuttiSelezionati
+                          ? true
+                          : selezionati.size > 0
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(on) =>
+                        setSelezionati(
+                          on ? new Set(files.map((f) => f.fileName)) : new Set()
+                        )
+                      }
+                      aria-label="Seleziona tutti i backup"
+                    />
+                  </TableHead>
                   <TableHead>File</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead>Dimensione</TableHead>
@@ -184,7 +256,7 @@ export function BackupPage() {
                 {query.data.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="h-24 text-center text-muted-foreground"
                     >
                       Nessun backup disponibile.
@@ -192,7 +264,17 @@ export function BackupPage() {
                   </TableRow>
                 ) : (
                   query.data.map((row) => (
-                    <TableRow key={row.fileName}>
+                    <TableRow
+                      key={row.fileName}
+                      data-state={selezionati.has(row.fileName) ? "selected" : undefined}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selezionati.has(row.fileName)}
+                          onCheckedChange={(on) => toggleUno(row.fileName, on === true)}
+                          aria-label={`Seleziona ${row.fileName}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{row.fileName}</TableCell>
                       <TableCell>{row.date}</TableCell>
                       <TableCell>{row.sizeMB} MB</TableCell>

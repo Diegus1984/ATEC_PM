@@ -15,6 +15,29 @@ import type {
   FullBackupPackage,
 } from "@/lib/api/types"
 
+/**
+ * Cancellazione in blocco dei backup .sql selezionati. Un file bloccato non ferma
+ * gli altri: il messaggio del server dice quanti sono andati e quali no.
+ */
+export async function deleteBackupBatch(fileNames: string[]): Promise<string> {
+  const response = await apiPost<ApiResponse<{ eliminati: number }>>(
+    "/api/backup/delete-batch",
+    { fileNames }
+  )
+  unwrapApi(response)
+  return response.message ?? ""
+}
+
+/** Come deleteBackupBatch, ma sui pacchetti completi (.zip, anche su NAS). */
+export async function deleteFullBackupBatch(fileNames: string[]): Promise<string> {
+  const response = await apiPost<ApiResponse<{ eliminati: number }>>(
+    "/api/backup/full/delete-batch",
+    { fileNames }
+  )
+  unwrapApi(response)
+  return response.message ?? ""
+}
+
 /** Destinazione dei pacchetti completi (percorso, origine, utente share). */
 export async function fetchBackupDestination(): Promise<BackupDestination> {
   const response = await apiGet<ApiResponse<BackupDestination>>(
