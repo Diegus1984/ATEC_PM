@@ -90,8 +90,27 @@ public class FullBackupService
 
     public BackupJob? GetJob(string id) => _jobs.TryGetValue(id, out BackupJob? j) ? j : null;
 
-    public BackupJob? GetJobAttivo() =>
-        _jobs.Values.Where(j => j.Stato == "in_corso").OrderByDescending(j => j.Inizio).FirstOrDefault();
+    public BackupJob? GetJobAttivo()
+    {
+        BackupJob? attivo = _jobs.Values
+            .Where(j => j.Stato == "in_corso").OrderByDescending(j => j.Inizio).FirstOrDefault();
+        // Un job «in corso» da più di 6 ore è morto (thread ucciso, scrittura SMB
+        // appesa): se restasse attivo per sempre, AvviaBackup lo restituirebbe OGNI
+        // notte e il backup notturno non creerebbe più pacchetti fino al riavvio del
+        // servizio — senza che nessuno se ne accorga. Lo si dichiara fallito e si
+        // libera la strada; se il thread zombie un giorno finisse davvero, scriverebbe
+        // un file con un altro nome e nessuno gli darebbe retta.
+        if (attivo != null && DateTime.Now - attivo.Inizio > TimeSpan.FromHours(6))
+        {
+            attivo.Stato = "errore";
+            attivo.Messaggio = "Operazione considerata bloccata dopo 6 ore: si può riprovare.";
+            attivo.Fine = DateTime.Now;
+            _log.LogError("[BackupCompleto] Job {Id} ({Tipo}) bloccato da oltre 6 ore: dichiarato fallito.",
+                attivo.Id, attivo.Tipo);
+            return null;
+        }
+        return attivo;
+    }
 
     // ══════════════════════════════════════════════════════════════
     // PERCORSI
@@ -197,8 +216,8 @@ public class FullBackupService
         catch (Exception ex)
         {
             // Scrivibile ma non cancellabile: per FARE i backup basta, ma la pulizia
-            // «tieni gli ultimi 3» non potrà eliminare i pacchetti vecchi — si accetta
-            // e si lascia traccia (il .tmp residuo dice da solo cos'è).
+            // a tempo non potrà eliminare i pacchetti vecchi — si accetta e si lascia
+            // traccia (il .tmp residuo dice da solo cos'è).
             _log.LogWarning("[Backup] Il file di prova {File} non si cancella ({Errore}): " +
                 "destinazione scrivibile ma senza permesso di eliminazione — la pulizia dei " +
                 "pacchetti vecchi non funzionerà.", prova, ex.Message);
@@ -371,7 +390,8 @@ public class FullBackupService
         {
             throw new InvalidOperationException(
                 $"Spazio insufficiente in {dir}: servono almeno {totaleByte / 1024 / 1024} MB " +
-                $"ma ce ne sono {liberi / 1024 / 1024}. Libera spazio o imposta una destinazione diversa (Backup:PackagePath).");
+                $"ma ce ne sono {liberi / 1024 / 1024}. Libera spazio, abbassa i giorni di " +
+                "conservazione (Backup:GiorniConservazione) o cambia destinazione dalla pagina Backup.");
         }
 
         var manifest = new Dictionary<string, object>
@@ -873,18 +893,69 @@ public class FullBackupService
         catch { return null; }
     }
 
-    private void PulisciVecchi()
+    /// <summary>
+    /// Pulizia A TEMPO di TUTTI i backup vecchi (`Backup:GiorniConservazione`, default 60):
+    /// pacchetti completi e dump .sql oltre la soglia si eliminano da soli. Le copie PIÙ
+    /// RECENTI però si tengono SEMPRE (`Backup:PackageKeep` zip, 5 dump), qualunque età
+    /// abbiano: se il notturno resta fermo tre mesi, l'anzianità da sola non deve poter
+    /// cancellare gli ultimi backup rimasti. La chiama il notturno; i pacchetti li pulisce
+    /// anche ogni creazione.
+    /// </summary>
+    public void PulisciBackupVecchi()
     {
-        int daTenere = _config.GetValue("Backup:PackageKeep", 3);
+        PulisciVecchi();
+        int giorni = GiorniConservazione();
+        string dir = _config["Backup:Path"] ?? @"C:\ATEC_Backups";
         try
         {
-            foreach (FileInfo f in Directory.GetFiles(GetPackageDir(), "atec_pm_completo_*.zip")
+            if (!Directory.Exists(dir)) return;
+            foreach (FileInfo f in Directory.GetFiles(dir, "atec_pm_*.sql")
                          .Select(x => new FileInfo(x))
                          .OrderByDescending(x => x.CreationTime)
-                         .Skip(daTenere))
+                         .Skip(5)
+                         .Where(x => x.CreationTime < DateTime.Now.AddDays(-giorni)))
+            {
+                f.Delete();
+                _log.LogInformation("[BackupAuto] Rimosso dump vecchio {File}", f.Name);
+            }
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "[BackupAuto] Pulizia dump non riuscita"); }
+    }
+
+    /// <summary>Soglia di conservazione in giorni, mai sotto i 7: uno zero (o un refuso) in
+    /// configurazione non deve poter svuotare la cartella dei backup.</summary>
+    private int GiorniConservazione() =>
+        Math.Max(7, _config.GetValue("Backup:GiorniConservazione", 60));
+
+    private void PulisciVecchi()
+    {
+        // 🪤 Prima era «tieni gli ultimi 3» SECCO: col pacchetto notturno automatico
+        // avrebbe buttato in tre giorni anche i pacchetti fatti A MANO prima di un
+        // lavoro grosso. Ora l'età decide (60 giorni) e il conteggio fa solo da scorta.
+        int minimo = Math.Max(1, _config.GetValue("Backup:PackageKeep", 3));
+        int giorni = GiorniConservazione();
+        try
+        {
+            string dirPacchetti = GetPackageDir();
+            foreach (FileInfo f in Directory.GetFiles(dirPacchetti, "atec_pm_completo_*.zip")
+                         .Select(x => new FileInfo(x))
+                         .OrderByDescending(x => x.CreationTime)
+                         .Skip(minimo)
+                         .Where(x => x.CreationTime < DateTime.Now.AddDays(-giorni)))
             {
                 f.Delete();
                 _log.LogInformation("[BackupCompleto] Rimosso pacchetto vecchio {File}", f.Name);
+            }
+
+            // Orfani di crash: uno zip scritto come .parziale e mai rinominato (spegnimento
+            // a metà backup) non lo matcha nessun *.zip — resterebbe lì per sempre a
+            // occupare gigabyte. Più vecchio di un giorno = nessuno lo sta più scrivendo.
+            foreach (FileInfo f in Directory.GetFiles(dirPacchetti, "atec_pm_completo_*.zip.parziale")
+                         .Select(x => new FileInfo(x))
+                         .Where(x => x.CreationTime < DateTime.Now.AddDays(-1)))
+            {
+                f.Delete();
+                _log.LogInformation("[BackupCompleto] Rimosso pacchetto parziale orfano {File}", f.Name);
             }
         }
         catch (Exception ex) { _log.LogWarning(ex, "[BackupCompleto] Pulizia pacchetti non riuscita"); }

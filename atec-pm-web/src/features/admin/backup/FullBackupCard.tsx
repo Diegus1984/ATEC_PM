@@ -219,8 +219,9 @@ export function FullBackupCard() {
             </div>
             <CardDescription>
               Un unico pacchetto .zip con il database e le cartelle: documenti di
-              commessa, foto, video e allegati. È la copia da portare fuori dal
-              server.
+              commessa, foto, video e allegati. Ogni notte alle 02:00 se ne crea uno
+              in automatico nella destinazione qui sotto; i pacchetti più vecchi di
+              60 giorni si eliminano da soli (i più recenti restano sempre).
             </CardDescription>
           </div>
           <div className="flex gap-2">

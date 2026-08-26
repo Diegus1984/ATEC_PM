@@ -326,18 +326,27 @@ La misura delle richieste HTTP invece può restare accesa: scrive solo sopra sog
 
 Nel gestionale, sezione **Backup DB**, ci sono due livelli.
 
-### 7.1 Backup del database (leggero, automatico)
+### 7.1 Backup del database (dump .sql leggero)
 
-Ogni notte alle 02:00 il programma scrive un dump SQL in `C:\ATEC_Backups` (si può
-lanciare anche a mano con «Backup ora»). Pesa pochi MB e contiene **solo i dati**: le
-tabelle le ricrea il programma all'avvio. Da qui si ripristina con «Ripristina», che
-prima di sostituire i dati fa una copia di sicurezza.
+Il pulsante «Backup ora» scrive un dump SQL in `C:\ATEC_Backups`; nella stessa
+cartella finiscono i dump fatti prima delle migrazioni e quelli di sicurezza dei
+ripristini. Pesa pochi MB e contiene **solo i dati**: le tabelle le ricrea il
+programma all'avvio. Da qui si ripristina con «Ripristina», che prima di sostituire
+i dati fa una copia di sicurezza.
+
+> ⏰ **Dal 26/08/2026 il notturno delle 02:00 crea il PACCHETTO COMPLETO** (§7.2), non
+> più il solo dump: il dump era ridondante (il pacchetto lo contiene) e lasciava fuori
+> proprio i file. Se il pacchetto fallisce (NAS spento), quella notte si RIPIEGA sul
+> dump .sql locale — una notte senza NAS non è una notte senza backup. Per tornare al
+> solo dump: `Backup:AutoCompleto = false` in `appsettings.json`.
 
 ### 7.2 Backup completo: database + file (da portare via)
 
 Il dump da solo non basta: documenti di commessa, foto, video e allegati stanno su
-disco, non nel database. Il pulsante **«Crea pacchetto completo»** produce un unico
-`.zip` in `C:\ATEC_Backups\Pacchetti` con dentro:
+disco, non nel database. Il pulsante **«Crea pacchetto completo»** (e il notturno
+delle 02:00) produce un unico `.zip` nella destinazione configurata — di serie la
+share `\\Server-maga\d\ATEC_Backups\Pacchetti`, si cambia dalla card «Destinazione
+dei pacchetti» in fondo alla pagina Backup — con dentro:
 
 - `database.sql` — tutti i dati
 - `documenti/` — la cartella delle commesse (`BasePath`)
@@ -345,8 +354,12 @@ disco, non nel database. Il pulsante **«Crea pacchetto completo»** produce un 
 - `manifest.json` — data, macchina, versione dello schema, conteggi
 
 La creazione gira in background con una barra di avanzamento (con molti GB ci vogliono
-minuti; foto e video non vengono ricompressi, sarebbe tempo perso). Vengono tenuti gli
-ultimi 3 pacchetti.
+minuti; foto e video non vengono ricompressi, sarebbe tempo perso).
+
+**Pulizia automatica:** i backup più vecchi di **60 giorni** (`Backup:GiorniConservazione`)
+si eliminano da soli — pacchetti e dump — ma le copie **più recenti restano sempre**
+(`Backup:PackageKeep` pacchetti, di serie 3; 5 per i dump), qualunque età abbiano: se
+il notturno resta fermo dei mesi, l'anzianità da sola non cancella gli ultimi backup.
 
 **Ripristino:** dal menu del pacchetto — «Ripristina tutto», «solo database» o «solo
 cartelle». Il database viene sostituito (con copia di sicurezza automatica prima), le

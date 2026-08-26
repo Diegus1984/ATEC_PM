@@ -81,6 +81,63 @@ public class DestinazionePacchettiTests
         Assert.Equal(@"\\pc-nuovo\backup", percorso);
     }
 
+    /// <summary>
+    /// La pulizia a tempo elimina i backup oltre la soglia ma tiene SEMPRE le copie più
+    /// recenti, qualunque età abbiano: se il notturno resta fermo per mesi, l'anzianità
+    /// da sola non deve poter cancellare gli ultimi backup rimasti.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void PulisciBackupVecchi_EliminaIVecchiMaTieneLaScorta()
+    {
+        using var db = new DatabaseDiProva("dest_pacchetti_pulizia");
+        db.CreaSchemaCompleto();
+
+        string dirPacchetti = Path.Combine(Path.GetTempPath(), $"atec_puli_zip_{Guid.NewGuid():N}");
+        string dirDump = Path.Combine(Path.GetTempPath(), $"atec_puli_sql_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dirPacchetti);
+        Directory.CreateDirectory(dirDump);
+        try
+        {
+            var servizio = Servizio(db, new Dictionary<string, string?>
+            {
+                ["Backup:PackagePath"] = dirPacchetti,
+                ["Backup:Path"] = dirDump,
+                ["Backup:PackageKeep"] = "2",
+                ["Backup:GiorniConservazione"] = "60",
+            });
+
+            // 4 pacchetti TUTTI vecchi di 90 giorni: oltre soglia, ma i 2 più recenti
+            // sono la scorta e devono restare.
+            for (int i = 0; i < 4; i++)
+            {
+                string f = Path.Combine(dirPacchetti, $"atec_pm_completo_2026010{i + 1}_020000.zip");
+                File.WriteAllText(f, "zip finto");
+                File.SetCreationTime(f, DateTime.Now.AddDays(-90 - i));
+            }
+            // 7 dump: 6 vecchi di 90 giorni + 1 recente. Scorta fissa 5 → restano i 5
+            // più recenti (il fresco + 4 vecchi), gli altri 2 se ne vanno.
+            for (int i = 0; i < 6; i++)
+            {
+                string f = Path.Combine(dirDump, $"atec_pm_auto_2026010{i + 1}_020000.sql");
+                File.WriteAllText(f, "dump finto");
+                File.SetCreationTime(f, DateTime.Now.AddDays(-90 - i));
+            }
+            string fresco = Path.Combine(dirDump, "atec_pm_auto_fresco.sql");
+            File.WriteAllText(fresco, "dump fresco");
+
+            servizio.PulisciBackupVecchi();
+
+            Assert.Equal(2, Directory.GetFiles(dirPacchetti, "*.zip").Length);
+            Assert.Equal(5, Directory.GetFiles(dirDump, "*.sql").Length);
+            Assert.True(File.Exists(fresco), "Il dump recente non va mai toccato.");
+        }
+        finally
+        {
+            Directory.Delete(dirPacchetti, recursive: true);
+            Directory.Delete(dirDump, recursive: true);
+        }
+    }
+
     /// <summary>Un percorso locale scrivibile passa la prova; uno impossibile la fallisce con un errore parlante.</summary>
     [FactRichiedeMySql]
     public void ProvaDestinazione_localeScrivibileEImpossibile()

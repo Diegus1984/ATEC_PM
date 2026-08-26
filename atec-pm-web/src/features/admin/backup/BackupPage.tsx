@@ -150,7 +150,10 @@ export function BackupPage() {
                 <Badge variant="secondary">ADMIN</Badge>
               </div>
               <CardDescription>
-                Backup SQL completi del database ATEC PM
+                Dump SQL del solo database: il pulsante «Backup ora» e i backup fatti
+                prima delle migrazioni. Il notturno delle 02:00 crea invece il pacchetto
+                completo (card sotto). I dump più vecchi di 60 giorni si eliminano da
+                soli, i 5 più recenti restano sempre.
               </CardDescription>
             </div>
             <div className="flex gap-2">
