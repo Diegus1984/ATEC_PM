@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260826-1442",
+                     "data":  "2026-08-26T14:42:44",
+                     "hash":  "6e681c9fd09c491a95af3b9e40f232a53d99b565",
+                     "modifiche":  [
+                                       "Icona Link2 (catena) su ogni punto di mappatura del codice Codex"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-1419",
                      "data":  "2026-08-26T14:19:31",
                      "hash":  "78f24b6980d31b9c6bd099019f3d5614e4fc8956",
