@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDown, ChevronUp, Plus, RefreshCw, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, X } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/codex-compositions"
 import { fetchAllCodex, fetchCodex } from "@/lib/api/codex"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
+import { CodexEditDialog } from "@/features/codex/CodexEditDialog"
 import type {
   CatalogItemListItem,
   CodexListItem,
@@ -468,6 +469,8 @@ export function CodexCompositionPage() {
   // Creazione di un composito nuovo dalla pagina stessa: senza, una famiglia vuota
   // («Nessun composito 511») sarebbe un vicolo cieco.
   const [newComposite, setNewComposite] = React.useState(false)
+  // Rinomina della descrizione di un composito (stesso dialog della pagina Codex).
+  const [editComposite, setEditComposite] = React.useState<CodexListItem | null>(null)
 
   // Stato drag&drop.
   const dragItem = React.useRef<AvailableItem | null>(null)
@@ -854,14 +857,30 @@ export function CodexCompositionPage() {
                             data-state={
                               selectedParent?.id === item.id ? "selected" : undefined
                             }
-                            className="cursor-pointer"
+                            className="group cursor-pointer"
                             onClick={() => setSelectedParent(item)}
                           >
                             <TableCell className="font-mono font-medium">
                               {item.codice}
                             </TableCell>
                             <TableCell className="whitespace-normal break-words text-muted-foreground">
-                              {item.descr || "—"}
+                              <span className="flex items-start justify-between gap-2">
+                                <span>{item.descr || "—"}</span>
+                                {canCreateComposite ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="shrink-0 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                                    title="Rinomina la descrizione"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setEditComposite(item)
+                                    }}
+                                  >
+                                    <Pencil className="size-3.5" />
+                                  </Button>
+                                ) : null}
+                              </span>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1152,6 +1171,19 @@ export function CodexCompositionPage() {
           ])
           const nuovo = lista?.find((item) => item.id === created.id)
           if (nuovo) setSelectedParent(nuovo)
+        }}
+      />
+
+      {/* Rinomina descrizione: stesso dialog della pagina Codex Articoli, stesso
+          permesso del server (action.manage_codex, PUT /api/codex/{id}). */}
+      <CodexEditDialog
+        item={editComposite}
+        onClose={() => setEditComposite(null)}
+        onSaved={async () => {
+          setEditComposite(null)
+          // La descrizione compare anche nella radice dell'albero aperto.
+          await queryClient.invalidateQueries({ queryKey: ["codex-by-prefix", typeCode] })
+          void queryClient.invalidateQueries({ queryKey: ["composition-tree"] })
         }}
       />
 
