@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -1410,7 +1410,7 @@ public class ProjectsController : ControllerBase
     }
 
     // --- DDP (Distinta Di Produzione) ---
-    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox", "project.ddp_officina")]
     [HttpGet("{id}/ddp")]
     public IActionResult GetDdpItems(int id, [FromQuery] string type = "COMMERCIAL")
     {
@@ -1460,7 +1460,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
+    // project.ddp_officina in OR: dal picker unico delle DDP un codice commerciale
+    // (2xx/3xx) scelto dal lato officina finisce QUI, previa conferma a video.
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox", "project.ddp_officina")]
     [HttpPost("{id}/ddp")]
     public IActionResult AddDdpItem(int id, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1510,7 +1512,7 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox")]
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox", "project.ddp_officina")]
     [HttpPut("{id}/ddp/{itemId}")]
     public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1711,7 +1713,7 @@ public class ProjectsController : ControllerBase
     // --- DDP OFFICINA (distinta particolari meccanici, tabella dedicata ddp_officina_items) ---
     // Stesso contratto della DDP commerciale (concorrenza ottimistica, real-time, notifiche cambio stato),
     // ma campi del template officina: Codice 101, Materiale, Trattamento, fornitore testuale.
-    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox", "project.ddp_commerciale")]
     [HttpGet("{id}/ddp-officina")]
     public IActionResult GetOfficinaItems(int id)
     {
@@ -1759,7 +1761,9 @@ public class ProjectsController : ControllerBase
         }
     }
 
-    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
+    // project.ddp_commerciale in OR: dal picker unico un particolare 1xx (o l'intestazione
+    // di un gruppo) scelto dal lato commerciale finisce QUI, previa conferma a video.
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox", "project.ddp_commerciale")]
     [HttpPost("{id}/ddp-officina")]
     public IActionResult AddOfficinaItem(int id, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
     {
@@ -1826,7 +1830,9 @@ public class ProjectsController : ControllerBase
     // Dedup per codice normalizzato (senza punti) e PER TABELLA: se il figlio è già in quella
     // distinta si somma la quantità della composizione alla riga esistente. I figli da Catalogo
     // vengono saltati e contati (dal 25/08 non possono più nemmeno esistere in composizione).
-    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
+    // project.ddp_commerciale in OR: l'import dei gruppi (che smista nelle DUE distinte)
+    // dal picker unico parte anche dal lato commerciale.
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox", "project.ddp_commerciale")]
     [HttpPost("{id}/ddp-officina/import-composition")]
     public IActionResult ImportOfficinaComposition(int id, [FromBody] OfficinaImportCompositionRequest req, [FromQuery] string? conn = null)
     {
@@ -2137,7 +2143,7 @@ public class ProjectsController : ControllerBase
         public bool IsCatalog { get; set; }
     }
 
-    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox")]
+    [RequireFeature("project.ddp_officina", "nav.gestore_ddp", "nav.officina_inbox", "project.ddp_commerciale")]
     [HttpPut("{id}/ddp-officina/{itemId}")]
     public IActionResult UpdateOfficinaItem(int id, int itemId, [FromBody] OfficinaItemSaveRequest req, [FromQuery] string? conn = null)
     {

@@ -613,6 +613,7 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
       <CodexPickerDialog
         open={!readOnly && pickerOpen}
         projectId={projectId}
+        ddpType="OFFICINA"
         onClose={() => setPickerOpen(false)}
         onAdded={() => void invalidate()}
       />

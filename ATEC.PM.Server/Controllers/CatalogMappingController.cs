@@ -26,7 +26,9 @@ namespace ATEC.PM.Server.Controllers;
 // (`action.assign_atec_code`, sugli endpoint), che qui compare perché i due filtri sono
 // in AND: senza, chi ha SOLO la chiave di assegnazione non passerebbe la porta di classe.
 [RequireFeature("nav.catalogo", "nav.acquisti_inbox", "action.assign_atec_code",
-    "action.manage_codex", "action.recode_codex", "project.ddp_commerciale")]
+    "action.manage_codex", "action.recode_codex", "project.ddp_commerciale",
+    // Il picker unico delle DDP risolve le alternative Danea anche dal lato officina.
+    "project.ddp_officina")]
 public class CatalogMappingController : ControllerBase
 {
     private readonly DbService _db;

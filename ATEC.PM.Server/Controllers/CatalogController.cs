@@ -72,8 +72,10 @@ public class CatalogController : ControllerBase
     /// senza mettere la chiave sarebbe stato un cerotto su una porta aperta.</para>
     /// </summary>
     [HttpGet]
+    // project.ddp_officina in OR: il picker unico delle DDP sfoglia il Catalogo
+    // (famiglie 201/211/221) anche dal lato officina.
     [RequireFeature("nav.catalogo", "nav.codex", "nav.codex_composizione",
-                    "nav.acquisti_inbox", "project.ddp_commerciale")]
+                    "nav.acquisti_inbox", "project.ddp_commerciale", "project.ddp_officina")]
     public IActionResult GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 0,

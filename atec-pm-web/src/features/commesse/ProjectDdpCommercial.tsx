@@ -1248,6 +1248,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       <CodexPickerDialog
         open={!readOnly && pickerOpen}
         projectId={projectId}
+        ddpType="COMMERCIAL"
         onClose={() => setPickerOpen(false)}
         onAdded={() => void invalidate()}
       />
