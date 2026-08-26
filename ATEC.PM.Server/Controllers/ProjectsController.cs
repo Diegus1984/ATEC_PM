@@ -1874,6 +1874,20 @@ public class ProjectsController : ControllerBase
                     parentRowId = parentRow.Id;
                     if (parentRow.Quantity > 0) parentQty = parentRow.Quantity;
                 }
+                else
+                {
+                    // Gruppo di SOLI componenti commerciali (fix 26/08/2026): il padre in
+                    // officina non esiste e non deve nascere — il «padre che comanda» è
+                    // l'intestazione della DDP Commerciale, quindi il moltiplicatore è la
+                    // sua quantità (un import completato dopo un +1 sull'intestazione
+                    // genera figli già allineati). Senza nessuna intestazione resta 1.
+                    decimal? bomQty = c.ExecuteScalar<decimal?>(@"
+                    SELECT quantity FROM bom_items
+                    WHERE project_id = @Id AND REPLACE(COALESCE(part_number,''), '.', '') = @Key
+                      AND parent_bom_item_id IS NULL
+                    ORDER BY id LIMIT 1", new { Id = id, Key = parentKey });
+                    if (bomQty is > 0) parentQty = bomQty.Value;
+                }
             }
 
             // Righe già in distinta, indicizzate per codice normalizzato (il part_number è

@@ -33,8 +33,9 @@ public static class DdpSmistamento
     /// <item><c>2xx</c> commerciale e <c>3xx</c> elementi di fissaggio → <b>commerciale</b>
     /// (si comprano);</item>
     /// <item><c>5xx</c>/<c>6xx</c>/<c>7xx</c> gruppi e assiemi → <b>officina</b>: come figli
-    /// sono sotto-gruppi che si montano, come padri sono l'intestazione (che vive in entrambe
-    /// le DDP, ma quella la decide l'import, non questa funzione).</item>
+    /// sono sotto-gruppi che si montano, come padri sono l'intestazione (che vive nelle sole
+    /// distinte dove il gruppo ha componenti — fix 26/08/2026: un gruppo di soli commerciali
+    /// non lascia nulla in officina; quella la decide l'import, non questa funzione).</item>
     /// </list>
     /// <para>Qualunque altra cosa — codice vuoto, part number scritto a mano, la famiglia
     /// <c>401</c> ritirata — va in <b>officina</b>: è dove finivano tutte le righe prima della

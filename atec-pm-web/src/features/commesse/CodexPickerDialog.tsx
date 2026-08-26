@@ -54,7 +54,11 @@ import { useDebounced } from "@/lib/use-debounced"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
 import { CodexGeneratePanel } from "../codex/CodexGeneratePanel"
-import { DDP_STATUS_TO_ORDER, DDP_STATUS_VERIFY } from "./ddp-constants"
+import {
+  DDP_STATUS_TO_ORDER,
+  DDP_STATUS_VERIFY,
+  isCommercialQtyEditable,
+} from "./ddp-constants"
 
 const PAGE_SIZE = 50
 const ALL_FAMILIES = "__all__"
@@ -153,9 +157,10 @@ type PickEntry =
  *
  * - 2xx/3xx → riga nella DDP Commerciale (dall'Officina, con conferma);
  * - 1xx → riga nella DDP Officina (dalla Commerciale, con conferma);
- * - 5xx/6xx/7xx → import della composizione: intestazione in ENTRAMBE le distinte e
- *   componenti smistati automaticamente. Un gruppo SENZA figli non si importa
- *   (messaggio, niente riga orfana).
+ * - 5xx/6xx/7xx → import della composizione: componenti smistati automaticamente e
+ *   intestazione SOLO nelle distinte dove il gruppo ha componenti (fix 26/08/2026:
+ *   un gruppo di soli commerciali non lascia più il padre orfano in Officina).
+ *   Un gruppo SENZA figli non si importa (messaggio, niente riga orfana).
  *
  * Doppio clic o «+» = Qtà 1; se il codice è già in distinta nello stato d'ingresso
  * propone +1. «Nuovo codice Codex» genera un codice e lo aggiunge subito. Resta
@@ -258,17 +263,33 @@ export function CodexPickerDialog({
     }
   }
 
-  /** Etichetta della DDP in cui finirà un componente (anteprima dello smistamento). */
-  function etichettaDestinazione(codice: string): string {
-    switch (destinazioneDi((codice ?? "").replace(/\./g, ""))) {
+  /** Badge della DDP in cui finirà un componente (anteprima dello smistamento). */
+  function renderDestinationBadge(codice: string) {
+    const dest = destinazioneDi((codice ?? "").replace(/\./g, ""))
+    switch (dest) {
       case "COMMERCIAL":
-        return "→ DDP Commerciale"
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+            <span className="size-1.5 rounded-full bg-sky-500" />
+            DDP Commerciale
+          </span>
+        )
       case "OFFICINA":
-        return "→ DDP Officina"
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            <span className="size-1.5 rounded-full bg-amber-500" />
+            DDP Officina
+          </span>
+        )
       case "GRUPPO":
-        return "→ sotto-gruppo (Officina)"
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
+            <span className="size-1.5 rounded-full bg-purple-500" />
+            Sotto-gruppo (Officina)
+          </span>
+        )
       default:
-        return ""
+        return null
     }
   }
 
@@ -515,8 +536,100 @@ export function CodexPickerDialog({
     return { code: item.codice, testo: "aggiunto alla DDP Officina" }
   }
 
-  // ── Import di un gruppo/assieme (5xx/6xx/7xx): intestazione in entrambe le DDP,
-  //    componenti smistati dal server (#119). SENZA figli non si importa. ──────────
+  // ── Gruppo di SOLI componenti commerciali (fix 26/08/2026): nella DDP Officina non
+  //    entra NIENTE — niente padre orfano che sporcherebbe Lavorazioni Officine (vista
+  //    Esterne), i KPI del Gestore e il Bilancio (OfficinaParentDedup non lo scarta).
+  //    L'intestazione vive solo nella Commerciale (la crea il server alla prima riga
+  //    commerciale) ed è lei il «padre che comanda»: un cambio quantità passa da
+  //    ComposizioneDdp.PropagaQuantita come per gli altri gruppi. ──────────────────
+  async function importaGruppoSoloCommerciale(item: CodexListItem) {
+    const parentKey = (item.codice ?? "").replace(/\./g, "").trim()
+    let existing: Awaited<ReturnType<typeof fetchDdpRows>>
+    try {
+      existing = await fetchDdpRows(projectId, "COMMERCIAL")
+    } catch {
+      throw new Error(
+        "Impossibile leggere la DDP Commerciale: import annullato per non raddoppiare le quantità."
+      )
+    }
+    const header =
+      existing.find(
+        (r) =>
+          (r.partNumber ?? "").replace(/\./g, "").trim() === parentKey &&
+          r.parentBomItemId == null
+      ) ?? null
+
+    if (header) {
+      // Intestazione già in distinta: +1 solo negli stati a quantità libera (VER/DO),
+      // negli altri il server rifiuterebbe comunque la nuova quantità.
+      if (!isCommercialQtyEditable(header.itemStatus)) {
+        throw new Error(
+          `${item.codice} è già nella DDP Commerciale in stato ${header.itemStatus}: lì la quantità è bloccata, gestiscilo dalla distinta.`
+        )
+      }
+      const okPiu = await confirm({
+        title: "Gruppo già presente",
+        description: `${item.codice} è già nella DDP Commerciale (Qtà attuale: ${header.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
+        confirmLabel: "Aggiungi +1",
+        destructive: false,
+      })
+      if (!okPiu) return null
+      await updateDdpRow(projectId, header.id, {
+        id: header.id,
+        projectId,
+        catalogItemId: header.catalogItemId ?? null,
+        partNumber: header.partNumber,
+        description: header.description,
+        unit: header.unit,
+        quantity: header.quantity + 1,
+        unitCost: header.unitCost,
+        supplierId: null,
+        manufacturer: header.manufacturer,
+        itemStatus: header.itemStatus,
+        requestedBy: header.requestedBy,
+        daneaRef: header.daneaRef,
+        dateNeeded: header.dateNeeded,
+        destination: header.destination,
+        destinationSpec: header.destinationSpec ?? "",
+        notes: header.notes,
+        ddpType: "COMMERCIAL",
+        expectedUpdatedAt: null,
+      })
+      // Figli mai collegati (import interrotto a metà): si completa ora — il server
+      // usa la quantità dell'intestazione come moltiplicatore.
+      const hasLinkedChildren = existing.some(
+        (r) => r.parentBomItemId === header.id
+      )
+      let imported: OfficinaImportCompositionResult | null = null
+      if (!hasLinkedChildren) {
+        imported = await importOfficinaComposition(projectId, {
+          codexParentId: item.id,
+          requestedBy,
+        })
+      }
+      const mult =
+        imported && imported.parentQuantity !== 1
+          ? ` ×${imported.parentQuantity}`
+          : ""
+      const compo = imported
+        ? ` + componenti importati${mult} (${imported.added} nuovi, ${imported.updated} aggiornati)`
+        : " (componenti allineati all'intestazione)"
+      return { code: item.codice, testo: `Qtà aggiornata${compo}` }
+    }
+
+    const imported = await importOfficinaComposition(projectId, {
+      codexParentId: item.id,
+      requestedBy,
+    })
+    return {
+      code: item.codice,
+      testo: `importato nella sola DDP Commerciale: ${imported.added} componenti nuovi, ${imported.updated} aggiornati${imported.skipped ? `, ${imported.skipped} saltati` : ""}`,
+    }
+  }
+
+  // ── Import di un gruppo/assieme (5xx/6xx/7xx): componenti smistati dal server
+  //    (#119) e intestazione solo dove il gruppo ha componenti. SENZA figli non si
+  //    importa. ──────────
   async function importaGruppo(item: CodexListItem) {
     const children = await fetchCompositionChildren(item.id)
     const codexChildren = children.filter((ch) => ch.source === "codex")
@@ -526,13 +639,28 @@ export function CodexPickerDialog({
       )
     }
     const pieces = codexChildren.reduce((sum, ch) => sum + ch.quantity, 0)
+
+    // Specchio di DdpSmistamento (prima cifra): 2xx/3xx → commerciale, tutto il resto
+    // (1xx, sotto-gruppi 5xx/6xx/7xx, famiglie ignote) → officina.
+    const haFigliOfficina = codexChildren.some((ch) => {
+      const key = (ch.childCodice ?? "").replace(/\./g, "").trim()
+      return key.length > 0 && !/^[23]/.test(key)
+    })
+
+    const smistamento = haFigliOfficina
+      ? "I componenti verranno smistati automaticamente: i commerciali (2xx/3xx) nella DDP Commerciale, il resto nella DDP Officina, con l'intestazione del gruppo dove ha componenti. I codici già presenti sommeranno le quantità."
+      : "I componenti sono tutti commerciali (2xx/3xx): finiranno nella DDP Commerciale con l'intestazione del gruppo. Nella DDP Officina non entrerà nulla."
     const ok = await confirm({
       title: "Importare il gruppo?",
-      description: `${item.codice} è un gruppo con ${codexChildren.length} componenti (${pieces} pezzi).\n\nI componenti verranno smistati automaticamente: i commerciali (2xx/3xx) nella DDP Commerciale, il resto nella DDP Officina, con l'intestazione del gruppo in entrambe. I codici già presenti sommeranno le quantità.`,
+      description: `${item.codice} è un gruppo con ${codexChildren.length} componenti (${pieces} pezzi).\n\n${smistamento}`,
       confirmLabel: "Importa",
       destructive: false,
     })
     if (!ok) return null
+
+    if (!haFigliOfficina) {
+      return importaGruppoSoloCommerciale(item)
+    }
 
     // Riga del padre in DDP Officina (è il «padre che comanda»): se c'è già in Da
     // Ordinare propone +1, e se i componenti sono già collegati il server li ha già
@@ -1062,45 +1190,68 @@ export function CodexPickerDialog({
                         </TableCell>
                       </TableRow>
                       {figli !== undefined ? (
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableRow className="bg-muted/15 hover:bg-muted/15">
                           <TableCell
                             colSpan={visibleColumns.length + 1}
-                            className="py-2"
+                            className="p-2.5 pl-8 pr-4"
                           >
                             {figli === "loading" ? (
-                              <span className="ml-8 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground">
+                                <span className="size-2 animate-pulse rounded-full bg-primary" />
                                 Caricamento componenti…
-                              </span>
+                              </div>
                             ) : figli.length === 0 ? (
-                              <span className="ml-8 text-xs text-destructive">
-                                Nessun componente in composizione: questo gruppo
-                                non è importabile finché non ha i figli.
-                              </span>
+                              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                                Nessun componente in composizione: questo gruppo non è importabile finché non ha i figli.
+                              </div>
                             ) : (
-                              <ul className="ml-8 space-y-0.5">
-                                {figli.map((f) => (
-                                  <li
-                                    key={f.id}
-                                    className="flex items-center gap-2 text-xs"
-                                  >
-                                    <span className="font-mono tabular-nums">
-                                      {formatCodice(f.childCodice)}
+                              <div className="rounded-lg border border-border/80 bg-card shadow-2xs overflow-hidden">
+                                <div className="flex items-center justify-between border-b border-border/70 bg-muted/40 px-3.5 py-1.5 text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="size-1.5 rounded-full bg-primary" />
+                                    <span className="font-semibold text-foreground">
+                                      Distinta componenti gruppo
                                     </span>
-                                    <span
-                                      className="max-w-[320px] truncate text-muted-foreground"
-                                      title={f.childDescr}
-                                    >
-                                      {f.childDescr || "—"}
+                                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                                      {figli.length} articol{figli.length === 1 ? "o" : "i"} •{" "}
+                                      {figli.reduce((acc, c) => acc + c.quantity, 0)} pezz{figli.reduce((acc, c) => acc + c.quantity, 0) === 1 ? "o" : "i"} tot.
                                     </span>
-                                    <span className="tabular-nums">
-                                      ×{f.quantity}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {etichettaDestinazione(f.childCodice)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
+                                  </div>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    Smistamento automatico all&apos;importazione
+                                  </span>
+                                </div>
+                                <table className="w-full text-xs text-left">
+                                  <thead>
+                                    <tr className="border-b border-border/40 bg-muted/20 text-[11px] font-medium text-muted-foreground">
+                                      <th className="py-1.5 px-3.5 text-left font-medium w-40">Cod. ATEC</th>
+                                      <th className="py-1.5 px-3 text-left font-medium">Descrizione componente</th>
+                                      <th className="py-1.5 px-3 text-center font-medium w-20">Qtà</th>
+                                      <th className="py-1.5 px-3.5 text-right font-medium w-48">Destinazione DDP</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/30">
+                                    {figli.map((f) => (
+                                      <tr key={f.id} className="hover:bg-muted/30 transition-colors">
+                                        <td className="py-1.5 px-3.5 font-mono font-medium tabular-nums text-foreground">
+                                          {formatCodice(f.childCodice)}
+                                        </td>
+                                        <td className="py-1.5 px-3 text-foreground/80 font-normal truncate max-w-[360px]" title={f.childDescr}>
+                                          {f.childDescr || "—"}
+                                        </td>
+                                        <td className="py-1.5 px-3 text-center">
+                                          <span className="inline-block rounded bg-muted px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-foreground">
+                                            ×{f.quantity}
+                                          </span>
+                                        </td>
+                                        <td className="py-1.5 px-3.5 text-right">
+                                          {renderDestinationBadge(f.childCodice)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>
