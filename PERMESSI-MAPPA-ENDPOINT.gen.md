@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 26/08/2026 09:52.
+> Fotografia del 27/08/2026 12:34.
 
 ## Chiavi con endpoint
 
@@ -195,6 +195,7 @@
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
+- `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
@@ -306,6 +307,9 @@
 - `PUT /api/catalog/{id}` (CatalogController.Update)
 - `PUT /api/material-categories/{id}` (MaterialCategoriesController.Update)
 
+### `nav.changelog` — Changelog versioni
+- `GET /api/changelog` (ChangelogController.Get)
+
 ### `nav.checklist` — Check list
 - `DELETE /api/checklist/groups/{id}` (CheckListController.DeleteGroup)
 - `DELETE /api/checklist/inbox/{id}` (CheckListController.DeleteInbox)
@@ -372,7 +376,9 @@
 ### `nav.danea_migration` — Trasferimento Danea
 - `GET /api/danea-migration/filter-options` (DaneaMigrationController.GetFilterOptions)
 - `GET /api/danea-migration/old-articles` (DaneaMigrationController.GetOldArticles)
+- `GET /api/danea-migration/pull-status` (DaneaMigrationController.GetPullStatus)
 - `GET /api/danea-migration/status` (DaneaMigrationController.GetStatus)
+- `POST /api/danea-migration/pull-old` (DaneaMigrationController.PullOld)
 - `POST /api/danea-migration/transfer` (DaneaMigrationController.Transfer)
 
 ### `nav.ddp_aggregazioni` — Aggregazioni DDP
@@ -407,6 +413,7 @@
 ### `nav.gestore_ddp` — Gestore DDP
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/ddp-feedback/acquisti` (DdpFeedbackController.GetAcquisti)
 - `GET /api/ddp-feedback/magazzino` (DdpFeedbackController.GetMagazzino)
 - `GET /api/ddp-manager/{projectId:int}` (DdpManagerController.GetDetail)
@@ -469,6 +476,7 @@
 
 ### `nav.officina_inbox` — Inbox Officina (endpoint)
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
@@ -675,22 +683,38 @@
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
+- `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
+- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
 ### `project.ddp_officina` — DDP Officina
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `GET /api/catalog` (CatalogController.GetAll)
+- `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
+- `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
+- `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
+- `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
+- `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
+- `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/codex/confirm` (CodexController.ConfirmReservation)
 - `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
+- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
 - `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
 ### `project.documenti` — Documenti
 - `GET /api/projects/{id}/download` (ProjectsController.DownloadFile)

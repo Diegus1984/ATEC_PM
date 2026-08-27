@@ -1,6 +1,15 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDown, ChevronUp, Link2, Pencil, Plus, RefreshCw, X } from "lucide-react"
+import {
+  Boxes,
+  Link2,
+  PackageOpen,
+  Pencil,
+  Plus,
+  RefreshCw,
+  ShoppingCart,
+  Trash2,
+} from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -95,23 +104,13 @@ const PREFIX_LABELS: Record<string, string> = {
   "3": "3xx — Elementi di fissaggio",
   "5": "5xx — Gruppi (501 mecc. / 511 custom)",
   "6": "6xx — Assieme mecc.",
+  "7": "7xx — Layout mecc.",
 }
 
-// Accenti di sezione (replicano i tre header colorati della pagina WPF).
+// Accenti di sezione.
 const ACCENT_COMPOSITI = "#4F6EF7"
 const ACCENT_ARTICOLI = "#D97706"
 const ACCENT_COMPOSIZIONE = "#12B76A"
-
-// Sfondi tenui per famiglia di codice (1xx…7xx), come nei nodi dell'albero WPF.
-const NODE_COLORS: Record<string, string> = {
-  "1": "#DBEDF8",
-  "2": "#E8F5E9",
-  "3": "#FFF3E0",
-  "4": "#F3E5F5",
-  "5": "#FDF6D6",
-  "6": "#E0F2F1",
-  "7": "#FCE4EC",
-}
 
 const ALL = "__all__"
 
@@ -176,17 +175,176 @@ function formatCodice(codice: string): string {
   return raw
 }
 
-function nodeColor(codice: string): string {
-  return NODE_COLORS[codice.charAt(0)] ?? "#F5F5F5"
+function getDestinationInfo(
+  code: string,
+  source?: string
+): { label: string; dotColor: string; badgeClass: string } {
+  if (source === "catalog") {
+    return {
+      label: "DDP Commerciale",
+      dotColor: "bg-emerald-500 shadow-[0_0_4px_#10b981]",
+      badgeClass:
+        "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+    }
+  }
+  const prefix = (code ?? "").charAt(0)
+  if (prefix === "2") {
+    return {
+      label: "DDP Commerciale",
+      dotColor: "bg-emerald-500 shadow-[0_0_4px_#10b981]",
+      badgeClass:
+        "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+    }
+  }
+  if (prefix === "1") {
+    return {
+      label: "DDP Officina",
+      dotColor: "bg-sky-500 shadow-[0_0_4px_#0284c7]",
+      badgeClass:
+        "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
+    }
+  }
+  if (prefix === "3") {
+    return {
+      label: "Fissaggi",
+      dotColor: "bg-amber-500 shadow-[0_0_4px_#f59e0b]",
+      badgeClass:
+        "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+    }
+  }
+  if (["5", "6", "7"].includes(prefix)) {
+    return {
+      label: "Sotto-gruppo",
+      dotColor: "bg-purple-500 shadow-[0_0_4px_#a855f7]",
+      badgeClass:
+        "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+    }
+  }
+  return {
+    label: "Componente",
+    dotColor: "bg-slate-400",
+    badgeClass:
+      "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  }
 }
 
-function nodeIcon(node: { source: string; codice: string }): string {
-  if (node.source === "catalog") return "🛒"
-  const prefix = node.codice.charAt(0)
-  if (prefix === "7") return "📦"
-  if (prefix === "6") return "🔧"
-  if (prefix === "5") return "⚙"
-  return "🔩"
+function getItemFamilyTheme(
+  code: string,
+  source?: string
+): {
+  rowClass: string
+  codePillClass: string
+} {
+  if (source === "catalog") {
+    return {
+      rowClass:
+        "bg-orange-50/70 hover:bg-orange-100/70 border-l-[5px] border-l-orange-500 dark:bg-orange-950/20 dark:hover:bg-orange-900/30 dark:border-l-orange-400",
+      codePillClass:
+        "bg-background text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-700 shadow-[0_0_6px_rgba(234,88,12,0.18)]",
+    }
+  }
+  const prefix = (code ?? "").charAt(0)
+  if (prefix === "1") {
+    return {
+      rowClass:
+        "bg-sky-50/70 hover:bg-sky-100/70 border-l-[5px] border-l-sky-500 dark:bg-sky-950/20 dark:hover:bg-sky-900/30 dark:border-l-sky-400",
+      codePillClass:
+        "bg-background text-sky-800 dark:text-sky-300 border-sky-300 dark:border-sky-700 shadow-[0_0_6px_rgba(2,132,199,0.18)]",
+    }
+  }
+  if (prefix === "2") {
+    return {
+      rowClass:
+        "bg-emerald-50/70 hover:bg-emerald-100/70 border-l-[5px] border-l-emerald-500 dark:bg-emerald-950/20 dark:hover:bg-emerald-900/30 dark:border-l-emerald-400",
+      codePillClass:
+        "bg-background text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 shadow-[0_0_6px_rgba(16,185,129,0.18)]",
+    }
+  }
+  if (prefix === "3") {
+    return {
+      rowClass:
+        "bg-amber-50/70 hover:bg-amber-100/70 border-l-[5px] border-l-amber-500 dark:bg-amber-950/20 dark:hover:bg-amber-900/30 dark:border-l-amber-400",
+      codePillClass:
+        "bg-background text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-[0_0_6px_rgba(245,158,11,0.18)]",
+    }
+  }
+  if (prefix === "5") {
+    return {
+      rowClass:
+        "bg-purple-50/70 hover:bg-purple-100/70 border-l-[5px] border-l-purple-500 dark:bg-purple-950/20 dark:hover:bg-purple-900/30 dark:border-l-purple-400",
+      codePillClass:
+        "bg-background text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700 shadow-[0_0_6px_rgba(168,85,247,0.18)]",
+    }
+  }
+  if (prefix === "6") {
+    return {
+      rowClass:
+        "bg-teal-50/70 hover:bg-teal-100/70 border-l-[5px] border-l-teal-500 dark:bg-teal-950/20 dark:hover:bg-teal-900/30 dark:border-l-teal-400",
+      codePillClass:
+        "bg-background text-teal-800 dark:text-teal-300 border-teal-300 dark:border-teal-700 shadow-[0_0_6px_rgba(13,148,136,0.18)]",
+    }
+  }
+  if (prefix === "7") {
+    return {
+      rowClass:
+        "bg-rose-50/70 hover:bg-rose-100/70 border-l-[5px] border-l-rose-500 dark:bg-rose-950/20 dark:hover:bg-rose-900/30 dark:border-l-rose-400",
+      codePillClass:
+        "bg-background text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700 shadow-[0_0_6px_rgba(225,29,72,0.18)]",
+    }
+  }
+  return {
+    rowClass:
+      "bg-muted/40 hover:bg-muted/60 border-l-[5px] border-l-slate-400 dark:border-l-slate-500",
+    codePillClass:
+      "bg-background text-foreground border-border shadow-[0_0_6px_rgba(0,0,0,0.06)]",
+  }
+}
+
+function renderDestinationBadge(code: string, source?: string) {
+  const dest = getDestinationInfo(code, source)
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border tracking-tight shrink-0",
+        dest.badgeClass
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full shrink-0", dest.dotColor)} />
+      {dest.label}
+    </span>
+  )
+}
+
+function getRootPrefixBadgeClass(prefix: string): { bg: string; border: string; pill: string } {
+  if (prefix === "5") {
+    return {
+      bg: "bg-amber-500",
+      border:
+        "border-amber-300/80 border-l-amber-500 dark:border-amber-800/60 dark:border-l-amber-400 from-amber-500/10 via-amber-500/5",
+      pill: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+    }
+  }
+  if (prefix === "6") {
+    return {
+      bg: "bg-teal-600",
+      border:
+        "border-teal-300/80 border-l-teal-500 dark:border-teal-800/60 dark:border-l-teal-400 from-teal-500/10 via-teal-500/5",
+      pill: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+    }
+  }
+  if (prefix === "7") {
+    return {
+      bg: "bg-rose-600",
+      border:
+        "border-rose-300/80 border-l-rose-500 dark:border-rose-800/60 dark:border-l-rose-400 from-rose-500/10 via-rose-500/5",
+      pill: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+    }
+  }
+  return {
+    bg: "bg-primary",
+    border: "border-primary/30 border-l-primary from-primary/10 via-primary/5",
+    pill: "bg-primary/10 text-primary border-primary/20",
+  }
 }
 
 /**
@@ -237,7 +395,7 @@ function patchQuantity(
   }
 }
 
-// ── ALBERO ─────────────────────────────────────────────────
+// ── ALBERO E TABELLE COMPOSIZIONE ──────────────────────────
 
 interface TreeCtx {
   canEdit: boolean
@@ -253,23 +411,80 @@ interface TreeCtx {
   onChangeQuantity: (node: CompositionTreeNode, delta: number) => void
 }
 
-function NodeRow({
+function RootHeaderCard({ node }: { node: CompositionTreeNode }) {
+  const prefix = node.codice.charAt(0)
+  const typeLabel = PREFIX_LABELS[prefix] ?? "Composito"
+  const theme = getRootPrefixBadgeClass(prefix)
+  const totalComponents = countComponents(node)
+  const totalPieces = countPieces(node)
+
+  return (
+    <div
+      className={cn(
+        "bg-gradient-to-r to-transparent border border-l-[5px] rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs",
+        theme.border
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className={cn(
+            "size-9 rounded-lg text-white flex items-center justify-center font-mono font-bold text-sm shadow-xs shrink-0",
+            theme.bg
+          )}
+        >
+          {node.codice.slice(0, 3)}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono font-bold text-base sm:text-lg text-foreground tracking-tight">
+              {formatCodice(node.codice)}
+            </span>
+            <span
+              className={cn(
+                "px-2.5 py-0.5 text-[10px] sm:text-[11px] font-semibold rounded-full border",
+                theme.pill
+              )}
+            >
+              {typeLabel}
+            </span>
+          </div>
+          <div
+            className="text-xs sm:text-sm font-medium text-muted-foreground truncate"
+            title={node.descr}
+          >
+            {node.descr || "—"}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+        <div className="bg-background/90 border border-border px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 shadow-2xs">
+          <span className="text-muted-foreground">Voci:</span>
+          <span className="font-semibold text-foreground">{totalComponents}</span>
+        </div>
+        <div className="bg-background/90 border border-border px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 shadow-2xs">
+          <span className="text-muted-foreground">Tot. Pezzi:</span>
+          <span className="font-bold text-emerald-600 dark:text-emerald-400">{totalPieces}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ComponentRow({
   node,
   depth,
-  isRoot,
   ctx,
 }: {
   node: CompositionTreeNode
   depth: number
-  isRoot: boolean
   ctx: TreeCtx
 }) {
   const isCodex = node.source !== "catalog"
-  // I nodi Codex non-radice accettano figli (drop con annidamento); la radice è
-  // gestita dal contenitore. Il server valida comunque la gerarchia all'aggiunta.
-  const droppable = ctx.canEdit && isCodex && !isRoot
+  const droppable = ctx.canEdit && isCodex
   const key = `node-${node.compositionId}-${node.codexId}`
   const display = isCodex ? formatCodice(node.codice) : node.codice
+  const familyTheme = getItemFamilyTheme(node.codice, node.source)
 
   const dndHandlers = droppable
     ? {
@@ -292,112 +507,205 @@ function NodeRow({
     : {}
 
   return (
-    <div>
-      <div
+    <>
+      <tr
         {...dndHandlers}
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-1",
-          ctx.hoverKey === key && "ring-2 ring-primary ring-offset-1"
+          "transition-colors group",
+          familyTheme.rowClass,
+          ctx.hoverKey === key && "ring-2 ring-primary ring-inset bg-primary/15"
         )}
-        style={{
-          marginLeft: depth * 16,
-          backgroundColor: nodeColor(node.codice),
-          color: "#1A1D26",
-        }}
       >
-        <span className="shrink-0">{nodeIcon(node)}</span>
-        <span
-          className={cn(
-            "shrink-0 font-mono",
-            isRoot ? "text-base font-bold" : "text-sm font-semibold"
-          )}
-        >
-          {display}
-        </span>
-        <span className="truncate text-sm" style={{ color: "#444" }}>
-          — {node.descr}
-        </span>
-        {!isRoot ? (
-          <span className="ml-auto flex shrink-0 items-center gap-1">
-            {ctx.canEdit ? (
-              <span className="flex items-stretch overflow-hidden rounded border border-black/20 bg-white/75">
-                <button
-                  type="button"
-                  title="Imposta quantità"
-                  onClick={() => ctx.onEditQuantity(node)}
-                  className="min-w-5 px-1 font-mono text-[11px] font-semibold tabular-nums hover:bg-white"
-                >
-                  {node.quantity}
-                </button>
-                <span className="flex flex-col border-l border-black/10">
-                  <button
-                    type="button"
-                    title="Aumenta quantità"
-                    onClick={() => ctx.onChangeQuantity(node, 1)}
-                    className="flex h-[10px] items-center justify-center px-0.5 text-black/60 hover:bg-white hover:text-black"
-                  >
-                    <ChevronUp className="size-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Diminuisci quantità"
-                    disabled={node.quantity <= 1}
-                    onClick={() => ctx.onChangeQuantity(node, -1)}
-                    className="flex h-[10px] items-center justify-center border-t border-black/10 px-0.5 text-black/60 hover:bg-white hover:text-black disabled:pointer-events-none disabled:opacity-30"
-                  >
-                    <ChevronDown className="size-2.5" />
-                  </button>
-                </span>
-              </span>
-            ) : (
-              <span className="rounded-full border border-black/10 px-2 font-mono text-[11px] leading-5 tabular-nums opacity-70">
-                ×{node.quantity}
-              </span>
+        <td className="py-2.5 px-3 font-mono">
+          <div
+            className="flex items-center gap-1.5"
+            style={{ paddingLeft: depth > 0 ? `${depth * 14}px` : undefined }}
+          >
+            {depth > 0 && (
+              <span className="text-muted-foreground/60 text-xs font-sans select-none">↳</span>
             )}
-            {ctx.canEdit ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0 text-destructive hover:bg-destructive/10"
-                title="Rimuovi il componente dalla composizione (tutte le quantità)"
-                onClick={() => ctx.onRemove(node)}
+            <span
+              className={cn(
+                "px-2.5 py-0.5 rounded-md font-mono font-bold text-xs sm:text-[13px] border tracking-tight shrink-0 transition-shadow",
+                familyTheme.codePillClass
+              )}
+            >
+              {display}
+            </span>
+          </div>
+        </td>
+        <td className="py-2.5 px-3 text-foreground font-medium text-xs sm:text-[13px] whitespace-normal break-words">
+          {node.descr || "—"}
+        </td>
+        <td className="py-2.5 px-3">
+          {renderDestinationBadge(node.codice, node.source)}
+        </td>
+        <td className="py-2.5 px-3 text-center">
+          {ctx.canEdit ? (
+            <div className="inline-flex items-center border border-border rounded-md bg-background/90 shadow-2xs overflow-hidden">
+              <button
+                type="button"
+                disabled={node.quantity <= 1}
+                onClick={() => ctx.onChangeQuantity(node, -1)}
+                className="px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors font-bold"
+                title="Diminuisci quantità (-1)"
               >
-                <X className="size-3.5" />
-              </Button>
-            ) : null}
-          </span>
-        ) : null}
-      </div>
+                -
+              </button>
+              <button
+                type="button"
+                onClick={() => ctx.onEditQuantity(node)}
+                className="px-2.5 py-0.5 font-mono font-bold text-foreground text-xs sm:text-[13px] min-w-6 text-center hover:bg-muted/50 transition-colors border-x border-border/60"
+                title="Clicca per impostare la quantità esatta"
+              >
+                {node.quantity}
+              </button>
+              <button
+                type="button"
+                onClick={() => ctx.onChangeQuantity(node, 1)}
+                className="px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors font-bold"
+                title="Aumenta quantità (+1)"
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <span className="px-2 py-0.5 font-mono text-xs sm:text-[13px] font-bold text-muted-foreground">
+              ×{node.quantity}
+            </span>
+          )}
+        </td>
+        <td className="py-2.5 px-2 text-center">
+          {ctx.canEdit && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 text-muted-foreground/50 opacity-60 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
+              title="Rimuovi il componente dalla distinta"
+              onClick={() => ctx.onRemove(node)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          )}
+        </td>
+      </tr>
 
-      {isRoot ? (
-        <RootGroups node={node} ctx={ctx} />
-      ) : (
+      {/* Sotto-figli gerarchici (per gruppi annidati, es. 601 -> 501 -> 201) */}
+      {node.children &&
+        node.children.length > 0 &&
         [...node.children]
           .sort((a, b) => a.codice.localeCompare(b.codice))
           .map((child) => (
-            <NodeRow
-              key={key + "/" + child.compositionId}
+            <ComponentRow
+              key={`nested-${child.compositionId}-${child.codexId}`}
               node={child}
               depth={depth + 1}
-              isRoot={false}
               ctx={ctx}
             />
-          ))
+          ))}
+    </>
+  )
+}
+
+function CompositionGroupTable({
+  title,
+  icon: Icon,
+  items,
+  groupKey,
+  onDrop,
+  onDragOver,
+  ctx,
+}: {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  items: CompositionTreeNode[]
+  groupKey: string
+  onDrop: (event: React.DragEvent) => void
+  onDragOver: (groupKey: string) => (event: React.DragEvent) => void
+  ctx: TreeCtx
+}) {
+  const totalPieces = items.reduce((acc, c) => acc + c.quantity + countPieces(c), 0)
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden shadow-2xs mb-3 bg-card">
+      <div
+        onDragOver={onDragOver(groupKey)}
+        onDrop={onDrop}
+        className={cn(
+          "bg-muted/40 border-b border-border px-3 py-2 flex items-center justify-between text-xs transition-colors",
+          ctx.hoverKey === groupKey && "ring-2 ring-primary ring-inset bg-primary/10"
+        )}
+      >
+        <div className="flex items-center gap-2 font-semibold text-foreground">
+          <Icon className="size-4 text-indigo-600 dark:text-indigo-400" />
+          <span>{title}</span>
+        </div>
+        <span className="text-[11px] text-muted-foreground font-medium">
+          {items.length} {items.length === 1 ? "voce" : "voci"} · {totalPieces}{" "}
+          {totalPieces === 1 ? "pezzo" : "pezzi"}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr className="bg-muted/20 border-b border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <th className="py-2 px-3 w-36">Cod. ATEC</th>
+              <th className="py-2 px-3">Descrizione Componente</th>
+              <th className="py-2 px-3 w-36">Destinazione</th>
+              <th className="py-2 px-3 w-28 text-center">Quantità</th>
+              <th className="py-2 px-2 w-9 text-center"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {items.map((child) => (
+              <ComponentRow
+                key={`comp-${child.compositionId}-${child.codexId}`}
+                node={child}
+                depth={0}
+                ctx={ctx}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Dropzone attiva in fondo alla tabella */}
+      {ctx.canEdit && (
+        <div
+          onDragOver={onDragOver(`${groupKey}-bottom`)}
+          onDrop={onDrop}
+          className={cn(
+            "p-2 bg-muted/10 border-t border-dashed border-border text-center transition-colors",
+            ctx.hoverKey === `${groupKey}-bottom` &&
+              "ring-2 ring-primary ring-inset bg-primary/10"
+          )}
+        >
+          <div className="border border-dashed border-border/80 hover:border-primary/50 hover:bg-primary/5 transition-all rounded-md py-2 px-3 flex items-center justify-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Plus className="size-3.5 text-muted-foreground/70" />
+            <span>
+              Trascina qui un articolo da sinistra oppure fai <strong>doppio clic</strong> nell'elenco
+            </span>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
-/** Raggruppa i figli diretti della radice in "Componenti Codex" e "Componenti commerciali". */
-function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) {
+function CompositionTreeView({
+  node,
+  ctx,
+}: {
+  node: CompositionTreeNode
+  ctx: TreeCtx
+}) {
   const codex = node.children
     .filter((c) => c.source !== "catalog")
     .sort((a, b) => a.codice.localeCompare(b.codice))
   const catalog = node.children
     .filter((c) => c.source === "catalog")
     .sort((a, b) => a.codice.localeCompare(b.codice))
-  const codexPieces = codex.reduce((acc, c) => acc + c.quantity, 0)
-  const catalogPieces = catalog.reduce((acc, c) => acc + c.quantity, 0)
 
   function groupDrop(event: React.DragEvent) {
     event.preventDefault()
@@ -419,50 +727,58 @@ function RootGroups({ node, ctx }: { node: CompositionTreeNode; ctx: TreeCtx }) 
   }
 
   return (
-    <div className="mt-1 space-y-1">
-      {codex.length > 0 ? (
-        <div className="ml-4">
-          <div
-            onDragOver={groupDragOver("group-codex")}
-            onDrop={groupDrop}
-            className={cn(
-              "rounded-md px-2 py-1 text-sm font-semibold",
-              ctx.hoverKey === "group-codex" && "ring-2 ring-primary ring-offset-1"
-            )}
-            style={{ backgroundColor: "#EEF2FF", color: ACCENT_COMPOSITI }}
-          >
-            🔩 Componenti Codex{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              ({codex.length} componenti · {codexPieces} pezzi)
-            </span>
-          </div>
-          {codex.map((child) => (
-            <NodeRow key={`codex/${child.compositionId}`} node={child} depth={2} isRoot={false} ctx={ctx} />
-          ))}
-        </div>
-      ) : null}
+    <div className="space-y-3">
+      {/* Testata Padre in Evidenza */}
+      <RootHeaderCard node={node} />
 
-      {catalog.length > 0 ? (
-        <div className="ml-4">
-          <div
-            onDragOver={groupDragOver("group-catalog")}
-            onDrop={groupDrop}
-            className={cn(
-              "rounded-md px-2 py-1 text-sm font-semibold",
-              ctx.hoverKey === "group-catalog" && "ring-2 ring-primary ring-offset-1"
-            )}
-            style={{ backgroundColor: "#FFF8F0", color: ACCENT_ARTICOLI }}
-          >
-            🛒 Componenti commerciali{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              ({catalog.length} componenti · {catalogPieces} pezzi)
-            </span>
-          </div>
-          {catalog.map((child) => (
-            <NodeRow key={`catalog/${child.compositionId}`} node={child} depth={2} isRoot={false} ctx={ctx} />
-          ))}
+      {/* Se non ci sono figli */}
+      {node.children.length === 0 ? (
+        <div
+          onDragOver={groupDragOver("empty-root")}
+          onDrop={groupDrop}
+          className={cn(
+            "p-8 text-center border-2 border-dashed border-border rounded-lg bg-muted/10 transition-colors",
+            ctx.hoverKey === "empty-root" &&
+              "ring-2 ring-primary ring-inset bg-primary/10 border-primary"
+          )}
+        >
+          <PackageOpen className="size-8 text-muted-foreground/50 mx-auto mb-2" />
+          <p className="text-sm font-medium text-foreground">Nessun componente in distinta</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {ctx.canEdit
+              ? "Trascina qui un articolo disponibile da sinistra o fai doppio clic nell'elenco per aggiungerlo."
+              : "Nessun componente associato a questo composito."}
+          </p>
         </div>
-      ) : null}
+      ) : (
+        <>
+          {/* Tabella Componenti Codex */}
+          {codex.length > 0 && (
+            <CompositionGroupTable
+              title="Componenti Codex"
+              icon={Boxes}
+              items={codex}
+              groupKey="group-codex"
+              onDrop={groupDrop}
+              onDragOver={groupDragOver}
+              ctx={ctx}
+            />
+          )}
+
+          {/* Tabella Componenti Commerciali */}
+          {catalog.length > 0 && (
+            <CompositionGroupTable
+              title="Componenti commerciali"
+              icon={ShoppingCart}
+              items={catalog}
+              groupKey="group-catalog"
+              onDrop={groupDrop}
+              onDragOver={groupDragOver}
+              ctx={ctx}
+            />
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -1194,43 +1510,47 @@ export function CodexCompositionPage() {
 
             {/* ── DESTRA: Composizione (albero) ── */}
             <div className="flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-md border lg:h-auto">
-              <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2">
                 <span
                   className="text-xs font-semibold tracking-wide"
                   style={{ color: ACCENT_COMPOSIZIONE }}
                 >
-                  COMPOSIZIONE
-                  {selectedParent ? ` — ${selectedParent.codice}` : ""}
+                  DISTINTA COMPOSIZIONE
+                  {selectedParent ? ` — ${formatCodice(selectedParent.codice)}` : ""}
                 </span>
+                {selectedParent && (
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                    Trascina articoli o fai doppio clic a sinistra
+                  </span>
+                )}
               </div>
               <div
                 onDragOver={rootDragOver}
                 onDrop={rootDrop}
                 className={cn(
-                  "min-h-0 flex-1 overflow-y-auto p-2",
-                  hoverKey === "root" && "ring-2 ring-inset ring-primary"
+                  "min-h-0 flex-1 overflow-y-auto p-3 transition-colors",
+                  hoverKey === "root" && "ring-2 ring-inset ring-primary bg-primary/5"
                 )}
               >
                 {!selectedParent ? (
-                  <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
-                    Seleziona un composito a sinistra per vederne la distinta.
+                  <div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground p-8">
+                    <PackageOpen className="size-10 text-muted-foreground/40 mb-2" />
+                    <p className="font-medium text-foreground">Nessun composito selezionato</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Seleziona un composito dalla tabella in alto a sinistra per visualizzarne o modificarne la distinta.
+                    </p>
                   </div>
                 ) : treeQuery.isLoading ? (
-                  <p className="p-4 text-sm text-muted-foreground">Caricamento…</p>
+                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                    <RefreshCw className="size-4 animate-spin mr-2" />
+                    Caricamento distinta…
+                  </div>
                 ) : treeQuery.isError ? (
-                  <p className="p-4 text-sm text-destructive">
+                  <div className="p-4 text-sm text-destructive bg-destructive/10 rounded-md">
                     {(treeQuery.error as Error).message}
-                  </p>
+                  </div>
                 ) : treeData ? (
-                  <>
-                    <NodeRow node={treeData} depth={0} isRoot ctx={ctx} />
-                    {treeData.children.length === 0 ? (
-                      <p className="px-2 py-4 text-sm text-muted-foreground">
-                        Nessun componente.{" "}
-                        {canEdit ? "Trascina qui un articolo disponibile." : ""}
-                      </p>
-                    ) : null}
-                  </>
+                  <CompositionTreeView node={treeData} ctx={ctx} />
                 ) : null}
               </div>
             </div>
