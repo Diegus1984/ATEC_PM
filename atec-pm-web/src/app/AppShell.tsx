@@ -1,12 +1,13 @@
 import * as React from "react"
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Bug, LogOut, Search } from "lucide-react"
+import { Bug, ChevronDown, LogOut, Search } from "lucide-react"
 
 import { AppUpdateBanner } from "@/app/AppUpdateBanner"
 import { ErrorBoundary } from "@/app/ErrorBoundary"
 import { NoAccessNotice } from "@/app/NoAccessNotice"
 import { BugReportDialog } from "@/features/bug-reports/BugReportDialog"
 import { CommandPalette } from "@/components/shared/command-palette"
+import { Collapsible } from "@/components/ui/collapsible"
 import { AtecBrandIcon } from "@/components/branding/AtecBrandIcon"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -85,11 +86,19 @@ function filterNavGroups(): NavGroupConfig[] {
   })).filter((group) => group.items.length > 0)
 }
 
+function navGroupsCollapsedKey(): string {
+  const employeeId = getSession()?.user.employeeId ?? "anon"
+  return `atec.sidebar.nav-groups.collapsed.${employeeId}`
+}
+
 function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.path === "/") {
     return pathname === "/"
   }
-  return pathname.startsWith(item.path)
+  if (item.path === "/mom") {
+    return pathname === "/mom" || (pathname.startsWith("/mom/") && !pathname.startsWith("/mom/note"))
+  }
+  return pathname === item.path || pathname.startsWith(item.path + "/")
 }
 
 export function AppShell() {
@@ -98,6 +107,37 @@ export function AppShell() {
   const session = getSession()
   const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
+
+  // Persistenza delle macro sezioni collassate (ricordate per utente in localStorage)
+  const [collapsedGroupIds, setCollapsedGroupIds] = React.useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(navGroupsCollapsedKey())
+      if (!raw) return new Set()
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed)
+        ? new Set(parsed.filter((k): k is string => typeof k === "string"))
+        : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+
+  const toggleGroupCollapse = React.useCallback((groupId: string) => {
+    setCollapsedGroupIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      try {
+        localStorage.setItem(navGroupsCollapsedKey(), JSON.stringify([...next]))
+      } catch {
+        /* storage non disponibile */
+      }
+      return next
+    })
+  }, [])
 
   // Scorciatoia globale Ctrl+K / Cmd+K e '/' per aprire la Command Palette universale
   React.useEffect(() => {
@@ -208,64 +248,97 @@ export function AppShell() {
         </SidebarHeader>
 
         <SidebarContent>
-          {navGroups.map((group) => (
-            <SidebarGroup
-              key={group.id}
-              className={group.pinBottom ? "mt-auto" : undefined}
-            >
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {group.items.map((item) => {
-                    const Icon = item.icon
-                    const active = isNavActive(item, location.pathname)
-                    // Una mappa al posto della catena di ternari: con sei voci a numero
-                    // proprio non si leggeva più. Il ramo `sectionCounts` resta il
-                    // fallback per le voci alimentate dalle scadenze.
-                    const badgeById: Record<string, number> = {
-                      scadenze: pendingCount,
-                      "bug-reports": bugReportsCount,
-                      chat: chatUnreadCount,
-                      trasferta: travelPending,
-                      "ore-commessa": oreCommessaPending,
-                      sal: salWarningsCount,
-                      "gestore-ddp": ddpDaVerificare,
-                    }
-                    const badgeCount =
-                      badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0
-                    // #102/#109: le due voci dello scarico ore si accendono anche nel
-                    // testo — verde grassetto — perché il pallino sparisce quando la
-                    // barra è compressa a sole icone.
-                    const daVerificare =
-                      (item.id === "trasferta" || item.id === "ore-commessa") &&
-                      badgeCount > 0
+          {navGroups.map((group) => {
+            const isGroupOpen = !collapsedGroupIds.has(group.id)
+            const badgeById: Record<string, number> = {
+              scadenze: pendingCount,
+              "bug-reports": bugReportsCount,
+              chat: chatUnreadCount,
+              trasferta: travelPending,
+              "ore-commessa": oreCommessaPending,
+              sal: salWarningsCount,
+              "gestore-ddp": ddpDaVerificare,
+            }
+            const groupBadgeCount = group.items.reduce(
+              (sum, item) => sum + (badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0),
+              0
+            )
 
-                    return (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={active}
-                          tooltip={item.label}
-                        >
-                          <button type="button" onClick={() => navigate(item.path)}>
-                            <Icon className={cn(daVerificare && "text-success")} />
-                            <span className={cn(daVerificare && "font-bold text-success")}>
-                              {item.label}
-                            </span>
-                          </button>
-                        </SidebarMenuButton>
-                        {badgeCount > 0 && (
-                          <SidebarMenuBadge className="bg-destructive text-destructive-foreground font-semibold">
-                            {badgeCount}
-                          </SidebarMenuBadge>
+            return (
+              <SidebarGroup
+                key={group.id}
+                className={group.pinBottom ? "mt-auto" : undefined}
+              >
+                <SidebarGroupLabel asChild>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroupCollapse(group.id)}
+                    className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none group-data-[collapsible=icon]:pointer-events-none"
+                    aria-expanded={isGroupOpen}
+                  >
+                    <span className="truncate">{group.label}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isGroupOpen && groupBadgeCount > 0 ? (
+                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1.5 font-mono text-[10px] font-semibold tabular-nums text-destructive-foreground">
+                          {groupBadgeCount}
+                        </span>
+                      ) : null}
+                      <ChevronDown
+                        className={cn(
+                          "size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
+                          !isGroupOpen && "-rotate-90"
                         )}
-                      </SidebarMenuItem>
-                    )
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))}
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </button>
+                </SidebarGroupLabel>
+                <Collapsible
+                  open={isGroupOpen}
+                  style={{ "--accordion-duration": "200ms" } as React.CSSProperties}
+                >
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {group.items.map((item) => {
+                        const Icon = item.icon
+                        const active = isNavActive(item, location.pathname)
+                        const badgeCount =
+                          badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0
+                        // #102/#109: le due voci dello scarico ore si accendono anche nel
+                        // testo — verde grassetto — perché il pallino sparisce quando la
+                        // barra è compressa a sole icone.
+                        const daVerificare =
+                          (item.id === "trasferta" || item.id === "ore-commessa") &&
+                          badgeCount > 0
+
+                        return (
+                          <SidebarMenuItem key={item.id}>
+                            <SidebarMenuButton
+                              asChild
+                              isActive={active}
+                              tooltip={item.label}
+                            >
+                              <button type="button" onClick={() => navigate(item.path)}>
+                                <Icon className={cn(daVerificare && "text-success")} />
+                                <span className={cn(daVerificare && "font-bold text-success")}>
+                                  {item.label}
+                                </span>
+                              </button>
+                            </SidebarMenuButton>
+                            {badgeCount > 0 && (
+                              <SidebarMenuBadge className="bg-destructive text-destructive-foreground font-semibold">
+                                {badgeCount}
+                              </SidebarMenuBadge>
+                            )}
+                          </SidebarMenuItem>
+                        )
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </Collapsible>
+              </SidebarGroup>
+            )
+          })}
         </SidebarContent>
 
         <SidebarFooter>
