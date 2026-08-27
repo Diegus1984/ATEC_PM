@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260827-1535",
+                     "data":  "2026-08-27T15:36:02",
+                     "hash":  "9e552bdfa8593bf76752e4a106f20abe49dedec7",
+                     "modifiche":  [
+                                       "Command palette globale (Ctrl+K / Cmd+K e /) per cercare e navigare"
+                                   ]
+                 },
+                 {
                      "build":  "20260827-1412",
                      "data":  "2026-08-27T14:12:28",
                      "hash":  "f8808387595b1b93d75fc13c48104abf4ac3d860",
@@ -47,8 +55,8 @@
                      "data":  "2026-08-26T15:27:49",
                      "hash":  "85987c60779085148cbae6c5a271a97cac364200",
                      "modifiche":  [
-                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ il padre orfano in Officina",
-                                       "Codex: codifica rapida dalla griglia e voce ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«Codice originaleÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â» nella ricodifica"
+                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ il padre orfano in Officina",
+                                       "Codex: codifica rapida dalla griglia e voce ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«Codice originaleÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â» nella ricodifica"
                                    ]
                  },
                  {
