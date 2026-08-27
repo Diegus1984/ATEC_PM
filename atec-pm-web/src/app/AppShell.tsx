@@ -1,11 +1,12 @@
 import * as React from "react"
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
-import { Bug, LogOut } from "lucide-react"
+import { Bug, LogOut, Search } from "lucide-react"
 
 import { AppUpdateBanner } from "@/app/AppUpdateBanner"
 import { ErrorBoundary } from "@/app/ErrorBoundary"
 import { NoAccessNotice } from "@/app/NoAccessNotice"
 import { BugReportDialog } from "@/features/bug-reports/BugReportDialog"
+import { CommandPalette } from "@/components/shared/command-palette"
 import { AtecBrandIcon } from "@/components/branding/AtecBrandIcon"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -96,6 +97,31 @@ export function AppShell() {
   const navigate = useNavigate()
   const session = getSession()
   const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
+
+  // Scorciatoia globale Ctrl+K / Cmd+K e '/' per aprire la Command Palette universale
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setCommandPaletteOpen((prev) => !prev)
+        return
+      }
+      if (
+        e.key === "/" &&
+        !commandPaletteOpen &&
+        !["INPUT", "TEXTAREA", "SELECT"].includes(
+          (e.target as HTMLElement)?.tagName
+        ) &&
+        !(e.target as HTMLElement)?.isContentEditable
+      ) {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [commandPaletteOpen])
   // I permessi stanno in variabili di modulo, non nello stato di React: senza sottoscrizione
   // il menu resterebbe quello del primo render — vuoto per sempre anche dopo un «Riprova»
   // riuscito. È anche l'aggancio per il futuro aggiornamento dei permessi a caldo, ed è per
@@ -312,11 +338,31 @@ export function AppShell() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex flex-1 items-center justify-between gap-2">
-            <h1 className="text-sm font-medium">
-              {/* Senza permessi la rotta è comunque «/»: scrivere «Dashboard» sopra un
-                  avviso di accesso negato farebbe credere che la pagina esista e sia rotta. */}
-              {hasNoAccess ? "ATEC PM" : (currentPage?.label ?? "ATEC PM")}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-sm font-medium hidden lg:inline-block">
+                {/* Senza permessi la rotta è comunque «/»: scrivere «Dashboard» sopra un
+                    avviso di accesso negato farebbe credere che la pagina esista e sia rotta. */}
+                {hasNoAccess ? "ATEC PM" : (currentPage?.label ?? "ATEC PM")}
+              </h1>
+
+              {/* Barra / Pulsante Trigger per la Command Palette */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-44 sm:w-60 md:w-72 lg:w-80 justify-between bg-muted/30 hover:bg-muted text-xs text-muted-foreground hover:text-foreground border-border/60 shadow-none px-2.5 cursor-pointer"
+                onClick={() => setCommandPaletteOpen(true)}
+                title="Apri ricerca e comandi (Ctrl+K o /)"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <Search className="size-3.5 shrink-0 opacity-60" />
+                  <span className="truncate">Cerca commessa o comando...</span>
+                </div>
+                <kbd className="pointer-events-none hidden h-5 select-none items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 sm:flex">
+                  <span className="text-[10px]">Ctrl</span>K
+                </kbd>
+              </Button>
+            </div>
+
             <div className="flex items-center gap-1">
               {canWriteFeature("nav.bug_reports") ? (
                 <Button
@@ -359,6 +405,13 @@ export function AppShell() {
           </div>
         </main>
       </SidebarInset>
+
+      {/* Command Palette Globale (Ctrl+K) */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onOpenBugReport={() => setReportDialogOpen(true)}
+      />
 
       {canWriteFeature("nav.bug_reports") && reportDialogOpen ? (
         <BugReportDialog

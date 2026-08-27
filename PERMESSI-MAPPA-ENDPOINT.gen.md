@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 27/08/2026 12:34.
+> Fotografia del 27/08/2026 15:23.
 
 ## Chiavi con endpoint
 

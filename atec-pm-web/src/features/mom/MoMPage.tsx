@@ -8,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { notifyError } from "@/lib/toast"
@@ -155,12 +155,23 @@ function PriorityPill({ value, variant }: { value: number; variant: "p1" | "p2" 
 
 export function MoMPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
 
   const [dialogVerbale, setDialogVerbale] = React.useState<number | "new" | null>(
     null
   )
+
+  React.useEffect(() => {
+    if (location.state?.newVerbale || searchParams.get("action") === "new") {
+      setDialogVerbale("new")
+      if (location.state?.newVerbale) {
+        window.history.replaceState({}, document.title)
+      }
+    }
+  }, [location.state, searchParams])
   const [view, setView] = React.useState<MoMView>({ kind: "all" })
   const [viewMode, setViewModeState] = React.useState<ViewMode>(loadViewMode)
 

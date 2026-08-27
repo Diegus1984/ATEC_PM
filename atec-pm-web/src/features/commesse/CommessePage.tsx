@@ -91,6 +91,15 @@ export function CommessePage() {
     number | "new" | null
   >(null)
 
+  React.useEffect(() => {
+    if (location.state?.newProject || searchParams.get("action") === "new") {
+      setDialogProject("new")
+      if (location.state?.newProject) {
+        window.history.replaceState({}, document.title)
+      }
+    }
+  }, [location.state, searchParams])
+
   // #94 — Intestazione commessa: `selectedProject` si valorizza solo dai click
   // sull'albero, quindi su deep-link (es. card di /milestones) resterebbe null e
   // l'header direbbe solo «Commessa». Codice e titolo arrivano da questa query
