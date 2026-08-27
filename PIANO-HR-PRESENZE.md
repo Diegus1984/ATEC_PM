@@ -20,7 +20,8 @@ richiesta → approvazione agganciato ai reparti e alle commesse.
 |---|---|
 | Sezione **HR** nel menu del gestionale | ✅ creata (voci `planned`, vedi §7) |
 | Chiavi permesso `nav.hr_timbrature`, `nav.hr_richieste` | ✅ a catalogo, spente (livello 3 = solo Admin) |
-| Motore cartellino (import Ecos + calcolo ore/straordinari) | ✅ esiste, in VB.NET fuori da ATEC PM (§4) |
+| Motore di calcolo del cartellino | ✅ **portato in C# e verificato**: 330/330 giornate identiche all'originale (§6 Fase 1) |
+| Import timbrature da Ecos (client API) | ⬜ da portare, in VB.NET fuori da ATEC PM (§4) |
 | Flusso richiesta → approvazione ferie/permessi | ❌ non esiste da nessuna parte — **è la parte nuova** |
 | Quadratura presenze ↔ ore su commessa | ❌ non esiste |
 | Tabella `absences` in produzione | ⚠️ esiste, **vuota**, da rifare (§6, Fase 2) |
@@ -123,12 +124,38 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 
 ### Fase 0 — verifiche (mezza giornata) — *parzialmente fatta*
 - ✅ `absences` e `holidays` esistono in produzione, entrambe **vuote**.
-- ⬜ Quanti dati ci sono nello SQLite del progetto Timbrature, da migrare o no.
+- ✅ **Nessuno storico da migrare**: lo SQLite del progetto Timbrature contiene solo dati
+  di prova (2-24 febbraio 2026: 932 timbrature, 379 cartellini, 48 dipendenti di cui 23
+  attivi). La storia vera sta in Ecos: si riparte puliti reimportando da lì. Quei 379
+  cartellini sono però diventati il **banco di prova** del port (vedi Fase 1).
 - ⬜ **Decisione ferma da tre mesi** (`TODO.md:156`): le festività infrasettimanali
   consumano un giorno di ferie? Oggi il planner dice di sì perché esclude solo i weekend
   (`planner-logic.ts`), ed è sbagliato.
 
-### Fase 1 — porto il motore dentro ATEC PM (2-3 settimane)
+### Fase 1 — porto il motore dentro ATEC PM (2-3 settimane) — **INIZIATA 27/08/2026**
+
+> **Fatto finora**: il **motore di calcolo è portato in C# e verificato**.
+> `ATEC.PM.Server/Services/Hr/RegoleCartellino.cs` (soglie, arrotondamenti, maggiorazioni
+> CCNL) e `MotoreCartellino.cs` (raggruppamento timbrature, assegnazione, riconoscimento
+> turni, pausa dedotta, scomposizione straordinario per fascia). Classe **pura**: niente
+> database, niente orologio di sistema — «oggi» si passa da fuori.
+>
+> **La rete di sicurezza**: `ATEC.PM.Tests/Hr/cartellini-collaudo.json` contiene **379
+> giornate vere** calcolate dal motore VB in esercizio (2-24 febbraio 2026), e
+> `MotoreCartellinoTests` confronta il port campo per campo. Esito: **330 su 330 giornate
+> con timbrature identiche**, comprese pausa dedotta, turni riconosciuti, anomalie e le
+> 78 con straordinario. Le 49 senza timbrature (forfait/assenze piene) sono escluse: non
+> le produce il motore ma la riconciliazione assenze, ancora da portare.
+>
+> 🪤 **Trappola già pagata**: nel VB il ramo «solo entrata» **non esce**, prosegue e i
+> totali vengono azzerati dal blocco finale — scrive `---` e poi lo sovrascrive con
+> `0h 0m`. Tradurlo come uscita anticipata sballa quel caso. È l'unica divergenza emersa,
+> e l'ha trovata il banco di prova.
+>
+> **Resta da fare in Fase 1**: client Ecos in C#, tabelle `time_punches`/`time_days`,
+> mappatura dipendenti Ecos↔ATEC PM, riconciliazione assenze, pagina cartellino.
+
+Impostazione originale della fase:
 Traduzione VB.NET → C#, SQLite → MySQL, riusando §4 senza reinventare le regole.
 - `time_punches` **append-only e immutabile**, idempotente su (seriale, matricola, timestamp);
 - `time_days` **rigenerabile** dal grezzo, mai modificata a mano;
