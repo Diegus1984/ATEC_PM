@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260827-1412",
+                     "data":  "2026-08-27T14:12:28",
+                     "hash":  "f8808387595b1b93d75fc13c48104abf4ac3d860",
+                     "modifiche":  [
+                                       "#129: ripescaggio automatico dal vecchio archivio Danea + trasferimento a prova di doppioni",
+                                       "Composizione Codex: badge di destinazione per famiglia nella distinta"
+                                   ]
+                 },
+                 {
                      "build":  "20260826-2134",
                      "data":  "2026-08-26T21:35:18",
                      "hash":  "476df9c20b7e868ef027c2541b7270c7536b6f6f",
@@ -38,8 +47,8 @@
                      "data":  "2026-08-26T15:27:49",
                      "hash":  "85987c60779085148cbae6c5a271a97cac364200",
                      "modifiche":  [
-                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¹ il padre orfano in Officina",
-                                       "Codex: codifica rapida dalla griglia e voce ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«Codice originaleÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â» nella ricodifica"
+                                       "DDP: un gruppo di soli commerciali non lascia piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ il padre orfano in Officina",
+                                       "Codex: codifica rapida dalla griglia e voce ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«Codice originaleÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â» nella ricodifica"
                                    ]
                  },
                  {
