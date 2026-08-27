@@ -55,6 +55,8 @@ export type ChiaveCatalogo =
   | "nav.fornitori"
   | "nav.gamma_robot"
   | "nav.gestore_ddp"
+  | "nav.hr_richieste"
+  | "nav.hr_timbrature"
   | "nav.milestones"
   | "nav.mom"
   | "nav.officina_inbox"
@@ -452,6 +454,25 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
   {
     "kind": "sezione",
     "chiave": null,
+    "label": "HR",
+    "figli": [
+      {
+        "kind": "voce",
+        "chiave": "nav.hr_timbrature",
+        "label": "Timbrature",
+        "soloClient": true
+      },
+      {
+        "kind": "voce",
+        "chiave": "nav.hr_richieste",
+        "label": "Ferie e permessi",
+        "soloClient": true
+      }
+    ]
+  },
+  {
+    "kind": "sezione",
+    "chiave": null,
     "label": "Gestione",
     "figli": [
       {
@@ -679,6 +700,8 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "nav.fornitori",
   "nav.gamma_robot",
   "nav.gestore_ddp",
+  "nav.hr_richieste",
+  "nav.hr_timbrature",
   "nav.milestones",
   "nav.mom",
   "nav.officina_inbox",

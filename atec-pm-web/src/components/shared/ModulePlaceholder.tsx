@@ -38,12 +38,12 @@ export function ModulePlaceholder({
           {statusBadge(status)}
         </div>
         <CardDescription>
-          {description ??
-            "Modulo in migrazione dal client WPF. L'API esiste già: prossimo sprint UI web."}
+          {description ?? "Modulo non ancora disponibile in questa versione."}
         </CardDescription>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
-        Nel frattempo puoi usare il client Windows (ATEC.PM.Client) per questo modulo.
+        La voce di menu esiste già per fissare la struttura: la pagina arriva con lo
+        sviluppo del modulo.
       </CardContent>
     </Card>
   )

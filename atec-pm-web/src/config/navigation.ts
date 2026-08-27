@@ -19,6 +19,7 @@ import {
   Bot,
   BriefcaseBusiness,
   Bug,
+  CalendarCheck,
   CalendarClock,
   ClipboardList,
   Clock,
@@ -26,6 +27,7 @@ import {
   Database,
   FileStack,
   FileText,
+  Fingerprint,
   FolderKanban,
   History,
   LayoutDashboard,
@@ -291,6 +293,35 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         status: "live",
         description:
           "Distinta Gamma Robot: Per Robot, Magazzino, Composizione (ADMIN) con drag&drop.",
+      },
+    ],
+  },
+  {
+    // Sezione HR — presenze, ferie e permessi (piano: PIANO-HR-PRESENZE.md).
+    // Le voci nascono `planned`: senza rotta in LIVE_ROUTES mostrano ModulePlaceholder,
+    // e le chiavi partono spente (EnsureCatalogo le registra a livello 3, solo Admin).
+    id: "hr",
+    label: "HR",
+    items: [
+      {
+        id: "hr-timbrature",
+        label: "Timbrature",
+        path: "/hr/timbrature",
+        featureKey: "nav.hr_timbrature",
+        icon: Fingerprint,
+        status: "planned",
+        description:
+          "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
+      },
+      {
+        id: "hr-richieste",
+        label: "Ferie e permessi",
+        path: "/hr/richieste",
+        featureKey: "nav.hr_richieste",
+        icon: CalendarCheck,
+        status: "planned",
+        description:
+          "Richieste di ferie e permessi con approvazione del responsabile di reparto.",
       },
     ],
   },

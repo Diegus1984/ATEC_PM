@@ -156,6 +156,14 @@
     },
     {
       "kind": "sezione",
+      "label": "HR",
+      "figli": [
+        { "kind": "voce", "chiave": "nav.hr_timbrature", "label": "Timbrature", "soloClient": true, "motivo": "Sezione HR in costruzione (PIANO-HR-PRESENZE.md): la voce fissa la struttura del menu, gli endpoint arrivano col modulo - allora si toglie soloClient." },
+        { "kind": "voce", "chiave": "nav.hr_richieste", "label": "Ferie e permessi", "soloClient": true, "motivo": "Sezione HR in costruzione (PIANO-HR-PRESENZE.md): la voce fissa la struttura del menu, gli endpoint arrivano col modulo - allora si toglie soloClient." }
+      ]
+    },
+    {
+      "kind": "sezione",
       "label": "Gestione",
       "figli": [
         { "kind": "voce", "chiave": "nav.clienti", "label": "Clienti" },
