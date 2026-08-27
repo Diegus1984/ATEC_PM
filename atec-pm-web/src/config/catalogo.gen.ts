@@ -459,8 +459,7 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
       {
         "kind": "voce",
         "chiave": "nav.hr_timbrature",
-        "label": "Timbrature",
-        "soloClient": true
+        "label": "Timbrature"
       },
       {
         "kind": "voce",

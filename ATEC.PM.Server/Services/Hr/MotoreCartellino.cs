@@ -110,20 +110,35 @@ public static class MotoreCartellino
     // ── ASSEGNAZIONE ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Raggruppa le timbrature ravvicinate (meno di 30 minuti = stesso gesto ripetuto,
-    /// tiene la prima) e assegna quelle rimaste ai posti del cartellino.
+    /// Due stadi, come nell'originale. Primo: via i doppioni di strisciata — una timbratura
+    /// a meno di 5 minuti dalla riga precedente si scarta (nel VB lo faceva la CTE SQL di
+    /// <c>ReportProcessor.vb</c> PRIMA del motore: senza questo stadio un doppione può fare
+    /// da ponte nel raggruppamento a 30' e inghiottire una timbratura vera). Secondo:
+    /// raggruppa le ravvicinate (meno di 30 minuti = stesso gesto ripetuto, tiene la prima)
+    /// e assegna quelle rimaste ai posti del cartellino.
     /// </summary>
     private static Assegnazione Assegna(List<TimbraturaGrezza> timbrature)
     {
-        var filtrate = new List<TimbraturaGrezza>();
-        TimbraturaGrezza inizioGruppo = timbrature[0];
+        // Stadio 1 — semantica LAG: il gap si misura dalla riga precedente (anche se
+        // scartata), e si tronca ai minuti interi come il CAST AS INTEGER del VB.
+        var pulite = new List<TimbraturaGrezza> { timbrature[0] };
         for (int i = 1; i < timbrature.Count; i++)
         {
-            double gap = (timbrature[i].Orario - timbrature[i - 1].Orario).TotalMinutes;
+            int gap = (int)(timbrature[i].Orario - timbrature[i - 1].Orario).TotalMinutes;
+            if (gap >= RegoleCartellino.FiltroDoppioniMinuti)
+                pulite.Add(timbrature[i]);
+        }
+
+        // Stadio 2 — raggruppamento a 30 minuti.
+        var filtrate = new List<TimbraturaGrezza>();
+        TimbraturaGrezza inizioGruppo = pulite[0];
+        for (int i = 1; i < pulite.Count; i++)
+        {
+            double gap = (pulite[i].Orario - pulite[i - 1].Orario).TotalMinutes;
             if (gap >= 30)
             {
                 filtrate.Add(inizioGruppo);
-                inizioGruppo = timbrature[i];
+                inizioGruppo = pulite[i];
             }
         }
         filtrate.Add(inizioGruppo);

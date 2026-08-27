@@ -309,7 +309,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         path: "/hr/timbrature",
         featureKey: "nav.hr_timbrature",
         icon: Fingerprint,
-        status: "planned",
+        status: "live",
         description:
           "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
       },

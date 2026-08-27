@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Services.Hr;
 using ATEC.PM.Server;
 using ATEC.PM.Server.Controllers;
 using ATEC.PM.Server.Hubs;
@@ -288,6 +289,14 @@ if (svcDaneaSync)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaOldPullService>());
 }
+
+// Modulo HR presenze (PIANO-HR-PRESENZE.md): client Ecos + import timbrature.
+// Senza credenziali (sezione "Ecos") tutto resta a riposo: in sviluppo è la norma.
+builder.Services.AddSingleton<EcosClient>();
+builder.Services.AddSingleton<HrPresenzeService>();
+bool svcHrSync = builder.Configuration.GetValue("Services:HrSync", true);
+if (svcHrSync)
+    builder.Services.AddHostedService<HrSyncBackgroundService>();
 
 builder.Services.AddSingleton<FullBackupService>();
 builder.Services.AddScoped<BackupController>();

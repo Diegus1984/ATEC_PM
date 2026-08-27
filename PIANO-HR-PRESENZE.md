@@ -2,7 +2,7 @@
 
 > **Punto d'ingresso del modulo HR.** Documento di consegna: chi riprende il lavoro
 > (persona o sessione) legge questo file e sa dove siamo, cosa è già stato deciso e
-> cosa manca. Ultimo aggiornamento: **27/08/2026**.
+> cosa manca. Ultimo aggiornamento: **27/08/2026 (sera: Fase 1 quasi completa)**.
 
 ---
 
@@ -21,7 +21,7 @@ richiesta → approvazione agganciato ai reparti e alle commesse.
 | Sezione **HR** nel menu del gestionale | ✅ creata (voci `planned`, vedi §7) |
 | Chiavi permesso `nav.hr_timbrature`, `nav.hr_richieste` | ✅ a catalogo, spente (livello 3 = solo Admin) |
 | Motore di calcolo del cartellino | ✅ **portato in C# e verificato**: 330/330 giornate identiche all'originale (§6 Fase 1) |
-| Import timbrature da Ecos (client API) | ⬜ da portare, in VB.NET fuori da ATEC PM (§4) |
+| Import timbrature da Ecos (client API) | ✅ **portato in C#** (`EcosClient` + `HrPresenzeService` + import automatico ogni 12h), pagina Timbrature **live** — mancano le credenziali Ecos in produzione (§6 Fase 1) |
 | Flusso richiesta → approvazione ferie/permessi | ❌ non esiste da nessuna parte — **è la parte nuova** |
 | Quadratura presenze ↔ ore su commessa | ❌ non esiste |
 | Tabella `absences` in produzione | ⚠️ esiste, **vuota**, da rifare (§6, Fase 2) |
@@ -112,6 +112,11 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 
 ### Da chiedere a SoftAgile (info@ecosagile.com, 02 89054136)
 
+0. **(nuove, dal port del client — 27/08 sera)** (a) Esiste un parametro di **ordinamento
+   stabile** per `PeopleStampGetAll`? Senza, durante un import lungo una riga può scivolare
+   fra due pagine e sparire. (b) Che valori assume **`StatusCode`** su una timbratura, e
+   come si riconosce una timbratura **annullata**? (c) Quando una timbratura viene
+   **cancellata** su Ecos resta una traccia (tombstone), o sparisce e basta?
 1. Abilitare l'utente API al **ServiceID `request`** per `PeopleAbsenceRequestPost` e
    `PeopleOvertimeRequestPost`.
 2. **Tracciato dei parametri** di `PeopleAbsenceRequestPost`: campi obbligatori, codici
@@ -160,13 +165,91 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 > timbrature non sanno di chi sono. Le rettifiche non hanno tabella propria: sono righe di
 > `hr_timbrature` con `origine='RETTIFICA'`, autore e motivo.
 >
-> **Resta da fare in Fase 1**: client Ecos in C# (port di `EcosApiManager.vb`), servizio di
-> import che riempie `hr_timbrature` e rigenera `hr_giornate` col motore, compilazione di
-> `ecos_empl_code` per i 37 dipendenti, riconciliazione assenze, pagina cartellino.
+> **Fatto il 27/08 sera** (in locale, NON ancora deployato):
+> - **`EcosClient.cs`** — port del client API (token, paginazione, timbrature, badge).
+>   Differenza voluta rispetto al VB: un errore API **solleva eccezione** invece di
+>   restituire dati parziali in silenzio (il cursore non deve avanzare su uno scarico rotto).
+> - **`HrPresenzeService.cs`** — l'import: confronta lo scarico con le righe
+>   `origine='ECOS'` esistenti (chiave `id_esterno`), inserisce le nuove, **aggiorna le
+>   cambiate** (Ecos è il padrone del suo dato: l'append-only vieta le correzioni a mano,
+>   non il mirror del rilevatore) e ricalcola SOLO le giornate toccate — compresa la
+>   giornata VECCHIA di una timbratura spostata di giorno, che altrimenti resterebbe
+>   calcolata su dati spariti. Cursore in `app_config` (`hr_sync_timbrature_da`), margine
+>   10 min, idempotente. Le giornate rimaste «Giornata in corso» si chiudono d'ufficio al
+>   primo import del giorno dopo. Rettifiche = righe `origine='RETTIFICA'` con autore e
+>   motivo obbligatorio; si possono eliminare SOLO le rettifiche, mai il grezzo.
+> - **`HrSyncBackgroundService`** — import automatico ogni 12h (`Hr:ImportIntervalHours`,
+>   gate `Services:HrSync`); senza credenziali resta a riposo e lo dice una volta sola.
+> - **`HrController`** (`api/hr/*`) dietro `nav.hr_timbrature` (tolto `soloClient` dal
+>   catalogo): con la LETTURA si vede solo il PROPRIO cartellino; la SCRITTURA apre
+>   cartellini altrui, import, mappatura (`ecos_empl_code`, unicità difesa) e rettifiche.
+> - **Pagina web `/hr/timbrature` LIVE** (`features/hr/`): cartellino mensile con totali,
+>   fasce CCNL in tooltip, doppio click = dettaglio giornata + rettifica, dialogo
+>   «Collega Ecos» coi badge letti vivi da Ecos + «Reimporta tutto» (serve dopo aver
+>   collegato una persona nuova: le sue timbrature passate erano state scartate).
+> - **Test**: `EcosClientTests` (parsing/paginazione senza rete, comprese le forme
+>   insidiose: riga singola come oggetto, `ECOSAGILE_DATA` stringa vuota, errori con
+>   HTTP 200) e `ImportPresenzeTests` (su MySQL: idempotenza, correzione da Ecos,
+>   spostamento di giorno, rettifiche, unicità mappatura). Il csproj del server ora ha
+>   `InternalsVisibleTo ATEC.PM.Tests`.
+>
+> **Difese aggiunte dopo la revisione avversaria** (32 difetti confermati, corretti):
+> - 🪤 **Il filtro dei doppioni sotto i 5 minuti mancava.** Nel VB stava nella CTE SQL
+>   *fuori* dal motore (`ReportProcessor.vb` righe 27-48, semantica `LAG`), quindi il port
+>   del solo motore non l'aveva. Senza, una doppia strisciata fa da ponte nel
+>   raggruppamento a 30' e si porta via il rientro vero: mezz'ora di straordinario persa in
+>   silenzio. Ora è il primo stadio di `MotoreCartellino.Assegna`, e `RegoleCartellino.Versione`
+>   è passata a **2** (le giornate a versione 1 si ricalcolano da sole).
+> - **`RiparaGiornate`**: ogni import rimette in pari le giornate con timbrature ma senza
+>   cartellino (ricalcolo interrotto da un deploy), quelle a regole vecchie e quelle più
+>   vecchie della loro ultima timbratura; toglie i cartellini orfani. Senza, un'interruzione
+>   lasciava il buco **per sempre** — il giro dopo il diff trovava tutto identico.
+> - **Cancellazioni su Ecos**: l'import *completo* toglie anche qui le righe che là non
+>   esistono più (l'incrementale no: non ha la fotografia intera). Prima una timbratura
+>   spuria cancellata su Ecos restava a sballare il cartellino, e dalla UI non si poteva
+>   togliere (il grezzo non si cancella a mano).
+> - **Cursore dall'orologio DI ECOS** (massimo `UpdateDate` ricevuto): il nostro non è
+>   confrontabile col loro, e uno scarto apriva una finestra cieca da cui le correzioni non
+>   tornavano più. Ripiego sul nostro solo se manca, con un'ora di margine (cambio d'ora).
+> - **Paginazione**: `LASTPAGE` assente non vuol dire «ultima pagina» — ci si ferma solo su
+>   `LASTPAGE=TRUE` o su una pagina non piena. Prima una risposta senza quel campo troncava
+>   lo scarico alla prima pagina e l'import si dichiarava riuscito.
+> - **Date**: solo formati espliciti. Il ripiego invariante leggeva «05/02/2026» come 2
+>   maggio, mettendo la timbratura nel giorno sbagliato senza dirlo.
+> - **Nessuno rettifica sé stesso** (§8: serve il secondo occhio), né elimina una rettifica
+>   sul proprio cartellino; l'eliminazione lascia traccia nel log. `GET /api/hr/stato` è
+>   passato dietro la scrittura (riporta l'errore grezzo di Ecos).
+> - **M108**: `employees.ecos_empl_code` UNICO. Il controllo applicativo non bastava: due
+>   salvataggi simultanei mettevano lo stesso badge su due persone, e da lì le ore di uno
+>   finivano nel cartellino dell'altro *a caso*.
+> - Web: il dialogo giornata lavora sulla data (non su uno snapshot che restava congelato →
+>   rettifiche doppie), i codici non abbinati sono un **banner persistente** e non una
+>   notifica verde che sparisce, errore Ecos sui badge distinto da «non configurato»,
+>   conferma sul «Reimporta tutto», guardie sul doppio invio.
+>
+> **Limiti noti, non risolvibili qui** (da chiedere a SoftAgile, §5):
+> 1. **Paginazione a offset senza snapshot**: se durante un import lungo una riga scivola
+>    fra due pagine, si perde e il cursore non la ripesca. Serve un parametro di ordinamento
+>    stabile lato API. Mitigazione oggi: un secondo import completo.
+> 2. **Timbrature annullate**: non sappiamo che valori assume `StatusCode` (il VB lo
+>    scaricava ma non lo guardava). Il campo ora viene richiesto: quando SoftAgile dirà cosa
+>    significa, basta filtrarlo.
+> 3. **Turni a cavallo di mezzanotte**: il giorno è quello di calendario della timbratura,
+>    come nel VB — un'uscita alle 00:20 finisce nel giorno dopo. Difetto ereditato, da
+>    affrontare solo se in officina nasceranno turni notturni veri.
+> 4. **Nessun filtro per reparto**: chi ha la scrittura vede e rettifica i cartellini di
+>    tutti. Oggi è solo l'Admin; **prima di concedere la scrittura ai 12 responsabili
+>    (Fase 2) va scritto lo scoping** — il piano lo dice già in §8.
+>
+> **Resta da fare in Fase 1**: compilare `ecos_empl_code` per i 37 dipendenti (dalla
+> pagina, dialogo «Collega Ecos»), **riconciliazione assenze** (le 49 giornate
+> forfait/assenza piena del banco di prova — dipende dal rifacimento di `absences`,
+> Fase 2), e in produzione: **credenziali Ecos** nella sezione `Ecos` dell'appsettings
+> del server (quello che vive solo là) + primo import completo.
 >
 > **Da dove ripartire in una chat nuova**: leggere questo file, poi
-> `ATEC.PM.Server/Services/Hr/` (motore già fatto) e
-> `Timbrature - API/.../Api/EcosApiManager.vb` (il client da portare, §4).
+> `ATEC.PM.Server/Services/Hr/` (motore + client + import) e
+> `ATEC.PM.Server/Controllers/HrController.cs`.
 
 Impostazione originale della fase:
 Traduzione VB.NET → C#, SQLite → MySQL, riusando §4 senza reinventare le regole.
@@ -214,25 +297,26 @@ non un fallimento**.
 Struttura pronta a ricevere le pagine, **nessuna funzione attiva**:
 
 - **`ATEC.PM.Shared/catalogo-permessi.json`** — sezione `HR` fra «Commerciale» e
-  «Gestione», con `nav.hr_timbrature` e `nav.hr_richieste`. Entrambe `soloClient: true`
-  con motivo, **obbligatorio** finché non esistono endpoint: il test
-  `CensimentoCatalogoTests` pretende che ogni chiave sia usata dal server, oppure
-  `soloClient` con motivo, oppure ritirata. **Quando arrivano gli endpoint, si toglie
-  `soloClient`.**
+  «Gestione». Dal 27/08 sera `nav.hr_timbrature` **non è più `soloClient`** (gli endpoint
+  esistono, `HrController`); `nav.hr_richieste` resta `soloClient` con motivo finché non
+  nasce la Fase 2. Le chiavi restano SPENTE (livello 3, solo Admin) finché non le concedi
+  dalla pagina Permessi.
 - **`atec-pm-web/src/config/catalogo.gen.ts`** — rigenerato (`node scripts/genera-catalogo.mjs`),
   82 chiavi. Non si modifica a mano.
 - **`atec-pm-web/src/config/navigation.ts`** — gruppo `hr`, due voci `status: "planned"`,
   percorsi `/hr/timbrature` e `/hr/richieste`.
 - **`ModulePlaceholder.tsx`** — tolto il rimando al client WPF (dismesso dal 20/07/2026).
 
-**Come si comportano oggi**: non avendo una voce in `LIVE_ROUTES`, le due pagine mostrano
-`ModulePlaceholder` con badge «In migrazione» — nessun link morto. Le chiavi nascono
-**spente**: `EnsureCatalogo` le registra a livello 3 (solo Admin) senza concessioni, quindi
-finché non le concedi dalla pagina Permessi la sezione HR **non compare a nessuno**,
-Admin escluso.
+**Come si comportano oggi**: `/hr/timbrature` è **live** (pagina vera in `features/hr/`,
+voce in `LIVE_ROUTES`, `status: "live"`); `/hr/richieste` mostra ancora
+`ModulePlaceholder` con badge «In migrazione». Le chiavi nascono **spente**:
+`EnsureCatalogo` le registra a livello 3 (solo Admin) senza concessioni, quindi finché
+non le concedi dalla pagina Permessi la sezione HR **non compare a nessuno**, Admin
+escluso.
 
 **Per accendere una pagina** servono tre cose: la pagina in `features/hr/`, la voce in
-`LIVE_ROUTES` di `AppRoutes.tsx`, e `status: "live"` in `navigation.ts`.
+`LIVE_ROUTES` di `AppRoutes.tsx`, e `status: "live"` in `navigation.ts` (fatto per
+Timbrature il 27/08).
 
 ## 8. Punti delicati — da non sbagliare
 

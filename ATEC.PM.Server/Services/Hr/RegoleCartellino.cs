@@ -13,11 +13,28 @@ namespace ATEC.PM.Server.Services.Hr;
 /// </summary>
 public static class RegoleCartellino
 {
+    /// <summary>
+    /// Versione delle regole, scritta su ogni riga di <c>hr_giornate</c> (<c>regole_versione</c>).
+    /// Si alza quando cambia una soglia o una maggiorazione: le giornate con versione più
+    /// bassa le ricalcola da sé <c>HrPresenzeService.RiparaGiornate</c> al primo import.
+    ///
+    /// <para>Storia: <b>1</b> primo port del motore VB · <b>2</b> aggiunto il filtro dei
+    /// doppioni di strisciata sotto i 5 minuti (era nella CTE SQL del VB, fuori dal motore).</para>
+    /// </summary>
+    public const int Versione = 2;
+
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int MinutiGiornataStandard = 480;
 
     /// <summary>Sotto questa pausa si considera che il tempo sia stato recuperato.</summary>
     public const int PausaMinimaMinuti = 30;
+
+    /// <summary>
+    /// Doppioni di strisciata: una timbratura a meno di questi minuti dalla PRECEDENTE
+    /// (riga precedente, non «precedente tenuta»: semantica LAG della CTE del VB,
+    /// <c>ReportProcessor.vb</c> righe 27-48) si scarta prima di ogni altro calcolo.
+    /// </summary>
+    public const int FiltroDoppioniMinuti = 5;
 
     /// <summary>Pausa dedotta d'ufficio quando non è stata timbrata.</summary>
     public const int PausaForzataMinuti = 60;

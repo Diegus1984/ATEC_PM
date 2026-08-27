@@ -51,6 +51,7 @@ import { UtentiPage } from "@/features/utenti/UtentiPage"
 import ScadenzePage from "@/features/scadenze/ScadenzePage"
 import { AcquistiPage } from "@/features/acquisti/AcquistiPage"
 import { DaneaMigrationPage } from "@/features/danea-migrazione/DaneaMigrationPage"
+import { TimbraturePage } from "@/features/hr/TimbraturePage"
 import { WorkRequestsPage } from "@/features/work-requests/WorkRequestsPage"
 import { BilancioPage } from "@/features/bilancio/BilancioPage"
 
@@ -69,6 +70,7 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   checklist: <ChecklistPage />,
   "bug-reports": <BugReportsPage />,
   "milestones-summary": <MilestonesPage />,
+  "hr-timbrature": <TimbraturePage />,
   sal: <SalPage />,
   trasferta: <TrasfertaPage />,
   "ore-commessa": <OreCommessaPage />,

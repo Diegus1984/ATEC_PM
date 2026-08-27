@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 27/08/2026 20:07.
+> Fotografia del 27/08/2026 22:11.
 
 ## Chiavi con endpoint
 
@@ -441,6 +441,16 @@
 - `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
+### `nav.hr_timbrature` — Timbrature
+- `DELETE /api/hr/rettifica/{id:long}` (HrController.EliminaRettifica)
+- `GET /api/hr/cartellino` (HrController.Cartellino)
+- `GET /api/hr/mappatura` (HrController.Mappatura)
+- `GET /api/hr/mappatura/badges` (HrController.Badges)
+- `GET /api/hr/stato` (HrController.Stato)
+- `POST /api/hr/import` (HrController.Importa)
+- `POST /api/hr/rettifica` (HrController.Rettifica)
+- `PUT /api/hr/mappatura/{employeeId:int}` (HrController.AggiornaMappatura)
+
 ### `nav.milestones` — Milestones
 - `DELETE /api/milestones/{id}` (MilestonesController.Delete)
 - `DELETE /api/milestones/project/{projectId}/views/{name}` (MilestonesController.DeleteView)
@@ -842,7 +852,6 @@
 - `nav.dashboard` — Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.
 - `nav.gamma_robot` — Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.
 - `nav.hr_richieste` — Sezione HR in costruzione (PIANO-HR-PRESENZE.md): la voce fissa la struttura del menu, gli endpoint arrivano col modulo - allora si toglie soloClient.
-- `nav.hr_timbrature` — Sezione HR in costruzione (PIANO-HR-PRESENZE.md): la voce fissa la struttura del menu, gli endpoint arrivano col modulo - allora si toglie soloClient.
 - `nav.sal_condizioni` — Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize]).
 - `project.dettagli` — Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize]).
 - `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).

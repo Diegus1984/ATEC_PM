@@ -28,6 +28,10 @@
 		<ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />
 	</ItemGroup>
 	<ItemGroup>
+		<!-- I test esercitano gli internal (es. il cuore dell'import HR senza HTTP). -->
+		<InternalsVisibleTo Include="ATEC.PM.Tests" />
+	</ItemGroup>
+	<ItemGroup>
 		<None Include="Firebird\**\*" CopyToOutputDirectory="PreserveNewest" />
 		<!-- Changelog delle versioni: lo aggiorna aggiorna-server.ps1 a ogni deploy
 		     (voci dai commit git), lo serve ChangelogController dietro nav.changelog. -->
