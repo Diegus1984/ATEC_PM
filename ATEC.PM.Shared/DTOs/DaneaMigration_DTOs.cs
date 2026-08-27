@@ -59,6 +59,39 @@ public class DaneaTransferResult
     public string Error { get; set; } = "";
     public int ImagesCopied { get; set; }
     public string ImageWarning { get; set; } = "";
+    /// <summary>ID effettivo in Atec_PM (= IdArticolo, salvo ID occupato e rimappato). Serve all'allineamento specchio.</summary>
+    public int IdInAtecPm { get; set; }
+    /// <summary>Cosa e' successo oltre al trasferimento: ID rimappato, fornitore copiato… (#129)</summary>
+    public string Note { get; set; } = "";
+}
+
+// Ripescaggio automatico dal VECCHIO archivio (#129): gli articoli nati dopo lo
+// spartiacque (cursore) arrivano da soli almeno due volte al giorno + a richiesta.
+
+public class DaneaPullReport
+{
+    /// <summary>Esito leggibile (spartiacque impostato, nessun nuovo, gia' in corso…).</summary>
+    public string Message { get; set; } = "";
+    /// <summary>true se un trasferimento e' stato eseguito (Transfer valorizzato).</summary>
+    public bool Ran { get; set; }
+    /// <summary>Articoli nuovi trovati oltre lo spartiacque in questo giro.</summary>
+    public int NewArticles { get; set; }
+    /// <summary>Cursore dopo il giro (ultimo IDArticolo del vecchio considerato).</summary>
+    public long LastSeenId { get; set; }
+    public DaneaTransferReport? Transfer { get; set; }
+}
+
+public class DaneaPullStatus
+{
+    public bool Enabled { get; set; }
+    public int IntervalHours { get; set; }
+    /// <summary>false finche' il primo giro non fissa lo spartiacque.</summary>
+    public bool Initialized { get; set; }
+    public long? LastSeenId { get; set; }
+    public DateTime? LastRunAt { get; set; }
+    public bool IsRunning { get; set; }
+    public string LastMessage { get; set; } = "";
+    public string? LastError { get; set; }
 }
 
 public class DaneaTransferReport

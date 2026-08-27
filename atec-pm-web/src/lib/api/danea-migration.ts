@@ -42,6 +42,10 @@ export interface DaneaTransferResult {
   error: string
   imagesCopied: number
   imageWarning: string
+  /** ID effettivo in Atec_PM (diverso da idArticolo se l'ID era occupato). */
+  idInAtecPm: number
+  /** ID rimappato, fornitore copiato… (#129) */
+  note: string
 }
 
 export interface DaneaTransferReport {
@@ -63,6 +67,28 @@ export interface DaneaFilterOptions {
   manufacturers: string[]
 }
 
+/** Ripescaggio automatico dal vecchio archivio (#129). */
+export interface DaneaPullStatus {
+  enabled: boolean
+  intervalHours: number
+  /** false finché il primo giro non fissa lo spartiacque. */
+  initialized: boolean
+  lastSeenId?: number | null
+  lastRunAt?: string | null
+  isRunning: boolean
+  lastMessage: string
+  lastError?: string | null
+}
+
+export interface DaneaPullReport {
+  message: string
+  /** true se un trasferimento è stato eseguito (transfer valorizzato). */
+  ran: boolean
+  newArticles: number
+  lastSeenId: number
+  transfer?: DaneaTransferReport | null
+}
+
 export async function fetchDaneaMigrationStatus(): Promise<DaneaMigrationStatus> {
   const response = await apiGet<ApiResponse<DaneaMigrationStatus>>(
     "/api/danea-migration/status"
@@ -82,6 +108,8 @@ export async function fetchDaneaOldArticles(params: {
   pageSize?: number
   search?: string
   onlyMissing?: boolean
+  /** Ordina per IDArticolo discendente: i codificati di recente in cima (#129). */
+  recentFirst?: boolean
   /** Filtri per colonna (chiave = parametro server: codArticolo/descrizione/categoria/fornitore/extra1). */
   filters?: Record<string, string>
 }): Promise<PagedResult<DaneaOldArticle>> {
@@ -92,6 +120,7 @@ export async function fetchDaneaOldArticles(params: {
   const search = params.search?.trim()
   if (search) query.set("search", search)
   if (params.onlyMissing) query.set("onlyMissing", "true")
+  if (params.recentFirst) query.set("recentFirst", "true")
   if (params.filters) {
     for (const [key, value] of Object.entries(params.filters)) {
       const trimmed = value.trim()
@@ -110,6 +139,21 @@ export async function transferDaneaArticles(
   const response = await apiPost<ApiResponse<DaneaTransferReport>>(
     "/api/danea-migration/transfer",
     { articleIds }
+  )
+  return unwrapApi(response)
+}
+
+export async function fetchDaneaPullStatus(): Promise<DaneaPullStatus> {
+  const response = await apiGet<ApiResponse<DaneaPullStatus>>(
+    "/api/danea-migration/pull-status"
+  )
+  return unwrapApi(response)
+}
+
+export async function runDaneaPull(): Promise<DaneaPullReport> {
+  const response = await apiPost<ApiResponse<DaneaPullReport>>(
+    "/api/danea-migration/pull-old",
+    {}
   )
   return unwrapApi(response)
 }

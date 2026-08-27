@@ -18,11 +18,42 @@ public class DaneaMigrationController : ControllerBase
 {
     private readonly DaneaMigrationService _svc;
     private readonly DaneaSyncService _sync;
+    private readonly DaneaOldPullService _pull;
 
-    public DaneaMigrationController(DaneaMigrationService svc, DaneaSyncService sync)
+    public DaneaMigrationController(
+        DaneaMigrationService svc, DaneaSyncService sync, DaneaOldPullService pull)
     {
         _svc = svc;
         _sync = sync;
+        _pull = pull;
+    }
+
+    /// <summary>Stato del ripescaggio automatico dal vecchio archivio (#129).</summary>
+    [HttpGet("pull-status")]
+    public async Task<IActionResult> GetPullStatus()
+    {
+        try
+        {
+            return Ok(ApiResponse<DaneaPullStatus>.Ok(await _pull.GetStatus()));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<DaneaPullStatus>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>Ripescaggio manuale «all'occorrenza»: stesso giro del servizio automatico.</summary>
+    [HttpPost("pull-old")]
+    public async Task<IActionResult> PullOld()
+    {
+        try
+        {
+            return Ok(ApiResponse<DaneaPullReport>.Ok(await _pull.RunOnce()));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<DaneaPullReport>.Fail(ex.Message));
+        }
     }
 
     [HttpGet("status")]
@@ -63,13 +94,15 @@ public class DaneaMigrationController : ControllerBase
         [FromQuery] string? sottocategoria = null,
         [FromQuery] string? fornitore = null,
         [FromQuery] string? produttore = null,
-        [FromQuery] string? extra1 = null)
+        [FromQuery] string? extra1 = null,
+        [FromQuery] bool recentFirst = false)
     {
         try
         {
             return Ok(ApiResponse<PagedResult<DaneaOldArticle>>.Ok(
                 _svc.GetOldArticles(page, pageSize, search, onlyMissing,
-                    codArticolo, descrizione, categoria, sottocategoria, fornitore, produttore, extra1)));
+                    codArticolo, descrizione, categoria, sottocategoria, fornitore, produttore, extra1,
+                    recentFirst)));
         }
         catch (Exception ex)
         {
@@ -96,9 +129,11 @@ public class DaneaMigrationController : ControllerBase
             // di esito compare, il catalogo e' gia' a posto. Il giro completo resta al sync.
             // Anche gli "skipped" vanno allineati: erano gia' nell'archivio ma potevano essere
             // rimasti spenti nello specchio, ed e' proprio il caso che sembra un guasto.
+            // IdInAtecPm, non IdArticolo: con la rimappatura (#129) l'articolo puo' vivere
+            // in Atec_PM con un ID diverso da quello del vecchio archivio.
             var daAllineare = report.Results
                 .Where(r => r.Outcome != "error")
-                .Select(r => r.IdArticolo)
+                .Select(r => r.IdInAtecPm > 0 ? r.IdInAtecPm : r.IdArticolo)
                 .ToList();
             if (daAllineare.Count > 0)
             {

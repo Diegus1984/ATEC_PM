@@ -1,6 +1,14 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowRightLeft, Check, Image as ImageIcon, Search, TriangleAlert } from "lucide-react"
+import {
+  ArrowRightLeft,
+  Check,
+  History,
+  Image as ImageIcon,
+  RefreshCw,
+  Search,
+  TriangleAlert,
+} from "lucide-react"
 
 import { ColumnFilterCombobox } from "@/components/shared/column-filter-combobox"
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
@@ -32,12 +40,15 @@ import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   fetchDaneaMigrationStatus,
   fetchDaneaOldArticles,
+  fetchDaneaPullStatus,
+  runDaneaPull,
   transferDaneaArticles,
   type DaneaOldArticle,
   type DaneaTransferReport,
 } from "@/lib/api/danea-migration"
+import { formatDateTimeShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
-import { notifyError } from "@/lib/toast"
+import { notifyError, notifyInfo } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
@@ -89,6 +100,8 @@ export function DaneaMigrationPage() {
   const [searchInput, setSearchInput] = React.useState("")
   const search = useDebounced(searchInput.trim(), 350)
   const [onlyMissing, setOnlyMissing] = React.useState(true)
+  /** #129: IDArticolo discendente — gli articoli codificati di recente nel vecchio in cima. */
+  const [recentFirst, setRecentFirst] = React.useState(false)
   /** Filtri per colonna (chiave = parametro server), debounced come la ricerca. */
   const [columnFilters, setColumnFilters] = React.useState<Record<string, string>>({})
   const debouncedFilters = useDebounced(columnFilters, 300)
@@ -121,20 +134,25 @@ export function DaneaMigrationPage() {
 
   React.useEffect(() => {
     setPage(1)
-  }, [search, onlyMissing, debouncedFilters])
+  }, [search, onlyMissing, recentFirst, debouncedFilters])
 
   const statusQuery = useQuery({
     queryKey: ["danea-migration-status"],
     queryFn: fetchDaneaMigrationStatus,
   })
+  const pullStatusQuery = useQuery({
+    queryKey: ["danea-migration-pull-status"],
+    queryFn: fetchDaneaPullStatus,
+  })
   const listQuery = useQuery({
-    queryKey: ["danea-migration-old", page, search, onlyMissing, debouncedFilters],
+    queryKey: ["danea-migration-old", page, search, onlyMissing, recentFirst, debouncedFilters],
     queryFn: () =>
       fetchDaneaOldArticles({
         page,
         pageSize: PAGE_SIZE,
         search,
         onlyMissing,
+        recentFirst,
         filters: debouncedFilters,
       }),
   })
@@ -172,7 +190,19 @@ export function DaneaMigrationPage() {
   const invalidate = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["danea-migration-status"] })
     void queryClient.invalidateQueries({ queryKey: ["danea-migration-old"] })
+    void queryClient.invalidateQueries({ queryKey: ["danea-migration-pull-status"] })
   }, [queryClient])
+
+  /** #129: ripescaggio manuale «all'occorrenza» — stesso giro del servizio automatico. */
+  const pullMutation = useMutation({
+    mutationFn: runDaneaPull,
+    onSuccess: (rep) => {
+      if (rep.transfer) setReport(rep.transfer)
+      else notifyInfo(rep.message)
+      invalidate()
+    },
+    onError: (err: Error) => notifyError(err),
+  })
 
   const selectableOnPage = items.filter((i) => !i.transferred)
   const allPageSelected =
@@ -238,6 +268,23 @@ export function DaneaMigrationPage() {
             «Atec_PM» ({status?.newArticles ?? "…"} trasferiti). Il vecchio non
             viene mai modificato.
           </p>
+          {pullStatusQuery.data ? (
+            <p className="text-sm text-muted-foreground">
+              {!pullStatusQuery.data.enabled
+                ? "Ripescaggio automatico spento."
+                : !pullStatusQuery.data.initialized
+                  ? `Ripescaggio automatico ogni ${pullStatusQuery.data.intervalHours} h: il primo giro fissa lo spartiacque.`
+                  : `Ripescaggio automatico ogni ${pullStatusQuery.data.intervalHours} h · ultimo giro ` +
+                    `${formatDateTimeShort(pullStatusQuery.data.lastRunAt) || "mai"} · ` +
+                    pullStatusQuery.data.lastMessage}
+              {pullStatusQuery.data.lastError ? (
+                <span className="text-destructive">
+                  {" "}
+                  Ultimo errore: {pullStatusQuery.data.lastError}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         {status && (!status.imagesSourceReachable || !status.imagesTargetReachable) ? (
           <div className="flex flex-col items-start gap-1 sm:items-end">
@@ -282,6 +329,23 @@ export function DaneaMigrationPage() {
                 onClick={() => setOnlyMissing((v) => !v)}
               >
                 Solo da trasferire
+              </Button>
+              <Button
+                variant={recentFirst ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRecentFirst((v) => !v)}
+              >
+                <History />
+                Più recenti prima
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pullMutation.isPending || pullStatusQuery.data?.isRunning}
+                onClick={() => pullMutation.mutate()}
+              >
+                <RefreshCw className={pullMutation.isPending ? "animate-spin" : undefined} />
+                {pullMutation.isPending ? "Ripescaggio…" : "Ripesca adesso"}
               </Button>
               <Button
                 size="sm"
@@ -500,7 +564,7 @@ function TransferReportDialog({
 }) {
   if (!report) return null
   const problems = report.results.filter(
-    (r) => r.outcome === "error" || r.imageWarning
+    (r) => r.outcome === "error" || r.imageWarning || r.note
   )
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -527,9 +591,18 @@ function TransferReportDialog({
               <p key={r.idArticolo}>
                 <span className="font-medium">{r.codArticolo || `#${r.idArticolo}`}</span>
                 {": "}
-                <span className={r.outcome === "error" ? "text-destructive" : "text-amber-700"}>
-                  {r.outcome === "error" ? r.error : r.imageWarning}
-                </span>
+                {r.outcome === "error" ? (
+                  <span className="text-destructive">{r.error}</span>
+                ) : (
+                  <>
+                    {r.note ? (
+                      <span className="text-muted-foreground">{r.note} </span>
+                    ) : null}
+                    {r.imageWarning ? (
+                      <span className="text-amber-700">{r.imageWarning}</span>
+                    ) : null}
+                  </>
+                )}
               </p>
             ))}
           </div>

@@ -281,8 +281,13 @@ builder.Services.AddSingleton<DaneaMappingService>();
 builder.Services.AddSingleton<NetworkShareConnector>();
 builder.Services.AddSingleton<DaneaMigrationService>();
 builder.Services.AddSingleton<DaneaOrderService>();
+// #129: ripescaggio automatico dal vecchio archivio (articoli oltre lo spartiacque)
+builder.Services.AddSingleton<DaneaOldPullService>();
 if (svcDaneaSync)
+{
     builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaSyncService>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<DaneaOldPullService>());
+}
 
 builder.Services.AddSingleton<FullBackupService>();
 builder.Services.AddScoped<BackupController>();
