@@ -152,8 +152,21 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 > `0h 0m`. Tradurlo come uscita anticipata sballa quel caso. È l'unica divergenza emersa,
 > e l'ha trovata il banco di prova.
 >
-> **Resta da fare in Fase 1**: client Ecos in C#, tabelle `time_punches`/`time_days`,
-> mappatura dipendenti Ecos↔ATEC PM, riconciliazione assenze, pagina cartellino.
+> **Anche le tabelle ci sono** (migrazione `M107_HrPresenze`, 42 test migrazioni verdi,
+> NON ancora deployata): `hr_timbrature` (grezzo **append-only**, unicità su
+> `(origine, id_esterno)` così il reimport non duplica), `hr_giornate` (cartellino
+> **rigenerabile**, con `calcolato_il` e `regole_versione` per sapere cosa ricalcolare se
+> cambia una soglia) e `employees.ecos_empl_code`, il ponte con Ecos senza il quale le
+> timbrature non sanno di chi sono. Le rettifiche non hanno tabella propria: sono righe di
+> `hr_timbrature` con `origine='RETTIFICA'`, autore e motivo.
+>
+> **Resta da fare in Fase 1**: client Ecos in C# (port di `EcosApiManager.vb`), servizio di
+> import che riempie `hr_timbrature` e rigenera `hr_giornate` col motore, compilazione di
+> `ecos_empl_code` per i 37 dipendenti, riconciliazione assenze, pagina cartellino.
+>
+> **Da dove ripartire in una chat nuova**: leggere questo file, poi
+> `ATEC.PM.Server/Services/Hr/` (motore già fatto) e
+> `Timbrature - API/.../Api/EcosApiManager.vb` (il client da portare, §4).
 
 Impostazione originale della fase:
 Traduzione VB.NET → C#, SQLite → MySQL, riusando §4 senza reinventare le regole.
