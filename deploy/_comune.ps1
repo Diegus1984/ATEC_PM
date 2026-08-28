@@ -260,6 +260,19 @@ function Update-Changelog {
         $ultimoHash = ''
         if ($voci.Count -gt 0 -and $voci[0].hash) { $ultimoHash = [string]$voci[0].hash }
 
+        # TRAPPOLA (28/08/2026): l'ancora dev'essere un hash VERO, non una parola.
+        # Una voce scritta a mano con hash = «head» ha bloccato il changelog per tre
+        # deploy di fila: git risolve `head` come HEAD, quindi `head..HEAD` è sempre
+        # vuoto e la funzione usciva dicendo «nessun commit nuovo» — sempre, per
+        # sempre, senza che niente sembrasse rotto. Qui si controlla che l'ancora sia
+        # un commit raggiungibile e DIVERSO da HEAD; se non lo è si dice ad alta voce
+        # invece di registrare il silenzio.
+        if ($ultimoHash -and $ultimoHash -notmatch '^[0-9a-fA-F]{7,40}$') {
+            Write-Host ("[Changelog] ATTENZIONE: l'ancora dell'ultima voce non è un hash ('{0}'): " -f $ultimoHash) -ForegroundColor Yellow
+            Write-Host '            nessuna voce verrà più registrata finché non la si corregge in changelog.json.' -ForegroundColor Yellow
+            return
+        }
+
         # I messaggi dei commit sono UTF-8: senza questo, gli accenti arrivano rotti
         # (PowerShell 5.1 decodifica l'output dei comandi esterni con la codepage OEM).
         $vecchiaEnc = [Console]::OutputEncoding
