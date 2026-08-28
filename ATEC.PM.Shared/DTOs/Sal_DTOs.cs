@@ -188,3 +188,42 @@ public class SalSummaryDto
     public decimal? Valore { get; set; }          // Importo ordine — il server lo azzera per chi non ha `sal.economics`
 }
 
+
+// ── #131 «SAL / SAP Acconti»: riconciliazione fra gli acconti del gestionale e il conto SAP ──
+
+/// <summary>
+/// Le tre tabelle della pagina in un colpo solo. La prima coppia si calcola dalle righe SAL,
+/// la seconda la scrive una persona leggendo SAP: la differenza la fa il client, perché è una
+/// sottrazione fra due numeri che ha già in mano.
+/// </summary>
+public class SalSapAccontiDto
+{
+    /// <summary>Etichetta del conto SAP di cui si sta facendo la quadratura (per il titolo).</summary>
+    public string ContoSap { get; set; } = "";
+
+    /// <summary>Etichetta della causale Conto SAP che marca un acconto sulle righe SAL.</summary>
+    public string CausaleAcconto { get; set; } = "";
+
+    // ── Da SAL Gestionale (calcolati, sola lettura) ──
+    /// <summary>Quante fatture del SAL hanno Conto SAP = acconto.</summary>
+    public int SalTotFatture { get; set; }
+    /// <summary>Somma dei loro Importi Fattura.</summary>
+    public decimal SalImportoAcconti { get; set; }
+
+    // ── Conto SAP (a mano). null = non ancora compilato, che NON è come «zero». ──
+    public int? SapTotFatture { get; set; }
+    public decimal? SapImportoAcconti { get; set; }
+
+    public int RowVersion { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    /// <summary>Chi ha scritto per ultimo i valori SAP ("" se non l'ha mai fatto nessuno).</summary>
+    public string UpdatedByName { get; set; } = "";
+}
+
+/// <summary>Salvataggio dei soli valori del conto SAP (gli altri sono calcolati).</summary>
+public class SalSapAccontiSaveRequest
+{
+    public int? TotFatture { get; set; }
+    public decimal? ImportoAcconti { get; set; }
+    public int? RowVersion { get; set; }
+}

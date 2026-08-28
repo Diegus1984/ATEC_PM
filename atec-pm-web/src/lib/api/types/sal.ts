@@ -191,3 +191,36 @@ export interface SalSummary {
   /** Importo ordine — null anche per chi non ha `sal.economics` (azzerato dal server). */
   valore: number | null
 }
+
+/**
+ * #131 — le tre tabelle di «SAL / SAP Acconti».
+ *
+ * La prima coppia (`sal*`) la calcola il server dalle righe SAL; la seconda (`sap*`) la
+ * scrive una persona leggendo il conto in SAP. La terza tabella — la differenza — non
+ * viaggia: è la sottrazione fra le due, e si fa dove si mostra.
+ */
+export interface SalSapAcconti {
+  /** Conto SAP di cui si sta facendo la quadratura (per il titolo della tabella). */
+  contoSap: string
+  /** Causale «Conto SAP» che marca un acconto sulle righe SAL. */
+  causaleAcconto: string
+  /** Quante fatture del SAL hanno Conto SAP = acconto. */
+  salTotFatture: number
+  /** Somma dei loro Importi Fattura. */
+  salImportoAcconti: number
+  /** null = non ancora compilato (diverso da «zero»). */
+  sapTotFatture: number | null
+  /** null = non ancora compilato (diverso da «zero»). */
+  sapImportoAcconti: number | null
+  rowVersion: number
+  updatedAt: string | null
+  /** Chi ha scritto per ultimo i valori SAP ("" se non l'ha mai fatto nessuno). */
+  updatedByName: string
+}
+
+/** Salvataggio dei soli valori del conto SAP (gli altri sono calcolati). */
+export interface SalSapAccontiSaveRequest {
+  totFatture: number | null
+  importoAcconti: number | null
+  rowVersion: number | null
+}

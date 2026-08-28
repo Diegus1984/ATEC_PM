@@ -1074,6 +1074,135 @@ public class SalController : ControllerBase
         return Ok(ApiResponse<SalEconomicsDto>.Ok(new SalEconomicsDto { Headers = headers, Rows = rows }));
     }
 
+    // ── #131 «SAL / SAP Acconti» ──────────────────────────────────────────────
+
+    /// <summary>Conto SAP di cui la pagina fa la quadratura (compare nel titolo della tabella).</summary>
+    public const string ContoSapAcconti = "1501600001";
+
+    /// <summary>
+    /// Causale «Conto SAP» che, scritta su una riga SAL, dice che quella fattura è un acconto.
+    /// <para>🪤 Sulla riga finisce l'<b>etichetta</b> della causale, non il suo id (come per
+    /// condizione e stato pagamento): il confronto è quindi sul testo, in minuscolo e senza
+    /// spazi ai lati, così un ritocco di battitura nell'anagrafica non fa sparire le righe già
+    /// scritte. Se un giorno la causale venisse <b>rinominata</b>, le righe vecchie
+    /// resterebbero indietro — vanno riallineate a mano, non c'è un id che le segua.</para>
+    /// </summary>
+    public const string CausaleAcconto = "acconto";
+
+    /// <summary>
+    /// Perimetro della quadratura SAP: <b>tutte le commesse</b>, non il solo
+    /// <see cref="ProjectScope"/> delle viste operative.
+    ///
+    /// <para>La differenza è voluta e va capita. Il Prospetto e il Cash Flow rispondono a
+    /// «cosa mi resta da fare», e per quello una commessa chiusa e incassata non serve più.
+    /// Qui la domanda è un'altra — «il conto acconti di SAP torna con il gestionale?» — e un
+    /// acconto fatturato su una commessa nel frattempo chiusa <b>è ancora dentro quel conto</b>:
+    /// escluderlo produrrebbe una differenza che non esiste, e qualcuno passerebbe un
+    /// pomeriggio a cercarla.</para>
+    ///
+    /// <para>Restano fuori le sole cose che non sono fatturato vero: le Altre Attività (codice
+    /// libero, che nel SAL non entrano dalla #85), le bozze e le commesse annullate.</para>
+    /// </summary>
+    private static readonly string AccontiScope = $@"(
+        {ProjectSorting.IsCommessa("p")}
+        AND p.status NOT IN ('DRAFT', 'CANCELLED')
+    )";
+
+    /// <summary>
+    /// Il conteggio e la somma degli acconti secondo il gestionale, in una costante
+    /// <c>public</c> come <see cref="ProspettoSql"/> e <see cref="SummarySql"/> — <b>perché il
+    /// test esegue questa, non una copia</b>. Parametro: <c>@Causale</c> (già in minuscolo).
+    /// <para>L'importo si calcola con la stessa espressione dell'«Importo Fattura» del foglio
+    /// e del Cash Flow (valore ordine × %SAL): due formule diverse per lo stesso numero sono
+    /// il modo più rapido per far litigare due pagine.</para>
+    /// </summary>
+    public static readonly string SapAccontiSql = $@"
+            SELECT COUNT(*) AS TotFatture,
+                   COALESCE(SUM(ps.valore * sr.perc / 100), 0) AS Importo
+            FROM sal_rows sr
+            JOIN projects p ON p.id = sr.project_id
+            LEFT JOIN project_sal ps ON ps.project_id = sr.project_id
+            WHERE LOWER(TRIM(sr.conto_sap)) = @Causale
+              AND {AccontiScope}";
+
+    [HttpGet("sap-acconti")]
+    public IActionResult GetSapAcconti()
+    {
+        // Sono importi: stessa chiave delle altre viste economiche → 403 esplicito.
+        if (!CanSeeEconomics())
+            return StatusCode(403, ApiResponse<SalSapAccontiDto>.Fail("Non autorizzato"));
+
+        using var c = _db.Open();
+
+        var dalSal = c.QuerySingle(SapAccontiSql, new { Causale = CausaleAcconto });
+
+        var sap = c.QuerySingleOrDefault(@"
+            SELECT a.tot_fatture AS TotFatture, a.importo_acconti AS ImportoAcconti,
+                   a.row_version AS RowVersion, a.updated_at AS UpdatedAt,
+                   TRIM(CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, ''))) AS UpdatedByName
+            FROM sal_sap_acconti a
+            LEFT JOIN employees e ON e.id = a.updated_by
+            WHERE a.id = 1");
+
+        return Ok(ApiResponse<SalSapAccontiDto>.Ok(new SalSapAccontiDto
+        {
+            ContoSap = ContoSapAcconti,
+            CausaleAcconto = CausaleAcconto,
+            SalTotFatture = (int)dalSal.TotFatture,
+            SalImportoAcconti = (decimal)dalSal.Importo,
+            SapTotFatture = (int?)sap?.TotFatture,
+            SapImportoAcconti = (decimal?)sap?.ImportoAcconti,
+            RowVersion = sap == null ? 0 : (int)sap.RowVersion,
+            UpdatedAt = (DateTime?)sap?.UpdatedAt,
+            UpdatedByName = (string?)sap?.UpdatedByName ?? "",
+        }));
+    }
+
+    [ScritturaNonDiCommessa("Totali del conto SAP acconti: un dato di contabilita globale, non di una commessa")]
+    [HttpPut("sap-acconti")]
+    public IActionResult SaveSapAcconti([FromBody] SalSapAccontiSaveRequest req)
+    {
+        // Vederli è `sal.economics` in lettura, scriverli è la stessa chiave in scrittura:
+        // una concessione in sola lettura non deve poter cambiare la quadratura di nessuno.
+        if (!_access.CanWriteUser(CurrentEmployeeId, User.FindFirst(ClaimTypes.Role)?.Value, EconomicsFeature))
+            return StatusCode(403, ApiResponse<int>.Fail("Non autorizzato"));
+
+        // Un conto acconti non va in negativo, e un numero di fatture nemmeno: un segno meno
+        // battuto per sbaglio qui diventerebbe una differenza doppia nella terza tabella.
+        int? totFatture = req.TotFatture == null ? null : Math.Max(0, req.TotFatture.Value);
+        decimal? importo = req.ImportoAcconti == null ? null : Math.Max(0m, req.ImportoAcconti.Value);
+
+        using var c = _db.Open();
+
+        int rows = c.Execute(@"
+            UPDATE sal_sap_acconti SET
+                tot_fatture = @Tot, importo_acconti = @Importo,
+                updated_by = @By, updated_at = CURRENT_TIMESTAMP,
+                row_version = row_version + 1
+             WHERE id = 1 AND (@RowVersion IS NULL OR row_version = @RowVersion)",
+            new
+            {
+                Tot = totFatture,
+                Importo = importo,
+                By = CurrentEmployeeId > 0 ? CurrentEmployeeId : (int?)null,
+                req.RowVersion,
+            });
+
+        if (rows == 0)
+        {
+            // La riga unica la crea la M115: se manca davvero è uno schema incompleto, non un
+            // conflitto — e dirlo «conflitto» manderebbe fuori strada chi legge il messaggio.
+            int esiste = c.ExecuteScalar<int>("SELECT COUNT(*) FROM sal_sap_acconti WHERE id = 1");
+            return Ok(ApiResponse<int>.Fail(esiste > 0
+                ? ConflictMessage
+                : "Totali SAP non inizializzati: manca la riga di sal_sap_acconti"));
+        }
+
+        int versione = c.ExecuteScalar<int>("SELECT row_version FROM sal_sap_acconti WHERE id = 1");
+        NotifyLookupChanged();
+        return Ok(ApiResponse<int>.Ok(versione, "Totali conto SAP aggiornati"));
+    }
+
     [HttpGet("summary")]
     public IActionResult GetSummary()
     {

@@ -8,6 +8,8 @@ import type {
   SalConditionSaveRequest,
   SalEconomics,
   SalProspettoRow,
+  SalSapAcconti,
+  SalSapAccontiSaveRequest,
   SalSummary,
 } from "@/lib/api/types"
 
@@ -331,6 +333,25 @@ export async function fetchSalSummary(): Promise<SalSummary[]> {
 export async function fetchSalEconomics(): Promise<SalEconomics> {
   const response = await apiGet<ApiResponse<SalEconomics>>(
     "/api/sal/economics"
+  )
+  return unwrapApi(response)
+}
+
+/** #131 — le tre tabelle di «SAL / SAP Acconti» (solo chi ha `sal.economics`: 403 altrimenti). */
+export async function fetchSalSapAcconti(): Promise<SalSapAcconti> {
+  const response = await apiGet<ApiResponse<SalSapAcconti>>(
+    "/api/sal/sap-acconti"
+  )
+  return unwrapApi(response)
+}
+
+/** Salva i totali del conto SAP scritti a mano; torna la nuova `rowVersion`. */
+export async function saveSalSapAcconti(
+  request: SalSapAccontiSaveRequest
+): Promise<number> {
+  const response = await apiPut<ApiResponse<number>>(
+    "/api/sal/sap-acconti",
+    request
   )
   return unwrapApi(response)
 }
