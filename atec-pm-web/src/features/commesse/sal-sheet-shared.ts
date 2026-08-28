@@ -14,7 +14,9 @@ export const SAL_COL = {
   // 10 cifre (es. 2026000193) a text-sm ≈ 82px + padding cella/input: sotto i 8rem il numero si taglia.
   nFatt: "w-32",
   contoSap: "w-32",
-  perc: "w-20 min-w-[4.5rem]",
+  // #130: la % SAL arriva a 10 decimali (es. 8,13278177) — a text-sm sono ~76px di sole
+  // cifre: sotto le 8rem il numero si taglia proprio mentre lo si sta controllando.
+  perc: "w-32 min-w-[8rem]",
   condizione: "w-32",
   importo: "w-24",
   dataFatt: "w-28",

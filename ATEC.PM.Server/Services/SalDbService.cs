@@ -51,7 +51,9 @@ public static class SalDbService
             id INT AUTO_INCREMENT PRIMARY KEY,
             project_id INT NOT NULL,
             step VARCHAR(1000) NOT NULL DEFAULT '',
-            perc DECIMAL(6,3) NULL,
+            -- #130: 10 decimali, non per vezzo — la % SAL è quello che serve per riprodurre
+            -- esattamente l'importo di fattura concordato (vedi M114_SalPercDecimali).
+            perc DECIMAL(13,10) NULL,
             condizione VARCHAR(200) NOT NULL DEFAULT '',
             data_fatt DATE NULL,
             stato VARCHAR(10) NOT NULL DEFAULT '',

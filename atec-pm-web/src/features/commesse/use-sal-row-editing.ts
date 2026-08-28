@@ -12,10 +12,29 @@ import { notifyError } from "@/lib/toast"
 import { salGgSaldoValue } from "./sal-utils"
 import { salRowPayload } from "./sal-sheet-shared"
 
+/**
+ * #130 — la % SAL tiene fino a 10 decimali (colonna `sal_rows.perc` DECIMAL(13,10)).
+ *
+ * Non è precisione per sport: la percentuale è quello che serve per far uscire
+ * l'importo di fattura concordato col cliente (8,13278177% di 142.625,00 € =
+ * 11.599,38 €). Prima qui si arrotondava a 1 decimale e la fattura ballava di euro.
+ *
+ * `String()` toglie da solo gli zeri in coda che MySQL restituisce (8,1327817700 →
+ * 8.13278177) e non passa mai alla notazione esponenziale in questo intervallo.
+ */
+export const SAL_PERC_DECIMALI = 10
+
 function formatSalPercInput(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return ""
-  const rounded = Math.round(n * 10) / 10
-  return String(rounded)
+  // Nessun clamp qui: quello che c'è scritto sulla riga si mostra com'è, anche se
+  // fuori scala — altrimenti un dato sbagliato diventa invisibile invece che evidente.
+  return String(troncaSalPerc(n))
+}
+
+/** Arrotondamento alle 10 cifre decimali che la colonna sa tenere. */
+function troncaSalPerc(n: number): number {
+  const factor = 10 ** SAL_PERC_DECIMALI
+  return Math.round(n * factor) / factor
 }
 
 export function useSalRowEditing({
@@ -31,7 +50,6 @@ export function useSalRowEditing({
 }) {
   const [stepText, setStepText] = React.useState(row.step)
   // == null (e non ===): se il server omette il campo, row.perc è undefined.
-  // formatSalPercInput approssima ad 1 decimale post virgola (es. 39.535 -> 39.5).
   const [percText, setPercText] = React.useState(formatSalPercInput(row.perc))
   const [ivaText, setIvaText] = React.useState(
     row.ivaPerc === null ? "" : String(row.ivaPerc)
@@ -91,7 +109,7 @@ export function useSalRowEditing({
       setPercText(formatSalPercInput(row.perc))
       return
     }
-    n = Math.round(Math.max(0, Math.min(100, n)) * 10) / 10
+    n = troncaSalPerc(Math.max(0, Math.min(100, n)))
     if (n !== row.perc) void patch({ perc: n })
     else setPercText(formatSalPercInput(n))
   }

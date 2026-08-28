@@ -478,7 +478,7 @@ export function SalRowComponent({
                 data-sal-col="perc"
                 data-sal-row={index}
                 placeholder="0.0"
-                className="h-10 w-16 px-1 text-center text-sm shadow-none bg-white dark:bg-zinc-950 border-zinc-200"
+                className="h-10 w-24 px-1 text-center text-sm shadow-none bg-white dark:bg-zinc-950 border-zinc-200"
                 disabled={isLocked}
               />
               <span className="text-sm">%</span>
