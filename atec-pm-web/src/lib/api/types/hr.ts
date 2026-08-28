@@ -260,3 +260,47 @@ export interface HrQuadraturaMonth {
   totalTimesheetHours: number
   overallCoveragePercent: number
 }
+
+// ── #132 GIUSTIFICAZIONE ORE MANCANTI DAL CALENDARIO ─────────────────────
+
+/** Codici causale dell'ufficio: gli stessi del programma «Timbrature». */
+export type HrCausale = "FE" | "PE" | "MA" | "IN"
+
+/** Etichette del `CausaleDialog` originale, parola per parola. */
+export const HR_CAUSALE_LABEL: Record<HrCausale, string> = {
+  FE: "FE - Ferie",
+  PE: "PE - Permesso",
+  MA: "MA - Malattia",
+  IN: "IN - Infortunio",
+}
+
+/** Cosa si può fare sulla giornata cliccata (lo decide il server). */
+export interface HrGiustificaInfo {
+  employeeId: number
+  employeeName: string
+  date: string
+  /** Ore di contratto della giornata. */
+  dailyHours: number
+  /** Ore già coperte da timbrature (ordinario + straordinario). */
+  oreLavorate: number
+  /** Ore da giustificare: contratto − lavorate, mai negative. */
+  oreMancanti: number
+  /** Codici ammessi su QUESTA giornata. */
+  causali: HrCausale[]
+  /** Codice già presente sulla giornata, "" se non c'è niente. */
+  causaleCorrente: string
+  oreCorrenti: number | null
+  /** true = la causale presente si può togliere. */
+  puoRimuovere: boolean
+  /** Vuoto = si può giustificare; altrimenti il motivo per cui no, già scritto. */
+  blocco: string
+}
+
+export interface HrGiustificaRequest {
+  employeeId: number
+  /** Data della giornata (ISO, senza ora). */
+  date: string
+  /** FE | PE | MA | IN, oppure "" per togliere la causale. */
+  causale: string
+  hours?: number | null
+}

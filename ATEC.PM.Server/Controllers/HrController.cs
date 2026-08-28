@@ -106,6 +106,40 @@ public class HrController : ControllerBase
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nomeFile);
     }
 
+    // ── #132 GIUSTIFICAZIONE DELLE ORE MANCANTI ───────────────────────────────
+    //
+    // Il clic sulla cella del calendario. Stessa guardia del calendario: si tocca il
+    // cartellino di un'altra persona, quindi serve la scrittura su Timbrature.
+
+    [HttpGet("calendar/giustifica")]
+    public IActionResult GiustificaInfo([FromQuery] int employeeId, [FromQuery] DateTime date)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Giustificare le ore richiede la scrittura su Timbrature."));
+
+        if (employeeId <= 0) return Ok(ApiResponse<string>.Fail("Dipendente non indicato."));
+
+        return Ok(ApiResponse<HrGiustificaInfoDto>.Ok(_attendance.GetGiustificaInfo(employeeId, date)));
+    }
+
+    [HttpPost("calendar/giustifica")]
+    public IActionResult Giustifica([FromBody] HrGiustificaRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Giustificare le ore richiede la scrittura su Timbrature."));
+
+        if (req.EmployeeId <= 0) return Ok(ApiResponse<bool>.Fail("Dipendente non indicato."));
+
+        string? errore = _attendance.SaveGiustifica(req, MeId);
+        return Ok(errore == null
+            ? ApiResponse<bool>.Ok(true, string.IsNullOrWhiteSpace(req.Causale)
+                ? "Causale rimossa"
+                : "Causale registrata")
+            : ApiResponse<bool>.Fail(errore));
+    }
+
     // ── CREDENZIALI ECOS ──────────────────────────────────────────────────────
     //
     // Come il dialogo «Configurazione Credenziali» del programma originale: utente,

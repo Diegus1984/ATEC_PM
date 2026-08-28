@@ -362,3 +362,102 @@ public class HrQuadraturaMonthDto
     public decimal TotalTimesheetHours { get; set; }
     public decimal OverallCoveragePercent { get; set; }
 }
+
+// ── #132 GIUSTIFICAZIONE DELLE ORE MANCANTI DAL CALENDARIO ────────────────
+//
+// Port del doppio clic su cella di `CalendarPage.xaml.vb` (righe 763-859) e del
+// `CausaleDialog`: si clicca la giornata scoperta, il programma dice quante ore mancano e
+// si sceglie la causale che le copre. Le causali portano i codici che l'ufficio usa da
+// sempre (FE, PE, MA, IN); dentro diventano i tipi di `hr_absences`.
+//
+// 🪤 Quali causali si possano scegliere NON è un dettaglio grafico: con timbrature vere e
+// parziali si può solo aggiungere un permesso o un infortunio a completare la giornata —
+// ferie e malattia sono giornate intere e con mezza giornata timbrata non stanno in piedi.
+// La regola sta nel server, così la pagina e chiunque altro chiami l'endpoint la applicano
+// per forza.
+
+public static class HrCausali
+{
+    public const string Ferie = "FE";
+    public const string Permesso = "PE";
+    public const string Malattia = "MA";
+    public const string Infortunio = "IN";
+
+    /// <summary>Codice dell'ufficio → tipo di <c>hr_absences</c> (null se il codice non esiste).</summary>
+    public static string? TipoAssenza(string? causale) => (causale ?? "").Trim().ToUpperInvariant() switch
+    {
+        Ferie => "VACATION",
+        Permesso => "PERMIT",
+        Malattia => "SICKNESS",
+        Infortunio => "INJURY",
+        _ => null,
+    };
+
+    /// <summary>Il verso opposto: tipo di <c>hr_absences</c> → codice dell'ufficio ("" se altro).</summary>
+    public static string Codice(string? tipoAssenza) => (tipoAssenza ?? "").Trim().ToUpperInvariant() switch
+    {
+        "VACATION" => Ferie,
+        "PERMIT" => Permesso,
+        "SICKNESS" => Malattia,
+        "INJURY" => Infortunio,
+        _ => "",
+    };
+
+    /// <summary>Etichetta per l'elenco a tendina, come nel <c>CausaleDialog</c> originale.</summary>
+    public static string Etichetta(string causale) => causale switch
+    {
+        Ferie => "FE - Ferie",
+        Permesso => "PE - Permesso",
+        Malattia => "MA - Malattia",
+        Infortunio => "IN - Infortunio",
+        _ => causale,
+    };
+}
+
+/// <summary>Cosa si può fare su una giornata del calendario, prima di aprire il dialogo.</summary>
+public class HrGiustificaInfoDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public DateTime Date { get; set; }
+
+    /// <summary>Ore di contratto della giornata.</summary>
+    public decimal DailyHours { get; set; }
+
+    /// <summary>Ore già coperte da timbrature (ordinario + straordinario).</summary>
+    public decimal OreLavorate { get; set; }
+
+    /// <summary>Ore da giustificare: contratto − lavorate, mai negative.</summary>
+    public decimal OreMancanti { get; set; }
+
+    /// <summary>Codici ammessi su QUESTA giornata (FE/PE/MA/IN).</summary>
+    public List<string> Causali { get; set; } = new();
+
+    /// <summary>Codice già presente sulla giornata, "" se non c'è niente.</summary>
+    public string CausaleCorrente { get; set; } = "";
+
+    /// <summary>Ore della causale già presente.</summary>
+    public decimal? OreCorrenti { get; set; }
+
+    /// <summary>true = la causale presente si può togliere (è nostra e copre solo questo giorno).</summary>
+    public bool PuoRimuovere { get; set; }
+
+    /// <summary>
+    /// Vuoto = si può giustificare. Altrimenti è il motivo per cui no, già scritto per
+    /// essere mostrato: giorno futuro, festivo, niente da giustificare, assenza di Ecos.
+    /// </summary>
+    public string Blocco { get; set; } = "";
+}
+
+/// <summary>Salvataggio della causale scelta nel dialogo (causale vuota = rimuovi).</summary>
+public class HrGiustificaRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime Date { get; set; }
+
+    /// <summary>FE | PE | MA | IN, oppure "" per togliere quella che c'è.</summary>
+    public string Causale { get; set; } = "";
+
+    /// <summary>Ore da coprire; se omesso vale l'intero buco calcolato dal server.</summary>
+    public decimal? Hours { get; set; }
+}

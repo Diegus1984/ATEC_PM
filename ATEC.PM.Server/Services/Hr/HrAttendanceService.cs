@@ -437,17 +437,26 @@ public class HrAttendanceService
                      hr_must_punch AS MustPunch, hr_daily_hours AS DailyHours
               FROM employees WHERE id = @Id", new { Id = employeeId });
 
+        // 🪤 Ogni colonna vuole il suo alias: Dapper NON abbina `work_date` a `WorkDate`
+        // (`MatchNamesWithUnderscores` qui non è attivo). Senza alias la data resta a
+        // DateTime.MinValue su OGNI riga, e il `ToDictionary` qui sotto muore al secondo
+        // giorno con «An item with the same key has already been added: 01/01/0001» —
+        // cioè il cartellino risponde 500 appena una persona ha due giornate.
         var giornate = c.Query<DayRow>(
-                @"SELECT work_date, clock_in_1, clock_out_1, clock_in_2, clock_out_2,
+                @"SELECT work_date AS WorkDate,
+                         clock_in_1 AS ClockIn1, clock_out_1 AS ClockOut1,
+                         clock_in_2 AS ClockIn2, clock_out_2 AS ClockOut2,
                          regular_minutes AS RegularMinutes, overtime_minutes AS OvertimeMinutes,
-                         break_minutes AS BreakMinutes, bands_json AS BandsJson, note, has_anomaly
+                         break_minutes AS BreakMinutes, bands_json AS BandsJson,
+                         note AS Note, has_anomaly AS HasAnomaly
                   FROM hr_days
                   WHERE employee_id = @Id AND work_date BETWEEN @Da AND @A",
                 new { Id = employeeId, Da = primo, A = ultimo })
             .ToDictionary(g => g.WorkDate.Date);
 
         var timbrature = c.Query<PunchRow>(
-                @"SELECT t.id, t.work_date, t.punched_at, t.direction, t.source, t.reason,
+                @"SELECT t.id AS Id, t.work_date AS WorkDate, t.punched_at AS PunchedAt,
+                         t.direction AS Direction, t.source AS Source, t.reason AS Reason,
                          CONCAT_WS(' ', e.first_name, e.last_name) AS CreatedBy
                   FROM hr_punches t
                   LEFT JOIN employees e ON e.id = t.created_by
@@ -1303,6 +1312,215 @@ public class HrAttendanceService
         public string AbsenceType { get; set; } = "";
         public string Status { get; set; } = "";
         public string Source { get; set; } = "";
+    }
+
+    // ── #132 GIUSTIFICAZIONE DELLE ORE MANCANTI (clic su cella del calendario) ─
+    //
+    // Port di `dgCalendar_MouseDoubleClick` + `CausaleDialog` del programma «Timbrature»:
+    // si apre la giornata scoperta, si vedono le ore che mancano e si sceglie la causale
+    // che le copre. Le regole (quali causali, quante ore) le decide QUI il server: la
+    // pagina disegna quello che le viene detto, non una seconda interpretazione.
+    //
+    // 🪤 Nell'originale queste giornate erano righe di `Absences`; qui sono righe di
+    // `hr_absences`, che è la stessa tabella delle richieste ferie della Fase 2. Ne segue
+    // una regola che nel VB non serviva: **una causale scritta da qui copre un giorno
+    // solo**. Se sulla giornata c'è già un'assenza che viene da una richiesta a più giorni
+    // (o da Ecos) non la si tocca da qui — spezzarla in silenzio lascerebbe la richiesta
+    // approvata diversa da quello che è stato approvato.
+    //
+    // 🪤 Chi giustifica NON deve essere per forza un'altra persona (la regola del «secondo
+    // occhio» vale per le rettifiche, che riscrivono le timbrature). Qui si dichiara una
+    // causale su una giornata già passata, ed è quello che l'ufficio fa da anni col
+    // programma originale: aggiungere il divieto vorrebbe dire cambiargli il lavoro.
+
+    /// <summary>
+    /// Cosa si può fare sulla giornata cliccata: quante ore mancano, quali causali sono
+    /// ammesse, cosa c'è già scritto. <see cref="HrGiustificaInfoDto.Blocco"/> valorizzato
+    /// = non si giustifica, e dentro c'è il perché.
+    /// </summary>
+    public HrGiustificaInfoDto GetGiustificaInfo(int employeeId, DateTime data)
+    {
+        DateTime giorno = data.Date;
+        var info = new HrGiustificaInfoDto { EmployeeId = employeeId, Date = giorno };
+
+        using MySqlConnection c = _db.Open();
+
+        var emp = c.QueryFirstOrDefault<CalendarEmployee>(@"
+            SELECT id AS EmployeeId,
+                   CONCAT_WS(' ', first_name, last_name) AS EmployeeName,
+                   hr_must_punch AS MustPunch, hr_daily_hours AS DailyHours
+            FROM employees WHERE id = @Id AND status <> 'TERMINATED'",
+            new { Id = employeeId });
+
+        if (emp == null)
+        {
+            info.Blocco = "Dipendente non trovato o cessato.";
+            return info;
+        }
+
+        info.EmployeeName = emp.EmployeeName;
+        info.DailyHours = emp.DailyHours;
+
+        // Le due porte dell'originale: solo giorni già passati, e mai i non lavorativi.
+        if (giorno >= DateTime.Today)
+        {
+            info.Blocco = "Si giustificano solo le giornate già passate.";
+            return info;
+        }
+        if (giorno.DayOfWeek == DayOfWeek.Saturday || TimesheetRules.IsHoliday(giorno))
+        {
+            info.Blocco = "Giornata non lavorativa: non c'è niente da giustificare.";
+            return info;
+        }
+
+        // Quello che risulta già scritto sulla giornata. Se ci fossero due assenze
+        // sovrapposte vince quella di un giorno solo: è la nostra, quella modificabile.
+        var assenza = c.QueryFirstOrDefault<GiustificaAssenza>(@"
+            SELECT id AS Id, date_from AS DateFrom, date_to AS DateTo, hours AS Hours,
+                   absence_type AS AbsenceType, source AS Source, status AS Status
+            FROM hr_absences
+            WHERE employee_id = @Id AND status IN ('APPROVED', 'PENDING')
+              AND date_from <= @G AND date_to >= @G
+            ORDER BY (date_from = date_to) DESC, id DESC
+            LIMIT 1",
+            new { Id = employeeId, G = giorno });
+
+        var day = c.QueryFirstOrDefault<GiustificaGiornata>(@"
+            SELECT regular_minutes AS RegularMinutes, overtime_minutes AS OvertimeMinutes
+            FROM hr_days WHERE employee_id = @Id AND work_date = @G",
+            new { Id = employeeId, G = giorno });
+
+        if (assenza != null)
+        {
+            info.CausaleCorrente = HrCausali.Codice(assenza.AbsenceType);
+            info.OreCorrenti = assenza.Hours ?? emp.DailyHours;
+
+            if (string.Equals(assenza.Source, "ECOS", StringComparison.OrdinalIgnoreCase))
+            {
+                // Ecos è il padrone del suo dato: qui si guarda e basta.
+                info.Blocco = "L'assenza arriva da Ecos: si corregge là, non da qui.";
+                return info;
+            }
+            if (assenza.DateFrom.Date != assenza.DateTo.Date)
+            {
+                info.Blocco =
+                    $"Coperta da una richiesta dal {assenza.DateFrom:dd/MM/yyyy} al {assenza.DateTo:dd/MM/yyyy}: "
+                    + "si modifica dalle Richieste.";
+                return info;
+            }
+
+            info.PuoRimuovere = true;
+        }
+
+        // Timbrature vere = giornata parziale: si può solo completarla (PE o IN). Senza
+        // timbrature — assenza piena o forfettario — vale l'elenco intero, come nel VB.
+        info.Causali = day != null
+            ? new List<string> { HrCausali.Permesso, HrCausali.Infortunio }
+            : new List<string> { HrCausali.Ferie, HrCausali.Permesso, HrCausali.Malattia, HrCausali.Infortunio };
+
+        info.OreLavorate = day == null
+            ? 0m
+            : Math.Round((decimal)(day.RegularMinutes + day.OvertimeMinutes) / 60m, 2);
+        info.OreMancanti = Math.Max(0m, emp.DailyHours - info.OreLavorate);
+
+        // Niente da coprire e niente da togliere: è la stessa informazione che dava il
+        // messaggio «Nessuna ora da giustificare per questo giorno» dell'originale.
+        if (info.OreMancanti <= 0m && !info.PuoRimuovere)
+            info.Blocco = "Nessuna ora da giustificare per questo giorno.";
+
+        return info;
+    }
+
+    /// <summary>
+    /// Scrive (o toglie) la causale della giornata. Torna null se è andata, altrimenti il
+    /// motivo — le stesse guardie di <see cref="GetGiustificaInfo"/>, rifatte qui perché
+    /// fra l'apertura del dialogo e il salvataggio può essere cambiato tutto.
+    /// </summary>
+    public string? SaveGiustifica(HrGiustificaRequest req, int autoreId)
+    {
+        DateTime giorno = req.Date.Date;
+        HrGiustificaInfoDto info = GetGiustificaInfo(req.EmployeeId, giorno);
+        if (!string.IsNullOrEmpty(info.Blocco)) return info.Blocco;
+
+        string causale = (req.Causale ?? "").Trim().ToUpperInvariant();
+
+        using MySqlConnection c = _db.Open();
+
+        if (causale.Length == 0)
+        {
+            if (!info.PuoRimuovere) return "Su questa giornata non c'è nessuna causale da togliere.";
+
+            c.Execute(@"DELETE FROM hr_absences
+                        WHERE employee_id = @Id AND date_from = @G AND date_to = @G
+                          AND source <> 'ECOS'",
+                new { Id = req.EmployeeId, G = giorno });
+            return null;
+        }
+
+        if (!info.Causali.Contains(causale))
+        {
+            return info.Causali.Count == 2
+                ? "La giornata ha timbrature: si può solo completarla con PE (permesso) o IN (infortunio)."
+                : "Causale non valida: ammesse FE, PE, MA, IN.";
+        }
+
+        string? tipo = HrCausali.TipoAssenza(causale);
+        if (tipo == null) return "Causale non valida: ammesse FE, PE, MA, IN.";
+
+        // Ore: quelle chieste se stanno dentro il buco, altrimenti il buco intero — come il
+        // dialogo originale, che proponeva sempre e solo le ore mancanti.
+        decimal ore = req.Hours is > 0m && req.Hours.Value <= info.OreMancanti
+            ? req.Hours.Value
+            : info.OreMancanti;
+        if (ore <= 0m) return "Nessuna ora da giustificare per questo giorno.";
+
+        bool giornataPiena = ore >= info.DailyHours;
+
+        // 🪤 `created_by`/`approved_by` hanno la chiave esterna su `employees`: un id 0
+        // (token senza dipendente collegato) farebbe fallire l'INSERT con un 500 invece che
+        // con un messaggio. Null vuol dire «non lo sappiamo», ed è quello che la colonna ammette.
+        int? autore = autoreId > 0 ? autoreId : null;
+
+        // Una riga per giornata: se ce n'è già una nostra la si riscrive, non se ne aggiunge
+        // una seconda (il calendario ne mostrerebbe una sola e l'altra resterebbe invisibile).
+        int aggiornate = c.Execute(@"
+            UPDATE hr_absences
+               SET absence_type = @Tipo, hours = @Ore, is_full_day = @Piena,
+                   status = 'APPROVED', source = 'MANUAL', created_by = @Autore,
+                   approved_by = @Autore, approved_at = CURRENT_TIMESTAMP
+             WHERE employee_id = @Id AND date_from = @G AND date_to = @G AND source <> 'ECOS'",
+            new { Tipo = tipo, Ore = ore, Piena = giornataPiena, Autore = autore, Id = req.EmployeeId, G = giorno });
+
+        if (aggiornate == 0)
+        {
+            c.Execute(@"
+                INSERT INTO hr_absences
+                    (employee_id, date_from, date_to, hours, is_full_day, absence_type,
+                     status, source, notes, created_by, approved_by, approved_at)
+                VALUES
+                    (@Id, @G, @G, @Ore, @Piena, @Tipo, 'APPROVED', 'MANUAL',
+                     'Giustificazione ore mancanti da Calendario mensile', @Autore, @Autore, CURRENT_TIMESTAMP)",
+                new { Id = req.EmployeeId, G = giorno, Ore = ore, Piena = giornataPiena, Tipo = tipo, Autore = autore });
+        }
+
+        return null;
+    }
+
+    private sealed class GiustificaAssenza
+    {
+        public int Id { get; set; }
+        public DateTime DateFrom { get; set; }
+        public DateTime DateTo { get; set; }
+        public decimal? Hours { get; set; }
+        public string AbsenceType { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+
+    private sealed class GiustificaGiornata
+    {
+        public int RegularMinutes { get; set; }
+        public int OvertimeMinutes { get; set; }
     }
 
     // ── SOLLECITI DELLE TIMBRATURE MANCANTI ───────────────────────────────────

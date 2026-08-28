@@ -312,6 +312,30 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >    tutti. Oggi è solo l'Admin; **prima di concedere la scrittura ai 12 responsabili
 >    (Fase 2) va scritto lo scoping** — il piano lo dice già in §8.
 >
+> **Segnalazione #132 — giustificare le ore mancanti dal calendario (28/08).**
+> Doppio clic su una cella del Calendario mensile — o **tasto destro → «Giustifica ore
+> mancanti…»** (menu contestuale, chiesto da Diego il 28/08): il server dice quante ore
+> mancano (contratto − timbrate) e quali causali sono ammesse, si sceglie e la griglia si
+> ridisegna. Le due strade aprono lo stesso dialogo e valgono sulle stesse celle.
+> Port di `dgCalendar_MouseDoubleClick` + `CausaleDialog`: `GetGiustificaInfo` /
+> `SaveGiustifica` in `HrAttendanceService`, `GET/POST /api/hr/calendar/giustifica` dietro
+> la **scrittura** su `nav.hr_timbrature`, dialogo `GiustificaCausaleDialog` nel web.
+> - 🪤 **Con timbrature vere e parziali si può solo completare la giornata (PE o IN)**:
+>   ferie e malattia sono giornate intere e su mezza giornata timbrata non stanno in piedi.
+>   Era la doppia lista del VB; ora è nel server, e `GiustificaOreTests` la tiene ferma.
+> - 🪤 Le giustificazioni sono righe di **`hr_absences`**, la stessa tabella delle richieste
+>   della Fase 2. Ne segue una regola che il VB non aveva: da qui si scrive **un giorno
+>   solo**. Un'assenza che arriva da Ecos non si tocca (là è il padrone del dato) e una
+>   richiesta a più giorni non si spezza — si va sulle Richieste.
+> - Chi giustifica **può** essere la persona stessa: il «secondo occhio» vale per le
+>   rettifiche, che riscrivono le timbrature. Qui si dichiara una causale su una giornata
+>   passata, ed è quello che l'ufficio fa da anni col programma originale.
+>
+> **⏭️ Le opzioni dell'originale ancora da portare** stanno in un file a parte:
+> **`PIANO-HR-PORT-ORIGINALE.md`** — censimento pagina per pagina del programma
+> «Timbrature» contro quello che gira oggi, con le 11 voci decise una per una con Diego il
+> 28/08 (9 da importare, 2 scartate col motivo). È il punto d'ingresso di quel lavoro.
+>
 > **Resta da fare in Fase 1**: compilare `ecos_empl_code` per i 37 dipendenti (dalla
 > pagina, dialogo «Collega Ecos»), **riconciliazione assenze** (le 49 giornate
 > forfait/assenza piena del banco di prova — dipende dal rifacimento di `absences`,

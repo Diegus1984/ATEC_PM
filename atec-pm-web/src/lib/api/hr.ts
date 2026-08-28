@@ -6,6 +6,8 @@ import type {
   HrAbsence,
   HrBadges,
   HrCreateAbsenceRequest,
+  HrGiustificaInfo,
+  HrGiustificaRequest,
   HrImportResult,
   HrMappingRow,
   HrEcosSettings,
@@ -257,5 +259,24 @@ export async function fetchHrQuadratura(
   const r = await apiGet<ApiResponse<HrQuadraturaMonth>>(
     `/api/hr/quadratura?year=${year}&month=${month}${extra}`
   )
+  return unwrapApi(r)
+}
+
+// ── #132 GIUSTIFICAZIONE ORE MANCANTI DAL CALENDARIO ─────────────────────
+
+/** Cosa si può fare sulla giornata cliccata: ore mancanti, causali ammesse, cosa c'è già. */
+export async function fetchHrGiustificaInfo(
+  employeeId: number,
+  date: string
+): Promise<HrGiustificaInfo> {
+  const r = await apiGet<ApiResponse<HrGiustificaInfo>>(
+    `/api/hr/calendar/giustifica?employeeId=${employeeId}&date=${date}`
+  )
+  return unwrapApi(r)
+}
+
+/** Scrive la causale scelta (causale vuota = toglie quella che c'è). */
+export async function saveHrGiustifica(request: HrGiustificaRequest): Promise<boolean> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/calendar/giustifica", request)
   return unwrapApi(r)
 }

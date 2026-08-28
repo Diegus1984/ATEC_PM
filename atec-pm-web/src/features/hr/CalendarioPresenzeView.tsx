@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Download, Mail, MailCheck, Printer, RotateCcw } from "lucide-react"
+import { CalendarCheck, Download, Mail, MailCheck, Printer, RotateCcw } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
@@ -9,6 +9,12 @@ import {
   type LookupComboboxOption,
 } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   Table,
   TableBody,
@@ -22,6 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
 import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
   downloadHrCalendarExcel,
@@ -31,6 +38,7 @@ import {
   sendHrReminders,
 } from "@/lib/api/hr"
 import type { HrCalendarCell, HrCalendarRow, HrReminderTarget } from "@/lib/api/types"
+import { dateToIso } from "@/lib/date-iso"
 import { printHtml } from "@/lib/print-template"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
@@ -78,6 +86,11 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
   const [scaricando, setScaricando] = React.useState(false)
   const [sollecitando, setSollecitando] = React.useState(false)
+  // #132: giornata su cui si e fatto doppio clic, in attesa della causale.
+  const [giustifica, setGiustifica] = React.useState<{
+    employeeId: number
+    date: string
+  } | null>(null)
 
   const repartiQuery = useQuery({
     queryKey: ["departments-lookup"],
@@ -117,6 +130,22 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
     month: "long",
     year: "numeric",
   })
+
+  /**
+   * #132 — su quali celle ha senso il doppio clic. È lo stesso filtro delle due prime
+   * porte dell'originale (solo giorni passati, mai i non lavorativi): serve a non far
+   * sembrare cliccabile una cella che poi risponderebbe «non si può». Il vero controllo
+   * resta del server, che rifà tutto anche al salvataggio.
+   */
+  const giornoGiustificabile = React.useCallback(
+    (giorno: number) => {
+      if (calendario?.nonWorkingDays[giorno]) return false
+      const oggi = new Date()
+      oggi.setHours(0, 0, 0, 0)
+      return new Date(anno, mese - 1, giorno) < oggi
+    },
+    [calendario, anno, mese]
+  )
 
   async function handleEsportaExcel() {
     if (!calendario) return
@@ -428,31 +457,69 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
                     {Array.from({ length: giorni }, (_, i) => {
                       const g = i + 1
                       const cella: HrCalendarCell | undefined = riga.days[g]
+                      const cliccabile = giornoGiustificabile(g)
+                      const apriGiustifica = () =>
+                        setGiustifica({
+                          employeeId: riga.employeeId,
+                          date: dateToIso(new Date(anno, mese - 1, g)),
+                        })
+
                       const contenuto = (
                         <div className="flex h-6 w-full items-center justify-center">
                           {cella?.text ?? ""}
                         </div>
                       )
 
+                      // Il tooltip col dettaglio della giornata, quando il server ne manda uno.
+                      const corpo = cella?.tooltip ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="cursor-default">{contenuto}</div>
+                          </TooltipTrigger>
+                          <TooltipContent className="whitespace-pre-line text-xs">
+                            {cella.tooltip}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        contenuto
+                      )
+
                       return (
                         <TableCell
                           key={g}
+                          // Doppio clic = causale, come nel programma originale; il tasto
+                          // destro apre lo stesso dialogo dal menu contestuale.
+                          onDoubleClick={cliccabile ? apriGiustifica : undefined}
+                          // 🪤 Il `title` nativo solo dove NON c'e' gia' il tooltip del
+                          // server: due suggerimenti sovrapposti sulla stessa cella si
+                          // coprono a vicenda e non si legge piu' nessuno dei due.
+                          title={
+                            cliccabile && !cella?.tooltip
+                              ? "Doppio clic o tasto destro: giustifica le ore mancanti"
+                              : undefined
+                          }
                           className={cn(
                             "border-r p-0.5 text-center font-mono text-[10px]",
-                            cella?.color ? COLORI[cella.color] : ""
+                            cella?.color ? COLORI[cella.color] : "",
+                            cliccabile && "cursor-pointer"
                           )}
                         >
-                          {cella?.tooltip ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="cursor-default">{contenuto}</div>
-                              </TooltipTrigger>
-                              <TooltipContent className="whitespace-pre-line text-xs">
-                                {cella.tooltip}
-                              </TooltipContent>
-                            </Tooltip>
+                          {cliccabile ? (
+                            // Il menu sta DENTRO la cella: un <div> fra <tr> e <td> non e'
+                            // markup valido e il browser lo sposterebbe fuori dalla tabella.
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <div>{corpo}</div>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent>
+                                <ContextMenuItem onSelect={apriGiustifica}>
+                                  <CalendarCheck className="size-3.5" />
+                                  Giustifica ore mancanti…
+                                </ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
                           ) : (
-                            contenuto
+                            corpo
                           )}
                         </TableCell>
                       )
@@ -468,6 +535,14 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
           </TableBody>
         </Table>
       </GridScroller>
+
+      <GiustificaCausaleDialog
+        target={giustifica}
+        onOpenChange={(open) => {
+          if (!open) setGiustifica(null)
+        }}
+        onSaved={() => void calendarioQuery.refetch()}
+      />
     </div>
   )
 }
