@@ -43,6 +43,7 @@ public sealed class M107_HrPresenze : IMigrazione
     public void Applica(MySqlConnection c, ILogger log)
     {
         // ── 1. Il ponte con EcosAgile ────────────────────────────────────────────────
+        // (la colonna resta qui anche a schema già rinominato: è idempotente e serve comunque)
         bool nuovaColonna = AddColumnIfMissing(
             c, "employees", "ecos_empl_code", "VARCHAR(20) NULL AFTER username");
         if (nuovaColonna)
@@ -50,6 +51,18 @@ public sealed class M107_HrPresenze : IMigrazione
             CreaIndiceSeManca(c, "employees", "idx_employees_ecos", "ecos_empl_code");
             log.LogInformation("[M107] employees.ecos_empl_code aggiunta: il collegamento con Ecos " +
                                "va compilato dalla pagina Timbrature, dipendente per dipendente.");
+        }
+
+        // 🪤 Se M111 ha già rinominato lo schema in inglese, qui NON c'è più niente da
+        // creare. `RENAME TABLE` non tocca il nome dei vincoli: le FK restano
+        // `fk_hr_timbrature_*` su `hr_punches`, quindi ricreare `hr_timbrature` fallisce con
+        // «Duplicate foreign key constraint name» e, se anche passasse, lascerebbe due
+        // tabelle — una vuota col nome vecchio. Una migrazione deve poter rigirare su uno
+        // schema già avanti (lo pretende MotoreMigrazioniTests): si esce e basta.
+        if (EsisteTabella(c, "hr_punches"))
+        {
+            log.LogInformation("[M107] Tabelle presenze già presenti col nome inglese (M111): niente da creare.");
+            return;
         }
 
         // ── 2. Il grezzo: append-only, idempotente sull'origine ──────────────────────
@@ -107,4 +120,9 @@ public sealed class M107_HrPresenze : IMigrazione
         log.LogInformation("[M107] Tabelle presenze pronte (timbrature {T}, giornate {G}). " +
                            "Il primo import le popola.", timbrature, giornate);
     }
+
+    private static bool EsisteTabella(MySqlConnection c, string tabella) =>
+        c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = @Tabella", new { Tabella = tabella }) > 0;
 }

@@ -194,15 +194,15 @@ public class EcosClientTests
         var handler = new RisposteInSequenza(pagina1, pagina2);
         EcosClient client = CreaClient(handler);
 
-        List<EcosTimbratura> timbrature = await client.TimbratureAsync("tok", updateDa: null);
+        List<EcosPunch> timbrature = await client.GetPunchesAsync("tok", updateDa: null);
 
         // La riga senza orario si scarta (loggata), non si inventa.
         Assert.Equal(2, timbrature.Count);
-        Assert.Equal("1", timbrature[0].IdEsterno);
-        Assert.Equal(new DateTime(2026, 2, 5, 7, 58, 12), timbrature[0].Orario);
-        Assert.Equal("IN", timbrature[0].Verso);
-        Assert.Equal("Sede", timbrature[0].Luogo);
-        Assert.Equal("3", timbrature[1].IdEsterno);
+        Assert.Equal("1", timbrature[0].ExternalId);
+        Assert.Equal(new DateTime(2026, 2, 5, 7, 58, 12), timbrature[0].PunchedAt);
+        Assert.Equal("IN", timbrature[0].Direction);
+        Assert.Equal("Sede", timbrature[0].Location);
+        Assert.Equal("3", timbrature[1].ExternalId);
 
         Assert.Equal(2, handler.UrlChiamati.Count);
         Assert.Contains("PageNumber=1", handler.UrlChiamati[0]);
@@ -227,8 +227,41 @@ public class EcosClientTests
 
         // Il badge senza EmplCode non serve a niente: la mappatura aggancia i codici.
         Assert.Equal(2, badges.Count);
-        Assert.True(badges[0].InForza);
-        Assert.False(badges[1].InForza);
+        Assert.True(badges[0].IsActive);
+        Assert.False(badges[1].IsActive);
+    }
+
+    [Fact]
+    public async Task GetAbsenceRequests_parsa_ferie_e_permessi_correttamente()
+    {
+        const string risposta = """
+            { "ECOSAGILE_TABLE_DATA": {
+                "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+                "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [
+                    { "AbsenceRequestID": "ABS-101", "EmplCode": "42", "NameComplete": "Rossi, Mario",
+                      "CategoryCode": "F", "CategoryDescShort": "Ferie", "StatusCode": "ACCEPTED",
+                      "DateBegin": "2026-08-10", "DateEnd": "2026-08-14", "FullDay": "TRUE", "Duration": "40.0" },
+                    { "AbsenceRequestID": "ABS-102", "EmplCode": "42", "NameComplete": "Rossi, Mario",
+                      "CategoryCode": "P", "CategoryDescShort": "Permesso", "StatusCode": "ACCEPTED",
+                      "DateBegin": "2026-08-20", "DateEnd": "2026-08-20", "FullDay": "FALSE", "Duration": "4,0" } ] } } }
+            """;
+        EcosClient client = CreaClient(new RisposteInSequenza(risposta));
+
+        List<EcosAbsenceRequest> assenze = await client.GetAbsenceRequestsAsync("tok", updateDa: null);
+
+        Assert.Equal(2, assenze.Count);
+        Assert.Equal("ABS-101", assenze[0].AbsenceRequestId);
+        Assert.Equal("42", assenze[0].EmplCode);
+        Assert.Equal("F", assenze[0].CategoryCode);
+        Assert.Equal("ACCEPTED", assenze[0].StatusCode);
+        Assert.Equal(new DateTime(2026, 8, 10), assenze[0].DateBegin);
+        Assert.Equal(new DateTime(2026, 8, 14), assenze[0].DateEnd);
+        Assert.True(assenze[0].FullDay);
+        Assert.Equal(40.0m, assenze[0].Duration);
+
+        Assert.Equal("ABS-102", assenze[1].AbsenceRequestId);
+        Assert.False(assenze[1].FullDay);
+        Assert.Equal(4.0m, assenze[1].Duration);
     }
 
     [Fact]
@@ -238,7 +271,7 @@ public class EcosClientTests
         var client = new EcosClient(config, NullLogger<EcosClient>.Instance,
             new HttpClient(new RisposteInSequenza()));
 
-        Assert.False(client.Configurato);
+        Assert.False(client.Configured);
         await Assert.ThrowsAsync<EcosApiException>(() => client.TokenAsync());
     }
 

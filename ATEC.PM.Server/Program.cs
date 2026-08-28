@@ -293,7 +293,7 @@ if (svcDaneaSync)
 // Modulo HR presenze (PIANO-HR-PRESENZE.md): client Ecos + import timbrature.
 // Senza credenziali (sezione "Ecos") tutto resta a riposo: in sviluppo è la norma.
 builder.Services.AddSingleton<EcosClient>();
-builder.Services.AddSingleton<HrPresenzeService>();
+builder.Services.AddSingleton<HrAttendanceService>();
 bool svcHrSync = builder.Configuration.GetValue("Services:HrSync", true);
 if (svcHrSync)
     builder.Services.AddHostedService<HrSyncBackgroundService>();

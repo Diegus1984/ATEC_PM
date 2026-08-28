@@ -464,8 +464,7 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
       {
         "kind": "voce",
         "chiave": "nav.hr_richieste",
-        "label": "Ferie e permessi",
-        "soloClient": true
+        "label": "Ferie e permessi"
       }
     ]
   },

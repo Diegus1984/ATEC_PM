@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 27/08/2026 22:11.
+> Fotografia del 28/08/2026 10:19.
 
 ## Chiavi con endpoint
 
@@ -441,15 +441,51 @@
 - `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
+### `nav.hr_richieste` — Ferie e permessi
+- `DELETE /api/hr/absences/{id:int}` (HrController.CancelAbsence)
+- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeleteAdjustment)
+- `GET /api/hr/absences` (HrController.GetAbsences)
+- `GET /api/hr/calendar` (HrController.Calendar)
+- `GET /api/hr/calendar/export` (HrController.CalendarExport)
+- `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/ecos/settings` (HrController.EcosSettings)
+- `GET /api/hr/mapping` (HrController.Mapping)
+- `GET /api/hr/mapping/badges` (HrController.Badges)
+- `GET /api/hr/quadratura` (HrController.Quadratura)
+- `GET /api/hr/status` (HrController.Status)
+- `GET /api/hr/timesheet` (HrController.Timesheet)
+- `POST /api/hr/absences` (HrController.CreateAbsence)
+- `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
+- `POST /api/hr/adjustment` (HrController.Adjustment)
+- `POST /api/hr/calendar/reminders` (HrController.SendReminders)
+- `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
+- `POST /api/hr/ecos/settings/test` (HrController.TestEcosSettings)
+- `POST /api/hr/import` (HrController.Import)
+- `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
+
 ### `nav.hr_timbrature` — Timbrature
-- `DELETE /api/hr/rettifica/{id:long}` (HrController.EliminaRettifica)
-- `GET /api/hr/cartellino` (HrController.Cartellino)
-- `GET /api/hr/mappatura` (HrController.Mappatura)
-- `GET /api/hr/mappatura/badges` (HrController.Badges)
-- `GET /api/hr/stato` (HrController.Stato)
-- `POST /api/hr/import` (HrController.Importa)
-- `POST /api/hr/rettifica` (HrController.Rettifica)
-- `PUT /api/hr/mappatura/{employeeId:int}` (HrController.AggiornaMappatura)
+- `DELETE /api/hr/absences/{id:int}` (HrController.CancelAbsence)
+- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeleteAdjustment)
+- `GET /api/hr/absences` (HrController.GetAbsences)
+- `GET /api/hr/calendar` (HrController.Calendar)
+- `GET /api/hr/calendar/export` (HrController.CalendarExport)
+- `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/ecos/settings` (HrController.EcosSettings)
+- `GET /api/hr/mapping` (HrController.Mapping)
+- `GET /api/hr/mapping/badges` (HrController.Badges)
+- `GET /api/hr/quadratura` (HrController.Quadratura)
+- `GET /api/hr/status` (HrController.Status)
+- `GET /api/hr/timesheet` (HrController.Timesheet)
+- `POST /api/hr/absences` (HrController.CreateAbsence)
+- `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
+- `POST /api/hr/adjustment` (HrController.Adjustment)
+- `POST /api/hr/calendar/reminders` (HrController.SendReminders)
+- `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
+- `POST /api/hr/ecos/settings/test` (HrController.TestEcosSettings)
+- `POST /api/hr/import` (HrController.Import)
+- `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
 
 ### `nav.milestones` — Milestones
 - `DELETE /api/milestones/{id}` (MilestonesController.Delete)
@@ -851,7 +887,6 @@
 - `nav.codex_composizione` — Pagina: le scritture passano da action.edit_codex_composition.
 - `nav.dashboard` — Solo menu/pagina: gli endpoint della Dashboard sono governati da data.revenue e dalle azioni qui sotto.
 - `nav.gamma_robot` — Pagina: le letture sono aperte agli autenticati, le scritture passano da action.edit_gamma_robot.
-- `nav.hr_richieste` — Sezione HR in costruzione (PIANO-HR-PRESENZE.md): la voce fissa la struttura del menu, gli endpoint arrivano col modulo - allora si toglie soloClient.
 - `nav.sal_condizioni` — Pagina: gli endpoint delle condizioni SAL oggi non usano questa chiave (solo [Authorize]).
 - `project.dettagli` — Sezione gestita a video; gli endpoint di dettaglio commessa non usano questa chiave (solo [Authorize]).
 - `project.flusso_cassa` — Sezione gestita a video; CashFlowController non usa questa chiave (solo [Authorize]).

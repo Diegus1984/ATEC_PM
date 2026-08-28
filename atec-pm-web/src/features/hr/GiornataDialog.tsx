@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { eliminaHrRettifica, inviaHrRettifica } from "@/lib/api/hr"
-import type { HrGiornata } from "@/lib/api/types"
+import { deleteHrAdjustment, sendHrAdjustment } from "@/lib/api/hr"
+import type { HrDay } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
 
@@ -47,7 +47,7 @@ export function GiornataDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  giornata: HrGiornata | null
+  giornata: HrDay | null
   employeeId: number
   canWrite: boolean
   onChanged: () => void
@@ -65,7 +65,7 @@ export function GiornataDialog({
   }, [open])
 
   const rettifica = useMutation({
-    mutationFn: inviaHrRettifica,
+    mutationFn: sendHrAdjustment,
     onSuccess: () => {
       notifySuccess("Rettifica registrata")
       onChanged()
@@ -75,7 +75,7 @@ export function GiornataDialog({
   })
 
   const elimina = useMutation({
-    mutationFn: eliminaHrRettifica,
+    mutationFn: deleteHrAdjustment,
     onSuccess: () => {
       notifySuccess("Rettifica eliminata")
       onChanged()
@@ -85,15 +85,15 @@ export function GiornataDialog({
   })
 
   if (!giornata) return null
-  const giorno = giornata.giorno.slice(0, 10)
+  const giorno = giornata.workDate.slice(0, 10)
 
   function inviaRettifica() {
     if (!ora || !motivo.trim() || !giornata) return
     rettifica.mutate({
       employeeId,
-      orario: `${giorno}T${ora}:00`,
-      verso,
-      motivo: motivo.trim(),
+      punchedAt: `${giorno}T${ora}:00`,
+      direction: verso,
+      reason: motivo.trim(),
     })
   }
 
@@ -112,38 +112,38 @@ export function GiornataDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Giornata del {formatDateShort(giornata.giorno)}</DialogTitle>
+          <DialogTitle>Giornata del {formatDateShort(giornata.workDate)}</DialogTitle>
           <DialogDescription>
-            {giornata.nota || "Nessuna timbratura registrata."}
+            {giornata.note || "Nessuna timbratura registrata."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1">
           <p className="text-sm font-medium">Timbrature grezze</p>
-          {giornata.timbrature.length === 0 ? (
+          {giornata.punches.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nessuna timbratura.</p>
           ) : (
             <ul className="space-y-1">
-              {giornata.timbrature.map((t) => (
+              {giornata.punches.map((t) => (
                 <li
                   key={t.id}
                   className="flex items-center gap-2 rounded-md border px-2 py-1 text-sm"
                 >
-                  <span className="tabular-nums font-medium">{oraDa(t.orario)}</span>
-                  <span>{t.verso === "IN" ? "Entrata" : "Uscita"}</span>
-                  <Badge variant={t.origine === "RETTIFICA" ? "default" : "outline"}>
-                    {t.origine}
+                  <span className="tabular-nums font-medium">{oraDa(t.punchedAt)}</span>
+                  <span>{t.direction === "IN" ? "Entrata" : "Uscita"}</span>
+                  <Badge variant={t.source === "ADJUSTMENT" ? "default" : "outline"}>
+                    {t.source === "ADJUSTMENT" ? "RETTIFICA" : t.source}
                   </Badge>
-                  {t.motivo && (
+                  {t.reason && (
                     <span
                       className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-                      title={`${t.motivo}${t.creataDa ? ` — ${t.creataDa}` : ""}`}
+                      title={`${t.reason}${t.createdBy ? ` — ${t.createdBy}` : ""}`}
                     >
-                      {t.motivo}
-                      {t.creataDa ? ` — ${t.creataDa}` : ""}
+                      {t.reason}
+                      {t.createdBy ? ` — ${t.createdBy}` : ""}
                     </span>
                   )}
-                  {canWrite && t.origine === "RETTIFICA" && (
+                  {canWrite && t.source === "ADJUSTMENT" && (
                     <Button
                       variant="ghost"
                       size="icon-sm"

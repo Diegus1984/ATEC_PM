@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using MySqlConnector;
 
 namespace ATEC.PM.Server.Services.Hr;
 
@@ -7,12 +8,19 @@ namespace ATEC.PM.Server.Services.Hr;
 /// <param name="UpdateDate">Istante di ultima modifica secondo l'orologio DI ECOS: è il
 /// campo su cui l'API filtra, quindi è l'unico cursore incrementale sensato (il nostro
 /// orologio non è confrontabile con il loro).</param>
-public record EcosTimbratura(
-    string IdEsterno, DateTime Orario, string EmplCode, string Nome, string Verso, string? Luogo,
+public record EcosPunch(
+    string ExternalId, DateTime PunchedAt, string EmplCode, string Name, string Direction, string? Location,
     DateTime? UpdateDate = null);
 
 /// <summary>Un badge/anagrafica Ecos: serve alla mappatura <c>employees.ecos_empl_code</c>.</summary>
-public record EcosBadge(string EmplCode, string Nome, bool InForza);
+public record EcosBadge(string EmplCode, string Name, bool IsActive);
+
+/// <summary>Una richiesta di assenza come arriva dall'API Ecos.</summary>
+public record EcosAbsenceRequest(
+    string AbsenceRequestId, string EmplCode, string Name, string CategoryCode,
+    string CategoryDesc, string StatusCode, DateTime DateBegin, DateTime DateEnd,
+    bool FullDay, string? HourBegin, string? HourEnd, decimal? Duration,
+    DateTime? UpdateDate = null);
 
 /// <summary>L'API Ecos ha risposto ma con un errore suo (CODE ≠ OK) o in una forma inattesa.</summary>
 public sealed class EcosApiException : Exception
@@ -35,16 +43,16 @@ public sealed class EcosApiException : Exception
 ///
 /// <para>Credenziali nella sezione <c>Ecos</c> di appsettings (in produzione vanno
 /// nell'appsettings.json che vive solo sul server, come per DaneaSync). Senza credenziali
-/// <see cref="Configurato"/> è false e nessuno chiama l'API.</para>
+/// <see cref="Configured"/> è false e nessuno chiama l'API.</para>
 /// </summary>
 public class EcosClient
 {
-    private const int RighePerPagina = 500;
+    private const int RowsPerPage = 500;
 
     /// <summary>Tetto anti-loop: se LASTPAGE non arriva mai qualcosa è rotto lato API.</summary>
-    private const int MassimoPagine = 2000;
+    private const int MaxPages = 2000;
 
-    private static readonly string[] CampiTimbrature =
+    private static readonly string[] PunchFields =
     {
         "StampID", "StampDateTime", "EmplID", "EmplCode", "NameComplete",
         "VersusCode", "StampLocationName", "YearMonth", "UpdateDate", "StatusCode",
@@ -55,48 +63,167 @@ public class EcosClient
         "EmplID", "EmplCode", "NameComplete", "BadgeCode", "InForce", "StatusCode",
     };
 
+    private static readonly string[] AbsenceFields =
+    {
+        "AbsenceRequestID", "EmplID", "EmplCode", "NameComplete",
+        "CategoryCode", "CategoryDescShort", "StatusCode",
+        "DateBegin", "DateEnd", "FullDay", "HourBegin", "HourEnd", "Duration", "UpdateDate"
+    };
+
     private readonly HttpClient _http;
     private readonly ILogger<EcosClient> _logger;
-    private readonly string _baseUrl;
-    private readonly string _userId;
-    private readonly string _password;
-    private readonly string _clientId;
+    private readonly IConfiguration _config;
+    private readonly ResourcesDbService? _rdb;
 
-    public EcosClient(IConfiguration config, ILogger<EcosClient> logger)
-        : this(config, logger, new HttpClient()) { }
+    public EcosClient(IConfiguration config, ILogger<EcosClient> logger, ResourcesDbService? rdb = null)
+        : this(config, logger, new HttpClient(), rdb) { }
 
     /// <summary>Costruttore per i test: l'HttpClient (con handler finto) arriva da fuori.</summary>
-    internal EcosClient(IConfiguration config, ILogger<EcosClient> logger, HttpClient http)
+    internal EcosClient(
+        IConfiguration config, ILogger<EcosClient> logger, HttpClient http, ResourcesDbService? rdb = null)
     {
         _logger = logger;
         _http = http;
-        _baseUrl = config["Ecos:BaseUrl"] ?? "https://ha.ecosagile.com/dd/api.pm?ApiName=";
-        _userId = config["Ecos:UserId"] ?? "";
-        _password = config["Ecos:Password"] ?? "";
-        _clientId = config["Ecos:ClientId"] ?? "";
+        _config = config;
+        _rdb = rdb;
+    }
+
+    // ── CREDENZIALI ───────────────────────────────────────────────────────────
+    //
+    // Nel programma «Timbrature» le credenziali Ecos si mettono da dentro l'applicazione
+    // (dialogo «Configurazione Credenziali», password cifrata con DPAPI). Qui è uguale:
+    // stanno in `res_settings` con chiavi `ecos.*` come quelle SMTP, e si scrivono dalla
+    // pagina Timbrature. L'appsettings del server resta come RIPIEGO: chi le ha già messe
+    // là continua a funzionare, e se il database non risponde il modulo non si blocca.
+    //
+    // Si rileggono a ogni uso, non una volta all'avvio: cambiare la password non deve
+    // richiedere il riavvio del servizio.
+
+    /// <summary>Le credenziali in vigore e da dove arrivano.</summary>
+    internal sealed record Credenziali(string BaseUrl, string UserId, string Password, string ClientId, string Source);
+
+    private const string BaseUrlPredefinito = "https://ha.ecosagile.com/dd/api.pm?ApiName=";
+
+    internal Credenziali ResolveCredenziali()
+    {
+        Dictionary<string, string> righe = LeggiImpostazioni();
+
+        string Get(string chiave, string ripiego) =>
+            righe.TryGetValue(chiave, out string? v) && !string.IsNullOrEmpty(v) ? v : ripiego;
+
+        string password = righe.TryGetValue("ecos.password", out string? cifrata) && !string.IsNullOrEmpty(cifrata)
+            ? DecifraPassword(cifrata) ?? ""
+            : _config["Ecos:Password"] ?? "";
+
+        bool dalDatabase = righe.ContainsKey("ecos.userid") || righe.ContainsKey("ecos.password");
+
+        return new Credenziali(
+            Get("ecos.baseurl", _config["Ecos:BaseUrl"] ?? BaseUrlPredefinito),
+            Get("ecos.userid", _config["Ecos:UserId"] ?? ""),
+            password,
+            Get("ecos.clientid", _config["Ecos:ClientId"] ?? ""),
+            dalDatabase ? "DATABASE" : "APPSETTINGS");
+    }
+
+    private Dictionary<string, string> LeggiImpostazioni()
+    {
+        if (_rdb == null) return new Dictionary<string, string>();
+        try
+        {
+            using MySqlConnection c = _rdb.Open();
+            return c.Query<(string SettingKey, string SettingValue)>(
+                "SELECT `key` AS SettingKey, `value` AS SettingValue FROM res_settings WHERE `key` LIKE 'ecos.%'")
+                .ToDictionary(r => r.SettingKey, r => r.SettingValue);
+        }
+        catch (Exception ex)
+        {
+            // Database irraggiungibile: si ripiega su appsettings invece di dichiarare
+            // «non configurato», che manderebbe l'import a riposo per un guasto passeggero.
+            _logger.LogWarning(ex, "[Ecos] Impostazioni non leggibili dal database: uso appsettings.");
+            return new Dictionary<string, string>();
+        }
+    }
+
+    /// <summary>Salva le credenziali. La password si aggiorna SOLO se ne arriva una nuova.</summary>
+    public void SalvaCredenziali(HrEcosSettingsDto dto)
+    {
+        if (_rdb == null) throw new InvalidOperationException("Impostazioni Ecos non disponibili senza database.");
+
+        using MySqlConnection c = _rdb.Open();
+        void Set(string chiave, string valore) => c.Execute(
+            "INSERT INTO res_settings (`key`, `value`) VALUES (@K, @V) " +
+            "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
+            new { K = chiave, V = valore ?? "" });
+
+        Set("ecos.baseurl", string.IsNullOrWhiteSpace(dto.BaseUrl) ? BaseUrlPredefinito : dto.BaseUrl.Trim());
+        Set("ecos.userid", dto.UserId?.Trim() ?? "");
+        Set("ecos.clientid", dto.ClientId?.Trim() ?? "");
+
+        // Write-only, come la password SMTP: chi riapre la pagina non se la ritrova a video
+        // e salvando senza toccarla non la cancella.
+        if (!string.IsNullOrEmpty(dto.Password))
+            Set("ecos.password", ProtectedConfigHelper.Encrypt(dto.Password));
+    }
+
+    /// <summary>Le impostazioni per la pagina: la password non esce mai, esce se c'è.</summary>
+    public HrEcosSettingsDto LeggiCredenziali()
+    {
+        Credenziali cred = ResolveCredenziali();
+        return new HrEcosSettingsDto
+        {
+            BaseUrl = cred.BaseUrl,
+            UserId = cred.UserId,
+            ClientId = cred.ClientId,
+            HasPassword = !string.IsNullOrEmpty(cred.Password),
+            Source = cred.Source,
+            Configured = Configured,
+        };
+    }
+
+    private static string? DecifraPassword(string cifrataBase64)
+    {
+        try
+        {
+            return ProtectedConfigHelper.Decrypt(cifrataBase64);
+        }
+        catch
+        {
+            return null; // cifrata da un'altra macchina: va riscritta
+        }
     }
 
     /// <summary>true = le credenziali ci sono; false = il modulo import resta a riposo.</summary>
-    public bool Configurato =>
-        !string.IsNullOrWhiteSpace(_userId)
-        && !string.IsNullOrWhiteSpace(_password)
-        && !string.IsNullOrWhiteSpace(_clientId);
+    public bool Configured
+    {
+        get
+        {
+            Credenziali c = ResolveCredenziali();
+            return !string.IsNullOrWhiteSpace(c.UserId)
+                && !string.IsNullOrWhiteSpace(c.Password)
+                && !string.IsNullOrWhiteSpace(c.ClientId);
+        }
+    }
 
     // ── TOKEN ─────────────────────────────────────────────────────────────────
 
     public async Task<string> TokenAsync(CancellationToken ct = default)
     {
-        if (!Configurato)
-            throw new EcosApiException("Credenziali Ecos non configurate (sezione Ecos di appsettings).");
+        Credenziali cred = ResolveCredenziali();
+        if (string.IsNullOrWhiteSpace(cred.UserId) || string.IsNullOrWhiteSpace(cred.Password)
+            || string.IsNullOrWhiteSpace(cred.ClientId))
+        {
+            throw new EcosApiException(
+                "Credenziali Ecos non configurate: si mettono dalla pagina Timbrature, «Credenziali Ecos».");
+        }
 
         using var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["Userid"] = _userId,
-            ["Password"] = _password,
-            ["ClientID"] = _clientId,
+            ["Userid"] = cred.UserId,
+            ["Password"] = cred.Password,
+            ["ClientID"] = cred.ClientId,
         });
 
-        string body = await PostAsync(_baseUrl + "TokenGet", form, ct);
+        string body = await PostAsync(cred.BaseUrl + "TokenGet", form, ct);
         string? token = EstraiToken(body);
         if (string.IsNullOrEmpty(token))
             throw new EcosApiException("TokenGet: token non presente nella risposta (credenziali errate?).");
@@ -119,21 +246,21 @@ public class EcosClient
 
     /// <summary>
     /// Tutte le timbrature con <c>UpdateDate &gt;= updateDa</c> (null = dal 2020, cioè tutto:
-    /// il primo import è completo per costruzione). L'incrementale funziona perché Ecos
+    /// il primo import è full per costruzione). L'incrementale funziona perché Ecos
     /// filtra su UpdateDate, quindi arrivano anche le timbrature <b>corrette</b> dopo il fatto.
     /// </summary>
-    public async Task<List<EcosTimbratura>> TimbratureAsync(
+    public async Task<List<EcosPunch>> GetPunchesAsync(
         string token, DateTime? updateDa, CancellationToken ct = default)
     {
         List<Dictionary<string, string>> righe =
-            await FetchTutteLePagineAsync("PeopleStampGetAll", token, CampiTimbrature, updateDa, ct);
+            await FetchTutteLePagineAsync("PeopleStampGetAll", token, PunchFields, updateDa, ct);
 
-        var risultato = new List<EcosTimbratura>(righe.Count);
+        var risultato = new List<EcosPunch>(righe.Count);
         foreach (Dictionary<string, string> r in righe)
         {
             // Una timbratura senza orario o senza id non è importabile: si scarta e si
             // logga, non si inventa.
-            if (!ProvaData(r.GetValueOrDefault("StampDateTime", ""), out DateTime orario)
+            if (!ProvaData(r.GetValueOrDefault("StampDateTime", ""), out DateTime punchedAt)
                 || string.IsNullOrWhiteSpace(r.GetValueOrDefault("StampID")))
             {
                 _logger.LogWarning("[Ecos] Timbratura scartata (StampID='{Id}', StampDateTime='{Dt}')",
@@ -141,13 +268,13 @@ public class EcosClient
                 continue;
             }
 
-            risultato.Add(new EcosTimbratura(
-                IdEsterno: r["StampID"].Trim(),
-                Orario: orario,
+            risultato.Add(new EcosPunch(
+                ExternalId: r["StampID"].Trim(),
+                PunchedAt: punchedAt,
                 EmplCode: r.GetValueOrDefault("EmplCode", "").Trim(),
-                Nome: r.GetValueOrDefault("NameComplete", "").Trim(),
-                Verso: r.GetValueOrDefault("VersusCode", "").Trim(),
-                Luogo: ValoreOpzionale(r, "StampLocationName"),
+                Name: r.GetValueOrDefault("NameComplete", "").Trim(),
+                Direction: r.GetValueOrDefault("VersusCode", "").Trim(),
+                Location: ValoreOpzionale(r, "StampLocationName"),
                 UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg)
                     ? agg
                     : null));
@@ -165,10 +292,55 @@ public class EcosClient
             .Where(r => !string.IsNullOrWhiteSpace(r.GetValueOrDefault("EmplCode")))
             .Select(r => new EcosBadge(
                 EmplCode: r["EmplCode"].Trim(),
-                Nome: r.GetValueOrDefault("NameComplete", "").Trim(),
-                InForza: string.Equals(r.GetValueOrDefault("InForce"), "TRUE",
+                Name: r.GetValueOrDefault("NameComplete", "").Trim(),
+                IsActive: string.Equals(r.GetValueOrDefault("InForce"), "TRUE",
                     StringComparison.OrdinalIgnoreCase)))
             .ToList();
+    }
+
+    /// <summary>Richieste di assenza / ferie / permessi da Ecos.</summary>
+    public async Task<List<EcosAbsenceRequest>> GetAbsenceRequestsAsync(
+        string token, DateTime? updateDa, CancellationToken ct = default)
+    {
+        List<Dictionary<string, string>> righe =
+            await FetchTutteLePagineAsync("PeopleAbsenceRequestGetAll", token, AbsenceFields, updateDa, ct);
+
+        var risultato = new List<EcosAbsenceRequest>(righe.Count);
+        foreach (Dictionary<string, string> r in righe)
+        {
+            if (string.IsNullOrWhiteSpace(r.GetValueOrDefault("AbsenceRequestID"))
+                || !ProvaData(r.GetValueOrDefault("DateBegin", ""), out DateTime dateBegin))
+            {
+                continue;
+            }
+
+            DateTime dateEnd = dateBegin;
+            if (ProvaData(r.GetValueOrDefault("DateEnd", ""), out DateTime dtEnd))
+                dateEnd = dtEnd;
+
+            bool fullDay = string.Equals(r.GetValueOrDefault("FullDay", ""), "TRUE", StringComparison.OrdinalIgnoreCase);
+
+            decimal? duration = null;
+            string durStr = r.GetValueOrDefault("Duration", "").Replace(',', '.');
+            if (decimal.TryParse(durStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal dur))
+                duration = dur;
+
+            risultato.Add(new EcosAbsenceRequest(
+                AbsenceRequestId: r["AbsenceRequestID"].Trim(),
+                EmplCode: r.GetValueOrDefault("EmplCode", "").Trim(),
+                Name: r.GetValueOrDefault("NameComplete", "").Trim(),
+                CategoryCode: r.GetValueOrDefault("CategoryCode", "").Trim(),
+                CategoryDesc: r.GetValueOrDefault("CategoryDescShort", "").Trim(),
+                StatusCode: r.GetValueOrDefault("StatusCode", "").Trim().ToUpperInvariant(),
+                DateBegin: dateBegin.Date,
+                DateEnd: dateEnd.Date,
+                FullDay: fullDay,
+                HourBegin: ValoreOpzionale(r, "HourBegin"),
+                HourEnd: ValoreOpzionale(r, "HourEnd"),
+                Duration: duration,
+                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null));
+        }
+        return risultato;
     }
 
     // ── PAGINAZIONE ───────────────────────────────────────────────────────────
@@ -179,12 +351,13 @@ public class EcosClient
         var tutte = new List<Dictionary<string, string>>();
         string updateFrom = (updateDa ?? new DateTime(2020, 1, 1))
             .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        string baseUrl = ResolveCredenziali().BaseUrl;
 
-        for (int pagina = 1; pagina <= MassimoPagine; pagina++)
+        for (int pagina = 1; pagina <= MaxPages; pagina++)
         {
             // Il token va in query string ed è dato altrui: senza escape un '&' lo
             // troncherebbe e l'errore arriverebbe travestito da «privilegi insufficienti».
-            string url = $"{_baseUrl}{apiName}&PageNumber={pagina}&RowsPerPage={RighePerPagina}" +
+            string url = $"{baseUrl}{apiName}&PageNumber={pagina}&RowsPerPage={RowsPerPage}" +
                          $"&DF=1&AuthToken={Uri.EscapeDataString(token)}";
             using var form = new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -198,11 +371,11 @@ public class EcosClient
             // LASTPAGE dichiarato: si crede all'API. Non dichiarato: è l'ultima solo se
             // la pagina non è piena — una pagina piena può sempre avere un seguito.
             if (ultima == true || righe.Count == 0) return tutte;
-            if (ultima == null && righe.Count < RighePerPagina) return tutte;
+            if (ultima == null && righe.Count < RowsPerPage) return tutte;
         }
 
         throw new EcosApiException(
-            $"{apiName}: superate {MassimoPagine} pagine senza LASTPAGE — risposta API anomala.");
+            $"{apiName}: superate {MaxPages} pagine senza LASTPAGE — risposta API anomala.");
     }
 
     /// <summary>

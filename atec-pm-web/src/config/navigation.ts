@@ -319,7 +319,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         path: "/hr/richieste",
         featureKey: "nav.hr_richieste",
         icon: CalendarCheck,
-        status: "planned",
+        status: "live",
         description:
           "Richieste di ferie e permessi con approvazione del responsabile di reparto.",
       },

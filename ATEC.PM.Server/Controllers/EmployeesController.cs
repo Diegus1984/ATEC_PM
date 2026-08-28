@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Dapper;
+using MySqlConnector;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Services.Hr;
 using ATEC.PM.Server.Authorization;
 
 namespace ATEC.PM.Server.Controllers;
@@ -14,11 +16,27 @@ public class EmployeesController : ControllerBase
 {
     private readonly DbService _db;
     private readonly FeatureAccessService _access;
-    public EmployeesController(DbService db, FeatureAccessService access)
+    private readonly HrAttendanceService _attendance;
+
+    public EmployeesController(DbService db, FeatureAccessService access, HrAttendanceService attendance)
     {
         _db = db;
         _access = access;
+        _attendance = attendance;
     }
+    private const string SelectEmployeeSql = @"
+        SELECT id,
+               first_name AS FirstName,
+               last_name AS LastName,
+               email,
+               emp_type AS EmpType,
+               supplier_id AS SupplierId,
+               status,
+               ecos_empl_code AS EcosEmplCode,
+               hr_must_punch AS HrMustPunch,
+               hr_daily_hours AS HrDailyHours,
+               hr_counts_overtime AS HrCountsOvertime
+        FROM employees";
 
     /// <summary>
     /// L'elenco dei dipendenti con email, utenza di login e stato: dietro <c>nav.utenti</c>,
@@ -147,7 +165,7 @@ public class EmployeesController : ControllerBase
     {
         using var c = _db.Open();
         var emp = c.QueryFirstOrDefault<EmployeeSaveRequest>(
-            "SELECT id, first_name AS FirstName, last_name AS LastName, email, emp_type AS EmpType, supplier_id AS SupplierId, status FROM employees WHERE id=@Id",
+            $"{SelectEmployeeSql} WHERE id=@Id",
             new { Id = id });
         if (emp == null) return NotFound(ApiResponse<string>.Fail("Non trovato"));
         return Ok(ApiResponse<EmployeeSaveRequest>.Ok(emp));
@@ -171,10 +189,29 @@ public class EmployeesController : ControllerBase
         if (NameTaken(c, req, excludeId: null))
             return Ok(ApiResponse<int>.Fail(DuplicateMessage(req)));
 
-        var newId = c.ExecuteScalar<int>(
-            "INSERT INTO employees (first_name,last_name,email,emp_type,supplier_id,status) VALUES (@FirstName,@LastName,@Email,@EmpType,@SupplierId,@Status); SELECT LAST_INSERT_ID()",
-            req);
-        return Ok(ApiResponse<int>.Ok(newId, "Creato"));
+        string? hrError = ValidateHrFields(c, employeeId: 0, req);
+        if (hrError != null)
+            return Ok(ApiResponse<int>.Fail(hrError));
+
+        req.EcosEmplCode = EmployeeHrConfig.NormalizeEcosCode(req.EcosEmplCode);
+
+        try
+        {
+            var newId = c.ExecuteScalar<int>(@"
+                INSERT INTO employees
+                    (first_name, last_name, email, emp_type, supplier_id, status,
+                     ecos_empl_code, hr_must_punch, hr_daily_hours, hr_counts_overtime)
+                VALUES
+                    (@FirstName, @LastName, @Email, @EmpType, @SupplierId, @Status,
+                     @EcosEmplCode, @HrMustPunch, @HrDailyHours, @HrCountsOvertime);
+                SELECT LAST_INSERT_ID()", req);
+            return Ok(ApiResponse<int>.Ok(newId, "Creato"));
+        }
+        catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
+        {
+            return Ok(ApiResponse<int>.Fail(
+                $"Il codice Ecos {req.EcosEmplCode} è appena stato collegato a un altro dipendente."));
+        }
     }
 
     /// <summary>
@@ -210,14 +247,66 @@ public class EmployeesController : ControllerBase
         if (NameTaken(c, req, excludeId: id))
             return Ok(ApiResponse<int>.Fail(DuplicateMessage(req)));
 
-        c.Execute(
-            "UPDATE employees SET first_name=@FirstName,last_name=@LastName,email=@Email,emp_type=@EmpType,supplier_id=@SupplierId,status=@Status WHERE id=@Id",
-            req);
+        if (c.ExecuteScalar<int>("SELECT COUNT(*) FROM employees WHERE id = @Id", new { Id = id }) == 0)
+            return NotFound(ApiResponse<int>.Fail("Non trovato"));
+
+        var previousHr = c.QuerySingle<(bool HrCountsOvertime, bool HrMustPunch, decimal HrDailyHours)>(
+            @"SELECT hr_counts_overtime AS HrCountsOvertime,
+                     hr_must_punch AS HrMustPunch,
+                     hr_daily_hours AS HrDailyHours
+              FROM employees WHERE id = @Id",
+            new { Id = id });
+
+        string? hrError = ValidateHrFields(c, id, req);
+        if (hrError != null)
+            return Ok(ApiResponse<int>.Fail(hrError));
+
+        req.EcosEmplCode = EmployeeHrConfig.NormalizeEcosCode(req.EcosEmplCode);
+
+        try
+        {
+            int rowsAffected = c.Execute(@"
+                UPDATE employees SET
+                    first_name = @FirstName,
+                    last_name = @LastName,
+                    email = @Email,
+                    emp_type = @EmpType,
+                    supplier_id = @SupplierId,
+                    status = @Status,
+                    ecos_empl_code = @EcosEmplCode,
+                    hr_must_punch = @HrMustPunch,
+                    hr_daily_hours = @HrDailyHours,
+                    hr_counts_overtime = @HrCountsOvertime
+                WHERE id = @Id", req);
+            if (rowsAffected == 0)
+                return NotFound(ApiResponse<int>.Fail("Non trovato"));
+        }
+        catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
+        {
+            return Ok(ApiResponse<int>.Fail(
+                $"Il codice Ecos {req.EcosEmplCode} è appena stato collegato a un altro dipendente."));
+        }
+
         // Qui si scrive anche `status`, che è la cosa guardata a ogni richiesta autenticata:
         // senza svuotare la cache, una disattivazione dall'anagrafica resterebbe senza effetto
         // per mezzo minuto.
         _access.DimenticaPersona(id);
+
+        // Se cambia la contabilizzazione dello straordinario, i cartellini già calcolati
+        // resterebbero con i vecchi totali finché non si ricalcolano.
+        if (previousHr.HrCountsOvertime != req.HrCountsOvertime)
+            _attendance.RecalculateAllEmployeeDays(c, id);
+
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
+    }
+
+    private static string? ValidateHrFields(System.Data.IDbConnection c, int employeeId, EmployeeSaveRequest req)
+    {
+        string? hoursError = EmployeeHrConfig.ValidateDailyHours(req.HrDailyHours);
+        if (hoursError != null)
+            return hoursError;
+
+        return EmployeeHrConfig.ValidateEcosCode((MySqlConnection)c, employeeId, req.EcosEmplCode);
     }
 
     [HttpDelete("{id}")]

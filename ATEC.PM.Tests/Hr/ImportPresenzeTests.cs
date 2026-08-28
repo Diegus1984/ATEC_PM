@@ -10,7 +10,7 @@ namespace ATEC.PM.Tests.Hr;
 
 /// <summary>
 /// L'import delle timbrature Ecos su database vero, senza HTTP: si esercita il cuore
-/// (<see cref="HrPresenzeService.ImportaTimbrature"/>) con timbrature finte.
+/// (<see cref="HrAttendanceService.ImportPunches"/>) con timbrature finte.
 ///
 /// <para>Le proprietà da difendere: <b>idempotenza</b> (reimportare non duplica),
 /// <b>mirror di Ecos</b> (una timbratura corretta là si aggiorna qui e la giornata si
@@ -38,25 +38,25 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
+        HrAttendanceService servizio = CreaServizio();
 
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrImportResultDto esito = servizio.ImportPunches(c, GiornataRegolare("42"));
 
-        Assert.True(esito.Successo);
-        Assert.Equal(4, esito.TimbratureNuove);
-        Assert.Equal(0, esito.TimbratureAggiornate);
-        Assert.Equal(1, esito.GiornateRicalcolate);
-        Assert.Empty(esito.NonAbbinati);
+        Assert.True(esito.Success);
+        Assert.Equal(4, esito.PunchesAdded);
+        Assert.Equal(0, esito.PunchesUpdated);
+        Assert.Equal(1, esito.DaysRecalculated);
+        Assert.Empty(esito.Unmatched);
 
         Assert.Equal(4, c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM hr_timbrature WHERE employee_id = @Id", new { Id = mario }));
+            "SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
 
         // 07:58→08:00, 12:32→12:30, 13:28→13:30, 17:04→17:00 (scatto 30' a favore azienda):
         // 480 minuti ordinari, zero straordinario, pausa un'ora.
         var giornata = c.QuerySingle<(string Entrata1, string Uscita2, int Ordinari, int Straord, int Pausa, bool Anomalia, string Nota)>(
-            @"SELECT entrata1 AS Entrata1, uscita2 AS Uscita2, minuti_ordinari AS Ordinari,
-                     minuti_straord AS Straord, minuti_pausa AS Pausa, anomalia AS Anomalia, nota AS Nota
-              FROM hr_giornate WHERE employee_id = @Id AND giorno = @Giorno",
+            @"SELECT clock_in_1 AS Entrata1, clock_out_2 AS Uscita2, regular_minutes AS Ordinari,
+                     overtime_minutes AS Straord, break_minutes AS Pausa, has_anomaly AS Anomalia, note AS Nota
+              FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
             new { Id = mario, Giorno });
 
         Assert.Equal("08:00", giornata.Entrata1);
@@ -73,17 +73,17 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        List<EcosTimbratura> scarico = GiornataRegolare("42");
+        HrAttendanceService servizio = CreaServizio();
+        List<EcosPunch> scarico = GiornataRegolare("42");
 
-        servizio.ImportaTimbrature(c, scarico);
-        HrImportEsitoDto secondo = servizio.ImportaTimbrature(c, scarico);
+        servizio.ImportPunches(c, scarico);
+        HrImportResultDto secondo = servizio.ImportPunches(c, scarico);
 
-        Assert.Equal(0, secondo.TimbratureNuove);
-        Assert.Equal(0, secondo.TimbratureAggiornate);
-        Assert.Equal(0, secondo.GiornateRicalcolate);
+        Assert.Equal(0, secondo.PunchesAdded);
+        Assert.Equal(0, secondo.PunchesUpdated);
+        Assert.Equal(0, secondo.DaysRecalculated);
         Assert.Equal(4, c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM hr_timbrature WHERE employee_id = @Id", new { Id = mario }));
+            "SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
     }
 
     [FactRichiedeMySql]
@@ -91,21 +91,21 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
 
         // In Ecos correggono l'uscita: stesso StampID, orario nuovo (18:04 → 18:00).
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrImportResultDto esito = servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("s4", Giorno.AddHours(18).AddMinutes(4), "42", "OUT"),
         });
 
-        Assert.Equal(0, esito.TimbratureNuove);
-        Assert.Equal(1, esito.TimbratureAggiornate);
+        Assert.Equal(0, esito.PunchesAdded);
+        Assert.Equal(1, esito.PunchesUpdated);
 
         var giornata = c.QuerySingle<(int Ordinari, int Straord, string? Fasce)>(
-            @"SELECT minuti_ordinari AS Ordinari, minuti_straord AS Straord, fasce_json AS Fasce
-              FROM hr_giornate WHERE employee_id = @Id AND giorno = @Giorno",
+            @"SELECT regular_minutes AS Ordinari, overtime_minutes AS Straord, bands_json AS Fasce
+              FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
             new { Id = mario, Giorno });
 
         // 08:00-12:30 + 13:30-18:00 = 540 minuti: 480 ordinari + 60 di straordinario
@@ -121,8 +121,8 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("solo", Giorno.AddHours(7).AddMinutes(58), "42", "IN"),
         });
@@ -131,7 +131,7 @@ public class ImportPresenzeTests
         // Ecos sposta la timbratura al giorno dopo: il cartellino del 5 deve sparire,
         // non restare calcolato su una timbratura che non c'è più.
         DateTime giornoDopo = Giorno.AddDays(1);
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("solo", giornoDopo.AddHours(7).AddMinutes(58), "42", "IN"),
         });
@@ -145,18 +145,18 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
+        HrAttendanceService servizio = CreaServizio();
 
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrImportResultDto esito = servizio.ImportPunches(c, new List<EcosPunch>
         {
             new("x1", Giorno.AddHours(8), "999", "Pallino, Pinco", "IN", null),
         });
 
-        Assert.True(esito.Successo);
-        Assert.Equal(0, esito.TimbratureNuove);
-        Assert.Single(esito.NonAbbinati);
-        Assert.Equal("999 — Pallino, Pinco", esito.NonAbbinati[0]);
-        Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_timbrature"));
+        Assert.True(esito.Success);
+        Assert.Equal(0, esito.PunchesAdded);
+        Assert.Single(esito.Unmatched);
+        Assert.Equal("999 — Pallino, Pinco", esito.Unmatched[0]);
+        Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
     }
 
     // ── RETTIFICHE ────────────────────────────────────────────────────────────
@@ -167,31 +167,31 @@ public class ImportPresenzeTests
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
         int admin = CreaDipendente(c, "Anna", "Admin", ecosCode: null);
-        HrPresenzeService servizio = CreaServizio();
+        HrAttendanceService servizio = CreaServizio();
 
         // Solo l'entrata: anomalia (il ramo-trappola del motore VB, coperto dal banco di prova).
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("s1", Giorno.AddHours(7).AddMinutes(58), "42", "IN"),
         });
         Assert.True(Anomalia(c, mario, Giorno));
 
-        string? errore = servizio.Rettifica(new HrRettificaRequest
+        string? errore = servizio.AddAdjustment(new HrAdjustmentRequest
         {
             EmployeeId = mario,
-            Orario = Giorno.AddHours(17),
-            Verso = "out",
-            Motivo = "Uscita non timbrata (dimenticanza)",
+            PunchedAt = Giorno.AddHours(17),
+            Direction = "out",
+            Reason = "Uscita non timbrata (dimenticanza)",
         }, autoreId: admin);
 
         Assert.Null(errore);
         Assert.False(Anomalia(c, mario, Giorno));
 
         long rettificaId = c.ExecuteScalar<long>(
-            "SELECT id FROM hr_timbrature WHERE origine = 'RETTIFICA' AND employee_id = @Id",
+            "SELECT id FROM hr_punches WHERE source = 'ADJUSTMENT' AND employee_id = @Id",
             new { Id = mario });
 
-        Assert.Null(servizio.EliminaRettifica(rettificaId, autoreId: admin));
+        Assert.Null(servizio.DeleteAdjustment(rettificaId, autoreId: admin));
         Assert.True(Anomalia(c, mario, Giorno));
     }
 
@@ -201,31 +201,31 @@ public class ImportPresenzeTests
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
         int admin = CreaDipendente(c, "Anna", "Admin", ecosCode: null);
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("s1", Giorno.AddHours(8), "42", "IN"),
         });
-        long ecosId = c.ExecuteScalar<long>("SELECT id FROM hr_timbrature LIMIT 1");
+        long ecosId = c.ExecuteScalar<long>("SELECT id FROM hr_punches LIMIT 1");
 
-        Assert.NotNull(servizio.EliminaRettifica(ecosId, autoreId: admin));
-        Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_timbrature"));
+        Assert.NotNull(servizio.DeleteAdjustment(ecosId, autoreId: admin));
+        Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
 
-        string? senzaMotivo = servizio.Rettifica(new HrRettificaRequest
+        string? senzaReason = servizio.AddAdjustment(new HrAdjustmentRequest
         {
             EmployeeId = mario,
-            Orario = Giorno.AddHours(17),
-            Verso = "OUT",
-            Motivo = "  ",
+            PunchedAt = Giorno.AddHours(17),
+            Direction = "OUT",
+            Reason = "  ",
         }, autoreId: admin);
-        Assert.NotNull(senzaMotivo);
+        Assert.NotNull(senzaReason);
 
-        string? versoStorto = servizio.Rettifica(new HrRettificaRequest
+        string? versoStorto = servizio.AddAdjustment(new HrAdjustmentRequest
         {
             EmployeeId = mario,
-            Orario = Giorno.AddHours(17),
-            Verso = "USCITA",
-            Motivo = "motivo valido",
+            PunchedAt = Giorno.AddHours(17),
+            Direction = "USCITA",
+            Reason = "motivo valido",
         }, autoreId: admin);
         Assert.NotNull(versoStorto);
     }
@@ -241,37 +241,37 @@ public class ImportPresenzeTests
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
         int capo = CreaDipendente(c, "Anna", "Capo", ecosCode: null);
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("s1", Giorno.AddHours(7).AddMinutes(58), "42", "IN"),
         });
 
-        string? seStesso = servizio.Rettifica(new HrRettificaRequest
+        string? seStesso = servizio.AddAdjustment(new HrAdjustmentRequest
         {
             EmployeeId = mario,
-            Orario = Giorno.AddHours(19),
-            Verso = "OUT",
-            Motivo = "uscita non timbrata",
+            PunchedAt = Giorno.AddHours(19),
+            Direction = "OUT",
+            Reason = "uscita non timbrata",
         }, autoreId: mario);
         Assert.NotNull(seStesso);
         Assert.Equal(0, c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM hr_timbrature WHERE origine = 'RETTIFICA'"));
+            "SELECT COUNT(*) FROM hr_punches WHERE source = 'ADJUSTMENT'"));
 
         // Il capo può: è il secondo occhio che il piano richiede.
-        Assert.Null(servizio.Rettifica(new HrRettificaRequest
+        Assert.Null(servizio.AddAdjustment(new HrAdjustmentRequest
         {
             EmployeeId = mario,
-            Orario = Giorno.AddHours(17),
-            Verso = "OUT",
-            Motivo = "uscita non timbrata, verificata",
+            PunchedAt = Giorno.AddHours(17),
+            Direction = "OUT",
+            Reason = "uscita non timbrata, verificata",
         }, autoreId: capo));
 
         // …ma Mario non può cancellarla dal proprio cartellino.
         long rettificaId = c.ExecuteScalar<long>(
-            "SELECT id FROM hr_timbrature WHERE origine = 'RETTIFICA'");
-        Assert.NotNull(servizio.EliminaRettifica(rettificaId, autoreId: mario));
-        Assert.Null(servizio.EliminaRettifica(rettificaId, autoreId: capo));
+            "SELECT id FROM hr_punches WHERE source = 'ADJUSTMENT'");
+        Assert.NotNull(servizio.DeleteAdjustment(rettificaId, autoreId: mario));
+        Assert.Null(servizio.DeleteAdjustment(rettificaId, autoreId: capo));
     }
 
     /// <summary>
@@ -285,23 +285,23 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, GiornataRegolare("42"), completo: true);
-        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_timbrature"));
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"), full: true);
+        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
 
         // Su Ecos hanno cancellato la doppia strisciata delle 12:32: lo scarico completo
         // non la contiene più.
-        List<EcosTimbratura> senzaUna = GiornataRegolare("42")
-            .Where(t => t.IdEsterno != "s2").ToList();
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, senzaUna, completo: true);
+        List<EcosPunch> senzaUna = GiornataRegolare("42")
+            .Where(t => t.ExternalId != "s2").ToList();
+        HrImportResultDto esito = servizio.ImportPunches(c, senzaUna, full: true);
 
-        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_timbrature"));
-        Assert.True(esito.GiornateRicalcolate >= 1);
+        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+        Assert.True(esito.DaysRecalculated >= 1);
 
         // L'incrementale invece NON cancella: non ha la fotografia intera, e uno scarico
         // parziale farebbe strage di righe legittime.
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>(), completo: false);
-        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_timbrature"));
+        servizio.ImportPunches(c, new List<EcosPunch>(), full: false);
+        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
     }
 
     /// <summary>
@@ -314,25 +314,25 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
 
         // Si simula il ricalcolo interrotto: il cartellino sparisce, il grezzo resta.
-        c.Execute("DELETE FROM hr_giornate");
+        c.Execute("DELETE FROM hr_days");
 
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrImportResultDto esito = servizio.ImportPunches(c, GiornataRegolare("42"));
 
-        Assert.Equal(0, esito.TimbratureNuove);
+        Assert.Equal(0, esito.PunchesAdded);
         Assert.Equal(1, ConteggioGiornate(c, mario, Giorno));
         Assert.Equal(480, c.ExecuteScalar<int>(
-            "SELECT minuti_ordinari FROM hr_giornate WHERE employee_id = @Id", new { Id = mario }));
+            "SELECT regular_minutes FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
 
         // Stesso trattamento per una giornata calcolata con regole ormai vecchie: si
         // riconosce da regole_versione e si rifà, senza che nessuno debba ricordarsene.
-        c.Execute("UPDATE hr_giornate SET regole_versione = 0, minuti_ordinari = 999");
-        servizio.RiparaGiornate(c);
+        c.Execute("UPDATE hr_days SET rules_version = 0, regular_minutes = 999");
+        servizio.RepairDays(c);
         Assert.Equal(480, c.ExecuteScalar<int>(
-            "SELECT minuti_ordinari FROM hr_giornate WHERE employee_id = @Id", new { Id = mario }));
+            "SELECT regular_minutes FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
     }
 
     [FactRichiedeMySql]
@@ -340,14 +340,14 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
 
         // Il grezzo sparisce (cancellato su Ecos) ma il cartellino resta appeso.
-        c.Execute("DELETE FROM hr_timbrature");
+        c.Execute("DELETE FROM hr_punches");
         Assert.Equal(1, ConteggioGiornate(c, mario, Giorno));
 
-        servizio.RiparaGiornate(c);
+        servizio.RepairDays(c);
         Assert.Equal(0, ConteggioGiornate(c, mario, Giorno));
     }
 
@@ -361,20 +361,46 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
-        servizio.ImportaTimbrature(c, GiornataRegolare("42"));
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
 
-        Assert.Null(servizio.AggiornaMappatura(mario, null));
+        Assert.Null(servizio.UpdateEcosMapping(mario, null));
 
-        HrImportEsitoDto esito = servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        HrImportResultDto esito = servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("s4", Giorno.AddHours(18).AddMinutes(4), "42", "OUT"),
         });
 
-        Assert.Equal(1, esito.TimbratureAggiornate);
-        Assert.Single(esito.NonAbbinati);   // il codice resta segnalato come da collegare
+        Assert.Equal(1, esito.PunchesUpdated);
+        Assert.Single(esito.Unmatched);   // il codice resta segnalato come da collegare
         Assert.Equal(60, c.ExecuteScalar<int>(
-            "SELECT minuti_straord FROM hr_giornate WHERE employee_id = @Id", new { Id = mario }));
+            "SELECT overtime_minutes FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
+    }
+
+    /// <summary>
+    /// Port di <c>IncludeOvertime</c> nel VB: se l'anagrafica dice di non conteggiare lo
+    /// straordinario, il ricalcolo azzera <c>minuti_straord</c> anche su giornate già calcolate.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Disabling_overtime_in_profile_clears_timesheet()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
+        servizio.ImportPunches(c, new List<EcosPunch>
+        {
+            Timbratura("s4", Giorno.AddHours(18).AddMinutes(4), "42", "OUT"),
+        });
+
+        Assert.Equal(60, c.ExecuteScalar<int>(
+            "SELECT overtime_minutes FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
+
+        c.Execute("UPDATE employees SET hr_counts_overtime = 0 WHERE id = @Id", new { Id = mario });
+        servizio.RecalculateAllEmployeeDays(c, mario);
+
+        Assert.Equal(0, c.ExecuteScalar<int>(
+            "SELECT overtime_minutes FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
     }
 
     // ── FILTRO DOPPIONI (parità col VB) ───────────────────────────────────────
@@ -389,9 +415,9 @@ public class ImportPresenzeTests
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
-        HrPresenzeService servizio = CreaServizio();
+        HrAttendanceService servizio = CreaServizio();
 
-        servizio.ImportaTimbrature(c, new List<EcosTimbratura>
+        servizio.ImportPunches(c, new List<EcosPunch>
         {
             Timbratura("d1", Giorno.AddHours(8), "42", "IN"),
             Timbratura("d2", Giorno.AddHours(12), "42", "OUT"),
@@ -401,8 +427,8 @@ public class ImportPresenzeTests
         });
 
         var giornata = c.QuerySingle<(int Ordinari, int Straord, string Nota)>(
-            @"SELECT minuti_ordinari AS Ordinari, minuti_straord AS Straord, nota AS Nota
-              FROM hr_giornate WHERE employee_id = @Id", new { Id = mario });
+            @"SELECT regular_minutes AS Ordinari, overtime_minutes AS Straord, note AS Nota
+              FROM hr_days WHERE employee_id = @Id", new { Id = mario });
 
         // Turno regolare 08:00-12:00 + 12:30-17:30 con pausa di 30': 540 minuti
         // (480 ordinari + 60 di straordinario), non i 510 del raggruppamento sbagliato.
@@ -423,7 +449,7 @@ public class ImportPresenzeTests
         var inizio = new DateTime(2026, 2, 24, 10, 0, 0);
         var ultimoAggiornamento = new DateTime(2026, 2, 24, 9, 30, 0);
 
-        DateTime cursore = HrPresenzeService.NuovoCursore(new List<EcosTimbratura>
+        DateTime cursore = HrAttendanceService.NuovoCursore(new List<EcosPunch>
         {
             new("a", Giorno.AddHours(8), "42", "Rossi", "IN", null, ultimoAggiornamento.AddHours(-2)),
             new("b", Giorno.AddHours(17), "42", "Rossi", "OUT", null, ultimoAggiornamento),
@@ -437,7 +463,7 @@ public class ImportPresenzeTests
     {
         var inizio = new DateTime(2026, 2, 24, 10, 0, 0);
 
-        DateTime cursore = HrPresenzeService.NuovoCursore(new List<EcosTimbratura>
+        DateTime cursore = HrAttendanceService.NuovoCursore(new List<EcosPunch>
         {
             new("a", Giorno.AddHours(8), "42", "Rossi", "IN", null, null),
         }, inizio);
@@ -453,16 +479,16 @@ public class ImportPresenzeTests
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: null);
         int anna = CreaDipendente(c, "Anna", "Verdi", ecosCode: null);
-        HrPresenzeService servizio = CreaServizio();
+        HrAttendanceService servizio = CreaServizio();
 
-        Assert.Null(servizio.AggiornaMappatura(mario, "42"));
+        Assert.Null(servizio.UpdateEcosMapping(mario, "42"));
 
-        string? conflitto = servizio.AggiornaMappatura(anna, "42");
+        string? conflitto = servizio.UpdateEcosMapping(anna, "42");
         Assert.NotNull(conflitto);
         Assert.Contains("Mario Rossi", conflitto);
 
         // Scollegare: codice vuoto → NULL.
-        Assert.Null(servizio.AggiornaMappatura(mario, "  "));
+        Assert.Null(servizio.UpdateEcosMapping(mario, "  "));
         Assert.Null(c.ExecuteScalar<string?>(
             "SELECT ecos_empl_code FROM employees WHERE id = @Id", new { Id = mario }));
     }
@@ -478,13 +504,13 @@ public class ImportPresenzeTests
     [InlineData(null, 0)]
     public void Il_parser_delle_durate_rilegge_il_formato_del_motore(string? durata, int attesi)
     {
-        Assert.Equal(attesi, HrPresenzeService.MinutiDa(durata));
+        Assert.Equal(attesi, HrAttendanceService.MinutesFrom(durata));
     }
 
     // ── ATTREZZI ──────────────────────────────────────────────────────────────
 
     /// <summary>La giornata canonica: 07:58 IN, 12:32 OUT, 13:28 IN, 17:04 OUT.</summary>
-    private static List<EcosTimbratura> GiornataRegolare(string emplCode) => new()
+    private static List<EcosPunch> GiornataRegolare(string emplCode) => new()
     {
         Timbratura("s1", Giorno.AddHours(7).AddMinutes(58), emplCode, "IN"),
         Timbratura("s2", Giorno.AddHours(12).AddMinutes(32), emplCode, "OUT"),
@@ -492,14 +518,14 @@ public class ImportPresenzeTests
         Timbratura("s4", Giorno.AddHours(17).AddMinutes(4), emplCode, "OUT"),
     };
 
-    private static EcosTimbratura Timbratura(string id, DateTime orario, string emplCode, string verso) =>
+    private static EcosPunch Timbratura(string id, DateTime orario, string emplCode, string verso) =>
         new(id, orario, emplCode, "Rossi, Mario", verso, "Sede");
 
-    private HrPresenzeService CreaServizio()
+    private HrAttendanceService CreaServizio()
     {
         IConfiguration configVuota = new ConfigurationBuilder().Build();
         var ecos = new EcosClient(configVuota, NullLogger<EcosClient>.Instance);
-        return new HrPresenzeService(_schema.Servizio(), ecos, NullLogger<HrPresenzeService>.Instance);
+        return new HrAttendanceService(_schema.Servizio(), ecos, NullLogger<HrAttendanceService>.Instance);
     }
 
     private static int CreaDipendente(MySqlConnection c, string nome, string cognome, string? ecosCode)
@@ -512,11 +538,11 @@ public class ImportPresenzeTests
 
     private static int ConteggioGiornate(MySqlConnection c, int employeeId, DateTime giorno) =>
         c.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM hr_giornate WHERE employee_id = @Id AND giorno = @Giorno",
+            "SELECT COUNT(*) FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
             new { Id = employeeId, Giorno = giorno });
 
     private static bool Anomalia(MySqlConnection c, int employeeId, DateTime giorno) =>
         c.ExecuteScalar<bool>(
-            "SELECT anomalia FROM hr_giornate WHERE employee_id = @Id AND giorno = @Giorno",
+            "SELECT has_anomaly FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
             new { Id = employeeId, Giorno = giorno });
 }

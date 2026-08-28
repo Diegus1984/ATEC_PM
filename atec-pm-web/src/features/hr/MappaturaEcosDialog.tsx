@@ -27,9 +27,9 @@ import {
 } from "@/components/ui/table"
 import {
   fetchHrBadges,
-  fetchHrMappatura,
-  importaTimbrature,
-  salvaHrMappatura,
+  fetchHrMapping,
+  importHrPunches,
+  saveHrMapping,
 } from "@/lib/api/hr"
 import { notifyError, notifySuccess } from "@/lib/toast"
 
@@ -52,8 +52,8 @@ export function MappaturaEcosDialog({
   const confirm = useConfirm()
 
   const mappaturaQuery = useQuery({
-    queryKey: ["hr-mappatura"],
-    queryFn: fetchHrMappatura,
+    queryKey: ["hr-mapping"],
+    queryFn: fetchHrMapping,
     enabled: open,
   })
   const badgesQuery = useQuery({
@@ -63,14 +63,14 @@ export function MappaturaEcosDialog({
   })
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["hr-mappatura"] })
-    void queryClient.invalidateQueries({ queryKey: ["hr-stato"] })
-    void queryClient.invalidateQueries({ queryKey: ["hr-cartellino"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-mapping"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-status"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-timesheet"] })
   }
 
   const salva = useMutation({
     mutationFn: ({ employeeId, codice }: { employeeId: number; codice: string | null }) =>
-      salvaHrMappatura(employeeId, codice),
+      saveHrMapping(employeeId, codice),
     onSuccess: () => {
       notifySuccess("Mappatura aggiornata")
       invalidate()
@@ -82,9 +82,9 @@ export function MappaturaEcosDialog({
   })
 
   const reimporta = useMutation({
-    mutationFn: () => importaTimbrature(true),
+    mutationFn: () => importHrPunches(true),
     onSuccess: (esito) => {
-      notifySuccess(esito.messaggio)
+      notifySuccess(esito.message)
       invalidate()
     },
     onError: (e) => notifyError((e as Error).message),
@@ -107,7 +107,7 @@ export function MappaturaEcosDialog({
     if (ok) reimporta.mutate()
   }
 
-  const configurato = badgesQuery.data?.configurato ?? false
+  const configurato = badgesQuery.data?.configured ?? false
   // 🪤 «Non configurato» e «Ecos non ha risposto» sono due cose diverse: con l'errore
   // travestito da credenziali mancanti si finiva a digitare i codici a mano — e un codice
   // digitato storto fa scartare le timbrature di quella persona a ogni import.
@@ -116,8 +116,8 @@ export function MappaturaEcosDialog({
   const opzioniBadge: LookupComboboxOption<string>[] = React.useMemo(() => {
     const dalVivo = (badgesQuery.data?.badges ?? []).map((b) => ({
       id: b.emplCode,
-      name: `${b.emplCode} — ${b.nome}`,
-      hint: b.inForza ? undefined : "Non in forza",
+      name: `${b.emplCode} — ${b.name}`,
+      hint: b.isActive ? undefined : "Non in forza",
     }))
     // I codici già salvati che Ecos non elenca più (persona rimossa di là, codice messo
     // a mano) devono restare visibili: senza, la riga sembrerebbe scollegata.
@@ -175,7 +175,7 @@ export function MappaturaEcosDialog({
               <TableBody>
                 {(mappaturaQuery.data ?? []).map((riga) => (
                   <TableRow key={riga.employeeId}>
-                    <TableCell>{riga.nome}</TableCell>
+                    <TableCell>{riga.name}</TableCell>
                     <TableCell>
                       {configurato ? (
                         <LookupCombobox<string>

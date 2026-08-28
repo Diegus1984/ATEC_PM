@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, DownloadCloud, Link2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, DownloadCloud, KeyRound, Link2 } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { GridScroller } from "@/components/shared/grid-scroller"
@@ -17,13 +17,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { fetchRealEmployees } from "@/lib/api/employees"
-import { fetchHrCartellino, fetchHrStato, importaTimbrature } from "@/lib/api/hr"
+import type { HrDayStage } from "@/lib/api/types"
+import { fetchHrTimesheet, fetchHrStatus, importHrPunches } from "@/lib/api/hr"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { formatDateShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
@@ -32,8 +34,16 @@ import { cn } from "@/lib/utils"
 
 import { GiornataDialog } from "./GiornataDialog"
 import { MappaturaEcosDialog } from "./MappaturaEcosDialog"
+import { CalendarioPresenzeView } from "./CalendarioPresenzeView"
+import { CredenzialiEcosDialog } from "./CredenzialiEcosDialog"
+import { QuadraturaPresenzeView } from "./QuadraturaPresenzeView"
 
+// Le tre letture della stessa giornata, come il ReportPage del programma «Timbrature»:
+// 🔸 come e' arrivata dal rilevatore, 🔷 dopo l'arrotondamento, ✅ come vale. Affiancate si
+// vede DOVE la giornata e' cambiata: quanto ha spostato lo scatto, quanto la pausa dedotta.
 const COLUMNS: { id: string; label: string }[] = [
+  { id: "grezzo", label: "🔸 Grezzo (come timbrato)" },
+  { id: "normalizzato", label: "🔷 Normalizzato (arrotondato)" },
   { id: "entrata1", label: "Entrata 1" },
   { id: "uscita1", label: "Uscita 1" },
   { id: "entrata2", label: "Entrata 2" },
@@ -44,7 +54,8 @@ const COLUMNS: { id: string; label: string }[] = [
   { id: "nota", label: "Nota" },
 ]
 const COLUMNS_DEFAULT = Object.fromEntries(COLUMNS.map((c) => [c.id, true]))
-const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v1"
+// v2: sono nati i due blocchi 🔸/🔷 - con la chiave vecchia resterebbero spenti.
+const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v2"
 
 /** Le fasce della Circolare n. 12 del 23.12.2024 (colonna «Non a turni»). */
 const FASCE_LABELS: Record<string, string> = {
@@ -59,7 +70,35 @@ const FASCE_LABELS: Record<string, string> = {
   M: "Straord. nott. festivo con riposo comp. (55%)",
 }
 
-/** «8h 30m» → minuti; «---» e simili → 0 (il totale non deve inventare). */
+/**
+ * Le sei celle di uno stadio (grezzo o normalizzato): quattro orari, pausa e totale.
+ * In grigio, perché non sono il dato che vale — servono a spiegare quello che vale.
+ */
+function StadioCelle({ stadio }: { stadio: HrDayStage }) {
+  return (
+    <>
+      <TableCell className="border-l font-mono text-xs text-muted-foreground">
+        {stadio.clockIn1}
+      </TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        {stadio.clockOut1}
+      </TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        {stadio.clockIn2}
+      </TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        {stadio.clockOut2}
+      </TableCell>
+      <TableCell className="text-right font-mono text-xs text-muted-foreground">
+        {stadio.breakTime}
+      </TableCell>
+      <TableCell className="text-right font-mono text-xs text-muted-foreground">
+        {stadio.totalHours}
+      </TableCell>
+    </>
+  )
+}
+
 function minutiDa(durata: string): number {
   const m = /^(\d+)h (\d+)m$/.exec(durata)
   return m ? Number(m[1]) * 60 + Number(m[2]) : 0
@@ -69,25 +108,21 @@ function durata(minuti: number): string {
   return `${Math.floor(minuti / 60)}h ${minuti % 60}m`
 }
 
-/**
- * Cartellino presenze (PIANO-HR-PRESENZE.md, Fase 1): le timbrature importate da
- * EcosAgile, elaborate dal motore CCNL. Con la sola lettura si vede il PROPRIO
- * cartellino; la scrittura apre i colleghi, l'import, la mappatura e le rettifiche.
- */
 export function TimbraturePage() {
   const queryClient = useQueryClient()
   const canWrite = canWriteFeature("nav.hr_timbrature")
 
+  const [vista, setVista] = React.useState<"cartellino" | "calendario" | "quadratura">(
+    "cartellino"
+  )
   const [periodo, setPeriodo] = React.useState(() => {
     const oggi = new Date()
     return { anno: oggi.getFullYear(), mese: oggi.getMonth() + 1 }
   })
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
-  // 🪤 Si tiene la DATA, non l'oggetto giornata: con lo snapshot in state il dialogo
-  // restava congelato dopo una rettifica (e su un ambiente condiviso anche dopo quella
-  // di un collega), e si finiva per registrare due volte la stessa correzione.
   const [giornoAperto, setGiornoAperto] = React.useState<string | null>(null)
   const [mappaturaAperta, setMappaturaAperta] = React.useState(false)
+  const [credenzialiAperte, setCredenzialiAperte] = React.useState(false)
 
   const [visible, setVisible] = usePersistedColumnVisibility(
     COLUMNS_STORAGE_KEY,
@@ -102,14 +137,13 @@ export function TimbraturePage() {
   const show = (id: string) => visible[id] ?? true
 
   const cartellinoQuery = useQuery({
-    queryKey: ["hr-cartellino", periodo.anno, periodo.mese, employeeId],
-    queryFn: () => fetchHrCartellino(periodo.anno, periodo.mese, employeeId),
+    queryKey: ["hr-timesheet", periodo.anno, periodo.mese, employeeId],
+    queryFn: () => fetchHrTimesheet(periodo.anno, periodo.mese, employeeId),
+    enabled: vista === "cartellino",
   })
-  // Lo stato dell'import è dietro la scrittura (riporta l'errore grezzo di Ecos): chi ha
-  // la sola lettura non lo chiede nemmeno, altrimenti prenderebbe un 403 a ogni apertura.
   const statoQuery = useQuery({
-    queryKey: ["hr-stato"],
-    queryFn: fetchHrStato,
+    queryKey: ["hr-status"],
+    queryFn: fetchHrStatus,
     enabled: canWrite,
   })
   const dipendentiQuery = useQuery({
@@ -119,14 +153,16 @@ export function TimbraturePage() {
   })
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["hr-cartellino"] })
-    void queryClient.invalidateQueries({ queryKey: ["hr-stato"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-timesheet"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-calendar"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-quadratura"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-status"] })
   }
 
   const importa = useMutation({
-    mutationFn: () => importaTimbrature(false),
+    mutationFn: () => importHrPunches(false),
     onSuccess: (esito) => {
-      notifySuccess(esito.messaggio)
+      notifySuccess(esito.message)
       invalidate()
     },
     onError: (e) => notifyError((e as Error).message),
@@ -134,12 +170,10 @@ export function TimbraturePage() {
 
   const cartellino = cartellinoQuery.data
   const stato = statoQuery.data
-  // I codici non abbinati restano in pagina finché non si risolvono: le loro timbrature
-  // sono state SCARTATE, e una notifica che sparisce in quattro secondi non basta a dirlo.
-  const nonAbbinati = importa.data?.nonAbbinati ?? []
+  const nonAbbinati = importa.data?.unmatched ?? []
 
   const giornataAperta = React.useMemo(
-    () => cartellino?.giornate.find((g) => g.giorno === giornoAperto) ?? null,
+    () => cartellino?.days.find((g) => g.workDate.slice(0, 10) === giornoAperto) ?? null,
     [cartellino, giornoAperto]
   )
 
@@ -161,20 +195,25 @@ export function TimbraturePage() {
   }
 
   const totali = React.useMemo(() => {
-    const giornate = cartellino?.giornate ?? []
+    const giornate = cartellino?.days ?? []
     let ordinarie = 0
     let straordinario = 0
     let anomalie = 0
     for (const g of giornate) {
-      if (!g.haDati) continue
-      ordinarie += minutiDa(g.oreOrdinarie)
-      straordinario += minutiDa(g.straordinario)
-      if (g.anomalia) anomalie++
+      if (!g.hasData) continue
+      ordinarie += minutiDa(g.regularHours)
+      straordinario += minutiDa(g.overtime)
+      if (g.hasAnomaly) anomalie++
     }
     return { ordinarie, straordinario, anomalie }
   }, [cartellino])
 
-  const visibleCount = COLUMNS.filter((c) => show(c.id)).length + 1
+  // I blocchi 🔸 e 🔷 valgono sei colonne ciascuno; le altre voci una a testa.
+  const colonneFinali = COLUMNS.filter(
+    (c) => c.id !== "grezzo" && c.id !== "normalizzato" && show(c.id)
+  ).length
+  const visibleCount =
+    1 + colonneFinali + (show("grezzo") ? 6 : 0) + (show("normalizzato") ? 6 : 0)
 
   return (
     <div className="space-y-4">
@@ -182,11 +221,11 @@ export function TimbraturePage() {
         <div>
           <h1 className="text-lg font-semibold">Timbrature</h1>
           <p className="text-sm text-muted-foreground">
-            Cartellino presenze da EcosAgile: ore, pausa e straordinari per fascia CCNL.
+            Cartellino presenze da EcosAgile: ore, pausa, straordinari e quadratura con commesse.
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {canWrite && (
+          {canWrite && vista === "cartellino" && (
             <LookupCombobox<number>
               options={opzioniDipendenti}
               value={employeeId}
@@ -209,7 +248,7 @@ export function TimbraturePage() {
               </Button>
               <Button
                 size="sm"
-                disabled={importa.isPending || stato?.importInCorso}
+                disabled={importa.isPending || stato?.importInProgress}
                 onClick={() => importa.mutate()}
               >
                 <DownloadCloud className="mr-1 size-3.5" />
@@ -217,10 +256,27 @@ export function TimbraturePage() {
               </Button>
             </>
           )}
-          <ColumnsMenu columns={columnToggles} />
+          {vista === "cartellino" && <ColumnsMenu columns={columnToggles} />}
         </div>
       </div>
 
+      {/* Tabs Switcher: Cartellino vs Calendario vs Quadratura */}
+      {canWrite && (
+        <Tabs
+          value={vista}
+          onValueChange={(v) =>
+            setVista(v as "cartellino" | "calendario" | "quadratura")
+          }
+        >
+          <TabsList>
+            <TabsTrigger value="cartellino">Cartellino individuale</TabsTrigger>
+            <TabsTrigger value="calendario">Calendario mensile</TabsTrigger>
+            <TabsTrigger value="quadratura">Quadratura commesse</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {/* Toolbar mese */}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="icon-sm" onClick={() => cambiaMese(-1)}>
           <ChevronLeft className="size-4" />
@@ -231,7 +287,8 @@ export function TimbraturePage() {
         <Button variant="outline" size="icon-sm" onClick={() => cambiaMese(1)}>
           <ChevronRight className="size-4" />
         </Button>
-        {cartellino && (
+
+        {vista === "cartellino" && cartellino && (
           <span className="text-sm text-muted-foreground">
             {cartellino.employeeName} · ordinarie {durata(totali.ordinarie)} ·
             straordinario {durata(totali.straordinario)}
@@ -243,7 +300,7 @@ export function TimbraturePage() {
             )}
           </span>
         )}
-        {canWrite && stato && !stato.configurato && (
+        {canWrite && stato && !stato.configured && (
           <span className="text-sm text-amber-600 dark:text-amber-500">
             Credenziali Ecos non configurate sul server: l'import è fermo.
           </span>
@@ -266,150 +323,231 @@ export function TimbraturePage() {
             <Link2 className="mr-1 size-3.5" />
             Collega e reimporta
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCredenzialiAperte(true)}
+            title="Utente, password e Client ID con cui il server entra in Ecos"
+          >
+            <KeyRound className="mr-1 size-3.5" />
+            Credenziali Ecos
+          </Button>
         </div>
       )}
 
-      {cartellino && !cartellino.ecosCollegato && (
-        <p className="text-sm text-muted-foreground">
-          {employeeId == null
-            ? "Il tuo utente non è ancora collegato a Ecos: il cartellino si riempie quando l'amministratore collega il tuo codice badge."
-            : "Dipendente non collegato a Ecos: nessuna timbratura può arrivare."}
-        </p>
-      )}
+      {vista === "calendario" ? (
+        <CalendarioPresenzeView anno={periodo.anno} mese={periodo.mese} />
+      ) : vista === "quadratura" ? (
+        <QuadraturaPresenzeView anno={periodo.anno} mese={periodo.mese} />
+      ) : (
+        <>
+          {cartellino && !cartellino.ecosLinked && (
+            <p className="text-sm text-muted-foreground">
+              {employeeId == null
+                ? "Il tuo utente non è ancora collegato a Ecos: il cartellino si riempie quando l'amministratore collega il tuo codice badge."
+                : "Dipendente non collegato a Ecos: nessuna timbratura può arrivare."}
+            </p>
+          )}
 
-      {cartellinoQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Caricamento…</p>
-      ) : cartellinoQuery.error ? (
-        <p className="text-sm text-destructive">
-          {(cartellinoQuery.error as Error).message}
-        </p>
-      ) : cartellino ? (
-        <GridScroller className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28">Giorno</TableHead>
-                {show("entrata1") && <TableHead>E1</TableHead>}
-                {show("uscita1") && <TableHead>U1</TableHead>}
-                {show("entrata2") && <TableHead>E2</TableHead>}
-                {show("uscita2") && <TableHead>U2</TableHead>}
-                {show("ordinarie") && (
-                  <TableHead className="text-right">Ordinarie</TableHead>
-                )}
-                {show("straordinario") && (
-                  <TableHead className="text-right">Straord.</TableHead>
-                )}
-                {show("pausa") && <TableHead className="text-right">Pausa</TableHead>}
-                {show("nota") && <TableHead>Nota</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cartellino.giornate.map((g) => {
-                const data = new Date(g.giorno)
-                const settimana = data.toLocaleDateString("it-IT", {
-                  weekday: "short",
-                })
-                return (
-                  <TableRow
-                    key={g.giorno}
-                    className={cn(
-                      "cursor-pointer",
-                      g.festivo && "bg-muted/50 text-muted-foreground",
-                      g.anomalia && "bg-destructive/5"
+          {cartellinoQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">Caricamento…</p>
+          ) : cartellinoQuery.error ? (
+            <p className="text-sm text-destructive">
+              {(cartellinoQuery.error as Error).message}
+            </p>
+          ) : cartellino ? (
+            <GridScroller className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  {(show("grezzo") || show("normalizzato")) && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-28" />
+                      {show("grezzo") && (
+                        <TableHead
+                          colSpan={6}
+                          className="border-l text-center text-[11px] font-semibold"
+                        >
+                          🔸 Grezzo
+                        </TableHead>
+                      )}
+                      {show("normalizzato") && (
+                        <TableHead
+                          colSpan={6}
+                          className="border-l text-center text-[11px] font-semibold"
+                        >
+                          🔷 Normalizzato
+                        </TableHead>
+                      )}
+                      {colonneFinali > 0 && (
+                        <TableHead
+                          colSpan={colonneFinali}
+                          className="border-l text-center text-[11px] font-semibold"
+                        >
+                          ✅ Finale
+                        </TableHead>
+                      )}
+                    </TableRow>
+                  )}
+                  <TableRow>
+                    <TableHead className="w-28">Giorno</TableHead>
+                    {show("grezzo") && (
+                      <>
+                        <TableHead className="border-l">E1</TableHead>
+                        <TableHead>U1</TableHead>
+                        <TableHead>E2</TableHead>
+                        <TableHead>U2</TableHead>
+                        <TableHead className="text-right">Pausa</TableHead>
+                        <TableHead className="text-right">Ore</TableHead>
+                      </>
                     )}
-                    onDoubleClick={() => setGiornoAperto(g.giorno)}
-                  >
-                    <TableCell className="whitespace-nowrap">
-                      <span className="capitalize">{settimana}</span>{" "}
-                      {formatDateShort(g.giorno)}
-                    </TableCell>
-                    {show("entrata1") && (
-                      <TableCell className="tabular-nums">{g.entrata1 || "—"}</TableCell>
+                    {show("normalizzato") && (
+                      <>
+                        <TableHead className="border-l">E1</TableHead>
+                        <TableHead>U1</TableHead>
+                        <TableHead>E2</TableHead>
+                        <TableHead>U2</TableHead>
+                        <TableHead className="text-right">Pausa</TableHead>
+                        <TableHead className="text-right">Ore</TableHead>
+                      </>
                     )}
-                    {show("uscita1") && (
-                      <TableCell className="tabular-nums">{g.uscita1 || "—"}</TableCell>
-                    )}
-                    {show("entrata2") && (
-                      <TableCell className="tabular-nums">{g.entrata2 || "—"}</TableCell>
-                    )}
-                    {show("uscita2") && (
-                      <TableCell className="tabular-nums">{g.uscita2 || "—"}</TableCell>
-                    )}
+                    {show("entrata1") && <TableHead className="border-l">E1</TableHead>}
+                    {show("uscita1") && <TableHead>U1</TableHead>}
+                    {show("entrata2") && <TableHead>E2</TableHead>}
+                    {show("uscita2") && <TableHead>U2</TableHead>}
                     {show("ordinarie") && (
-                      <TableCell className="text-right tabular-nums">
-                        {g.haDati ? g.oreOrdinarie : "—"}
-                      </TableCell>
+                      <TableHead className="text-right">Ordinarie</TableHead>
                     )}
                     {show("straordinario") && (
-                      <TableCell className="text-right tabular-nums">
-                        {g.haDati && Object.keys(g.fasce).length > 0 ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="underline decoration-dotted underline-offset-2">
-                                {g.straordinario}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <div className="space-y-0.5">
-                                {Object.entries(g.fasce).map(([fascia, valore]) => (
-                                  <p key={fascia}>
-                                    {FASCE_LABELS[fascia] ?? fascia}: {valore}
-                                  </p>
-                                ))}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : g.haDati ? (
-                          g.straordinario
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
+                      <TableHead className="text-right">Straord.</TableHead>
                     )}
                     {show("pausa") && (
-                      <TableCell className="text-right tabular-nums">
-                        {g.haDati ? g.pausa : "—"}
-                      </TableCell>
+                      <TableHead className="text-right">Pausa</TableHead>
                     )}
-                    {show("nota") && (
-                      <TableCell
-                        className={cn(
-                          "max-w-[280px] truncate",
-                          g.anomalia && "text-destructive"
-                        )}
-                        title={g.nota}
-                      >
-                        {g.nota || "—"}
-                      </TableCell>
-                    )}
+                    {show("nota") && <TableHead className="w-60">Nota</TableHead>}
                   </TableRow>
-                )
-              })}
-              {cartellino.giornate.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={visibleCount}
-                    className="text-center text-sm text-muted-foreground"
-                  >
-                    Nessuna giornata nel mese.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </GridScroller>
-      ) : null}
+                </TableHeader>
+                <TableBody>
+                  {cartellino.days.map((g) => {
+                    const dataIso = g.workDate.slice(0, 10)
+                    const cliccabile = g.hasData || g.punches.length > 0 || canWrite
+                    const fasceEntries = Object.entries(g.bands)
 
-      <GiornataDialog
-        open={giornataAperta != null}
-        onOpenChange={(open) => {
-          if (!open) setGiornoAperto(null)
-        }}
-        giornata={giornataAperta}
-        employeeId={cartellino?.employeeId ?? 0}
-        canWrite={canWrite}
-        onChanged={invalidate}
-      />
+                    return (
+                      <TableRow
+                        key={g.workDate}
+                        className={cn(
+                          g.isHoliday && "bg-muted/40",
+                          g.hasAnomaly && "bg-destructive/10 text-destructive",
+                          cliccabile && "cursor-pointer hover:bg-muted/60"
+                        )}
+                        onClick={() => {
+                          if (cliccabile) setGiornoAperto(dataIso)
+                        }}
+                      >
+                        <TableCell className="font-mono text-xs">
+                          {formatDateShort(g.workDate)}
+                        </TableCell>
+                        {show("grezzo") && <StadioCelle stadio={g.raw} />}
+                        {show("normalizzato") && <StadioCelle stadio={g.normalized} />}
+                        {show("entrata1") && (
+                          <TableCell className="border-l font-mono text-xs">
+                            {g.clockIn1 || "—"}
+                          </TableCell>
+                        )}
+                        {show("uscita1") && (
+                          <TableCell className="font-mono text-xs">
+                            {g.clockOut1 || "—"}
+                          </TableCell>
+                        )}
+                        {show("entrata2") && (
+                          <TableCell className="font-mono text-xs">
+                            {g.clockIn2 || "—"}
+                          </TableCell>
+                        )}
+                        {show("uscita2") && (
+                          <TableCell className="font-mono text-xs">
+                            {g.clockOut2 || "—"}
+                          </TableCell>
+                        )}
+                        {show("ordinarie") && (
+                          <TableCell className="text-right font-mono text-xs">
+                            {g.regularHours || "—"}
+                          </TableCell>
+                        )}
+                        {show("straordinario") && (
+                          <TableCell className="text-right font-mono text-xs">
+                            {fasceEntries.length > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="underline decoration-dotted cursor-help">
+                                    {g.overtime || "—"}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">
+                                  <p className="font-semibold mb-1">
+                                    Dettaglio fasce CCNL:
+                                  </p>
+                                  {fasceEntries.map(([k, v]) => (
+                                    <div key={k}>
+                                      <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
+                                    </div>
+                                  ))}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              g.overtime || "—"
+                            )}
+                          </TableCell>
+                        )}
+                        {show("pausa") && (
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                            {g.breakTime || "—"}
+                          </TableCell>
+                        )}
+                        {show("nota") && (
+                          <TableCell
+                            className="max-w-60 truncate text-xs text-muted-foreground"
+                            title={g.note}
+                          >
+                            {g.note || "—"}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  })}
+                  {cartellino.days.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={visibleCount}
+                        className="text-center text-sm text-muted-foreground"
+                      >
+                        Nessuna giornata nel mese.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </GridScroller>
+          ) : null}
+
+          <CredenzialiEcosDialog
+            open={credenzialiAperte}
+            onOpenChange={setCredenzialiAperte}
+          />
+
+          <GiornataDialog
+            open={giornataAperta != null}
+            onOpenChange={(open) => {
+              if (!open) setGiornoAperto(null)
+            }}
+            giornata={giornataAperta}
+            employeeId={cartellino?.employeeId ?? 0}
+            canWrite={canWrite}
+            onChanged={invalidate}
+          />
+        </>
+      )}
+
       <MappaturaEcosDialog
         open={mappaturaAperta}
         onOpenChange={setMappaturaAperta}

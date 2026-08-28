@@ -475,18 +475,10 @@ public class DbService
             FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        c.Execute(@"CREATE TABLE IF NOT EXISTS absences (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            date_from DATE NOT NULL,
-            date_to DATE NOT NULL,
-            absence_type VARCHAR(20) DEFAULT 'VACATION',
-            status VARCHAR(20) DEFAULT 'PENDING',
-            approved_by INT NULL,
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // `absences` NON si crea più qui: la sostituisce `hr_absences` (M112), che la droppa
+        // se vuota. Il bootstrap gira PRIMA delle migrazioni (vedi sotto): lasciare la CREATE
+        // qui la faceva rinascere vuota a ogni avvio e il DROP di M112 — che passa una volta
+        // sola — non teneva.
 
         c.Execute(@"CREATE TABLE IF NOT EXISTS cost_section_templates (
             id INT AUTO_INCREMENT PRIMARY KEY,

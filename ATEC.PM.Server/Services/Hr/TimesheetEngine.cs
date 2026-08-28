@@ -1,37 +1,62 @@
 namespace ATEC.PM.Server.Services.Hr;
 
-/// <summary>Una timbratura come arriva dal rilevatore: orario e verso, niente di elaborato.</summary>
+/// <summary>Una timbratura come arriva dal rilevatore: punched_at e direction, niente di elaborato.</summary>
 /// <param name="Orario">Istante grezzo, mai modificato.</param>
 /// <param name="Verso">Verso dichiarato dal terminale (IN/OUT, ENTRATA/USCITA...).</param>
-/// <param name="IdEsterno">Identificativo del rilevatore, per risalire alla timbratura originale.</param>
-public record TimbraturaGrezza(DateTime Orario, string Verso, long? IdEsterno = null);
+/// <param name="ExternalId">Identificativo del rilevatore, per risalire alla timbratura originale.</param>
+public record RawPunch(DateTime PunchedAt, string Direction, long? ExternalId = null);
 
 /// <summary>Il cartellino di una giornata: cosa risulta lavorato e come si scompone.</summary>
-public class Cartellino
+public class TimesheetDay
 {
-    public DateTime Giorno { get; init; }
+    public DateTime WorkDate { get; init; }
 
-    /// <summary>Orari come vanno letti a video. L'asterisco segnala un orario messo dal sistema.</summary>
+    /// <summary>Orari come vanno letti a video. L'asterisco segnala un punched_at messo dal sistema.</summary>
     public string Entrata1 { get; set; } = "";
     public string Uscita1 { get; set; } = "";
     public string Entrata2 { get; set; } = "";
     public string Uscita2 { get; set; } = "";
 
     /// <summary>Ore ordinarie (mai oltre la giornata standard); «---» se non calcolabili.</summary>
-    public string OreOrdinarie { get; set; } = "0h 0m";
-    public string Straordinario { get; set; } = "0h 0m";
-    public string Pausa { get; set; } = "0h 0m";
+    public string RegularHours { get; set; } = "0h 0m";
+    public string Overtime { get; set; } = "0h 0m";
+    public string BreakTime { get; set; } = "0h 0m";
 
-    /// <summary>Straordinario per fascia CCNL: chiave = lettera della circolare (A, C, D, E, F, G, H, L, M).</summary>
-    public Dictionary<string, string> Fasce { get; } = NuoveFasce();
+    /// <summary>Overtime per fascia CCNL: chiave = lettera della circolare (A, C, D, E, F, G, H, L, M).</summary>
+    public Dictionary<string, string> Fasce { get; } = NewBands();
 
-    /// <summary>Cosa è successo: «OK», la pausa dedotta, il turno riconosciuto o l'anomalia.</summary>
-    public string Nota { get; set; } = "";
+    // ── I due stadi che stanno PRIMA del risultato ────────────────────────────
+    //
+    // Il cartellino non nasce già fatto: le timbrature passano dal grezzo (come sono
+    // arrivate) al normalizzato (arrotondato allo scatto) e solo allora diventano il
+    // risultato qui sopra. Il ReportPage del programma «Timbrature» mostra i tre stadi
+    // affiancati — 🔸 grezzo, 🔷 normalizzato, ✅ finale — ed è così che in ufficio si
+    // capisce PERCHÉ una giornata è venuta com'è venuta. Sono di sola lettura: nessun
+    // calcolo li guarda.
+
+    /// <summary>🔸 Le timbrature come sono arrivate dal rilevatore, senza arrotondamento.</summary>
+    public string RawEntrata1 { get; set; } = "--:--";
+    public string RawUscita1 { get; set; } = "--:--";
+    public string RawEntrata2 { get; set; } = "--:--";
+    public string RawUscita2 { get; set; } = "--:--";
+    public string RawTotal { get; set; } = "0h 0m";
+    public string RawBreak { get; set; } = "0h 0m";
+
+    /// <summary>🔷 Le stesse timbrature dopo l'arrotondamento (scatto 30', tolleranza 10').</summary>
+    public string NormEntrata1 { get; set; } = "--:--";
+    public string NormUscita1 { get; set; } = "--:--";
+    public string NormEntrata2 { get; set; } = "--:--";
+    public string NormUscita2 { get; set; } = "--:--";
+    public string NormTotal { get; set; } = "0h 0m";
+    public string NormBreak { get; set; } = "0h 0m";
+
+    /// <summary>Cosa è successo: «OK», la pausa dedotta, il turno riconosciuto o l'has_anomaly.</summary>
+    public string Note { get; set; } = "";
 
     /// <summary>true se la giornata richiede un intervento umano (timbratura mancante o incoerente).</summary>
-    public bool Anomalia => Nota.StartsWith("⚠");
+    public bool HasAnomaly => Note.StartsWith("⚠");
 
-    internal static Dictionary<string, string> NuoveFasce() =>
+    internal static Dictionary<string, string> NewBands() =>
         new() { ["A"] = "0h 0m", ["C"] = "0h 0m", ["D"] = "0h 0m", ["E"] = "0h 0m", ["F"] = "0h 0m",
                 ["G"] = "0h 0m", ["H"] = "0h 0m", ["L"] = "0h 0m", ["M"] = "0h 0m" };
 }
@@ -51,58 +76,70 @@ public class Cartellino
 /// <para>La classe è <b>pura</b>: nessun accesso al database, nessun orologio di sistema —
 /// «oggi» si passa da fuori, altrimenti la giornata in corso non sarebbe riproducibile.</para>
 /// </summary>
-public static class MotoreCartellino
+public static class TimesheetEngine
 {
     /// <summary>Configurazione della persona che incide sul calcolo.</summary>
-    /// <param name="ConStraordinari">false = a questa persona lo straordinario non si conteggia.</param>
-    public record ConfigDipendente(bool ConStraordinari = true);
+    /// <param name="CountsOvertime">false = overtime is not counted for this employee.</param>
+    public record EmployeeConfig(bool CountsOvertime = true);
 
     /// <summary>Timbrature assegnate ai quattro posti del cartellino, già arrotondate.</summary>
-    private sealed class Assegnazione
+    private sealed class Assignment
     {
         public DateTime? Entrata1, Uscita1, Entrata2, Uscita2;
         public int NumIngressi, NumUscite;
+
+        /// <summary>Gli stessi quattro posti PRIMA dell'arrotondamento: servono solo a mostrare il grezzo.</summary>
+        public DateTime? RawEntrata1, RawUscita1, RawEntrata2, RawUscita2;
     }
 
     /// <summary>
     /// Calcola il cartellino di una giornata.
     /// </summary>
-    /// <param name="giorno">Giornata di competenza.</param>
-    /// <param name="timbrature">Timbrature grezze del giorno, in qualsiasi ordine.</param>
+    /// <param name="work_date">Giornata di competenza.</param>
+    /// <param name="timbrature">Timbrature grezze del work_date, in qualsiasi ordine.</param>
     /// <param name="oggi">Data odierna: serve a riconoscere la giornata ancora in corso.</param>
     /// <param name="config">Configurazione della persona.</param>
-    public static Cartellino Calcola(
-        DateTime giorno,
-        IEnumerable<TimbraturaGrezza> timbrature,
+    public static TimesheetDay Calcola(
+        DateTime work_date,
+        IEnumerable<RawPunch> timbrature,
         DateTime oggi,
-        ConfigDipendente? config = null)
+        EmployeeConfig? config = null)
     {
-        config ??= new ConfigDipendente();
-        var cartellino = new Cartellino { Giorno = giorno.Date };
+        config ??= new EmployeeConfig();
+        var cartellino = new TimesheetDay { WorkDate = work_date.Date };
 
-        var ordinate = timbrature.OrderBy(t => t.Orario).ToList();
+        var ordinate = timbrature.OrderBy(t => t.PunchedAt).ToList();
         if (ordinate.Count == 0)
         {
-            cartellino.Nota = "";
+            cartellino.Note = "";
             return cartellino;
         }
 
-        Assegnazione dati = Assegna(ordinate);
+        Assignment dati = Assign(ordinate);
+
+        // I tre stadi si mostrano affiancati: il grezzo c'è sempre, il normalizzato solo
+        // quando la giornata è chiusa — su una giornata in corso non c'è niente da
+        // arrotondare, ed è così anche nell'originale.
+        RiempiStadio(cartellino, dati.RawEntrata1, dati.RawUscita1, dati.RawEntrata2, dati.RawUscita2,
+            dati.NumIngressi, dati.NumUscite, grezzo: true);
 
         // Giornata ancora aperta: si mostra quel che c'è, senza calcolare nulla.
-        if (giorno.Date == oggi.Date && dati.NumIngressi <= 1 && dati.NumUscite <= 1)
+        if (work_date.Date == oggi.Date && dati.NumIngressi <= 1 && dati.NumUscite <= 1)
         {
-            cartellino.Nota = "Giornata in corso";
+            cartellino.Note = "Giornata in corso";
             return cartellino;
         }
 
-        int minutiLavorati = Elabora(cartellino, dati);
+        RiempiStadio(cartellino, dati.Entrata1, dati.Uscita1, dati.Entrata2, dati.Uscita2,
+            dati.NumIngressi, dati.NumUscite, grezzo: false);
+
+        int minutiLavorati = ProcessDay(cartellino, dati);
         if (minutiLavorati < 0) return cartellino;   // ramo d'errore: ha già scritto tutto
 
         if (minutiLavorati > 0)
-            ScomponiStraordinario(cartellino, minutiLavorati, giorno, config.ConStraordinari);
+            ScomponiOvertime(cartellino, minutiLavorati, work_date, config.CountsOvertime);
         else
-            AzzeraTutto(cartellino);
+            ClearTotals(cartellino);
 
         return cartellino;
     }
@@ -117,24 +154,24 @@ public static class MotoreCartellino
     /// raggruppa le ravvicinate (meno di 30 minuti = stesso gesto ripetuto, tiene la prima)
     /// e assegna quelle rimaste ai posti del cartellino.
     /// </summary>
-    private static Assegnazione Assegna(List<TimbraturaGrezza> timbrature)
+    private static Assignment Assign(List<RawPunch> timbrature)
     {
         // Stadio 1 — semantica LAG: il gap si misura dalla riga precedente (anche se
         // scartata), e si tronca ai minuti interi come il CAST AS INTEGER del VB.
-        var pulite = new List<TimbraturaGrezza> { timbrature[0] };
+        var pulite = new List<RawPunch> { timbrature[0] };
         for (int i = 1; i < timbrature.Count; i++)
         {
-            int gap = (int)(timbrature[i].Orario - timbrature[i - 1].Orario).TotalMinutes;
-            if (gap >= RegoleCartellino.FiltroDoppioniMinuti)
+            int gap = (int)(timbrature[i].PunchedAt - timbrature[i - 1].PunchedAt).TotalMinutes;
+            if (gap >= TimesheetRules.DuplicatePunchFilterMinutes)
                 pulite.Add(timbrature[i]);
         }
 
         // Stadio 2 — raggruppamento a 30 minuti.
-        var filtrate = new List<TimbraturaGrezza>();
-        TimbraturaGrezza inizioGruppo = pulite[0];
+        var filtrate = new List<RawPunch>();
+        RawPunch inizioGruppo = pulite[0];
         for (int i = 1; i < pulite.Count; i++)
         {
-            double gap = (pulite[i].Orario - pulite[i - 1].Orario).TotalMinutes;
+            double gap = (pulite[i].PunchedAt - pulite[i - 1].PunchedAt).TotalMinutes;
             if (gap >= 30)
             {
                 filtrate.Add(inizioGruppo);
@@ -143,33 +180,51 @@ public static class MotoreCartellino
         }
         filtrate.Add(inizioGruppo);
 
-        var dati = new Assegnazione();
+        var dati = new Assignment();
         switch (filtrate.Count)
         {
             case 1:
-                dati.Entrata1 = Norm(filtrate[0]);
-                dati.NumIngressi = 1; dati.NumUscite = 0;
+                Posiziona(dati, filtrate[0], null, null, null, numIngressi: 1, numUscite: 0);
                 break;
 
             case 2:
-                dati.Entrata1 = Norm(filtrate[0]);
-                dati.Uscita1 = Norm(filtrate[1]);
-                dati.NumIngressi = 1; dati.NumUscite = 1;
+                Posiziona(dati, filtrate[0], filtrate[1], null, null, numIngressi: 1, numUscite: 1);
                 break;
 
             case 3:
-                AssegnaTre(filtrate, dati);
+                AssignThree(filtrate, dati);
                 break;
 
             default:
-                dati.Entrata1 = Norm(filtrate[0]);
-                dati.Uscita1 = Norm(filtrate[1]);
-                dati.Entrata2 = Norm(filtrate[2]);
-                dati.Uscita2 = Norm(filtrate[3]);
-                dati.NumIngressi = 2; dati.NumUscite = 2;
+                Posiziona(dati, filtrate[0], filtrate[1], filtrate[2], filtrate[3],
+                    numIngressi: 2, numUscite: 2);
                 break;
         }
         return dati;
+    }
+
+    /// <summary>
+    /// Mette le timbrature ai quattro posti del cartellino, tenendo accanto all'orario
+    /// arrotondato quello grezzo da cui viene (serve solo a mostrarli affiancati: nessun
+    /// calcolo guarda il grezzo).
+    /// </summary>
+    private static void Posiziona(
+        Assignment dati,
+        RawPunch? entrata1, RawPunch? uscita1, RawPunch? entrata2, RawPunch? uscita2,
+        int numIngressi, int numUscite)
+    {
+        dati.Entrata1 = entrata1 is null ? null : Norm(entrata1);
+        dati.Uscita1 = uscita1 is null ? null : Norm(uscita1);
+        dati.Entrata2 = entrata2 is null ? null : Norm(entrata2);
+        dati.Uscita2 = uscita2 is null ? null : Norm(uscita2);
+
+        dati.RawEntrata1 = entrata1?.PunchedAt;
+        dati.RawUscita1 = uscita1?.PunchedAt;
+        dati.RawEntrata2 = entrata2?.PunchedAt;
+        dati.RawUscita2 = uscita2?.PunchedAt;
+
+        dati.NumIngressi = numIngressi;
+        dati.NumUscite = numUscite;
     }
 
     /// <summary>
@@ -177,7 +232,7 @@ public static class MotoreCartellino
     /// Le soglie (15, 12, 11, 90 min, 180 min) vengono dal motore originale: non toccarle
     /// senza rimisurare il banco di prova.
     /// </summary>
-    private static void AssegnaTre(List<TimbraturaGrezza> t, Assegnazione dati)
+    private static void AssignThree(List<RawPunch> t, Assignment dati)
     {
         DateTime t1 = Norm(t[0]), t2 = Norm(t[1]), t3 = Norm(t[2]);
         double gap12 = (t2 - t1).TotalMinutes;
@@ -186,49 +241,84 @@ public static class MotoreCartellino
         // Mattina + due timbrature nel pomeriggio: turno unico, la centrale è di troppo.
         if (t2.Hour >= 15 && t3.Hour >= 15 && t1.Hour < 12)
         {
-            dati.Entrata1 = t1; dati.Uscita1 = t3;
-            dati.NumIngressi = 1; dati.NumUscite = 1;
+            Posiziona(dati, t[0], t[2], null, null, numIngressi: 1, numUscite: 1);
             return;
         }
 
         if (t3.Hour < 15)
         {
-            dati.Entrata1 = t1; dati.Uscita1 = t2; dati.Entrata2 = t3;
-            dati.NumIngressi = 2; dati.NumUscite = 1;
+            Posiziona(dati, t[0], t[1], t[2], null, numIngressi: 2, numUscite: 1);
         }
         else if (gap23 > 90)
         {
-            dati.Entrata1 = t1; dati.Uscita1 = t2; dati.Uscita2 = t3;
-            dati.NumIngressi = 1; dati.NumUscite = 2;
+            Posiziona(dati, t[0], t[1], null, t[2], numIngressi: 1, numUscite: 2);
         }
         else if (t2.Hour >= 12 && t2.Hour <= 14 && gap12 > 180)
         {
-            dati.Entrata1 = t1; dati.Entrata2 = t2; dati.Uscita2 = t3;
-            dati.NumIngressi = 2; dati.NumUscite = 1;
+            Posiziona(dati, t[0], null, t[1], t[2], numIngressi: 2, numUscite: 1);
         }
         else if (t1.Hour >= 11)
         {
-            dati.Uscita1 = t1; dati.Entrata2 = t2; dati.Uscita2 = t3;
-            dati.NumIngressi = 1; dati.NumUscite = 2;
+            Posiziona(dati, null, t[0], t[1], t[2], numIngressi: 1, numUscite: 2);
         }
         else
         {
-            dati.Entrata1 = t1; dati.Uscita1 = t2; dati.Entrata2 = t3;
-            dati.NumIngressi = 2; dati.NumUscite = 1;
+            Posiziona(dati, t[0], t[1], t[2], null, numIngressi: 2, numUscite: 1);
         }
     }
 
-    private static DateTime Norm(TimbraturaGrezza t)
+    /// <summary>
+    /// Scrive uno dei due stadi che precedono il risultato. Orari «--:--» dove non c'è
+    /// niente, pausa = stacco fra prima uscita e seconda entrata, totale = somma delle
+    /// sessioni davvero chiuse — le formule di <c>CalcGap</c> e <c>CalcMinuti</c> del VB.
+    /// </summary>
+    private static void RiempiStadio(
+        TimesheetDay c,
+        DateTime? entrata1, DateTime? uscita1, DateTime? entrata2, DateTime? uscita2,
+        int numIngressi, int numUscite, bool grezzo)
     {
-        string verso = (t.Verso ?? "").ToUpperInvariant();
-        bool eIngresso = verso.Contains("IN") || verso.Contains("ENTR");
-        return RegoleCartellino.Arrotonda(t.Orario, eIngresso);
+        int minuti = 0;
+        if (numIngressi >= 1 && numUscite >= 1 && entrata1.HasValue && uscita1.HasValue)
+            minuti += (int)(uscita1.Value - entrata1.Value).TotalMinutes;
+        if (numIngressi >= 2 && numUscite >= 2 && entrata2.HasValue && uscita2.HasValue)
+            minuti += (int)(uscita2.Value - entrata2.Value).TotalMinutes;
+        minuti = Math.Max(0, minuti);
+
+        int pausa = uscita1.HasValue && entrata2.HasValue
+            ? (int)Math.Max(0, (entrata2.Value - uscita1.Value).TotalMinutes)
+            : 0;
+
+        if (grezzo)
+        {
+            c.RawEntrata1 = TimesheetRules.FormatClock(entrata1);
+            c.RawUscita1 = TimesheetRules.FormatClock(uscita1);
+            c.RawEntrata2 = TimesheetRules.FormatClock(entrata2);
+            c.RawUscita2 = TimesheetRules.FormatClock(uscita2);
+            c.RawTotal = TimesheetRules.FormatDuration(minuti);
+            c.RawBreak = TimesheetRules.FormatDuration(pausa);
+        }
+        else
+        {
+            c.NormEntrata1 = TimesheetRules.FormatClock(entrata1);
+            c.NormUscita1 = TimesheetRules.FormatClock(uscita1);
+            c.NormEntrata2 = TimesheetRules.FormatClock(entrata2);
+            c.NormUscita2 = TimesheetRules.FormatClock(uscita2);
+            c.NormTotal = TimesheetRules.FormatDuration(minuti);
+            c.NormBreak = TimesheetRules.FormatDuration(pausa);
+        }
+    }
+
+    private static DateTime Norm(RawPunch t)
+    {
+        string direction = (t.Direction ?? "").ToUpperInvariant();
+        bool eIngresso = direction.Contains("IN") || direction.Contains("ENTR");
+        return TimesheetRules.RoundTime(t.PunchedAt, eIngresso);
     }
 
     // ── TURNI ─────────────────────────────────────────────────────────────────
 
     /// <summary>Riconosce il turno e riempie il cartellino. Torna i minuti lavorati, o -1 se non calcolabile.</summary>
-    private static int Elabora(Cartellino c, Assegnazione d)
+    private static int ProcessDay(TimesheetDay c, Assignment d)
     {
         if (d.NumIngressi >= 2 && d.NumUscite >= 2 && d.Entrata1.HasValue && d.Uscita1.HasValue
             && d.Entrata2.HasValue && d.Uscita2.HasValue)
@@ -247,29 +337,29 @@ public static class MotoreCartellino
         if (d.NumIngressi == 1 && d.NumUscite == 0 && d.Entrata1.HasValue)
         {
             // Manca l'uscita: si mostra l'entrata e si segnala. Zero minuti lavorati,
-            // quindi i totali finiscono azzerati (non «---»: qui la giornata è nota, è
+            // quindi i totali finiscono azzerati (non «---»: qui la giornata è note, è
             // solo incompleta — nel motore originale questo ramo prosegue apposta).
-            c.Nota = "⚠ INCOMPLETO: Solo entrata";
-            c.Entrata1 = RegoleCartellino.Orario(d.Entrata1);
+            c.Note = "⚠ INCOMPLETO: Solo entrata";
+            c.Entrata1 = TimesheetRules.FormatClock(d.Entrata1);
             c.Uscita1 = "??:??";
-            c.Pausa = "0h 0m";
+            c.BreakTime = "0h 0m";
             return 0;
         }
 
-        c.Nota = "⚠ ERR: Verificare timbrature";
-        c.OreOrdinarie = "---";
-        c.Straordinario = "---";
+        c.Note = "⚠ ERR: Verificare timbrature";
+        c.RegularHours = "---";
+        c.Overtime = "---";
         foreach (string f in c.Fasce.Keys.ToList()) c.Fasce[f] = "---";
         return -1;
     }
 
     /// <summary>Quattro timbrature: la pausa è quella vera, salvo che sia assente o troppo corta.</summary>
-    private static int TurnoRegolare(Cartellino c, Assegnazione d)
+    private static int TurnoRegolare(TimesheetDay c, Assignment d)
     {
         DateTime e1 = d.Entrata1!.Value, u1 = d.Uscita1!.Value;
         DateTime e2 = d.Entrata2!.Value, u2 = d.Uscita2!.Value;
         int pausa = (int)Math.Max(0, (e2 - u1).TotalMinutes);
-        c.Pausa = RegoleCartellino.Durata(pausa);
+        c.BreakTime = TimesheetRules.FormatDuration(pausa);
 
         if (pausa == 0)
         {
@@ -280,8 +370,8 @@ public static class MotoreCartellino
             c.Uscita1 = "12:30*";
             c.Entrata2 = "13:30*";
             c.Uscita2 = u2.ToString("HH:mm");
-            c.Pausa = "1h 0m";
-            c.Nota = "AUTO_P: Pausa 1h forzata";
+            c.BreakTime = "1h 0m";
+            c.Note = "AUTO_P: Pausa 1h forzata";
             return (int)(fineMattino - e1).TotalMinutes + (int)(u2 - ripresa).TotalMinutes;
         }
 
@@ -291,19 +381,19 @@ public static class MotoreCartellino
         c.Uscita2 = u2.ToString("HH:mm");
 
         int lavorati = (int)(u1 - e1).TotalMinutes + (int)(u2 - e2).TotalMinutes;
-        if (pausa < RegoleCartellino.PausaMinimaMinuti)
+        if (pausa < TimesheetRules.MinimumBreakMinutes)
         {
-            // Pausa più corta del minimo: il tempo mancante si considera recuperato.
-            c.Nota = "Recupero pausa pranzo";
-            return lavorati + (RegoleCartellino.PausaMinimaMinuti - pausa);
+            // BreakTime più corta del minimo: il tempo mancante si considera recuperato.
+            c.Note = "Recupero pausa pranzo";
+            return lavorati + (TimesheetRules.MinimumBreakMinutes - pausa);
         }
 
-        c.Nota = "OK";
+        c.Note = "OK";
         return lavorati;
     }
 
     /// <summary>Una entrata e una uscita: mattino, pomeriggio o giornata intera con pausa dedotta.</summary>
-    private static int TurnoUnico(Cartellino c, Assegnazione d)
+    private static int TurnoUnico(TimesheetDay c, Assignment d)
     {
         DateTime entrata = d.Entrata1!.Value, uscita = d.Uscita1!.Value;
         int minutiTotali = (int)(uscita - entrata).TotalMinutes;
@@ -312,8 +402,8 @@ public static class MotoreCartellino
         {
             c.Entrata1 = entrata.ToString("HH:mm");
             c.Uscita1 = uscita.ToString("HH:mm");
-            c.Pausa = "0h 0m";
-            c.Nota = "Turno pomeridiano";
+            c.BreakTime = "0h 0m";
+            c.Note = "Turno pomeridiano";
             return minutiTotali;
         }
 
@@ -321,8 +411,8 @@ public static class MotoreCartellino
         {
             c.Entrata1 = entrata.ToString("HH:mm");
             c.Uscita1 = uscita.ToString("HH:mm");
-            c.Pausa = "0h 0m";
-            c.Nota = "Turno mattutino";
+            c.BreakTime = "0h 0m";
+            c.Note = "Turno mattutino";
             return minutiTotali;
         }
 
@@ -331,13 +421,13 @@ public static class MotoreCartellino
         c.Uscita1 = "12:30*";
         c.Entrata2 = "13:30*";
         c.Uscita2 = uscita.ToString("HH:mm");
-        c.Pausa = "1h 0m";
-        c.Nota = "AUTO_P: Pausa 1h detratta";
-        return minutiTotali - RegoleCartellino.PausaForzataMinuti;
+        c.BreakTime = "1h 0m";
+        c.Note = "AUTO_P: Pausa 1h detratta";
+        return minutiTotali - TimesheetRules.ForcedBreakMinutes;
     }
 
     /// <summary>Una entrata e due uscite: manca il rientro dalla pausa.</summary>
-    private static int TurnoEntrataMancante(Cartellino c, Assegnazione d)
+    private static int TurnoEntrataMancante(TimesheetDay c, Assignment d)
     {
         DateTime e1 = d.Entrata1!.Value, u1 = d.Uscita1!.Value;
         DateTime u2 = d.Uscita2 ?? u1;
@@ -348,34 +438,34 @@ public static class MotoreCartellino
             // Le due uscite sono vicine: la seconda è un doppione, vale il mattino.
             c.Entrata1 = e1.ToString("HH:mm");
             c.Uscita1 = u1.ToString("HH:mm");
-            c.Pausa = "0h 0m";
-            c.Nota = "Turno mattutino (seconda uscita ignorata)";
+            c.BreakTime = "0h 0m";
+            c.Note = "Turno mattutino (seconda uscita ignorata)";
             return (int)(u1 - e1).TotalMinutes;
         }
 
-        DateTime ripresa = u1.AddMinutes(RegoleCartellino.PausaForzataMinuti);
+        DateTime ripresa = u1.AddMinutes(TimesheetRules.ForcedBreakMinutes);
         c.Entrata1 = e1.ToString("HH:mm");
         c.Uscita1 = u1.ToString("HH:mm") + "*";
         c.Entrata2 = ripresa.ToString("HH:mm") + "*";
         c.Uscita2 = u2.ToString("HH:mm");
-        c.Pausa = RegoleCartellino.Durata(RegoleCartellino.PausaForzataMinuti);
-        c.Nota = "AUTO_P: Pausa implicita (1 IN / 2 OUT)";
+        c.BreakTime = TimesheetRules.FormatDuration(TimesheetRules.ForcedBreakMinutes);
+        c.Note = "AUTO_P: Pausa implicita (1 IN / 2 OUT)";
         return (int)(u1 - e1).TotalMinutes + (int)(u2 - ripresa).TotalMinutes;
     }
 
     /// <summary>Due entrate e una uscita: manca l'uscita finale, si stima alle 17:00.</summary>
-    private static int TurnoUscitaMancante(Cartellino c, Assegnazione d)
+    private static int TurnoUscitaMancante(TimesheetDay c, Assignment d)
     {
         DateTime e1 = d.Entrata1!.Value, u1 = d.Uscita1!.Value, e2 = d.Entrata2!.Value;
         int pausa = (int)Math.Max(0, (e2 - u1).TotalMinutes);
-        c.Pausa = RegoleCartellino.Durata(pausa);
+        c.BreakTime = TimesheetRules.FormatDuration(pausa);
 
         var uscitaStimata = new DateTime(e2.Year, e2.Month, e2.Day, 17, 0, 0);
         c.Entrata1 = e1.ToString("HH:mm");
         c.Uscita1 = u1.ToString("HH:mm");
         c.Entrata2 = e2.ToString("HH:mm");
         c.Uscita2 = uscitaStimata.ToString("HH:mm") + "*";
-        c.Nota = "AUTO_P: Uscita mancante - Stimata 17:00";
+        c.Note = "AUTO_P: Uscita mancante - Stimata 17:00";
         return (int)(u1 - e1).TotalMinutes + (int)(uscitaStimata - e2).TotalMinutes;
     }
 
@@ -385,10 +475,10 @@ public static class MotoreCartellino
     /// Divide i minuti lavorati fra ordinario e straordinario, e lo straordinario fra le
     /// fasce della circolare. Feriale, sabato e festivo hanno regole diverse.
     /// </summary>
-    private static void ScomponiStraordinario(Cartellino c, int minutiLavorati, DateTime giorno, bool conStraordinari)
+    private static void ScomponiOvertime(TimesheetDay c, int minutiLavorati, DateTime work_date, bool conStraordinari)
     {
-        bool festivo = RegoleCartellino.EFestivo(giorno);
-        bool sabato = giorno.DayOfWeek == DayOfWeek.Saturday;
+        bool festivo = TimesheetRules.IsHoliday(work_date);
+        bool sabato = work_date.DayOfWeek == DayOfWeek.Saturday;
 
         int minutiNotturni = MinutiNotturni(c);
         int minutiDiurni = minutiLavorati - minutiNotturni;
@@ -405,81 +495,81 @@ public static class MotoreCartellino
         }
         else
         {
-            ordinari = Math.Min(minutiLavorati, RegoleCartellino.MinutiGiornataStandard);
-            straordinari = Math.Max(0, minutiLavorati - RegoleCartellino.MinutiGiornataStandard);
+            ordinari = Math.Min(minutiLavorati, TimesheetRules.StandardDayMinutes);
+            straordinari = Math.Max(0, minutiLavorati - TimesheetRules.StandardDayMinutes);
         }
 
-        c.OreOrdinarie = RegoleCartellino.Durata(ordinari);
-        c.Straordinario = RegoleCartellino.Durata(straordinari);
+        c.RegularHours = TimesheetRules.FormatDuration(ordinari);
+        c.Overtime = TimesheetRules.FormatDuration(straordinari);
 
         // Chi non fa straordinario: le ore restano, la maggiorazione no.
         if (!conStraordinari)
         {
-            c.Straordinario = "0h 0m";
+            c.Overtime = "0h 0m";
             foreach (string f in c.Fasce.Keys.ToList()) c.Fasce[f] = "0h 0m";
         }
     }
 
     /// <summary>Feriale: oltre le 8 ore è straordinario, notturno (g) prima di diurno (a).</summary>
-    private static void FasceFeriale(Cartellino c, int minutiTotali, int minutiNotturni)
+    private static void FasceFeriale(TimesheetDay c, int minutiTotali, int minutiNotturni)
     {
-        int straordinario = Math.Max(0, minutiTotali - RegoleCartellino.MinutiGiornataStandard);
+        int straordinario = Math.Max(0, minutiTotali - TimesheetRules.StandardDayMinutes);
         if (straordinario == 0) return;
 
         if (minutiNotturni > 0)
         {
             int notturnoStraord = Math.Min(minutiNotturni, straordinario);
-            c.Fasce["G"] = RegoleCartellino.Durata(notturnoStraord);
+            c.Fasce["G"] = TimesheetRules.FormatDuration(notturnoStraord);
             int residuo = straordinario - notturnoStraord;
-            if (residuo > 0) c.Fasce["A"] = RegoleCartellino.Durata(residuo);
+            if (residuo > 0) c.Fasce["A"] = TimesheetRules.FormatDuration(residuo);
         }
         else
         {
-            c.Fasce["A"] = RegoleCartellino.Durata(straordinario);
+            c.Fasce["A"] = TimesheetRules.FormatDuration(straordinario);
         }
     }
 
     /// <summary>Sabato: non è giornata ordinaria, quindi è tutto straordinario.</summary>
-    private static void FasceSabato(Cartellino c, int minutiTotali, int minutiNotturni, int minutiDiurni)
+    private static void FasceSabato(TimesheetDay c, int minutiTotali, int minutiNotturni, int minutiDiurni)
     {
         if (minutiNotturni > 0)
         {
-            c.Fasce["G"] = RegoleCartellino.Durata(minutiNotturni);
-            if (minutiDiurni > 0) c.Fasce["A"] = RegoleCartellino.Durata(minutiDiurni);
+            c.Fasce["G"] = TimesheetRules.FormatDuration(minutiNotturni);
+            if (minutiDiurni > 0) c.Fasce["A"] = TimesheetRules.FormatDuration(minutiDiurni);
         }
         else
         {
-            c.Fasce["A"] = RegoleCartellino.Durata(minutiTotali);
+            c.Fasce["A"] = TimesheetRules.FormatDuration(minutiTotali);
         }
     }
 
     /// <summary>Festivo: entro le 8 ore fascia c (o d col riposo compensativo), oltre e/f; notturno h/l/m.</summary>
-    private static void FasceFestivo(Cartellino c, int minutiTotali, int minutiNotturni, int minutiDiurni,
+    private static void FasceFestivo(TimesheetDay c, int minutiTotali, int minutiNotturni, int minutiDiurni,
                                      bool riposoCompensativo = false)
     {
-        int entro8h = Math.Min(minutiTotali, RegoleCartellino.MinutiGiornataStandard);
-        int oltre8h = Math.Max(0, minutiTotali - RegoleCartellino.MinutiGiornataStandard);
+        int entro8h = Math.Min(minutiTotali, TimesheetRules.StandardDayMinutes);
+        int oltre8h = Math.Max(0, minutiTotali - TimesheetRules.StandardDayMinutes);
 
         if (minutiNotturni > 0)
         {
             int notturnoEntro8h = Math.Min(minutiNotturni, entro8h);
             int notturnoOltre8h = Math.Min(Math.Max(0, minutiNotturni - entro8h), oltre8h);
 
-            if (notturnoEntro8h > 0) c.Fasce["H"] = RegoleCartellino.Durata(notturnoEntro8h);
+            if (notturnoEntro8h > 0) c.Fasce["H"] = TimesheetRules.FormatDuration(notturnoEntro8h);
             if (notturnoOltre8h > 0)
-                c.Fasce[riposoCompensativo ? "M" : "L"] = RegoleCartellino.Durata(notturnoOltre8h);
+                c.Fasce[riposoCompensativo ? "M" : "L"] = TimesheetRules.FormatDuration(notturnoOltre8h);
 
             int diurnoEntro8h = Math.Max(0, entro8h - notturnoEntro8h);
             int diurnoOltre8h = Math.Max(0, oltre8h - notturnoOltre8h);
             if (diurnoEntro8h > 0)
-                c.Fasce[riposoCompensativo ? "D" : "C"] = RegoleCartellino.Durata(diurnoEntro8h);
+                c.Fasce[riposoCompensativo ? "D" : "C"] = TimesheetRules.FormatDuration(diurnoEntro8h);
             if (diurnoOltre8h > 0)
-                c.Fasce[riposoCompensativo ? "F" : "E"] = RegoleCartellino.Durata(diurnoOltre8h);
+                c.Fasce[riposoCompensativo ? "F" : "E"] = TimesheetRules.FormatDuration(diurnoOltre8h);
         }
         else
         {
-            if (entro8h > 0) c.Fasce[riposoCompensativo ? "D" : "C"] = RegoleCartellino.Durata(entro8h);
-            if (oltre8h > 0) c.Fasce[riposoCompensativo ? "F" : "E"] = RegoleCartellino.Durata(oltre8h);
+            if (entro8h > 0) c.Fasce[riposoCompensativo ? "D" : "C"] = TimesheetRules.FormatDuration(entro8h);
+            if (oltre8h > 0) c.Fasce[riposoCompensativo ? "F" : "E"] = TimesheetRules.FormatDuration(oltre8h);
         }
     }
 
@@ -487,7 +577,7 @@ public static class MotoreCartellino
     /// Minuti lavorati dopo le 22:00, letti dagli orari già scritti sul cartellino
     /// (asterischi degli orari stimati compresi).
     /// </summary>
-    private static int MinutiNotturni(Cartellino c) =>
+    private static int MinutiNotturni(TimesheetDay c) =>
         NotturniDi(c.Entrata1, c.Uscita1) + NotturniDi(c.Entrata2, c.Uscita2);
 
     private static int NotturniDi(string entrata, string uscita)
@@ -495,7 +585,7 @@ public static class MotoreCartellino
         if (!ProvaOrario(entrata, out int daMinuti)) return 0;
         if (!ProvaOrario(uscita, out int aMinuti)) return 0;
 
-        int soglia = RegoleCartellino.OraInizioNotturno * 60;
+        int soglia = TimesheetRules.NightShiftStartHour * 60;
         if (aMinuti <= soglia) return 0;
         return aMinuti - Math.Max(daMinuti, soglia);
     }
@@ -514,10 +604,10 @@ public static class MotoreCartellino
         return true;
     }
 
-    private static void AzzeraTutto(Cartellino c)
+    private static void ClearTotals(TimesheetDay c)
     {
-        c.OreOrdinarie = "0h 0m";
-        c.Straordinario = "0h 0m";
+        c.RegularHours = "0h 0m";
+        c.Overtime = "0h 0m";
         foreach (string f in c.Fasce.Keys.ToList()) c.Fasce[f] = "0h 0m";
     }
 }

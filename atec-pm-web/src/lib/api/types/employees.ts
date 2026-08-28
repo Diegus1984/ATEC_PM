@@ -46,6 +46,14 @@ export interface EmployeeSaveRequest {
   empType: string
   supplierId: number | null
   status: string
+  /** Codice badge EcosAgile (EmplCode). Vuoto = non collegato. */
+  ecosEmplCode?: string | null
+  /** false = forfait, no punch required. Default true. */
+  hrMustPunch?: boolean
+  /** Contract daily hours: 4, 6 or 8. Default 8. */
+  hrDailyHours?: number
+  /** false = overtime zeroed on timesheet. Default true. */
+  hrCountsOvertime?: boolean
 }
 
 export interface DeptSummary {

@@ -21,7 +21,8 @@ richiesta → approvazione agganciato ai reparti e alle commesse.
 | Sezione **HR** nel menu del gestionale | ✅ creata (voci `planned`, vedi §7) |
 | Chiavi permesso `nav.hr_timbrature`, `nav.hr_richieste` | ✅ a catalogo, spente (livello 3 = solo Admin) |
 | Motore di calcolo del cartellino | ✅ **portato in C# e verificato**: 330/330 giornate identiche all'originale (§6 Fase 1) |
-| Import timbrature da Ecos (client API) | ✅ **portato in C#** (`EcosClient` + `HrPresenzeService` + import automatico ogni 12h), pagina Timbrature **live** — mancano le credenziali Ecos in produzione (§6 Fase 1) |
+| Vista mensile, export Excel, solleciti, tre colonne | ✅ **fedeli al programma originale** (28/08, §Fase 1) |
+| Import timbrature da Ecos (client API) | ✅ **portato in C#** (`EcosClient` + `HrPresenzeService` + import automatico ogni 12h), pagina Timbrature **live**; credenziali Ecos da mettere in produzione, ora dalla pagina (§6 Fase 1) |
 | Flusso richiesta → approvazione ferie/permessi | ❌ non esiste da nessuna parte — **è la parte nuova** |
 | Quadratura presenze ↔ ore su commessa | ❌ non esiste |
 | Tabella `absences` in produzione | ⚠️ esiste, **vuota**, da rifare (§6, Fase 2) |
@@ -193,6 +194,76 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   spostamento di giorno, rettifiche, unicità mappatura). Il csproj del server ora ha
 >   `InternalsVisibleTo ATEC.PM.Tests`.
 >
+> **Fatto il 28/08/2026 — la vista mensile torna quella dell'originale.**
+> La pagina aveva una «Matrice presenze» inventata qui: una riga per dipendente, le nove
+> fasce di straordinario schiacciate in una colonna «Stra.», e l'export in CSV. Il
+> programma «Timbrature» (§4) ha invece una griglia precisa, che in ufficio si legge a
+> colpo d'occhio da anni, e un export **Excel**. Ora sono la stessa cosa:
+> - **`GetMonthlyCalendar`** (`HrAttendanceService`) è il port di `CaricaDatiMensili`:
+>   una riga per VOCE — ORE ORDINARIE, le fasce della Circolare 12/2024 (solo quelle con
+>   ore), PRESENZA, FERIE, PERMESSI, MALATTIA, INFORTUNIO — nome e matricola sulla sola
+>   prima riga, colonna TOTALE, e i colori dell'originale (grigio su sabati/domeniche e
+>   festivi, verde sul lavorato, «?» rosso sul feriale scoperto, arancio sullo
+>   straordinario, blu/viola/giallo sulle causali). Testo, colore e tooltip li decide il
+>   server: la pagina e il file Excel disegnano la stessa griglia, non due interpretazioni.
+> - **`HrCalendarExcel`** (EPPlus, già nel progetto) rifà il foglio di `btnEsportaExcel_Click`
+>   colore per colore: titolo unito, intestazioni a riga 3 con la lettera del giorno,
+>   festivi rossi e feriali azzurri, ore come numeri in formato `0.0`, riquadri bloccati su
+>   intestazione e colonne nome/voce, larghezze 24/16/5,5/8, riga di separazione sotto
+>   INFORTUNIO. Unica aggiunta: il colore **TEAL** (assenza già approvata su Ecos), che nel
+>   VB era nato dopo l'export e sul foglio spariva.
+> - **`GET /api/hr/calendar`** e **`/calendar/export`**, entrambi dietro la **scrittura** su
+>   `nav.hr_timbrature`: la vecchia `GET /api/hr/matrix` non controllava niente, così con la
+>   sola lettura — che deve mostrare solo il proprio cartellino — si vedeva l'azienda intera.
+>   Stessa guardia aggiunta a `/quadratura`.
+> - Test: `CalendarioExcelTests` (il foglio, cella per cella) e `CalendarioPresenzeTests`
+>   (la griglia su MySQL: verde/grigio/rosso, fasce, ferie, totali).
+>
+> **Portato anche il resto del programma originale (28/08, secondo giro).**
+> - **Solleciti** — i due pulsanti del calendario. «Sollecita» apre il client di posta (un
+>   `mailto:` per persona, con il testo dell'originale parola per parola), «Invia sollecito»
+>   spedisce dal server con `EmailService`. La fonte è il **«?» del calendario**: si
+>   sollecita quello che la griglia mostra, non un secondo conteggio fatto per conto suo —
+>   altrimenti la mail elencherebbe giorni diversi da quelli che la persona vede a video.
+>   Prima di spedire si vede sempre chi verrà scritto (conferma con l'elenco, chi è senza
+>   email, chi era già stato sollecitato). Le giornate chieste finiscono in **`hr_reminders`**
+>   (`M113`): **una riga per giornata**, come il `MailLog` del VB, perché la domanda vera è
+>   «questo buco l'ho già chiesto?» — con una riga per email quella risposta si perderebbe.
+>   Endpoint `GET/POST /api/hr/calendar/reminders` e `POST …/reminders/mark` (il `mark` serve
+>   al mailto: là la mail la spedisce l'utente, il server sa solo che gliel'abbiamo messa davanti).
+> - **Le tre colonne del `ReportPage`** — 🔸 grezzo · 🔷 normalizzato · ✅ finale, sei colonne
+>   per stadio (E1, U1, E2, U2, pausa, ore), con intestazione a due livelli e il menu Colonne
+>   per spegnere i blocchi che non servono. I due stadi **non si salvano**: si ricalcolano al
+>   volo ripassando le timbrature in `TimesheetEngine`, che è puro — nessuna migrazione,
+>   nessun secondo dato da tenere allineato. `TimesheetDay` ora li espone, e `Assign` tiene
+>   accanto a ogni orario arrotondato quello grezzo da cui viene (banco di prova 330/330
+>   ancora identico: il calcolo non è stato toccato).
+>   Non riportate le colonne «Str» di grezzo e normalizzato: nel VB non vengono mai
+>   valorizzate, sono sempre `0h 0m`.
+
+> **Credenziali Ecos dalla pagina, non più dal file (28/08).** Erano leggibili solo da
+> `appsettings.json` sul server: per cambiare una password bisognava entrare sulla macchina.
+> Ora c'è il dialogo **«Credenziali Ecos»** nella pagina Timbrature — utente, password,
+> Client ID e indirizzo API — come il «Configurazione Credenziali» del programma originale.
+> Stesso meccanismo della configurazione SMTP: valori in `res_settings` (chiavi `ecos.*`),
+> password cifrata con `ProtectedConfigHelper` (DPAPI ad ambito macchina, perché sul server
+> il programma gira come servizio) e **write-only** — si sostituisce, non si rilegge.
+> L'appsettings resta come **ripiego**: chi le ha già messe là non deve rifare niente, e la
+> pagina dice sempre da dove arrivano quelle in vigore. Le credenziali si rileggono a ogni
+> uso, quindi cambiarle NON richiede il riavvio del servizio. C'è anche **«Prova
+> collegamento»**: una sola `TokenGet`, che non legge e non scrive niente su Ecos.
+> Endpoint `GET/POST /api/hr/ecos/settings` e `POST …/settings/test`, dietro la scrittura su
+> `nav.hr_timbrature`. Difeso da `CredenzialiEcosTests` (precedenza database→file, password
+> write-only e cifrata a riposo, modulo a riposo se manca tutto).
+
+> 🪤 **Difetti trovati mentre si allineava** (tutti corretti): la query di matrice e
+> quadratura erano `SELECT DISTINCT … ORDER BY e.last_name` — **MySQL le rifiuta**, quindi
+> quelle due pagine non avrebbero mai risposto in produzione; `M107` non era più
+> rieseguibile dopo il rename di `M111` (il `RENAME TABLE` non tocca il nome dei vincoli:
+> ricreare `hr_timbrature` dava «Duplicate foreign key constraint name», e il test
+> `MotoreMigrazioniTests` lo ha preso); `M112` droppava `absences` ma `InitDatabase` la
+> ricreava a ogni avvio, perché il bootstrap gira **prima** delle migrazioni.
+
 > **Difese aggiunte dopo la revisione avversaria** (32 difetti confermati, corretti):
 > - 🪤 **Il filtro dei doppioni sotto i 5 minuti mancava.** Nel VB stava nella CTE SQL
 >   *fuori* dal motore (`ReportProcessor.vb` righe 27-48, semantica `LAG`), quindi il port
@@ -244,8 +315,8 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 > **Resta da fare in Fase 1**: compilare `ecos_empl_code` per i 37 dipendenti (dalla
 > pagina, dialogo «Collega Ecos»), **riconciliazione assenze** (le 49 giornate
 > forfait/assenza piena del banco di prova — dipende dal rifacimento di `absences`,
-> Fase 2), e in produzione: **credenziali Ecos** nella sezione `Ecos` dell'appsettings
-> del server (quello che vive solo là) + primo import completo.
+> Fase 2), e in produzione: **credenziali Ecos** dal dialogo «Credenziali Ecos» della pagina
+> Timbrature (non serve più toccare l'appsettings del server) + primo import completo.
 >
 > **Da dove ripartire in una chat nuova**: leggere questo file, poi
 > `ATEC.PM.Server/Services/Hr/` (motore + client + import) e

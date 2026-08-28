@@ -26,7 +26,7 @@ public class MotoreCartellinoTests
         string Dipendente, string Giorno, Config Config,
         List<Timbratura> Timbrature, Atteso Atteso);
 
-    private sealed record Config(bool Forfait, double? OreForfait, bool ConStraordinari);
+    private sealed record Config(bool Forfait, double? ForfaitHours, bool CountsOvertime);
     private sealed record Timbratura(string Orario, string Verso, long? IdEsterno);
     private sealed record Atteso(
         string? Entrata1, string? Uscita1, string? Entrata2, string? Uscita2,
@@ -87,12 +87,12 @@ public class MotoreCartellinoTests
         {
             DateTime giorno = DateTime.Parse(caso.Giorno);
             var timbrature = caso.Timbrature
-                .Select(t => new TimbraturaGrezza(DateTime.Parse(t.Orario), t.Verso, t.IdEsterno))
+                .Select(t => new RawPunch(DateTime.Parse(t.Orario), t.Verso, t.IdEsterno))
                 .ToList();
 
-            Cartellino calcolato = MotoreCartellino.Calcola(
+            TimesheetDay calcolato = TimesheetEngine.Calcola(
                 giorno, timbrature, GiornoElaborazione,
-                new MotoreCartellino.ConfigDipendente(caso.Config.ConStraordinari));
+                new TimesheetEngine.EmployeeConfig(caso.Config.CountsOvertime));
 
             confrontati++;
             var diff = new List<string>();
@@ -100,10 +100,10 @@ public class MotoreCartellinoTests
             Confronta(diff, "uscita1", caso.Atteso.Uscita1, calcolato.Uscita1);
             Confronta(diff, "entrata2", caso.Atteso.Entrata2, calcolato.Entrata2);
             Confronta(diff, "uscita2", caso.Atteso.Uscita2, calcolato.Uscita2);
-            Confronta(diff, "ore", caso.Atteso.OreTotali, calcolato.OreOrdinarie);
-            Confronta(diff, "pausa", caso.Atteso.Pausa, calcolato.Pausa);
-            Confronta(diff, "straord", caso.Atteso.Straordinario, calcolato.Straordinario);
-            Confronta(diff, "nota", caso.Atteso.Nota, calcolato.Nota);
+            Confronta(diff, "ore", caso.Atteso.OreTotali, calcolato.RegularHours);
+            Confronta(diff, "pausa", caso.Atteso.Pausa, calcolato.BreakTime);
+            Confronta(diff, "straord", caso.Atteso.Straordinario, calcolato.Overtime);
+            Confronta(diff, "nota", caso.Atteso.Nota, calcolato.Note);
 
             if (caso.Atteso.Fasce is not null)
                 foreach ((string lettera, string atteso) in caso.Atteso.Fasce)

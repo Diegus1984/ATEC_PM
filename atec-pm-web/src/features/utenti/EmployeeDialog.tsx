@@ -107,6 +107,10 @@ export function EmployeeDialog({
   const [compState, setCompState] = React.useState<Record<number, CompRowState>>(
     {}
   )
+  const [ecosEmplCode, setEcosEmplCode] = React.useState("")
+  const [mustPunch, setMustPunch] = React.useState(true)
+  const [dailyHours, setDailyHours] = React.useState("8")
+  const [countsOvertime, setCountsOvertime] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
   const departmentsQuery = useQuery({
@@ -170,6 +174,10 @@ export function EmployeeDialog({
       setUsername("")
       setDeptState({})
       setCompState({})
+      setEcosEmplCode("")
+      setMustPunch(true)
+      setDailyHours("8")
+      setCountsOvertime(true)
       return
     }
 
@@ -186,6 +194,10 @@ export function EmployeeDialog({
         setStatus(emp.status || "ACTIVE")
         setUserRoleState(detail.userRole || "TECH")
         setUsername(detail.username || "")
+        setEcosEmplCode(emp.ecosEmplCode ?? "")
+        setMustPunch(emp.hrMustPunch ?? true)
+        setDailyHours(String(emp.hrDailyHours ?? 8))
+        setCountsOvertime(emp.hrCountsOvertime ?? true)
         setDeptState(
           Object.fromEntries(
             detail.departments.map((d) => [
@@ -259,6 +271,10 @@ export function EmployeeDialog({
         empType,
         supplierId: null,
         status,
+        ecosEmplCode: ecosEmplCode.trim() || null,
+        hrMustPunch: mustPunch,
+        hrDailyHours: Number(dailyHours),
+        hrCountsOvertime: countsOvertime,
       }
       const id = editId ?? (await createEmployee(payload))
       if (editId != null) {
@@ -357,6 +373,61 @@ export function EmployeeDialog({
                 </Select>
               </div>
             </div>
+          </section>
+
+          {/* Sezione — Presenze (port da Timbrature/Users.xaml) */}
+          <section className="space-y-4">
+            <SectionTitle>Presenze</SectionTitle>
+            <p className="text-xs text-muted-foreground">
+              Impostazioni per il cartellino HR. Il codice badge Ecos collega le timbrature
+              del rilevatore a questa persona (si può anche mappare in blocco da Timbrature).
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="ecos-empl-code">Codice badge Ecos</Label>
+                <Input
+                  id="ecos-empl-code"
+                  value={ecosEmplCode}
+                  placeholder="Es. 42"
+                  onChange={(event) => setEcosEmplCode(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="hr-ore-giornaliere">Ore giornaliere</Label>
+                <Select value={dailyHours} onValueChange={setDailyHours}>
+                  <SelectTrigger id="hr-ore-giornaliere" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="4">4 ore</SelectItem>
+                    <SelectItem value="6">6 ore</SelectItem>
+                    <SelectItem value="8">8 ore</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:gap-8">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={mustPunch}
+                  onCheckedChange={(value) => setMustPunch(!!value)}
+                />
+                <span>Deve timbrare</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={countsOvertime}
+                  onCheckedChange={(value) => setCountsOvertime(!!value)}
+                />
+                <span>Conteggia straordinario</span>
+              </label>
+            </div>
+            {!mustPunch ? (
+              <p className="text-xs text-muted-foreground">
+                Forfait: non deve timbrare. La generazione automatica del cartellino forfait
+                arriverà con la riconciliazione assenze (Fase 2).
+              </p>
+            ) : null}
           </section>
 
           {/* Sezione 2 — Accesso e ruolo */}
