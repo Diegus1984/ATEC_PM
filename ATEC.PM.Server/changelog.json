@@ -3,7 +3,7 @@
                  {
                      "build":  "20260828-0900",
                      "data":  "2026-08-28T09:00:00",
-                     "hash":  "head",
+                     "hash":  "325e576296893ecd10f2dc0bde7bd0841cb6b23f",
                      "modifiche":  [
                                        "HR: Richieste Ferie e Permessi (/hr/richieste) con approvazione responsabili e notifiche",
                                        "HR: Sincronizzazione automatica ferie approvate sul Planner Risorse (Gantt)",
