@@ -129,12 +129,30 @@ public static class ProjectEconomics
         "COALESCE(ew.counts_in_project, 1) = 1";
 
     /// <summary>
+    /// Quanta parte di una riga commerciale pesa nel conto economico (#135). Vale 1 su tutte
+    /// le righe normali; sui <b>grezzi</b> generati dalla derivazione 101 → 201 è la quota
+    /// chiesta da lavorazioni fatte in casa.
+    ///
+    /// <para>🪤 Serve perché in officina il costo di un 101 è <b>un campo solo</b>: se la
+    /// lavorazione è esterna quel numero è già il pezzo <b>finito</b>, materiale compreso, e
+    /// sommarci pure il grezzo conterebbe il materiale due volte; se il pezzo si fa in casa il
+    /// costo sono le ore per la tariffa, e il materiale non lo conta nessuno. La quota la
+    /// scrive <see cref="GrezziDerivazione"/>, che sa quali 101 chiedono quel grezzo.</para>
+    ///
+    /// <para>Moltiplicare per la quota — invece di filtrare via le righe — regge anche il caso
+    /// misto (stesso grezzo per un 101 in casa e uno fuori) e non si sfalsa quando chi compra
+    /// corregge a mano la quantità, perché è una frazione, non un numero di pezzi.</para>
+    /// </summary>
+    public const string QuotaGrezzoNelBilancio = "COALESCE(raw_internal_share, 1)";
+
+    /// <summary>
     /// Costo dei soli materiali commerciali (bom_items), stesse esclusioni A9 e dedup dei
-    /// padri di composizione (#119, vedi <see cref="CommercialeParentDedup"/>).
+    /// padri di composizione (#119, vedi <see cref="CommercialeParentDedup"/>), più la quota
+    /// dei grezzi (#135, vedi <see cref="QuotaGrezzoNelBilancio"/>).
     /// </summary>
     public static decimal GetCommercialMaterialCost(IDbConnection c, int projectId, string[] excludedStates) =>
         c.ExecuteScalar<decimal?>($@"
-            SELECT COALESCE(SUM(quantity * unit_cost), 0)
+            SELECT COALESCE(SUM(quantity * unit_cost * {QuotaGrezzoNelBilancio}), 0)
             FROM bom_items
             WHERE project_id = @Pid AND COALESCE(item_status,'') NOT IN @Excluded
               AND {CommercialeParentDedup}",

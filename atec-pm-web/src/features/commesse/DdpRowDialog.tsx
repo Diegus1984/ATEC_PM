@@ -37,6 +37,7 @@ import {
   DDP_DESTINATION_NONE,
 } from "./ddp-destination-options"
 import { DDP_STATUS_VERIFY, filterStatusOptions, isCommercialQtyEditable } from "./ddp-constants"
+import { isRawRow, RawRowBadge, rawRowTitle } from "./ddp-raw-row"
 import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
 import { parseDecimal } from "@/lib/format"
 
@@ -207,6 +208,18 @@ export function DdpRowDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* #135 — la riga del grezzo si apre e si modifica come le altre (la quantità
+              in particolare: da una barra escono più pezzi), ma non nasce qui e da qui
+              non si toglie. Il dialog non ha comandi di eliminazione: dice solo cos'è.
+              🪤 La frase è la stessa della griglia (`rawRowTitle`): due testi diversi
+              per la stessa regola invecchiano male. */}
+          {isRawRow(editRow) ? (
+            <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <RawRowBadge row={editRow} />
+              <span>{rawRowTitle(editRow)}</span>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-[2fr_1fr] gap-4">
             <div className="grid gap-2">
               <Label>Part Number</Label>

@@ -53,6 +53,7 @@ import { DdpStatusFilterBar } from "./DdpStatusFilterBar"
 import { DdpStatusMenu } from "./DdpStatusMenu"
 import { ddpCommercialRowToSaveRequest } from "./ddp-commercial-row"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
+import { isRawRow, RawRowBadge } from "./ddp-raw-row"
 import { isCommercialQtyEditable } from "./ddp-constants"
 import {
   buildCompositionRows,
@@ -729,6 +730,9 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                 </button>
               ) : null}
               {item.partNumber || "—"}
+              {/* #135: la riga è il grezzo di uno o più particolari a disegno — non è
+                  una riga come le altre e non si toglie da qui (title del badge). */}
+              {isRawRow(item) ? <RawRowBadge row={item} /> : null}
             </span>
           )
         },
@@ -751,11 +755,30 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         enableColumnFilter: false,
         cell: ({ row }) => {
           const item = row.original
+          // #135 — grezzo con la quantità corretta a mano: RESTA modificabile (da una
+          // barra escono più pezzi), si segna solo che non è più quella della distinta.
+          // Da lì in poi il ricalcolo del server non la tocca più.
+          const autoQty =
+            item.rawAutoQty != null && item.rawAutoQty !== item.quantity
+              ? item.rawAutoQty
+              : null
+          const autoQtyMark =
+            autoQty == null ? null : (
+              <span
+                className="shrink-0 opacity-60"
+                title={`Corretta a mano: la distinta ne chiede ${formatQuantity(autoQty)}`}
+              >
+                <Pencil className="size-3" />
+              </span>
+            )
           // Sola lettura: via le frecce +/- (sono una scrittura), resta il numero.
           if (readOnly) {
             return (
-              <span className="text-sm tabular-nums">
-                {formatQuantity(item.quantity)}
+              <span className="flex items-center gap-1">
+                <span className="text-sm tabular-nums">
+                  {formatQuantity(item.quantity)}
+                </span>
+                {autoQtyMark}
               </span>
             )
           }
@@ -765,22 +788,25 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
           const atMin =
             item.quantity <= 1 && item.itemStatus === DDP_STATUS_CANCELLED
           return (
-            <span
-              title={
-                isChild
-                  ? "Componente di composizione: la quantità segue quella del padre"
-                  : canEditQty
-                    ? undefined
-                    : "La quantità è modificabile solo in stato Da Ordinare"
-              }
-            >
-              <DdpQuantityStepper
-                quantity={item.quantity}
-                disabled={quantityMutation.isPending || !canEditQty || isChild}
-                decrementDisabled={atMin}
-                onIncrement={() => void handleQuantityAdjust(item, 1)}
-                onDecrement={() => void handleQuantityAdjust(item, -1)}
-              />
+            <span className="flex items-center gap-1">
+              <span
+                title={
+                  isChild
+                    ? "Componente di composizione: la quantità segue quella del padre"
+                    : canEditQty
+                      ? undefined
+                      : "La quantità è modificabile solo in stato Da Ordinare"
+                }
+              >
+                <DdpQuantityStepper
+                  quantity={item.quantity}
+                  disabled={quantityMutation.isPending || !canEditQty || isChild}
+                  decrementDisabled={atMin}
+                  onIncrement={() => void handleQuantityAdjust(item, 1)}
+                  onDecrement={() => void handleQuantityAdjust(item, -1)}
+                />
+              </span>
+              {autoQtyMark}
             </span>
           )
         },
@@ -891,8 +917,6 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         accessorKey: "dateNeeded",
         header: "Data Prev.",
         enableColumnFilter: false,
-        // Sola lettura: stessa etichetta impilata di «Consegnato il» qui accanto,
-        // senza calendario né «X» per cancellare la data.
         cell: ({ row }) =>
           readOnly ? (
             row.original.dateNeeded ? (
@@ -912,9 +936,6 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         accessorKey: "deliveredAt",
         header: "Consegnato il",
         enableColumnFilter: false,
-        // Ricavata dalla cronistoria (ultimo passaggio a DISPONIBILE / CONSEGNATO):
-        // non è un campo che si scrive a mano. Stesso aspetto di «Data Prev.» qui
-        // accanto (giorno della settimana sopra la data) e colore ereditato dalla riga.
         cell: ({ row }) =>
           row.original.deliveredAt ? (
             <StackedDateLabel value={row.original.deliveredAt} />
@@ -1037,7 +1058,15 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
           }
           // #119: un componente non si annulla e non si elimina da solo — se ne va col
           // padre, altrimenti la composizione resterebbe monca senza che nessuno lo veda.
+          // #135: il grezzo non si CANCELLA da qui — lo comanda la DDP Officina e il
+          // server rifiuta già la DELETE: serve che non sembri nemmeno possibile. Il
+          // perché sta nel title del badge «Grezzo» in colonna «Codice», perché sulle
+          // voci disabilitate del menu un title non comparirebbe mai (pointer-events).
+          // 🪤 L'ANNULLO invece resta: «questo grezzo ce l'abbiamo già a magazzino» è una
+          // decisione di chi compra, e il ricalcolo la rispetta (su una riga fuori dagli
+          // stati d'ingresso non scrive più la quantità).
           const isChild = item.parentBomItemId != null
+          const isRaw = isRawRow(item)
           if (!readOnly && item.itemStatus !== DDP_STATUS_CANCELLED) {
             actions.push({
               label: "Elimina",
@@ -1054,7 +1083,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               icon: Trash2,
               destructive: true,
               separatorBefore: item.itemStatus === DDP_STATUS_CANCELLED,
-              disabled: isChild,
+              disabled: isChild || isRaw,
               onClick: () => void handleDeleteRow(item),
             })
           }

@@ -19,14 +19,38 @@ public class CodexController : ControllerBase
     private readonly CodexSyncService _sync;
     private readonly CodexGeneratorService _generator;
     private readonly IHubContext<CodexHub> _codexHub;
+    private readonly IHubContext<ProjectHub> _projectHub;
 
     public CodexController(DbService db, CodexSyncService sync, CodexGeneratorService generator,
-        IHubContext<CodexHub> codexHub)
+        IHubContext<CodexHub> codexHub, IHubContext<ProjectHub> projectHub)
     {
         _db = db;
         _sync = sync;
         _generator = generator;
         _codexHub = codexHub;
+        _projectHub = projectHub;
+    }
+
+    private int GetCurrentEmployeeId() =>
+        int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
+
+    /// <summary>
+    /// Avvisa chi sta guardando la DDP Commerciale di una commessa (#135): la derivazione di
+    /// un 101 si compila da qui, ma le righe che ne nascono stanno di là. Stesso contratto di
+    /// <c>ProjectsController.NotifyDdpChange</c> — evento <c>DdpChanged</c> sull'hub delle
+    /// commesse — perché è la stessa griglia ad ascoltarlo.
+    /// </summary>
+    private void NotifyDdpCommerciale(int projectId)
+    {
+        var payload = new DdpChange
+        {
+            ProjectId = projectId,
+            Action = "update",
+            ItemId = 0,
+            DdpType = "COMMERCIAL"
+        };
+        foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
+            _ = _projectHub.Clients.Group(group).SendAsync("DdpChanged", payload);
     }
 
     // Notifica real-time ai client che guardano la Composizione (hub /hubs/codex),
@@ -102,7 +126,8 @@ public class CodexController : ControllerBase
         [FromQuery] string? sortBy = null,
         [FromQuery] string? sortDir = null,
         [FromQuery] string? codicePrefixes = null,
-        [FromQuery] string? newCodeState = null)
+        [FromQuery] string? newCodeState = null,
+        [FromQuery] string? refState = null)
     {
         try
         {
@@ -169,6 +194,16 @@ public class CodexController : ControllerBase
             else if (string.Equals(newCodeState, "done", StringComparison.OrdinalIgnoreCase))
                 clauses.Add("(codice_nuovo IS NOT NULL AND codice_nuovo <> '')");
 
+            // Stato derivazione (#135): quali particolari a disegno hanno il grezzo commerciale.
+            // È una clausola sulla sola codex_items (EXISTS), così il COUNT qui sotto e la
+            // SELECT restano d'accordo senza portarsi dietro nessuna join.
+            const string esisteDerivazione =
+                "EXISTS (SELECT 1 FROM codex_item_references r0 WHERE r0.source_codex_id = codex_items.id AND r0.ref_type = '201')";
+            if (string.Equals(refState, "missing", StringComparison.OrdinalIgnoreCase))
+                clauses.Add("NOT " + esisteDerivazione);
+            else if (string.Equals(refState, "done", StringComparison.OrdinalIgnoreCase))
+                clauses.Add(esisteDerivazione);
+
             // Filtro per prefisso del codice (OR di più prefissi), usato dal picker
             // della composizione (es. 5xx → figli 1xx-4xx). Valori sanificati.
             if (!string.IsNullOrWhiteSpace(codicePrefixes))
@@ -207,8 +242,24 @@ public class CodexController : ControllerBase
                    barcode AS Barcode, tipologia AS Tipologia,
                    extra1 AS Extra1, extra2 AS Extra2, extra3 AS Extra3,
                    code_prod AS CodeProd, spec AS Spec, oper AS Oper, um AS Um,
-                   ubicazione AS Ubicazione, codexforn AS Codexforn
-            FROM codex_items {where}
+                   ubicazione AS Ubicazione, codexforn AS Codexforn,
+                   -- #135: il grezzo 201 da cui deriva il particolare, già nella lista.
+                   rc.ref_id AS RefCommercialeId,
+                   COALESCE(rc.ref_codice,'') AS RefCommercialeCodice,
+                   COALESCE(rc.ref_descr,'') AS RefCommercialeDescr
+            FROM codex_items
+            -- 🪤 Tabella derivata con nomi TUTTI diversi, non un self-join su codex_items:
+            -- le clausole WHERE e l'ORDER BY di questo endpoint usano nomi di colonna NUDI
+            -- (`codice`, `descr`, `fornitore`…) e un secondo codex_items li renderebbe ambigui,
+            -- facendo esplodere ogni filtro e ogni ordinamento, non solo la colonna nuova.
+            LEFT JOIN (
+                SELECT r.source_codex_id AS ref_source_id, r.id AS ref_id,
+                       x.codice AS ref_codice, COALESCE(x.descr,'') AS ref_descr
+                FROM codex_item_references r
+                JOIN codex_items x ON x.id = r.ref_codex_id
+                WHERE r.ref_type = '201'
+            ) rc ON rc.ref_source_id = codex_items.id
+            {where}
             {orderBy}
             LIMIT @Limit OFFSET @Offset", dp).ToList();
 
@@ -1037,13 +1088,35 @@ public class CodexController : ControllerBase
             JOIN codex_items ci ON ci.id = r.ref_codex_id
             WHERE r.source_codex_id = @Id
             ORDER BY r.ref_type", new { Id = sourceId }).ToList();
+
+        // Il codice esce col punto come dappertutto nel gestionale: la query lo legge grezzo
+        // (in DB sta senza) e senza questo passaggio la scheda articolo scriverebbe
+        // 201231219001 invece di 201231219.001.
+        foreach (CodexItemReference r in refs)
+            r.RefCodice = CodexListItem.FormatCodice(r.RefCodice ?? "");
+
         return Ok(ApiResponse<List<CodexItemReference>>.Ok(refs));
     }
 
+    /// <summary>
+    /// Scrive (o cambia) la derivazione di un particolare a disegno. È un <b>upsert</b> sulla
+    /// UNIQUE <c>(source_codex_id, ref_type)</c>: un 101 ha un solo grezzo, e rifare la POST
+    /// sostituisce il precedente — non serve nessuna PUT.
+    ///
+    /// <para>🪤 Sul ramo di aggiornamento <c>LAST_INSERT_ID()</c> non è l'id della riga
+    /// toccata: chi ha bisogno dell'id (per la DELETE) lo prende dalla GET, non da qui.</para>
+    /// </summary>
+    [RequireFeature("action.manage_codex")]
     [HttpPost("references")]
     public IActionResult AddReference([FromBody] AddCodexReferenceRequest req)
     {
         using var c = _db.Open();
+
+        // Solo i due tipi che esistono. Prima qualunque altra stringa passava tutti i controlli
+        // (le due if sotto guardano solo '201' e '401'), e siccome la UNIQUE è su
+        // (source, ref_type) ogni tipo inventato aggiungeva una riga in più allo stesso 101.
+        if (req.RefType != "201" && req.RefType != "401")
+            return BadRequest(ApiResponse<string>.Fail("Tipo di riferimento non valido: sono ammessi solo 201 e 401."));
 
         // Verifica che il source sia un 101
         var source = c.QueryFirstOrDefault<CodexListItem>(
@@ -1070,6 +1143,11 @@ public class CodexController : ControllerBase
                 VALUES (@SourceCodexId, @RefCodexId, @RefType)
                 ON DUPLICATE KEY UPDATE ref_codex_id = @RefCodexId;
                 SELECT LAST_INSERT_ID()", req);
+
+            // #135: la derivazione appena scritta vale anche per le commesse che hanno già
+            // quel 101 in DDP Officina — il grezzo 201 ci nasce adesso, non alla prossima
+            // volta che qualcuno tocca quella distinta.
+            AllineaGrezzi(c, source.Codice);
             return Ok(ApiResponse<int>.Ok(id, "Riferimento salvato"));
         }
         catch (Exception ex)
@@ -1078,12 +1156,41 @@ public class CodexController : ControllerBase
         }
     }
 
+    [RequireFeature("action.manage_codex")]
     [HttpDelete("references/{id}")]
     public IActionResult DeleteReference(int id)
     {
         using var c = _db.Open();
+
+        // Il codice del 101 va letto PRIMA della cancellazione: dopo, il riferimento non c'è
+        // più e non si saprebbe quali commesse riallineare (#135).
+        string codice101 = c.ExecuteScalar<string?>(@"
+            SELECT ci.codice FROM codex_item_references r
+            JOIN codex_items ci ON ci.id = r.source_codex_id
+            WHERE r.id = @Id", new { Id = id }) ?? "";
+
         int rows = c.Execute("DELETE FROM codex_item_references WHERE id=@Id", new { Id = id });
         if (rows == 0) return NotFound(ApiResponse<string>.Fail("Non trovato"));
+
+        // Tolta la derivazione, il grezzo non lo chiede più nessuno: sparisce dalle DDP
+        // Commerciali dove era libero, resta (sganciato) dove era già stato messo in ordine.
+        AllineaGrezzi(c, codice101);
         return Ok(ApiResponse<bool>.Ok(true, "Riferimento rimosso"));
+    }
+
+    /// <summary>
+    /// Riallinea i grezzi delle commesse che usano un 101 e avvisa chi ha quelle DDP aperte.
+    /// Un errore qui non deve far fallire il salvataggio della derivazione: il ricalcolo
+    /// ripasserà alla prima scrittura sulla distinta.
+    /// </summary>
+    private void AllineaGrezzi(System.Data.IDbConnection c, string? codice101)
+    {
+        try
+        {
+            int? autore = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
+            foreach ((int projectId, _) in GrezziDerivazione.SincronizzaCommesseCon101(c, codice101, autore))
+                NotifyDdpCommerciale(projectId);
+        }
+        catch { /* la derivazione è salvata: il grezzo si riallinea al prossimo giro */ }
     }
 }

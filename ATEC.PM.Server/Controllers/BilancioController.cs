@@ -74,7 +74,10 @@ public class BilancioController : ControllerBase
                              AND vt.counts_in_project = 1
                        ), 0) AS ActualResourceCost,
                        COALESCE((
-                           SELECT SUM(b.quantity * b.unit_cost)
+                           -- #135: la quota dei grezzi, come in ProjectEconomics — questa
+                           -- pagina ricopia la somma invece di chiamarla, e senza la quota
+                           -- direbbe un materiale diverso dal conto economico.
+                           SELECT SUM(b.quantity * b.unit_cost * COALESCE(b.raw_internal_share, 1))
                            FROM bom_items b
                            WHERE b.project_id = p.id
                              AND COALESCE(b.item_status,'') NOT IN @Excluded

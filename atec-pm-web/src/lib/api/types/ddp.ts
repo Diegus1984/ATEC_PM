@@ -191,6 +191,21 @@ export interface DdpRowItem {
   /** #119 — gemello di `parentOfficinaItemId` sulla DDP Commerciale (tabella `bom_items`). */
   parentBomItemId?: number | null
   compositionQty?: number | null
+  /**
+   * #135 — la riga è il GREZZO di uno o più particolari a disegno: codice Codex del 201 da cui
+   * nasce, col punto. Vuoto/assente = riga commerciale normale.
+   *
+   * 🪤 Non è `parentBomItemId` e non va trattato come tale: quello è la composizione di un
+   * gruppo 5xx e arrotolerebbe il costo del grezzo nell'intestazione, togliendolo dal totale.
+   */
+  rawCodexCode?: string
+  /** I particolari a disegno che chiedono questo grezzo, per l'etichetta «Grezzo di …». */
+  rawSources?: string
+  /**
+   * Quantità calcolata dalla distinta. Diversa da `quantity` = qualcuno l'ha corretta a mano
+   * (da una barra escono più pezzi) e da lì in poi il ricalcolo non la tocca più.
+   */
+  rawAutoQty?: number | null
 }
 
 /** Una voce della cronistoria di una riga di distinta (commerciale o officina). */

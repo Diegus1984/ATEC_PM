@@ -76,6 +76,26 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// <summary>Quantità unitaria in composizione: al cambio Qtà del padre il figlio segue con questo passo.</summary>
     public decimal? CompositionQty { get; set; }
 
+    /// <summary>
+    /// #135 — questa riga è il <b>grezzo</b> di uno o più particolari a disegno: il codice Codex
+    /// del 201 da cui nasce, formattato col punto. Vuoto = riga commerciale normale.
+    ///
+    /// <para>🪤 Non è <see cref="ParentBomItemId"/> e non deve diventarlo: quello è la
+    /// composizione di un gruppo 5xx, e ci farebbe arrotolare il costo del grezzo
+    /// nell'intestazione, togliendolo dal totale della distinta.</para>
+    /// </summary>
+    public string RawCodexCode { get; set; } = "";
+
+    /// <summary>I 101 che chiedono questo grezzo, per l'etichetta «Grezzo di …».</summary>
+    public string RawSources { get; set; } = "";
+
+    /// <summary>
+    /// Quantità calcolata dalla distinta (somma dei 101 che lo usano). Se è diversa da
+    /// <c>Quantity</c>, qualcuno l'ha corretta a mano — da una barra escono più pezzi — e da
+    /// quel momento il ricalcolo non la tocca più.
+    /// </summary>
+    public decimal? RawAutoQty { get; set; }
+
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
 

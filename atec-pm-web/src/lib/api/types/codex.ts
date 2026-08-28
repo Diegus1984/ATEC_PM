@@ -85,6 +85,13 @@ export interface CodexListItem {
   um: string
   ubicazione: string
   codexforn: string
+  /**
+   * #135 — grezzo commerciale da cui si ricava questo particolare a disegno.
+   * `refCommercialeCodice` vuoto = nessuna derivazione. L'id serve alla DELETE.
+   */
+  refCommercialeId: number | null
+  refCommercialeCodice: string
+  refCommercialeDescr: string
 }
 
 export interface CodexRecodeStats {
@@ -133,4 +140,18 @@ export interface AddCodexReferenceRequest {
   refCodexId: number
   /** "201" (commerciale) o "401" (materia prima). */
   refType: string
+}
+
+/**
+ * Derivazione di un particolare a disegno: da quale articolo commerciale si ricava (#135).
+ * Il codice arriva già col punto dal server.
+ */
+export interface CodexItemReference {
+  id: number
+  sourceCodexId: number
+  refCodexId: number
+  /** "201" (commerciale) o "401" (materia prima, famiglia ritirata). */
+  refType: string
+  refCodice: string
+  refDescr: string
 }

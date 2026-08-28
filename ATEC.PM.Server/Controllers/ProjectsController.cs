@@ -1449,8 +1449,14 @@ public class ProjectsController : ControllerBase
             WHERE b.project_id = @Id AND b.ddp_type = @Type
             ORDER BY b.id", new { Id = id, Type = type }).ToList();
             foreach (BomItemListItem row in rows)
+            {
                 if (row.AtecCode.Length > 0)
                     row.AtecCode = CodexListItem.FormatCodice(row.AtecCode);
+                // #135: in DB il codice del grezzo sta senza punti, in pagina si legge col punto
+                // come tutti gli altri codici Codex.
+                if (row.RawCodexCode.Length > 0)
+                    row.RawCodexCode = CodexListItem.FormatCodice(row.RawCodexCode);
+            }
 
             return Ok(ApiResponse<List<BomItemListItem>>.Ok(rows));
         }
@@ -1607,6 +1613,11 @@ public class ProjectsController : ControllerBase
                 {
                     NotifyWorkRequestsChanged("update", id);
                     NotifyDdpChange(id, conn, "update", 0, "OFFICINA");
+
+                    // #135: fra i componenti d'officina appena moltiplicati possono esserci dei
+                    // 101 con derivazione — se cambia la loro quantità cambia anche quella del
+                    // grezzo che chiedono, che sta proprio in questa griglia.
+                    GrezziDerivazione.Sincronizza(c, id, firma, req.RequestedBy);
                 }
             }
 
@@ -1685,6 +1696,19 @@ public class ProjectsController : ControllerBase
                 return BadRequest(ApiResponse<bool>.Fail(
                     "Impossibile eliminare direttamente un componente figlio. Eliminare il padre."));
 
+            // #135: il grezzo è la proiezione di un particolare a disegno che sta nell'altra
+            // distinta. Cancellarlo qui non servirebbe a niente — il ricalcolo lo rimetterebbe
+            // al primo salvataggio in officina — quindi si dice dove si toglie davvero.
+            string? grezzoDi = c.ExecuteScalar<string?>(@"
+                SELECT COALESCE(raw_sources,'') FROM bom_items
+                WHERE id = @ItemId AND project_id = @Id
+                  AND COALESCE(raw_codex_code,'') <> ''",
+                new { ItemId = itemId, Id = id });
+            if (grezzoDi != null)
+                return BadRequest(ApiResponse<bool>.Fail(grezzoDi.Length > 0
+                    ? $"Questa riga è il grezzo di {grezzoDi}: si toglie eliminando quel particolare dalla DDP Officina, oppure togliendo la derivazione dall'articolo Codex."
+                    : "Questa riga è il grezzo di un particolare a disegno: si toglie dalla DDP Officina, oppure togliendo la derivazione dall'articolo Codex."));
+
             string partNumber = c.ExecuteScalar<string?>(
                 "SELECT part_number FROM bom_items WHERE id = @ItemId", new { ItemId = itemId }) ?? "";
             (int figliOfficina, int figliCommerciale) =
@@ -1697,6 +1721,12 @@ public class ProjectsController : ControllerBase
             {
                 NotifyDdpChange(id, conn, "delete", 0, "OFFICINA");
                 NotifyWorkRequestsChanged("delete", id);
+
+                // #135: fra i componenti d'officina appena cancellati con l'intestazione
+                // possono esserci dei 101 con derivazione: i loro grezzi non li chiede più
+                // nessuno.
+                GrezziDerivazione.Sincronizza(
+                    c, id, GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null);
             }
 
             int figli = figliOfficina + figliCommerciale;
@@ -1752,6 +1782,11 @@ public class ProjectsController : ControllerBase
             LEFT JOIN employees e ON e.id = o.created_by
             WHERE o.project_id = @Id
             ORDER BY o.id", new { Id = id }).ToList();
+            foreach (OfficinaItemListItem row in rows)
+            {
+                if (row.PartNumber.Length > 0)
+                    row.PartNumber = CodexListItem.FormatCodice(row.PartNumber);
+            }
 
             return Ok(ApiResponse<List<OfficinaItemListItem>>.Ok(rows));
         }
@@ -1804,9 +1839,13 @@ public class ProjectsController : ControllerBase
             });
 
             // Niente più bozze da generare (#83): la riga si vede in Lavorazioni Officine dov'è.
-            // Resta il congelamento del Tipo, su cui si reggono Bilancio e viste Interne/Esterne.
-            OfficinaRowSync.CongelaTipoDaStato(c, newId);
+            // Il Tipo parte vuoto (segnalazione #138): lo sceglie l'utente dal menu a tendina.
             NotifyWorkRequestsChanged("create", id);
+
+            // #135: se la riga appena inserita è un 101 con derivazione, il suo grezzo 201 deve
+            // comparire (o crescere) in DDP Commerciale — il materiale lo compra qualcun altro.
+            var grezzi = GrezziDerivazione.Sincronizza(c, id, createdBy, req.RequestedBy);
+            if (!grezzi.NienteDaFare) NotifyDdpChange(id, conn, "update", 0, "COMMERCIAL");
 
             NotifyDdpChange(id, conn, "create", newId, "OFFICINA");
             return Ok(ApiResponse<int>.Ok(newId, "Aggiunto"));
@@ -2023,7 +2062,6 @@ public class ProjectsController : ControllerBase
                                 updated_at = NOW(), updated_by = @UpdatedBy
                                 WHERE id = @Id",
                         new { Add = child.Quantity * parentQty, ParentRowId = parentRowId, CompQty = (decimal)child.Quantity, Id = existingId, UpdatedBy = createdByComp });
-                    OfficinaRowSync.CongelaTipoDaStato(c, existingId);
                     result.Updated++;
                 }
                 else
@@ -2052,12 +2090,16 @@ public class ProjectsController : ControllerBase
                         CompQty = (decimal)child.Quantity,
                         CreatedBy = createdByComp
                     });
-                    OfficinaRowSync.CongelaTipoDaStato(c, newId);
                     existingByCode[key] = newId;
                     result.Added++;
                     result.AddedOfficina++;
                 }
             }
+
+            // #135: i 101 appena entrati possono avere una derivazione — i loro grezzi 201
+            // vanno in DDP Commerciale. Si fa DOPO tutto l'import, una volta sola: il ricalcolo
+            // ragiona sulla commessa intera, non sulla singola riga.
+            var grezziImport = GrezziDerivazione.Sincronizza(c, id, createdByComp, req.RequestedBy);
 
             if (result.Added + result.Updated > 0)
             {
@@ -2065,7 +2107,8 @@ public class ProjectsController : ControllerBase
                 // Due griglie toccate, due notifiche: chi ha aperta solo la Commerciale non
                 // riceverebbe nulla da un avviso marcato OFFICINA e vedrebbe righe vecchie.
                 NotifyDdpChange(id, conn, "create", 0, "OFFICINA");
-                if (parentBomId != null) NotifyDdpChange(id, conn, "create", 0, "COMMERCIAL");
+                if (parentBomId != null || !grezziImport.NienteDaFare)
+                    NotifyDdpChange(id, conn, "create", 0, "COMMERCIAL");
             }
             string mult = parentQty != 1 ? $" ×{parentQty:0.###}" : "";
             string dove = result.AddedCommerciale > 0 && result.AddedOfficina > 0
@@ -2083,48 +2126,17 @@ public class ProjectsController : ControllerBase
     /// <summary>
     /// Come si presenta in DDP Commerciale un componente che arriva dalla composizione Codex.
     ///
-    /// <para>La convenzione della griglia è: colonna <b>Codice</b> = codice commerciale Danea
-    /// (<c>catalog_items.code</c>), colonna <b>Cod. ATEC</b> = codice Codex della NUOVA codifica.
-    /// Un componente di composizione però nasce da un codice Codex, non da un articolo Danea,
-    /// e i due campi vanno riempiti solo se c'è davvero qualcosa da metterci.</para>
-    ///
-    /// <para>🪤 <b>In <c>atec_code</c> può finire SOLO <c>codex_items.codice_nuovo</c>, mai il
-    /// codice storico.</b> Non è una preferenza: <c>AssignCore</c> rifiuta esplicitamente le
-    /// righe senza codice nuovo («in Extra1 vanno SOLO codici nuovi»), quindi
-    /// <c>catalog_items.atec_code</c> contiene per costruzione solo codici nuovi, e
-    /// <c>/catalog-mapping/orphans</c> classifica come <b>refuso</b> ogni <c>atec_code</c> che
-    /// non corrisponde a nessun <c>codice_nuovo</c>. Scriverci il codice storico riempirebbe la
-    /// colonna con un valore che nessuna query può agganciare — e siccome la griglia mostra
-    /// l'icona «Assegna codice ATEC» <b>solo quando il campo è vuoto</b>, toglierebbe pure
-    /// l'unico comando che su quelle righe serve. Sembrerebbe sistemato, e sarebbe peggio.</para>
-    ///
-    /// <para>Quindi: niente codice nuovo → <c>atec_code</c> resta vuoto (stato «da codificare»,
-    /// che è la verità) e in <c>part_number</c> resta il codice Codex, che è l'unico
-    /// identificatore che quel pezzo ha — serve alla richiesta d'offerta, che stampa un codice
-    /// per riga, e tiene viva l'icona di assegnazione, che pretende un <c>part_number</c> non
-    /// vuoto oppure un articolo collegato.</para>
+    /// <para>La regola vera — che cosa finisce in «Codice» e in «Cod. ATEC», e quando si può
+    /// già dire da chi si compra — vive in <see cref="ArticoloDaCodex"/>. È uscita di qui con
+    /// la #135, che la chiama dal secondo posto in cui serve: il grezzo 201 di un 101
+    /// (<see cref="GrezziDerivazione"/>). Qui resta solo l'adattatore per il figlio di
+    /// composizione, che tiene la firma con cui i chiamanti la conoscono.</para>
     /// </summary>
     private static (string PartNumber, string AtecCode, int? CatalogItemId, int? SupplierId, decimal? UnitCost)
         RisolviArticoloCommerciale(IDbConnection c, OfficinaCompositionChild child)
     {
-        string codexFormattato = CodexListItem.FormatCodice(child.RawCode);
-        string atec = (child.CodiceNuovo ?? "").Replace(".", "").Trim();
-        if (atec.Length == 0)
-            return (codexFormattato, "", null, null, null);
-
-        // Articolo Danea associato a quel codice ATEC. Si aggancia solo se ce n'è ESATTAMENTE
-        // uno: con due fornitori mappati sullo stesso codice la scelta è dell'utente, non nostra.
-        var articoli = c.Query<(int Id, string Code, decimal? UnitCost, int? SupplierId)>(@"
-            SELECT id, COALESCE(code,''), unit_cost, supplier_id
-            FROM catalog_items
-            WHERE is_active = 1 AND REPLACE(COALESCE(atec_code,''), '.', '') = @Atec
-            ORDER BY id", new { Atec = atec }).ToList();
-
-        if (articoli.Count != 1)
-            return (codexFormattato, atec, null, null, null);
-
-        var art = articoli[0];
-        return (art.Code.Length > 0 ? art.Code : codexFormattato, atec, art.Id, art.SupplierId, art.UnitCost);
+        ArticoloDaCodex.Esito e = ArticoloDaCodex.Risolvi(c, child.RawCode, child.CodiceNuovo);
+        return (e.PartNumber, e.AtecCode, e.CatalogItemId, e.SupplierId, e.UnitCost);
     }
 
     /// <summary>
@@ -2346,10 +2358,15 @@ public class ProjectsController : ControllerBase
                 catch { /* non bloccare l'update per errore notifica */ }
             }
 
-            // Lo stato può essere appena cambiato: se ora rivela la natura del lavoro, si congela.
-            // La riga si vede in Lavorazioni Officine, quindi chi ha quella pagina aperta va avvisato.
-            OfficinaRowSync.CongelaTipoDaStato(c, itemId);
+            // Avvisa chi ha aperto Lavorazioni Officine (la riga si vede lì).
             NotifyWorkRequestsChanged("update", id);
+
+            // #135: quantità e stato di un 101 muovono il suo grezzo 201 in DDP Commerciale.
+            // Anche il solo cambio di stato conta: passando a uno stato A9 la riga esce dai
+            // conteggi, e con lei il materiale che chiedeva.
+            var grezzi = GrezziDerivazione.Sincronizza(
+                c, id, GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null, req.RequestedBy);
+            if (!grezzi.NienteDaFare) NotifyDdpChange(id, conn, "update", 0, "COMMERCIAL");
 
             // Real-time: avvisa gli altri che guardano la distinta officina di questa commessa.
             NotifyDdpChange(id, conn, "update", itemId, "OFFICINA");
@@ -2402,9 +2419,17 @@ public class ProjectsController : ControllerBase
             // restano, scollegate dalla FK ON DELETE SET NULL.
             c.Execute("DELETE FROM ddp_officina_items WHERE id = @ItemId AND project_id = @Id",
                 new { ItemId = itemId, Id = id });
+
+            // #135: sparito il 101, sparisce anche il grezzo che chiedeva — a meno che nel
+            // frattempo sia stato messo in RDO o ordinato, e allora resta a chi compra
+            // (sganciato dalla derivazione, vedi GrezziDerivazione).
+            var grezzi = GrezziDerivazione.Sincronizza(
+                c, id, GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null);
+
             NotifyWorkRequestsChanged("delete", id);
             NotifyDdpChange(id, conn, "delete", itemId, "OFFICINA");
-            if (figliCommerciale > 0) NotifyDdpChange(id, conn, "delete", 0, "COMMERCIAL");
+            if (figliCommerciale > 0 || !grezzi.NienteDaFare)
+                NotifyDdpChange(id, conn, "delete", 0, "COMMERCIAL");
 
             int figli = figliOfficina + figliCommerciale;
             return Ok(ApiResponse<bool>.Ok(true, figli > 0
@@ -2500,17 +2525,19 @@ public class ProjectsController : ControllerBase
         // Costo materiali DDP — esclude solo gli stati «esclusi da totale» (aggregazione A9);
         // i materiali consegnati (A2) SONO un costo reale e restano nel totale.
         string[] ddpExcluded = DdpAggregationSet.Load(c, "A9", _cache);
-        decimal materialCostCommercial = c.ExecuteScalar<decimal>(@"
-            SELECT COALESCE(SUM(quantity * unit_cost), 0)
-            FROM bom_items
-            WHERE project_id = @Id AND COALESCE(item_status,'') NOT IN @Excluded",
-            new { Id = id, Excluded = ddpExcluded });
+        // La somma commerciale NON si ricopia: la fa ProjectEconomics, che porta con sé le due
+        // regole del Bilancio — dedup dei padri di composizione (#119) e quota dei grezzi
+        // (#135). Fino al 28/08/2026 qui c'era una terza copia della query, senza la dedup:
+        // su ogni commessa con un gruppo Codex importato questa card sommava anche
+        // l'intestazione ai suoi figli e diceva un materiale più alto del Bilancio.
+        decimal materialCostCommercial =
+            ProjectEconomics.GetCommercialMaterialCost(c, id, ddpExcluded);
 
-        decimal materialCostOfficina = c.ExecuteScalar<decimal>(@"
+        decimal materialCostOfficina = c.ExecuteScalar<decimal>($@"
             SELECT COALESCE(SUM(quantity * unit_cost), 0)
             FROM ddp_officina_items
             WHERE project_id = @Id AND COALESCE(item_status,'') NOT IN @Excluded
-              AND id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)",
+              AND {ProjectEconomics.OfficinaParentDedup}",
             new { Id = id, Excluded = ddpExcluded });
 
         data.MaterialCostCommercial = materialCostCommercial;

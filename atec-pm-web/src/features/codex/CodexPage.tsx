@@ -29,6 +29,13 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -59,7 +66,14 @@ import { canRecodeCodex } from "./codex-roles"
 import { dash } from "@/lib/format"
 
 const PAGE_SIZE = 50
+// 🪤 Chiave SENZA versione, e va bene così: `loadVisibility` parte dai default di COLUMNS e
+// sovrascrive solo le chiavi già salvate, quindi una colonna nuova nasce con il suo default
+// anche per chi ha un vecchio salvataggio. Da versionare solo se cambiasse il senso di una
+// chiave esistente.
 const COLUMN_STORAGE_KEY = "atec_pm_codex_columns"
+
+/** Filtro derivazione (#135): tutte · senza grezzo commerciale · con grezzo. */
+type CodexRefView = "all" | "missing" | "done"
 
 interface CodexCellContext {
   /** Ruoli ricodifica: scelta rapida di codifica sulle righe senza codice nuovo. */
@@ -72,6 +86,12 @@ interface CodexColumn {
   label: string
   defaultHidden?: boolean
   align?: "right"
+  /**
+   * La colonna non esiste come chiave lato server (né in `CodexSortColumns` né fra i filtri
+   * per-colonna): niente freccette e niente casella di filtro, o si manderebbe all'API un
+   * parametro che non conosce. Per la derivazione c'è il filtro «Derivazione» in barra.
+   */
+  noServerKey?: boolean
   cell: (item: CodexListItem, ctx: CodexCellContext) => React.ReactNode
 }
 
@@ -116,6 +136,24 @@ const COLUMNS: CodexColumn[] = [
           <Tag />
           <span className="sr-only">Assegna codice nuovo</span>
         </Button>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    // #135: da quale grezzo commerciale (201) si ricava il particolare a disegno. Sola
+    // lettura: si cambia dalla scheda articolo, non con un pulsante che scrive in griglia.
+    key: "refCommerciale",
+    label: "Rif. Commerciale",
+    noServerKey: true,
+    cell: (item) =>
+      item.refCommercialeCodice ? (
+        <span
+          className="font-medium tabular-nums"
+          title={decodeHtmlEntities(item.refCommercialeDescr)}
+        >
+          {item.refCommercialeCodice}
+        </span>
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
@@ -244,6 +282,7 @@ export function CodexPage() {
   >({})
   const debouncedFilters = useDebounced(columnFilters, 300)
   const [sort, setSort] = React.useState<SortState>({ by: "codice", dir: "asc" })
+  const [refView, setRefView] = React.useState<CodexRefView>("all")
 
   const [visibility, setVisibility] = React.useState<Record<string, boolean>>(
     loadVisibility
@@ -270,7 +309,7 @@ export function CodexPage() {
   // Reset alla prima pagina quando cambia ricerca, filtri o ordinamento.
   React.useEffect(() => {
     setPage(1)
-  }, [searchTerm, sort, debouncedFilters])
+  }, [searchTerm, sort, debouncedFilters, refView])
 
   React.useEffect(() => {
     try {
@@ -281,7 +320,7 @@ export function CodexPage() {
   }, [visibility])
 
   const listQuery = useQuery({
-    queryKey: ["codex", page, searchTerm, sort, debouncedFilters],
+    queryKey: ["codex", page, searchTerm, sort, debouncedFilters, refView],
     queryFn: () =>
       fetchCodex({
         page,
@@ -290,6 +329,9 @@ export function CodexPage() {
         sortBy: sort.by,
         sortDir: sort.dir,
         filters: debouncedFilters,
+        // "all" = nessun parametro: `refState` non va dentro `filters`, che è il dizionario
+        // dei LIKE per colonna.
+        refState: refView === "all" ? undefined : refView,
       }),
   })
 
@@ -421,6 +463,19 @@ export function CodexPage() {
               />
             </div>
             <div className="ml-auto flex gap-2">
+              <Select
+                value={refView}
+                onValueChange={(value) => setRefView(value as CodexRefView)}
+              >
+                <SelectTrigger size="sm" className="w-[190px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Derivazione: tutte</SelectItem>
+                  <SelectItem value="missing">Senza grezzo (201)</SelectItem>
+                  <SelectItem value="done">Con grezzo (201)</SelectItem>
+                </SelectContent>
+              </Select>
               {hasColumnFilters ? (
                 <Button
                   variant="outline"
@@ -480,13 +535,21 @@ export function CodexPage() {
                       key={column.key}
                       className={column.align === "right" ? "text-right" : undefined}
                     >
-                      <SortableHeader
-                        label={column.label}
-                        columnKey={column.key}
-                        sort={sort}
-                        onSort={setSort}
-                        align={column.align}
-                      />
+                      {column.noServerKey ? (
+                        // Etichetta ferma: senza chiave server non c'è niente da ordinare,
+                        // e una freccetta che non ordina è peggio di nessuna freccetta.
+                        <span className="px-2 text-sm font-medium">
+                          {column.label}
+                        </span>
+                      ) : (
+                        <SortableHeader
+                          label={column.label}
+                          columnKey={column.key}
+                          sort={sort}
+                          onSort={setSort}
+                          align={column.align}
+                        />
+                      )}
                     </TableHead>
                   ))}
                   {showActions ? <TableHead className="w-12" /> : null}
@@ -497,10 +560,12 @@ export function CodexPage() {
                       key={column.key}
                       className="h-auto px-2 py-2 align-middle"
                     >
-                      <ColumnFilterInput
-                        value={columnFilters[column.key] ?? ""}
-                        onChange={(value) => setColumnFilter(column.key, value)}
-                      />
+                      {column.noServerKey ? null : (
+                        <ColumnFilterInput
+                          value={columnFilters[column.key] ?? ""}
+                          onChange={(value) => setColumnFilter(column.key, value)}
+                        />
+                      )}
                     </TableHead>
                   ))}
                   {showActions ? <TableHead className="w-12" /> : null}

@@ -290,13 +290,25 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     [aggregationsQuery.data]
   )
 
-  const invalidate = React.useCallback(
-    () =>
+  /**
+   * 🪤 #135: una riga di officina non tocca più la sola distinta officina. Un particolare
+   * a disegno «101» può derivare da un commerciale «201» (il grezzo da comprare), e la
+   * riga del grezzo nella DDP COMMERCIALE la crea, aggiorna e cancella il server da solo
+   * seguendo questa distinta: aggiunta dal picker, cancellazione, quantità e stato.
+   * Invalidando la sola officina la scheda accanto resterebbe con la distinta vecchia
+   * fino al ricaricamento della pagina. Sta qui e non sui singoli chiamanti perché di
+   * qui passano tutte le scritture della pagina (picker, menu riga, dialog, real-time).
+   */
+  const invalidate = React.useCallback(async () => {
+    await Promise.all([
       queryClient.invalidateQueries({
         queryKey: ["project-ddp-officina", projectId],
       }),
-    [queryClient, projectId]
-  )
+      queryClient.invalidateQueries({
+        queryKey: ["project-ddp", projectId, "COMMERCIAL"],
+      }),
+    ])
+  }, [queryClient, projectId])
 
   const onDdpChange = React.useCallback(
     (change: { ddpType: string }) => {

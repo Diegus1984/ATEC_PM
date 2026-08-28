@@ -51,6 +51,24 @@ public class CodexListItem
     public string Um { get; set; } = "";
     public string Ubicazione { get; set; } = "";
     public string Codexforn { get; set; } = "";
+
+    // ── Derivazione 101 → 201 (#135) ──────────────────────────────
+    // Il grezzo commerciale da cui si ricava questo particolare a disegno. Vuoto = nessuna
+    // derivazione (o articolo che non è un 1xx). Arriva già nella lista per non fare una
+    // query per riga quando la griglia mostra la colonna.
+
+    /// <summary>Id della riga di <c>codex_item_references</c>: serve alla DELETE.</summary>
+    public int? RefCommercialeId { get; set; }
+
+    private string _refCommercialeCodice = "";
+    /// <summary>Codice del 201 di derivazione, col punto come tutti gli altri codici Codex.</summary>
+    public string RefCommercialeCodice
+    {
+        get => _refCommercialeCodice.Length > 0 ? FormatCodice(_refCommercialeCodice) : "";
+        set => _refCommercialeCodice = value ?? "";
+    }
+
+    public string RefCommercialeDescr { get; set; } = "";
 }
 
 public class CodexSyncStatus

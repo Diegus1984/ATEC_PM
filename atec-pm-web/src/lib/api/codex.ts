@@ -5,6 +5,7 @@ import type {
   CodexBulkReserveItem,
   CodexBulkReserveResult,
   CodexGeneratedCode,
+  CodexItemReference,
   CodexListItem,
   CodexPrefix,
   CodexRecodeStats,
@@ -25,6 +26,11 @@ export interface FetchCodexParams {
   filters?: Record<string, string>
   /** Stato ricodifica: "missing" = senza codice nuovo, "done" = con codice nuovo. */
   newCodeState?: "missing" | "done"
+  /**
+   * Stato derivazione (#135): "missing" = particolari a disegno SENZA il grezzo commerciale,
+   * "done" = con. Non va dentro `filters`: quel dizionario è per i LIKE per-colonna.
+   */
+  refState?: "missing" | "done"
 }
 
 /** Lista articoli Codex (paginata server-side, ricerca multi-colonna, ordinamento). */
@@ -51,6 +57,9 @@ export async function fetchCodex(
   }
   if (params.newCodeState) {
     query.set("newCodeState", params.newCodeState)
+  }
+  if (params.refState) {
+    query.set("refState", params.refState)
   }
   if (params.filters) {
     for (const [key, value] of Object.entries(params.filters)) {
@@ -252,12 +261,37 @@ export async function deleteCodex(id: number): Promise<void> {
 
 // ── RIFERIMENTI 101 → 201/401 ───────────────────────────
 
+/**
+ * Scrive o CAMBIA la derivazione: il server fa un upsert sulla coppia (articolo, tipo), e un
+ * particolare a disegno ha un solo grezzo. Non esiste (né serve) una PUT.
+ *
+ * 🪤 L'id che torna dal server non è affidabile quando la riga viene aggiornata invece che
+ * creata: per la {@link deleteCodexReference} prendere l'id da {@link fetchCodexReferences}.
+ */
 export async function addCodexReference(
   request: AddCodexReferenceRequest
 ): Promise<void> {
   const response = await apiPost<ApiResponse<number>>(
     "/api/codex/references",
     request
+  )
+  unwrapApi(response)
+}
+
+/** Derivazioni di un articolo (per un 101: il suo grezzo commerciale). */
+export async function fetchCodexReferences(
+  sourceId: number
+): Promise<CodexItemReference[]> {
+  const response = await apiGet<ApiResponse<CodexItemReference[]>>(
+    `/api/codex/references/${sourceId}`
+  )
+  return unwrapApi(response) ?? []
+}
+
+/** Toglie la derivazione. `id` è quello della riga di riferimento, non dell'articolo. */
+export async function deleteCodexReference(id: number): Promise<void> {
+  const response = await apiDelete<ApiResponse<boolean>>(
+    `/api/codex/references/${id}`
   )
   unwrapApi(response)
 }
