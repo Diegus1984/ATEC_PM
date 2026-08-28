@@ -13,16 +13,26 @@ import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   cashFlowTotals,
+  type SalCashAmount,
   type SalCashFlowTotals,
 } from "./sal-economics"
 
-// Cash Flow SAL (Fase 5 v10): 5 totali globali su tutte le commesse ATTIVE,
-// ciascuno Netto e Con IVA. Dati da GET /api/sal/economics (solo PM/ADMIN,
-// il server risponde 403 agli altri ruoli).
+/**
+ * Le sole voci di `SalCashFlowTotals` che sono un importo Netto/Con IVA: dalla #134 il
+ * tipo porta anche un contatore (`ordiniEsclusi`), che una card non saprebbe disegnare.
+ * Scritto come tipo derivato e non come elenco a mano: la prossima voce si sistema da sé.
+ */
+type SalCardKey = {
+  [K in keyof SalCashFlowTotals]: SalCashFlowTotals[K] extends SalCashAmount ? K : never
+}[keyof SalCashFlowTotals]
+
+// Analisi Economica SAL (Fase 5 v10, rinominata dalla #134 — prima «Cash Flow»):
+// 5 totali globali su tutte le commesse ATTIVE, ciascuno Netto e Con IVA. Dati da
+// GET /api/sal/economics (solo PM/ADMIN, il server risponde 403 agli altri ruoli).
 // Aggiornamento real-time gestito da SalPage tramite SignalR (GlobalSalChanged).
 
 const CARDS: {
-  key: keyof SalCashFlowTotals
+  key: SalCardKey
   title: string
   accent: string
   note?: string | ((totals: SalCashFlowTotals) => string)
@@ -31,6 +41,12 @@ const CARDS: {
     key: "ordini",
     title: "Totale Ordini commesse Attive",
     accent: "border-l-sky-600",
+    // #134: le commesse col SAL chiuso escono dal portafoglio ordini. Il perché sta
+    // scritto sulla card: un totale che cala senza spiegazione sembra un difetto.
+    note: (totals) =>
+      totals.ordiniEsclusi > 0
+        ? `Escluse ${totals.ordiniEsclusi} commesse col SAL chiuso (incasso al 100%).`
+        : "Escluse le commesse col SAL chiuso (incasso al 100%): oggi nessuna.",
   },
   {
     key: "incassate",
@@ -57,7 +73,7 @@ const CARDS: {
 ]
 
 /** Apre una finestra con la SOLA tabella dei totali e ne lancia la stampa. */
-function printCashFlow(totals: SalCashFlowTotals): void {
+function printAnalisiEconomica(totals: SalCashFlowTotals): void {
   const body = CARDS.map((c) => {
     const v = totals[c.key]
     const noteText = typeof c.note === "function" ? c.note(totals) : c.note
@@ -90,7 +106,7 @@ function printCashFlow(totals: SalCashFlowTotals): void {
   `
 
   printHtml({
-    title: "Cash Flow SAL — commesse attive",
+    title: "Analisi Economica SAL — commesse attive",
     subtitle: `Situazione al ${formatDateShort(new Date())}`,
     contentHtml,
     orientation: "portrait",
@@ -116,7 +132,7 @@ export function SalCashFlowView() {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground justify-center py-12">
         <RefreshCw className="size-4 animate-spin" />
-        Caricamento cash flow SAL...
+        Caricamento analisi economica SAL...
       </div>
     )
   }
@@ -147,7 +163,7 @@ export function SalCashFlowView() {
           variant="outline"
           size="sm"
           className="h-8"
-          onClick={() => printCashFlow(totals)}
+          onClick={() => printAnalisiEconomica(totals)}
         >
           <Printer className="size-3.5 mr-1.5" />
           Stampa PDF

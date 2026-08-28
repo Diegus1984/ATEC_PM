@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Banknote,
   CalendarClock,
+  CheckCircle2,
   CircleAlert,
   ExternalLink,
   Folder,
@@ -10,6 +11,7 @@ import {
   Printer,
   ReceiptText,
   RefreshCw,
+  Scale,
   TriangleAlert,
 } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
@@ -38,10 +40,12 @@ import { projectStatusMeta } from "@/features/commesse/project-status"
 import { printSalSheet } from "@/features/commesse/sal-sheet-print"
 import { salSummaryDots } from "@/features/commesse/sal-utils"
 import { ProjectSal } from "@/features/commesse/ProjectSal"
+import { salChiuso } from "./sal-economics"
 import { SalIncassoProgress } from "./SalIncassoProgress"
 import { SalAnalisiView } from "./SalAnalisiView"
 import { SalCashFlowView } from "./SalCashFlowView"
 import { SalProspettoView } from "./SalProspettoView"
+import { SalSapAccontiView } from "./SalSapAccontiView"
 import { SalWarningView } from "./SalWarningView"
 import { SalTableView } from "./SalTableView"
 import { useGlobalSalHub } from "@/lib/signalr/use-sal-hub"
@@ -57,7 +61,7 @@ const DISPLAY_MODE_STORAGE_KEY = "sal:display-mode:v1"
 export function SalPage() {
   const queryClient = useQueryClient()
 
-  // Le viste economiche (Cash Flow / Analisi) dipendono dalla funzione `sal.economics`
+  // Le viste economiche (Analisi Economica / grafico) dipendono dalla funzione `sal.economics`
   // (livello 2 = PM/ADMIN come prima, più i reparti a cui è concessa); l'endpoint fa 403.
   const canSeeEconomics = canAccessFeature("sal.economics")
 
@@ -67,16 +71,18 @@ export function SalPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Stato di vista: all = tutte le commesse attive; prospetto = prospetto SAL;
-  // cashflow = vista economica globale con card + grafico Analisi (solo PM/ADMIN);
+  // sapAcconti = quadratura col conto acconti SAP (#131, solo PM/ADMIN);
+  // cashflow = Analisi Economica: card + grafico, solo PM/ADMIN (#134: era «Cash Flow»);
   // perProject = commessa singola
   const [view, setView] = React.useState<
-    "all" | "prospetto" | "warnFatt" | "warnIncasso" | "cashflow" | "perProject"
+    "all" | "prospetto" | "sapAcconti" | "warnFatt" | "warnIncasso" | "cashflow" | "perProject"
   >(() => {
     const v = searchParams.get("view")
     if (v === "prospetto") return "prospetto"
+    if (v === "sap-acconti" && canSeeEconomics) return "sapAcconti"
     if (v === "warn-fatturazione") return "warnFatt"
     if (v === "warn-incasso") return "warnIncasso"
-    // "analisi" è un alias storico: l'Analisi vive sotto le card del Cash Flow
+    // "analisi" è un alias storico: il grafico vive sotto le card dell'Analisi Economica
     if ((v === "cashflow" || v === "analisi") && canSeeEconomics) return "cashflow"
     return "all"
   })
@@ -137,11 +143,13 @@ export function SalPage() {
     const next =
       view === "prospetto" || view === "cashflow"
         ? view
-        : view === "warnFatt"
-          ? "warn-fatturazione"
-          : view === "warnIncasso"
-            ? "warn-incasso"
-            : null
+        : view === "sapAcconti"
+          ? "sap-acconti"
+          : view === "warnFatt"
+            ? "warn-fatturazione"
+            : view === "warnIncasso"
+              ? "warn-incasso"
+              : null
     if ((searchParams.get("view") ?? null) === next) return
     const params = new URLSearchParams(searchParams)
     if (next) params.set("view", next)
@@ -176,9 +184,29 @@ export function SalPage() {
     return (projectsQuery.data?.items ?? []).filter((p) => isCommessaCode(p.code))
   }, [projectsQuery.data])
 
-  const activeProjects = React.useMemo(() => {
-    return allProjects.filter((p) => p.status === "ACTIVE")
-  }, [allProjects])
+  /**
+   * #133 — nell'elenco (Card e Tabella) entrano SOLO le commesse che il foglio SAL ce
+   * l'hanno davvero, ed entrano **le stesse** che elenca la barra laterale.
+   *
+   * Prima l'elenco partiva dalle commesse attive e le viste rapide dal riepilogo SAL: due
+   * fonti diverse per la stessa domanda, e infatti dicevano numeri diversi — la barra
+   * laterale ne contava 12 e le card ne mostravano di più, con dentro commesse dove ogni
+   * campo era «—». Adesso la fonte è una sola, il riepilogo, che il server costruisce dalle
+   * righe SAL vere: stesso insieme, stesso ordine, niente da riconciliare a occhio.
+   *
+   * 🪤 Non è «le commesse attive che hanno un SAL»: è il perimetro del riepilogo, che
+   * comprende anche la commessa chiusa con fatture ancora aperte — sono i soldi che restano
+   * da incassare, ed è il motivo per cui il server la tiene dentro (vedi `ProjectScope`).
+   *
+   * Un piano di fatturazione nuovo si apre dalla scheda della commessa (sezione «SAL /
+   * Fatturazione»), che è il posto dove si va quando la commessa nasce.
+   */
+  const commesseConSal = React.useMemo(() => {
+    const perId = new Map(allProjects.map((p) => [p.id, p]))
+    return (summaryQuery.data ?? [])
+      .map((s) => perId.get(s.projectId))
+      .filter((p): p is ProjectLookupItem => p != null)
+  }, [allProjects, summaryQuery.data])
 
   // Somma di warn + pre + incassi scaduti per il conteggio del Prospetto SAL
   const prospettoCount = React.useMemo(() => {
@@ -210,7 +238,7 @@ export function SalPage() {
       },
       icon: <ReceiptText />,
       label: "Tutte le commesse",
-      count: activeProjects.length,
+      count: commesseConSal.length,
     },
     {
       key: "prospetto",
@@ -223,6 +251,22 @@ export function SalPage() {
       label: "Prospetto SAL",
       count: prospettoCount,
     },
+    // #131: la quadratura col conto acconti SAP sta subito dopo il Prospetto, come chiesto.
+    // Sono importi: chi non ha `sal.economics` non la vede proprio (e l'endpoint fa 403).
+    ...(canSeeEconomics
+      ? [
+          {
+            key: "sapAcconti",
+            selected: view === "sapAcconti",
+            onClick: () => {
+              setView("sapAcconti")
+              setSelectedProjectId(null)
+            },
+            icon: <Scale />,
+            label: "SAP Acconti",
+          } satisfies PmQuickView,
+        ]
+      : []),
     // Le due liste di allarme: il Prospetto le contiene tutte ma non è filtrabile per
     // segnalazione, quindi «cosa devo fatturare» e «cosa non ho incassato» avevano
     // bisogno di due viste proprie.
@@ -252,7 +296,7 @@ export function SalPage() {
 
   if (canSeeEconomics) {
     const monitoredCount = summaryQuery.data?.length ?? 0
-    // Un'unica voce: la vista Cash Flow contiene le card e, sotto, il grafico Analisi
+    // Un'unica voce: l'Analisi Economica contiene le card e, sotto, il grafico
     quickViews.push({
       key: "cashflow",
       selected: view === "cashflow",
@@ -261,7 +305,9 @@ export function SalPage() {
         setSelectedProjectId(null)
       },
       icon: <Banknote />,
-      label: "Cash Flow",
+      // #134: si chiamava «Cash Flow». Il parametro `?view=cashflow` resta com'era —
+      // rinominarlo romperebbe i collegamenti gia' salvati da chi la usa.
+      label: "Analisi Economica",
       count: monitoredCount,
     })
   }
@@ -298,10 +344,10 @@ export function SalPage() {
       return found ? [found] : []
     }
     if (view === "all") {
-      return activeProjects
+      return commesseConSal
     }
     return []
-  }, [view, selectedProjectId, allProjects, activeProjects])
+  }, [view, selectedProjectId, allProjects, commesseConSal])
 
   const expandAll = () => {
     const next: Record<number, boolean> = {}
@@ -391,23 +437,31 @@ export function SalPage() {
           <section className="flex-1 space-y-4 overflow-y-auto pr-1 min-h-0 pb-4">
             {view === "prospetto" ? (
               <SalProspettoView />
+            ) : view === "sapAcconti" ? (
+              <SalSapAccontiView />
             ) : view === "warnFatt" ? (
               <SalWarningView mode="fatturazione" />
             ) : view === "warnIncasso" ? (
               <SalWarningView mode="incasso" />
             ) : view === "cashflow" ? (
               <>
-                {/* Card di sintesi + grafico Analisi sulla stessa pagina (richiesta 09/07) */}
+                {/* Card di sintesi + grafico sulla stessa pagina (richiesta 09/07) */}
                 <SalCashFlowView />
                 <SalAnalisiView />
               </>
-            ) : projectsQuery.isLoading ? (
+            ) : projectsQuery.isLoading || summaryQuery.isLoading ? (
+              // Il riepilogo decide chi entra nell'elenco (#133): finché non c'è, un
+              // «Nessuna commessa trovata» sarebbe una risposta data prima di sapere.
               <p className="text-sm text-muted-foreground p-4">Caricamento commesse...</p>
             ) : projectsQuery.isError ? (
               <PageErrorAlert message={(projectsQuery.error as Error).message} />
             ) : visibleProjects.length === 0 ? (
               <div className="text-center py-16 border border-dashed rounded-lg bg-muted/10">
-                <p className="text-sm font-medium text-muted-foreground">Nessuna commessa trovata</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {view === "all"
+                    ? "Nessuna commessa con un foglio SAL compilato"
+                    : "Nessuna commessa trovata"}
+                </p>
               </div>
             ) : displayMode === "table" ? (
               <SalTableView
@@ -519,6 +573,18 @@ function ProjectSalCard({
             <statusMeta.icon className="size-3" />
             {statusMeta.label}
           </Badge>
+          {/* #134: il SAL e' incassato al 100%. Sta accanto al tag di stato perche' e'
+              un'altra cosa: la commessa puo' essere ancora Attiva col piano gia' chiuso. */}
+          {salSummary != null && salChiuso(salSummary.percTotal, salSummary.percPaid) && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px] border-emerald-600/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              title="Piano di fatturazione incassato al 100%: fuori dal totale ordini dell'Analisi Economica"
+            >
+              <CheckCircle2 className="size-3" />
+              SAL CHIUSO
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-3 shrink-0 ml-4" onClick={(e) => e.stopPropagation()}>

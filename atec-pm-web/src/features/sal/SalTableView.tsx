@@ -7,6 +7,7 @@ import { DataTableCard } from "@/components/shared/data-table-card"
 import { Button } from "@/components/ui/button"
 import { ProjectSal } from "@/features/commesse/ProjectSal"
 import { printSalSheet } from "@/features/commesse/sal-sheet-print"
+import { salChiuso } from "./sal-economics"
 import { SalIncassoProgress } from "./SalIncassoProgress"
 import { fetchSal } from "@/lib/api/sal"
 import type { ProjectLookupItem, SalSummary } from "@/lib/api/types"
@@ -173,10 +174,28 @@ export function SalTableView({
         header: "Stato",
         cell: ({ row }) => {
           const st = row.original.status
-          if (st === "ACTIVE") return <span className="text-xs font-semibold text-emerald-600">Attiva</span>
+          const sum = summaryMap.get(row.original.id)
+          // #134: il tag «SAL CHIUSO» sta accanto allo stato anche qui. Card e Tabella
+          // sono due disegni dello stesso elenco: se il tag comparisse solo su una, si
+          // tornerebbe alla discordanza che ha aperto la #133.
+          const chiuso = sum != null && salChiuso(sum.percTotal, sum.percPaid)
           return (
-            <span className="uppercase text-[10px] bg-amber-100 text-amber-800 px-1 rounded font-bold">
-              {st}
+            <span className="flex flex-wrap items-center gap-1">
+              {st === "ACTIVE" ? (
+                <span className="text-xs font-semibold text-emerald-600">Attiva</span>
+              ) : (
+                <span className="uppercase text-[10px] bg-amber-100 text-amber-800 px-1 rounded font-bold">
+                  {st}
+                </span>
+              )}
+              {chiuso && (
+                <span
+                  className="uppercase text-[10px] bg-emerald-100 text-emerald-800 px-1 rounded font-bold"
+                  title="Piano di fatturazione incassato al 100%"
+                >
+                  SAL chiuso
+                </span>
+              )}
             </span>
           )
         },

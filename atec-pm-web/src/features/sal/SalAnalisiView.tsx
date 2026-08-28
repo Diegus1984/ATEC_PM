@@ -187,7 +187,7 @@ function printAnalisi(
   `
 
   printHtml({
-    title: "Analisi Cash Flow SAL — serie mensile",
+    title: "Analisi Economica SAL — serie mensile",
     subtitle: `Situazione al ${formatDateShort(new Date())} — barre per mese di Ipotesi Fatturazione; Incasso previsto per mese di Data Prevista Saldo Fattura.${truncNote}`,
     contentHtml,
     orientation: "landscape",

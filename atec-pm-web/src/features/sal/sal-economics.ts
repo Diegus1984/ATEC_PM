@@ -24,7 +24,7 @@ export interface SalCashAmount {
   conIva: number
 }
 
-/** I 5 totali del Cash Flow SAL (Ordini / Incassate / Emesse / da Fatturare / Avere) + Totale Emesso cumulativo. */
+/** I 5 totali dell'Analisi Economica SAL (Ordini / Incassate / Emesse / da Fatturare / Avere) + Totale Emesso cumulativo. */
 export interface SalCashFlowTotals {
   ordini: SalCashAmount
   incassate: SalCashAmount
@@ -32,6 +32,8 @@ export interface SalCashFlowTotals {
   daFatturare: SalCashAmount
   avere: SalCashAmount
   totaleEmesso: SalCashAmount
+  /** #134: quante commesse col SAL chiuso sono state tolte dal «Totale Ordini». */
+  ordiniEsclusi: number
 }
 
 /** Punto mensile della serie del grafico Analisi (barre impilate + linea prev). */
@@ -64,6 +66,32 @@ export interface SalDrillPill {
 /** Normalizza numeri nullable/NaN a 0 per le somme. */
 const num = (v: number | null | undefined): number =>
   v == null || Number.isNaN(v) ? 0 : v
+
+/**
+ * #134 — **SAL chiuso**: il piano di fatturazione è incassato al 100%, cioè la somma
+ * delle percentuali «Pagata» ha raggiunto la somma totale delle percentuali.
+ *
+ * <p>La regola sta scritta QUI e in nessun altro posto: la usano il tag sulla commessa
+ * (card e tabella) e l'esclusione dal «Totale Ordini commesse Attive». Due copie
+ * allineate non danno fastidio finché restano allineate — il guaio è che quando smettono
+ * non se ne accorge nessuno, ed è già costato le segnalazioni #114, #117 e #133.</p>
+ *
+ * <p>🪤 Il confronto ha una tolleranza: dalla #130 le percentuali arrivano a 10 decimali,
+ * e dopo il giro JSON due somme che in banca dati sono identiche possono differire
+ * nell'ultimo bit. Un millesimo di punto è irrilevante per la domanda «è tutto
+ * incassato?», mentre un 99,99% resta lontanissimo dalla soglia e non si chiude.</p>
+ */
+const TOLLERANZA_PERC = 1e-6
+
+export function salChiuso(
+  percTotal: number | null | undefined,
+  percPaid: number | null | undefined
+): boolean {
+  const totale = num(percTotal)
+  // Senza righe SAL non c'è niente da chiudere: una commessa vuota non è «incassata».
+  if (totale <= 0) return false
+  return num(percPaid) >= totale - TOLLERANZA_PERC
+}
 
 const MESI_SHORT = [
   "gen", "feb", "mar", "apr", "mag", "giu",
@@ -136,16 +164,52 @@ export function classifySalRow(
 }
 
 /**
+ * Le commesse col SAL chiuso (#134), ricavate dalle righe economiche: per ognuna la
+ * somma delle percentuali e quella delle sole righe «Pagata», poi <see cref="salChiuso"/>.
+ *
+ * <p>Non arriva un flag dal server perché il dato per deciderlo è già tutto qui, ed è lo
+ * stesso che alimenta il tag sulla commessa: due strade diverse per la stessa risposta
+ * sarebbero due numeri che prima o poi divergono.</p>
+ */
+function progettiConSalChiuso(rows: SalEconomicsRow[]): Set<number> {
+  const totali = new Map<number, { tot: number; pagata: number }>()
+  for (const row of rows) {
+    const slot = totali.get(row.projectId) ?? { tot: 0, pagata: 0 }
+    slot.tot += num(row.perc)
+    if (salIsPagata(row.pagamento)) slot.pagata += num(row.perc)
+    totali.set(row.projectId, slot)
+  }
+
+  const chiusi = new Set<number>()
+  for (const [projectId, { tot, pagata }] of totali) {
+    if (salChiuso(tot, pagata)) chiusi.add(projectId)
+  }
+  return chiusi
+}
+
+/**
  * Totali Cash Flow v10 da GET /api/sal/economics ({ headers, rows }):
- * - Totale Ordini: netto = Σ headers[].valore (TUTTI gli header, anche senza
- *   righe); con IVA = Σ headers[].valore + Σ iva di TUTTE le rows;
+ * - Totale Ordini: netto = Σ headers[].valore; con IVA = netto + Σ iva delle rows —
+ *   **escluse le commesse col SAL chiuso** (#134);
  * - Incassate / Emesse / da Fatturare: netto = Σ importo del bucket;
  *   con IVA = Σ (importo + iva) = Σ totIva del bucket;
  * - Avere = Emesse + da Fatturare (sia netto che con IVA).
+ *
+ * <p>🪤 **L'esclusione tocca SOLO il Totale Ordini**, come chiede la #134. Le fatture di
+ * una commessa col SAL chiuso restano nelle «Incassate»: sono state incassate davvero, e
+ * toglierle da lì cambierebbe la storia invece del portafoglio ordini. Ne segue che
+ * «Incassate» può risultare più grande di «Totale Ordini» — è voluto, non è uno sbaglio.</p>
  */
 export function cashFlowTotals(data: SalEconomics): SalCashFlowTotals {
-  const ordiniNetto = data.headers.reduce((acc, h) => acc + num(h.valore), 0)
-  const ivaTotale = data.rows.reduce((acc, r) => acc + num(r.iva), 0)
+  const chiusi = progettiConSalChiuso(data.rows)
+
+  // L'IVA segue l'ordine: se la commessa esce dal netto deve uscire anche dal «con IVA»,
+  // altrimenti la card mostrerebbe un imponibile senza la sua imposta.
+  const headersAperti = data.headers.filter((h) => !chiusi.has(h.projectId))
+  const ordiniNetto = headersAperti.reduce((acc, h) => acc + num(h.valore), 0)
+  const ivaTotale = data.rows
+    .filter((r) => !chiusi.has(r.projectId))
+    .reduce((acc, r) => acc + num(r.iva), 0)
 
   const bucketTotals: Record<SalBucket, SalCashAmount> = {
     inc: { netto: 0, conIva: 0 },
@@ -172,6 +236,7 @@ export function cashFlowTotals(data: SalEconomics): SalCashFlowTotals {
       netto: bucketTotals.inc.netto + bucketTotals.em.netto,
       conIva: bucketTotals.inc.conIva + bucketTotals.em.conIva,
     },
+    ordiniEsclusi: data.headers.filter((h) => chiusi.has(h.projectId)).length,
   }
 }
 
