@@ -14,9 +14,20 @@ namespace ATEC.PM.Tests.Infrastruttura;
 /// server» che uno crede di avere non esisterebbe — se ne accorgerebbe chi un giorno
 /// cerca il backup per un ripristino.</para>
 /// </summary>
+[Collection(SchemaCondiviso.Nome)]
 public class DestinazionePacchettiTests
 {
-    private static FullBackupService Servizio(DatabaseDiProva db, Dictionary<string, string?> config)
+    private readonly SchemaCondiviso _schema;
+
+    // Si prova da dove esce la destinazione dei pacchetti, non lo schema:
+    // lo schema condiviso basta e avanza, e costa millisecondi invece di secondi.
+    public DestinazionePacchettiTests(SchemaCondiviso schema)
+    {
+        _schema = schema;
+        _schema.Pulisci();
+    }
+
+    private static FullBackupService Servizio(SchemaCondiviso db, Dictionary<string, string?> config)
     {
         config["ConnectionStrings:Default"] = db.ConnectionString;
         IConfiguration cfg = new ConfigurationBuilder().AddInMemoryCollection(config).Build();
@@ -29,9 +40,7 @@ public class DestinazionePacchettiTests
     [FactRichiedeMySql]
     public void SenzaImpostazioni_valeLaCartellaLocalePredefinita()
     {
-        using var db = new DatabaseDiProva("dest_pacchetti_default");
-        db.CreaSchemaCompleto();
-        var servizio = Servizio(db, new Dictionary<string, string?> { ["Backup:Path"] = @"C:\Prova_Backups" });
+        var servizio = Servizio(_schema, new Dictionary<string, string?> { ["Backup:Path"] = @"C:\Prova_Backups" });
 
         (string percorso, string origine) = servizio.DestinazionePacchetti();
 
@@ -42,9 +51,7 @@ public class DestinazionePacchettiTests
     [FactRichiedeMySql]
     public void ConAppsettings_valeAppsettings()
     {
-        using var db = new DatabaseDiProva("dest_pacchetti_file");
-        db.CreaSchemaCompleto();
-        var servizio = Servizio(db, new Dictionary<string, string?>
+        var servizio = Servizio(_schema, new Dictionary<string, string?>
         {
             ["Backup:PackagePath"] = @"\\nas\backup\pm",
         });
@@ -63,14 +70,12 @@ public class DestinazionePacchettiTests
     [FactRichiedeMySql]
     public void LaPaginaVinceSuAppsettings()
     {
-        using var db = new DatabaseDiProva("dest_pacchetti_pagina");
-        db.CreaSchemaCompleto();
-        using (var c = db.Servizio().Open())
+        using (var c = _schema.Servizio().Open())
             c.Execute(@"INSERT INTO app_config (config_key, config_value)
                         VALUES (@K, @V)",
                 new { K = FullBackupService.ChiavePercorso, V = @"\\pc-nuovo\backup" });
 
-        var servizio = Servizio(db, new Dictionary<string, string?>
+        var servizio = Servizio(_schema, new Dictionary<string, string?>
         {
             ["Backup:PackagePath"] = @"\\nas-vecchio\backup",
         });
@@ -89,8 +94,6 @@ public class DestinazionePacchettiTests
     [FactRichiedeMySql]
     public void PulisciBackupVecchi_EliminaIVecchiMaTieneLaScorta()
     {
-        using var db = new DatabaseDiProva("dest_pacchetti_pulizia");
-        db.CreaSchemaCompleto();
 
         string dirPacchetti = Path.Combine(Path.GetTempPath(), $"atec_puli_zip_{Guid.NewGuid():N}");
         string dirDump = Path.Combine(Path.GetTempPath(), $"atec_puli_sql_{Guid.NewGuid():N}");
@@ -98,7 +101,7 @@ public class DestinazionePacchettiTests
         Directory.CreateDirectory(dirDump);
         try
         {
-            var servizio = Servizio(db, new Dictionary<string, string?>
+            var servizio = Servizio(_schema, new Dictionary<string, string?>
             {
                 ["Backup:PackagePath"] = dirPacchetti,
                 ["Backup:Path"] = dirDump,
@@ -142,9 +145,7 @@ public class DestinazionePacchettiTests
     [FactRichiedeMySql]
     public void ProvaDestinazione_localeScrivibileEImpossibile()
     {
-        using var db = new DatabaseDiProva("dest_pacchetti_prova");
-        db.CreaSchemaCompleto();
-        var servizio = Servizio(db, new Dictionary<string, string?>());
+        var servizio = Servizio(_schema, new Dictionary<string, string?>());
 
         string buona = Path.Combine(Path.GetTempPath(), $"atec_prova_dest_{Guid.NewGuid():N}");
         try

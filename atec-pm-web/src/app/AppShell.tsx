@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Bug, ChevronDown, LogOut, Search } from "lucide-react"
 
@@ -53,7 +54,7 @@ import { useTravelBadge } from "@/features/trasferta/useTravelBadge"
 import { useDeadlinesCount } from "@/features/scadenze/useDeadlinesCount"
 import { useSalWarnings } from "@/features/sal/useSalWarnings"
 import { useDdpUpdatedList } from "@/features/gestore-ddp/useDdpUpdatedList"
-import { APP_BUILD } from "@/lib/app-version"
+import { APP_BUILD, fetchServerVersion } from "@/lib/app-version"
 import { cn } from "@/lib/utils"
 import {
   canAccessFeature,
@@ -107,6 +108,17 @@ export function AppShell() {
   const session = getSession()
   const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
+
+  // Versione del server: cambia solo quando si pubblica, quindi non la si ricontrolla di
+  // continuo. Se non arriva (server piu' vecchio, o momento del riavvio) resta null e la
+  // riga qui sotto mostra solo la parte «Web», come faceva prima.
+  const versioneServerQuery = useQuery({
+    queryKey: ["server-version"],
+    queryFn: fetchServerVersion,
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+  const versioneServer = versioneServerQuery.data ?? null
 
   // Persistenza delle macro sezioni collassate (ricordate per utente in localStorage)
   const [collapsedGroupIds, setCollapsedGroupIds] = React.useState<Set<string>>(() => {
@@ -229,18 +241,28 @@ export function AppShell() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" className="pointer-events-none">
+              <SidebarMenuButton size="lg" className="pointer-events-none h-auto py-1.5">
                 <AtecBrandIcon size="sm" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">ATEC PM</span>
                   {/* Build in chiaro: dice a colpo d'occhio (anche al telefono, leggendola
-                      da chi chiama) su quale versione sta girando quella postazione. */}
+                      da chi chiama) su quale versione sta girando quella postazione.
+                      Due righe e non una: affiancate non ci stanno nella barra e la
+                      seconda finiva tagliata a meta'. */}
                   <span
                     className="truncate text-xs text-sidebar-foreground/70"
-                    title={`Versione installata: ${APP_BUILD}`}
+                    title={`Client web installato su questa postazione: ${APP_BUILD}`}
                   >
                     Web · {APP_BUILD}
                   </span>
+                  {versioneServer && (
+                    <span
+                      className="truncate text-xs text-sidebar-foreground/70"
+                      title={`Server installato: ${versioneServer}`}
+                    >
+                      Srv · {versioneServer}
+                    </span>
+                  )}
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>

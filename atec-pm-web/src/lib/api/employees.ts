@@ -18,6 +18,16 @@ export async function fetchRealEmployees(): Promise<LookupItem[]> {
   return unwrapApi(response)
 }
 
+/**
+ * Dipendenti con obbligo di timbratura (esclusi forfettari / esenti da cartellino presenze).
+ */
+export async function fetchPunchingEmployees(): Promise<LookupItem[]> {
+  const response = await apiGet<ApiResponse<LookupItem[]>>(
+    "/api/employees/real?mustPunch=true"
+  )
+  return unwrapApi(response)
+}
+
 export async function fetchEmployee(id: number): Promise<EmployeeSaveRequest> {
   const response = await apiGet<ApiResponse<EmployeeSaveRequest>>(
     `/api/employees/${id}`

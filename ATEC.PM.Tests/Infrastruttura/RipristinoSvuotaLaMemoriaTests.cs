@@ -30,7 +30,8 @@ public class RipristinoSvuotaLaMemoriaTests
         }
     }
 
-    private static FullBackupService Servizio(DatabaseDiProva db, AnagraficheCache cache, FeatureAccessService access)
+    /// <summary>Visibile anche alla classe gemella qui sotto, che prova il caso riuscito.</summary>
+    internal static FullBackupService Servizio(DatabaseDiProva db, AnagraficheCache cache, FeatureAccessService access)
     {
         IConfiguration cfg = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?> { ["ConnectionStrings:Default"] = db.ConnectionString }).Build();
@@ -38,7 +39,6 @@ public class RipristinoSvuotaLaMemoriaTests
         return new FullBackupService(db.Servizio(), cfg, NullLogger<FullBackupService>.Instance, cache, access,
             new NetworkShareConnector(NullLogger<NetworkShareConnector>.Instance));
     }
-
     [FactRichiedeMySql]
     public void RipristinoFallitoAmeta_svuotaComunqueLaMemoria()
     {
@@ -64,7 +64,16 @@ public class RipristinoSvuotaLaMemoriaTests
         Assert.Equal("riletto", cache.Leggi(Anagrafica.AggregazioniDdp, () => "riletto"));
         Assert.Equal(0, access.GetLevelForRole("ADMIN"));
     }
+}
 
+/// <summary>
+/// Il ripristino che va a buon fine: la memoria delle anagrafiche si svuota lo stesso.
+///
+/// <para>Classe a parte per una ragione di tempo: xUnit parallelizza le CLASSI, e qui ogni
+/// test ripristina un backup su un database intero.</para>
+/// </summary>
+public class RipristinoRiuscitoSvuotaLaMemoriaTests
+{
     /// <summary>Lo stesso, sul percorso normale: ripristino che arriva in fondo senza errori.</summary>
     [FactRichiedeMySql]
     public void RipristinoRiuscito_svuotaLaMemoria()
@@ -79,7 +88,7 @@ public class RipristinoSvuotaLaMemoriaTests
         Assert.True(access.GetLevelForRole("ADMIN") > 0);
 
         // Un pacchetto valido ma vuoto: svuota e non reinserisce niente.
-        Servizio(db, cache, access).RipristinaDatabase(new StringReader("-- pacchetto vuoto\n"));
+        RipristinoSvuotaLaMemoriaTests.Servizio(db, cache, access).RipristinaDatabase(new StringReader("-- pacchetto vuoto\n"));
 
         Assert.Equal("riletta", cache.Leggi(Anagrafica.TransizioniDdp, () => "riletta"));
         Assert.Equal(0, access.GetLevelForRole("ADMIN"));

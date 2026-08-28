@@ -390,6 +390,9 @@ app.MapGet("/api/health", () => Results.Ok(new
     status = "ok",
     environment = app.Environment.EnvironmentName,
     version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(),
+    // Quando è stato installato il server che sta rispondendo: il build id in basso a
+    // sinistra è quello del CLIENT, e un aggiornamento di solo C# non lo muove.
+    build = VersioneServer.Build,
     utc = DateTime.UtcNow
 })).AllowAnonymous();
 

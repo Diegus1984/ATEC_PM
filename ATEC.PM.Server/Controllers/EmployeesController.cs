@@ -58,12 +58,23 @@ public class EmployeesController : ControllerBase
 
     /// <summary>
     /// Solo dipendenti reali: esclude ADMIN, cessati e wildcard reparto ([PM] Generico, …).
+    /// Con mustPunch=true filtra solo chi ha l'obbligo di timbratura (esclude i forfettari).
     /// </summary>
     [HttpGet("real")]
-    public IActionResult GetRealEmployees()
+    public IActionResult GetRealEmployees([FromQuery] bool? mustPunch = null)
     {
         using var c = _db.Open();
-        List<LookupItem> rows = c.Query<LookupItem>(EmployeeLookupQueries.RealEmployeesSql).ToList();
+        string sql = mustPunch.HasValue
+            ? @"SELECT id AS Id, CONCAT_WS(' ', first_name, last_name) AS Name
+               FROM employees
+               WHERE status <> 'TERMINATED'
+                 AND user_role <> 'ADMIN'
+                 AND first_name NOT LIKE '[%'
+                 AND hr_must_punch = @MustPunch
+               ORDER BY last_name, first_name"
+            : EmployeeLookupQueries.RealEmployeesSql;
+
+        List<LookupItem> rows = c.Query<LookupItem>(sql, new { MustPunch = mustPunch }).ToList();
         return Ok(ApiResponse<List<LookupItem>>.Ok(rows));
     }
 

@@ -43,3 +43,25 @@ export async function fetchServerBuild(): Promise<string | null> {
     return null
   }
 }
+
+/**
+ * Id di build del SERVER (data di installazione dei binari, «20260828-1126»).
+ *
+ * Non e' lo stesso di `fetchServerBuild()`, che legge `version.json` e riguarda il CLIENT:
+ * un aggiornamento di solo C# lascia il client invariato, e senza questo dato
+ * dall'applicazione non si vedrebbe che il server e' cambiato.
+ *
+ * Torna `null` se il server non risponde o non lo dichiara (versione piu' vecchia): in quel
+ * caso la riga in basso mostra solo la parte «Web», come prima.
+ */
+export async function fetchServerVersion(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/health", { cache: "no-store" })
+    if (!res.ok) return null
+    const data: unknown = await res.json()
+    const build = (data as { build?: unknown } | null)?.build
+    return typeof build === "string" && build.length > 0 ? build : null
+  } catch {
+    return null
+  }
+}

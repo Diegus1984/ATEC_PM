@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 28/08/2026 10:19.
+> Fotografia del 28/08/2026 13:23.
 
 ## Chiavi con endpoint
 
@@ -447,6 +447,7 @@
 - `GET /api/hr/absences` (HrController.GetAbsences)
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
+- `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)
@@ -457,6 +458,7 @@
 - `POST /api/hr/absences` (HrController.CreateAbsence)
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
+- `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
 - `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
@@ -470,6 +472,7 @@
 - `GET /api/hr/absences` (HrController.GetAbsences)
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
+- `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)
@@ -480,6 +483,7 @@
 - `POST /api/hr/absences` (HrController.CreateAbsence)
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
+- `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
 - `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
@@ -608,6 +612,7 @@
 - `GET /api/sal/payment-states` (SalController.GetPaymentStates)
 - `GET /api/sal/payment-states/active` (SalController.GetActivePaymentStates)
 - `GET /api/sal/prospetto` (SalController.GetProspetto)
+- `GET /api/sal/sap-acconti` (SalController.GetSapAcconti)
 - `GET /api/sal/sap-causali` (SalController.GetSapCausali)
 - `GET /api/sal/sap-causali/active` (SalController.GetActiveSapCausali)
 - `GET /api/sal/summary` (SalController.GetSummary)
@@ -629,6 +634,7 @@
 - `PUT /api/sal/payment-states/{id}` (SalController.UpdatePaymentState)
 - `PUT /api/sal/payment-states/{id}/toggle-active` (SalController.ToggleActivePaymentState)
 - `PUT /api/sal/rows/{id}` (SalController.UpdateRow)
+- `PUT /api/sal/sap-acconti` (SalController.SaveSapAcconti)
 - `PUT /api/sal/sap-causali/{id}` (SalController.UpdateSapCausale)
 - `PUT /api/sal/sap-causali/{id}/toggle-active` (SalController.ToggleActiveSapCausale)
 
@@ -820,6 +826,7 @@
 - `GET /api/sal/payment-states` (SalController.GetPaymentStates)
 - `GET /api/sal/payment-states/active` (SalController.GetActivePaymentStates)
 - `GET /api/sal/prospetto` (SalController.GetProspetto)
+- `GET /api/sal/sap-acconti` (SalController.GetSapAcconti)
 - `GET /api/sal/sap-causali` (SalController.GetSapCausali)
 - `GET /api/sal/sap-causali/active` (SalController.GetActiveSapCausali)
 - `GET /api/sal/summary` (SalController.GetSummary)
@@ -841,6 +848,7 @@
 - `PUT /api/sal/payment-states/{id}` (SalController.UpdatePaymentState)
 - `PUT /api/sal/payment-states/{id}/toggle-active` (SalController.ToggleActivePaymentState)
 - `PUT /api/sal/rows/{id}` (SalController.UpdateRow)
+- `PUT /api/sal/sap-acconti` (SalController.SaveSapAcconti)
 - `PUT /api/sal/sap-causali/{id}` (SalController.UpdateSapCausale)
 - `PUT /api/sal/sap-causali/{id}/toggle-active` (SalController.ToggleActiveSapCausale)
 

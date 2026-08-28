@@ -6,6 +6,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace ATEC.PM.Tests.Migrazioni;
 
 /// <summary>
+/// L'ultima migrazione scritta, chiesta al <see cref="MigrationRunner"/> che le scopre
+/// dall'assembly. <b>Non è un numero da tenere aggiornato</b>: fino al 15/08/2026 era una
+/// costante, ed è bastata la v88 di un'altra sessione per far diventare rossi due test che
+/// non c'entravano niente.
+/// </summary>
+internal static class VersioniAttese
+{
+    public static readonly int Ultima =
+        new MigrationRunner(NullLogger.Instance).VersioneMassima;
+}
+
+/// <summary>
 /// Il motore delle migrazioni (<c>DbService.InitDatabase</c> → <c>ApplyVersionedMigrations</c>).
 ///
 /// <para><b>Perché questi test esistono.</b> Fino al 14/08/2026 una migrazione veniva saltata se
@@ -20,15 +32,6 @@ namespace ATEC.PM.Tests.Migrazioni;
 /// </summary>
 public class MotoreMigrazioniTests
 {
-    /// <summary>
-    /// L'ultima migrazione scritta. <b>Non è un numero da tenere aggiornato</b>: lo chiede al
-    /// <see cref="MigrationRunner"/>, che scopre le migrazioni dall'assembly. Fino al 15/08/2026
-    /// era una costante, ed è bastata la v88 di un'altra sessione per far diventare rossi due
-    /// test che non c'entravano niente.
-    /// </summary>
-    private static readonly int UltimaVersione =
-        new MigrationRunner(NullLogger.Instance).VersioneMassima;
-
     [FactRichiedeMySql]
     public void DatabaseVuoto_creaLoSchemaCompletoERegistraTutteLeVersioni()
     {
@@ -37,10 +40,10 @@ public class MotoreMigrazioniTests
         db.CreaSchemaCompleto();
 
         List<int> versioni = db.VersioniApplicate();
-        int[] mancanti = Enumerable.Range(1, UltimaVersione).Where(v => !versioni.Contains(v)).ToArray();
+        int[] mancanti = Enumerable.Range(1, VersioniAttese.Ultima).Where(v => !versioni.Contains(v)).ToArray();
 
         Assert.Empty(mancanti);
-        Assert.Equal(UltimaVersione, versioni.Max());
+        Assert.Equal(VersioniAttese.Ultima, versioni.Max());
         Assert.True(db.ContaTabelle() > 80, $"Solo {db.ContaTabelle()} tabelle: lo schema non è completo.");
     }
 
@@ -77,14 +80,85 @@ public class MotoreMigrazioniTests
         db.Servizio().InitDatabase(productionMode: true);
 
         List<int> versioni = db.VersioniApplicate();
-        for (int v = 81; v <= UltimaVersione; v++)
+        for (int v = 81; v <= VersioniAttese.Ultima; v++)
         {
             Assert.Contains(v, versioni);
             Assert.False(db.Descrizione(v).StartsWith("backfill"),
                 $"La v{v} doveva essere ESEGUITA, non timbrata: sopra il massimo non si fa backfill.");
         }
     }
+}
 
+/// <summary>
+/// Il registro <c>schema_migrations</c>: cosa viene timbrato e cosa no.
+///
+/// <para>Classe separata da <see cref="MotoreMigrazioniTests"/> per una ragione di tempo, non
+/// di argomento: xUnit manda in parallelo le CLASSI, mai i test di una stessa classe, e qui
+/// ogni test costruisce un database intero.</para>
+/// </summary>
+public class MotoreMigrazioniRegistroTests
+{
+    /// <summary>
+    /// Registro azzerato ma dati veri presenti: è quello che lascia un ripristino da backup
+    /// interrotto a metà (<c>FullBackupService.RipristinaDatabase</c> fa TRUNCATE anche di
+    /// <c>schema_migrations</c>). Rieseguire le 87 migrazioni su dati di produzione li rovinerebbe:
+    /// il server deve fermarsi.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void RegistroAzzeratoSuDatabasePopolato_nonRieseguiLeMigrazioni()
+    {
+        using var db = new DatabaseDiProva("registro_perso");
+        db.CreaSchemaCompleto();
+        db.Esegui("DELETE FROM schema_migrations");
+
+        Exception? errore = Record.Exception(() => db.Servizio().InitDatabase(productionMode: true));
+
+        Assert.NotNull(errore);
+        Assert.Contains("schema_migrations", errore!.Message);
+    }
+
+    /// <summary>
+    /// Il backfill non deve mai toccare le versioni FUTURE: se domani la v88 fallisce e la v89
+    /// passa, timbrare la v88 come applicata rimetterebbe in circolo esattamente il difetto che
+    /// è stato chiuso.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void VersioneFuturaMancante_nonVieneMaiTimbrata()
+    {
+        // Due numeri OLTRE l'ultima migrazione scritta: quello più alto risulta riuscito, quello
+        // in mezzo è il buco che non deve essere timbrato.
+        int buco = VersioniAttese.Ultima + 1, riuscita = VersioniAttese.Ultima + 2;
+
+        using var db = new DatabaseDiProva("futuro");
+        db.CreaSchemaCompleto();
+        db.Esegui($"INSERT INTO schema_migrations (version, description) VALUES ({riuscita}, 'migrazione futura riuscita')");
+
+        db.Servizio().InitDatabase(productionMode: true);
+
+        Assert.DoesNotContain(buco, db.VersioniApplicate());
+    }
+
+    /// <summary>Rilanciare l'avvio su uno schema già aggiornato non deve cambiare niente.</summary>
+    [FactRichiedeMySql]
+    public void AvvioRipetuto_nonCambiaNulla()
+    {
+        using var db = new DatabaseDiProva("idempotente");
+        db.CreaSchemaCompleto();
+        List<int> prima = db.VersioniApplicate();
+
+        db.Servizio().InitDatabase(productionMode: true);
+        db.Servizio().InitDatabase(productionMode: true);
+
+        Assert.Equal(prima, db.VersioniApplicate());
+    }
+}
+
+/// <summary>
+/// Cosa succede quando una migrazione fallisce: l'avvio si ferma, e con
+/// <c>Migrations:StopOnError=false</c> prosegue lasciando l'errore scritto nel registro.
+/// </summary>
+public class MotoreMigrazioniFallimentiTests
+{
     /// <summary>
     /// Una migrazione che fallisce deve fermare l'avvio: un server che parte con lo schema a metà
     /// continua a lavorare e a scrivere dati, e il guaio si scopre dai numeri sbagliati.
@@ -120,109 +194,13 @@ public class MotoreMigrazioniTests
         // …e la versione fallita resta pendente, così al prossimo avvio viene ritentata.
         Assert.DoesNotContain(81, db.VersioniApplicate());
     }
+}
 
-    /// <summary>
-    /// Registro azzerato ma dati veri presenti: è quello che lascia un ripristino da backup
-    /// interrotto a metà (<c>FullBackupService.RipristinaDatabase</c> fa TRUNCATE anche di
-    /// <c>schema_migrations</c>). Rieseguire le 87 migrazioni su dati di produzione li rovinerebbe:
-    /// il server deve fermarsi.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void RegistroAzzeratoSuDatabasePopolato_nonRieseguiLeMigrazioni()
-    {
-        using var db = new DatabaseDiProva("registro_perso");
-        db.CreaSchemaCompleto();
-        db.Esegui("DELETE FROM schema_migrations");
-
-        Exception? errore = Record.Exception(() => db.Servizio().InitDatabase(productionMode: true));
-
-        Assert.NotNull(errore);
-        Assert.Contains("schema_migrations", errore!.Message);
-    }
-
-    /// <summary>
-    /// Il backfill non deve mai toccare le versioni FUTURE: se domani la v88 fallisce e la v89
-    /// passa, timbrare la v88 come applicata rimetterebbe in circolo esattamente il difetto che
-    /// è stato chiuso.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void VersioneFuturaMancante_nonVieneMaiTimbrata()
-    {
-        // Due numeri OLTRE l'ultima migrazione scritta: quello più alto risulta riuscito, quello
-        // in mezzo è il buco che non deve essere timbrato.
-        int buco = UltimaVersione + 1, riuscita = UltimaVersione + 2;
-
-        using var db = new DatabaseDiProva("futuro");
-        db.CreaSchemaCompleto();
-        db.Esegui($"INSERT INTO schema_migrations (version, description) VALUES ({riuscita}, 'migrazione futura riuscita')");
-
-        db.Servizio().InitDatabase(productionMode: true);
-
-        Assert.DoesNotContain(buco, db.VersioniApplicate());
-    }
-
-    /// <summary>Rilanciare l'avvio su uno schema già aggiornato non deve cambiare niente.</summary>
-    [FactRichiedeMySql]
-    public void AvvioRipetuto_nonCambiaNulla()
-    {
-        using var db = new DatabaseDiProva("idempotente");
-        db.CreaSchemaCompleto();
-        List<int> prima = db.VersioniApplicate();
-
-        db.Servizio().InitDatabase(productionMode: true);
-        db.Servizio().InitDatabase(productionMode: true);
-
-        Assert.Equal(prima, db.VersioniApplicate());
-    }
-
-    /// <summary>
-    /// Anti-regressione della v69: la vista del consuntivo ore deve contenere anche le ore delle
-    /// <b>fasi locali</b> (quelle create dalla commessa, senza template). In produzione girava una
-    /// versione della vista con una JOIN INNER che le buttava via: quelle ore sparivano dal costo
-    /// consuntivo del Bilancio senza nessun errore.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void VistaTimesheet_tieneLeOreDelleFasiLocali()
-    {
-        using var db = new DatabaseDiProva("vista");
-        db.CreaSchemaCompleto();
-
-        using MySqlConnector.MySqlConnection c = db.Apri();
-
-        int clienteId = Inserisci(c,
-            "INSERT INTO customers (company_name) VALUES ('Cliente di prova')");
-        int personaId = Inserisci(c,
-            "INSERT INTO employees (first_name, last_name) VALUES ('Mario', 'Rossi')");
-        int commessaId = Inserisci(c,
-            @"INSERT INTO projects (code, title, customer_id, pm_id)
-              VALUES ('C20260814.999', 'Commessa di prova', @Cliente, @Pm)",
-            new { Cliente = clienteId, Pm = personaId });
-
-        // LA FASE LOCALE: nata dalla commessa, non da un template → phase_template_id resta NULL.
-        int faseId = Inserisci(c,
-            @"INSERT INTO project_phases (project_id, name, phase_template_id)
-              VALUES (@Commessa, 'Montaggio in cantiere', NULL)",
-            new { Commessa = commessaId });
-
-        int oreId = Inserisci(c,
-            @"INSERT INTO timesheet_entries (employee_id, project_phase_id, work_date, hours)
-              VALUES (@Persona, @Fase, '2026-08-14', 7.5)",
-            new { Persona = personaId, Fase = faseId });
-
-        var riga = Dapper.SqlMapper.QueryFirstOrDefault<(int ProjectId, string PhaseName, decimal Hours)>(c,
-            @"SELECT project_id AS ProjectId, phase_name AS PhaseName, hours AS Hours
-              FROM v_timesheet_with_section WHERE entry_id = @Id", new { Id = oreId });
-
-        // Se la JOIN su phase_templates tornasse INNER (com'era in produzione fino alla v69),
-        // questa riga sparirebbe dalla vista — e con lei le ore dal consuntivo del Bilancio,
-        // senza nessun errore da nessuna parte.
-        Assert.Equal(commessaId, riga.ProjectId);
-        Assert.Equal("Montaggio in cantiere", riga.PhaseName);
-        Assert.Equal(7.5m, riga.Hours);
-    }
-
-    // ── il lock e le viste (blocco A2) ────────────────────────────────────────
-
+/// <summary>
+/// Il lock esclusivo: due server che partono insieme non migrano in due.
+/// </summary>
+public class MotoreMigrazioniLockTests
+{
     /// <summary>
     /// Due processi che migrano lo stesso database insieme farebbero girare la stessa migrazione
     /// due volte, e il DDL di MySQL non torna indietro. Se il lock è già in mano a qualcun altro,
@@ -270,6 +248,60 @@ public class MotoreMigrazioniTests
 
         Assert.Null(errore);
     }
+}
+
+/// <summary>
+/// Le viste, che NON stanno nelle migrazioni: le riallinea <c>EnsureViews</c> a ogni avvio.
+/// </summary>
+public class MotoreMigrazioniVisteTests
+{
+    /// <summary>
+    /// Anti-regressione della v69: la vista del consuntivo ore deve contenere anche le ore delle
+    /// <b>fasi locali</b> (quelle create dalla commessa, senza template). In produzione girava una
+    /// versione della vista con una JOIN INNER che le buttava via: quelle ore sparivano dal costo
+    /// consuntivo del Bilancio senza nessun errore.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void VistaTimesheet_tieneLeOreDelleFasiLocali()
+    {
+        using var db = new DatabaseDiProva("vista");
+        db.CreaSchemaCompleto();
+
+        using MySqlConnector.MySqlConnection c = db.Apri();
+
+        int clienteId = Inserisci(c,
+            "INSERT INTO customers (company_name) VALUES ('Cliente di prova')");
+        int personaId = Inserisci(c,
+            "INSERT INTO employees (first_name, last_name) VALUES ('Mario', 'Rossi')");
+        int commessaId = Inserisci(c,
+            @"INSERT INTO projects (code, title, customer_id, pm_id)
+              VALUES ('C20260814.999', 'Commessa di prova', @Cliente, @Pm)",
+            new { Cliente = clienteId, Pm = personaId });
+
+        // LA FASE LOCALE: nata dalla commessa, non da un template → phase_template_id resta NULL.
+        int faseId = Inserisci(c,
+            @"INSERT INTO project_phases (project_id, name, phase_template_id)
+              VALUES (@Commessa, 'Montaggio in cantiere', NULL)",
+            new { Commessa = commessaId });
+
+        int oreId = Inserisci(c,
+            @"INSERT INTO timesheet_entries (employee_id, project_phase_id, work_date, hours)
+              VALUES (@Persona, @Fase, '2026-08-14', 7.5)",
+            new { Persona = personaId, Fase = faseId });
+
+        var riga = Dapper.SqlMapper.QueryFirstOrDefault<(int ProjectId, string PhaseName, decimal Hours)>(c,
+            @"SELECT project_id AS ProjectId, phase_name AS PhaseName, hours AS Hours
+              FROM v_timesheet_with_section WHERE entry_id = @Id", new { Id = oreId });
+
+        // Se la JOIN su phase_templates tornasse INNER (com'era in produzione fino alla v69),
+        // questa riga sparirebbe dalla vista — e con lei le ore dal consuntivo del Bilancio,
+        // senza nessun errore da nessuna parte.
+        Assert.Equal(commessaId, riga.ProjectId);
+        Assert.Equal("Montaggio in cantiere", riga.PhaseName);
+        Assert.Equal(7.5m, riga.Hours);
+    }
+
+    // ── il lock e le viste (blocco A2) ────────────────────────────────────────
 
     /// <summary>
     /// La vista del consuntivo ore viene riallineata a OGNI avvio, anche in produzione su un

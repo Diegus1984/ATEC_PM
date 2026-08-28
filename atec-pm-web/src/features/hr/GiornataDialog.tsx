@@ -24,7 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { deleteHrAdjustment, sendHrAdjustment } from "@/lib/api/hr"
 import type { HrDay } from "@/lib/api/types"
-import { formatDateShort } from "@/lib/date-iso"
+import { formatDateWithWeekday } from "@/components/shared/date-field"
 import { notifyError, notifySuccess } from "@/lib/toast"
 
 function oraDa(iso: string): string {
@@ -112,7 +112,7 @@ export function GiornataDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Giornata del {formatDateShort(giornata.workDate)}</DialogTitle>
+          <DialogTitle>Giornata di {formatDateWithWeekday(giornata.workDate)}</DialogTitle>
           <DialogDescription>
             {giornata.note || "Nessuna timbratura registrata."}
           </DialogDescription>

@@ -52,6 +52,12 @@ public class EcosClient
     /// <summary>Tetto anti-loop: se LASTPAGE non arriva mai qualcosa è rotto lato API.</summary>
     private const int MaxPages = 2000;
 
+    /// <summary>
+    /// «Tutto quello che c'è»: l'API vuole comunque un <c>UpdateDate</c>, e questa data lo
+    /// rende innocuo. Serve alle anagrafiche, dove le righe vecchie contano quanto le nuove.
+    /// </summary>
+    private static readonly DateTime DallInizio = new(1900, 1, 1);
+
     private static readonly string[] PunchFields =
     {
         "StampID", "StampDateTime", "EmplID", "EmplCode", "NameComplete",
@@ -282,11 +288,20 @@ public class EcosClient
         return risultato;
     }
 
-    /// <summary>Anagrafica badge: alimenta i suggerimenti della pagina di mappatura.</summary>
+    /// <summary>
+    /// Anagrafica badge: alimenta i suggerimenti della pagina di mappatura.
+    ///
+    /// <para>🪤 Qui si chiede <b>dall'inizio dei tempi</b>, non dal 2020 come per timbrature e
+    /// assenze. L'API filtra su <c>UpdateDate</c>, e un badge non si aggiorna più dal giorno
+    /// in cui è stato assegnato: col ripiego al 2020-01-01 mancavano all'appello quattordici
+    /// persone assegnate nel 2019 — fra cui Carretta, Chiantia, Larganà, Tomasi e Vinardi —
+    /// e la pagina di mappatura le dava per «senza badge», costringendo a scrivere il codice
+    /// a mano. Un elenco di anagrafica si chiede intero: non è un incrementale.</para>
+    /// </summary>
     public async Task<List<EcosBadge>> BadgesAsync(string token, CancellationToken ct = default)
     {
         List<Dictionary<string, string>> righe =
-            await FetchTutteLePagineAsync("PeopleBadgeGetAll", token, CampiBadge, updateDa: null, ct);
+            await FetchTutteLePagineAsync("PeopleBadgeGetAll", token, CampiBadge, DallInizio, ct);
 
         return righe
             .Where(r => !string.IsNullOrWhiteSpace(r.GetValueOrDefault("EmplCode")))
@@ -349,6 +364,8 @@ public class EcosClient
         string apiName, string token, string[] campi, DateTime? updateDa, CancellationToken ct)
     {
         var tutte = new List<Dictionary<string, string>>();
+        // Senza una data di partenza si riparte dal 2020: vale per i dati che scorrono
+        // (timbrature, richieste). Per le anagrafiche si passa <see cref="DallInizio"/>.
         string updateFrom = (updateDa ?? new DateTime(2020, 1, 1))
             .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
         string baseUrl = ResolveCredenziali().BaseUrl;

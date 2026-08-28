@@ -23,9 +23,6 @@ namespace ATEC.PM.Tests.Migrazioni;
 public class LavorazioniOfficineTests
 {
     // Il filtro delle viste NON si ricopia: si prende dal controller e si esegue quello.
-    private const string FiltroViste =
-        ATEC.PM.Server.Controllers.WorkRequestsController.RigheDdpFiltro;
-
     // ── 1. Il backfill del Tipo ───────────────────────────────────────────────
 
     /// <summary>
@@ -39,17 +36,17 @@ public class LavorazioniOfficineTests
         using var db = new DatabaseDiProva("v92_tipo_stato");
         db.CreaSchemaCompleto();
         using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
 
-        int daCostruire = RigaOfficina(c, commessa, stato: "DC");
-        int daOrdinare = RigaOfficina(c, commessa, stato: "DO");
-        int giaScelta = RigaOfficina(c, commessa, stato: "DC", workType: "External");
+        int daCostruire = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC");
+        int daOrdinare = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DO");
+        int giaScelta = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "External");
 
-        Applica(c);
+        AiutiLavorazioniOfficine.Applica(c);
 
-        Assert.Equal("Internal", TipoDi(c, daCostruire));
-        Assert.Equal("External", TipoDi(c, daOrdinare));
-        Assert.Equal("External", TipoDi(c, giaScelta));
+        Assert.Equal("Internal", AiutiLavorazioniOfficine.TipoDi(c, daCostruire));
+        Assert.Equal("External", AiutiLavorazioniOfficine.TipoDi(c, daOrdinare));
+        Assert.Equal("External", AiutiLavorazioniOfficine.TipoDi(c, giaScelta));
     }
 
     /// <summary>
@@ -63,17 +60,17 @@ public class LavorazioniOfficineTests
         using var db = new DatabaseDiProva("v92_tipo_storia");
         db.CreaSchemaCompleto();
         using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
 
-        int parziale = RigaOfficina(c, commessa, stato: "PAR");
-        Evento(c, parziale, commessa, "DO", "DC", giorniFa: 5);   // prima era da ordinare…
-        Evento(c, parziale, commessa, "DC", "PAR", giorniFa: 1);  // …poi si è deciso di farla in casa
+        int parziale = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "PAR");
+        AiutiLavorazioniOfficine.Evento(c, parziale, commessa, "DO", "DC", giorniFa: 5);   // prima era da ordinare…
+        AiutiLavorazioniOfficine.Evento(c, parziale, commessa, "DC", "PAR", giorniFa: 1);  // …poi si è deciso di farla in casa
 
-        int inTrattamento = RigaOfficina(c, commessa, stato: "MIT");
-        Evento(c, inTrattamento, commessa, "DC", "MIT", giorniFa: 2);
+        int inTrattamento = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "MIT");
+        AiutiLavorazioniOfficine.Evento(c, inTrattamento, commessa, "DC", "MIT", giorniFa: 2);
 
         // Nessuna cronistoria: resta il fornitore a dire che il pezzo è stato comprato.
-        int soloFornitore = RigaOfficina(c, commessa, stato: "PAR", fornitore: "Officina Bianchi");
+        int soloFornitore = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "PAR", fornitore: "Officina Bianchi");
 
         // Premessa del test: la cronistoria dice davvero quello che diamo per scontato.
         Assert.Equal("DC", c.ExecuteScalar<string>(@"
@@ -82,123 +79,14 @@ public class LavorazioniOfficineTests
               AND UPPER(TRIM(COALESCE(ev.to_status,''))) IN ('DC','COS','DO','RO','IO','CON')
             ORDER BY ev.changed_at DESC, ev.id DESC LIMIT 1", new { R = parziale }));
 
-        Applica(c);
+        AiutiLavorazioniOfficine.Applica(c);
 
-        Assert.Equal("Internal", TipoDi(c, parziale));
-        Assert.Equal("Internal", TipoDi(c, inTrattamento));
-        Assert.Equal("External", TipoDi(c, soloFornitore));
+        Assert.Equal("Internal", AiutiLavorazioniOfficine.TipoDi(c, parziale));
+        Assert.Equal("Internal", AiutiLavorazioniOfficine.TipoDi(c, inTrattamento));
+        Assert.Equal("External", AiutiLavorazioniOfficine.TipoDi(c, soloFornitore));
     }
 
     // ── 2. Il filtro delle viste, eseguito com'è in produzione ────────────────
-
-    /// <summary>
-    /// Le regole della segnalazione, parola per parola: interna da costruire e esterna da
-    /// ordinare ci sono; il parziale resta; il materiale in trattamento c'è (lo raccoglie la
-    /// vista Trattamenti); l'ordine già emesso (IO) e la riga chiusa (COS) escono.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void LeViste_prendonoSoloLeRigheCheLaSegnalazioneChiede()
-    {
-        using var db = new DatabaseDiProva("v92_viste");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
-
-        int internaDaFare = RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
-        int esternaDaOrdinare = RigaOfficina(c, commessa, stato: "DO", workType: "External");
-        int parziale = RigaOfficina(c, commessa, stato: "PAR", workType: "Internal");
-        int inTrattamento = RigaOfficina(c, commessa, stato: "MIT", workType: "Internal");
-        int ordineEmesso = RigaOfficina(c, commessa, stato: "IO", workType: "External");
-        int costruita = RigaOfficina(c, commessa, stato: "COS", workType: "Internal");
-
-        List<int> visibili = c.Query<int>($@"
-            SELECT o.id FROM ddp_officina_items o
-            JOIN projects p ON p.id = o.project_id
-            WHERE COALESCE(p.status,'') <> 'CANCELLED'
-            {FiltroViste}").ToList();
-
-        Assert.Contains(internaDaFare, visibili);
-        Assert.Contains(esternaDaOrdinare, visibili);
-        Assert.Contains(parziale, visibili);
-        Assert.Contains(inTrattamento, visibili);
-        Assert.DoesNotContain(ordineEmesso, visibili);
-        Assert.DoesNotContain(costruita, visibili);
-    }
-
-    /// <summary>
-    /// Segnalazione #87 — la Stampa 3D si costruisce in casa: entra nelle viste con gli stessi
-    /// stati delle interne. È il difetto che la #83 aveva già insegnato a temere: un Tipo che il
-    /// filtro non nomina non toglie la riga dalla DDP, la toglie <b>dalla pagina di chi la deve
-    /// fare</b>, e non se ne accorge nessuno.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void LeRigheInStampa3D_stannoNelleViste_comeLeInterne()
-    {
-        using var db = new DatabaseDiProva("v95_stampa3d");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
-
-        int daStampare = RigaOfficina(c, commessa, stato: "DC", workType: "Print3D");
-        int stampaParziale = RigaOfficina(c, commessa, stato: "PAR", workType: "Print3D");
-        int stampaFinita = RigaOfficina(c, commessa, stato: "COS", workType: "Print3D");
-        // Lo stato «da ordinare» non appartiene a un pezzo che si stampa in casa: se ci
-        // finisce, è una riga classificata male e non deve comparire come lavoro da fare.
-        int stampaDaOrdinare = RigaOfficina(c, commessa, stato: "DO", workType: "Print3D");
-
-        List<int> visibili = c.Query<int>($@"
-            SELECT o.id FROM ddp_officina_items o
-            JOIN projects p ON p.id = o.project_id
-            WHERE COALESCE(p.status,'') <> 'CANCELLED'
-            {FiltroViste}").ToList();
-
-        Assert.Contains(daStampare, visibili);
-        Assert.Contains(stampaParziale, visibili);
-        Assert.DoesNotContain(stampaFinita, visibili);
-        Assert.DoesNotContain(stampaDaOrdinare, visibili);
-    }
-
-    /// <summary>
-    /// La v95 ricostruisce la tariffa oraria dalle righe già calcolate — ma <b>solo</b> quando
-    /// il rapporto costo ÷ ore cade esattamente su una tariffa d'anagrafica. Un numero
-    /// inventato lì dentro sarebbe peggio del vuoto: la finestra del particolare lo mostrerebbe
-    /// come se qualcuno l'avesse scelto, e la prima correzione alle ore rifarebbe il conto su
-    /// quello.
-    /// </summary>
-    [FactRichiedeMySql]
-    public void LaTariffaOraria_siRicostruisceSoloSeCoincideConUnaDiAnagrafica()
-    {
-        using var db = new DatabaseDiProva("v95_tariffe");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
-
-        int cinqueOreA50 = RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
-        c.Execute("UPDATE ddp_officina_items SET work_hours = 5, unit_cost = 250, hourly_rate = NULL WHERE id = @R",
-            new { R = cinqueOreA50 });
-
-        int costoFuoriTariffa = RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
-        c.Execute("UPDATE ddp_officina_items SET work_hours = 3, unit_cost = 100, hourly_rate = NULL WHERE id = @R",
-            new { R = costoFuoriTariffa });
-
-        int soloCostoAMano = RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
-        c.Execute("UPDATE ddp_officina_items SET work_hours = NULL, unit_cost = 90, hourly_rate = NULL WHERE id = @R",
-            new { R = soloCostoAMano });
-
-        new M095_Stampa3D().Applica(c, NullLogger.Instance);
-
-        Assert.Equal(50m, TariffaDi(c, cinqueOreA50));
-        Assert.Null(TariffaDi(c, costoFuoriTariffa));   // 100 ÷ 3 = 33,33 €/h: non è una tariffa
-        Assert.Null(TariffaDi(c, soloCostoAMano));
-
-        // Le tre tariffe della segnalazione, con il loro nome.
-        Assert.Equal("Stampa 3D", c.ExecuteScalar<string>(
-            "SELECT label FROM tariff_options WHERE tariff_type='HOURLY_RATE' AND value=20"));
-        Assert.Equal("Meccanica", c.ExecuteScalar<string>(
-            "SELECT label FROM tariff_options WHERE tariff_type='HOURLY_RATE' AND value=50"));
-    }
-
-    // ── 3. Quello che era scritto a mano non si perde ─────────────────────────
 
     /// <summary>
     /// La v92 cancella le bozze. Note e urgenze scritte nel vecchio pannello devono essere già
@@ -211,8 +99,8 @@ public class LavorazioniOfficineTests
         using var db = new DatabaseDiProva("v92_travaso");
         db.CreaSchemaCompleto();
         using MySqlConnection c = db.Apri();
-        int commessa = SeminaCommessa(c);
-        int riga = RigaOfficina(c, commessa, stato: "DC");
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
+        int riga = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC");
 
         c.Execute(@"
             INSERT INTO project_work_requests
@@ -220,7 +108,7 @@ public class LavorazioniOfficineTests
             VALUES (@P, 'Bozza dalla distinta', 'Sentire Paolo per il grezzo', 1, 1, @R, 0)",
             new { P = commessa, R = riga });
 
-        Applica(c);
+        AiutiLavorazioniOfficine.Applica(c);
 
         var dopo = c.QueryFirst<(string Note, bool Urgente)>(@"
             SELECT COALESCE(workshop_notes,'') AS Note, is_ultra_critical AS Urgente
@@ -229,6 +117,50 @@ public class LavorazioniOfficineTests
         Assert.Equal("Sentire Paolo per il grezzo", dopo.Note);
         Assert.True(dopo.Urgente, "La segnalazione ultra critica non è stata travasata.");
         Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM project_work_requests WHERE is_staging = 1"));
+    }
+}
+
+/// <summary>
+/// Le viste della pagina Lavorazioni Officine e la chiave di permesso che le apre.
+///
+/// <para>Classe separata per una ragione di tempo, non di argomento: xUnit manda in
+/// parallelo le CLASSI, mai i test di una stessa classe, e qui ognuno costruisce un
+/// database intero.</para>
+/// </summary>
+public class LavorazioniOfficineVisteTests
+{
+    /// <summary>
+    /// Le regole della segnalazione, parola per parola: interna da costruire e esterna da
+    /// ordinare ci sono; il parziale resta; il materiale in trattamento c'è (lo raccoglie la
+    /// vista Trattamenti); l'ordine già emesso (IO) e la riga chiusa (COS) escono.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void LeViste_prendonoSoloLeRigheCheLaSegnalazioneChiede()
+    {
+        using var db = new DatabaseDiProva("v92_viste");
+        db.CreaSchemaCompleto();
+        using MySqlConnection c = db.Apri();
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
+
+        int internaDaFare = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
+        int esternaDaOrdinare = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DO", workType: "External");
+        int parziale = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "PAR", workType: "Internal");
+        int inTrattamento = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "MIT", workType: "Internal");
+        int ordineEmesso = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "IO", workType: "External");
+        int costruita = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "COS", workType: "Internal");
+
+        List<int> visibili = c.Query<int>($@"
+            SELECT o.id FROM ddp_officina_items o
+            JOIN projects p ON p.id = o.project_id
+            WHERE COALESCE(p.status,'') <> 'CANCELLED'
+            {AiutiLavorazioniOfficine.FiltroViste}").ToList();
+
+        Assert.Contains(internaDaFare, visibili);
+        Assert.Contains(esternaDaOrdinare, visibili);
+        Assert.Contains(parziale, visibili);
+        Assert.Contains(inTrattamento, visibili);
+        Assert.DoesNotContain(ordineEmesso, visibili);
+        Assert.DoesNotContain(costruita, visibili);
     }
 
     /// <summary>
@@ -264,13 +196,13 @@ public class LavorazioniOfficineTests
         db.CreaSchemaCompleto();
         using MySqlConnection c = db.Apri();
 
-        int persona = Inserisci(c, "INSERT INTO employees (first_name, last_name) VALUES ('Paolo', 'Officina')");
+        int persona = AiutiLavorazioniOfficine.Inserisci(c, "INSERT INTO employees (first_name, last_name) VALUES ('Paolo', 'Officina')");
         c.Execute(@"INSERT INTO employee_feature_access (employee_id, feature_key, access, origin)
                     VALUES (@P, 'nav.officina_inbox', 'FULL', 'CLASSE')", new { P = persona });
         c.Execute("DELETE FROM employee_feature_access WHERE employee_id = @P AND feature_key = 'nav.work_requests'",
             new { P = persona });
 
-        Applica(c);
+        AiutiLavorazioniOfficine.Applica(c);
 
         Assert.Equal("FULL", c.ExecuteScalar<string>(@"
             SELECT access FROM employee_feature_access
@@ -284,42 +216,135 @@ public class LavorazioniOfficineTests
     /// seminati. Deve poterlo sopportare — è la stessa cosa che succede a ogni riavvio quando
     /// una migrazione è rimasta pendente.
     /// </summary>
-    private static void Applica(MySqlConnection c) =>
+
+}
+
+/// <summary>
+/// La v95: Stampa 3D nelle viste e la tariffa oraria ricostruita dall'anagrafica.
+/// </summary>
+public class LavorazioniOfficineStampa3DTests
+{
+    /// <summary>
+    /// Segnalazione #87 — la Stampa 3D si costruisce in casa: entra nelle viste con gli stessi
+    /// stati delle interne. È il difetto che la #83 aveva già insegnato a temere: un Tipo che il
+    /// filtro non nomina non toglie la riga dalla DDP, la toglie <b>dalla pagina di chi la deve
+    /// fare</b>, e non se ne accorge nessuno.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void LeRigheInStampa3D_stannoNelleViste_comeLeInterne()
+    {
+        using var db = new DatabaseDiProva("v95_stampa3d");
+        db.CreaSchemaCompleto();
+        using MySqlConnection c = db.Apri();
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
+
+        int daStampare = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "Print3D");
+        int stampaParziale = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "PAR", workType: "Print3D");
+        int stampaFinita = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "COS", workType: "Print3D");
+        // Lo stato «da ordinare» non appartiene a un pezzo che si stampa in casa: se ci
+        // finisce, è una riga classificata male e non deve comparire come lavoro da fare.
+        int stampaDaOrdinare = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DO", workType: "Print3D");
+
+        List<int> visibili = c.Query<int>($@"
+            SELECT o.id FROM ddp_officina_items o
+            JOIN projects p ON p.id = o.project_id
+            WHERE COALESCE(p.status,'') <> 'CANCELLED'
+            {AiutiLavorazioniOfficine.FiltroViste}").ToList();
+
+        Assert.Contains(daStampare, visibili);
+        Assert.Contains(stampaParziale, visibili);
+        Assert.DoesNotContain(stampaFinita, visibili);
+        Assert.DoesNotContain(stampaDaOrdinare, visibili);
+    }
+
+    /// <summary>
+    /// La v95 ricostruisce la tariffa oraria dalle righe già calcolate — ma <b>solo</b> quando
+    /// il rapporto costo ÷ ore cade esattamente su una tariffa d'anagrafica. Un numero
+    /// inventato lì dentro sarebbe peggio del vuoto: la finestra del particolare lo mostrerebbe
+    /// come se qualcuno l'avesse scelto, e la prima correzione alle ore rifarebbe il conto su
+    /// quello.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void LaTariffaOraria_siRicostruisceSoloSeCoincideConUnaDiAnagrafica()
+    {
+        using var db = new DatabaseDiProva("v95_tariffe");
+        db.CreaSchemaCompleto();
+        using MySqlConnection c = db.Apri();
+        int commessa = AiutiLavorazioniOfficine.SeminaCommessa(c);
+
+        int cinqueOreA50 = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
+        c.Execute("UPDATE ddp_officina_items SET work_hours = 5, unit_cost = 250, hourly_rate = NULL WHERE id = @R",
+            new { R = cinqueOreA50 });
+
+        int costoFuoriTariffa = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
+        c.Execute("UPDATE ddp_officina_items SET work_hours = 3, unit_cost = 100, hourly_rate = NULL WHERE id = @R",
+            new { R = costoFuoriTariffa });
+
+        int soloCostoAMano = AiutiLavorazioniOfficine.RigaOfficina(c, commessa, stato: "DC", workType: "Internal");
+        c.Execute("UPDATE ddp_officina_items SET work_hours = NULL, unit_cost = 90, hourly_rate = NULL WHERE id = @R",
+            new { R = soloCostoAMano });
+
+        new M095_Stampa3D().Applica(c, NullLogger.Instance);
+
+        Assert.Equal(50m, AiutiLavorazioniOfficine.TariffaDi(c, cinqueOreA50));
+        Assert.Null(AiutiLavorazioniOfficine.TariffaDi(c, costoFuoriTariffa));   // 100 ÷ 3 = 33,33 €/h: non è una tariffa
+        Assert.Null(AiutiLavorazioniOfficine.TariffaDi(c, soloCostoAMano));
+
+        // Le tre tariffe della segnalazione, con il loro nome.
+        Assert.Equal("Stampa 3D", c.ExecuteScalar<string>(
+            "SELECT label FROM tariff_options WHERE tariff_type='HOURLY_RATE' AND value=20"));
+        Assert.Equal("Meccanica", c.ExecuteScalar<string>(
+            "SELECT label FROM tariff_options WHERE tariff_type='HOURLY_RATE' AND value=50"));
+    }
+
+    // ── 3. Quello che era scritto a mano non si perde ─────────────────────────
+}
+
+/// <summary>
+/// Attrezzi condivisi dalle classi qui sopra: seminano una commessa, una riga di
+/// officina e i suoi eventi, e rileggono quello che la migrazione ha ricostruito.
+/// </summary>
+internal static class AiutiLavorazioniOfficine
+{
+    internal const string FiltroViste =
+        ATEC.PM.Server.Controllers.WorkRequestsController.RigheDdpFiltro;
+
+    internal static void Applica(MySqlConnection c) =>
         new M092_LavorazioniOfficine().Applica(c, NullLogger.Instance);
 
-    private static int SeminaCommessa(MySqlConnection c)
+    internal static int SeminaCommessa(MySqlConnection c)
     {
-        int cliente = Inserisci(c, "INSERT INTO customers (company_name) VALUES ('Cliente di prova')");
-        int pm = Inserisci(c, "INSERT INTO employees (first_name, last_name) VALUES ('Mario', 'Rossi')");
-        return Inserisci(c,
+        int cliente = AiutiLavorazioniOfficine.Inserisci(c, "INSERT INTO customers (company_name) VALUES ('Cliente di prova')");
+        int pm = AiutiLavorazioniOfficine.Inserisci(c, "INSERT INTO employees (first_name, last_name) VALUES ('Mario', 'Rossi')");
+        return AiutiLavorazioniOfficine.Inserisci(c,
             @"INSERT INTO projects (code, title, customer_id, pm_id, status)
               VALUES ('C20260815.992', 'Commessa di prova', @Cliente, @Pm, 'ACTIVE')",
             new { Cliente = cliente, Pm = pm });
     }
 
-    private static int RigaOfficina(
+    internal static int RigaOfficina(
         MySqlConnection c, int commessa, string stato,
         string workType = "", string fornitore = "") =>
-        Inserisci(c, @"
+        AiutiLavorazioniOfficine.Inserisci(c, @"
             INSERT INTO ddp_officina_items
                 (project_id, part_number, description, quantity, item_status, work_type, supplier_name)
             VALUES (@P, '101.0001', 'Piastra', 3, @S, @W, @F)",
             new { P = commessa, S = stato, W = workType, F = fornitore });
 
-    private static void Evento(
+    internal static void Evento(
         MySqlConnection c, int riga, int commessa, string da, string a, int giorniFa) =>
         c.Execute(@"
             INSERT INTO ddp_item_events (item_type, item_id, project_id, from_status, to_status, changed_at)
             VALUES ('OFFICINA', @R, @P, @Da, @A, DATE_SUB(NOW(), INTERVAL @G DAY))",
             new { R = riga, P = commessa, Da = da, A = a, G = giorniFa });
 
-    private static string TipoDi(MySqlConnection c, int riga) =>
+    internal static string TipoDi(MySqlConnection c, int riga) =>
         c.ExecuteScalar<string>("SELECT work_type FROM ddp_officina_items WHERE id = @R", new { R = riga }) ?? "";
 
-    private static decimal? TariffaDi(MySqlConnection c, int riga) =>
+    internal static decimal? TariffaDi(MySqlConnection c, int riga) =>
         c.ExecuteScalar<decimal?>("SELECT hourly_rate FROM ddp_officina_items WHERE id = @R", new { R = riga });
 
-    private static int Inserisci(MySqlConnection c, string sql, object? par = null)
+    internal static int Inserisci(MySqlConnection c, string sql, object? par = null)
     {
         c.Execute(sql, par);
         return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");

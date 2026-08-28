@@ -1,14 +1,11 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, DownloadCloud, KeyRound, Link2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, DownloadCloud, KeyRound, Link2, Search, User } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { GridScroller } from "@/components/shared/grid-scroller"
-import {
-  LookupCombobox,
-  type LookupComboboxOption,
-} from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Table,
   TableBody,
@@ -23,11 +20,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { fetchRealEmployees } from "@/lib/api/employees"
+import { fetchPunchingEmployees } from "@/lib/api/employees"
 import type { HrDayStage } from "@/lib/api/types"
 import { fetchHrTimesheet, fetchHrStatus, importHrPunches } from "@/lib/api/hr"
 import { canWriteFeature } from "@/lib/auth/permissions"
-import { formatDateShort } from "@/lib/date-iso"
+import { formatDateWithWeekday } from "@/components/shared/date-field"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
@@ -120,6 +117,7 @@ export function TimbraturePage() {
     return { anno: oggi.getFullYear(), mese: oggi.getMonth() + 1 }
   })
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
+  const [searchEmployee, setSearchEmployee] = React.useState("")
   const [giornoAperto, setGiornoAperto] = React.useState<string | null>(null)
   const [mappaturaAperta, setMappaturaAperta] = React.useState(false)
   const [credenzialiAperte, setCredenzialiAperte] = React.useState(false)
@@ -147,8 +145,8 @@ export function TimbraturePage() {
     enabled: canWrite,
   })
   const dipendentiQuery = useQuery({
-    queryKey: ["employees-real"],
-    queryFn: fetchRealEmployees,
+    queryKey: ["employees-punching"],
+    queryFn: fetchPunchingEmployees,
     enabled: canWrite,
   })
 
@@ -177,10 +175,12 @@ export function TimbraturePage() {
     [cartellino, giornoAperto]
   )
 
-  const opzioniDipendenti: LookupComboboxOption<number>[] = React.useMemo(
-    () => (dipendentiQuery.data ?? []).map((d) => ({ id: d.id, name: d.name })),
-    [dipendentiQuery.data]
-  )
+  const dipendentiFiltrati = React.useMemo(() => {
+    const list = dipendentiQuery.data ?? []
+    if (!searchEmployee.trim()) return list
+    const q = searchEmployee.toLowerCase()
+    return list.filter((e) => e.name.toLowerCase().includes(q))
+  }, [dipendentiQuery.data, searchEmployee])
 
   const meseLabel = new Date(periodo.anno, periodo.mese - 1, 1).toLocaleDateString(
     "it-IT",
@@ -225,17 +225,6 @@ export function TimbraturePage() {
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {canWrite && vista === "cartellino" && (
-            <LookupCombobox<number>
-              options={opzioniDipendenti}
-              value={employeeId}
-              onValueChange={setEmployeeId}
-              placeholder="Il mio cartellino"
-              noneLabel="— il mio cartellino —"
-              loading={dipendentiQuery.isLoading}
-              className="w-56"
-            />
-          )}
           {canWrite && (
             <>
               <Button
@@ -340,212 +329,280 @@ export function TimbraturePage() {
       ) : vista === "quadratura" ? (
         <QuadraturaPresenzeView anno={periodo.anno} mese={periodo.mese} />
       ) : (
-        <>
-          {cartellino && !cartellino.ecosLinked && (
-            <p className="text-sm text-muted-foreground">
-              {employeeId == null
-                ? "Il tuo utente non è ancora collegato a Ecos: il cartellino si riempie quando l'amministratore collega il tuo codice badge."
-                : "Dipendente non collegato a Ecos: nessuna timbratura può arrivare."}
-            </p>
+        <div className={cn("flex flex-col gap-4", canWrite && "md:flex-row md:items-start")}>
+          {/* Elenco dipendenti lato sinistro */}
+          {canWrite && (
+            <div className="w-full md:w-64 shrink-0 rounded-lg border bg-card p-2.5 space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Dipendenti ({dipendentiQuery.data?.length ?? 0})
+                </span>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca dipendente…"
+                  value={searchEmployee}
+                  onChange={(e) => setSearchEmployee(e.target.value)}
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+              <div className="max-h-[calc(100vh-20rem)] min-h-[300px] overflow-y-auto space-y-0.5 pr-1">
+                <button
+                  type="button"
+                  onClick={() => setEmployeeId(null)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-left font-medium transition-colors cursor-pointer",
+                    employeeId === null
+                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                      : "hover:bg-muted text-foreground"
+                  )}
+                >
+                  <User className="size-3.5 shrink-0" />
+                  <span className="truncate flex-1">Il mio cartellino</span>
+                </button>
+                <div className="my-1.5 border-t" />
+                {dipendentiQuery.isLoading ? (
+                  <p className="p-2 text-xs text-muted-foreground">Caricamento…</p>
+                ) : dipendentiFiltrati.length === 0 ? (
+                  <p className="p-2 text-xs text-muted-foreground">Nessun dipendente trovato.</p>
+                ) : (
+                  dipendentiFiltrati.map((emp) => (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => setEmployeeId(emp.id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-left transition-colors cursor-pointer",
+                        employeeId === emp.id
+                          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                          : "hover:bg-muted text-foreground"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full shrink-0",
+                          employeeId === emp.id
+                            ? "bg-primary-foreground"
+                            : "bg-muted-foreground/60"
+                        )}
+                      />
+                      <span className="truncate flex-1">{emp.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           )}
 
-          {cartellinoQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Caricamento…</p>
-          ) : cartellinoQuery.error ? (
-            <p className="text-sm text-destructive">
-              {(cartellinoQuery.error as Error).message}
-            </p>
-          ) : cartellino ? (
-            <GridScroller className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  {(show("grezzo") || show("normalizzato")) && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-28" />
-                      {show("grezzo") && (
-                        <TableHead
-                          colSpan={6}
-                          className="border-l text-center text-[11px] font-semibold"
-                        >
-                          🔸 Grezzo
-                        </TableHead>
-                      )}
-                      {show("normalizzato") && (
-                        <TableHead
-                          colSpan={6}
-                          className="border-l text-center text-[11px] font-semibold"
-                        >
-                          🔷 Normalizzato
-                        </TableHead>
-                      )}
-                      {colonneFinali > 0 && (
-                        <TableHead
-                          colSpan={colonneFinali}
-                          className="border-l text-center text-[11px] font-semibold"
-                        >
-                          ✅ Finale
-                        </TableHead>
-                      )}
-                    </TableRow>
-                  )}
-                  <TableRow>
-                    <TableHead className="w-28">Giorno</TableHead>
-                    {show("grezzo") && (
-                      <>
-                        <TableHead className="border-l">E1</TableHead>
-                        <TableHead>U1</TableHead>
-                        <TableHead>E2</TableHead>
-                        <TableHead>U2</TableHead>
-                        <TableHead className="text-right">Pausa</TableHead>
-                        <TableHead className="text-right">Ore</TableHead>
-                      </>
-                    )}
-                    {show("normalizzato") && (
-                      <>
-                        <TableHead className="border-l">E1</TableHead>
-                        <TableHead>U1</TableHead>
-                        <TableHead>E2</TableHead>
-                        <TableHead>U2</TableHead>
-                        <TableHead className="text-right">Pausa</TableHead>
-                        <TableHead className="text-right">Ore</TableHead>
-                      </>
-                    )}
-                    {show("entrata1") && <TableHead className="border-l">E1</TableHead>}
-                    {show("uscita1") && <TableHead>U1</TableHead>}
-                    {show("entrata2") && <TableHead>E2</TableHead>}
-                    {show("uscita2") && <TableHead>U2</TableHead>}
-                    {show("ordinarie") && (
-                      <TableHead className="text-right">Ordinarie</TableHead>
-                    )}
-                    {show("straordinario") && (
-                      <TableHead className="text-right">Straord.</TableHead>
-                    )}
-                    {show("pausa") && (
-                      <TableHead className="text-right">Pausa</TableHead>
-                    )}
-                    {show("nota") && <TableHead className="w-60">Nota</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {cartellino.days.map((g) => {
-                    const dataIso = g.workDate.slice(0, 10)
-                    const cliccabile = g.hasData || g.punches.length > 0 || canWrite
-                    const fasceEntries = Object.entries(g.bands)
+          {/* Area principale Cartellino */}
+          <div className="min-w-0 flex-1 space-y-3">
+            {cartellino && !cartellino.ecosLinked && (
+              <p className="text-sm text-muted-foreground">
+                {employeeId == null
+                  ? "Il tuo utente non è ancora collegato a Ecos: il cartellino si riempie quando l'amministratore collega il tuo codice badge."
+                  : "Dipendente non collegato a Ecos: nessuna timbratura può arrivare."}
+              </p>
+            )}
 
-                    return (
-                      <TableRow
-                        key={g.workDate}
-                        className={cn(
-                          g.isHoliday && "bg-muted/40",
-                          g.hasAnomaly && "bg-destructive/10 text-destructive",
-                          cliccabile && "cursor-pointer hover:bg-muted/60"
-                        )}
-                        onClick={() => {
-                          if (cliccabile) setGiornoAperto(dataIso)
-                        }}
-                      >
-                        <TableCell className="font-mono text-xs">
-                          {formatDateShort(g.workDate)}
-                        </TableCell>
-                        {show("grezzo") && <StadioCelle stadio={g.raw} />}
-                        {show("normalizzato") && <StadioCelle stadio={g.normalized} />}
-                        {show("entrata1") && (
-                          <TableCell className="border-l font-mono text-xs">
-                            {g.clockIn1 || "—"}
-                          </TableCell>
-                        )}
-                        {show("uscita1") && (
-                          <TableCell className="font-mono text-xs">
-                            {g.clockOut1 || "—"}
-                          </TableCell>
-                        )}
-                        {show("entrata2") && (
-                          <TableCell className="font-mono text-xs">
-                            {g.clockIn2 || "—"}
-                          </TableCell>
-                        )}
-                        {show("uscita2") && (
-                          <TableCell className="font-mono text-xs">
-                            {g.clockOut2 || "—"}
-                          </TableCell>
-                        )}
-                        {show("ordinarie") && (
-                          <TableCell className="text-right font-mono text-xs">
-                            {g.regularHours || "—"}
-                          </TableCell>
-                        )}
-                        {show("straordinario") && (
-                          <TableCell className="text-right font-mono text-xs">
-                            {fasceEntries.length > 0 ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="underline decoration-dotted cursor-help">
-                                    {g.overtime || "—"}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs">
-                                  <p className="font-semibold mb-1">
-                                    Dettaglio fasce CCNL:
-                                  </p>
-                                  {fasceEntries.map(([k, v]) => (
-                                    <div key={k}>
-                                      <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
-                                    </div>
-                                  ))}
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              g.overtime || "—"
-                            )}
-                          </TableCell>
-                        )}
-                        {show("pausa") && (
-                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                            {g.breakTime || "—"}
-                          </TableCell>
-                        )}
-                        {show("nota") && (
-                          <TableCell
-                            className="max-w-60 truncate text-xs text-muted-foreground"
-                            title={g.note}
+            {cartellinoQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Caricamento…</p>
+            ) : cartellinoQuery.error ? (
+              <p className="text-sm text-destructive">
+                {(cartellinoQuery.error as Error).message}
+              </p>
+            ) : cartellino ? (
+              <GridScroller className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    {(show("grezzo") || show("normalizzato")) && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-32" />
+                        {show("grezzo") && (
+                          <TableHead
+                            colSpan={6}
+                            className="border-l text-center text-[11px] font-semibold"
                           >
-                            {g.note || "—"}
-                          </TableCell>
+                            🔸 Grezzo
+                          </TableHead>
+                        )}
+                        {show("normalizzato") && (
+                          <TableHead
+                            colSpan={6}
+                            className="border-l text-center text-[11px] font-semibold"
+                          >
+                            🔷 Normalizzato
+                          </TableHead>
+                        )}
+                        {colonneFinali > 0 && (
+                          <TableHead
+                            colSpan={colonneFinali}
+                            className="border-l text-center text-[11px] font-semibold"
+                          >
+                            ✅ Finale
+                          </TableHead>
                         )}
                       </TableRow>
-                    )
-                  })}
-                  {cartellino.days.length === 0 && (
+                    )}
                     <TableRow>
-                      <TableCell
-                        colSpan={visibleCount}
-                        className="text-center text-sm text-muted-foreground"
-                      >
-                        Nessuna giornata nel mese.
-                      </TableCell>
+                      <TableHead className="w-32">Giorno</TableHead>
+                      {show("grezzo") && (
+                        <>
+                          <TableHead className="border-l">E1</TableHead>
+                          <TableHead>U1</TableHead>
+                          <TableHead>E2</TableHead>
+                          <TableHead>U2</TableHead>
+                          <TableHead className="text-right">Pausa</TableHead>
+                          <TableHead className="text-right">Ore</TableHead>
+                        </>
+                      )}
+                      {show("normalizzato") && (
+                        <>
+                          <TableHead className="border-l">E1</TableHead>
+                          <TableHead>U1</TableHead>
+                          <TableHead>E2</TableHead>
+                          <TableHead>U2</TableHead>
+                          <TableHead className="text-right">Pausa</TableHead>
+                          <TableHead className="text-right">Ore</TableHead>
+                        </>
+                      )}
+                      {show("entrata1") && <TableHead className="border-l">E1</TableHead>}
+                      {show("uscita1") && <TableHead>U1</TableHead>}
+                      {show("entrata2") && <TableHead>E2</TableHead>}
+                      {show("uscita2") && <TableHead>U2</TableHead>}
+                      {show("ordinarie") && (
+                        <TableHead className="text-right">Ordinarie</TableHead>
+                      )}
+                      {show("straordinario") && (
+                        <TableHead className="text-right">Straord.</TableHead>
+                      )}
+                      {show("pausa") && (
+                        <TableHead className="text-right">Pausa</TableHead>
+                      )}
+                      {show("nota") && <TableHead className="w-60">Nota</TableHead>}
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </GridScroller>
-          ) : null}
+                  </TableHeader>
+                  <TableBody>
+                    {cartellino.days.map((g) => {
+                      const dataIso = g.workDate.slice(0, 10)
+                      const cliccabile = g.hasData || g.punches.length > 0 || canWrite
+                      const fasceEntries = Object.entries(g.bands)
 
-          <CredenzialiEcosDialog
-            open={credenzialiAperte}
-            onOpenChange={setCredenzialiAperte}
-          />
+                      return (
+                        <TableRow
+                          key={g.workDate}
+                          className={cn(
+                            g.isHoliday && "bg-muted/40",
+                            g.hasAnomaly && "bg-destructive/10 text-destructive",
+                            cliccabile && "cursor-pointer hover:bg-muted/60"
+                          )}
+                          onClick={() => {
+                            if (cliccabile) setGiornoAperto(dataIso)
+                          }}
+                        >
+                          <TableCell className="font-mono text-xs whitespace-nowrap">
+                            {formatDateWithWeekday(g.workDate)}
+                          </TableCell>
+                          {show("grezzo") && <StadioCelle stadio={g.raw} />}
+                          {show("normalizzato") && <StadioCelle stadio={g.normalized} />}
+                          {show("entrata1") && (
+                            <TableCell className="border-l font-mono text-xs">
+                              {g.clockIn1 || "—"}
+                            </TableCell>
+                          )}
+                          {show("uscita1") && (
+                            <TableCell className="font-mono text-xs">
+                              {g.clockOut1 || "—"}
+                            </TableCell>
+                          )}
+                          {show("entrata2") && (
+                            <TableCell className="font-mono text-xs">
+                              {g.clockIn2 || "—"}
+                            </TableCell>
+                          )}
+                          {show("uscita2") && (
+                            <TableCell className="font-mono text-xs">
+                              {g.clockOut2 || "—"}
+                            </TableCell>
+                          )}
+                          {show("ordinarie") && (
+                            <TableCell className="text-right font-mono text-xs">
+                              {g.regularHours || "—"}
+                            </TableCell>
+                          )}
+                          {show("straordinario") && (
+                            <TableCell className="text-right font-mono text-xs">
+                              {fasceEntries.length > 0 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="underline decoration-dotted cursor-help">
+                                      {g.overtime || "—"}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">
+                                    <p className="font-semibold mb-1">
+                                      Dettaglio fasce CCNL:
+                                    </p>
+                                    {fasceEntries.map(([k, v]) => (
+                                      <div key={k}>
+                                        <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
+                                      </div>
+                                    ))}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                g.overtime || "—"
+                              )}
+                            </TableCell>
+                          )}
+                          {show("pausa") && (
+                            <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                              {g.breakTime || "—"}
+                            </TableCell>
+                          )}
+                          {show("nota") && (
+                            <TableCell
+                              className="max-w-60 truncate text-xs text-muted-foreground"
+                              title={g.note}
+                            >
+                              {g.note || "—"}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      )
+                    })}
+                    {cartellino.days.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={visibleCount}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          Nessuna giornata nel mese.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </GridScroller>
+            ) : null}
 
-          <GiornataDialog
-            open={giornataAperta != null}
-            onOpenChange={(open) => {
-              if (!open) setGiornoAperto(null)
-            }}
-            giornata={giornataAperta}
-            employeeId={cartellino?.employeeId ?? 0}
-            canWrite={canWrite}
-            onChanged={invalidate}
-          />
-        </>
+            <CredenzialiEcosDialog
+              open={credenzialiAperte}
+              onOpenChange={setCredenzialiAperte}
+            />
+
+            <GiornataDialog
+              open={giornataAperta != null}
+              onOpenChange={(open) => {
+                if (!open) setGiornoAperto(null)
+              }}
+              giornata={giornataAperta}
+              employeeId={cartellino?.employeeId ?? 0}
+              canWrite={canWrite}
+              onChanged={invalidate}
+            />
+          </div>
+        </div>
       )}
 
       <MappaturaEcosDialog

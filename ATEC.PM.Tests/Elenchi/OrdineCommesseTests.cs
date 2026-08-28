@@ -20,8 +20,19 @@ namespace ATEC.PM.Tests.Elenchi;
 /// subito dopo il salvataggio — compariva in cima all'elenco invece che in fondo, dove la mette
 /// la sua data. Nessun errore, nessun messaggio: solo l'ordine cronologico che sembrava rotto.</para>
 /// </summary>
+[Collection(SchemaCondiviso.Nome)]
 public class OrdineCommesseTests
 {
+    private readonly SchemaCondiviso _schema;
+
+    // Qui si provano DATI, non lo schema: si riparte da pulito in millisecondi
+    // invece di ricostruire il database (che a questa classe costava un minuto).
+    public OrdineCommesseTests(SchemaCondiviso schema)
+    {
+        _schema = schema;
+        _schema.Pulisci();
+    }
+
     /// <summary>Titolo delle righe seminate qui: lo schema di prova ne semina già di suoi.</summary>
     private const string Titolo = "PROVA ORDINE ELENCO";
 
@@ -40,9 +51,7 @@ public class OrdineCommesseTests
     [FactRichiedeMySql]
     public void LaCommessaAppenaCreata_restaInFondo_nonInTesta()
     {
-        using var db = new DatabaseDiProva("ordine_commesse");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
+        using MySqlConnection c = _schema.Apri();
 
         // Le date che contano: una commessa vecchia, una di mezzo e quella di oggi (l'ultima creata).
         Semina(c, "C241204_166", "ON_HOLD");
@@ -61,9 +70,7 @@ public class OrdineCommesseTests
     [FactRichiedeMySql]
     public void LaCommessaChiusaDelDeepLink_restaInTesta()
     {
-        using var db = new DatabaseDiProva("ordine_commesse_chiusa");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
+        using MySqlConnection c = _schema.Apri();
 
         Semina(c, "C241204_166", "ON_HOLD");
         Semina(c, "C260824_210", "ACTIVE");
@@ -79,9 +86,7 @@ public class OrdineCommesseTests
     [FactRichiedeMySql]
     public void SenzaDeepLink_leCommesseVannoInOrdineDiData_eLeAttivitaInFondo()
     {
-        using var db = new DatabaseDiProva("ordine_commesse_base");
-        db.CreaSchemaCompleto();
-        using MySqlConnection c = db.Apri();
+        using MySqlConnection c = _schema.Apri();
 
         // Ordine di inserimento apposta sbagliato, e i due formati di codice mescolati:
         // 'C20260805.500' alfabetico verrebbe PRIMA di 'C241204_166' ('0' < '4').

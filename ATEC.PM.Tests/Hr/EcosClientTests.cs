@@ -264,6 +264,53 @@ public class EcosClientTests
         Assert.Equal(4.0m, assenze[1].Duration);
     }
 
+    /// <summary>
+    /// I badge si chiedono DALL'INIZIO, non dal 2020 come i dati che scorrono.
+    ///
+    /// <para>L'API filtra su <c>UpdateDate</c> e un badge non si aggiorna piu' dal giorno in
+    /// cui e' stato assegnato: col ripiego al 2020-01-01 quattordici persone assegnate nel
+    /// 2019 non comparivano, e la pagina di mappatura le dava per «senza badge».</para>
+    /// </summary>
+    [Fact]
+    public async Task I_badge_si_chiedono_dall_inizio_non_dal_2020()
+    {
+        const string risposta = """
+            { "ECOSAGILE_TABLE_DATA": {
+                "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK" },
+                "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW":
+                    { "EmplCode": "1010", "NameComplete": "Larganà, Gionatan", "InForce": "TRUE" } } } }
+            """;
+        var handler = new RisposteInSequenza(risposta);
+        EcosClient client = CreaClient(handler);
+
+        List<EcosBadge> badge = await client.BadgesAsync("tok");
+
+        Assert.Single(badge);
+        Assert.Equal("1010", badge[0].EmplCode);
+
+        string corpo = Assert.Single(handler.CorpiInviati);
+        Assert.Contains("1900-01-01", Uri.UnescapeDataString(corpo));
+        Assert.DoesNotContain("2020-01-01", Uri.UnescapeDataString(corpo));
+    }
+
+    /// <summary>Le timbrature invece restano incrementali: il 2020 e' il loro ripiego.</summary>
+    [Fact]
+    public async Task Le_timbrature_senza_cursore_ripiegano_sul_2020()
+    {
+        const string risposta = """
+            { "ECOSAGILE_TABLE_DATA": {
+                "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK" },
+                "ECOSAGILE_DATA": "" } }
+            """;
+        var handler = new RisposteInSequenza(risposta);
+        EcosClient client = CreaClient(handler);
+
+        await client.GetPunchesAsync("tok", updateDa: null);
+
+        string corpo = Uri.UnescapeDataString(Assert.Single(handler.CorpiInviati));
+        Assert.Contains("2020-01-01", corpo);
+    }
+
     [Fact]
     public async Task Senza_credenziali_TokenAsync_rifiuta_subito()
     {
@@ -298,10 +345,15 @@ public class EcosClientTests
 
         public RisposteInSequenza(params string[] corpi) => _corpi = new Queue<string>(corpi);
 
+        /// <summary>I corpi POST inviati: e' li' che viaggia il filtro UpdateDate.</summary>
+        public List<string> CorpiInviati { get; } = new();
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken ct)
         {
             UrlChiamati.Add(request.RequestUri!.ToString());
+            if (request.Content != null)
+                CorpiInviati.Add(request.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
             string corpo = _corpi.Count > 0 ? _corpi.Dequeue() : "{}";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
