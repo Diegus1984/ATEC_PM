@@ -1,6 +1,21 @@
 {
     "voci":  [
                  {
+                     "build":  "20260828-1712",
+                     "data":  "2026-08-28T17:12:20",
+                     "hash":  "afd1f4feb46994939bb4aa81939674a3eb58ce0d",
+                     "modifiche":  [
+                                       "#135: i particolari a disegno derivati da un commerciale portano il grezzo in DDP Commerciale",
+                                       "Il changelog non si blocca piu\u0027 in silenzio su un\u0027ancora non valida",
+                                       "Piano: le opzioni del programma Timbrature ancora da portare",
+                                       "HR: versione del server visibile, cartellino rifinito e lookup dei soli timbranti",
+                                       "#132: giustificare le ore mancanti dal calendario presenze, anche col tasto destro",
+                                       "#133 e #134: elenco SAL col solo foglio compilato, tag SAL CHIUSO, Analisi Economica",
+                                       "#131: nuova pagina SAL / SAP Acconti per la quadratura del conto acconti",
+                                       "#130: la percentuale SAL tiene dieci decimali e la fattura torna al centesimo"
+                                   ]
+                 },
+                 {
                      "build":  "20260828-0900",
                      "data":  "2026-08-28T09:00:00",
                      "hash":  "325e576296893ecd10f2dc0bde7bd0841cb6b23f",
