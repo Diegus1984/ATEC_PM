@@ -237,9 +237,14 @@ function Update-Changelog {
         $percorso    = Join-Path $Radice 'ATEC.PM.Server\changelog.json'
         $versionFile = Join-Path $Radice 'ATEC.PM.Server\wwwroot\version.json'
 
+        # TRAPPOLA: Get-Content in PowerShell 5.1, senza -Encoding, decodifica con la
+        # codepage ANSI di sistema (Windows-1252). Su questi JSON — scritti in UTF-8 —
+        # rileggere così spezza ogni accento, e la riscrittura in UTF-8 ricodifica i
+        # byte già codificati: la corruzione si ALLUNGA a ogni deploy. Si legge con
+        # ReadAllText, che è UTF-8 (e toglie il BOM se qualcuno lo ha messo).
         $build = ''
         if (Test-Path $versionFile) {
-            $v = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json
+            $v = [IO.File]::ReadAllText($versionFile, [Text.Encoding]::UTF8) | ConvertFrom-Json
             if ($v -and $v.build) { $build = [string]$v.build }
         }
         if (-not $build) {
@@ -249,7 +254,7 @@ function Update-Changelog {
 
         $voci = @()
         if (Test-Path $percorso) {
-            $doc = Get-Content -LiteralPath $percorso -Raw | ConvertFrom-Json
+            $doc = [IO.File]::ReadAllText($percorso, [Text.Encoding]::UTF8) | ConvertFrom-Json
             if ($doc -and $doc.voci) { $voci = @($doc.voci) }
         }
         $ultimoHash = ''
