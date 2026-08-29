@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260829-1054",
+                     "data":  "2026-08-29T10:54:49",
+                     "hash":  "e8040c489e6de170d12c338310cbae4f790466bc",
+                     "modifiche":  [
+                                       "Timbrature: via i doppioni dei badge e chi non e\u0027 in forza dalle viste HR"
+                                   ]
+                 },
+                 {
                      "build":  "20260829-1034",
                      "data":  "2026-08-29T10:47:52",
                      "hash":  "82ea222b623b9038a7433d16a7015b26fe009732",
