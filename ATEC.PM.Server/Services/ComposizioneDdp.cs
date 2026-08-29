@@ -72,7 +72,6 @@ public static class ComposizioneDdp
                     SET quantity = GREATEST(0, quantity + composition_qty * @Delta),
                         updated_at = NOW(), updated_by = @UpdatedBy
                     WHERE id = @Id", new { Delta = delta, Id = childId, UpdatedBy = updatedBy });
-                OfficinaRowSync.CongelaTipoDaStato(c, childId);
             }
         }
 

@@ -1,4 +1,4 @@
-﻿using ATEC.PM.Server.Migrations;
+using ATEC.PM.Server.Migrations;
 using ATEC.PM.Server.Data;
 using MySqlConnector;
 using Dapper;
@@ -858,6 +858,7 @@ public class DbService
             danea_order_iddoc INT NULL,
             purchase_order VARCHAR(100) DEFAULT '',
             date_needed DATE,
+            delivered_at DATE NULL,
             date_ordered DATE,
             date_received DATE,
             destination VARCHAR(200) DEFAULT '',

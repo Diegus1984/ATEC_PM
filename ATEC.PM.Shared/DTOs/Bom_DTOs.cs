@@ -128,6 +128,8 @@ public class BomItemSaveRequest
     public string? RequestedBy { get; set; }
     public string DaneaRef { get; set; } = "";
     public DateTime? DateNeeded { get; set; }
+    /// <summary>«Consegnato il» (segnalazione #139): data manuale/automatica di consegna materiale.</summary>
+    public DateTime? DeliveredAt { get; set; }
     public string Destination { get; set; } = "";
     public string DestinationSpec { get; set; } = "";
     public string Notes { get; set; } = "";

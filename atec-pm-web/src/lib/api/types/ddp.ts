@@ -243,6 +243,7 @@ export interface BomItemSaveRequest {
   requestedBy: string
   daneaRef: string
   dateNeeded: string | null
+  deliveredAt?: string | null
   destination: string
   destinationSpec: string
   notes: string
