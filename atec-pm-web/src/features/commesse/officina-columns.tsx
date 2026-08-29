@@ -19,7 +19,7 @@ import type {
   DdpTreatmentItem,
   OfficinaItem,
 } from "@/lib/api/types"
-import { euro } from "@/lib/format"
+import { euro, formatCodexCode } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import {
@@ -38,7 +38,7 @@ import { DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { DDP_STATUS_TO_ORDER } from "./ddp-constants"
 import { OfficinaProducedCell } from "./OfficinaProducedCell"
 import type { OfficinaRowMutations } from "./use-officina-row-mutations"
-import { formatDateOrDash, formatDateShort, toDateOnly } from "@/lib/date-iso"
+import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
 
 export function buildOfficinaColumns({
   statuses,
@@ -59,7 +59,8 @@ export function buildOfficinaColumns({
 }: {
   statuses: DdpStatusItem[]
   statusMap: Map<string, DdpStatusItem>
-  transitionMap: Record<string, string[]>
+  /** Assente = finestra stati completa (privilegio #140). */
+  transitionMap: Record<string, string[]> | undefined
   destinations: DdpDestinationItem[]
   treatments: DdpTreatmentItem[]
   parentIdsWithChildren: Set<number>
@@ -165,7 +166,7 @@ export function buildOfficinaColumns({
                 )}
               </button>
             ) : null}
-            {item.partNumber || "—"}
+            {formatCodexCode(item.partNumber) || "—"}
           </span>
         )
       },
@@ -175,7 +176,7 @@ export function buildOfficinaColumns({
       header: "Descrizione",
       cell: ({ row }) => (
         <span
-          className="block max-w-[240px] whitespace-normal break-words"
+          className="block min-w-[280px] max-w-[420px] line-clamp-2 whitespace-normal break-words leading-snug"
           title={row.original.description}
         >
           {row.original.description || "—"}
@@ -327,25 +328,14 @@ export function buildOfficinaColumns({
     },
     {
       accessorKey: "dateNeeded",
-      // «Necessario» → «Data Richiesta» (segnalazione #58): stessa data, il nome è quello
-      // che usa Paolo compilando.
-      //
-      // Dalla #83 si legge e basta: la data la decide chi programma il lavoro, dalla pagina
-      // «Lavorazioni Officine», e da lì si riporta qui. Due punti in cui scriverla
-      // significa che vince l'ultimo che salva — e il server, dalla v92, la ignora
-      // comunque in questa PUT: lasciarla scrivibile mostrerebbe una modifica che poi
-      // non c'è più al primo refresh.
       header: "Data Richiesta",
       enableColumnFilter: false,
       cell: ({ row }) => (
-        <span
-          className="text-sm tabular-nums"
-          title="Si imposta da Lavorazioni Officine"
-        >
-          {row.original.dateNeeded
-            ? formatDateShort(toDateOnly(row.original.dateNeeded))
-            : "—"}
-        </span>
+        <DdpInlineDateCell
+          value={toDateOnly(row.original.dateNeeded)}
+          disabled={pending.dateNeeded}
+          onChange={(value) => mutations.changeDateNeeded(row.original, value)}
+        />
       ),
     },
     {

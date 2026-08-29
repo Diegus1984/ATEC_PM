@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -198,6 +198,12 @@ public class WorkRequestsController : ControllerBase
     /// cambia nella DDP, che ne resta l'unica padrona: qui non c'è nessun altro campo
     /// scrivibile <b>apposta</b>, ed è il motivo per cui esiste questo endpoint invece di
     /// riusare il salvataggio della riga officina.
+    ///
+    /// <para>Dalla segnalazione #141 la <b>Data Richiesta</b> si scrive anche dalla DDP Officina,
+    /// con lo stesso picker di «Data ordine» e «Consegnato il». Non nascono due padroni del dato:
+    /// è la stessa colonna <c>ddp_officina_items.date_needed</c>, e la PUT della riga avvisa
+    /// questa pagina (<c>NotifyWorkRequestsChanged</c>), quindi chi guarda qui la vede cambiare.
+    /// Note di officina e urgenza restano invece solo di questa pagina.</para>
     /// </summary>
     [RequireProjectWritable(Tabella = "ddp_officina_items", ChiaveRotta = "itemId")]
     [HttpPatch("officina/{itemId}/field")]
@@ -662,7 +668,7 @@ public class WorkRequestsController : ControllerBase
             CustomerName = row.CustomerName ?? "",
             RequestDate = row.request_date == null ? "" : ((DateTime)row.request_date).ToString("yyyy-MM-dd"),
             Description = row.description ?? "",
-            PartNumber = row.part_number ?? "",
+            PartNumber = CodexListItem.FormatCodice(row.part_number ?? ""),
             Quantity = row.quantity == null ? 0m : Convert.ToDecimal(row.quantity),
             QuantityProduced = row.quantity_produced == null ? 0m : Convert.ToDecimal(row.quantity_produced),
             Material = row.material ?? "",

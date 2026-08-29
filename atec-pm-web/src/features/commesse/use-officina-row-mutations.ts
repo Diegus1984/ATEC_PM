@@ -51,6 +51,7 @@ export interface OfficinaRowMutations {
     destination: boolean
     destinationSpec: boolean
     daneaRef: boolean
+    dateNeeded: boolean
     orderDate: boolean
     deliveredAt: boolean
     supplier: boolean
@@ -69,6 +70,7 @@ export interface OfficinaRowMutations {
   changeDestination: (item: OfficinaItem, destination: string) => void
   commitDestinationSpec: (item: OfficinaItem, destinationSpec: string) => void
   commitDaneaRef: (item: OfficinaItem, daneaRef: string) => void
+  changeDateNeeded: (item: OfficinaItem, dateNeeded: string | null) => void
   changeOrderDate: (item: OfficinaItem, orderDate: string | null) => void
   changeDeliveredAt: (item: OfficinaItem, deliveredAt: string | null) => void
   changeSupplier: (item: OfficinaItem, supplier: SupplierLookupItem | null) => void
@@ -92,6 +94,7 @@ export function useOfficinaRowMutations(
   const destination = useFieldMutation(projectId, invalidate)
   const destinationSpec = useFieldMutation(projectId, invalidate)
   const daneaRef = useFieldMutation(projectId, invalidate)
+  const dateNeeded = useFieldMutation(projectId, invalidate)
   const orderDate = useFieldMutation(projectId, invalidate)
   const deliveredAt = useFieldMutation(projectId, invalidate)
   const supplier = useFieldMutation(projectId, invalidate)
@@ -177,10 +180,13 @@ export function useOfficinaRowMutations(
     [daneaRef]
   )
 
-  // «Data Richiesta» non si scrive più da qui (#83): la decide chi programma il lavoro,
-  // dalla pagina Lavorazioni Officine, e il server la ignora in questo salvataggio.
-  // La mutation è stata tolta perché una scrittura che il server scarta è peggio di una
-  // colonna ferma: mostra una modifica che sparisce al primo refresh.
+  const changeDateNeeded = React.useCallback(
+    (item: OfficinaItem, value: string | null) => {
+      if (value === toDateOnly(item.dateNeeded) || dateNeeded.isPending) return
+      dateNeeded.mutate({ item, patch: { dateNeeded: value } })
+    },
+    [dateNeeded]
+  )
 
   const changeOrderDate = React.useCallback(
     (item: OfficinaItem, value: string | null) => {
@@ -264,6 +270,7 @@ export function useOfficinaRowMutations(
         destination: destination.isPending,
         destinationSpec: destinationSpec.isPending,
         daneaRef: daneaRef.isPending,
+        dateNeeded: dateNeeded.isPending,
         orderDate: orderDate.isPending,
         deliveredAt: deliveredAt.isPending,
         supplier: supplier.isPending,
@@ -279,6 +286,7 @@ export function useOfficinaRowMutations(
       changeDestination,
       commitDestinationSpec,
       commitDaneaRef,
+      changeDateNeeded,
       changeOrderDate,
       changeDeliveredAt,
       changeSupplier,
@@ -295,6 +303,7 @@ export function useOfficinaRowMutations(
       destination.isPending,
       destinationSpec.isPending,
       daneaRef.isPending,
+      dateNeeded.isPending,
       orderDate.isPending,
       deliveredAt.isPending,
       supplier.isPending,
@@ -309,6 +318,7 @@ export function useOfficinaRowMutations(
       changeDestination,
       commitDestinationSpec,
       commitDaneaRef,
+      changeDateNeeded,
       changeOrderDate,
       changeDeliveredAt,
       changeSupplier,
