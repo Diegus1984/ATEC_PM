@@ -161,10 +161,24 @@ function NavSubmenuItem({
   const isParentActive = children.some((child) => isNavActive(child, pathname))
   const isSubmenuOpen = open && !barCollapsed
 
+  // Aprire il contenitore porta anche sulla prima pagina figlia: un clic solo e
+  // sei dove serve. Se sei già dentro al gruppo NON ti sposta: staresti
+  // lavorando su una figlia e ti ritroveresti sull'altra.
+  function apriSullaPrimaFiglia() {
+    const prima = children[0]
+    if (prima && !isParentActive) onNavigate(prima.path)
+  }
+
   function handleParentClick() {
     if (barCollapsed) {
       setOpen(true)
       if (!open) onToggle()
+      apriSullaPrimaFiglia()
+      return
+    }
+    if (!open) {
+      onToggle()
+      apriSullaPrimaFiglia()
       return
     }
     onToggle()
@@ -193,18 +207,22 @@ function NavSubmenuItem({
         style={{ "--accordion-duration": "200ms" } as React.CSSProperties}
       >
         <SidebarMenuSub>
-          {children.map((subItem) => (
-            <SidebarMenuSubItem key={subItem.id}>
-              <SidebarMenuSubButton
-                asChild
-                isActive={isNavActive(subItem, pathname)}
-              >
-                <button type="button" onClick={() => onNavigate(subItem.path)}>
-                  <span className="truncate">{subItem.label}</span>
-                </button>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
+          {children.map((subItem) => {
+            const SubIcon = subItem.icon
+            return (
+              <SidebarMenuSubItem key={subItem.id}>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={isNavActive(subItem, pathname)}
+                >
+                  <button type="button" onClick={() => onNavigate(subItem.path)}>
+                    <SubIcon />
+                    <span className="truncate">{subItem.label}</span>
+                  </button>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            )
+          })}
         </SidebarMenuSub>
       </Collapsible>
     </SidebarMenuItem>

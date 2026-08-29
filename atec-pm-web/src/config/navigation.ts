@@ -13,25 +13,32 @@ import type { LucideIcon } from "lucide-react"
 import type { ChiaveCatalogo } from "./catalogo.gen"
 import {
   AlarmClock,
-  Archive,
   ArrowRightLeft,
+  BadgeEuro,
   BookOpen,
   Bot,
   BriefcaseBusiness,
   Bug,
   CalendarCheck,
   CalendarClock,
+  CircleDollarSign,
   ClipboardList,
   Clock,
-  Cog,
   Database,
+  DatabaseBackup,
   FileStack,
   FileText,
   Fingerprint,
+  FolderCog,
   FolderKanban,
+  Group,
+  HandCoins,
   History,
+  Layers,
   LayoutDashboard,
+  Library,
   ListChecks,
+  ListTree,
   Mail,
   MessageCircle,
   Milestone,
@@ -43,8 +50,10 @@ import {
   Scale,
   Shield,
   ShoppingCart,
+  Tags,
   Truck,
   Users,
+  Waypoints,
   Wrench,
 } from "lucide-react"
 
@@ -418,10 +427,10 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     items: [
       {
         id: "config-sezioni-group",
-        label: "Conf. Sezioni di costo",
+        label: "Costi e tariffe",
         path: "/config-sezioni",
         featureKey: "nav.config_sezioni",
-        icon: Cog,
+        icon: Layers,
         status: "live",
         children: [
           {
@@ -429,17 +438,17 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             label: "Sezioni di costo",
             path: "/config-sezioni",
             featureKey: "nav.config_sezioni",
-            icon: Cog,
+            icon: ListTree,
             status: "live",
             description:
               "Configurazione macro-fasi, sezioni di costo, fasi e associazione reparti.",
           },
           {
             id: "config-tariffe",
-            label: "Anagrafica tariffe",
+            label: "Tariffe",
             path: "/config-sezioni/tariffe",
             featureKey: "nav.config_sezioni",
-            icon: Cog,
+            icon: BadgeEuro,
             status: "live",
             description:
               "Tariffe orarie officine interne, rimborso km, vitto, alloggio e indennità di trasferta.",
@@ -451,7 +460,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         label: "Anagrafica attività",
         path: "/anagrafica-attivita",
         featureKey: "nav.anagrafica_attivita",
-        icon: ListChecks,
+        icon: Library,
         status: "live",
         description:
           "Catalogo delle voci-attività standard precaricate alla creazione di una commessa (aggiungi, rinomina, riordina, ripristina).",
@@ -466,10 +475,10 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         children: [
           {
             id: "sal-conditions",
-            label: "Condizioni pagamento",
+            label: "Condizioni di pagamento",
             path: "/admin/sal-conditions",
             featureKey: "nav.sal_condizioni",
-            icon: ReceiptText,
+            icon: HandCoins,
             status: "live",
             description:
               "Catalogo delle condizioni di pagamento utilizzabili negli step SAL delle commesse.",
@@ -479,7 +488,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             label: "Causali Conto SAP",
             path: "/admin/sal-conditions/sap",
             featureKey: "nav.sal_condizioni",
-            icon: ReceiptText,
+            icon: Tags,
             status: "live",
             description:
               "Causali Conto SAP selezionabili nella colonna Conto SAP degli step SAL.",
@@ -489,7 +498,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             label: "Stati pagamento",
             path: "/admin/sal-conditions/stati",
             featureKey: "nav.sal_condizioni",
-            icon: ReceiptText,
+            icon: CircleDollarSign,
             status: "live",
             description:
               "Stati pagamento/incasso con colori personalizzabili per gli step SAL.",
@@ -498,28 +507,28 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       },
       {
         id: "ddp-config-group",
-        label: "Conf. DDP",
+        label: "Configurazione DDP",
         path: "/ddp-destinazioni",
         featureKey: "nav.ddp_destinazioni",
-        icon: Wrench,
+        icon: ClipboardList,
         status: "live",
         children: [
           {
             id: "ddp-destinazioni",
-            label: "Destinazioni & Stati",
+            label: "Destinazioni e stati",
             path: "/ddp-destinazioni",
             featureKey: "nav.ddp_destinazioni",
-            icon: Wrench,
+            icon: Waypoints,
             status: "live",
             description:
               "Destinazioni distinta, stati, trattamenti e matrice di transizione delle righe DDP.",
           },
           {
             id: "ddp-aggregazioni",
-            label: "Aggregazioni DDP",
+            label: "Aggregazioni",
             path: "/ddp-aggregazioni",
             featureKey: "nav.ddp_aggregazioni",
-            icon: Archive,
+            icon: Group,
             status: "live",
             description:
               "Matrice stati × aggregazioni (A1–A9) per raggruppare le righe DDP.",
@@ -528,25 +537,25 @@ export const NAV_GROUPS: NavGroupConfig[] = [
       },
       {
         id: "backup",
-        label: "Backup DB",
+        label: "Backup database",
         path: "/backup",
         featureKey: "nav.backup",
-        icon: Archive,
+        icon: DatabaseBackup,
         status: "live",
       },
       {
         id: "template-commesse",
-        label: "Template Commesse",
+        label: "Template commesse",
         path: "/template-commesse",
         featureKey: "nav.project_templates",
-        icon: FileStack,
+        icon: FolderCog,
         status: "live",
         description:
           "Cartelle e file template: nuova cartella, upload multiplo, rinomina (F2), taglia/copia/incolla, elimina (Canc).",
       },
       {
         id: "digest-email",
-        label: "Digest Email",
+        label: "Email e digest",
         path: "/digest-email",
         featureKey: "nav.digest_email",
         icon: Mail,
