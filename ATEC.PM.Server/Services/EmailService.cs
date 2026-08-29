@@ -184,8 +184,24 @@ public class EmailService : BackgroundService
         EmailSettingsDto cfg = ResolveConfig();
 
         var msg = new MimeMessage();
-        msg.From.Add(new MailboxAddress(cfg.FromName, cfg.From));
-        msg.To.Add(new MailboxAddress(string.IsNullOrWhiteSpace(toName) ? toEmail : toName, toEmail));
+        try
+        {
+            msg.From.Add(new MailboxAddress(cfg.FromName, cfg.From));
+            msg.To.Add(new MailboxAddress(string.IsNullOrWhiteSpace(toName) ? toEmail : toName, toEmail));
+        }
+        catch (MimeKit.ParseException ex)
+        {
+            // 🪤 MimeKit valida l'indirizzo NEL COSTRUTTORE. Un'anagrafica con «Mario Rossi
+            // <m@atec.srl>», due indirizzi separati da «;» o anche solo uno spazio di troppo
+            // faceva saltare l'intero giro di invii del chiamante: le mail già accodate
+            // partivano, ma la registrazione a fine ciclo no — e al secondo tentativo chi
+            // l'aveva già ricevuta se la ritrovava due volte. Qui è un «no» a questo solo
+            // destinatario, che il chiamante conta fra i falliti.
+            _logger.LogWarning(ex,
+                "[EmailService] Indirizzo non valido in anagrafica, mail non accodata: {Email}", toEmail);
+            return false;
+        }
+
         msg.Subject = subject;
         msg.Body = new BodyBuilder
         {
