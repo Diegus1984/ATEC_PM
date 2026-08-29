@@ -1,7 +1,7 @@
 # PIANO — Fasi dettaglio multi-sezione (libreria unica di fasi)
 
 > Deciso il **07/08/2026** con Diego. Chiude la parte «fare ordine per logica e sintassi»
-> della segnalazione **#42**, insieme a [ANAGRAFICHE-FASI-SEZIONI.md](ANAGRAFICHE-FASI-SEZIONI.md)
+> della segnalazione **#42**, insieme a [ANAGRAFICHE-FASI-SEZIONI.md](../guide/ANAGRAFICHE-FASI-SEZIONI.md)
 > (fotografia dell'anagrafica) e a [PIANO-SEGNALAZIONI-BILANCIO.md](PIANO-SEGNALAZIONI-BILANCIO.md).
 
 ## Stato

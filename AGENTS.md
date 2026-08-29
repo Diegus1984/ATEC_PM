@@ -9,26 +9,29 @@
 
 | Area | Leggi PRIMA (in ordine) |
 |------|-------------------------|
-| **Client WEB** — `atec-pm-web/` (React + Vite + shadcn) | 1) `atec-pm-web/HANDOFF.md` — stato + regole + prossimi passi · 2) `atec-pm-web/BLOCKS-RULES.md` layout pagine · 3) `atec-pm-web/DESIGN-RULES.md` tema/token · 4) `atec-pm-web/WEB-MIGRATION.md` storico migrazione |
+| **Client WEB** — `atec-pm-web/` (React + Vite + shadcn) | 1) [docs/HANDOFF-WEB.md](docs/HANDOFF-WEB.md) — stato + regole + prossimi passi · 2) [docs/regole/BLOCKS-RULES.md](docs/regole/BLOCKS-RULES.md) layout pagine · 3) [docs/regole/DESIGN-RULES.md](docs/regole/DESIGN-RULES.md) tema/token · 4) [docs/archivio/WEB-MIGRATION.md](docs/archivio/WEB-MIGRATION.md) storico migrazione |
 | **Server / API** — `ATEC.PM.Server/` | Controller in `ATEC.PM.Server/Controllers/` + DTO in `ATEC.PM.Shared/DTOs/` (leggi il contratto reale prima di scrivere client) |
 | **DB / migrazioni** | **Una migrazione = un file** in `ATEC.PM.Server/Migrations/MNNN_Cosa.cs` (`IMigrazione`): si crea il file e basta — niente costanti da alzare, niente elenchi, `DbService.cs` non si tocca. Le applica `MigrationRunner` all'avvio (sotto lock MySQL, una sola istanza alla volta), scoprendole dall'assembly; se una fallisce **il server non parte** e l'errore resta scritto in `schema_migrations` (`success`, `error_text`, `duration_ms`). Le sole eccezioni sono le pulizie marcate `Facoltativa`. Le **viste** non stanno nelle migrazioni: le riallinea `EnsureViews` a ogni avvio. Attrezzi condivisi in `Migrations/AiutiMigrazione.cs`. MySQL con Dapper (no EF) |
-| **Segnalazioni / Bug** | **`python tools/segnalazioni.py <ID>`** per leggere ticket e scaricare subito gli screenshot allegati in `_bug_atts/`. `python tools/segnalazioni.py --aperte` per l'elenco aperto. |
+| **Segnalazioni / Bug** | **`python tools/segnalazioni.py <ID>`** per leggere ticket e scaricare subito gli screenshot allegati in `_bug_atts/`. `python tools/segnalazioni.py --aperte` per l'elenco aperto. Manuale completo: [docs/tools/TOOLS.md](docs/tools/TOOLS.md) |
 
 > **Client WPF retired (20/07/2026).** Sorgenti in `backups/ATEC.PM.Client_retired_20260720/`. Non è più in `ATEC.PM.sln`. Il client ufficiale è solo web.
 
 ## 🗂️ Mappa dei documenti (cosa sta dove)
 
-**Web** (`atec-pm-web/`):
-- `HANDOFF.md` — **punto d'ingresso web**: stato modulo per modulo, come avviare, regole, roadmap
-- `BLOCKS-RULES.md` — regole layout pagine (fedeltà ai blocchi shadcn, recipe copia-incolla)
-- `DESIGN-RULES.md` — preset/tema/token (radix-vega, neutral, Inter, radius 0.625rem)
-- `WEB-MIGRATION.md` — storico migrazione WPF → web
-- `README.md` — avvio rapido e struttura cartelle
+> **Tutta la documentazione sta in [`docs/`](docs/INDEX.md) — apri [docs/INDEX.md](docs/INDEX.md) per l'elenco completo e ragionato.**
+> **REGOLA: un `.md` nuovo nasce in `docs/<cartella giusta>/` e si aggiunge a `docs/INDEX.md`.** Niente file sciolti nella radice o dentro `atec-pm-web/`.
 
-**Progetto (root `ATEC_PM/`):**
-- `AGENTS.md` (questo) / `CLAUDE.md` — indice master (Codex / Claude Code). **Tienili allineati.**
-- `TODO.md`, `BUGS.md` — cose aperte
-- `GUIDA-SERVER-LAN.md` — **deploy sul server aziendale** (ATEC-FC 192.168.2.150): installazione, aggiornamenti, backup, problemi tipici. Script in `deploy/`, avvio da `carica-installazione.bat` / `aggiorna-server.bat`
+| Cartella | Cosa ci va |
+|----------|------------|
+| [`docs/`](docs/INDEX.md) | I vivi: `HANDOFF-WEB.md` (punto d'ingresso web), `TODO.md`, `BUGS.md` |
+| [`docs/tools/`](docs/tools/TOOLS.md) | Manuale degli attrezzi: segnalazioni, deploy, script Gamma, comandi di sviluppo |
+| `docs/regole/` | Regole che valgono sempre: `BLOCKS-RULES.md`, `DESIGN-RULES.md`, `REGOLA_DATE_INIZIO_FINE.md` |
+| `docs/guide/` | Manuali operativi: `GUIDA-SERVER-LAN.md` (**deploy sul server 192.168.2.150**), sezioni di costo, cataloghi |
+| `docs/piani/` | Piani di lavoro e specifiche di funzionalità (`PIANO-*.md`, `*-SPEC.md`) |
+| `docs/handoff/` | Consegne di fine sessione, datate |
+| `docs/archivio/` | Superato, generato o storico: si legge, non si aggiorna |
+
+**Fuori da `docs/` (di proposito):** `AGENTS.md` (questo) / `CLAUDE.md` — indice master (Codex / Claude Code), **tienili allineati**; `atec-pm-web/README.md` — avvio rapido SPA; `.claude/skills/**`.
 
 ## 🐛 Segnalazioni e Ticket (Accesso Diretto)
 
@@ -54,7 +57,7 @@ dotnet run --project ATEC.PM.Server      # API → http://localhost:5150 (Releas
 cd atec-pm-web; npm run dev               # SPA → http://localhost:5173 (proxy /api → 5150)
 ```
 
-> Nota shell: Node non è nel PATH. Per npm/tsc/eslint: prefissa `C:\Program Files\nodejs` al PATH.
+> Nota shell: Node non è nel PATH. Per npm/tsc/eslint: `$env:Path = "C:\Program Files\nodejs;" + $env:Path`.
 
 ## Stack
 

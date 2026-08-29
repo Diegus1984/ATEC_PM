@@ -13,7 +13,7 @@ Legenda: `[ ]` aperto · `[~]` in corso · `[x]` fatto · `[-]` scartato
 Gli strumenti sono in produzione dal **15/08/2026** (deploy di oggi). Quello che manca è la
 parte che non si può programmare: **lasciarla accesa e tornare a leggerla**. Finché non ci sono
 quei dati, E2 (indici), E3 (N+1) ed E5 (async) si farebbero a naso — che è esattamente ciò che
-il piano vieta. Dettagli in [PIANO-MIGLIORIE-TECNICHE.md](PIANO-MIGLIORIE-TECNICHE.md) §E1.
+il piano vieta. Dettagli in [PIANO-MIGLIORIE-TECNICHE.md](piani/PIANO-MIGLIORIE-TECNICHE.md) §E1.
 
 - [x] **① Accendere lo slow query log sul server** — **PROGRAMMATO: lunedì 24/08/2026 alle 08:00**
       (spostato dal 17: era in piena settimana di Ferragosto e si sarebbe misurato il silenzio).

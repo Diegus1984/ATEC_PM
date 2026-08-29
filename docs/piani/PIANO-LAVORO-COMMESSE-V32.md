@@ -29,7 +29,7 @@ Prospetto SAL (banner + «Conferma controllo»). Era stato implementato e l'hai 
 ## BLOCCO 0 — Bug da chiudere subito ✅ FATTO 04/08/2026
 
 Non dipendono dal prototipo: sono difetti trovati durante l'analisi del codice attuale.
-Dettaglio dei fix in [BUGS.md](BUGS.md), BUG-007 … BUG-012.
+Dettaglio dei fix in [BUGS.md](../BUGS.md), BUG-007 … BUG-012.
 
 | Bug | Dove | Stato |
 |---|---|---|

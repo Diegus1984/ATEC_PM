@@ -2,11 +2,11 @@
 
 Client React per ATEC PM. Consuma l'API ASP.NET Core esistente (`ATEC.PM.Server`).
 
-> 🧭 **Riprendi il lavoro da una nuova chat?** Parti da [HANDOFF.md](HANDOFF.md): stato modulo per modulo, regole e prossimi passi.
+> 🧭 **Riprendi il lavoro da una nuova chat?** Parti da [../docs/HANDOFF-WEB.md](../docs/HANDOFF-WEB.md): stato modulo per modulo, regole e prossimi passi.
 
 ## Design system
 
-**Regola fondamentale:** UI identica al preset [shadcn/create bIkeymG](https://ui.shadcn.com/create?preset=bIkeymG) (radix-vega). Vedi `DESIGN-RULES.md` (preset/tema/token) e `BLOCKS-RULES.md` (layout pagine fedele a [ui.shadcn.com/blocks](https://ui.shadcn.com/blocks)).
+**Regola fondamentale:** UI identica al preset [shadcn/create bIkeymG](https://ui.shadcn.com/create?preset=bIkeymG) (radix-vega). Vedi `../docs/regole/DESIGN-RULES.md` (preset/tema/token) e `../docs/regole/BLOCKS-RULES.md` (layout pagine fedele a [ui.shadcn.com/blocks](https://ui.shadcn.com/blocks)).
 
 ## Prerequisiti
 

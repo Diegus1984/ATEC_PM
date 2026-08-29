@@ -178,7 +178,7 @@ spedire, lo script se ne accorge e chiude in **12,5 secondi** dicendo *«già ag
 
 > **Alla fine lo script stampa dove se n'è andato il tempo**, fase per fase e in ordine di
 > durata. Serve a non ottimizzare a naso: la prima riga di quella classifica è il prossimo
-> lavoro da fare. Le voci aperte stanno in [TODO.md](TODO.md) §3.
+> lavoro da fare. Le voci aperte stanno in [TODO.md](../TODO.md) §3.
 >
 > I test che hanno bisogno di MySQL si saltano da soli se sul PC non c'è: l'aggiornamento
 > prosegue con i soli test puri, non si blocca per quello.

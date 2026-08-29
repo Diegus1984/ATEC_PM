@@ -163,7 +163,7 @@ con importi e testo libero — preventivi, SAL, trasferta, DDP.
 ### D1 — Root MySQL: sviluppo e rotazione, non "creare l'utente"
 In **produzione** l'utente dedicato c'è già: [`install-server.ps1`](deploy/install-server.ps1)
 crea `atecpm`@`localhost` con `GRANT ALL` solo su `atec_pm`, e
-[GUIDA-SERVER-LAN.md](GUIDA-SERVER-LAN.md) §9 lo conferma. I segreti di produzione
+[GUIDA-SERVER-LAN.md](../guide/GUIDA-SERVER-LAN.md) §9 lo conferma. I segreti di produzione
 sono cifrati con DPAPI (`ProtectedConfigHelper`). `ConnectionStrings:Default` con
 `User=root` è il file **di sviluppo** nel repo.
 
@@ -489,7 +489,7 @@ Dall'audit sono arrivate tre correzioni, tutte applicate:
   scatta il ritorno alla versione precedente. È il caso che A0 rende più probabile.
 - `Migrations.StopOnError` aggiunto a [appsettings.server.template.json](deploy/appsettings.server.template.json):
   la manopola d'emergenza mancava dal file che il server legge davvero.
-- [GUIDA-SERVER-LAN.md](GUIDA-SERVER-LAN.md) §8.1 — nuovo paragrafo «il servizio non parte e nel
+- [GUIDA-SERVER-LAN.md](../guide/GUIDA-SERVER-LAN.md) §8.1 — nuovo paragrafo «il servizio non parte e nel
   log c'è una migrazione FALLITA», con i comandi da dare.
 
 **Da sapere al prossimo deploy.** All'ultimo deploy noto (09/08) la produzione era a
@@ -830,7 +830,7 @@ la v91 sostituiva un attimo dopo. Ora un database nuovo nasce già con l'assetto
 **Trovato e non corretto** (difetto **preesistente**, non introdotto da E2): il dedup delle
 anomalie ore cerca la notifica nel **giorno lavorato** e non in quello corrente, quindi chi
 registra le ore il giorno dopo si prende fino a 8 notifiche identiche. Registrato come
-**BUG-014** in [BUGS.md](BUGS.md): correggerlo richiede prima di portare il giorno dentro il
+**BUG-014** in [BUGS.md](../BUGS.md): correggerlo richiede prima di portare il giorno dentro il
 riferimento della notifica, o due giorni anomali della stessa persona si annullerebbero.
 
 #### Guardato e scartato (per non rifare l'analisi)
@@ -858,7 +858,7 @@ backup completo prima, come sempre.
 
 ### 🟨 E3 — N+1: **censimento fatto il 15/08/2026**, correzioni dopo la misura
 
-Elenco completo, voce per voce, in **[CENSIMENTO-N1-E3.md](CENSIMENTO-N1-E3.md)**.
+Elenco completo, voce per voce, in **[CENSIMENTO-N1-E3.md](../archivio/CENSIMENTO-N1-E3.md)**.
 
 Un rilevatore deterministico ha trovato **240 candidati in 45 file** (più dei 166 stimati: prende
 anche i cicli scritti su una riga sola senza graffe, la forma più insidiosa). Otto classificazioni
@@ -891,7 +891,7 @@ di E3: il lavoro è correggerne una manciata, e sapere quali.
 > `QuoteCostingController.cs:370`). Un utente autenticato può sovrascrivere contingenza, margine e
 > ombreggiatura delle righe materiale di **qualunque altro preventivo** passando id arbitrari — e
 > sono percentuali che concorrono al prezzo d'offerta. **Verificato a mano**: la riga sopra, nello
-> stesso metodo, il filtro ce l'ha. Registrato in [BUGS.md](BUGS.md), da chiudere insieme
+> stesso metodo, il filtro ce l'ha. Registrato in [BUGS.md](../BUGS.md), da chiudere insieme
 > all'accorpamento di quelle righe.
 
 - [ ] Correggere i punti che la misura di E1 conferma, partendo da `TravelFromTimesheet`.

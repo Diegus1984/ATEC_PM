@@ -18,10 +18,10 @@ l'API ASP.NET Core esistente (`ATEC.PM.Server`). **È il client ufficiale** dal
 | File | A cosa serve |
 |------|--------------|
 | **HANDOFF.md** (questo) | Punto d'ingresso: stato, regole, prossimi passi |
-| [WEB-MIGRATION.md](WEB-MIGRATION.md) | **Stato modulo per modulo** (web vs WPF) + roadmap |
-| [BLOCKS-RULES.md](BLOCKS-RULES.md) | **Regole layout pagine**: fedeltà ai blocchi shadcn, recipe copia-incolla |
-| [DESIGN-RULES.md](DESIGN-RULES.md) | Tema/preset/token (preset `bIkeymG`, radix-vega, neutral, Inter, radius 0.625rem) |
-| [README.md](README.md) | Avvio rapido e struttura cartelle |
+| [WEB-MIGRATION.md](archivio/WEB-MIGRATION.md) | **Stato modulo per modulo** (web vs WPF) + roadmap |
+| [BLOCKS-RULES.md](regole/BLOCKS-RULES.md) | **Regole layout pagine**: fedeltà ai blocchi shadcn, recipe copia-incolla |
+| [DESIGN-RULES.md](regole/DESIGN-RULES.md) | Tema/preset/token (preset `bIkeymG`, radix-vega, neutral, Inter, radius 0.625rem) |
+| [README.md](../atec-pm-web/README.md) | Avvio rapido e struttura cartelle |
 
 ## Come avviare
 
