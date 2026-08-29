@@ -92,7 +92,9 @@
           "micros": ["prices"],
           "nota": "Micro prezzi dal passo 4 (M104, semina fotografica): le viste del Gestore aggregano i costi delle distinte.",
           "figli": [
-            { "kind": "azione", "chiave": "action.delete_ddp_row", "label": "Elimina righe DDP" }
+            { "kind": "azione", "chiave": "action.delete_ddp_row", "label": "Elimina righe DDP" },
+            { "kind": "azione", "chiave": "action.ddp_status_override", "label": "Cambia stato DDP fuori dalla matrice",
+              "nota": "Segnalazione #140: chi ce l'ha vede TUTTI gli stati nella colonna Stato delle due distinte e il server non gli applica ddp_status_transitions. Serve a rimettere in riga un collega che ha sbagliato assegnazione, altrimenti certi errori sono senza ritorno. Vale su DDP Commerciali, DDP Officina e Inbox Acquisti; chi ha il jolly ce l'ha gia'." }
           ]
         },
         { "kind": "voce", "chiave": "nav.checklist", "label": "Check list" },

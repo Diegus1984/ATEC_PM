@@ -38,6 +38,7 @@ import { CodexPickerDialog } from "./CodexPickerDialog"
 import { DdpItemHistoryDialog } from "./DdpItemHistoryDialog"
 import { DdpStatusFilterBar } from "./DdpStatusFilterBar"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
+import { ddpTransitionsPerUtente } from "./ddp-constants"
 import { WORK_TYPE_META } from "./ddp-work-type"
 import { OfficinaDialog } from "./OfficinaDialog"
 import { buildOfficinaColumns } from "./officina-columns"
@@ -255,8 +256,12 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     queryKey: ["ddp-status-transitions"],
     queryFn: fetchDdpStatusTransitions,
   })
+  // `undefined` = finestra completa: è così che chi ha il privilegio #140 vede tutti gli stati.
   const transitionMap = React.useMemo(
-    () => buildDdpTransitionMap(transitionsQuery.data ?? [], "OFFICINA"),
+    () =>
+      ddpTransitionsPerUtente(
+        buildDdpTransitionMap(transitionsQuery.data ?? [], "OFFICINA")
+      ),
     [transitionsQuery.data]
   )
 

@@ -6,6 +6,7 @@ export type ChiaveCatalogo =
   | "action.app_config"
   | "action.assign_atec_code"
   | "action.create_project"
+  | "action.ddp_status_override"
   | "action.delete_ddp_row"
   | "action.delete_project"
   | "action.edit_bilancio_settings"
@@ -329,6 +330,11 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
             "kind": "azione",
             "chiave": "action.delete_ddp_row",
             "label": "Elimina righe DDP"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.ddp_status_override",
+            "label": "Cambia stato DDP fuori dalla matrice"
           }
         ]
       },
@@ -649,6 +655,7 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "action.app_config",
   "action.assign_atec_code",
   "action.create_project",
+  "action.ddp_status_override",
   "action.delete_ddp_row",
   "action.delete_project",
   "action.edit_bilancio_settings",

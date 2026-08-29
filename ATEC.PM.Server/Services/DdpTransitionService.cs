@@ -21,6 +21,15 @@ public static class DdpTransitionService
     private const string StartKey = "INIZIO";
 
     /// <summary>
+    /// Privilegio che libera dalla matrice (segnalazione #140). Chi ce l'ha sceglie qualunque
+    /// stato in entrambe le distinte: serve a rimettere in riga un collega che ha sbagliato
+    /// assegnazione, perché senza uscita la matrice rende certi errori definitivi. Chi ce l'ha
+    /// lo decide il chiamante (il controller interroga <c>FeatureAccessService</c>); qui la
+    /// chiave sta per essere un nome solo, uguale a quello che il client legge da /features/my.
+    /// </summary>
+    public const string FeatureScavalcaMatrice = "action.ddp_status_override";
+
+    /// <summary>
     /// Null se la transizione è ammessa, altrimenti il messaggio d'errore da mostrare all'utente.
     /// </summary>
     /// <param name="cache">
@@ -29,9 +38,16 @@ public static class DdpTransitionService
     /// volta per riga</b>: aggiudicare una RDO da 200 righe faceva 200 letture identiche.
     /// Ometterla non è un errore: si rilegge dal database.
     /// </param>
+    /// <param name="ignoraMatrice">
+    /// Vero per chi ha <see cref="FeatureScavalcaMatrice"/>: la transizione è sempre ammessa
+    /// (#140). Non è una scorciatoia di comodo — è il gesto con cui un amministratore o il PM
+    /// riporta indietro una riga che un collega ha mandato nello stato sbagliato.
+    /// </param>
     public static string? Validate(IDbConnection c, string ddpType, string? fromStatus, string? toStatus,
-        AnagraficheCache? cache = null)
+        AnagraficheCache? cache = null, bool ignoraMatrice = false)
     {
+        if (ignoraMatrice) return null;
+
         string from = (fromStatus ?? "").Trim().ToUpperInvariant();
         string to = (toStatus ?? "").Trim().ToUpperInvariant();
         if (to.Length == 0 || from == to) return null;

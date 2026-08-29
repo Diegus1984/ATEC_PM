@@ -54,7 +54,7 @@ import { DdpStatusMenu } from "./DdpStatusMenu"
 import { ddpCommercialRowToSaveRequest } from "./ddp-commercial-row"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { isRawRow, RawRowBadge } from "./ddp-raw-row"
-import { isCommercialQtyEditable } from "./ddp-constants"
+import { ddpTransitionsPerUtente, isCommercialQtyEditable } from "./ddp-constants"
 import {
   buildCompositionRows,
   collectParentIds,
@@ -98,7 +98,7 @@ const COLUMN_LABELS: Record<string, string> = {
   manufacturer: "Produttore",
   itemStatus: "Stato",
   daneaRef: "Rif. Danea",
-  dateNeeded: "Data Prev.",
+  dateNeeded: "Data Prevista",
   deliveredAt: "Consegnato il",
   destination: "Destinazione",
   destinationSpec: "Specifica",
@@ -153,8 +153,12 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
     queryKey: ["ddp-status-transitions"],
     queryFn: fetchDdpStatusTransitions,
   })
+  // `undefined` = finestra completa: è così che chi ha il privilegio #140 vede tutti gli stati.
   const transitionMap = React.useMemo(
-    () => buildDdpTransitionMap(transitionsQuery.data ?? [], "COMMERCIAL"),
+    () =>
+      ddpTransitionsPerUtente(
+        buildDdpTransitionMap(transitionsQuery.data ?? [], "COMMERCIAL")
+      ),
     [transitionsQuery.data]
   )
   const destinationsQuery = useQuery({
@@ -327,6 +331,23 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
     onError: onRowMutationError,
   })
 
+  const deliveredAtMutation = useMutation({
+    mutationFn: ({
+      row,
+      deliveredAt,
+    }: {
+      row: DdpRowItem
+      deliveredAt: string | null
+    }) =>
+      updateDdpRow(
+        projectId,
+        row.id,
+        ddpCommercialRowToSaveRequest(projectId, row, { deliveredAt })
+      ),
+    onSuccess: () => invalidate(),
+    onError: onRowMutationError,
+  })
+
   const notesMutation = useMutation({
     mutationFn: ({ row, notes }: { row: DdpRowItem; notes: string }) =>
       updateDdpRow(
@@ -448,6 +469,20 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       dateNeededMutation.mutate({ row, dateNeeded })
     },
     [dateNeededMutation, readOnly]
+  )
+
+  const handleDeliveredAtChange = React.useCallback(
+    (row: DdpRowItem, deliveredAt: string | null) => {
+      if (
+        readOnly ||
+        deliveredAt === toDateOnly(row.deliveredAt) ||
+        deliveredAtMutation.isPending
+      ) {
+        return
+      }
+      deliveredAtMutation.mutate({ row, deliveredAt })
+    },
+    [deliveredAtMutation, readOnly]
   )
 
   const handleNotesCommit = React.useCallback(
@@ -742,7 +777,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         header: "Descrizione",
         cell: ({ row }) => (
           <span
-            className="block max-w-[260px] whitespace-normal break-words"
+            className="block min-w-[280px] max-w-[420px] line-clamp-2 whitespace-normal break-words leading-snug"
             title={row.original.description}
           >
             {row.original.description || "—"}
@@ -915,7 +950,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       },
       {
         accessorKey: "dateNeeded",
-        header: "Data Prev.",
+        header: "Data Prevista",
         enableColumnFilter: false,
         cell: ({ row }) =>
           readOnly ? (
@@ -937,10 +972,20 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         header: "Consegnato il",
         enableColumnFilter: false,
         cell: ({ row }) =>
-          row.original.deliveredAt ? (
-            <StackedDateLabel value={row.original.deliveredAt} />
+          readOnly ? (
+            row.original.deliveredAt ? (
+              <StackedDateLabel value={toDateOnly(row.original.deliveredAt)} />
+            ) : (
+              <span className="whitespace-nowrap">—</span>
+            )
           ) : (
-            <span className="whitespace-nowrap">—</span>
+            <DdpInlineDateCell
+              value={toDateOnly(row.original.deliveredAt)}
+              disabled={deliveredAtMutation.isPending}
+              onChange={(value) =>
+                handleDeliveredAtChange(row.original, value)
+              }
+            />
           ),
       },
       {

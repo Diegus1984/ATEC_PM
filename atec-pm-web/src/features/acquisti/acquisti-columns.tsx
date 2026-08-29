@@ -33,7 +33,8 @@ export function buildAcquistiColumns({
   gridItems: AcquistiInboxItem[]
   statuses: DdpStatusItem[]
   statusMap: Map<string, DdpStatusItem>
-  transitionMap: Record<string, string[]>
+  /** Assente = finestra stati completa (privilegio #140). */
+  transitionMap: Record<string, string[]> | undefined
   statusChangePending: boolean
   onStatusChange: (item: AcquistiInboxItem, statusKey: string) => void
   onAssignAtec: (item: AcquistiInboxItem) => void
@@ -291,7 +292,7 @@ export function buildAcquistiColumns({
     },
     {
       accessorKey: "dateNeeded",
-      header: "Data Prev.",
+      header: "Data Prevista",
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-xs">
           {formatDateShort(row.original.dateNeeded) || "—"}

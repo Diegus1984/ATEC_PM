@@ -41,6 +41,7 @@ public class ProjectsController : ControllerBase
     private readonly IHubContext<ProjectHub> _hub;
     private readonly AnagraficheCache _cache;
     private readonly ProjectWriteGuard _guard;
+    private readonly FeatureAccessService _access;
     public ProjectsController(
         DbService db,
         NotificationService notif,
@@ -48,7 +49,8 @@ public class ProjectsController : ControllerBase
         ILogger<ProjectsController> logger,
         IHubContext<ProjectHub> hub,
         AnagraficheCache cache,
-        ProjectWriteGuard guard)
+        ProjectWriteGuard guard,
+        FeatureAccessService access)
     {
         _db = db;
         _notif = notif;
@@ -57,6 +59,7 @@ public class ProjectsController : ControllerBase
         _hub = hub;
         _cache = cache;
         _guard = guard;
+        _access = access;
     }
 
     // Notifica real-time: chi guarda QUESTA commessa (gruppo "project-{id}") + il Gestore DDP (gruppo globale
@@ -97,6 +100,20 @@ public class ProjectsController : ControllerBase
 
     private int GetCurrentEmployeeId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
+
+    /// <summary>
+    /// Chi ha <c>action.ddp_status_override</c> non è vincolato alla matrice degli avanzamenti
+    /// (segnalazione #140): amministratori e PM devono poter riportare indietro una riga che un
+    /// collega ha mandato nello stato sbagliato, altrimenti l'errore è definitivo. Il client
+    /// mostra la finestra completa alle stesse persone, leggendo la stessa chiave da
+    /// <c>/features/my</c>; qui il controllo si rifà comunque, perché la finestra ristretta del
+    /// menu è un aiuto e non un cancello.
+    /// </summary>
+    private bool PuoScavalcareMatriceDdp() =>
+        _access.CanAccessUser(
+            GetCurrentEmployeeId(),
+            User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value,
+            DdpTransitionService.FeatureScavalcaMatrice);
 
     /// <summary>
     /// I parametri di una UPDATE più la firma di chi sta scrivendo (<c>@UpdatedBy</c>, #114).
@@ -1438,10 +1455,14 @@ public class ProjectsController : ControllerBase
                    b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,
                    -- #119: raggruppamento per composizione, gemello di quello dell'officina.
                    b.parent_bom_item_id AS ParentBomItemId, b.composition_qty AS CompositionQty,
-                   -- «Consegnato il»: ultimo passaggio a DISP nella cronistoria della riga.
-                   (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
-                     WHERE ev.item_type = 'COMMERCIAL' AND ev.item_id = b.id
-                       AND ev.to_status = 'DISP') AS DeliveredAt
+                   -- #135: grezzo derivato da un 101 (vuoto = riga commerciale normale).
+                   COALESCE(b.raw_codex_code,'') AS RawCodexCode,
+                   COALESCE(b.raw_sources,'') AS RawSources, b.raw_auto_qty AS RawAutoQty,
+                   -- «Consegnato il»: valore salvato sulla riga oppure ultimo passaggio a DISP nella cronistoria.
+                   COALESCE(b.delivered_at,
+                             (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
+                              WHERE ev.item_type = 'COMMERCIAL' AND ev.item_id = b.id
+                                AND ev.to_status = 'DISP')) AS DeliveredAt
             FROM bom_items b
             LEFT JOIN suppliers s ON s.id = b.supplier_id
             LEFT JOIN catalog_items ci ON ci.id = b.catalog_item_id
@@ -1479,7 +1500,7 @@ public class ProjectsController : ControllerBase
 
             // Finestra di partenza (riga INIZIO della matrice, per tipo): sulla commerciale
             // esclude DC — il materiale commerciale si acquista, non si costruisce.
-            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, null, req.ItemStatus, _cache);
+            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, null, req.ItemStatus, _cache, PuoScavalcareMatriceDdp());
             if (startError != null)
                 return BadRequest(ApiResponse<int>.Fail(startError));
 
@@ -1492,12 +1513,12 @@ public class ProjectsController : ControllerBase
             INSERT INTO bom_items
                 (project_id, catalog_item_id, part_number, description, unit, quantity,
                  unit_cost, supplier_id, manufacturer, item_status, requested_by,
-                 danea_ref, date_needed, destination, destination_spec, notes, ddp_type,
+                 danea_ref, date_needed, delivered_at, destination, destination_spec, notes, ddp_type,
                  atec_code, created_by, updated_at)
             VALUES
                 (@ProjectId, @CatalogItemId, @PartNumber, @Description, @Unit, @Quantity,
                  @UnitCost, @SupplierId, @Manufacturer, @ItemStatus, COALESCE(@RequestedBy,''),
-                 @DaneaRef, @DateNeeded, @Destination, @DestinationSpec, @Notes, @DdpType,
+                 @DaneaRef, @DateNeeded, @DeliveredAt, @Destination, @DestinationSpec, @Notes, @DdpType,
                  NULLIF(@AtecCode,''), @CreatedBy, NOW());
             SELECT LAST_INSERT_ID()", new
             {
@@ -1505,7 +1526,7 @@ public class ProjectsController : ControllerBase
                 // Sensibile (§12.3): null = chi crea non vede i prezzi → costo 0, come una riga nata senza costo.
                 UnitCost = req.UnitCost ?? 0,
                 req.SupplierId, req.Manufacturer, req.ItemStatus, req.RequestedBy,
-                req.DaneaRef, req.DateNeeded, req.Destination, req.DestinationSpec, req.Notes, req.DdpType,
+                req.DaneaRef, req.DateNeeded, req.DeliveredAt, req.Destination, req.DestinationSpec, req.Notes, req.DdpType,
                 req.AtecCode, CreatedBy = createdBy
             });
 
@@ -1547,7 +1568,7 @@ public class ProjectsController : ControllerBase
             // Matrice degli avanzamenti di stato (v7, tipo COMMERCIAL): il server rifiuta le
             // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
             // client vecchi e modifiche concorrenti).
-            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus, _cache);
+            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus, _cache, PuoScavalcareMatriceDdp());
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
 
@@ -1561,6 +1582,17 @@ public class ProjectsController : ControllerBase
                     "La quantità è modificabile solo in stato Verificare magazzino o Da Ordinare."));
             }
 
+            // Auto-fill «Consegnato il» (#139): solo al PASSAGGIO in chiusura positiva (DISP), se ancora vuota → oggi.
+            bool closingPositive = string.Equals(req.ItemStatus, "DISP", StringComparison.OrdinalIgnoreCase);
+            bool wasClosing = string.Equals(oldStatus, "DISP", StringComparison.OrdinalIgnoreCase);
+            DateTime? beforeDeliveredAt = c.ExecuteScalar<DateTime?>(
+                "SELECT delivered_at FROM bom_items WHERE id = @ItemId AND project_id = @Id",
+                new { ItemId = itemId, Id = id });
+            if (closingPositive && !wasClosing && !req.DeliveredAt.HasValue && !beforeDeliveredAt.HasValue)
+            {
+                req.DeliveredAt = DateTime.Today;
+            }
+
             req.Id = itemId;
             req.ProjectId = id;
             req.AtecCode = (req.AtecCode ?? "").Replace(".", "").Trim();
@@ -1571,7 +1603,7 @@ public class ProjectsController : ControllerBase
                 -- affidabile → si azzera (valutato PRIMA dell'assegnazione di danea_ref: le
                 -- SET di MySQL sono applicate in ordine, qui danea_ref è ancora quello vecchio).
                 danea_order_iddoc = IF(COALESCE(danea_ref,'') <> @DaneaRef, NULL, danea_order_iddoc),
-                danea_ref = @DaneaRef, date_needed = @DateNeeded,
+                danea_ref = @DaneaRef, date_needed = @DateNeeded, delivered_at = @DeliveredAt,
                 -- «Inserito da» (#61): NULL = il chiamante non gestisce il campo → autore
                 -- invariato. Per svuotarlo si manda la stringa vuota.
                 requested_by = COALESCE(@RequestedBy, requested_by),
@@ -1808,7 +1840,7 @@ public class ProjectsController : ControllerBase
             req.ProjectId = id;
 
             // Finestra di partenza (riga INIZIO della matrice, tipo OFFICINA).
-            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, null, req.ItemStatus, _cache);
+            string? startError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, null, req.ItemStatus, _cache, PuoScavalcareMatriceDdp());
             if (startError != null)
                 return BadRequest(ApiResponse<int>.Fail(startError));
 
@@ -2202,7 +2234,7 @@ public class ProjectsController : ControllerBase
             // transizioni non ammesse (la UI mostra solo quelle valide, ma qui si coprono
             // client vecchi e modifiche concorrenti). Gli auto-avanzamenti successivi
             // (pezzi prodotti → PAR/DISP) sono transizioni di sistema già coerenti con la matrice.
-            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, oldStatus, req.ItemStatus, _cache);
+            string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeOfficina, oldStatus, req.ItemStatus, _cache, PuoScavalcareMatriceDdp());
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
 
@@ -2285,11 +2317,7 @@ public class ProjectsController : ControllerBase
                 -- «Inserito da» (#61): stessa regola, NULL = autore invariato.
                 requested_by = COALESCE(@RequestedBy, requested_by),
                 danea_ref = @DaneaRef,
-                -- «Data Richiesta» NON si tocca da qui (#83): la decide chi programma il
-                -- lavoro, dalla pagina Lavorazioni Officine, e da lì si riporta sulla riga.
-                -- Restava scrivibile in distinta, e due padroni sulla stessa data significa
-                -- che l'ultimo che salva vince — anche solo riaprendo e chiudendo il dialogo.
-                -- Alla creazione della riga la data si mette ancora (POST qui sopra).
+                date_needed = @DateNeeded,
                 order_date = @OrderDate, delivered_at = @DeliveredAt,
                 destination = @Destination, destination_spec = @DestinationSpec,
                 notes = @Notes, updated_at = NOW(),

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
 import { DdpStatusFilterBar } from "@/features/commesse/DdpStatusFilterBar"
 import { ddpCommercialRowToSaveRequest } from "@/features/commesse/ddp-commercial-row"
+import { ddpTransitionsPerUtente } from "@/features/commesse/ddp-constants"
 import { fetchAcquistiInbox } from "@/lib/api/ddp-commercial-inbox"
 import {
   buildDdpTransitionMap,
@@ -102,8 +103,9 @@ export function AcquistiPage() {
     [statuses]
   )
 
+  // `undefined` = finestra completa: è così che chi ha il privilegio #140 vede tutti gli stati.
   const transitionMap = React.useMemo(
-    () => buildDdpTransitionMap(transitions, "COMMERCIAL"),
+    () => ddpTransitionsPerUtente(buildDdpTransitionMap(transitions, "COMMERCIAL")),
     [transitions]
   )
 
