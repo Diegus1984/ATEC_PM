@@ -1,6 +1,19 @@
 {
     "voci":  [
                  {
+                     "build":  "20260829-1034",
+                     "data":  "2026-08-29T10:47:52",
+                     "hash":  "82ea222b623b9038a7433d16a7015b26fe009732",
+                     "modifiche":  [
+                                       "#140: con il nuovo privilegio si cambia lo stato DDP fuori dalla matrice",
+                                       "#141: la Data Richiesta della DDP Officina si compila come le altre date",
+                                       "Griglie DDP: codici Codex col punto, descrizioni su due righe, Tipo azzerabile",
+                                       "#139: «Consegnato il» compilabile anche sulla DDP Commerciale",
+                                       "Email: un indirizzo scritto male in anagrafica non blocca piu\u0027 l\u0027invio a tutti gli altri",
+                                       "HR: portate le ultime opzioni del programma originale (solleciti, cartellino Excel, cronologia email)"
+                                   ]
+                 },
+                 {
                      "build":  "20260828-1712",
                      "data":  "2026-08-28T17:12:20",
                      "hash":  "afd1f4feb46994939bb4aa81939674a3eb58ce0d",
