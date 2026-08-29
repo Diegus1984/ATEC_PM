@@ -1,8 +1,21 @@
 import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, DownloadCloud, KeyRound, Link2, Search, User } from "lucide-react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  DownloadCloud,
+  KeyRound,
+  Link2,
+  Mail,
+  MailCheck,
+  RotateCw,
+  Search,
+  User,
+} from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,8 +35,14 @@ import {
 } from "@/components/ui/tooltip"
 import { fetchPunchingEmployees } from "@/lib/api/employees"
 import type { HrDayStage } from "@/lib/api/types"
-import { fetchHrTimesheet, fetchHrStatus, importHrPunches } from "@/lib/api/hr"
+import {
+  downloadHrTimesheetExcel,
+  fetchHrTimesheet,
+  fetchHrStatus,
+  resyncHrDay,
+} from "@/lib/api/hr"
 import { canWriteFeature } from "@/lib/auth/permissions"
+import { formatDateShort, formatDateTimeShort } from "@/lib/date-iso"
 import { formatDateWithWeekday } from "@/components/shared/date-field"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
@@ -33,7 +52,10 @@ import { GiornataDialog } from "./GiornataDialog"
 import { MappaturaEcosDialog } from "./MappaturaEcosDialog"
 import { CalendarioPresenzeView } from "./CalendarioPresenzeView"
 import { CredenzialiEcosDialog } from "./CredenzialiEcosDialog"
+import { CronologiaMailView } from "./CronologiaMailView"
 import { QuadraturaPresenzeView } from "./QuadraturaPresenzeView"
+import { SincronizzaEcosDialog } from "./SincronizzaEcosDialog"
+import { SollecitoGiornataDialog } from "./SollecitoGiornataDialog"
 
 // Le tre letture della stessa giornata, come il ReportPage del programma «Timbrature»:
 // 🔸 come e' arrivata dal rilevatore, 🔷 dopo l'arrotondamento, ✅ come vale. Affiancate si
@@ -49,10 +71,12 @@ const COLUMNS: { id: string; label: string }[] = [
   { id: "straordinario", label: "Straordinario" },
   { id: "pausa", label: "Pausa" },
   { id: "nota", label: "Nota" },
+  { id: "azioni", label: "📧 Sollecito / 🔄 Risincronizza" },
 ]
 const COLUMNS_DEFAULT = Object.fromEntries(COLUMNS.map((c) => [c.id, true]))
 // v2: sono nati i due blocchi 🔸/🔷 - con la chiave vecchia resterebbero spenti.
-const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v2"
+// v3: e nata la colonna azioni (sollecito della giornata + risincronizzazione).
+const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v3"
 
 /** Le fasce della Circolare n. 12 del 23.12.2024 (colonna «Non a turni»). */
 const FASCE_LABELS: Record<string, string> = {
@@ -105,13 +129,14 @@ function durata(minuti: number): string {
   return `${Math.floor(minuti / 60)}h ${minuti % 60}m`
 }
 
+type Vista = "cartellino" | "calendario" | "quadratura" | "cronologia"
+
 export function TimbraturePage() {
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const canWrite = canWriteFeature("nav.hr_timbrature")
 
-  const [vista, setVista] = React.useState<"cartellino" | "calendario" | "quadratura">(
-    "cartellino"
-  )
+  const [vista, setVista] = React.useState<Vista>("cartellino")
   const [periodo, setPeriodo] = React.useState(() => {
     const oggi = new Date()
     return { anno: oggi.getFullYear(), mese: oggi.getMonth() + 1 }
@@ -121,6 +146,16 @@ export function TimbraturePage() {
   const [giornoAperto, setGiornoAperto] = React.useState<string | null>(null)
   const [mappaturaAperta, setMappaturaAperta] = React.useState(false)
   const [credenzialiAperte, setCredenzialiAperte] = React.useState(false)
+  const [sincronizzaAperto, setSincronizzaAperto] = React.useState(false)
+  // Voce 3 del port: l'interruttore «📧 Da segnalare» del ReportPage originale.
+  const [soloDaSegnalare, setSoloDaSegnalare] = React.useState(false)
+  const [sollecito, setSollecito] = React.useState<{
+    employeeId: number
+    date: string
+  } | null>(null)
+  const [nonAbbinati, setNonAbbinati] = React.useState<string[]>([])
+  const [esportando, setEsportando] = React.useState(false)
+  const [risincronizzando, setRisincronizzando] = React.useState<string | null>(null)
 
   const [visible, setVisible] = usePersistedColumnVisibility(
     COLUMNS_STORAGE_KEY,
@@ -155,20 +190,12 @@ export function TimbraturePage() {
     void queryClient.invalidateQueries({ queryKey: ["hr-calendar"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-quadratura"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-status"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-reminder-log"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-day-reminder"] })
   }
-
-  const importa = useMutation({
-    mutationFn: () => importHrPunches(false),
-    onSuccess: (esito) => {
-      notifySuccess(esito.message)
-      invalidate()
-    },
-    onError: (e) => notifyError((e as Error).message),
-  })
 
   const cartellino = cartellinoQuery.data
   const stato = statoQuery.data
-  const nonAbbinati = importa.data?.unmatched ?? []
 
   const giornataAperta = React.useMemo(
     () => cartellino?.days.find((g) => g.workDate.slice(0, 10) === giornoAperto) ?? null,
@@ -208,12 +235,73 @@ export function TimbraturePage() {
     return { ordinarie, straordinario, anomalie }
   }, [cartellino])
 
+  // Voce 3 del port: il filtro mostra le stesse giornate che hanno il pulsante 📧 —
+  // la regola la decide il server (canRemind), qui non se ne fa una seconda copia.
+  const giornate = React.useMemo(() => {
+    const tutte = cartellino?.days ?? []
+    return soloDaSegnalare ? tutte.filter((g) => g.canRemind) : tutte
+  }, [cartellino, soloDaSegnalare])
+
+  const daSegnalare = React.useMemo(
+    () => (cartellino?.days ?? []).filter((g) => g.canRemind).length,
+    [cartellino]
+  )
+
+  // La colonna azioni vive solo con la scrittura: sono due comandi, non due informazioni.
+  const mostraAzioni = canWrite && show("azioni")
+
   // I blocchi 🔸 e 🔷 valgono sei colonne ciascuno; le altre voci una a testa.
   const colonneFinali = COLUMNS.filter(
-    (c) => c.id !== "grezzo" && c.id !== "normalizzato" && show(c.id)
+    (c) =>
+      c.id !== "grezzo" &&
+      c.id !== "normalizzato" &&
+      (c.id !== "azioni" || mostraAzioni) &&
+      show(c.id)
   ).length
   const visibleCount =
     1 + colonneFinali + (show("grezzo") ? 6 : 0) + (show("normalizzato") ? 6 : 0)
+
+  async function esportaExcel() {
+    if (!cartellino) return
+    setEsportando(true)
+    try {
+      await downloadHrTimesheetExcel(
+        periodo.anno,
+        periodo.mese,
+        cartellino.employeeId,
+        cartellino.employeeName
+      )
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Esportazione non riuscita.")
+    } finally {
+      setEsportando(false)
+    }
+  }
+
+  async function risincronizzaGiorno(dataIso: string) {
+    if (!cartellino) return
+    const ok = await confirm({
+      title: `Risincronizzare il ${formatDateShort(dataIso)}?`,
+      description:
+        `Si riscaricano da Ecos le timbrature di ${cartellino.employeeName} per quel ` +
+        "giorno e si ricalcola la giornata. Le timbrature cancellate su Ecos spariscono " +
+        "anche qui; le rettifiche inserite a mano restano.",
+      confirmLabel: "Risincronizza",
+      destructive: false,
+    })
+    if (!ok) return
+
+    setRisincronizzando(dataIso)
+    try {
+      const esito = await resyncHrDay(cartellino.employeeId, dataIso)
+      notifySuccess(esito.message)
+      invalidate()
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Risincronizzazione non riuscita.")
+    } finally {
+      setRisincronizzando(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -227,6 +315,18 @@ export function TimbraturePage() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {canWrite && (
             <>
+              {/* Le credenziali stanno QUI e non nel banner dei codici non abbinati: quel
+                  banner compare solo dopo un import RIUSCITO, e le credenziali si devono
+                  poter correggere proprio quando l'import non riesce più. */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCredenzialiAperte(true)}
+                title="Utente, password e Client ID con cui il server entra in Ecos"
+              >
+                <KeyRound className="mr-1 size-3.5" />
+                Credenziali Ecos
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -235,13 +335,15 @@ export function TimbraturePage() {
                 <Link2 className="mr-1 size-3.5" />
                 Collega Ecos
               </Button>
+              {/* Mentre l'import gira il pulsante NON si spegne: è da lì che si guarda
+                  l'avanzamento — spegnerlo lascerebbe l'utente fuori dalla porta. */}
               <Button
                 size="sm"
-                disabled={importa.isPending || stato?.importInProgress}
-                onClick={() => importa.mutate()}
+                onClick={() => setSincronizzaAperto(true)}
+                title="Import da Ecos, sincronizzazione di un mese e avanzamento a video"
               >
                 <DownloadCloud className="mr-1 size-3.5" />
-                {importa.isPending ? "Import in corso…" : "Importa da Ecos"}
+                {stato?.importInProgress ? "Import in corso…" : "Sincronizza Ecos"}
               </Button>
             </>
           )}
@@ -249,18 +351,14 @@ export function TimbraturePage() {
         </div>
       </div>
 
-      {/* Tabs Switcher: Cartellino vs Calendario vs Quadratura */}
+      {/* Tabs Switcher: Cartellino vs Calendario vs Quadratura vs Cronologia email */}
       {canWrite && (
-        <Tabs
-          value={vista}
-          onValueChange={(v) =>
-            setVista(v as "cartellino" | "calendario" | "quadratura")
-          }
-        >
+        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
           <TabsList>
             <TabsTrigger value="cartellino">Cartellino individuale</TabsTrigger>
             <TabsTrigger value="calendario">Calendario mensile</TabsTrigger>
             <TabsTrigger value="quadratura">Quadratura commesse</TabsTrigger>
+            <TabsTrigger value="cronologia">Cronologia email</TabsTrigger>
           </TabsList>
         </Tabs>
       )}
@@ -294,6 +392,30 @@ export function TimbraturePage() {
             Credenziali Ecos non configurate sul server: l'import è fermo.
           </span>
         )}
+
+        {vista === "cartellino" && cartellino && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Voce 3: «📧 Da segnalare», l'interruttore del ReportPage originale. */}
+            <Button
+              variant={soloDaSegnalare ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSoloDaSegnalare((v) => !v)}
+              title="Mostra solo le giornate per cui c'è una segnalazione da mandare"
+            >
+              <Mail className="mr-1 size-3.5" />
+              Da segnalare{daSegnalare > 0 ? ` (${daSegnalare})` : ""}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void esportaExcel()}
+              disabled={esportando}
+            >
+              <Download className="mr-1 size-3.5" />
+              {esportando ? "Esporto…" : "Esporta Excel"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {canWrite && nonAbbinati.length > 0 && (
@@ -312,15 +434,6 @@ export function TimbraturePage() {
             <Link2 className="mr-1 size-3.5" />
             Collega e reimporta
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCredenzialiAperte(true)}
-            title="Utente, password e Client ID con cui il server entra in Ecos"
-          >
-            <KeyRound className="mr-1 size-3.5" />
-            Credenziali Ecos
-          </Button>
         </div>
       )}
 
@@ -328,6 +441,8 @@ export function TimbraturePage() {
         <CalendarioPresenzeView anno={periodo.anno} mese={periodo.mese} />
       ) : vista === "quadratura" ? (
         <QuadraturaPresenzeView anno={periodo.anno} mese={periodo.mese} />
+      ) : vista === "cronologia" ? (
+        <CronologiaMailView anno={periodo.anno} mese={periodo.mese} />
       ) : (
         <div className={cn("flex flex-col gap-4", canWrite && "md:flex-row md:items-start")}>
           {/* Elenco dipendenti lato sinistro */}
@@ -480,10 +595,11 @@ export function TimbraturePage() {
                         <TableHead className="text-right">Pausa</TableHead>
                       )}
                       {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+                      {mostraAzioni && <TableHead className="w-20 text-center">📧 🔄</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {cartellino.days.map((g) => {
+                    {giornate.map((g) => {
                       const dataIso = g.workDate.slice(0, 10)
                       const cliccabile = g.hasData || g.punches.length > 0 || canWrite
                       const fasceEntries = Object.entries(g.bands)
@@ -568,16 +684,67 @@ export function TimbraturePage() {
                               {g.note || "—"}
                             </TableCell>
                           )}
+                          {mostraAzioni && (
+                            <TableCell
+                              className="text-center whitespace-nowrap"
+                              // I due comandi non aprono il dettaglio della giornata.
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {/* Voce 1: il 📧 dell'originale, solo dove serve davvero.
+                                  Già mandato = busta chiusa e opaca, col giorno nel tooltip. */}
+                              {g.canRemind && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className={cn(g.lastReminderAt && "opacity-50")}
+                                  onClick={() =>
+                                    setSollecito({
+                                      employeeId: cartellino.employeeId,
+                                      date: dataIso,
+                                    })
+                                  }
+                                  title={
+                                    g.lastReminderAt
+                                      ? `Sollecito già inviato il ${formatDateTimeShort(g.lastReminderAt)}`
+                                      : "Invia segnalazione anomalia al dipendente"
+                                  }
+                                >
+                                  {g.lastReminderAt ? (
+                                    <MailCheck className="size-3.5" />
+                                  ) : (
+                                    <Mail className="size-3.5 text-amber-600 dark:text-amber-500" />
+                                  )}
+                                </Button>
+                              )}
+                              {/* Voce 2: risincronizza questo giorno da Ecos. */}
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled={risincronizzando != null}
+                                onClick={() => void risincronizzaGiorno(dataIso)}
+                                title="Risincronizza questo giorno da Ecos"
+                              >
+                                <RotateCw
+                                  className={cn(
+                                    "size-3.5",
+                                    risincronizzando === dataIso && "animate-spin"
+                                  )}
+                                />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       )
                     })}
-                    {cartellino.days.length === 0 && (
+                    {giornate.length === 0 && (
                       <TableRow>
                         <TableCell
                           colSpan={visibleCount}
                           className="text-center text-sm text-muted-foreground"
                         >
-                          Nessuna giornata nel mese.
+                          {soloDaSegnalare
+                            ? "Nessuna giornata da segnalare in questo mese."
+                            : "Nessuna giornata nel mese."}
                         </TableCell>
                       </TableRow>
                     )}
@@ -585,11 +752,6 @@ export function TimbraturePage() {
                 </Table>
               </GridScroller>
             ) : null}
-
-            <CredenzialiEcosDialog
-              open={credenzialiAperte}
-              onOpenChange={setCredenzialiAperte}
-            />
 
             <GiornataDialog
               open={giornataAperta != null}
@@ -608,6 +770,32 @@ export function TimbraturePage() {
       <MappaturaEcosDialog
         open={mappaturaAperta}
         onOpenChange={setMappaturaAperta}
+      />
+
+      {/* Fuori dal ramo del cartellino: le credenziali si devono poter aprire da qualunque
+          scheda, e prima si montava solo quando era a video la griglia del cartellino. */}
+      <CredenzialiEcosDialog
+        open={credenzialiAperte}
+        onOpenChange={setCredenzialiAperte}
+      />
+
+      <SincronizzaEcosDialog
+        open={sincronizzaAperto}
+        onOpenChange={setSincronizzaAperto}
+        anno={periodo.anno}
+        mese={periodo.mese}
+        onImported={(esito) => {
+          setNonAbbinati(esito?.unmatched ?? [])
+          invalidate()
+        }}
+      />
+
+      <SollecitoGiornataDialog
+        target={sollecito}
+        onOpenChange={(open) => {
+          if (!open) setSollecito(null)
+        }}
+        onSent={invalidate}
       />
     </div>
   )

@@ -2,7 +2,6 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { CalendarCheck, Download, Mail, MailCheck, Printer, RotateCcw } from "lucide-react"
 
-import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import {
   LookupCombobox,
@@ -28,6 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { AnteprimaMailDialog, type MessaggioMail } from "./AnteprimaMailDialog"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
 import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
@@ -81,11 +81,17 @@ const COLORI_STAMPA: Record<string, string> = {
 }
 
 export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewProps) {
-  const confirm = useConfirm()
   const [departmentId, setDepartmentId] = React.useState<number | null>(null)
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
   const [scaricando, setScaricando] = React.useState(false)
   const [sollecitando, setSollecitando] = React.useState(false)
+  // Voce 4 del port: prima di spedire si legge la mail per intero (ConfirmDialog.ShowEmail).
+  const [anteprima, setAnteprima] = React.useState<{
+    modo: "mailto" | "smtp"
+    destinatari: HrReminderTarget[]
+    messaggi: MessaggioMail[]
+    riepilogo: string
+  } | null>(null)
   // #132: giornata su cui si e fatto doppio clic, in attesa della causale.
   const [giustifica, setGiustifica] = React.useState<{
     employeeId: number
@@ -182,7 +188,13 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
     )
   }
 
-  async function handleSollecita() {
+  /**
+   * Prepara l'anteprima: si scarica chi va sollecitato e si mette davanti il testo
+   * INTEGRALE, col riepilogo dei destinatari sopra (voce 4 del port, `ConfirmDialog.ShowEmail`).
+   * Il riepilogo dice quanti sono e chi è senza indirizzo; l'anteprima dice cosa leggeranno.
+   * Servono tutte e due: un sollecito sbagliato lo legge una persona.
+   */
+  async function preparaSolleciti(modo: "mailto" | "smtp") {
     setSollecitando(true)
     try {
       const solleciti = await fetchHrReminders(anno, mese, departmentId, employeeId)
@@ -192,46 +204,7 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
         notifySuccess("Nessun sollecito da inviare: nessuna giornata scoperta.")
         return
       }
-      if (conEmail.length === 0) {
-        notifyError("Nessuno dei dipendenti da sollecitare ha un indirizzo email.")
-        return
-      }
-
-      const ok = await confirm({
-        title: `Aprire ${conEmail.length} email di sollecito?`,
-        description: `Si apre una finestra del client di posta per ciascuno: ${riepilogo(solleciti.targets)}`,
-        confirmLabel: "Apri le email",
-        destructive: false,
-      })
-      if (!ok) return
-
-      // Una finestra per volta: aprirle tutte insieme le fa bloccare dal browser.
-      conEmail.forEach((t, indice) => {
-        const url = `mailto:${t.email}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.mailtoBody)}`
-        if (indice === 0) window.open(url, "_self")
-        else setTimeout(() => window.open(url, "_self"), indice * 900)
-      })
-
-      await markHrReminders(anno, mese, conEmail.map((t) => t.employeeId))
-      notifySuccess(`${conEmail.length} solleciti aperti nel client di posta.`)
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : "Solleciti non riusciti.")
-    } finally {
-      setSollecitando(false)
-    }
-  }
-
-  async function handleInviaSollecito() {
-    setSollecitando(true)
-    try {
-      const solleciti = await fetchHrReminders(anno, mese, departmentId, employeeId)
-      const conEmail = solleciti.targets.filter((t) => t.email)
-
-      if (solleciti.targets.length === 0) {
-        notifySuccess("Nessun sollecito da inviare: nessuna giornata scoperta.")
-        return
-      }
-      if (!solleciti.smtpEnabled) {
+      if (modo === "smtp" && !solleciti.smtpEnabled) {
         notifyError(
           "SMTP non configurato: usa «Sollecita» per aprire le email nel client di posta."
         )
@@ -242,17 +215,57 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
         return
       }
 
-      const ok = await confirm({
-        title: `Inviare ${conEmail.length} solleciti via email?`,
-        description: `Le email partono dal server, senza altra conferma: ${riepilogo(solleciti.targets)}`,
-        confirmLabel: "Invia",
-        destructive: false,
+      setAnteprima({
+        modo,
+        destinatari: conEmail,
+        messaggi: conEmail.map((t) => ({
+          id: t.employeeId,
+          nome: t.employeeName,
+          email: t.email,
+          subject: t.subject,
+          // I due testi sono diversi: dal client di posta si chiede anche di inserire la
+          // causale su eTime. Si mostra quello che partirà davvero.
+          body: modo === "mailto" ? t.mailtoBody : t.body,
+        })),
+        riepilogo: riepilogo(solleciti.targets),
       })
-      if (!ok) return
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Solleciti non riusciti.")
+    } finally {
+      setSollecitando(false)
+    }
+  }
 
-      const esito = await sendHrReminders(anno, mese, departmentId, employeeId)
-      if (esito.failed > 0 || esito.withoutEmail.length > 0) notifyError(esito.message)
-      else notifySuccess(esito.message)
+  async function confermaSolleciti() {
+    if (!anteprima) return
+    setSollecitando(true)
+    try {
+      if (anteprima.modo === "mailto") {
+        // Il dialogo si chiude PRIMA della raffica: le finestre si aprono a distanza di
+        // secondi l'una dall'altra, e un secondo clic su «Apri le email» le riaprirebbe
+        // tutte da capo.
+        const destinatari = anteprima.destinatari
+        setAnteprima(null)
+
+        // Una finestra per volta: aprirle tutte insieme le fa bloccare dal browser.
+        destinatari.forEach((t, indice) => {
+          const url = `mailto:${t.email}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.mailtoBody)}`
+          if (indice === 0) window.open(url, "_self")
+          else setTimeout(() => window.open(url, "_self"), indice * 900)
+        })
+
+        await markHrReminders(
+          anno,
+          mese,
+          destinatari.map((t) => t.employeeId)
+        )
+        notifySuccess(`${destinatari.length} solleciti aperti nel client di posta.`)
+      } else {
+        const esito = await sendHrReminders(anno, mese, departmentId, employeeId)
+        if (esito.failed > 0 || esito.withoutEmail.length > 0) notifyError(esito.message)
+        else notifySuccess(esito.message)
+      }
+      setAnteprima(null)
     } catch (e) {
       notifyError(e instanceof Error ? e.message : "Invio dei solleciti non riuscito.")
     } finally {
@@ -349,7 +362,7 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
           <Button
             variant="outline"
             size="sm"
-            onClick={handleSollecita}
+            onClick={() => void preparaSolleciti("mailto")}
             disabled={!calendario || sollecitando}
             title="Apre nel client di posta un sollecito per ogni dipendente con giornate scoperte"
           >
@@ -359,7 +372,7 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
           <Button
             variant="outline"
             size="sm"
-            onClick={handleInviaSollecito}
+            onClick={() => void preparaSolleciti("smtp")}
             disabled={!calendario || sollecitando}
             title="Invia i solleciti direttamente dal server, senza passare dal client di posta"
           >
@@ -535,6 +548,26 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
           </TableBody>
         </Table>
       </GridScroller>
+
+      <AnteprimaMailDialog
+        messaggi={anteprima?.messaggi ?? null}
+        titolo={
+          anteprima?.modo === "mailto"
+            ? `Aprire ${anteprima.destinatari.length} email di sollecito?`
+            : `Inviare ${anteprima?.destinatari.length ?? 0} solleciti via email?`
+        }
+        descrizione={
+          anteprima?.modo === "mailto"
+            ? `Si apre una finestra del client di posta per ciascuno: ${anteprima.riepilogo}`
+            : `Le email partono dal server, senza altra conferma: ${anteprima?.riepilogo ?? ""}`
+        }
+        confermaLabel={anteprima?.modo === "mailto" ? "Apri le email" : "Invia"}
+        inviando={sollecitando}
+        onConferma={() => void confermaSolleciti()}
+        onOpenChange={(open) => {
+          if (!open) setAnteprima(null)
+        }}
+      />
 
       <GiustificaCausaleDialog
         target={giustifica}

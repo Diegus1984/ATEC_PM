@@ -331,10 +331,14 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   rettifiche, che riscrivono le timbrature. Qui si dichiara una causale su una giornata
 >   passata, ed è quello che l'ufficio fa da anni col programma originale.
 >
-> **⏭️ Le opzioni dell'originale ancora da portare** stanno in un file a parte:
-> **`PIANO-HR-PORT-ORIGINALE.md`** — censimento pagina per pagina del programma
-> «Timbrature» contro quello che gira oggi, con le 11 voci decise una per una con Diego il
-> 28/08 (9 da importare, 2 scartate col motivo). È il punto d'ingresso di quel lavoro.
+> **✅ Le opzioni dell'originale sono state portate (28/08, in locale).** Il censimento e le
+> scelte stanno in **`PIANO-HR-PORT-ORIGINALE.md`** — 11 voci decise una per una con Diego,
+> 9 importate e 2 scartate col motivo. Tutte e nove sono scritte: sollecito della singola
+> giornata, risincronizzazione di un giorno e di un mese scelto, filtro «📧 Da segnalare»,
+> anteprima integrale della mail, Cronologia Email (quarta scheda, migrazione **M117**),
+> export Excel del cartellino, avanzamento dell'import a video, ultima lettura badge.
+> **Non ancora deployate.** Il §7 di quel file elenca voce per voce dove sta ogni cosa e le
+> trappole da conoscere prima di rimetterci mano.
 >
 > **Resta da fare in Fase 1**: compilare `ecos_empl_code` per i 37 dipendenti (dalla
 > pagina, dialogo «Collega Ecos»), **riconciliazione assenze** (le 49 giornate

@@ -256,11 +256,36 @@ public class EcosClient
     /// filtra su UpdateDate, quindi arrivano anche le timbrature <b>corrette</b> dopo il fatto.
     /// </summary>
     public async Task<List<EcosPunch>> GetPunchesAsync(
-        string token, DateTime? updateDa, CancellationToken ct = default)
+        string token, DateTime? updateDa, CancellationToken ct = default, Action<string>? log = null)
     {
         List<Dictionary<string, string>> righe =
-            await FetchTutteLePagineAsync("PeopleStampGetAll", token, PunchFields, updateDa, ct);
+            await FetchTutteLePagineAsync("PeopleStampGetAll", token, PunchFields, updateDa, ct, log: log);
 
+        return LeggiTimbrature(righe);
+    }
+
+    /// <summary>
+    /// Le timbrature di <b>un mese di calendario</b>, chieste col filtro <c>YearMonth</c> —
+    /// lo stesso che usava <c>FetchStampsForEmployee</c> nel VB.
+    ///
+    /// <para>Serve alla risincronizzazione mirata (voci 2 e 5 del port): dentro quel mese si
+    /// riceve tutto quello che Ecos ha, non solo ciò che è cambiato dal cursore, e quindi si
+    /// ha la <b>fotografia completa</b> da cui capire cosa è stato cancellato là. Per questo
+    /// il vincolo su <c>UpdateDate</c> parte dall'inizio dei tempi: qui non è un incrementale.</para>
+    /// </summary>
+    public async Task<List<EcosPunch>> GetPunchesMonthAsync(
+        string token, int year, int month, CancellationToken ct = default, Action<string>? log = null)
+    {
+        string yearMonth = $"{year:D4}{month:D2}";
+        List<Dictionary<string, string>> righe = await FetchTutteLePagineAsync(
+            "PeopleStampGetAll", token, PunchFields, DallInizio, ct,
+            filtro: ("YearMonth", $"='{yearMonth}'"), log: log);
+
+        return LeggiTimbrature(righe);
+    }
+
+    private List<EcosPunch> LeggiTimbrature(List<Dictionary<string, string>> righe)
+    {
         var risultato = new List<EcosPunch>(righe.Count);
         foreach (Dictionary<string, string> r in righe)
         {
@@ -360,8 +385,17 @@ public class EcosClient
 
     // ── PAGINAZIONE ───────────────────────────────────────────────────────────
 
+    /// <param name="filtro">
+    /// Filtro aggiuntivo sul campo indicato, nella forma che vuole Ecos (es.
+    /// <c>("YearMonth", "='202608'")</c>). Null = solo il vincolo su <c>UpdateDate</c>.
+    /// </param>
+    /// <param name="log">
+    /// Se valorizzato riceve una riga per pagina scaricata: è il <c>txtLog</c> di
+    /// <c>SyncEcosPage</c> che l'utente guarda mentre l'import gira.
+    /// </param>
     private async Task<List<Dictionary<string, string>>> FetchTutteLePagineAsync(
-        string apiName, string token, string[] campi, DateTime? updateDa, CancellationToken ct)
+        string apiName, string token, string[] campi, DateTime? updateDa, CancellationToken ct,
+        (string Key, string Value)? filtro = null, Action<string>? log = null)
     {
         var tutte = new List<Dictionary<string, string>>();
         // Senza una data di partenza si riparte dal 2020: vale per i dati che scorrono
@@ -376,14 +410,17 @@ public class EcosClient
             // troncherebbe e l'errore arriverebbe travestito da «privilegi insufficienti».
             string url = $"{baseUrl}{apiName}&PageNumber={pagina}&RowsPerPage={RowsPerPage}" +
                          $"&DF=1&AuthToken={Uri.EscapeDataString(token)}";
-            using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+            var campiPost = new Dictionary<string, string>
             {
                 ["UpdateDate"] = $">='{updateFrom}'",
-            });
+            };
+            if (filtro is { } f) campiPost[f.Key] = f.Value;
+            using var form = new FormUrlEncodedContent(campiPost);
 
             string body = await PostAsync(url, form, ct);
             (List<Dictionary<string, string>> righe, bool? ultima) = EstraiPagina(body, campi, apiName);
             tutte.AddRange(righe);
+            log?.Invoke($"  pagina {pagina}: {righe.Count} righe");
 
             // LASTPAGE dichiarato: si crede all'API. Non dichiarato: è l'ultima solo se
             // la pagina non è piena — una pagina piena può sempre avere un seguito.

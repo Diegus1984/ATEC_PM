@@ -30,6 +30,14 @@ export interface HrDay {
   raw: HrDayStage
   /** 🔷 Le stesse dopo l'arrotondamento (scatto 30', tolleranza 10'). */
   normalized: HrDayStage
+  /**
+   * true = giornata da segnalare al dipendente. La regola la decide il SERVER
+   * (HrDayReminder.Serve): il pulsante 📧 e il filtro «Da segnalare» leggono questo flag,
+   * cosi non possono divergere.
+   */
+  canRemind: boolean
+  /** Quando e stato mandato l'ultimo sollecito per questa giornata; null = mai. */
+  lastReminderAt?: string | null
 }
 
 /** Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio. */
@@ -60,6 +68,31 @@ export interface HrStatus {
   totalDays: number
   linkedEmployees: number
   activeEmployees: number
+  /** Ultima lettura riuscita dell'anagrafica badge da Ecos. */
+  lastBadgeRead?: string | null
+  /** Avanzamento dell'import a video: vive in memoria nel server. */
+  progress: HrImportProgress
+}
+
+/**
+ * L'avanzamento dell'import (port della barra + txtLog di SyncEcosPage).
+ *
+ * 🪤 Lo stato vive in memoria nel server: un riavvio a meta import lo azzera. Si riconosce
+ * da `startedAt` nullo con `running` falso — la pagina lo dice invece di girare per sempre.
+ */
+export interface HrImportProgress {
+  running: boolean
+  title: string
+  phase: string
+  percent: number
+  downloaded: number
+  added: number
+  updated: number
+  removed: number
+  daysRecalculated: number
+  startedAt?: string | null
+  endedAt?: string | null
+  log: string[]
 }
 
 export interface HrImportResult {
@@ -303,4 +336,46 @@ export interface HrGiustificaRequest {
   /** FE | PE | MA | IN, oppure "" per togliere la causale. */
   causale: string
   hours?: number | null
+}
+
+// ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────
+
+export interface HrDayReminder {
+  employeeId: number
+  employeeName: string
+  date: string
+  email?: string | null
+  subject: string
+  /** Il corpo integrale, quello che la persona leggera. */
+  body: string
+  canRemind: boolean
+  lastReminderAt?: string | null
+  /** false = SMTP non configurato: resta il client di posta. */
+  smtpEnabled: boolean
+  /** Vuoto = si puo spedire; altrimenti il motivo, gia scritto. */
+  blocco: string
+}
+
+// ── CRONOLOGIA EMAIL (voce 6 del port) ────────────────────────────────────
+
+export interface HrReminderLogRow {
+  id: number
+  sentAt: string
+  employeeId: number
+  employeeName: string
+  email?: string | null
+  /** La giornata per cui e stato chiesto il chiarimento. */
+  workDate: string
+  subject?: string | null
+  /** null = riga scritta prima della M117: «testo non conservato». */
+  body?: string | null
+  /** SMTP = spedita dal server · MAILTO = aperta nel client di posta. */
+  channel: string
+  sentByName?: string | null
+}
+
+export interface HrReminderLog {
+  year: number
+  month: number
+  rows: HrReminderLogRow[]
 }

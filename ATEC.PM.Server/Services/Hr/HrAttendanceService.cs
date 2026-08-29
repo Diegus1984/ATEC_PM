@@ -15,6 +15,14 @@ public class HrAttendanceService
 {
     private const string CursoreKey = "hr_sync_punches_from";
 
+    /// <summary>
+    /// L'ultima lettura riuscita dell'anagrafica badge (voce 11 del port): sta in
+    /// <c>app_config</c> perché è un'informazione che deve sopravvivere al riavvio.
+    /// 🪤 Nell'originale il pulsante «Solo Badge» NON la scriveva, e il ciclo dei 7 giorni
+    /// non se ne accorgeva: qui si scrive nell'unico punto in cui i badge si leggono.
+    /// </summary>
+    private const string BadgeKey = "hr_last_badge_read";
+
     private static readonly TimeSpan MargineCursore = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MargineCursoreOrologioNostro = TimeSpan.FromHours(1);
     private const int MaxDaysToRepair = 5000;
@@ -45,6 +53,93 @@ public class HrAttendanceService
     public DateTime? LastImport { get; private set; }
     public string LastResult { get; private set; } = "";
 
+    // ── AVANZAMENTO A VIDEO (PIANO-HR-PORT-ORIGINALE.md, B3) ──────────────────
+    //
+    // Port della barra + txtLog di SyncEcosPage. Il servizio è singleton, quindi lo stato
+    // sta qui in memoria e la pagina lo legge da GET /api/hr/status mentre l'import gira.
+    // 🪤 In memoria vuol dire che un riavvio del servizio a metà import lo azzera: la
+    // pagina lo riconosce (StartedAt nullo) e lo dice, invece di restare a girare.
+
+    private readonly object _progressoLock = new();
+    private HrImportProgressDto _progresso = new();
+
+    /// <summary>Copia dello stato dell'import: si legge da un altro thread mentre l'import scrive.</summary>
+    public HrImportProgressDto SnapshotProgresso()
+    {
+        lock (_progressoLock)
+        {
+            return new HrImportProgressDto
+            {
+                Running = _progresso.Running,
+                Title = _progresso.Title,
+                Phase = _progresso.Phase,
+                Percent = _progresso.Percent,
+                Downloaded = _progresso.Downloaded,
+                Added = _progresso.Added,
+                Updated = _progresso.Updated,
+                Removed = _progresso.Removed,
+                DaysRecalculated = _progresso.DaysRecalculated,
+                StartedAt = _progresso.StartedAt,
+                EndedAt = _progresso.EndedAt,
+                Log = new List<string>(_progresso.Log),
+            };
+        }
+    }
+
+    private void ProgressoInizio(string titolo)
+    {
+        lock (_progressoLock)
+        {
+            _progresso = new HrImportProgressDto
+            {
+                Running = true,
+                Title = titolo,
+                StartedAt = DateTime.Now,
+            };
+            _progresso.Log.Add($"=== {titolo.ToUpperInvariant()} ===");
+        }
+    }
+
+    private void ProgressoFase(string fase, int percento)
+    {
+        lock (_progressoLock)
+        {
+            _progresso.Phase = fase;
+            _progresso.Percent = percento;
+            AggiungiRiga(fase);
+        }
+    }
+
+    private void ProgressoLog(string riga)
+    {
+        lock (_progressoLock) AggiungiRiga(riga);
+    }
+
+    private void ProgressoFine(string riga, HrImportResultDto? esito)
+    {
+        lock (_progressoLock)
+        {
+            _progresso.Running = false;
+            _progresso.Percent = 100;
+            _progresso.Phase = riga;
+            _progresso.EndedAt = DateTime.Now;
+            if (esito != null)
+            {
+                _progresso.Added = esito.PunchesAdded;
+                _progresso.Updated = esito.PunchesUpdated;
+                _progresso.DaysRecalculated = esito.DaysRecalculated;
+            }
+            AggiungiRiga(riga);
+        }
+    }
+
+    /// <summary>Da chiamare già dentro il lock: tiene le ultime 200 righe, come il txtLog.</summary>
+    private void AggiungiRiga(string riga)
+    {
+        _progresso.Log.Add(riga);
+        if (_progresso.Log.Count > 200) _progresso.Log.RemoveAt(0);
+    }
+
     // ── IMPORT DA ECOS ────────────────────────────────────────────────────────
 
     public async Task<HrImportResultDto> ImportAsync(bool full, CancellationToken ct = default)
@@ -56,27 +151,40 @@ public class HrAttendanceService
             return Fallito("Import già in corso.");
 
         ImportInProgress = true;
+        ProgressoInizio(full ? "Import completo" : "Import incrementale");
         try
         {
             DateTime inizio = DateTime.Now;
 
             using MySqlConnection c = _db.Open();
             DateTime? cursore = full ? null : LeggiCursore(c);
+            ProgressoLog(cursore == null
+                ? "Nessun cursore: si scarica tutto lo storico"
+                : $"Dal cursore: timbrature modificate dal {cursore:dd/MM/yyyy HH:mm}");
 
+            ProgressoFase("[1/4] Richiesta token…", 10);
             string token = await _ecos.TokenAsync(ct);
-            List<EcosPunch> timbrature = await _ecos.GetPunchesAsync(token, cursore, ct);
+            ProgressoLog("✅ Token ottenuto");
+
+            ProgressoFase("[2/4] Scaricamento timbrature…", 25);
+            List<EcosPunch> timbrature = await _ecos.GetPunchesAsync(token, cursore, ct, ProgressoLog);
+            ProgressoScaricate(timbrature.Count);
 
             // Import assenze approvate da Ecos
+            ProgressoFase("[3/4] Scaricamento assenze approvate…", 45);
             List<EcosAbsenceRequest> assenze = new();
             try
             {
                 assenze = await _ecos.GetAbsenceRequestsAsync(token, cursore, ct);
+                ProgressoLog($"✅ {assenze.Count} richieste assenza scaricate");
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[HR] Scarico assenze Ecos non riuscito: {Msg}", ex.Message);
+                ProgressoLog($"⚠ Assenze non scaricate: {ex.Message} — l'import delle timbrature prosegue");
             }
 
+            ProgressoFase("[4/4] Confronto e scrittura…", 60);
             HrImportResultDto esito = ImportPunches(c, timbrature, full);
 
             if (assenze.Count > 0)
@@ -92,26 +200,223 @@ public class HrAttendanceService
             LastImport = inizio;
             LastResult = esito.Message;
             _logger.LogInformation("[HR] Import Ecos completato: {Msg}", esito.Message);
+            ProgressoFine($"=== COMPLETATO === {esito.Message}", esito);
             return esito;
         }
         catch (EcosApiException ex)
         {
             _logger.LogWarning("[HR] Import Ecos fallito: {Msg}", ex.Message);
             LastResult = $"ERRORE: {ex.Message}";
+            ProgressoFine($"❌ ERRORE: {ex.Message}", null);
             return Fallito(ex.Message);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "[HR] Import fallito: {Msg}", ex.Message);
             LastResult = $"ERRORE: {ex.Message}";
+            ProgressoFine($"❌ ERRORE: {ex.Message}", null);
             return Fallito($"Import fallito: {ex.Message}");
         }
         finally
         {
             ImportInProgress = false;
+            lock (_progressoLock) _progresso.Running = false;
             _gate.Release();
         }
     }
+
+    private void ProgressoScaricate(int quante)
+    {
+        lock (_progressoLock)
+        {
+            _progresso.Downloaded = quante;
+            AggiungiRiga($"✅ {quante} timbrature scaricate");
+        }
+    }
+
+    // ── RISINCRONIZZAZIONE MIRATA (PIANO-HR-PORT-ORIGINALE.md, B1 e B2) ───────
+
+    /// <summary>
+    /// Riscarica da Ecos una <b>finestra</b> di calendario e la rimette in pari: un giorno di
+    /// una persona (voce 2, port di <c>btnResyncDay_Click</c>) o un mese intero (voce 5).
+    ///
+    /// <para>Si scarica il mese con il filtro <c>YearMonth</c> — come faceva il VB — quindi
+    /// dentro quella finestra si ha la <b>fotografia completa</b>: le righe che su Ecos non
+    /// ci sono più si tolgono anche qui, come fa l'import <i>completo</i> e non
+    /// l'incrementale (che quella fotografia non ce l'ha).</para>
+    ///
+    /// <para>🪤 <b>Il cursore non si tocca.</b> È un ripescaggio mirato, non un avanzamento
+    /// dell'import: spostarlo aprirebbe una finestra cieca sul mese corrente. È l'errore che
+    /// l'originale faceva (riscriveva <c>last_stamp_sync</c> anche dopo una sync forzata di
+    /// un mese passato).</para>
+    ///
+    /// <para>🪤 Le timbrature si <b>inseriscono e aggiornano</b> su tutto il mese scaricato,
+    /// ma si <b>cancellano</b> solo dentro la finestra chiesta: così una timbratura che Ecos
+    /// ha spostato in un altro giorno viene ricollocata invece di sparire.</para>
+    /// </summary>
+    /// <param name="conAssenze">
+    /// Vero per la sincronizzazione di un mese: si riscaricano anche le richieste di assenza
+    /// approvate, come faceva <c>btnCarica_Click</c> del VB (timbrature <b>e</b> assenze).
+    /// Per la singola giornata resta falso, fedele a <c>btnResyncDay_Click</c>, che le
+    /// assenze non le toccava.
+    /// </param>
+    public async Task<HrImportResultDto> ImportWindowAsync(
+        int? employeeId, DateTime dal, DateTime al, CancellationToken ct = default,
+        bool conAssenze = false)
+    {
+        if (!_ecos.Configured)
+            return Fallito("Credenziali Ecos non configurate: risincronizzazione impossibile.");
+
+        dal = dal.Date;
+        al = al.Date;
+        if (al < dal) (dal, al) = (al, dal);
+        if ((al - dal).TotalDays > 366)
+            return Fallito("Si risincronizza al massimo un anno per volta.");
+
+        if (!await _gate.WaitAsync(0, ct))
+            return Fallito("Import già in corso.");
+
+        ImportInProgress = true;
+        string titolo = dal == al
+            ? $"Risincronizzazione del {dal:dd/MM/yyyy}"
+            : $"Sincronizzazione dal {dal:dd/MM/yyyy} al {al:dd/MM/yyyy}";
+        ProgressoInizio(titolo);
+        try
+        {
+            using MySqlConnection c = _db.Open();
+
+            string? codiceEcos = null;
+            if (employeeId is { } id)
+            {
+                codiceEcos = c.ExecuteScalar<string?>(
+                    "SELECT ecos_empl_code FROM employees WHERE id = @Id", new { Id = id });
+                if (string.IsNullOrWhiteSpace(codiceEcos))
+                {
+                    ProgressoFine("❌ Dipendente non collegato a Ecos", null);
+                    return Fallito("Dipendente non collegato a Ecos: non ha timbrature da riscaricare.");
+                }
+            }
+
+            ProgressoFase("[1/3] Richiesta token…", 10);
+            string token = await _ecos.TokenAsync(ct);
+            ProgressoLog("✅ Token ottenuto");
+
+            ProgressoFase("[2/3] Scaricamento timbrature del periodo…", 30);
+            var timbrature = new List<EcosPunch>();
+            foreach ((int anno, int mese) in MesiDellIntervallo(dal, al))
+            {
+                ProgressoLog($"  {NomiMesi[mese - 1]} {anno}…");
+                timbrature.AddRange(await _ecos.GetPunchesMonthAsync(token, anno, mese, ct, ProgressoLog));
+            }
+
+            // 🪤 Zero righe dall'intero mese non è un mese vuoto: è molto più probabile che
+            // il filtro non abbia funzionato o che Ecos abbia risposto a vuoto. Qui dentro
+            // vale la fotografia completa, quindi proseguire vorrebbe dire cancellare il
+            // mese di TUTTI in silenzio. Ci si ferma senza toccare niente.
+            //
+            // La rete vale SOLO per la finestra larga (tutti i dipendenti). Quando la
+            // persona è indicata — «Risincronizza questo giorno» — la cancellazione è già
+            // ristretta a lei e a quel giorno, e fermarsi tradirebbe proprio quello che
+            // l'utente ha chiesto: togliere la timbratura che su Ecos non c'è più.
+            if (timbrature.Count == 0 && employeeId is null)
+            {
+                ProgressoFine("Nessuna timbratura ricevuta da Ecos: niente è stato modificato.", null);
+                return new HrImportResultDto
+                {
+                    Success = true,
+                    Message = "Ecos non ha restituito nessuna timbratura per il periodo: "
+                              + "niente è stato modificato.",
+                };
+            }
+
+            // Il mese scaricato serve intero per gli aggiornamenti; se si chiede una sola
+            // persona però si tengono solo le sue, altrimenti la finestra cancellerebbe
+            // righe altrui che non sono state chieste.
+            if (codiceEcos != null)
+            {
+                timbrature = timbrature
+                    .Where(t => string.Equals(t.EmplCode, codiceEcos, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            ProgressoScaricate(timbrature.Count);
+
+            ProgressoFase("[3/3] Confronto e scrittura…", 60);
+            HrImportResultDto esito = ImportPunches(
+                c, timbrature, full: false, finestra: new FinestraImport(employeeId, dal, al));
+
+            if (conAssenze)
+            {
+                // Le assenze non hanno un filtro di periodo sull'API: si scarica e si tiene
+                // ciò che tocca la finestra. L'upsert è per ecos_absence_id, quindi rifarlo
+                // non duplica. Se Ecos non risponde, le timbrature restano importate.
+                try
+                {
+                    List<EcosAbsenceRequest> assenze = await _ecos.GetAbsenceRequestsAsync(token, null, ct);
+                    List<EcosAbsenceRequest> nellaFinestra = assenze
+                        .Where(a => a.DateBegin.Date <= al && a.DateEnd.Date >= dal)
+                        .ToList();
+
+                    if (nellaFinestra.Count > 0)
+                    {
+                        var (absNuove, absAggiornate) = SyncAbsences(c, nellaFinestra);
+                        ProgressoLog($"✅ assenze del periodo: {absNuove} nuove, {absAggiornate} aggiornate");
+                        if (absNuove > 0 || absAggiornate > 0)
+                            esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[HR] Scarico assenze Ecos non riuscito: {Msg}", ex.Message);
+                    ProgressoLog($"⚠ Assenze non scaricate: {ex.Message} — le timbrature sono state importate");
+                }
+            }
+
+            LastImport = DateTime.Now;
+            LastResult = esito.Message;
+            _logger.LogInformation(
+                "[HR] {Titolo}: {Msg} (il cursore non è stato toccato).", titolo, esito.Message);
+            ProgressoFine($"=== COMPLETATO === {esito.Message}", esito);
+            return esito;
+        }
+        catch (EcosApiException ex)
+        {
+            _logger.LogWarning("[HR] {Titolo} fallita: {Msg}", titolo, ex.Message);
+            LastResult = $"ERRORE: {ex.Message}";
+            ProgressoFine($"❌ ERRORE: {ex.Message}", null);
+            return Fallito(ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "[HR] {Titolo} fallita: {Msg}", titolo, ex.Message);
+            LastResult = $"ERRORE: {ex.Message}";
+            ProgressoFine($"❌ ERRORE: {ex.Message}", null);
+            return Fallito($"Risincronizzazione fallita: {ex.Message}");
+        }
+        finally
+        {
+            ImportInProgress = false;
+            lock (_progressoLock) _progresso.Running = false;
+            _gate.Release();
+        }
+    }
+
+    /// <summary>I mesi di calendario toccati dall'intervallo: Ecos filtra per <c>YearMonth</c>.</summary>
+    internal static IEnumerable<(int Anno, int Mese)> MesiDellIntervallo(DateTime dal, DateTime al)
+    {
+        var corrente = new DateTime(dal.Year, dal.Month, 1);
+        var fine = new DateTime(al.Year, al.Month, 1);
+        while (corrente <= fine)
+        {
+            yield return (corrente.Year, corrente.Month);
+            corrente = corrente.AddMonths(1);
+        }
+    }
+
+    /// <summary>
+    /// La finestra di calendario su cui vale la fotografia completa: dentro si può cancellare
+    /// quello che Ecos non ha più, fuori no.
+    /// </summary>
+    internal sealed record FinestraImport(int? EmployeeId, DateTime Dal, DateTime Al);
 
     internal (int Added, int Updated) SyncAbsences(
         MySqlConnection c, IReadOnlyList<EcosAbsenceRequest> requests)
@@ -195,7 +500,8 @@ public class HrAttendanceService
     }
 
     internal HrImportResultDto ImportPunches(
-        MySqlConnection c, IReadOnlyList<EcosPunch> timbrature, bool full = false)
+        MySqlConnection c, IReadOnlyList<EcosPunch> timbrature, bool full = false,
+        FinestraImport? finestra = null)
     {
         Dictionary<string, int> mappa = MappaEcos(c);
 
@@ -265,7 +571,9 @@ public class HrAttendanceService
                 }
             }
 
-            if (full)
+            if (finestra != null)
+                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, giorniToccati);
+            else if (full)
                 rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, giorniToccati);
 
             tran.Commit();
@@ -282,6 +590,10 @@ public class HrAttendanceService
 
         int riparate = RepairDays(c);
 
+        // Le rimosse non stanno nel DTO di esito: le si porta a video da qui, altrimenti il
+        // contatore dell'avanzamento resterebbe a zero anche quando qualcosa è stato tolto.
+        lock (_progressoLock) _progresso.Removed = rimosse;
+
         string messaggio =
             $"{nuove} timbrature nuove, {aggiornate} aggiornate, {giorniToccati.Count} giornate ricalcolate"
             + (rimosse > 0 ? $", {rimosse} cancellate su Ecos rimosse" : "")
@@ -297,6 +609,43 @@ public class HrAttendanceService
             DaysRecalculated = giorniToccati.Count + riparate,
             Unmatched = nonAbbinati.ToList(),
         };
+    }
+
+    /// <summary>
+    /// Dentro la finestra chiesta si ha la fotografia completa di Ecos: quello che là non
+    /// c'è più si toglie anche qui. Tocca <b>solo</b> le righe <c>ECOS</c>: le rettifiche
+    /// (<c>source='ADJUSTMENT'</c>) sono nostre e non si cancellano mai da qui.
+    /// </summary>
+    private int RimuoviSpariteNellaFinestra(
+        MySqlConnection c, MySqlTransaction tran,
+        IEnumerable<string> idVisti, FinestraImport finestra,
+        HashSet<(int, DateTime)> giorniToccati)
+    {
+        var visti = new HashSet<string>(idVisti, StringComparer.OrdinalIgnoreCase);
+
+        string filtroDipendente = finestra.EmployeeId.HasValue ? " AND employee_id = @EmployeeId" : "";
+        List<RigaEsistente> nostre = c.Query<RigaEsistente>(
+            @"SELECT id AS Id, external_id AS ExternalId, employee_id AS EmployeeId, work_date AS WorkDate,
+                     punched_at AS PunchedAt, direction AS Direction, location AS Location
+              FROM hr_punches
+              WHERE source = 'ECOS' AND work_date BETWEEN @Dal AND @Al" + filtroDipendente,
+            new { finestra.Dal, finestra.Al, finestra.EmployeeId }, tran).ToList();
+
+        List<RigaEsistente> sparite = nostre
+            .Where(r => r.ExternalId != null && !visti.Contains(r.ExternalId))
+            .ToList();
+        if (sparite.Count == 0) return 0;
+
+        foreach (long[] blocco in ABlocchi(sparite.Select(r => r.Id), 500))
+            c.Execute("DELETE FROM hr_punches WHERE id IN @Ids", new { Ids = blocco }, tran);
+
+        foreach (RigaEsistente r in sparite)
+            giorniToccati.Add((r.EmployeeId, r.WorkDate));
+
+        _logger.LogInformation(
+            "[HR] Risincronizzazione {Dal:dd/MM/yyyy}-{Al:dd/MM/yyyy}: {N} timbrature non più su Ecos rimosse.",
+            finestra.Dal, finestra.Al, sparite.Count);
+        return sparite.Count;
     }
 
     private int RimuoviCancellateSuEcos(
@@ -484,6 +833,17 @@ public class HrAttendanceService
                 assenzeGiorno[dt.Date] = a;
         }
 
+        // Solleciti già chiesti nel mese: il tooltip del pulsante 📧 dice QUANDO (come
+        // GetLastMailSent nell'originale), non solo che è già stato mandato.
+        var solleciti = c.Query<(DateTime WorkDate, DateTime SentAt)>(
+                @"SELECT work_date AS WorkDate, sent_at AS SentAt
+                  FROM hr_reminders
+                  WHERE employee_id = @Id AND work_date BETWEEN @Da AND @A",
+                new { Id = employeeId, Da = primo, A = ultimo })
+            .ToDictionary(x => x.WorkDate.Date, x => x.SentAt);
+
+        DateTime oggi = DateTime.Today;
+
         var dto = new HrMonthlyTimesheetDto
         {
             EmployeeId = employeeId,
@@ -578,10 +938,134 @@ public class HrAttendanceService
                 };
             }
 
+            // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
+            // riga e il filtro «📧 Da segnalare», che così non possono divergere.
+            riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);
+            if (solleciti.TryGetValue(work_date.Date, out DateTime quando))
+                riga.LastReminderAt = quando;
+
             dto.Days.Add(riga);
         }
 
         return dto;
+    }
+
+    // ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────
+
+    /// <summary>
+    /// Il sollecito pronto per una giornata: destinatario, oggetto e corpo integrale, più lo
+    /// stato («già chiesto il …»). Il testo lo compone il server, come per quello mensile: la
+    /// pagina lo mostra e basta.
+    /// </summary>
+    /// <param name="firma">
+    /// Nome del mittente da mettere in fondo (vuoto = solo la riga dell'ufficio).
+    /// </param>
+    public HrDayReminderDto GetDayReminder(int employeeId, DateTime date, string firma)
+    {
+        DateTime giorno = date.Date;
+        HrMonthlyTimesheetDto mese = GetMonthlyTimesheet(employeeId, giorno.Year, giorno.Month);
+        HrDayDto? giornata = mese.Days.FirstOrDefault(g => g.WorkDate.Date == giorno);
+
+        var dto = new HrDayReminderDto
+        {
+            EmployeeId = employeeId,
+            EmployeeName = mese.EmployeeName,
+            Date = giorno,
+        };
+
+        if (giornata == null)
+        {
+            dto.Blocco = "Giornata fuori dal mese richiesto.";
+            return dto;
+        }
+
+        using MySqlConnection c = _db.Open();
+
+        // Il saluto usa il nome di battesimo dalla colonna, come fa il sollecito mensile:
+        // ricavarlo tagliando il nome completo al primo spazio sbaglierebbe su «Maria Grazia».
+        var recapito = c.QueryFirstOrDefault<(string? Email, string FirstName)>(
+            "SELECT email AS Email, COALESCE(first_name, '') AS FirstName FROM employees WHERE id = @Id",
+            new { Id = employeeId });
+        dto.Email = recapito.Email;
+        string saluto = string.IsNullOrWhiteSpace(recapito.FirstName)
+            ? mese.EmployeeName
+            : recapito.FirstName;
+
+        dto.CanRemind = giornata.CanRemind;
+        dto.LastReminderAt = giornata.LastReminderAt;
+        dto.Subject = HrDayReminder.Oggetto(giorno);
+        dto.Body = HrDayReminder.Corpo(saluto, giorno, giornata, firma);
+
+        if (!giornata.CanRemind)
+        {
+            dto.Blocco = giorno == DateTime.Today
+                ? "La giornata di oggi non si sollecita: è ancora aperta."
+                : "Questa giornata non ha anomalie da segnalare.";
+        }
+        else if (string.IsNullOrWhiteSpace(dto.Email))
+        {
+            // Stesso messaggio dell'originale («Nessuna email configurata per …»).
+            dto.Blocco = $"Nessuna email configurata per {mese.EmployeeName}.";
+        }
+
+        return dto;
+    }
+
+    /// <summary>
+    /// Segna la giornata come sollecitata, conservando anche il testo (M117): è la riga che
+    /// la Cronologia Email rilegge. Un secondo sollecito sulla stessa giornata aggiorna.
+    /// </summary>
+    public void MarkDayReminder(
+        int employeeId, DateTime date, string? email, string subject, string body,
+        int sentBy, string channel)
+    {
+        using MySqlConnection c = _db.Open();
+        c.Execute(@"
+            INSERT INTO hr_reminders (employee_id, work_date, sent_by, channel, email, subject, body)
+            VALUES (@EmployeeId, @WorkDate, @SentBy, @Channel, @Email, @Subject, @Body)
+            ON DUPLICATE KEY UPDATE sent_at = NOW(), sent_by = VALUES(sent_by), channel = VALUES(channel),
+                                    email = VALUES(email), subject = VALUES(subject), body = VALUES(body)",
+            new
+            {
+                EmployeeId = employeeId,
+                WorkDate = date.Date,
+                SentBy = sentBy,
+                Channel = channel,
+                Email = email,
+                Subject = subject,
+                Body = body,
+            });
+    }
+
+    // ── CRONOLOGIA EMAIL (voce 6 del port) ───────────────────────────────────
+
+    /// <summary>
+    /// Le mail di sollecito di un mese. 🪤 Il mese è quello del <b>giorno di riferimento</b>
+    /// (<c>work_date</c>), non della spedizione: come nell'originale, una mail mandata a
+    /// settembre per un buco di agosto si cerca sotto agosto.
+    /// </summary>
+    public HrReminderLogDto GetReminderLog(int year, int month, int? employeeId)
+    {
+        var primo = new DateTime(year, month, 1);
+        DateTime ultimo = primo.AddMonths(1).AddDays(-1);
+
+        string filtro = employeeId.HasValue ? " AND r.employee_id = @EmployeeId" : "";
+
+        using MySqlConnection c = _db.Open();
+        List<HrReminderLogRowDto> righe = c.Query<HrReminderLogRowDto>(
+            @"SELECT r.id AS Id, r.sent_at AS SentAt, r.employee_id AS EmployeeId,
+                     CONCAT_WS(' ', e.first_name, e.last_name) AS EmployeeName,
+                     r.email AS Email, r.work_date AS WorkDate, r.subject AS Subject,
+                     r.body AS Body, r.channel AS Channel,
+                     CONCAT_WS(' ', a.first_name, a.last_name) AS SentByName
+              FROM hr_reminders r
+              JOIN employees e ON e.id = r.employee_id
+              LEFT JOIN employees a ON a.id = r.sent_by
+              WHERE r.work_date BETWEEN @Primo AND @Ultimo" + filtro + @"
+              ORDER BY r.sent_at DESC, r.work_date DESC",
+            new { Primo = primo, Ultimo = ultimo, EmployeeId = employeeId }).ToList();
+
+        return new HrReminderLogDto { Year = year, Month = month, Rows = righe };
     }
 
     // ── GESTIONE RICHIESTE ED ASSENZE (FASE 2) ─────────────────────────────────
@@ -1621,17 +2105,26 @@ public class HrAttendanceService
     /// <summary>
     /// Segna come sollecitate le giornate indicate. Una riga per giornata (non per email):
     /// il secondo sollecito sullo stesso giorno aggiorna la data.
+    ///
+    /// <para>Dalla M117 si conserva anche il testo (destinatario, oggetto, corpo): è quello
+    /// che la Cronologia Email rilegge. Le N giornate di uno stesso invio portano la stessa
+    /// mail, come il <c>MailLog</c> dell'originale.</para>
     /// </summary>
-    public void MarkReminders(int year, int month, IEnumerable<(int EmployeeId, List<int> Days)> solleciti,
+    public void MarkReminders(
+        int year, int month,
+        IEnumerable<(int EmployeeId, List<int> Days, string? Email, string? Subject, string? Body)> solleciti,
         int sentBy, string channel)
     {
         var righe = solleciti
             .SelectMany(x => x.Days.Select(g => new
             {
-                EmployeeId = x.EmployeeId,
+                x.EmployeeId,
                 WorkDate = new DateTime(year, month, g),
                 SentBy = sentBy,
                 Channel = channel,
+                x.Email,
+                x.Subject,
+                x.Body,
             }))
             .ToList();
 
@@ -1639,9 +2132,10 @@ public class HrAttendanceService
 
         using MySqlConnection c = _db.Open();
         c.Execute(@"
-            INSERT INTO hr_reminders (employee_id, work_date, sent_by, channel)
-            VALUES (@EmployeeId, @WorkDate, @SentBy, @Channel)
-            ON DUPLICATE KEY UPDATE sent_at = NOW(), sent_by = VALUES(sent_by), channel = VALUES(channel)",
+            INSERT INTO hr_reminders (employee_id, work_date, sent_by, channel, email, subject, body)
+            VALUES (@EmployeeId, @WorkDate, @SentBy, @Channel, @Email, @Subject, @Body)
+            ON DUPLICATE KEY UPDATE sent_at = NOW(), sent_by = VALUES(sent_by), channel = VALUES(channel),
+                                    email = VALUES(email), subject = VALUES(subject), body = VALUES(body)",
             righe);
     }
 
@@ -1989,7 +2483,33 @@ public class HrAttendanceService
             TotalDays = conteggi.Days,
             LinkedEmployees = conteggi.Collegati,
             ActiveEmployees = conteggi.Attivi,
+            LastBadgeRead = LeggiConfigData(c, BadgeKey),
+            Progress = SnapshotProgresso(),
         };
+    }
+
+    /// <summary>
+    /// Registra la lettura riuscita dell'anagrafica badge (voce 11 del port). Si chiama
+    /// nell'unico punto in cui i badge si leggono davvero: nell'originale il pulsante
+    /// «Solo Badge» non la scriveva, e la data a video restava indietro per sempre.
+    /// </summary>
+    public void MarkBadgeRead()
+    {
+        using MySqlConnection c = _db.Open();
+        c.Execute(@"
+            INSERT INTO app_config (config_key, config_value, description)
+            VALUES (@K, @V, 'HR: ultima lettura riuscita dell''anagrafica badge da Ecos')
+            ON DUPLICATE KEY UPDATE config_value = @V",
+            new { K = BadgeKey, V = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) });
+    }
+
+    private static DateTime? LeggiConfigData(MySqlConnection c, string chiave)
+    {
+        string? valore = c.ExecuteScalar<string?>(
+            "SELECT config_value FROM app_config WHERE config_key = @K", new { K = chiave });
+        return DateTime.TryParse(valore, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime data)
+            ? data
+            : null;
     }
 
     // ── ATTREZZI ──────────────────────────────────────────────────────────────

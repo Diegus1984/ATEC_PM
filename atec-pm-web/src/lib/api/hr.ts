@@ -14,6 +14,8 @@ import type {
   HrEcosTestResult,
   HrMonthlyCalendar,
   HrMonthlyTimesheet,
+  HrDayReminder,
+  HrReminderLog,
   HrReminders,
   HrRemindersResult,
   HrQuadraturaMonth,
@@ -48,6 +50,30 @@ export async function importHrPunches(full = false): Promise<HrImportResult> {
   const r = await apiPost<ApiResponse<HrImportResult>>(
     `/api/hr/import${full ? "?full=true" : ""}`
   )
+  return unwrapApi(r)
+}
+
+/**
+ * Risincronizza da Ecos una sola giornata di un dipendente (voce 2 del port).
+ * Il cursore dell'import non si muove: e un ripescaggio mirato.
+ */
+export async function resyncHrDay(employeeId: number, date: string): Promise<HrImportResult> {
+  const r = await apiPost<ApiResponse<HrImportResult>>(
+    `/api/hr/import/day?employeeId=${employeeId}&date=${date}`
+  )
+  return unwrapApi(r)
+}
+
+/** Riscarica da Ecos un mese scelto (voce 5 del port). Anche qui il cursore non si tocca. */
+export async function resyncHrMonth(
+  year: number,
+  month: number,
+  employeeId?: number | null
+): Promise<HrImportResult> {
+  const q = new URLSearchParams({ year: String(year), month: String(month) })
+  if (employeeId != null) q.set("employeeId", String(employeeId))
+
+  const r = await apiPost<ApiResponse<HrImportResult>>(`/api/hr/import/month?${q.toString()}`)
   return unwrapApi(r)
 }
 
@@ -278,5 +304,76 @@ export async function fetchHrGiustificaInfo(
 /** Scrive la causale scelta (causale vuota = toglie quella che c'è). */
 export async function saveHrGiustifica(request: HrGiustificaRequest): Promise<boolean> {
   const r = await apiPost<ApiResponse<boolean>>("/api/hr/calendar/giustifica", request)
+  return unwrapApi(r)
+}
+
+// ── EXPORT DEL CARTELLINO INDIVIDUALE (voce 7 del port) ───────────────────
+
+/** Il cartellino della persona aperta in Excel, nello stile del calendario. */
+export async function downloadHrTimesheetExcel(
+  year: number,
+  month: number,
+  employeeId?: number | null,
+  employeeName?: string
+): Promise<void> {
+  const q = new URLSearchParams({ year: String(year), month: String(month) })
+  if (employeeId != null) q.set("employeeId", String(employeeId))
+
+  const blob = await apiGetBlob(`/api/hr/timesheet/export?${q.toString()}`)
+
+  const mese = MESI[month - 1]
+  const nome = employeeName
+    ? `Cartellino_${safeFileName(employeeName)}_${mese}_${year}.xlsx`
+    : `Cartellino_${mese}_${year}.xlsx`
+  downloadFile(nome, blob, blob.type)
+}
+
+// ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────
+
+/** Il sollecito pronto per una giornata: testo integrale, destinatario e stato. */
+export async function fetchHrDayReminder(
+  employeeId: number,
+  date: string
+): Promise<HrDayReminder> {
+  const r = await apiGet<ApiResponse<HrDayReminder>>(
+    `/api/hr/day-reminder?employeeId=${employeeId}&date=${date}`
+  )
+  return unwrapApi(r)
+}
+
+/**
+ * Spedisce il sollecito della giornata e lo registra.
+ * `channel: "MAILTO"` = la mail l'ha aperta l'utente nel client di posta: qui si registra
+ * soltanto, come per il sollecito mensile del calendario.
+ */
+export async function sendHrDayReminder(
+  employeeId: number,
+  date: string,
+  channel: "SMTP" | "MAILTO" = "SMTP"
+): Promise<void> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/day-reminder", {
+    employeeId,
+    date,
+    channel,
+  })
+  unwrapApi(r)
+}
+
+// ── CRONOLOGIA EMAIL (voce 6 del port) ────────────────────────────────────
+
+/**
+ * Le mail di sollecito gia mandate. 🪤 Il mese e quello del GIORNO DI RIFERIMENTO, non
+ * della spedizione: come nell'originale, una mail mandata a settembre per un buco di
+ * agosto si cerca sotto agosto.
+ */
+export async function fetchHrReminderLog(
+  year: number,
+  month: number,
+  employeeId?: number | null
+): Promise<HrReminderLog> {
+  const q = new URLSearchParams({ year: String(year), month: String(month) })
+  if (employeeId != null) q.set("employeeId", String(employeeId))
+
+  const r = await apiGet<ApiResponse<HrReminderLog>>(`/api/hr/reminders/log?${q.toString()}`)
   return unwrapApi(r)
 }

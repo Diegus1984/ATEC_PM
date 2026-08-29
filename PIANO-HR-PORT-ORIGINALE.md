@@ -189,6 +189,66 @@ Excel dal Calendario.
 
 ## 7. Stato
 
-**Niente di questo elenco è ancora stato scritto.** Ultimo deploy in produzione:
-`20260828-1452`, schema **v115** — dentro c'è il modulo HR fino alla giustificazione delle
-ore mancanti col menu contestuale, non oltre.
+**✅ Tutte e nove le voci sono state scritte il 28/08/2026, IN LOCALE — non ancora
+deployate.** Ultimo deploy in produzione: `20260828-1452`, schema **v115** (dentro c'è il
+modulo HR fino alla giustificazione delle ore mancanti col menu contestuale, non oltre).
+
+Verifica: **416 test .NET verdi** (`dotnet test`, +2 rispetto a prima), client `tsc -b`
+pulito e `npm run lint` fermo ai **244 problemi preesistenti**.
+
+### Cosa c'è dentro, voce per voce
+
+| # | Voce | Dove |
+|---|---|---|
+| 1 | Sollecito della singola giornata | `Services/Hr/HrDayReminder.cs` (regola + testi) · `HrAttendanceService.GetDayReminder` / `MarkDayReminder` · `GET/POST /api/hr/day-reminder` · web `SollecitoGiornataDialog.tsx` + colonna 📧 del cartellino |
+| 2 | Risincronizza questo giorno | `HrAttendanceService.ImportWindowAsync` · `POST /api/hr/import/day` · pulsante 🔄 su ogni riga |
+| 3 | Filtro «📧 Da segnalare» | `TimbraturePage.tsx`, interruttore che filtra su `canRemind` — **la stessa funzione** del pulsante |
+| 4 | Anteprima integrale della mail | `AnteprimaMailDialog.tsx`, usato dal sollecito della giornata **e** da quello mensile del Calendario |
+| 5 | Sincronizzazione di un mese scelto | `ImportWindowAsync(conAssenze: true)` · `POST /api/hr/import/month` · dialogo «Sincronizza Ecos» |
+| 6 | Cronologia Email | migrazione **M117** (`email`, `subject`, `body` su `hr_reminders`) · `GetReminderLog` · `GET /api/hr/reminders/log` · **quarta scheda** `CronologiaMailView.tsx` |
+| 7 | Export del cartellino in Excel | `Services/Hr/HrTimesheetExcel.cs` · `GET /api/hr/timesheet/export` |
+| 8 | Avanzamento dell'import a video | `HrImportProgressDto` + stato in memoria nel servizio · esposto da `GET /api/hr/status` · barra + log nel dialogo «Sincronizza Ecos» |
+| 11 | Ultima lettura badge | `app_config['hr_last_badge_read']`, scritta in `MarkBadgeRead()` dall'unico punto che legge i badge |
+
+Le due voci scartate (**#9** filtro forfettari, **#10** Cancella Mese) restano fuori: i
+motivi sono al §2 e non vanno riproposti.
+
+### Le scelte che chi rimette mano deve conoscere
+
+- **La regola «questa giornata va segnalata» ha una copia sola**: `HrDayReminder.Serve`.
+  Viaggia già decisa sul DTO (`HrDayDto.CanRemind`), quindi il pulsante 📧 e il filtro
+  «Da segnalare» non possono divergere. 🪤 **Non è `HasAnomaly`** — vedi §A2.
+- **Il cursore `hr_sync_punches_from` non si tocca mai** nella risincronizzazione mirata.
+  C'è un test che lo difende.
+- 🪤 **La finestra cancella, ma il mese aggiorna.** Si scarica da Ecos il *mese* (filtro
+  `YearMonth`, come il VB) e si insersce/aggiorna tutto quello che arriva; si **cancella**
+  solo dentro la finestra chiesta. Così una timbratura che Ecos ha spostato a un altro
+  giorno viene ricollocata invece di sparire.
+- 🪤 **Rete sul mese vuoto**: se Ecos non restituisce nemmeno una riga per il periodo e la
+  finestra è di **tutti**, non si cancella niente e lo si dice. Sulla singola persona invece
+  si procede: là la cancellazione è già ristretta a lei e a quel giorno, ed è esattamente
+  quello che l'utente ha chiesto. Due test tengono ferme le due metà.
+- **L'avanzamento vive in memoria** (il servizio è singleton): un riavvio a metà import lo
+  azzera, e la pagina lo riconosce e lo dice invece di restare a girare. Il polling si
+  accende anche mentre la POST è in volo — il server risponde solo a lavoro finito, quindi
+  aspettare che sia lo stato a dire «running» non funzionerebbe mai.
+- **Le credenziali Ecos si aprono dalla toolbar**, non più dal banner dei codici non
+  abbinati: quel banner compare solo dopo un import *riuscito*, e le credenziali servono
+  proprio quando l'import non riesce più.
+- 🪤 **`hr_reminders` resta a chiave unica `(employee_id, work_date)`**: il secondo sollecito
+  sulla stessa giornata **aggiorna** la riga, testo compreso. Le righe scritte prima della
+  M117 non hanno il corpo: la Cronologia dice «testo non conservato».
+- 🪤 **Il mese della Cronologia è quello del giorno di riferimento**, non della spedizione:
+  una mail mandata a settembre per un buco di agosto si cerca sotto agosto (come il VB).
+- **Difetto dell'originale non riportato**: là l'esito dell'invio SMTP non veniva
+  controllato, e si scriveva nel MailLog «inviata» anche a invio fallito. Qui no. Nello
+  stesso giro è stata messa una rete in `EmailService.QueueSimpleMail`: un indirizzo
+  malformato in anagrafica faceva saltare l'**intero** ciclo di invii (le mail già accodate
+  partivano, la registrazione no, e al secondo tentativo arrivavano doppie).
+
+### Cosa resta da fare
+
+- **Il collaudo a mano in produzione**, dopo il deploy: 📧 su una giornata vera, 🔄 su un
+  giorno, «Sincronizza il mese», la barra dell'import, l'export del cartellino.
+- **Deploy solo su ordine di Diego** (§5): `deploy\prova-test.ps1` e poi
+  `deploy\aggiorna-server.ps1` **nudo, in background**.

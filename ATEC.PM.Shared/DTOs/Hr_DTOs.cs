@@ -40,6 +40,18 @@ public class HrDayDto
 
     /// <summary>🔷 Dopo l'arrotondamento (scatto 30', tolleranza 10').</summary>
     public HrDayStageDto Normalized { get; set; } = new();
+
+    // ── SOLLECITO DELLA SINGOLA GIORNATA ──────────────────────────────────────
+    //
+    // La regola sta nel server (HrDayReminder.Serve) e viaggia già decisa: il pulsante 📧
+    // sulla riga e il filtro «📧 Da segnalare» leggono lo STESSO flag. Se il client se la
+    // ricalcolasse, il filtro mostrerebbe righe senza pulsante.
+
+    /// <summary>true = questa giornata merita il sollecito (nota di anomalia, e non è oggi).</summary>
+    public bool CanRemind { get; set; }
+
+    /// <summary>Quando è stato mandato l'ultimo sollecito per questa giornata; null = mai.</summary>
+    public DateTime? LastReminderAt { get; set; }
 }
 
 /// <summary>Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio.</summary>
@@ -83,6 +95,50 @@ public class HrStatusDto
     public long TotalDays { get; set; }
     public int LinkedEmployees { get; set; }
     public int ActiveEmployees { get; set; }
+
+    /// <summary>
+    /// L'ultima lettura riuscita dell'anagrafica badge da Ecos (voce 11 dell'originale:
+    /// l'etichetta «Badge: …» di SyncEcosPage). Sta in <c>app_config</c>, non in memoria:
+    /// deve sopravvivere al riavvio del servizio.
+    /// </summary>
+    public DateTime? LastBadgeRead { get; set; }
+
+    /// <summary>Avanzamento dell'import a video (voce 8). Vive in memoria: un riavvio lo azzera.</summary>
+    public HrImportProgressDto Progress { get; set; } = new();
+}
+
+/// <summary>
+/// L'avanzamento dell'import mentre gira (PIANO-HR-PORT-ORIGINALE.md, B3): port della barra
+/// e del <c>txtLog</c> di <c>SyncEcosPage</c>.
+///
+/// <para>🪤 Questo stato vive <b>in memoria</b> nel servizio (che è singleton): un riavvio a
+/// metà import lo azzera. La pagina se ne accorge da <see cref="StartedAt"/> nullo con
+/// <see cref="Running"/> falso, e lo dice — invece di restare a girare per sempre.</para>
+/// </summary>
+public class HrImportProgressDto
+{
+    public bool Running { get; set; }
+
+    /// <summary>Cosa si sta importando: «Import incrementale», «Sincronizzazione Agosto 2026», …</summary>
+    public string Title { get; set; } = "";
+
+    /// <summary>La fase in corso, già scritta per essere letta.</summary>
+    public string Phase { get; set; } = "";
+
+    /// <summary>0-100, a scatti di fase come nell'originale.</summary>
+    public int Percent { get; set; }
+
+    public int Downloaded { get; set; }
+    public int Added { get; set; }
+    public int Updated { get; set; }
+    public int Removed { get; set; }
+    public int DaysRecalculated { get; set; }
+
+    public DateTime? StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
+
+    /// <summary>Le righe di log, le ultime 200.</summary>
+    public List<string> Log { get; set; } = new();
 }
 
 public class HrMappingRowDto
@@ -460,4 +516,88 @@ public class HrGiustificaRequest
 
     /// <summary>Ore da coprire; se omesso vale l'intero buco calcolato dal server.</summary>
     public decimal? Hours { get; set; }
+}
+
+// ── SOLLECITO DELLA SINGOLA GIORNATA (PIANO-HR-PORT-ORIGINALE.md, voce 1) ────
+//
+// Il pulsante 📧 sulla riga del cartellino: port di btnMailDipendente_Click. Il testo lo
+// compone il server (HrDayReminder), come per il sollecito mensile: la pagina lo mostra
+// per intero e basta — un sollecito sbagliato lo legge una persona.
+
+/// <summary>Il sollecito pronto per una giornata: testo, destinatario e stato.</summary>
+public class HrDayReminderDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public DateTime Date { get; set; }
+
+    /// <summary>Indirizzo del dipendente; null/vuoto = non si può spedire.</summary>
+    public string? Email { get; set; }
+
+    public string Subject { get; set; } = "";
+
+    /// <summary>Il corpo integrale, quello che la persona leggerà.</summary>
+    public string Body { get; set; } = "";
+
+    /// <summary>true = la giornata rientra nella regola dell'originale (vedi HrDayReminder.Serve).</summary>
+    public bool CanRemind { get; set; }
+
+    /// <summary>Quando è stato mandato l'ultimo sollecito per questa giornata; null = mai.</summary>
+    public DateTime? LastReminderAt { get; set; }
+
+    /// <summary>false = SMTP non configurato: resta il client di posta.</summary>
+    public bool SmtpEnabled { get; set; }
+
+    /// <summary>Vuoto = si può spedire. Altrimenti il motivo, già scritto per essere mostrato.</summary>
+    public string Blocco { get; set; } = "";
+}
+
+/// <summary>Invio (o registrazione) del sollecito di una giornata.</summary>
+public class HrDayReminderRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime Date { get; set; }
+
+    /// <summary>
+    /// SMTP = lo spedisce il server; MAILTO = l'ha aperto l'utente nel client di posta e qui
+    /// si registra soltanto (come per il sollecito mensile).
+    /// </summary>
+    public string Channel { get; set; } = "SMTP";
+}
+
+// ── CRONOLOGIA EMAIL (PIANO-HR-PORT-ORIGINALE.md, voce 6) ────────────────────
+//
+// Port di MailLogPage. 🪤 Il filtro mese/anno lavora sul GIORNO DI RIFERIMENTO
+// (work_date), non sulla data di invio: come nell'originale, una mail spedita a settembre
+// per un buco di agosto si cerca sotto agosto.
+
+/// <summary>Una riga della Cronologia Email.</summary>
+public class HrReminderLogRowDto
+{
+    public long Id { get; set; }
+    public DateTime SentAt { get; set; }
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public string? Email { get; set; }
+
+    /// <summary>La giornata per cui è stato chiesto il chiarimento.</summary>
+    public DateTime WorkDate { get; set; }
+
+    public string? Subject { get; set; }
+
+    /// <summary>Il corpo; null = riga scritta prima della M117 («testo non conservato»).</summary>
+    public string? Body { get; set; }
+
+    /// <summary>SMTP = spedita dal server · MAILTO = aperta nel client di posta.</summary>
+    public string Channel { get; set; } = "";
+
+    public string? SentByName { get; set; }
+}
+
+/// <summary>La Cronologia Email di un mese.</summary>
+public class HrReminderLogDto
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public List<HrReminderLogRowDto> Rows { get; set; } = new();
 }

@@ -45,6 +45,17 @@ public class HrController : ControllerBase
 
     private bool CanManageRichieste => _access.CanWriteUser(MeId, Role, "nav.hr_richieste");
 
+    /// <summary>
+    /// Il nome che firma il sollecito, come <c>SettingsManager.GetSmtpFrom</c> nell'originale:
+    /// il mittente configurato. Vuoto se è un indirizzo email o se manca — in quel caso resta
+    /// la sola riga «Ufficio Risorse Umane — ATEC S.r.l.».
+    /// </summary>
+    private string FirmaMail()
+    {
+        string nome = _email.ResolveConfig().FromName ?? "";
+        return string.IsNullOrWhiteSpace(nome) || nome.Contains('@') ? "" : nome.Trim();
+    }
+
     // ── CARTELLINO / TIMESHEET ────────────────────────────────────────────────
 
     [HttpGet("timesheet")]
@@ -62,6 +73,99 @@ public class HrController : ControllerBase
 
         return Ok(ApiResponse<HrMonthlyTimesheetDto>.Ok(
             _attendance.GetMonthlyTimesheet(targetId, year, month)));
+    }
+
+    /// <summary>
+    /// Il cartellino della persona aperta in Excel (voce 7 del port). Stessa guardia di
+    /// <see cref="Timesheet"/>: il proprio si esporta sempre, quello altrui richiede la
+    /// scrittura su Timbrature.
+    /// </summary>
+    [HttpGet("timesheet/export")]
+    public IActionResult TimesheetExport(
+        [FromQuery] int year, [FromQuery] int month, [FromQuery] int? employeeId)
+    {
+        if (year < 2020 || year > 2100 || month < 1 || month > 12)
+            return Ok(ApiResponse<string>.Fail("Mese non valido."));
+
+        int targetId = employeeId ?? MeId;
+        if (targetId != MeId && !CanManageTimbrature)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Puoi esportare solo il tuo cartellino."));
+        }
+
+        HrMonthlyTimesheetDto cartellino = _attendance.GetMonthlyTimesheet(targetId, year, month);
+        (byte[] contenuto, string nomeFile) = HrTimesheetExcel.Genera(cartellino);
+
+        return File(contenuto,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nomeFile);
+    }
+
+    // ── SOLLECITO DELLA SINGOLA GIORNATA (PIANO-HR-PORT-ORIGINALE.md, voce 1) ─
+    //
+    // Il pulsante 📧 sulla riga del cartellino, port di btnMailDipendente_Click. Si tocca il
+    // cartellino di un'altra persona e si scrive una mail a suo nome: serve la scrittura.
+
+    /// <summary>Il sollecito pronto per una giornata: testo integrale e stato «già chiesto».</summary>
+    [HttpGet("day-reminder")]
+    public IActionResult DayReminder([FromQuery] int employeeId, [FromQuery] DateTime date)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("I solleciti richiedono la scrittura su Timbrature."));
+
+        if (employeeId <= 0) return Ok(ApiResponse<string>.Fail("Dipendente non indicato."));
+
+        HrDayReminderDto sollecito = _attendance.GetDayReminder(employeeId, date, FirmaMail());
+        sollecito.SmtpEnabled = _email.Enabled;
+        return Ok(ApiResponse<HrDayReminderDto>.Ok(sollecito));
+    }
+
+    /// <summary>
+    /// Spedisce il sollecito della giornata e lo registra. Con <c>channel = "MAILTO"</c> la
+    /// mail l'ha aperta l'utente nel client di posta e qui si registra soltanto: è la stessa
+    /// coppia di strade del sollecito mensile, e serve quando l'SMTP non è configurato.
+    /// </summary>
+    [HttpPost("day-reminder")]
+    public IActionResult SendDayReminder([FromBody] HrDayReminderRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("I solleciti richiedono la scrittura su Timbrature."));
+
+        if (req.EmployeeId <= 0) return Ok(ApiResponse<string>.Fail("Dipendente non indicato."));
+
+        bool mailto = string.Equals(req.Channel, "MAILTO", StringComparison.OrdinalIgnoreCase);
+
+        HrDayReminderDto sollecito = _attendance.GetDayReminder(req.EmployeeId, req.Date, FirmaMail());
+        if (!sollecito.CanRemind)
+            return Ok(ApiResponse<bool>.Fail("Questa giornata non ha anomalie da segnalare."));
+        if (string.IsNullOrWhiteSpace(sollecito.Email))
+            return Ok(ApiResponse<bool>.Fail($"Nessuna email configurata per {sollecito.EmployeeName}."));
+
+        if (!mailto)
+        {
+            if (!_email.Enabled)
+                return Ok(ApiResponse<bool>.Fail(
+                    "SMTP non configurato: il sollecito si può solo aprire nel client di posta."));
+
+            string htmlBody = System.Net.WebUtility.HtmlEncode(sollecito.Body).Replace("\n", "<br>\n");
+            if (!_email.QueueSimpleMail(
+                    sollecito.Email, sollecito.EmployeeName, sollecito.Subject, sollecito.Body, htmlBody))
+            {
+                // 🪤 Nell'originale l'esito dell'invio non veniva controllato: si scriveva nel
+                // MailLog e si diceva «Email inviata» anche a SMTP rotto.
+                return Ok(ApiResponse<bool>.Fail("Invio non riuscito: la mail non è stata accodata."));
+            }
+        }
+
+        _attendance.MarkDayReminder(
+            req.EmployeeId, req.Date, sollecito.Email, sollecito.Subject, sollecito.Body,
+            MeId, mailto ? "MAILTO" : "SMTP");
+
+        return Ok(ApiResponse<bool>.Ok(true, mailto
+            ? "Sollecito aperto nel client di posta e registrato."
+            : $"Sollecito inviato a {sollecito.Email}."));
     }
 
     // ── CALENDARIO MENSILE ────────────────────────────────────────────────────
@@ -246,7 +350,7 @@ public class HrController : ControllerBase
 
         HrRemindersDto solleciti = _attendance.GetReminders(year, month, departmentId, employeeId);
         var esito = new HrRemindersResultDto();
-        var inviati = new List<(int EmployeeId, List<int> Days)>();
+        var inviati = new List<(int EmployeeId, List<int> Days, string? Email, string? Subject, string? Body)>();
 
         foreach (HrReminderTargetDto t in solleciti.Targets)
         {
@@ -262,7 +366,7 @@ public class HrController : ControllerBase
             if (_email.QueueSimpleMail(t.Email, t.EmployeeName, t.Subject, t.Body, htmlBody))
             {
                 esito.Sent++;
-                inviati.Add((t.EmployeeId, t.MissingDays));
+                inviati.Add((t.EmployeeId, t.MissingDays, t.Email, t.Subject, t.Body));
             }
             else
             {
@@ -302,11 +406,34 @@ public class HrController : ControllerBase
         HrRemindersDto solleciti = _attendance.GetReminders(request.Year, request.Month, null, null);
         var daSegnare = solleciti.Targets
             .Where(t => request.EmployeeIds.Contains(t.EmployeeId))
-            .Select(t => (t.EmployeeId, t.MissingDays))
+            // Dal client di posta parte il MailtoBody: nella Cronologia deve finire il testo
+            // che la persona ha davanti, non l'altra variante.
+            .Select(t => (t.EmployeeId, t.MissingDays, t.Email, (string?)t.Subject, (string?)t.MailtoBody))
             .ToList();
 
         _attendance.MarkReminders(request.Year, request.Month, daSegnare, MeId, "MAILTO");
         return Ok(ApiResponse<bool>.Ok(true, $"Registrati {daSegnare.Count} solleciti."));
+    }
+
+    // ── CRONOLOGIA EMAIL (PIANO-HR-PORT-ORIGINALE.md, voce 6) ─────────────────
+
+    /// <summary>
+    /// Le mail di sollecito già mandate, come la <c>MailLogPage</c> dell'originale. Il mese
+    /// è quello del <b>giorno di riferimento</b>, non della spedizione.
+    /// </summary>
+    [HttpGet("reminders/log")]
+    public IActionResult ReminderLog(
+        [FromQuery] int year, [FromQuery] int month, [FromQuery] int? employeeId)
+    {
+        if (year < 2020 || year > 2100 || month < 1 || month > 12)
+            return Ok(ApiResponse<string>.Fail("Mese non valido."));
+
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("La cronologia dei solleciti richiede la scrittura su Timbrature."));
+
+        return Ok(ApiResponse<HrReminderLogDto>.Ok(
+            _attendance.GetReminderLog(year, month, employeeId)));
     }
 
     // ── QUADRATURA PRESENZE ↔ COMMESSE (FASE 3) ─────────────────────────────
@@ -349,6 +476,59 @@ public class HrController : ControllerBase
             : ApiResponse<HrImportResultDto>.Fail(result.Message));
     }
 
+    /// <summary>
+    /// Risincronizza da Ecos <b>una giornata</b> di un dipendente (voce 2 del port, port di
+    /// <c>btnResyncDay_Click</c>). 🪤 Non sposta il cursore dell'import: è un ripescaggio
+    /// mirato, non un avanzamento.
+    /// </summary>
+    [HttpPost("import/day")]
+    public async Task<IActionResult> ImportDay([FromQuery] int employeeId, [FromQuery] DateTime date)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("La risincronizzazione richiede la scrittura su Timbrature."));
+
+        if (employeeId <= 0) return Ok(ApiResponse<string>.Fail("Dipendente non indicato."));
+        if (date.Year < 2020 || date.Year > 2100) return Ok(ApiResponse<string>.Fail("Data non valida."));
+
+        HrImportResultDto result = await _attendance.ImportWindowAsync(
+            employeeId, date.Date, date.Date, HttpContext.RequestAborted);
+
+        return Ok(result.Success
+            ? ApiResponse<HrImportResultDto>.Ok(result, result.Message)
+            : ApiResponse<HrImportResultDto>.Fail(result.Message));
+    }
+
+    /// <summary>
+    /// Riscarica da Ecos <b>un mese scelto</b> (voce 5 del port). È la strada per rifare un
+    /// mese: si riscarica invece di cancellare — l'originale aveva anche un «Cancella Mese»,
+    /// che qui non esiste apposta (il grezzo è append-only).
+    /// </summary>
+    [HttpPost("import/month")]
+    public async Task<IActionResult> ImportMonth(
+        [FromQuery] int year, [FromQuery] int month, [FromQuery] int? employeeId)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("La sincronizzazione di un mese richiede la scrittura su Timbrature."));
+
+        if (year < 2020 || year > 2100 || month < 1 || month > 12)
+            return Ok(ApiResponse<string>.Fail("Mese non valido."));
+
+        var primo = new DateTime(year, month, 1);
+        DateTime ultimo = primo.AddMonths(1).AddDays(-1);
+
+        // Sul mese si riscaricano anche le assenze approvate, come faceva il «Aggiorna
+        // Report» dell'originale: il calendario mostra ferie e permessi, e rifare il mese
+        // senza di loro lascerebbe a video la situazione vecchia.
+        HrImportResultDto result = await _attendance.ImportWindowAsync(
+            employeeId, primo, ultimo, HttpContext.RequestAborted, conAssenze: true);
+
+        return Ok(result.Success
+            ? ApiResponse<HrImportResultDto>.Ok(result, result.Message)
+            : ApiResponse<HrImportResultDto>.Fail(result.Message));
+    }
+
     // ── MAPPATURA DIPENDENTI ↔ ECOS ───────────────────────────────────────────
 
     [HttpGet("mapping")]
@@ -374,6 +554,11 @@ public class HrController : ControllerBase
         {
             string token = await _ecos.TokenAsync(HttpContext.RequestAborted);
             List<EcosBadge> badges = await _ecos.BadgesAsync(token, HttpContext.RequestAborted);
+
+            // Voce 11 del port: la data dell'ultima lettura riuscita si scrive QUI, nell'unico
+            // punto in cui i badge si leggono davvero.
+            _attendance.MarkBadgeRead();
+
             return Ok(ApiResponse<HrBadgesDto>.Ok(new HrBadgesDto
             {
                 Configured = true,
