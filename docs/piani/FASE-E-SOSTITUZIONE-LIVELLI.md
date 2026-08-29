@@ -255,7 +255,7 @@ un avviso rosso finché non arriva la scheda della persona (Fase B).
 ## 7. Buchi aperti, fuori dalla Fase E
 
 Trovati durante il censimento, **non** sono controlli per livello: chiuderli è un cambio di
-politica e va deciso a parte (`PERMESSI-CENSIMENTO-CHIAVI.md` §2).
+politica e va deciso a parte.
 
 - `POST /api/projects` e `DELETE /api/projects/{id}` senza nessuna guardia
 - `GET /api/employees` espone nome, email e **username** di tutti a ogni autenticato

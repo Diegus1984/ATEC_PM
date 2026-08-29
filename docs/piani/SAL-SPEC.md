@@ -251,7 +251,7 @@ Aggiungi un metodo `CheckSalDeadlines()` al `NotificationBackgroundService` sul 
 3. **F3 — Contorno**: anagrafica condizioni (pagina + nav) + `CheckSalDeadlines` nella campanella +
    (opz.) pagina globale «Prospetto SAL».
 
-Aggiorna `HANDOFF.md` e `WEB-MIGRATION.md` a fine lavoro.
+Aggiorna `docs/HANDOFF-WEB.md` a fine lavoro.
 
 ---
 

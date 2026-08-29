@@ -98,25 +98,14 @@
 | Documento | Sessione |
 |-----------|----------|
 | [handoff/HANDOFF-CHAT-20260825.md](handoff/HANDOFF-CHAT-20260825.md) | 25/08/2026 |
-| [handoff/HANDOFF-CASHFLOW-IMPORTI-20260731.md](handoff/HANDOFF-CASHFLOW-IMPORTI-20260731.md) | 31/07/2026 — importi in € nel Cash Flow commessa |
-| [handoff/HANDOFF-VERIFICA-RUNTIME-REFACTORING-20260727.md](handoff/HANDOFF-VERIFICA-RUNTIME-REFACTORING-20260727.md) | 27/07/2026 — verifica a runtime del refactoring web |
-| [handoff/HANDOFF-CHAT-20260722.md](handoff/HANDOFF-CHAT-20260722.md) | 20-22/07/2026 — matrice stati DDP v7, Codex |
-| [handoff/HANDOFF-ORDINE-DANEA-20260722.md](handoff/HANDOFF-ORDINE-DANEA-20260722.md) | 22/07/2026 — ordine fornitore Danea dalla RDO |
-| [handoff/HANDOFF-COMMESSA-FEDELE.md](handoff/HANDOFF-COMMESSA-FEDELE.md) | Conversione fedele della Gestione Commessa (WPF → web) |
 
 ## 🗄️ Archivio — si legge, non si aggiorna
 
 | Documento | Perché è qui |
 |-----------|--------------|
 | [archivio/PIANO-PERMESSI.md](archivio/PIANO-PERMESSI.md) | Superato da `piani/PIANO-PERMESSI-REBUILD.md` (citato ancora in molti commenti del codice) |
-| [archivio/PIANO-PERMESSI-PROFILI.md](archivio/PIANO-PERMESSI-PROFILI.md) | Piano del 13/08/2026, già marcato ARCHIVIO |
-| [archivio/PERMESSI-CENSIMENTO-CHIAVI.md](archivio/PERMESSI-CENSIMENTO-CHIAVI.md) | Censimento delle chiavi permesso al 13/08/2026 |
 | [archivio/PERMESSI-MAPPA-ENDPOINT.gen.md](archivio/PERMESSI-MAPPA-ENDPOINT.gen.md) | **Generato** dallo script: non si modifica a mano |
 | [archivio/CENSIMENTO-N1-E3.md](archivio/CENSIMENTO-N1-E3.md) | Censimento query N+1 del blocco E3 |
-| [archivio/WEB-MIGRATION.md](archivio/WEB-MIGRATION.md) | Storico della migrazione WPF → web |
-| [archivio/ANALISI_PROGETTO_ATEC_PM.md](archivio/ANALISI_PROGETTO_ATEC_PM.md) | Analisi statica del 22/05/2026 |
-| [archivio/DESIGN_GUIDELINES-WPF.md](archivio/DESIGN_GUIDELINES-WPF.md) | Design system del client WPF, in dismissione dal 20/07/2026 |
-| [archivio/HANDOFF-20260714.md](archivio/HANDOFF-20260714.md) | Handoff del 14/07/2026 (epoca WPF) |
 
 ---
 

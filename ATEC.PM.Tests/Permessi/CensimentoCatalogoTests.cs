@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using ATEC.PM.Server.Authorization;
@@ -22,8 +22,8 @@ namespace ATEC.PM.Tests.Permessi;
 ///   che non proteggono nulla non possono più nascondersi.</item>
 /// </list>
 ///
-/// <para>In più genera l'artefatto <c>PERMESSI-MAPPA-ENDPOINT.gen.md</c> alla radice del
-/// repo: la mappa chiave → endpoint del §4 è un output, non un documento da mantenere.</para>
+/// <para>In più genera l'artefatto <c>docs/archivio/PERMESSI-MAPPA-ENDPOINT.gen.md</c>:
+/// la mappa chiave → endpoint del §4 è un output, non un documento da mantenere.</para>
 /// </summary>
 public class CensimentoCatalogoTests
 {
@@ -162,7 +162,9 @@ public class CensimentoCatalogoTests
         foreach (var gruppo in EndpointsSenzaChiave().GroupBy(e => e.Metodo.Split('.')[0]).OrderBy(g => g.Key))
             sb.AppendLine($"- {gruppo.Key}: {gruppo.Count()} endpoint");
 
-        File.WriteAllText(Path.Combine(radice, "PERMESSI-MAPPA-ENDPOINT.gen.md"), sb.ToString(), Encoding.UTF8);
+        string cartellaArchivio = Path.Combine(radice, "docs", "archivio");
+        Directory.CreateDirectory(cartellaArchivio);
+        File.WriteAllText(Path.Combine(cartellaArchivio, "PERMESSI-MAPPA-ENDPOINT.gen.md"), sb.ToString(), Encoding.UTF8);
     }
 
     // ── Attrezzi ─────────────────────────────────────────────────────────────────

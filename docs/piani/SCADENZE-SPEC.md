@@ -96,7 +96,7 @@ e `INSERT IGNORE INTO schema_migrations (version, description) VALUES (18, 'nav.
 - `src/app/AppRoutes.tsx`: import `ScadenzePage` + `"scadenze": <ScadenzePage />` in `LIVE_ROUTES`.
 - `src/config/navigation.ts`: voce nel gruppo **PM** (dopo Milestone/SAL), `{ id:"scadenze", label:"Scadenze", path:"/scadenze", featureKey:"nav.scadenze", icon: AlarmClock /* da lucide-react */, status:"live", description:"Cruscotto unificato di tutte le scadenze (SAL, commesse, check list, MoM, DDP): elenco a sinistra, dettaglio del 'colpevole' a destra." }`.
 
-Aggiorna `HANDOFF.md` + `WEB-MIGRATION.md` a fine lavoro.
+Aggiorna `docs/HANDOFF-WEB.md` a fine lavoro.
 
 ---
 

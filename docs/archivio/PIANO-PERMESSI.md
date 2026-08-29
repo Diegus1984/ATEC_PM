@@ -1,7 +1,7 @@
 # Permessi — piano
 
 > 13/08/2026 (sera) — **rev. 2**, corretta dopo la lettura del codice (§0).
-> Sostituisce `PIANO-PERMESSI-PROFILI.md`.
+> Sostituisce il piano profili del 13/08/2026 (cancellato: superato dal rebuild).
 > Segnalazione **#63** (Paolo Zanoni, OPEN). Allegato: `CONFIGURAZIONE GESTIONALE.xlsx`.
 > Prima di toccare codice: `SELECT status FROM bug_reports WHERE id = 63` in produzione.
 
@@ -468,4 +468,4 @@ Non rifare, non disfare — tranne dove detto.
 - **v83 —** `project_chat_messages.reply_to_message_id` (niente a che vedere coi permessi).
 - **v84 — i tre profili GRANTS: da togliere** in Fase A (§10.0).
 
-Dettaglio della Fase 1 in `PIANO-PERMESSI-PROFILI.md` (archivio).
+Dettaglio della Fase 1 nel piano profili del 13/08/2026 (cancellato: superato dal rebuild).

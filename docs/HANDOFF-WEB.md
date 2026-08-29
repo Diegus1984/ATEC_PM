@@ -18,7 +18,6 @@ l'API ASP.NET Core esistente (`ATEC.PM.Server`). **È il client ufficiale** dal
 | File | A cosa serve |
 |------|--------------|
 | **HANDOFF.md** (questo) | Punto d'ingresso: stato, regole, prossimi passi |
-| [WEB-MIGRATION.md](archivio/WEB-MIGRATION.md) | **Stato modulo per modulo** (web vs WPF) + roadmap |
 | [BLOCKS-RULES.md](regole/BLOCKS-RULES.md) | **Regole layout pagine**: fedeltà ai blocchi shadcn, recipe copia-incolla |
 | [DESIGN-RULES.md](regole/DESIGN-RULES.md) | Tema/preset/token (preset `bIkeymG`, radix-vega, neutral, Inter, radius 0.625rem) |
 | [README.md](../atec-pm-web/README.md) | Avvio rapido e struttura cartelle |
@@ -40,7 +39,7 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
 > ⚠️ In questa shell **Node non è nel PATH**. Per i comandi npm/tsc/eslint usa:
 > `$env:Path = "C:\Program Files\nodejs;" + $env:Path` e poi `.\node_modules\.bin\<tool>.cmd`.
 
-## Stato attuale (sintesi — dettaglio in WEB-MIGRATION.md)
+## Stato attuale
 
 ✅ **Parità col WPF (fatto):**
 - App shell (sidebar inset + header, pattern `dashboard-01`), Dashboard (KPI+grafico+tabella), Login (`login-03`)
@@ -173,13 +172,13 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
 Per portare un modulo a parità: 1) mappa le funzionalità della pagina WPF corrispondente
 (in `ATEC.PM.Client/Views/...`), 2) leggi gli endpoint/DTO server reali, 3) costruisci il
 layer API, 4) costruisci la/le pagina/e seguendo `BLOCKS-RULES.md`, 5) collega rotte+nav,
-6) `tsc -b` + `eslint`, 7) aggiorna `WEB-MIGRATION.md`.
+6) `tsc -b` + `eslint`, 7) aggiorna lo stato qui sotto.
 
-## Prossimi passi suggeriti (roadmap WEB-MIGRATION.md)
+## Prossimi passi suggeriti
 
 - **Fase A — Commessa usabile:** albero commesse + crea/modifica; documenti (upload/cartelle/preview); DDP commerciale base.
 - **Fase B — Operatività PM:** MoM completo; Timesheet calendario mese/settimana.
-- **Fase C — Core business:** Gestore DDP + SignalR; Costing + Preventivo vs Consuntivo; Resource Planner Gantt *(deciso 18/06: portarlo da un progetto web già funzionante, NON convertirlo dal WPF — backend `/api/resource-planner` + hub già pronti; vedi WEB-MIGRATION.md §Risorse)*.
+- **Fase C — Core business:** Gestore DDP + SignalR; Costing + Preventivo vs Consuntivo; Resource Planner Gantt *(deciso 18/06: portarlo da un progetto web già funzionante, NON convertirlo dal WPF — backend `/api/resource-planner` + hub già pronti.
 - **Fase D — Commerciale/Codex:** Preventivi + catalogo; Codex + composizione.
 
 ## Sidebar PM condivisa — FATTO (06/07/2026)

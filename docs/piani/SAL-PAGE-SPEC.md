@@ -144,7 +144,7 @@ export function salSummaryDots(s: { warn: number; pre: number; open: number }): 
     description: "Piani di fatturazione SAL di tutte le commesse + prospetto delle ipotesi di fatturazione aperte." },
   ```
 
-Aggiorna `HANDOFF.md` + `WEB-MIGRATION.md` a fine lavoro (voce «Pagina PM SAL globale + Prospetto»).
+Aggiorna `docs/HANDOFF-WEB.md` a fine lavoro (voce «Pagina PM SAL globale + Prospetto»).
 
 ---
 

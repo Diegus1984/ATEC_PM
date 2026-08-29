@@ -162,8 +162,8 @@ export function canAccessFeature(featureKey: string): boolean {
   // Funzione che non esiste nel catalogo: negata. Prima era consentita a tutti, ed è il motivo
   // per cui intere sezioni (Chat, DDP, Documenti) sono rimaste aperte per mesi senza che nessuno
   // se ne accorgesse: dimenticare di registrare una chiave non dava nessun segnale.
-  // Verificato prima di invertire che nessuna chiave usata nel codice manchi dal catalogo
-  // (PERMESSI-CENSIMENTO-CHIAVI.md), altrimenti qui sparirebbero pagine vere.
+  // Prima di invertire è stato verificato che nessuna chiave usata nel codice mancasse dal
+  // catalogo, altrimenti qui sparirebbero pagine vere.
   const feature = features.get(featureKey.toLowerCase())
   if (!feature) {
     return false

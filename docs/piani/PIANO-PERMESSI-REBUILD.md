@@ -429,7 +429,6 @@ Priorità: cutover pulito, eccezioni, enforce API, micro prezzi, UX Applica vs C
 | Cosa | Dove |
 |------|------|
 | Piano classi attuale (storico) | `PIANO-PERMESSI.md` |
-| Profili / note correlate | `PIANO-PERMESSI-PROFILI.md` |
 | Regola agent catalogo sensitive | `.cursor/rules/permessi-catalogo-sensitive.mdc` |
 | Mock UI scheda persona | canvas `permessi-simulazione-v2` |
 | Menu oggi | `atec-pm-web/src/config/navigation.ts` |
