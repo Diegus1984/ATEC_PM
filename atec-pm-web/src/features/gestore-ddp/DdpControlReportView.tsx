@@ -60,7 +60,7 @@ function reportColumns(officina: boolean, withCommessa: boolean): ReportColumn[]
     { id: "riga", label: "Riga", value: (row) => String(row.rowNumber), numeric: true },
     {
       id: "dataprev",
-      label: "Data prev.",
+      label: "Data Prevista",
       value: (row) => formatDateShort(row.dateNeeded),
       due: true,
     },

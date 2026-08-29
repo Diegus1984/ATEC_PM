@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 28/08/2026 13:23.
+> Fotografia del 29/08/2026 10:30.
 
 ## Chiavi con endpoint
 
@@ -71,6 +71,7 @@
 
 ### `action.manage_codex` — Gestisce il Codex (sync, genera codice)
 - `DELETE /api/codex/{id}` (CodexController.Delete)
+- `DELETE /api/codex/references/{id}` (CodexController.DeleteReference)
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
@@ -78,6 +79,7 @@
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/codex/confirm` (CodexController.ConfirmReservation)
+- `POST /api/codex/references` (CodexController.AddReference)
 - `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
 - `POST /api/codex/sync` (CodexController.StartSync)
@@ -449,21 +451,27 @@
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/day-reminder` (HrController.DayReminder)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)
 - `GET /api/hr/mapping/badges` (HrController.Badges)
 - `GET /api/hr/quadratura` (HrController.Quadratura)
+- `GET /api/hr/reminders/log` (HrController.ReminderLog)
 - `GET /api/hr/status` (HrController.Status)
 - `GET /api/hr/timesheet` (HrController.Timesheet)
+- `GET /api/hr/timesheet/export` (HrController.TimesheetExport)
 - `POST /api/hr/absences` (HrController.CreateAbsence)
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/day-reminder` (HrController.SendDayReminder)
 - `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
 - `POST /api/hr/ecos/settings/test` (HrController.TestEcosSettings)
 - `POST /api/hr/import` (HrController.Import)
+- `POST /api/hr/import/day` (HrController.ImportDay)
+- `POST /api/hr/import/month` (HrController.ImportMonth)
 - `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
 
 ### `nav.hr_timbrature` — Timbrature
@@ -474,21 +482,27 @@
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/day-reminder` (HrController.DayReminder)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)
 - `GET /api/hr/mapping/badges` (HrController.Badges)
 - `GET /api/hr/quadratura` (HrController.Quadratura)
+- `GET /api/hr/reminders/log` (HrController.ReminderLog)
 - `GET /api/hr/status` (HrController.Status)
 - `GET /api/hr/timesheet` (HrController.Timesheet)
+- `GET /api/hr/timesheet/export` (HrController.TimesheetExport)
 - `POST /api/hr/absences` (HrController.CreateAbsence)
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/day-reminder` (HrController.SendDayReminder)
 - `POST /api/hr/ecos/settings` (HrController.SaveEcosSettings)
 - `POST /api/hr/ecos/settings/test` (HrController.TestEcosSettings)
 - `POST /api/hr/import` (HrController.Import)
+- `POST /api/hr/import/day` (HrController.ImportDay)
+- `POST /api/hr/import/month` (HrController.ImportMonth)
 - `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
 
 ### `nav.milestones` — Milestones
@@ -879,6 +893,7 @@
 - `PUT /api/resource-planner/services/{id}` (ResourcesController.UpdateService)
 
 ## Chiavi usate solo inline (CanAccessUser/CanWriteUser, senza attributo)
+- `action.ddp_status_override` — ATEC.PM.Server/Services/DdpTransitionService.cs
 - `action.moderate_chat` — ATEC.PM.Server/Controllers/ChatController.cs
 - `action.sal_edit_closed` — ATEC.PM.Server/Controllers/SalController.cs
 - `action.timesheet_any_employee` — ATEC.PM.Server/Controllers/TimesheetController.cs
@@ -910,7 +925,7 @@
 - ActivityCatalogController: 2 endpoint
 - AuthController: 4 endpoint
 - AuthLevelController: 4 endpoint
-- CodexController: 12 endpoint
+- CodexController: 10 endpoint
 - CostSectionsController: 2 endpoint
 - DaneaSyncController: 2 endpoint
 - DashboardController: 2 endpoint

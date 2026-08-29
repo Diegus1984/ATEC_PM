@@ -184,8 +184,13 @@ function DdpGroupCard({
                     <TableCell>{row.requestedBy || "—"}</TableCell>
                   )}
                   {show("description") && (
-                    <TableCell className="max-w-[240px] whitespace-normal break-words">
-                      {row.description}
+                    <TableCell className="min-w-[280px] max-w-[420px]">
+                      <span
+                        className="block line-clamp-2 whitespace-normal break-words leading-snug"
+                        title={row.description}
+                      >
+                        {row.description || "—"}
+                      </span>
                     </TableCell>
                   )}
                   {show("quantity") && (

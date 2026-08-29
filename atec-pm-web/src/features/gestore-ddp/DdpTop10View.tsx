@@ -105,8 +105,13 @@ export function DdpTop10View(props: DdpViewProps) {
                       {row.rank}
                     </span>
                   </TableCell>
-                  <TableCell className="min-w-[320px] whitespace-normal">
-                    {row.item.description}
+                  <TableCell className="min-w-[280px] max-w-[420px]">
+                    <span
+                      className="block line-clamp-2 whitespace-normal break-words leading-snug"
+                      title={row.item.description}
+                    >
+                      {row.item.description || "—"}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {fmtQty(row.item.quantity)}

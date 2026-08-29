@@ -11,6 +11,8 @@ export interface DdpCommercialRowOverrides {
   daneaRef?: string
   /** Presente (anche `null` = data rimossa) = la PUT aggiorna la data prevista. */
   dateNeeded?: string | null
+  /** Presente (anche `null` = data rimossa) = la PUT aggiorna la data di consegna. */
+  deliveredAt?: string | null
   notes?: string
   /** «Inserito da» (#61): presente = la PUT riscrive l'autore della riga. */
   requestedBy?: string
@@ -44,6 +46,8 @@ export function ddpCommercialRowToSaveRequest(
     daneaRef: overrides.daneaRef ?? row.daneaRef ?? "",
     dateNeeded:
       overrides.dateNeeded !== undefined ? overrides.dateNeeded : row.dateNeeded,
+    deliveredAt:
+      overrides.deliveredAt !== undefined ? overrides.deliveredAt : row.deliveredAt,
     destination: overrides.destination ?? row.destination ?? "",
     destinationSpec: overrides.destinationSpec ?? row.destinationSpec ?? "",
     notes: overrides.notes ?? row.notes ?? "",

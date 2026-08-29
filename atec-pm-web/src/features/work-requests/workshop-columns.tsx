@@ -6,6 +6,7 @@ import { DdpInlineDateCell } from "@/features/commesse/DdpInlineDateCell"
 import { DdpInlineTextCell } from "@/features/commesse/DdpInlineTextCell"
 import type { DdpStatusItem, WorkshopRow } from "@/lib/api/types"
 import { dateToIso, formatDateShort } from "@/lib/date-iso"
+import { formatCodexCode } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { isDataRichiestaScaduta, type WorkshopView } from "./workshop-shared"
@@ -82,7 +83,7 @@ export function buildWorkshopColumns(
       header: "Codice",
       cell: ({ row }) => (
         <span className="font-mono text-xs font-semibold">
-          {row.original.partNumber || "—"}
+          {formatCodexCode(row.original.partNumber) || "—"}
         </span>
       ),
     },
@@ -90,7 +91,10 @@ export function buildWorkshopColumns(
       accessorKey: "description",
       header: "Descrizione",
       cell: ({ row }) => (
-        <span className="line-clamp-2 max-w-[240px] text-sm">
+        <span
+          className="block min-w-[280px] max-w-[420px] line-clamp-2 whitespace-normal break-words leading-snug text-sm"
+          title={row.original.description}
+        >
           {row.original.description || "—"}
         </span>
       ),

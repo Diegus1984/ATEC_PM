@@ -87,12 +87,20 @@ export function DdpWorkTypeCell({
               <span>{option.label}</span>
             </DropdownMenuItem>
           ))}
-          {/* Niente voce «Non classificata»: svuotare il campo non regge, perché al
-              salvataggio il server ri-deduce subito la natura dallo stato DDP
-              (WorkRequestDdpSync.FreezeOfficinaWorkType scrive quando il campo è vuoto).
-              Sarebbe un comando che non fa niente sulle righe DO/RO/IO/DC e funziona solo
-              sulle altre: meglio non offrirlo. «Non classificata» resta uno stato in cui
-              una riga si trova, non uno che si sceglie. */}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="gap-2 text-muted-foreground"
+            onClick={() => onWorkTypeChange("")}
+          >
+            <Check
+              className={cn(
+                "size-4 shrink-0",
+                !workType ? "opacity-100" : "opacity-0"
+              )}
+            />
+            <span className="size-2 shrink-0 rounded-full border border-muted-foreground/50" />
+            <span>— (Non definita)</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

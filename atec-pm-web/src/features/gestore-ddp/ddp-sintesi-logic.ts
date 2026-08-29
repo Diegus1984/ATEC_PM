@@ -888,7 +888,7 @@ export function buildSintesiModel({
     })
     const stato = cell(mStato, "Stato")
     const rif = cell(mRif, "Rif. Danea")
-    const data = cell(mData, "Data prev.")
+    const data = cell(mData, "Data Prevista")
     const dest = cell(mDest, "Destinazione")
     const costo = cell(mCosto, "Costo")
     mancanti.push({

@@ -135,7 +135,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   itemStatus: "Stato",
   smartAction: "Prossimo Passo",
   daneaRef: "Rif. Danea",
-  dateNeeded: "Data Prev.",
+  dateNeeded: "Data Prevista",
   destination: "Destinazione",
   destinationSpec: "Specifica",
   notes: "Note",

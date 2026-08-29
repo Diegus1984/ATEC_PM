@@ -1,5 +1,5 @@
 import type { DdpRowItem } from "@/lib/api/types"
-import { euro } from "@/lib/format"
+import { euro, formatCodexCode } from "@/lib/format"
 
 export const COMMERCIAL_SINTESI_HEADERS = [
   "#",
@@ -16,7 +16,7 @@ export const COMMERCIAL_SINTESI_HEADERS = [
   "Produttore",
   "Stato",
   "Rif. Danea",
-  "Data prev.",
+  "Data Prevista",
   "Destinazione",
   "Specifica",
   "Note",
@@ -90,7 +90,7 @@ export function ddpRowToSintesiCells(
       String(row.rowNumber),
       row.requestedBy,
       formatDate(row.createdAt),
-      row.partNumber,
+      formatCodexCode(row.partNumber),
       row.description,
       fmtQty(row.quantity),
       row.material ?? "",

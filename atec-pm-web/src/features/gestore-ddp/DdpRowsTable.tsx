@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table"
 import type { DdpRowItem, DdpStatusItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
+import { formatCodexCode } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import {
@@ -182,7 +183,22 @@ export function DdpRowsTable({
                               )}
                             </button>
                           ) : null}
-                          {row.partNumber || "—"}
+                          {formatCodexCode(row.partNumber) || "—"}
+                        </span>
+                      </TableCell>
+                    )
+                  }
+                  if (index === 4) {
+                    return (
+                      <TableCell
+                        key={index}
+                        className="min-w-[280px] max-w-[420px] p-2"
+                      >
+                        <span
+                          className="block line-clamp-2 whitespace-normal break-words leading-snug"
+                          title={typeof cell === "string" ? cell : undefined}
+                        >
+                          {cell || "—"}
                         </span>
                       </TableCell>
                     )
@@ -191,7 +207,7 @@ export function DdpRowsTable({
                     <TableCell
                       key={index}
                       className={cn(
-                        index === 4 || index === headers.length - 2
+                        index === headers.length - 2
                           ? "min-w-[160px]"
                           : "whitespace-nowrap",
                         index === 0 || index === 5 ? "tabular-nums" : undefined,

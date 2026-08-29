@@ -60,6 +60,20 @@ export function dash(value: string | null | undefined): string {
   return value && value.trim() ? value : "—"
 }
 
+/**
+ * Formattazione canonica codice Codex / ATEC:
+ * rimuove tutti i punti e inserisce un solo punto prima delle ultime 3 cifre.
+ * Es. `101170426001` → `101170426.001`.
+ */
+export function formatCodexCode(codice: string | null | undefined): string {
+  if (!codice) return ""
+  const raw = codice.replace(/\./g, "").trim()
+  if (raw.length > 3) {
+    return `${raw.slice(0, raw.length - 3)}.${raw.slice(raw.length - 3)}`
+  }
+  return raw
+}
+
 /** Ore con al più un decimale, all'italiana e senza unità (es. `7,5`). */
 export function fmtHours(hours: number): string {
   return hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })
