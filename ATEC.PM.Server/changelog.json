@@ -1,6 +1,16 @@
 {
     "voci":  [
                  {
+                     "build":  "20260829-1943",
+                     "data":  "2026-08-29T19:43:45",
+                     "hash":  "abeacb16d7202d770c0c8c9a70672c1d6cda407a",
+                     "modifiche":  [
+                                       "Menu Gestione avanzata: sottomenu per Sezioni di costo, Anagrafiche SAL e Conf. DDP",
+                                       "Documentazione: via 11 documenti vecchi, la mappa endpoint torna in docs/archivio",
+                                       "Documentazione: tutti i .md finiscono in ATEC_PM/docs, divisi per tipo"
+                                   ]
+                 },
+                 {
                      "build":  "20260829-1054",
                      "data":  "2026-08-29T10:54:49",
                      "hash":  "e8040c489e6de170d12c338310cbae4f790466bc",
