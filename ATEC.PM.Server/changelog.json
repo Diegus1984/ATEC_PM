@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260829-1959",
+                     "data":  "2026-08-29T19:59:47",
+                     "hash":  "cb9d4e8f01d88d457e417a4a8d5dbc3215d469d6",
+                     "modifiche":  [
+                                       "Gestione avanzata: nomi e icone rifatti, i figli hanno la loro icona"
+                                   ]
+                 },
+                 {
                      "build":  "20260829-1943",
                      "data":  "2026-08-29T19:43:45",
                      "hash":  "abeacb16d7202d770c0c8c9a70672c1d6cda407a",

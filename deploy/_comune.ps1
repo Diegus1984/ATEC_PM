@@ -87,9 +87,14 @@ function Get-ImprontaSorgenti {
         # contiene `version.json` con l'identificativo della build — cambia a ogni `npm build`.
         # Includendolo, l'impronta non tornava mai uguale e i test si rifacevano sempre: il
         # salto sembrava funzionare e invece non saltava niente (visto succedere, 16/08/2026).
+        # 🪤 Stessa storia per `changelog.json`: sta in ATEC.PM.Server ed è il DEPLOY
+        # stesso a riscriverlo (una voce per build). Contandolo, l'impronta appena registrata
+        # verde moriva sul posto: il deploy dopo rifaceva i ~190 s di test anche per una
+        # modifica di sola SPA. Nessun test lo legge (visto succedere, 29/08/2026).
         $file = Get-ChildItem -LiteralPath $base -Recurse -File -Force |
                 Where-Object {
                     $_.Extension -in @('.cs', '.csproj', '.json') -and
+                    $_.Name -ne 'changelog.json' -and
                     $_.FullName -notmatch '\\(bin|obj|wwwroot|node_modules)\\'
                 }
         foreach ($f in $file) {
