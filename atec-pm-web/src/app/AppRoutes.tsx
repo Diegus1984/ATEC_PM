@@ -41,6 +41,7 @@ import { SalPage } from "@/features/sal/SalPage"
 import { OreCommessaPage } from "@/features/ore-commessa/OreCommessaPage"
 import { TrasfertaPage } from "@/features/trasferta/TrasfertaPage"
 import { ConfigSectionsPage } from "@/features/admin/config-sections/ConfigSectionsPage"
+import { TariffOptionsPage } from "@/features/admin/config-sections/TariffOptionsPage"
 import { DdpAggregationsPage } from "@/features/admin/ddp/DdpAggregationsPage"
 import { DdpConfigPage } from "@/features/admin/ddp/DdpConfigPage"
 import { ProjectTemplatesPage } from "@/features/admin/templates/ProjectTemplatesPage"
@@ -78,8 +79,11 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   "ore-commessa": <OreCommessaPage />,
   bilancio: <BilancioPage />,
   "config-sezioni": <ConfigSectionsPage />,
+  "config-tariffe": <TariffOptionsPage />,
   "anagrafica-attivita": <ActivityCatalogPage />,
-  "sal-conditions": <SalConditionsPage />,
+  "sal-conditions": <SalConditionsPage fixedTab="condizioni" />,
+  "sal-sap-causali": <SalConditionsPage fixedTab="sap" />,
+  "sal-payment-states": <SalConditionsPage fixedTab="pagamenti" />,
   "ddp-destinazioni": <DdpConfigPage />,
   "ddp-aggregazioni": <DdpAggregationsPage />,
   backup: <BackupPage />,

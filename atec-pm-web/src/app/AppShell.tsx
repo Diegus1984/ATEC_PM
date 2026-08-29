@@ -34,9 +34,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuBadge,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   NAV_GROUPS,
@@ -83,7 +87,25 @@ function userInitials(fullName: string): string {
 function filterNavGroups(): NavGroupConfig[] {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => canAccessFeature(item.featureKey)),
+    items: group.items
+      .map((item) => {
+        if (item.children) {
+          const visibleChildren = item.children.filter((child) =>
+            canAccessFeature(child.featureKey)
+          )
+          return {
+            ...item,
+            children: visibleChildren,
+          }
+        }
+        return item
+      })
+      .filter((item) => {
+        if (item.children) {
+          return item.children.length > 0
+        }
+        return canAccessFeature(item.featureKey)
+      }),
   })).filter((group) => group.items.length > 0)
 }
 
@@ -99,7 +121,94 @@ function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.path === "/mom") {
     return pathname === "/mom" || (pathname.startsWith("/mom/") && !pathname.startsWith("/mom/note"))
   }
+  if (item.path === "/config-sezioni") {
+    return pathname === "/config-sezioni"
+  }
+  if (item.path === "/admin/sal-conditions") {
+    return pathname === "/admin/sal-conditions"
+  }
+  if (item.path === "/ddp-destinazioni") {
+    return pathname === "/ddp-destinazioni"
+  }
   return pathname === item.path || pathname.startsWith(item.path + "/")
+}
+
+/**
+ * Voce di menu che apre un sottomenu (es. «Conf. Sezioni di costo»).
+ *
+ * Con la barra ridotta a sole icone il sottomenu lo nasconde il CSS di shadcn
+ * (`group-data-[collapsible=icon]:hidden`): in quello stato il clic riapre la
+ * barra invece di aprire un elenco che nessuno vedrebbe — altrimenti le pagine
+ * figlie resterebbero irraggiungibili dal menu.
+ */
+function NavSubmenuItem({
+  item,
+  pathname,
+  open,
+  onToggle,
+  onNavigate,
+}: {
+  item: NavItemConfig
+  pathname: string
+  open: boolean
+  onToggle: () => void
+  onNavigate: (path: string) => void
+}) {
+  const { state, isMobile, setOpen } = useSidebar()
+  const barCollapsed = !isMobile && state === "collapsed"
+  const Icon = item.icon
+  const children = item.children ?? []
+  const isParentActive = children.some((child) => isNavActive(child, pathname))
+  const isSubmenuOpen = open && !barCollapsed
+
+  function handleParentClick() {
+    if (barCollapsed) {
+      setOpen(true)
+      if (!open) onToggle()
+      return
+    }
+    onToggle()
+  }
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isParentActive}
+        tooltip={item.label}
+        onClick={handleParentClick}
+        className="cursor-pointer"
+      >
+        <Icon />
+        <span className="truncate">{item.label}</span>
+        <ChevronDown
+          className={cn(
+            "ml-auto size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
+            !isSubmenuOpen && "-rotate-90"
+          )}
+          aria-hidden="true"
+        />
+      </SidebarMenuButton>
+      <Collapsible
+        open={isSubmenuOpen}
+        style={{ "--accordion-duration": "200ms" } as React.CSSProperties}
+      >
+        <SidebarMenuSub>
+          {children.map((subItem) => (
+            <SidebarMenuSubItem key={subItem.id}>
+              <SidebarMenuSubButton
+                asChild
+                isActive={isNavActive(subItem, pathname)}
+              >
+                <button type="button" onClick={() => onNavigate(subItem.path)}>
+                  <span className="truncate">{subItem.label}</span>
+                </button>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      </Collapsible>
+    </SidebarMenuItem>
+  )
 }
 
 export function AppShell() {
@@ -150,6 +259,42 @@ export function AppShell() {
       return next
     })
   }, [])
+
+  // Sottomenu aperti (es. Conf. Sezioni di costo, Anagrafiche SAL, Conf. DDP)
+  const [openSubmenuIds, setOpenSubmenuIds] = React.useState<Set<string>>(
+    () =>
+      new Set([
+        "config-sezioni-group",
+        "sal-anagrafiche-group",
+        "ddp-config-group",
+      ])
+  )
+
+  const toggleSubmenu = React.useCallback((itemId: string) => {
+    setOpenSubmenuIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) {
+        next.delete(itemId)
+      } else {
+        next.add(itemId)
+      }
+      return next
+    })
+  }, [])
+
+  // Atterrando su una pagina figlia (link diretto, Command Palette) il suo
+  // sottomenu si apre da solo. NON lo teniamo forzato aperto finché è attivo,
+  // altrimenti il clic sul contenitore non riuscirebbe più a richiuderlo.
+  const { pathname } = location
+  React.useEffect(() => {
+    const parent = NAV_GROUPS.flatMap((group) => group.items).find((item) =>
+      item.children?.some((child) => isNavActive(child, pathname))
+    )
+    if (!parent) return
+    setOpenSubmenuIds((prev) =>
+      prev.has(parent.id) ? prev : new Set(prev).add(parent.id)
+    )
+  }, [pathname])
 
   // Scorciatoia globale Ctrl+K / Cmd+K e '/' per aprire la Command Palette universale
   React.useEffect(() => {
@@ -323,9 +468,23 @@ export function AppShell() {
                     <SidebarMenu>
                       {group.items.map((item) => {
                         const Icon = item.icon
-                        const active = isNavActive(item, location.pathname)
                         const badgeCount =
                           badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0
+
+                        if (item.children && item.children.length > 0) {
+                          return (
+                            <NavSubmenuItem
+                              key={item.id}
+                              item={item}
+                              pathname={location.pathname}
+                              open={openSubmenuIds.has(item.id)}
+                              onToggle={() => toggleSubmenu(item.id)}
+                              onNavigate={(path) => navigate(path)}
+                            />
+                          )
+                        }
+
+                        const active = isNavActive(item, location.pathname)
                         // #102/#109: le due voci dello scarico ore si accendono anche nel
                         // testo — verde grassetto — perché il pallino sparisce quando la
                         // barra è compressa a sole icone.

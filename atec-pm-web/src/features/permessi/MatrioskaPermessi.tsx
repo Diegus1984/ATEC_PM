@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { CATALOGO_PERMESSI, type VoceCatalogoGen } from "@/config/catalogo.gen"
-import { NAV_GROUPS } from "@/config/navigation"
+import { NAV_GROUPS, flattenNavItems } from "@/config/navigation"
 import { COMMESSA_SECTIONS } from "@/features/commesse/commessa-sections"
 import type { FunzionePermessoDto, StatoCombo } from "@/lib/api/types"
 import { etichettaStato } from "./stato-permesso"
@@ -360,7 +360,9 @@ export function AnteprimaVideo({ funzioni }: { funzioni: FunzionePermessoDto[] }
         </div>
         <div className="space-y-2">
           {NAV_GROUPS.map((gruppo) => {
-            const visibili = gruppo.items.filter((item) => puo(item.featureKey))
+            const visibili = flattenNavItems(gruppo.items).filter((item) =>
+              puo(item.featureKey)
+            )
             if (visibili.length === 0) return null
             return (
               <div key={gruppo.id}>
@@ -380,7 +382,9 @@ export function AnteprimaVideo({ funzioni }: { funzioni: FunzionePermessoDto[] }
               </div>
             )
           })}
-          {NAV_GROUPS.every((g) => g.items.every((i) => !puo(i.featureKey))) ? (
+          {NAV_GROUPS.every((g) =>
+            flattenNavItems(g.items).every((i) => !puo(i.featureKey))
+          ) ? (
             <div className="text-muted-foreground">Nessuna voce di menu visibile.</div>
           ) : null}
         </div>

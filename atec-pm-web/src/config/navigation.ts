@@ -59,6 +59,7 @@ export interface NavItemConfig {
   icon: LucideIcon
   status: ModuleStatus
   description?: string
+  children?: NavItemConfig[]
 }
 
 export interface NavGroupConfig {
@@ -416,12 +417,34 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     label: "Gestione avanzata",
     items: [
       {
-        id: "config-sezioni",
-        label: "Config. Sezioni di costo",
+        id: "config-sezioni-group",
+        label: "Conf. Sezioni di costo",
         path: "/config-sezioni",
         featureKey: "nav.config_sezioni",
         icon: Cog,
         status: "live",
+        children: [
+          {
+            id: "config-sezioni",
+            label: "Sezioni di costo",
+            path: "/config-sezioni",
+            featureKey: "nav.config_sezioni",
+            icon: Cog,
+            status: "live",
+            description:
+              "Configurazione macro-fasi, sezioni di costo, fasi e associazione reparti.",
+          },
+          {
+            id: "config-tariffe",
+            label: "Anagrafica tariffe",
+            path: "/config-sezioni/tariffe",
+            featureKey: "nav.config_sezioni",
+            icon: Cog,
+            status: "live",
+            description:
+              "Tariffe orarie officine interne, rimborso km, vitto, alloggio e indennità di trasferta.",
+          },
+        ],
       },
       {
         id: "anagrafica-attivita",
@@ -434,30 +457,74 @@ export const NAV_GROUPS: NavGroupConfig[] = [
           "Catalogo delle voci-attività standard precaricate alla creazione di una commessa (aggiungi, rinomina, riordina, ripristina).",
       },
       {
-        id: "sal-conditions",
-        label: "Condizioni pagamento SAL",
+        id: "sal-anagrafiche-group",
+        label: "Anagrafiche SAL",
         path: "/admin/sal-conditions",
         featureKey: "nav.sal_condizioni",
-        icon: ListChecks,
+        icon: ReceiptText,
         status: "live",
-        description:
-          "Catalogo delle condizioni di pagamento utilizzabili negli step SAL delle commesse (aggiungi, rinomina, riordina, ripristina).",
+        children: [
+          {
+            id: "sal-conditions",
+            label: "Condizioni pagamento",
+            path: "/admin/sal-conditions",
+            featureKey: "nav.sal_condizioni",
+            icon: ReceiptText,
+            status: "live",
+            description:
+              "Catalogo delle condizioni di pagamento utilizzabili negli step SAL delle commesse.",
+          },
+          {
+            id: "sal-sap-causali",
+            label: "Causali Conto SAP",
+            path: "/admin/sal-conditions/sap",
+            featureKey: "nav.sal_condizioni",
+            icon: ReceiptText,
+            status: "live",
+            description:
+              "Causali Conto SAP selezionabili nella colonna Conto SAP degli step SAL.",
+          },
+          {
+            id: "sal-payment-states",
+            label: "Stati pagamento",
+            path: "/admin/sal-conditions/stati",
+            featureKey: "nav.sal_condizioni",
+            icon: ReceiptText,
+            status: "live",
+            description:
+              "Stati pagamento/incasso con colori personalizzabili per gli step SAL.",
+          },
+        ],
       },
       {
-        id: "ddp-destinazioni",
+        id: "ddp-config-group",
         label: "Conf. DDP",
         path: "/ddp-destinazioni",
         featureKey: "nav.ddp_destinazioni",
         icon: Wrench,
         status: "live",
-      },
-      {
-        id: "ddp-aggregazioni",
-        label: "Aggregazioni DDP",
-        path: "/ddp-aggregazioni",
-        featureKey: "nav.ddp_aggregazioni",
-        icon: Archive,
-        status: "live",
+        children: [
+          {
+            id: "ddp-destinazioni",
+            label: "Destinazioni & Stati",
+            path: "/ddp-destinazioni",
+            featureKey: "nav.ddp_destinazioni",
+            icon: Wrench,
+            status: "live",
+            description:
+              "Destinazioni distinta, stati, trattamenti e matrice di transizione delle righe DDP.",
+          },
+          {
+            id: "ddp-aggregazioni",
+            label: "Aggregazioni DDP",
+            path: "/ddp-aggregazioni",
+            featureKey: "nav.ddp_aggregazioni",
+            icon: Archive,
+            status: "live",
+            description:
+              "Matrice stati × aggregazioni (A1–A9) per raggruppare le righe DDP.",
+          },
+        ],
       },
       {
         id: "backup",
@@ -519,8 +586,17 @@ export const NAV_GROUPS: NavGroupConfig[] = [
   },
 ]
 
-export const ALL_NAV_ITEMS: NavItemConfig[] = NAV_GROUPS.flatMap(
-  (group) => group.items
+/**
+ * Espande le voci con sottomenu nelle loro figlie (le voci semplici restano
+ * com'erano). Le voci-contenitore NON sono pagine: non hanno una rotta propria
+ * e non vanno mai contate fra le destinazioni raggiungibili.
+ */
+export function flattenNavItems(items: NavItemConfig[]): NavItemConfig[] {
+  return items.flatMap((item) => (item.children ? item.children : [item]))
+}
+
+export const ALL_NAV_ITEMS: NavItemConfig[] = NAV_GROUPS.flatMap((group) =>
+  flattenNavItems(group.items)
 )
 
 /**
@@ -535,7 +611,7 @@ export function firstAccessibleNavPath(
   canAccess: (featureKey: string) => boolean
 ): string | undefined {
   return NAV_GROUPS.filter((group) => !group.pinBottom)
-    .flatMap((group) => group.items)
+    .flatMap((group) => flattenNavItems(group.items))
     .find((item) => item.path !== "/" && canAccess(item.featureKey))?.path
 }
 
@@ -544,7 +620,10 @@ export function findNavItemByPath(path: string): NavItemConfig | undefined {
     return ALL_NAV_ITEMS.find((item) => item.path === "/")
   }
 
-  return ALL_NAV_ITEMS.find(
+  const exact = ALL_NAV_ITEMS.find((item) => item.path === path)
+  if (exact) return exact
+
+  return ALL_NAV_ITEMS.filter(
     (item) => item.path !== "/" && path.startsWith(item.path)
-  )
+  ).sort((a, b) => b.path.length - a.path.length)[0]
 }

@@ -1,3 +1,4 @@
+import * as React from "react"
 import { ArrowLeft } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 
@@ -47,6 +48,13 @@ type SalAdminTab = "condizioni" | "sap" | "pagamenti"
 
 const TAB_VALUES: SalAdminTab[] = ["condizioni", "sap", "pagamenti"]
 
+/** Rotta dedicata di ogni tab: le tre voci di menu «Anagrafiche SAL». */
+const TAB_PATHS: Record<SalAdminTab, string> = {
+  condizioni: "/admin/sal-conditions",
+  sap: "/admin/sal-conditions/sap",
+  pagamenti: "/admin/sal-conditions/stati",
+}
+
 /**
  * Stati pagamento «di sistema» (v10): `Pagata` e `Parzialmente Pagata` guidano
  * colori e regole di lock delle righe SAL → non rinominabili né eliminabili
@@ -62,17 +70,35 @@ function isSystemPaymentState(row: SalCondition): boolean {
  * nuova rotta/feature key): tre cataloghi globali del modulo SAL in altrettanti
  * tab — Condizioni pagamento · Causali SAP · Stati Pagamento.
  */
-export function SalConditionsPage() {
+export function SalConditionsPage({ fixedTab }: { fixedTab?: SalAdminTab } = {}) {
   const location = useLocation()
   const navigate = useNavigate()
   const fromProject = location.state?.fromProject
   const projectId = location.state?.projectId
   const backUrl = fromProject && projectId ? `/commesse/${projectId}/sal` : null
 
-  // Deep-link: il foglio SAL apre direttamente il tab richiesto via state.tab
+  // Deep-link: il foglio SAL apre direttamente il tab richiesto via state.tab o prop fixedTab
   const requestedTab = location.state?.tab as SalAdminTab | undefined
   const initialTab: SalAdminTab =
-    requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : "condizioni"
+    fixedTab ?? (requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : "condizioni")
+
+  // Le tre voci di menu montano LA STESSA pagina su rotte diverse: React
+  // aggiorna il componente invece di rimontarlo, quindi il tab NON può restare
+  // appeso al solo `defaultValue` — va risincronizzato quando cambia la rotta.
+  const [tab, setTab] = React.useState<SalAdminTab>(initialTab)
+  React.useEffect(() => {
+    if (fixedTab) setTab(fixedTab)
+  }, [fixedTab])
+
+  // Cambiando tab a mano si allinea anche la rotta, così nel menu resta accesa
+  // la voce giusta.
+  function handleTabChange(value: string) {
+    const next = value as SalAdminTab
+    setTab(next)
+    if (fixedTab && TAB_PATHS[next] !== location.pathname) {
+      navigate(TAB_PATHS[next], { state: location.state })
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -91,7 +117,7 @@ export function SalConditionsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue={initialTab}>
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
               <TabsTrigger value="condizioni">Condizioni pagamento</TabsTrigger>
               <TabsTrigger value="sap">Causali SAP</TabsTrigger>

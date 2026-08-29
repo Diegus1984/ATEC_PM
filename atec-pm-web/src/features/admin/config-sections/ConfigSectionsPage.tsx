@@ -24,7 +24,6 @@ import {
   DepartmentDragPanel,
 } from "./CostSectionsTreePanel"
 import { DepartmentDialog } from "./config-sections-dialogs"
-import { TariffOptionsPanel } from "./TariffOptionsPanel"
 
 export function ConfigSectionsPage() {
   const queryClient = useQueryClient()
@@ -64,7 +63,6 @@ export function ConfigSectionsPage() {
       queryClient.invalidateQueries({ queryKey: ["cost-section-templates"] }),
       queryClient.invalidateQueries({ queryKey: ["departments"] }),
       queryClient.invalidateQueries({ queryKey: ["phase-templates"] }),
-      queryClient.invalidateQueries({ queryKey: ["tariff-options"] }),
     ])
   }, [queryClient])
 
@@ -126,19 +124,6 @@ export function ConfigSectionsPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Anagrafica tariffe</CardTitle>
-          <CardDescription>
-            I valori proposti dai calcoli: tariffe orarie delle Officine interne, rimborso
-            km, vitto, alloggio e indennità di trasferta
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <TariffOptionsPanel />
         </CardContent>
       </Card>
 
