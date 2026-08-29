@@ -67,7 +67,8 @@ public class EmployeesController : ControllerBase
         string sql = mustPunch.HasValue
             ? @"SELECT id AS Id, CONCAT_WS(' ', first_name, last_name) AS Name
                FROM employees
-               WHERE status <> 'TERMINATED'
+               WHERE status = 'ACTIVE'
+                 AND emp_type = 'INTERNAL'
                  AND user_role <> 'ADMIN'
                  AND first_name NOT LIKE '[%'
                  AND hr_must_punch = @MustPunch

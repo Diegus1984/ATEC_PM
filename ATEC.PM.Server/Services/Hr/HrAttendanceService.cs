@@ -1400,7 +1400,7 @@ public class HrAttendanceService
             FROM employees e
             LEFT JOIN employee_departments ed ON ed.employee_id = e.id AND ed.is_primary = 1
             LEFT JOIN departments d ON d.id = ed.department_id
-            WHERE e.status <> 'TERMINATED' AND e.user_role <> 'ADMIN' AND e.first_name NOT LIKE '[%'";
+            WHERE e.status = 'ACTIVE' AND e.emp_type = 'INTERNAL' AND e.user_role <> 'ADMIN' AND e.first_name NOT LIKE '[%'";
 
         if (departmentId.HasValue)
         {
@@ -2166,7 +2166,7 @@ public class HrAttendanceService
             FROM employees e
             LEFT JOIN employee_departments ed ON ed.employee_id = e.id AND ed.is_primary = 1
             LEFT JOIN departments d ON d.id = ed.department_id
-            WHERE e.status <> 'TERMINATED' AND e.user_role <> 'ADMIN' AND e.first_name NOT LIKE '[%'";
+            WHERE e.status = 'ACTIVE' AND e.emp_type = 'INTERNAL' AND e.user_role <> 'ADMIN' AND e.first_name NOT LIKE '[%'";
 
         if (departmentId.HasValue)
         {
@@ -2416,14 +2416,14 @@ public class HrAttendanceService
         using MySqlConnection c = _db.Open();
         return c.Query<HrMappingRowDto>(
             @"SELECT id AS EmployeeId,
-                     CONCAT_WS(' ', first_name, last_name,
-                               CASE WHEN status = 'TERMINATED' THEN '(cessato)' ELSE NULL END) AS Name,
+                     CONCAT_WS(' ', first_name, last_name) AS Name,
                      ecos_empl_code AS EcosEmplCode
               FROM employees
-              WHERE user_role <> 'ADMIN' AND first_name NOT LIKE '[%'
-                AND (status <> 'TERMINATED'
-                     OR (ecos_empl_code IS NOT NULL AND ecos_empl_code <> ''))
-              ORDER BY (status = 'TERMINATED'), last_name, first_name").ToList();
+              WHERE status = 'ACTIVE'
+                AND emp_type = 'INTERNAL'
+                AND user_role <> 'ADMIN'
+                AND first_name NOT LIKE '[%'
+              ORDER BY last_name, first_name").ToList();
     }
 
     public string? UpdateEcosMapping(int employeeId, string? ecosEmplCode)
@@ -2469,9 +2469,9 @@ public class HrAttendanceService
             SELECT (SELECT COUNT(*) FROM hr_punches) AS Punches,
                    (SELECT COUNT(*) FROM hr_days) AS Days,
                    (SELECT COUNT(*) FROM employees
-                     WHERE status <> 'TERMINATED' AND ecos_empl_code IS NOT NULL AND ecos_empl_code <> '') AS Collegati,
+                     WHERE status = 'ACTIVE' AND emp_type = 'INTERNAL' AND ecos_empl_code IS NOT NULL AND ecos_empl_code <> '') AS Collegati,
                    (SELECT COUNT(*) FROM employees
-                     WHERE status <> 'TERMINATED' AND user_role <> 'ADMIN' AND first_name NOT LIKE '[%') AS Attivi");
+                     WHERE status = 'ACTIVE' AND emp_type = 'INTERNAL' AND user_role <> 'ADMIN' AND first_name NOT LIKE '[%') AS Attivi");
 
         return new HrStatusDto
         {

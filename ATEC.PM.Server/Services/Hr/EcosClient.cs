@@ -335,6 +335,8 @@ public class EcosClient
                 Name: r.GetValueOrDefault("NameComplete", "").Trim(),
                 IsActive: string.Equals(r.GetValueOrDefault("InForce"), "TRUE",
                     StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(b => b.EmplCode, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(b => b.IsActive).ThenByDescending(b => b.Name).First())
             .ToList();
     }
 

@@ -563,8 +563,8 @@ public class HrController : ControllerBase
             {
                 Configured = true,
                 Badges = badges
-                    .OrderByDescending(b => b.IsActive)
-                    .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                    .Where(b => b.IsActive)
+                    .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(b => new HrBadgeDto { EmplCode = b.EmplCode, Name = b.Name, IsActive = b.IsActive })
                     .ToList(),
             }));

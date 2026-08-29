@@ -114,11 +114,12 @@ export function MappaturaEcosDialog({
   const erroreBadge = badgesQuery.error as Error | null
 
   const opzioniBadge: LookupComboboxOption<string>[] = React.useMemo(() => {
-    const dalVivo = (badgesQuery.data?.badges ?? []).map((b) => ({
-      id: b.emplCode,
-      name: `${b.emplCode} — ${b.name}`,
-      hint: b.isActive ? undefined : "Non in forza",
-    }))
+    const dalVivo = (badgesQuery.data?.badges ?? [])
+      .filter((b) => b.isActive)
+      .map((b) => ({
+        id: b.emplCode,
+        name: `${b.emplCode} — ${b.name}`,
+      }))
     // I codici già salvati che Ecos non elenca più (persona rimossa di là, codice messo
     // a mano) devono restare visibili: senza, la riga sembrerebbe scollegata.
     const noti = new Set(dalVivo.map((o) => o.id))
@@ -128,9 +129,15 @@ export function MappaturaEcosDialog({
       .map((codice) => ({
         id: codice,
         name: codice,
-        hint: "Non presente fra i badge Ecos",
+        hint: "Non presente fra i badge Ecos in forza",
       }))
-    return [...dalVivo, ...orfani]
+    const map = new Map<string, LookupComboboxOption<string>>()
+    for (const opt of [...dalVivo, ...orfani]) {
+      if (!map.has(opt.id)) {
+        map.set(opt.id, opt)
+      }
+    }
+    return Array.from(map.values())
   }, [badgesQuery.data, mappaturaQuery.data])
 
   return (
