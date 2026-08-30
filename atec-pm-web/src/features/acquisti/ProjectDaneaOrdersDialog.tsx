@@ -67,6 +67,9 @@ export function ProjectDaneaOrdersDialog({
       notifyInfo(`Ordine fornitore n. ${num} creato in Danea (${rfqIds.length} RDO)`)
       onGenerated()
     },
+    // Niente prefisso: i messaggi del server sono auto-esplicativi e uno di loro
+    // dice «Ordine n. X CREATO in Danea, ma…» — un «Ordine non creato:» davanti
+    // lo contraddirebbe proprio nel caso più delicato.
     onError: (err: Error) => notifyError(err.message),
   })
 
@@ -79,10 +82,12 @@ export function ProjectDaneaOrdersDialog({
     const ok = await confirm({
       title: "Generare l'ordine fornitore in Danea?",
       description:
-        `Crea in Atec_PM UN ordine per ${g.supplierName} (commessa ${g.projectCode}) ` +
-        `con ${rfqIds.length} riga/e, totale ${euro(g.total)} + IVA` +
+        `Crea in Danea (archivio Atec_PM) UN ordine per ${g.supplierName} — ` +
+        `commessa ${g.projectCode}, ${rfqIds.length} RDO, totale ${euro(g.total)} + IVA` +
         (expectedDate ? `, consegna prevista ${formatDateShort(expectedDate)}` : "") +
-        ". Le righe distinta passano a In ordine.",
+        ".\nL'ordine è definitivo: dopo, le RDO incluse non si potranno più annullare da qui. " +
+        "Nessuna email viene inviata al fornitore: l'invio si fa da Danea. " +
+        "Le righe di distinta passano a In Ordine.",
       confirmLabel: "Genera ordine",
     })
     if (ok) mutation.mutate({ rfqIds, key: g.key })
@@ -97,15 +102,31 @@ export function ProjectDaneaOrdersDialog({
             Ordina in Danea — Commessa {project?.projectCode}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            RDO chiuse con vincitore, raggruppate per fornitore. Un ordine Danea per fornitore
-            (più righe se più RDO dello stesso fornitore).
+            Gare (RDO) chiuse con vincitore, raggruppate per fornitore. Un ordine fornitore in
+            Danea per ogni fornitore (più righe se più RDO dello stesso fornitore).
           </DialogDescription>
         </DialogHeader>
 
+        {groups.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-xs font-medium">
+              Consegna prevista — vale per tutti gli ordini generati da qui (facoltativa)
+            </div>
+            <DateField
+              value={expectedDate}
+              onChange={setExpectedDate}
+              size="sm"
+              placeholder="Consegna prevista"
+              className="h-8 w-52"
+            />
+          </div>
+        )}
+
         {groups.length === 0 ? (
           <div className="rounded border p-6 text-center text-sm text-muted-foreground">
-            Nessuna RDO pronta per l'ordine. Apri una RDO, registra i prezzi e scegli il
-            «Vincitore»: il gruppo comparirà qui.
+            Nessuna gara pronta per l'ordine. Se hai appena generato un ordine è tutto a posto:
+            i gruppi ordinati spariscono da qui. Altrimenti: apri una RDO, registra i prezzi e
+            scegli il «Vincitore» — il gruppo comparirà qui.
           </div>
         ) : (
           <GridScroller fill className="rounded-lg border">
@@ -137,7 +158,7 @@ export function ProjectDaneaOrdersDialog({
                         {pendingKey === g.key
                           ? "Creazione…"
                           : g.rfqs.length > 1
-                            ? `Ordine unico (${g.rfqs.length} RDO)`
+                            ? `Genera ordine unico (${g.rfqs.length} RDO)`
                             : "Genera ordine"}
                       </Button>
                     </TableCell>
@@ -148,14 +169,7 @@ export function ProjectDaneaOrdersDialog({
           </GridScroller>
         )}
 
-        <DialogFooter className="items-center sm:justify-between">
-          <DateField
-            value={expectedDate}
-            onChange={setExpectedDate}
-            size="sm"
-            placeholder="Consegna prevista (opzionale)"
-            className="h-8 w-52"
-          />
+        <DialogFooter>
           <Button variant="outline" size="sm" onClick={onClose}>
             Chiudi
           </Button>

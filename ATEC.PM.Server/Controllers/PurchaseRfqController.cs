@@ -122,22 +122,30 @@ public class PurchaseRfqController : ControllerBase
             WHERE b.id IN @Ids AND b.ddp_type = 'COMMERCIAL'",
             new { Ids = req.BomItemIds }).ToList();
         if (bomRows.Count == 0)
-            return Ok(ApiResponse<List<int>>.Fail("Nessuna riga BOM valida."));
+            return Ok(ApiResponse<List<int>>.Fail(
+                "Le righe scelte non sono righe della DDP Commerciale (o non esistono più): " +
+                "in gara possono andare solo le righe d'acquisto della DDP Commerciale."));
 
         // Guardia anti-doppione: una riga distinta può stare in UNA sola RDO viva alla
         // volta (le righe RO restano visibili nei gruppi ATEC → senza questo controllo si
         // potrebbe ri-mandarle in gara e ordinarle due volte). Le righe già occupate si
         // SALTANO (così una nuova riga del gruppo può partire in una nuova RDO senza
         // dover annullare la gara in corso); le RDO annullate liberano le loro righe.
-        var busyBomIds = c.Query<int>(@"
-            SELECT DISTINCT i.bom_item_id FROM purchase_rfq_items i
+        var busyRows = c.Query<(int BomItemId, int RfqId)>(@"
+            SELECT DISTINCT i.bom_item_id, r.id FROM purchase_rfq_items i
             JOIN purchase_rfqs r ON r.id = i.rfq_id
             WHERE i.bom_item_id IN @Ids AND r.status <> 'CANCELLED'",
-            new { Ids = req.BomItemIds }).ToHashSet();
+            new { Ids = req.BomItemIds }).ToList();
+        var busyBomIds = busyRows.Select(r => r.BomItemId).ToHashSet();
         bomRows = bomRows.Where(r => !busyBomIds.Contains(r.Id)).ToList();
         if (bomRows.Count == 0)
+        {
+            string rdoOccupanti = string.Join(", ",
+                busyRows.Select(r => r.RfqId).Distinct().OrderBy(x => x).Select(x => $"#{x}"));
             return Ok(ApiResponse<List<int>>.Fail(
-                "Tutte le righe selezionate sono già in RDO non annullate: nessuna nuova RDO da creare."));
+                $"Queste righe sono già dentro una gara in corso (RDO {rdoOccupanti}): non serve " +
+                "crearne un'altra. Per rifare la gara, annulla prima quella esistente."));
+        }
 
         // Una gara = UN articolo, e la regola deve valere anche QUI, non solo nel client:
         // il raggruppamento per codice lo fa CreateRfqDialog, ma un bundle web vecchio in
@@ -215,8 +223,10 @@ public class PurchaseRfqController : ControllerBase
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Creazione RDO fallita (codice ATEC {Atec})", atec);
             return Ok(ApiResponse<List<int>>.Fail(
-                $"Creazione RDO non riuscita: {ex.Message} (nessuna RDO creata)."));
+                "Creazione RDO non riuscita per un errore imprevisto: nessuna RDO è stata creata. " +
+                "Riprova; se l'errore si ripete fai una segnalazione."));
         }
 
         // Notifiche real-time solo a commit riuscito.
@@ -245,7 +255,8 @@ public class PurchaseRfqController : ControllerBase
         var rows = LoadFreeRows(c, ids);
         if (rows.Count == 0)
             return Ok(ApiResponse<List<OfferPlanSupplier>>.Fail(
-                "Le righe selezionate sono già in gara (RDO non annullate)."));
+                "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
+                "Per rifare la gara, annulla prima quella esistente."));
 
         var plan = new Dictionary<int, OfferPlanSupplier>();
         foreach (var row in rows)
@@ -295,7 +306,9 @@ public class PurchaseRfqController : ControllerBase
         var result = plan.Values.OrderBy(s => s.SupplierName).ToList();
         if (result.Count == 0)
             return Ok(ApiResponse<List<OfferPlanSupplier>>.Fail(
-                "Nessun fornitore trovato: le righe non hanno né fornitore né codice ATEC mappato."));
+                "Nessun fornitore da interpellare per queste righe: assegna un fornitore alla riga " +
+                "nella DDP Commerciale, oppure associa il codice ATEC dell'articolo nel Catalogo " +
+                "(icona catena), poi riprova."));
         return Ok(ApiResponse<List<OfferPlanSupplier>>.Ok(result));
     }
 
@@ -319,7 +332,8 @@ public class PurchaseRfqController : ControllerBase
         var rows = LoadFreeRows(c, selections.Select(s => s.BomItemId).Distinct().ToList());
         if (rows.Count == 0)
             return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
-                "Le righe selezionate sono già in gara (RDO non annullate)."));
+                "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
+                "Per rifare la gara, annulla prima quella esistente."));
         var suppliersByRow = selections
             .GroupBy(s => s.BomItemId)
             .ToDictionary(g => g.Key, g => g.SelectMany(s => s.SupplierIds).Distinct().ToList());
@@ -330,7 +344,9 @@ public class PurchaseRfqController : ControllerBase
             .GroupBy(r => (r.ProjectId, Key: r.Atec.Length > 0 ? r.Atec : $"ROW:{r.Id}"))
             .ToList();
         if (groups.Count == 0)
-            return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail("Nessuna riga valida."));
+            return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
+                "Le righe scelte non sono più disponibili per una richiesta d'offerta. " +
+                "Aggiorna la pagina e riprova."));
 
         // Articolo di catalogo per (gruppo, fornitore), risolto PRIMA della transazione
         // (MySqlConnector non ammette comandi fuori da una tx pendente).
@@ -388,8 +404,10 @@ public class PurchaseRfqController : ControllerBase
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Creazione richieste offerta fallita");
             return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
-                $"Creazione richieste non riuscita: {ex.Message} (nessuna richiesta creata)."));
+                "Creazione delle richieste non riuscita per un errore imprevisto: nessuna richiesta " +
+                "è stata creata. Riprova; se si ripete fai una segnalazione."));
         }
 
         foreach (int rfqId in createdRfqIds)
@@ -536,9 +554,16 @@ public class PurchaseRfqController : ControllerBase
             return Ok(ApiResponse<bool>.Fail("Nessun fornitore in RDO."));
 
         int sent = 0;
+        // Fornitori senza email in anagrafica: prima venivano saltati in silenzio e la RDO
+        // risultava comunque «inviata» — i nomi si raccolgono per dirlo chiaro nell'esito.
+        var senzaEmail = new List<string>();
         foreach (var offer in detail.Offers)
         {
-            if (string.IsNullOrWhiteSpace(offer.SupplierEmail)) continue;
+            if (string.IsNullOrWhiteSpace(offer.SupplierEmail))
+            {
+                senzaEmail.Add(offer.SupplierName);
+                continue;
+            }
 
             string lines = string.Join("\n", detail.Items.Select(i =>
                 $"- {i.ProjectCode}: {i.Description} × {i.Quantity:0.###}"));
@@ -565,8 +590,18 @@ public class PurchaseRfqController : ControllerBase
         NotifyRfqChange(id, "send");
 
         if (sent == 0 && !_email.Enabled)
-            return Ok(ApiResponse<bool>.Ok(true, "RDO marcata SENT (SMTP disabilitato: nessuna email inviata)."));
-        return Ok(ApiResponse<bool>.Ok(true, $"Email accodate: {sent}/{detail.Offers.Count}"));
+            return Ok(ApiResponse<bool>.Ok(true,
+                "L'invio automatico delle email non è attivo su questo server: la richiesta è stata " +
+                "registrata come inviata, ma i fornitori NON hanno ricevuto nulla."));
+        string esito = $"Email accodate per l'invio: {sent} su {detail.Offers.Count} fornitori.";
+        if (senzaEmail.Count > 0)
+            esito += senzaEmail.Count == 1
+                ? $" Attenzione: 1 fornitore senza indirizzo email in anagrafica NON è stato " +
+                  $"contattato: {senzaEmail[0]}. Aggiungi l'email nell'anagrafica fornitori e rimanda."
+                : $" Attenzione: {senzaEmail.Count} fornitori senza indirizzo email in anagrafica NON " +
+                  $"sono stati contattati: {string.Join(", ", senzaEmail)}. " +
+                  "Aggiungi l'email nell'anagrafica fornitori e rimanda.";
+        return Ok(ApiResponse<bool>.Ok(true, esito));
     }
 
     [ScritturaNonDiCommessa("Le RDO stanno sul codice ATEC e raggruppano righe di commesse diverse: non appartengono a una commessa sola")]
@@ -627,7 +662,7 @@ public class PurchaseRfqController : ControllerBase
         // Anche le ANNULLATE: prima si rifiutavano solo le CLOSED, e una RDO annullata
         // restava aggiudicabile — con le righe magari già ripartite in un'altra gara.
         if (detail.Status is "CLOSED" or "CANCELLED")
-            return Ok(ApiResponse<bool>.Fail("RDO chiusa o annullata: non si aggiudica più."));
+            return Ok(ApiResponse<bool>.Fail("RDO chiusa o annullata: non è più possibile scegliere il vincitore."));
 
         var offer = detail.Offers.FirstOrDefault(o => o.Id == req.OfferId);
         if (offer == null)
@@ -818,10 +853,19 @@ public class PurchaseRfqController : ControllerBase
                     "la RDO è stata chiusa o annullata da un altro utente nel frattempo");
             tx.Commit();
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
+            // Rifiuti VOLUTI dei throw qui sopra (offerta modificata / RDO chiusa da un
+            // collega): il testo è già pensato per l'utente e spiega cosa è successo.
             return Ok(ApiResponse<bool>.Fail(
                 $"Aggiudicazione non riuscita: {ex.Message} (nessuna modifica applicata, la RDO resta aperta)."));
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Aggiudicazione RDO {RfqId} fallita", id);
+            return Ok(ApiResponse<bool>.Fail(
+                "Aggiudicazione non riuscita per un errore imprevisto: nessuna modifica salvata. " +
+                "Riprova; se si ripete fai una segnalazione."));
         }
 
         // Notifiche real-time solo a commit riuscito.
@@ -863,7 +907,9 @@ public class PurchaseRfqController : ControllerBase
             catch { /* non bloccare il vincitore per errore notifica */ }
         }
 
-        return Ok(ApiResponse<bool>.Ok(true, $"Vincitore applicato a {detail.Items.Count} righe"));
+        return Ok(ApiResponse<bool>.Ok(true, detail.Items.Count == 1
+            ? "Vincitore applicato a 1 riga"
+            : $"Vincitore applicato a {detail.Items.Count} righe"));
     }
 
     // Strada B (22/07/2026): scrive l'ordine fornitore DIRETTAMENTE nel Firebird di
@@ -939,10 +985,13 @@ public class PurchaseRfqController : ControllerBase
                     new { Id = winner.CatalogItemId.Value })
                 : null;
             if (string.IsNullOrWhiteSpace(articleCode))
-                return (null, $"RDO #{id}: l'offerta vincente non ha un articolo Danea associato.");
+                return (null, $"RDO #{id}: l'offerta vincente non indica quale articolo Danea ordinare. " +
+                    "Apri il dettaglio della RDO, collega l'articolo del fornitore all'offerta vincente " +
+                    "(«Collega articolo»), poi rigenera l'ordine.");
             decimal totalQty = detail.Items.Sum(i => i.Quantity);
             if (totalQty <= 0)
-                return (null, $"RDO #{id}: quantità totale nulla.");
+                return (null, $"RDO #{id}: le righe di distinta collegate hanno quantità zero. " +
+                    "Correggi le quantità nella DDP Commerciale della commessa e rigenera l'ordine.");
 
             details.Add(detail);
             winners.Add(winner);
@@ -993,12 +1042,23 @@ public class PurchaseRfqController : ControllerBase
         {
             order = _daneaOrder.CreateSupplierOrder(supplier.Vat, supplier.Name, lines, expectedDate, note);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
+            // Rifiuti VOLUTI di DaneaOrderService (fornitore, articolo o aliquota IVA mancanti
+            // in Atec_PM): il testo è già in italiano e dice cosa sistemare — passa all'utente.
             // Nessuna scrittura avvenuta in Danea: si rilascia il claim e si può riprovare.
             c.Execute(@"UPDATE purchase_rfqs SET danea_order_iddoc = NULL, updated_at = NOW()
                         WHERE id IN @Ids AND danea_order_iddoc = 0", new { Ids = rfqIds });
-            return (null, $"Ordine NON creato: {ex.Message}");
+            return (null, $"Ordine NON creato in Danea (nessuna scrittura effettuata): {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Creazione ordine Danea fallita (RDO {RfqIds})", string.Join(",", rfqIds));
+            // Nessuna scrittura avvenuta in Danea: si rilascia il claim e si può riprovare.
+            c.Execute(@"UPDATE purchase_rfqs SET danea_order_iddoc = NULL, updated_at = NOW()
+                        WHERE id IN @Ids AND danea_order_iddoc = 0", new { Ids = rfqIds });
+            return (null, "Ordine NON creato in Danea (nessuna scrittura effettuata): puoi riprovare " +
+                "subito. Se l'errore si ripete, fai una segnalazione.");
         }
 
         // Avanzamenti calcolati PRIMA della transazione (Validate legge la matrice dalla
@@ -1072,8 +1132,10 @@ public class PurchaseRfqController : ControllerBase
         {
             // L'ordine in Danea ESISTE ma la registrazione in ATEC PM è fallita: il claim
             // (sentinella 0) resta a bloccare i doppioni; serve un intervento manuale.
-            return (order, $"Ordine n. {order.Num} CREATO in Danea, ma registrazione in ATEC PM non riuscita: {ex.Message}. " +
-                "Non rigenerare l'ordine: segnala il problema.");
+            _log.LogError(ex, "Ordine Danea n. {Num} creato ma registrazione ATEC PM fallita (RDO {RfqIds})",
+                order.Num, string.Join(",", rfqIds));
+            return (order, $"Ordine n. {order.Num} CREATO in Danea, ma la registrazione in ATEC PM " +
+                "non è riuscita: NON rigenerare l'ordine. Fai una segnalazione.");
         }
 
         // Notifiche real-time solo a commit riuscito.
@@ -1109,13 +1171,35 @@ public class PurchaseRfqController : ControllerBase
         // i valori scritti dall'aggiudicazione (prezzo, fornitore, identità) restano sulla
         // distinta e la prossima aggiudicazione li riscrive. Il claim della generazione
         // ordine (sentinella danea_order_iddoc = 0) conta come ordine in corso.
+        // SELECT solo DIAGNOSTICA: il rifiuto lo decide comunque l'UPDATE qui sotto
+        // (identico a prima); questa lettura serve unicamente a dire all'utente PERCHÉ.
+        var stato = c.QueryFirstOrDefault<(string? Status, int? IdDoc, int? Num)>(@"
+            SELECT status, danea_order_iddoc, danea_order_num
+            FROM purchase_rfqs WHERE id = @Id", new { Id = id });
         int n = c.Execute(@"
             UPDATE purchase_rfqs SET status = 'CANCELLED', updated_at = NOW()
             WHERE id = @Id AND status <> 'CANCELLED' AND danea_order_iddoc IS NULL",
             new { Id = id });
         if (n == 0)
+        {
+            if (stato.Status == null)
+                return Ok(ApiResponse<bool>.Fail("RDO non trovata."));
+            if (stato.Status == "CANCELLED")
+                return Ok(ApiResponse<bool>.Fail("RDO già annullata: le righe sono già libere."));
+            if (stato.IdDoc.HasValue)
+                return Ok(ApiResponse<bool>.Fail(stato.Num.HasValue
+                    ? $"Questa RDO ha già generato l'ordine fornitore n. {stato.Num} in Danea: " +
+                      "un ordine emesso non si annulla da qui."
+                    // Sentinella 0 senza numero: generazione in corso ADESSO, oppure claim
+                    // rimasto appeso da una generazione interrotta a metà — dal solo DB non
+                    // si distingue, e il messaggio non deve promettere che si sblocca da sé.
+                    : "Su questa RDO risulta una generazione dell'ordine Danea in corso (o " +
+                      "interrotta a metà): non si può annullare. Se tra qualche minuto non " +
+                      "si sblocca, fai una segnalazione."));
+            // Corsa fra la SELECT e l'UPDATE (annullo o ordine concorrente): esito generico.
             return Ok(ApiResponse<bool>.Fail(
-                "RDO non trovata, già annullata o con ordine Danea generato (un ordine emesso non si annulla da qui)."));
+                "RDO non annullabile in questo momento: aggiorna la pagina e riprova."));
+        }
         NotifyRfqChange(id, "cancel");
         return Ok(ApiResponse<bool>.Ok(true, "RDO annullata: le righe tornano disponibili per una nuova gara"));
     }

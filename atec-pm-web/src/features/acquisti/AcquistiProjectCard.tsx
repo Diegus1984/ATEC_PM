@@ -68,6 +68,7 @@ export function AcquistiProjectCard({
               size="sm"
               variant="outline"
               className="h-8 text-xs gap-1 font-medium"
+              title="Mette in gara tutte le righe in stato DA ORDINARE di questa commessa"
               onClick={() => onRequestRfq(group.items)}
             >
               <FileCheck2 className="h-3.5 w-3.5" />
@@ -76,6 +77,7 @@ export function AcquistiProjectCard({
             <Button
               size="sm"
               className="h-8 text-xs gap-1 font-medium"
+              title="Genera gli ordini fornitore in Danea dalle gare aggiudicate"
               onClick={() =>
                 onOrderDanea({
                   projectId: group.projectId,
@@ -92,7 +94,7 @@ export function AcquistiProjectCard({
 
       <CardContent className="p-0">
         <DataTableCardFiltered
-          title={`Fabbisogni ${group.projectCode}`}
+          title={`Articoli commessa ${group.projectCode}`}
           columns={columns}
           data={group.items}
           columnLabels={COLUMN_LABELS}

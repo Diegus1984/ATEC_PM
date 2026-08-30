@@ -247,7 +247,7 @@ export function DdpRowDialog({
                 title={
                   canEditQuantity
                     ? undefined
-                    : "La quantità è modificabile solo in stato Da Ordinare"
+                    : 'La quantità è modificabile solo negli stati "Verificare se disponibile a mag." e "Da Ordinare".'
                 }
                 onChange={(event) => set("quantity", event.target.value)}
               />

@@ -20,6 +20,12 @@ import { createPurchaseRfq } from "@/lib/api/purchase-rfqs"
 import type { AcquistiInboxItem } from "@/lib/api/types"
 import { notifyError, notifyInfo } from "@/lib/toast"
 
+/** Normalizzazione del codice ATEC che decide il gruppo RDO: UNICA copia, usata sia
+ *  dall'anteprima nel render sia da handleSubmit, così non possono divergere. */
+function codiceAtecEffettivo(item: AcquistiInboxItem): string {
+  return (item.atecCode || "").replace(/\./g, "").trim()
+}
+
 export function CreateRfqDialog({
   items,
   onClose,
@@ -42,6 +48,20 @@ export function CreateRfqDialog({
     setNotes("")
   }, [items])
 
+  // Anteprima VERITIERA: gli stessi gruppi che handleSubmit creerà (una RDO per
+  // codice ATEC, righe senza codice escluse), mostrati PRIMA della conferma invece
+  // che scoperti dai toast dopo.
+  const { numRdo, senzaCodice } = React.useMemo(() => {
+    const codici = new Set<string>()
+    let esclusi = 0
+    for (const item of items ?? []) {
+      const chiave = codiceAtecEffettivo(item)
+      if (chiave) codici.add(chiave)
+      else esclusi += 1
+    }
+    return { numRdo: codici.size, senzaCodice: esclusi }
+  }, [items])
+
   const handleSubmit = async () => {
     if (!items || items.length === 0) return
     setSubmitting(true)
@@ -54,7 +74,7 @@ export function CreateRfqDialog({
       const gruppi = new Map<string, number[]>()
       const senzaCodice: string[] = []
       for (const item of items) {
-        const chiave = (item.atecCode || "").replace(/\./g, "").trim()
+        const chiave = codiceAtecEffettivo(item)
         // Senza codice ATEC il server non sa chi invitare: cercherebbe i fornitori con
         // `WHERE atec_code = 'GENERICO'` e non ne troverebbe nessuno, creando una RDO MUTA
         // — zero offerte, nessuna mail possibile, e le righe bloccate dentro perché per la
@@ -136,46 +156,81 @@ export function CreateRfqDialog({
             Nuova Richiesta d'Offerta (RDO)
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Conferma gli articoli e le note per creare la gara e richiedere i preventivi ai
-            fornitori.
+            {numRdo > 1
+              ? "Conferma gli articoli e le note per creare le gare e richiedere i preventivi ai fornitori."
+              : "Conferma gli articoli e le note per creare la gara e richiedere i preventivi ai fornitori."}
           </DialogDescription>
         </DialogHeader>
 
         {items && (
           <div className="space-y-4 py-2 text-xs">
+            <div
+              className={
+                numRdo === 0
+                  ? "rounded border border-amber-500/60 bg-amber-500/5 p-2 font-medium text-amber-700 dark:text-amber-400"
+                  : "rounded border bg-muted/40 p-2 font-medium text-foreground"
+              }
+            >
+              {numRdo === 0
+                ? "Nessuna riga ha il Cod. ATEC: non verrà creata alcuna RDO. Assegna i codici dall'Inbox Acquisti (icona catena) e riprova."
+                : numRdo === 1
+                  ? "Verrà creata 1 richiesta d'offerta (RDO)."
+                  : `Verranno create ${numRdo} richieste d'offerta (RDO): una per ogni codice ATEC.`}
+              {numRdo > 0 && senzaCodice > 0 && (
+                <span className="font-normal text-amber-700 dark:text-amber-400">
+                  {/* «dalla gara/dalle gare» segue il numero di RDO, non di righe. */}
+                  {`${senzaCodice === 1 ? " 1 riga senza Cod. ATEC resterà fuori" : ` ${senzaCodice} righe senza Cod. ATEC resteranno fuori`} ${numRdo === 1 ? "dalla gara" : "dalle gare"}.`}
+                </span>
+              )}
+            </div>
             <div>
               <Label className="font-semibold text-foreground">
-                Articoli Inclusi nella RDO ({items.length})
+                Articoli selezionati ({items.length})
               </Label>
               <div className="mt-1 max-h-48 overflow-y-auto space-y-1.5 border rounded p-2 bg-muted/40">
-                {items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex justify-between items-start text-xs p-1.5 border rounded bg-card"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="font-semibold text-foreground">{item.description}</div>
-                      <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-                        <span>
-                          Cod. Fornitore:{" "}
-                          <strong className="font-mono text-foreground">
-                            {item.partNumber || "N.D."}
-                          </strong>
-                        </span>
-                        <span>•</span>
-                        <span>
-                          Rif. ATEC:{" "}
-                          <strong className="font-mono text-foreground">
-                            {item.atecCode || "N.D."}
-                          </strong>
-                        </span>
+                {items.map((item) => {
+                  const fuoriGara = !codiceAtecEffettivo(item)
+                  return (
+                    <div
+                      key={item.id}
+                      className={
+                        fuoriGara
+                          ? "text-xs p-1.5 border rounded border-amber-500/60 bg-amber-500/5"
+                          : "text-xs p-1.5 border rounded bg-card"
+                      }
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-foreground">{item.description}</div>
+                          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                            <span>
+                              Cod. Fornitore:{" "}
+                              <strong className="font-mono text-foreground">
+                                {item.partNumber || "N.D."}
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Rif. ATEC:{" "}
+                              <strong className="font-mono text-foreground">
+                                {item.atecCode || "N.D."}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="font-mono shrink-0 ml-2">
+                          {item.quantity} {item.unit || "pz"}
+                        </Badge>
                       </div>
+                      {fuoriGara && (
+                        <div className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                          Questa riga NON entrerà in gara: assegna prima il Cod. ATEC (icona
+                          catena nell'Inbox Acquisti).
+                        </div>
+                      )}
                     </div>
-                    <Badge variant="outline" className="font-mono shrink-0 ml-2">
-                      {item.quantity} {item.unit || "pz"}
-                    </Badge>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -214,11 +269,20 @@ export function CreateRfqDialog({
           <Button
             size="sm"
             onClick={() => void handleSubmit()}
-            disabled={submitting}
+            disabled={submitting || numRdo === 0}
+            title={
+              numRdo === 0
+                ? "Nessuna riga ha il Cod. ATEC: non c'è nulla da mettere in gara."
+                : undefined
+            }
             className="gap-1"
           >
             <FileCheck2 className="h-4 w-4" />
-            {submitting ? "Creazione in corso..." : "Conferma e Crea RDO"}
+            {submitting
+              ? "Creazione in corso..."
+              : numRdo > 1
+                ? `Conferma e Crea ${numRdo} RDO`
+                : "Conferma e Crea RDO"}
           </Button>
         </DialogFooter>
       </DialogContent>

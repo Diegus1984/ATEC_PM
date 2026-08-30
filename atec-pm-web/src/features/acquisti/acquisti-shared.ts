@@ -7,7 +7,7 @@ import type {
   PurchaseRfqListItem,
 } from "@/lib/api/types"
 
-const VISIBLE_STATUSES = new Set(["VER", "CHEK", "RO", "DO", "IO"])
+export const VISIBLE_STATUSES = new Set(["VER", "CHEK", "RO", "DO", "IO"])
 const TO_BUY_STATUSES = new Set(["VER", "CHEK", "DO"])
 
 /** Stato riga normalizzato (maiuscolo, mai null): base di tutti i predicati di dominio. */
@@ -127,7 +127,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   atecCode: "Cod. ATEC",
   partNumber: "Codice",
   description: "Descrizione",
-  rfqAction: "Az. (oggetto RDO)",
+  rfqAction: "RDO (oggetto)",
   quantity: "Qtà",
   unit: "UM",
   supplierName: "Fornitore",

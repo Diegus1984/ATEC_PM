@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ChevronDown, ChevronRight, Link2, Plus } from "lucide-react"
 
 import { ColumnFilterInput } from "@/components/shared/column-filter-input"
@@ -37,6 +37,7 @@ import {
   type CodexPickerRow,
 } from "@/lib/api/codex-picker"
 import { fetchCompositionChildren } from "@/lib/api/codex-compositions"
+import { fetchDdpStatuses } from "@/lib/api/ddp-config"
 import { createDdpRow, fetchDdpRows, updateDdpRow } from "@/lib/api/project-ddp"
 import {
   addOfficinaItem,
@@ -52,6 +53,7 @@ import type {
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { getSession } from "@/lib/auth/session"
 import { euro, dash } from "@/lib/format"
+import { notifyError } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
@@ -212,6 +214,18 @@ export function CodexPickerDialog({
     CATALOG_COLUMNS_DEFAULTS
   )
 
+  // Etichette leggibili degli stati DDP: stessa queryKey delle pagine DDP, quindi
+  // la mappa arriva dalla cache di chi ha aperto il picker. Serve a non mostrare
+  // mai all'utente il codice grezzo dello stato (es. «ORD»).
+  const statusesQuery = useQuery({
+    queryKey: ["ddp-statuses"],
+    queryFn: fetchDdpStatuses,
+  })
+  const statusMap = React.useMemo(
+    () => new Map((statusesQuery.data ?? []).map((s) => [s.statusKey, s])),
+    [statusesQuery.data]
+  )
+
   const vista: "catalog" | "codex" = CATALOG_FAMILIES.has(family)
     ? "catalog"
     : "codex"
@@ -294,10 +308,19 @@ export function CodexPickerDialog({
   }
 
   // I parametri filtro delle due viste sono diversi: cambiando famiglia (e quindi
-  // eventualmente vista) i filtri ripartono puliti.
+  // eventualmente vista) i filtri ripartono puliti. Se qualcosa era digitato,
+  // l'azzeramento va DETTO, o l'elenco che cambia sembra un capriccio del programma.
   function cambiaFamiglia(next: string) {
     const vistaNext = CATALOG_FAMILIES.has(next) ? "catalog" : "codex"
-    if (vistaNext !== vista) setFilters({})
+    if (vistaNext !== vista) {
+      if (Object.keys(filters).length > 0) {
+        setError(null)
+        setMessage(
+          "Filtri azzerati: cambiando famiglia cambia l'archivio di ricerca."
+        )
+      }
+      setFilters({})
+    }
     setFamily(next)
   }
 
@@ -482,11 +505,16 @@ export function CodexPickerDialog({
       atecCode: atecRaw,
       expectedUpdatedAt: null,
     })
+    // Riga smistata dall'ALTRA distinta: si dice anche DOVE ritrovarla.
+    const notaScheda =
+      ddpType === "OFFICINA"
+        ? ' — la trovi nella scheda "DDP Commerciali" di questa commessa'
+        : ""
     return {
       code: formatCodice(atecRaw),
       testo: daDefinire
-        ? "aggiunto alla DDP Commerciale (fornitore da definire)"
-        : "aggiunto alla DDP Commerciale",
+        ? `aggiunto alla DDP Commerciale (fornitore da definire)${notaScheda}`
+        : `aggiunto alla DDP Commerciale${notaScheda}`,
     }
   }
 
@@ -561,7 +589,11 @@ export function CodexPickerDialog({
     })
     return {
       code: formatCodice(item.codiceAtec),
-      testo: "aggiunto alla DDP Officina",
+      // Riga smistata dall'ALTRA distinta: si dice anche DOVE ritrovarla.
+      testo:
+        ddpType === "COMMERCIAL"
+          ? 'aggiunto alla DDP Officina — la trovi nella scheda "DDP Officina" di questa commessa'
+          : "aggiunto alla DDP Officina",
     }
   }
 
@@ -593,8 +625,11 @@ export function CodexPickerDialog({
       // Intestazione già in distinta: +1 solo negli stati a quantità libera (VER/DO),
       // negli altri il server rifiuterebbe comunque la nuova quantità.
       if (!isCommercialQtyEditable(header.itemStatus)) {
+        // Etichetta leggibile dello stato (fallback al codice se la mappa non c'è).
+        const statoLabel =
+          statusMap.get(header.itemStatus)?.label ?? header.itemStatus
         throw new Error(
-          `${codeVis} è già nella DDP Commerciale in stato ${header.itemStatus}: lì la quantità è bloccata, gestiscilo dalla distinta.`
+          `${codeVis} è già nella DDP Commerciale in stato ${statoLabel}: lì la quantità è bloccata, gestiscilo dalla distinta.`
         )
       }
       const okPiu = await confirm({
@@ -651,9 +686,14 @@ export function CodexPickerDialog({
       codexParentId: item.codexId,
       requestedBy,
     })
+    // Aperto dall'Officina qui non compare nulla: si dice DOVE è finito il gruppo.
+    const notaScheda =
+      ddpType === "OFFICINA"
+        ? ' — la trovi nella scheda "DDP Commerciali" di questa commessa'
+        : ""
     return {
       code: codeVis,
-      testo: `importato nella sola DDP Commerciale: ${imported.added} componenti nuovi, ${imported.updated} aggiornati${imported.skipped ? `, ${imported.skipped} saltati` : ""}`,
+      testo: `importato nella sola DDP Commerciale: ${imported.added} componenti nuovi, ${imported.updated} aggiornati${imported.skipped ? `, ${imported.skipped} saltati` : ""}${notaScheda}`,
     }
   }
 
@@ -857,7 +897,12 @@ export function CodexPickerDialog({
       setMessage(`✓ ${result.code}: ${result.testo}`)
       onAdded()
     },
-    onError: (err: Error) => setError(err.message),
+    // Errore bloccante: oltre alla riga nel footer (facile da non vedere) anche
+    // il toast rosso standard dell'app.
+    onError: (err: Error) => {
+      setError(err.message)
+      notifyError(err)
+    },
   })
 
   function handleAdd(entry: PickEntry) {
@@ -880,13 +925,16 @@ export function CodexPickerDialog({
         (r) => (r.codiceAtec ?? "").replace(/\./g, "") === raw
       )
       if (!created) {
-        setError(`Codice ${codice} generato ma non ritrovato nel Codex.`)
+        const msg = `Codice ${codice} generato ma non ritrovato nel Codex.`
+        setError(msg)
+        notifyError(msg)
         return
       }
       await codexQuery.refetch()
       addMutation.mutate({ kind: "codex", item: created })
     } catch (err) {
       setError((err as Error).message)
+      notifyError(err)
     }
   }
 
@@ -1016,9 +1064,11 @@ export function CodexPickerDialog({
                 {ddpType === "COMMERCIAL" ? "DDP Commerciale" : "DDP Officina"}
               </DialogTitle>
               <DialogDescription>
-                Doppio clic per aggiungere (Qtà = 1). Ogni codice va nella DDP
-                della sua famiglia: 2xx/3xx commerciale, 1xx officina; i gruppi
-                5xx/6xx/7xx si importano coi componenti smistati in automatico.
+                Doppio clic per aggiungere (Qtà = 1). Gli articoli da comprare
+                (commerciali, famiglie 2xx/3xx) vanno nella DDP Commerciale; i
+                particolari a disegno (1xx) nella DDP Officina; i gruppi
+                (5xx/6xx/7xx) vengono scomposti nei loro componenti in
+                automatico. Ci pensa il programma in base al codice.
               </DialogDescription>
             </div>
             {canGenerate ? (
@@ -1057,6 +1107,13 @@ export function CodexPickerDialog({
               ))}
             </SelectContent>
           </Select>
+          {/* La tendina cambia anche la SORGENTE della ricerca: senza dirlo,
+              l'elenco che cambia faccia sembra un errore. */}
+          <span className="text-xs text-muted-foreground">
+            {vista === "catalog"
+              ? "Ricerca nel Catalogo articoli (fornitori e prezzi Danea)"
+              : "Ricerca nell'archivio Codex"}
+          </span>
           {vista === "catalog" ? (
             <ColumnsMenu
               className="ml-auto"

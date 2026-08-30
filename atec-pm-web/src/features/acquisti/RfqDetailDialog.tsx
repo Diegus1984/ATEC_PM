@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils"
 
 import { DaneaOrderBadge } from "./acquisti-ui"
 import { rfqDaneaOrder } from "./acquisti-shared"
+import { rfqStatusLabel } from "./rfq-status"
 
 /** Windows tronca (o ignora del tutto) le URL mailto troppo lunghe, e lo fa in
  *  silenzio: la richiesta offerta partirebbe con la lista articoli tagliata a
@@ -83,6 +84,10 @@ export function RfqDetailDialog({
     [rfqDetail]
   )
 
+  // Offerta vincitrice (se già scelta): senza il suo articolo Danea collegato
+  // l'ordine fornitore non può essere generato, e il pulsante lo dice.
+  const offertaVincitrice = rfqDetail?.offers.find((o) => o.isWinner)
+
   /** RDO ancora lavorabile: né aggiudicata/chiusa né annullata. Governa email,
    *  annullamento e scelta del vincitore (il server rifiuta le chiuse). */
   const rfqIsOpen =
@@ -98,7 +103,7 @@ export function RfqDetailDialog({
   const createOrderMutation = useMutation({
     mutationFn: (id: number) => createPurchaseRfqDaneaOrder(id, expectedDate),
     onSuccess: (updated) => {
-      notifyInfo(`Ordine fornitore n. ${updated.daneaOrderNum} creato in Danea (Atec_PM)`)
+      notifyInfo(`Ordine fornitore n. ${updated.daneaOrderNum} creato in Danea`)
       void refetchRfqDetail()
       onChanged()
     },
@@ -121,6 +126,30 @@ export function RfqDetailDialog({
    *  fallito: senza, il campo continuerebbe a mostrare il valore digitato mentre a
    *  DB c'è quello vecchio — divergenza invisibile. */
   const [resetTick, setResetTick] = React.useState(0)
+
+  /** Riscontro «Salvato ✓» accanto al campo appena salvato dal blur: si spegne da
+   *  solo dopo ~2s. Niente toast per ogni blur: troppo rumore. */
+  const [salvataggioFlash, setSalvataggioFlash] = React.useState<{
+    offerId: number
+    campo: "prezzo" | "note"
+  } | null>(null)
+  const salvataggioFlashTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
+  const mostraSalvato = React.useCallback(
+    (offerId: number, campo: "prezzo" | "note") => {
+      if (salvataggioFlashTimer.current) clearTimeout(salvataggioFlashTimer.current)
+      setSalvataggioFlash({ offerId, campo })
+      salvataggioFlashTimer.current = setTimeout(() => setSalvataggioFlash(null), 2000)
+    },
+    []
+  )
+  React.useEffect(
+    () => () => {
+      if (salvataggioFlashTimer.current) clearTimeout(salvataggioFlashTimer.current)
+    },
+    []
+  )
 
   // 🪤 Base per il PUT completo: NON lo snapshot del render (cache react-query), che fra
   // un salvataggio e il refetch successivo è stantio — due blur ravvicinati (prezzo, poi
@@ -184,7 +213,11 @@ export function RfqDetailDialog({
       patch: Parameters<typeof saveOffer>[2]
     ) => {
       saveOffer(id, offer, patch)
-        .then(() => refetchRfqDetail())
+        .then(() => {
+          if ("unitPrice" in patch) mostraSalvato(offer.id, "prezzo")
+          else if ("notes" in patch) mostraSalvato(offer.id, "note")
+          return refetchRfqDetail()
+        })
         .catch((err) => {
           offerBaseRef.current.delete(offer.id)
           notifyError(
@@ -194,7 +227,7 @@ export function RfqDetailDialog({
           void refetchRfqDetail()
         })
     },
-    [saveOffer, refetchRfqDetail]
+    [saveOffer, refetchRfqDetail, mostraSalvato]
   )
 
   const handlePickCatalogItem = async (item: CatalogItemListItem) => {
@@ -242,10 +275,12 @@ export function RfqDetailDialog({
     const ok = await confirm({
       title: "Generare l'ordine fornitore in Danea?",
       description:
-        `Crea in Atec_PM l'ordine per ${winner?.supplierName ?? "—"}: ` +
+        `Crea in Danea (archivio Atec_PM) l'ordine fornitore per ${winner?.supplierName ?? "—"}: ` +
         `${qty} × ${winner?.catalogCode || detail.atecCode} a ${euro(winner?.unitPrice ?? 0)} + IVA` +
         (expectedDate ? `, consegna prevista ${formatDateShort(expectedDate)}` : "") +
-        ". Le righe distinta passano a In ordine.",
+        ". L'ordine è definitivo: dopo, la RDO non si potrà più annullare da qui. " +
+        "Nessuna email viene inviata al fornitore: l'invio si fa da Danea. " +
+        "Le righe di distinta passano a In Ordine.",
       confirmLabel: "Genera ordine",
     })
     if (ok) createOrderMutation.mutate(detail.id)
@@ -260,9 +295,6 @@ export function RfqDetailDialog({
       return
     }
 
-    // Si apre Outlook per OGNI fornitore in gara: se l'email non è in anagrafica
-    // il destinatario resta vuoto e lo mette l'ufficio acquisti prima di inviare.
-    //
     // Il codice va scritto DENTRO il ciclo, non fuori: «Codice Fornitore» deve essere il
     // codice con cui QUEL fornitore chiama l'articolo (`offer.catalogCode`), non il codice
     // della nostra riga di distinta. Prima il testo era calcolato una volta sola e mandava
@@ -275,14 +307,12 @@ export function RfqDetailDialog({
         })
         .join("\n\n")
 
-    // Offerte per cui la mail è stata davvero aperta: solo queste vanno marcate
-    // come contattate (una RDO mai partita non deve risultare inviata).
-    const opened: PurchaseRfqOfferDto[] = []
     // 🪤 Il corpo NON è uguale per tutti: `offer.catalogCode` (ripetuto una volta per
     // riga) e il nome del fornitore cambiano la lunghezza — vicino alla soglia un
-    // fornitore può sforare e un altro no. Chi sfora va NOMINATO, non saltato in
-    // silenzio: la sua offerta non viene marcata e resterebbe «da contattare» senza
-    // che nessuno sappia perché.
+    // fornitore può sforare e un altro no. Le mailto si costruiscono PRIMA della
+    // conferma: così la finestra promette il numero VERO di email apribili e chi
+    // sfora la soglia viene nominato subito, non scoperto a finestre già aperte.
+    const apribili: { offer: PurchaseRfqOfferDto; mailtoUrl: string }[] = []
     const troppoLunghe: string[] = []
     for (const offer of detail.offers) {
       const subject = `Richiesta Offerta — Commessa ${detail.projectCode}`
@@ -298,20 +328,60 @@ export function RfqDetailDialog({
         troppoLunghe.push(offer.supplierName)
         continue
       }
-
-      const position = opened.length
-      if (position === 0) window.open(mailtoUrl, "_self")
-      else setTimeout(() => window.open(mailtoUrl, "_self"), position * 900)
-      opened.push(offer)
+      apribili.push({ offer, mailtoUrl })
     }
 
-    if (opened.length === 0) {
+    if (apribili.length === 0) {
       notifyError(
         "Richiesta troppo lunga per l'apertura automatica di Outlook: Windows la " +
           "troncherebbe. Riduci le note della RDO oppure spezzala in più RDO con " +
           "meno articoli. Nessuna email è stata aperta e la RDO resta da inviare."
       )
       return
+    }
+
+    // Conferma preliminare: l'utente deve sapere PRIMA quante finestre Outlook si
+    // aprono e per chi, che l'invio vero lo fa lui premendo Invia in ciascuna, e
+    // che la RDO verrà segnata «Inviata ai fornitori». Chi è senza indirizzo in
+    // anagrafica e chi resta fuori per lunghezza vanno nominati subito.
+    const senzaEmail = apribili.filter(({ offer }) => !offer.supplierEmail?.trim())
+    const nomiFornitori = apribili.map(({ offer }) => offer.supplierName).join(", ")
+    const avvisoSenzaEmail =
+      senzaEmail.length === 0
+        ? ""
+        : senzaEmail.length === 1
+          ? ` ${senzaEmail[0].offer.supplierName} è senza indirizzo: andrà inserito a mano.`
+          : ` ${senzaEmail.map(({ offer }) => offer.supplierName).join(", ")} sono senza indirizzo: andranno inseriti a mano.`
+    const avvisoTroppoLunghe =
+      troppoLunghe.length === 0
+        ? ""
+        : troppoLunghe.length === 1
+          ? ` ${troppoLunghe[0]} NON verrà contattato da qui (richiesta troppo lunga per Outlook): la sua offerta resterà da inviare.`
+          : ` ${troppoLunghe.join(", ")} NON verranno contattati da qui (richiesta troppo lunga per Outlook): le loro offerte resteranno da inviare.`
+    const procedi = await confirm({
+      title: "Comporre le email in Outlook?",
+      description:
+        (apribili.length === 1
+          ? `Si aprirà 1 finestra di Outlook già compilata per ${nomiFornitori}.`
+          : `Si apriranno ${apribili.length} finestre di Outlook già compilate, una per fornitore: ${nomiFornitori}.`) +
+        " L'invio vero lo fai tu premendo Invia in ciascuna; la RDO verrà segnata " +
+        "«Inviata ai fornitori»." +
+        avvisoSenzaEmail +
+        avvisoTroppoLunghe,
+      confirmLabel: "Componi email",
+    })
+    if (!procedi) return
+
+    // Si apre Outlook per OGNI fornitore apribile: se l'email non è in anagrafica
+    // il destinatario resta vuoto e lo mette l'ufficio acquisti prima di inviare.
+    // Offerte per cui la mail è stata davvero aperta: solo queste vanno marcate
+    // come contattate (una RDO mai partita non deve risultare inviata).
+    const opened: PurchaseRfqOfferDto[] = []
+    for (const { offer, mailtoUrl } of apribili) {
+      const position = opened.length
+      if (position === 0) window.open(mailtoUrl, "_self")
+      else setTimeout(() => window.open(mailtoUrl, "_self"), position * 900)
+      opened.push(offer)
     }
 
     // Registra l'invio nel backend e avanza lo stato a SENT.
@@ -350,7 +420,20 @@ export function RfqDetailDialog({
   }
 
   return (
-    <Dialog open={!!rfqId} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={!!rfqId}
+      onOpenChange={(open) => {
+        if (!open) {
+          // Esc/X con il focus ancora dentro un campo prezzo/note modificato: il
+          // blur forzato fa scattare l'onBlur e committa il valore, che altrimenti
+          // andrebbe perso in silenzio alla chiusura.
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur()
+          }
+          onClose()
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-6xl sm:w-[1150px] max-w-[95vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
@@ -376,7 +459,7 @@ export function RfqDetailDialog({
                     {rfqDetail.description}
                   </div>
                 </div>
-                <Badge variant="outline">{rfqDetail.status}</Badge>
+                <Badge variant="outline">{rfqStatusLabel(rfqDetail.status)}</Badge>
               </div>
               {rfqDetail.items && rfqDetail.items.length > 0 && (
                 <div className="pt-2 border-t space-y-1">
@@ -409,9 +492,16 @@ export function RfqDetailDialog({
               <Label className="font-semibold text-foreground uppercase">
                 Offerte Ricevute dai Fornitori
               </Label>
+              <div className="text-[11px] text-muted-foreground">
+                I prezzi e le note si salvano da soli quando esci dal campo.
+              </div>
               {rfqDetail.offers.length === 0 ? (
                 <div className="text-xs text-muted-foreground p-4 border rounded text-center mt-1">
-                  Nessun fornitore contattato per questa RDO.
+                  Nessun fornitore collegato a questa gara. I fornitori vengono
+                  invitati in automatico in base al codice ATEC dell'articolo: se a
+                  quel codice non è associato nessun fornitore, la gara nasce vuota.
+                  Associa i fornitori all'articolo nel Catalogo, poi annulla questa
+                  RDO e ricreala.
                 </div>
               ) : (
                 <div className="space-y-3 mt-1">
@@ -542,6 +632,12 @@ export function RfqDetailDialog({
                                   €
                                 </span>
                               </div>
+                              {salvataggioFlash?.offerId === offer.id &&
+                                salvataggioFlash.campo === "prezzo" && (
+                                  <span className="text-[11px] font-medium text-green-700 dark:text-green-500">
+                                    Salvato ✓
+                                  </span>
+                                )}
                             </div>
                           </div>
 
@@ -553,15 +649,44 @@ export function RfqDetailDialog({
                               // aggiorna solo dopo il salvataggio scatenato dall'onBlur — passando
                               // dal campo al pulsante il primo clic andava perso e bisognava
                               // cliccare due volte. A fermare l'aggiudicazione senza prezzo ci
-                              // pensa il server, che ora la rifiuta.
+                              // pensano il pre-controllo nell'onClick (base locale, aggiornata
+                              // dal blur prima del click) e il server, che la rifiuta.
                               disabled={!rfqIsOpen}
                               title={!rfqIsOpen ? "RDO non più aperta" : undefined}
                               className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-100 disabled:opacity-50"
                               onClick={async () => {
+                                // Pre-controllo prezzo (base locale, poi cache): senza
+                                // prezzo il server rifiuterebbe comunque, ma l'utente
+                                // merita un messaggio chiaro PRIMA della conferma. Il
+                                // pulsante resta NON disabled (vincolo anti doppio-clic
+                                // documentato qui sopra).
+                                const prezzoOfferta =
+                                  offerBaseRef.current.get(offer.id)?.unitPrice ??
+                                  offer.unitPrice ??
+                                  null
+                                if (prezzoOfferta == null) {
+                                  notifyError(
+                                    `Inserisci prima il prezzo unitario offerto da ${offer.supplierName}.`
+                                  )
+                                  return
+                                }
+                                // Il server rifiuta anche 0/negativo (RdoGuardie):
+                                // meglio dirlo prima della conferma, non dopo.
+                                if (prezzoOfferta <= 0) {
+                                  notifyError(
+                                    `Il prezzo di ${offer.supplierName} è zero o negativo: correggilo prima di scegliere il vincitore.`
+                                  )
+                                  return
+                                }
                                 if (
                                   await confirm({
                                     title: "Assegna Vincitore",
-                                    description: `Confermi la scelta di ${offer.supplierName} come vincitore?`,
+                                    description:
+                                      `Aggiudicando a ${offer.supplierName} la gara si chiude: ` +
+                                      "i prezzi delle altre offerte non saranno più modificabili, " +
+                                      `il prezzo di ${offer.supplierName} viene scritto sulle righe ` +
+                                      "di distinta e potrai generare l'ordine in Danea. Se sbagli, " +
+                                      "puoi annullare la RDO finché l'ordine non è stato generato.",
                                   })
                                 ) {
                                   try {
@@ -569,11 +694,17 @@ export function RfqDetailDialog({
                                       rfqDetail.id,
                                       offer.id
                                     )
+                                    // Il testo arriva dal server («Vincitore applicato
+                                    // a N righe»): qui si declina solo il singolare.
+                                    const esitoLeggibile = esito.replace(
+                                      /\ba 1 righe\b/,
+                                      "a 1 riga"
+                                    )
                                     await refetchRfqDetail()
                                     onChanged()
                                     notifyInfo(
-                                      esito
-                                        ? `Aggiudicata a ${offer.supplierName}. ${esito}`
+                                      esitoLeggibile
+                                        ? `Aggiudicata a ${offer.supplierName}. ${esitoLeggibile}`
                                         : `Offerta aggiudicata a ${offer.supplierName}`
                                     )
                                   } catch (err) {
@@ -594,7 +725,12 @@ export function RfqDetailDialog({
                             <div className="grid grid-cols-12 gap-3 text-[11px] font-semibold text-muted-foreground uppercase px-1">
                               <div className="col-span-6">Articolo / Descrizione & Codice</div>
                               <div className="col-span-2 text-center">Qtà</div>
-                              <div className="col-span-4 text-center">Data Prev. Consegna</div>
+                              <div
+                                className="col-span-4 text-center"
+                                title="Data richiesta di consegna della riga di distinta: è unica, uguale sotto ogni fornitore."
+                              >
+                                Data Prev. Consegna
+                              </div>
                             </div>
                             <div className="space-y-2">
                               {rfqDetail.items.map((item) => (
@@ -646,9 +782,17 @@ export function RfqDetailDialog({
                           </div>
 
                           <div>
-                            <Label className="text-xs font-medium text-muted-foreground">
-                              Note Offerta / Condizioni Fornitore
-                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs font-medium text-muted-foreground">
+                                Note Offerta / Condizioni Fornitore
+                              </Label>
+                              {salvataggioFlash?.offerId === offer.id &&
+                                salvataggioFlash.campo === "note" && (
+                                  <span className="text-[11px] font-medium text-green-700 dark:text-green-500">
+                                    Salvato ✓
+                                  </span>
+                                )}
+                            </div>
                             <Input
                               key={`offer-${offer.id}-notes-${resetTick}`}
                               defaultValue={offer.notes ?? ""}
@@ -705,16 +849,39 @@ export function RfqDetailDialog({
                 />
                 <Button
                   size="sm"
+                  // Senza articolo Danea sull'offerta vincitrice l'ordine fallirebbe
+                  // comunque lato server: il pre-controllo nell'onClick lo spiega
+                  // PRIMA della conferma. Il pulsante resta cliccabile apposta: su
+                  // un disabled il title non compare mai (disabled:pointer-events-none
+                  // del Button shadcn) e l'utente resterebbe senza spiegazione.
                   disabled={createOrderMutation.isPending}
-                  onClick={() => void handleCreateSingleOrder(rfqDetail)}
+                  title="ODA = Ordine D'Acquisto: crea l'ordine nel gestionale Danea"
+                  onClick={() => {
+                    if (!offertaVincitrice?.catalogItemId) {
+                      notifyError(
+                        `L'offerta vincitrice non ha un articolo Danea collegato: ` +
+                          `usa il pulsante "Collega articolo" nella scheda di ` +
+                          `${offertaVincitrice?.supplierName ?? "quel fornitore"}, poi rigenera l'ordine.`
+                      )
+                      return
+                    }
+                    void handleCreateSingleOrder(rfqDetail)
+                  }}
                   className="gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
                 >
                   <FileCheck2 className="h-4 w-4" />
                   {createOrderMutation.isPending
                     ? "Creazione ordine…"
-                    : "Genera Ordine Danea (ODA)"}
+                    : "Genera ordine fornitore (Danea)"}
                 </Button>
               </>
+            ) : rfqDetail && rfqIsOpen && rfqDetail.offers.length > 0 ? (
+              // RDO aperta senza vincitore: al posto del pulsante ordine si spiega
+              // cosa manca perché compaia. Con zero offerte l'hint tace: lì
+              // l'istruzione giusta (annulla e ricrea) la dà già il corpo.
+              <span className="text-xs text-muted-foreground">
+                Inserisci i prezzi e scegli il vincitore per generare l'ordine.
+              </span>
             ) : null}
 
             {/* Annullamento: RDO aperte, più le CHIUSE senza ordine Danea (la via

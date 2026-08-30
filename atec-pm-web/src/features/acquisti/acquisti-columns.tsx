@@ -7,7 +7,6 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { CheckCircle2, Clock, FileCheck2, Link2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { DdpStatusMenu } from "@/features/commesse/DdpStatusMenu"
 import type { AcquistiInboxItem, DdpStatusItem } from "@/lib/api/types"
@@ -16,6 +15,7 @@ import { euro } from "@/lib/format"
 
 import { DaneaOrderBadge, StatusFilterCombobox } from "./acquisti-ui"
 import { getSmartActionSortKey, rowHasDaneaOrder, statusOf } from "./acquisti-shared"
+import { rfqStatusLabel } from "./rfq-status"
 
 export function buildAcquistiColumns({
   gridItems,
@@ -43,25 +43,6 @@ export function buildAcquistiColumns({
   onRequestRfq: (items: AcquistiInboxItem[]) => void
 }): ColumnDef<AcquistiInboxItem>[] {
   return [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          onCheckedChange={(val) => table.toggleAllPageRowsSelected(!!val)}
-          aria-label="Seleziona tutte"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(val) => row.toggleSelected(!!val)}
-          aria-label="Seleziona riga"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
     {
       id: "rowNumber",
       header: "#",
@@ -130,7 +111,7 @@ export function buildAcquistiColumns({
        Nella descrizione ci deve stare l'articolo comprato, non «Richiesta offerta — …». */
     {
       id: "rfqAction",
-      header: "Az.",
+      header: "RDO",
       enableColumnFilter: false,
       cell: ({ row }) => {
         const item = row.original
@@ -250,16 +231,31 @@ export function buildAcquistiColumns({
 
         // 2) In gara RDO (non ancora ordinata).
         if (item.inActiveRfq || status === "RO") {
+          const rfqId = item.activeRfqId
+          if (!rfqId) {
+            // Riga risultante in gara ma senza RDO viva agganciata: il server esclude
+            // le gare annullate dai campi activeRfq*, quindi qui la gara è stata
+            // annullata (o lo stato RO è stato messo a mano). «In gara» mentirebbe.
+            return (
+              <span className="block max-w-[180px] whitespace-normal text-[11px] leading-snug text-muted-foreground">
+                Gara annullata — Stato → DA ORDINARE per rifare la RDO
+              </span>
+            )
+          }
+          const closed = (item.activeRfqStatus ?? "").toUpperCase() === "CLOSED"
           return (
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded bg-black/10 hover:bg-black/20 text-current border border-black/20 px-2 py-0.5 text-xs font-medium transition-colors"
-              onClick={() => {
-                if (item.activeRfqId) onOpenRfqDetail(item.activeRfqId)
-              }}
+              title={
+                closed
+                  ? `Gara aggiudicata: genera l'ordine con "Ordina Danea" o dal dettaglio RDO`
+                  : "Richiesta d'offerta in corso: clicca per aprirla"
+              }
+              onClick={() => onOpenRfqDetail(rfqId)}
             >
-              <Clock className="size-3" />
-              RDO #{item.activeRfqId || ""}
+              {closed ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
+              {closed ? rfqStatusLabel(item.activeRfqStatus) : "In gara"} — RDO #{rfqId}
             </button>
           )
         }
@@ -277,6 +273,15 @@ export function buildAcquistiColumns({
               <FileCheck2 className="size-3.5" />
               Richiedi RDO
             </Button>
+          )
+        }
+
+        // In verifica a magazzino: suggerisci il passo successivo invece del «—» muto.
+        if (status === "VER" || status === "CHEK") {
+          return (
+            <span className="block max-w-[180px] whitespace-normal text-[11px] leading-tight opacity-60">
+              Verifica a magazzino, poi Stato → DA ORDINARE
+            </span>
           )
         }
 

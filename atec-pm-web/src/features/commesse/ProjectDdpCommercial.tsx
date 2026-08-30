@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
+  Ban,
   ChevronDown,
   ChevronRight,
   History,
@@ -830,7 +831,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                     ? "Componente di composizione: la quantità segue quella del padre"
                     : canEditQty
                       ? undefined
-                      : "La quantità è modificabile solo in stato Da Ordinare"
+                      : 'La quantità è modificabile solo negli stati "Verificare se disponibile a mag." e "Da Ordinare".'
                 }
               >
                 <DdpQuantityStepper
@@ -1113,9 +1114,11 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
           const isChild = item.parentBomItemId != null
           const isRaw = isRawRow(item)
           if (!readOnly && item.itemStatus !== DDP_STATUS_CANCELLED) {
+            // «Annulla riga», non «Elimina»: la riga resta in distinta in stato
+            // Annullato. Stessa etichetta e stessa icona della DDP Officina.
             actions.push({
-              label: "Elimina",
-              icon: Trash2,
+              label: "Annulla riga",
+              icon: Ban,
               destructive: true,
               separatorBefore: true,
               disabled: isChild,
@@ -1271,14 +1274,21 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                 <Button
                   size="sm"
                   variant="outline"
+                  title="Se conosci già il codice ATEC: cercalo e scegli il fornitore"
                   onClick={() => setAtecPickerOpen(true)}
                 >
                   <Link2 />
                   Per codice ATEC
                 </Button>
-                <Button size="sm" onClick={() => setPickerOpen(true)}>
+                {/* Stesso nome e stesso picker del pulsante della DDP Officina:
+                    è UN pulsante unico, lo smistamento lo fa il programma. */}
+                <Button
+                  size="sm"
+                  title="Cerca nel catalogo articoli e nel Codex e aggiungi righe alla distinta"
+                  onClick={() => setPickerOpen(true)}
+                >
                   <Plus />
-                  Aggiungi da Catalogo
+                  Aggiungi articolo
                 </Button>
               </>
             )}

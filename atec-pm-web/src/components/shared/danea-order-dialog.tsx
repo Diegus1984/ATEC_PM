@@ -58,8 +58,10 @@ export function DaneaOrderDialog({
               : "Ordine fornitore Danea"}
           </DialogTitle>
           <DialogDescription>
+            {/* Il nome leggibile dell'archivio è «Danea»: «Atec_PM» da solo si
+                confonde col programma ATEC PM (resta tra parentesi nel caricamento). */}
             {order
-              ? `Atec_PM · ${ORDER_STATUS_LABELS[order.orderStatus] ?? order.orderStatus} · Magazzino ${order.warehouse || "—"}`
+              ? `Danea · ${ORDER_STATUS_LABELS[order.orderStatus] ?? order.orderStatus} · Magazzino ${order.warehouse || "—"}`
               : "Lettura da Danea (Atec_PM)…"}
           </DialogDescription>
         </DialogHeader>

@@ -44,6 +44,7 @@ import {
   rowHasDaneaOrder,
   sortAcquistiByProjectAndAction,
   statusOf,
+  VISIBLE_STATUSES,
 } from "./acquisti-shared"
 import { CreateRfqDialog } from "./CreateRfqDialog"
 import { ProjectDaneaOrdersDialog } from "./ProjectDaneaOrdersDialog"
@@ -229,24 +230,40 @@ export function AcquistiPage() {
       })
       return updateDdpRow(data.projectId, data.rowId, req)
     },
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       queryClient.invalidateQueries({ queryKey: ["acquisti-inbox"] })
       queryClient.invalidateQueries({ queryKey: ["purchase-rfq-detail"] })
-      notifyInfo("Dati articolo aggiornati")
+      // Il nuovo stato porta la riga fuori dai VISIBLE_STATUSES dell'Inbox:
+      // senza avviso l'utente la vede solo sparire.
+      const newStatus = variables.itemStatus?.toUpperCase()
+      if (newStatus && !VISIBLE_STATUSES.has(newStatus)) {
+        notifyInfo(
+          "Stato aggiornato: la riga esce dall'Inbox Acquisti (la ritrovi nella DDP della commessa)."
+        )
+      } else {
+        notifyInfo("Dati articolo aggiornati")
+      }
     },
     onError: (err: Error) => {
       notifyError(`Errore aggiornamento: ${err.message}`)
     },
   })
 
-  // Apertura del dialog RDO: solo articoli nello stato DO (Da ORDINARE).
+  // Apertura del dialog RDO: solo articoli nello stato DO (Da ORDINARE) e non già
+  // dentro una gara viva — il server li scarterebbe comunque («già in gara»), quindi
+  // l'anteprima non deve contarli né prometterci sopra una RDO.
   const handleOpenRfqModal = React.useCallback((items: AcquistiInboxItem[]) => {
     const doItems = items.filter((i) => statusOf(i) === "DO")
-    if (doItems.length === 0) {
-      notifyError("Nessun articolo nello stato 'Da ORDINARE' selezionato per la RDO.")
+    const liberi = doItems.filter((i) => !i.inActiveRfq)
+    if (liberi.length === 0) {
+      notifyError(
+        doItems.length > 0
+          ? `Le righe in "DA ORDINARE" di questa commessa sono già dentro una gara in corso (colonna Prossimo Passo): non serve crearne un'altra.`
+          : `In questa commessa nessun articolo è nello stato "DA ORDINARE". Cambia lo stato della riga dal menu della colonna Stato, poi riprova.`
+      )
       return
     }
-    setCreateRfqTargetItems(doItems)
+    setCreateRfqTargetItems(liberi)
   }, [])
 
   // Stile di riga nativo basato sulla configurazione di Conf. DDP (s.colorBg / s.colorFg)
@@ -315,7 +332,7 @@ export function AcquistiPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <ShoppingCart className="h-6 w-6 text-primary" />
-              Inbox Acquisti (Controllo Commesse)
+              Inbox Acquisti
             </h1>
             <p className="text-sm text-muted-foreground">
               Vista unificata dello stato acquisti per commessa con evidenziazione automatica
@@ -343,15 +360,18 @@ export function AcquistiPage() {
         {/* KPI Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="Da Ordinare / RDO"
+            label="Da Comprare"
             value={kpi.toBuyCount}
             unit="articoli"
             icon={Package}
             borderClassName="border-l-red-500"
             iconClassName="text-red-500"
           >
-            Tot. Stimato:{" "}
-            <span className="font-semibold text-foreground">{euro(kpi.toBuyCost)}</span>
+            <div>In verifica a magazzino + da ordinare</div>
+            <div>
+              Tot. Stimato:{" "}
+              <span className="font-semibold text-foreground">{euro(kpi.toBuyCost)}</span>
+            </div>
           </KpiCard>
 
           <KpiCard
@@ -368,12 +388,20 @@ export function AcquistiPage() {
           <KpiCard
             label="Gare RDO Attive / In Ritardo"
             value={activeRfqsCount}
-            unit={<span className="text-red-500">({kpi.lateCount} ritardi)</span>}
+            unit="gare"
             icon={FileCheck2}
             borderClassName="border-l-purple-500"
             iconClassName="text-purple-500"
           >
-            Gare d'offerta in corso con fornitori
+            {kpi.lateCount > 0 ? (
+              <span className="font-medium text-red-500">
+                {kpi.lateCount === 1
+                  ? "1 articolo oltre la Data Prevista"
+                  : `${kpi.lateCount} articoli oltre la Data Prevista`}
+              </span>
+            ) : (
+              "Nessun articolo oltre la Data Prevista"
+            )}
           </KpiCard>
 
           <KpiCard
@@ -383,7 +411,7 @@ export function AcquistiPage() {
             borderClassName="border-l-indigo-500"
             iconClassName="text-indigo-500"
           >
-            Articoli da associare al Codex
+            Assegna il codice con l'icona catena nella colonna Cod. ATEC
           </KpiCard>
         </div>
 
@@ -414,7 +442,8 @@ export function AcquistiPage() {
         <div className="space-y-6">
           {groupsByProject.length === 0 ? (
             <Card className="p-8 text-center text-muted-foreground text-sm">
-              Nessuna riga d'acquisto trovata per i criteri selezionati.
+              Nessun articolo da acquistare qui: aggiungi righe nella DDP Commerciale della
+              commessa, oppure allarga i filtri.
             </Card>
           ) : (
             groupsByProject.map((group) => (

@@ -580,9 +580,15 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
             </span>
             {/* Il totale si legge sempre; ad aggiungere righe è solo chi scrive. */}
             {!readOnly && (
-              <Button size="sm" onClick={() => setPickerOpen(true)}>
+              /* Stesso nome e stesso picker del pulsante della DDP Commerciale:
+                 è UN pulsante unico, lo smistamento lo fa il programma. */
+              <Button
+                size="sm"
+                title="Cerca nel catalogo articoli e nel Codex e aggiungi righe alla distinta"
+                onClick={() => setPickerOpen(true)}
+              >
                 <Plus />
-                Aggiungi da Codex
+                Aggiungi articolo
               </Button>
             )}
           </>

@@ -26,6 +26,7 @@ import { fetchCodex } from "@/lib/api/codex"
 import { createDdpRow } from "@/lib/api/project-ddp"
 import type { CatalogItemListItem, CodexListItem } from "@/lib/api/types"
 import { getSession } from "@/lib/auth/session"
+import { notifyError } from "@/lib/toast"
 import { euro } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 import { DDP_STATUS_VERIFY } from "./ddp-constants"
@@ -121,7 +122,12 @@ export function AtecPickerDialog({
       setMessage(`✓ ${code} aggiunto`)
       onAdded()
     },
-    onError: (err: Error) => setError(err.message),
+    // Oltre alla riga nel dialogo, il toast: come nel picker gemello
+    // (CodexPickerDialog) gli errori bloccanti non devono passare inosservati.
+    onError: (err: Error) => {
+      setError(err.message)
+      notifyError(err.message)
+    },
   })
 
   const items = codexQuery.data?.items ?? []
@@ -135,8 +141,9 @@ export function AtecPickerDialog({
         <DialogHeader>
           <DialogTitle>Aggiungi per codice ATEC</DialogTitle>
           <DialogDescription>
-            Cerca un codice nuovo Codex, poi scegli un fornitore Danea oppure
-            lascia la riga «da definire».
+            Cerca il codice ATEC dell&apos;articolo; se ha già fornitori
+            collegati scegline uno, altrimenti inserisci la riga e il fornitore
+            si deciderà dopo.
           </DialogDescription>
         </DialogHeader>
 
@@ -211,6 +218,7 @@ export function AtecPickerDialog({
                   <Button
                     size="sm"
                     variant="outline"
+                    title="La riga entra in distinta con fornitore da definire"
                     disabled={addMutation.isPending || !selected.codiceNuovo}
                     onClick={() =>
                       addMutation.mutate({
@@ -221,7 +229,7 @@ export function AtecPickerDialog({
                     }
                   >
                     <Link2 />
-                    Solo ATEC (da definire)
+                    Inserisci senza fornitore
                   </Button>
                 </div>
                 <GridScroller className="rounded-md border">
@@ -245,8 +253,9 @@ export function AtecPickerDialog({
                     ) : alts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-muted-foreground">
-                          Nessun articolo Danea associato. Usa «Solo ATEC» oppure
-                          completa il mapping dal Catalogo/Codex.
+                          Questo codice non ha ancora fornitori collegati. Puoi
+                          inserire la riga senza fornitore, oppure collegare gli
+                          articoli dei fornitori dal Catalogo (icona catena).
                         </TableCell>
                       </TableRow>
                     ) : (
