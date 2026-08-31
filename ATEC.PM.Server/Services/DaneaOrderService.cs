@@ -17,11 +17,14 @@ public class DaneaOrderService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<DaneaOrderService> _log;
+    private readonly NetworkShareConnector _share;
 
-    public DaneaOrderService(IConfiguration config, ILogger<DaneaOrderService> log)
+    public DaneaOrderService(IConfiguration config, ILogger<DaneaOrderService> log,
+        NetworkShareConnector share)
     {
         _config = config;
         _log = log;
+        _share = share;
     }
 
     public record OrderLine(string CodArticolo, decimal Qta, decimal PrezzoNetto);
@@ -361,6 +364,60 @@ public class DaneaOrderService
         return TrovaIdDoc(c, num, anno).HasValue;
     }
 
+    // ── FOTO ARTICOLO (popup ordine) ──────────────────────────────────────
+
+    private string? AllegatiDir(bool vecchioArchivio) =>
+        _config[vecchioArchivio ? "DaneaSync:AllegatiPathOld" : "DaneaSync:AllegatiPathNew"];
+
+    /// <summary>
+    /// Foto dell'articolo per il popup ordine: nome file da TArticoli.PathImmagine_Import
+    /// (dell'archivio giusto), file cercato in Prod poi Prod2 della cartella Allegati
+    /// corrispondente. Best-effort: null quando manca qualcosa — una foto assente non
+    /// è un errore.
+    /// </summary>
+    public (byte[] Contenuto, string ContentType)? GetArticleImage(string codArticolo, bool vecchioArchivio)
+    {
+        if (string.IsNullOrWhiteSpace(codArticolo)) return null;
+        string? baseDir = AllegatiDir(vecchioArchivio);
+        if (string.IsNullOrWhiteSpace(baseDir)) return null;
+
+        // Share autenticata come per la migrazione: il servizio gira come account
+        // locale che Server-maga non conosce (vedi NetworkShareConnector).
+        string? utente = _config["DaneaSync:SmbUser"];
+        if (!string.IsNullOrWhiteSpace(utente))
+            _share.Connect(baseDir, utente, _config["DaneaSync:SmbPassword"]);
+
+        string? fileName;
+        using (var c = new FbConnection(ConnStr(vecchioArchivio)))
+        {
+            c.Open();
+            using var cmd = new FbCommand(
+                @"SELECT ""PathImmagine_Import"" FROM ""TArticoli"" WHERE ""CodArticolo"" = @Cod", c);
+            cmd.Parameters.AddWithValue("@Cod", codArticolo.Trim());
+            fileName = cmd.ExecuteScalar() as string;
+        }
+        fileName = fileName?.Trim();
+        if (string.IsNullOrEmpty(fileName)) return null;
+        fileName = Path.GetFileName(fileName);
+
+        foreach (string sub in new[] { "Prod", "Prod2" })
+        {
+            string candidate = Path.Combine(baseDir, sub, fileName);
+            if (!File.Exists(candidate)) continue;
+            string contentType = Path.GetExtension(fileName).ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".bmp" => "image/bmp",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                _ => "application/octet-stream",
+            };
+            return (File.ReadAllBytes(candidate), contentType);
+        }
+        return null;
+    }
+
     private static int? TrovaIdDoc(FbConnection c, int num, int? anno)
     {
         // Danea riparte da 1 per ogni serie di numerazione («Numeraz»): a parità di
@@ -457,6 +514,37 @@ public class DaneaOrderService
                     NetAmount = r.IsDBNull(1) ? 0 : Convert.ToDecimal(r[1]),
                     VatAmount = r.IsDBNull(2) ? 0 : Convert.ToDecimal(r[2]),
                 });
+        }
+
+        // Nome della foto articolo (TArticoli.PathImmagine_Import), in un colpo solo:
+        // il client mostra il riquadro foto solo alle righe che ce l'hanno, senza
+        // chiamate a vuoto per ogni riga.
+        var codici = view.Rows
+            .Select(x => x.Code)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (codici.Count > 0)
+        {
+            var mappa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string parametri = string.Join(",", codici.Select((_, i) => $"@c{i}"));
+            using var cmd = new FbCommand(
+                $@"SELECT ""CodArticolo"", ""PathImmagine_Import""
+                   FROM ""TArticoli"" WHERE ""CodArticolo"" IN ({parametri})", c);
+            for (int i = 0; i < codici.Count; i++)
+                cmd.Parameters.AddWithValue($"@c{i}", codici[i]);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                string? nome = r.IsDBNull(1) ? null : r.GetString(1).Trim();
+                if (!string.IsNullOrEmpty(nome))
+                    // Solo il nome file: un percorso nel campo non deve portare fuori
+                    // dalla cartella Allegati quando poi si va a leggere il file.
+                    mappa[r.GetString(0).Trim()] = Path.GetFileName(nome);
+            }
+            foreach (var row in view.Rows)
+                if (row.Code.Length > 0 && mappa.TryGetValue(row.Code, out string? nome))
+                    row.ImageFile = nome;
         }
 
         return view;

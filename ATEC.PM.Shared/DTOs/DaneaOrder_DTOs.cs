@@ -48,6 +48,9 @@ public class DaneaOrderView
 public class DaneaOrderRowView
 {
     public string Code { get; set; } = "";
+    // Nome del file foto (TArticoli.PathImmagine_Import): il client chiede l'immagine
+    // solo alle righe che ce l'hanno. Null = niente foto per questo articolo.
+    public string? ImageFile { get; set; }
     public string SupplierCode { get; set; } = "";
     public string Description { get; set; } = "";
     public decimal Quantity { get; set; }

@@ -1,5 +1,6 @@
+import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { FileCheck2 } from "lucide-react"
+import { FileCheck2, ImageOff } from "lucide-react"
 
 import {
   Dialog,
@@ -17,7 +18,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
-import { fetchDaneaOrder, fetchDaneaOrderByRef } from "@/lib/api/danea-orders"
+import {
+  fetchDaneaArticleImageBlob,
+  fetchDaneaOrder,
+  fetchDaneaOrderByRef,
+} from "@/lib/api/danea-orders"
 import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 
@@ -61,7 +66,9 @@ export function DaneaOrderDialog({
 
   return (
     <Dialog open={aperto} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-2xl">
+      {/* Larghezza generosa (richiesta di Diego): la tabella righe con foto e
+          importi stava stretta dentro la 2xl e costringeva allo scroll laterale. */}
+      <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck2 className="size-5 text-teal-700" />
@@ -141,6 +148,7 @@ export function DaneaOrderDialog({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[64px]">Foto</TableHead>
                   <TableHead>Codice</TableHead>
                   <TableHead>Descrizione</TableHead>
                   <TableHead className="text-right">Qtà</TableHead>
@@ -153,6 +161,13 @@ export function DaneaOrderDialog({
               <TableBody>
                 {order.rows.map((r, i) => (
                   <TableRow key={i}>
+                    <TableCell className="py-1.5">
+                      <FotoArticolo
+                        code={r.code}
+                        imageFile={r.imageFile}
+                        vecchio={order.archivio === "VECCHIO"}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium whitespace-nowrap">
                       {r.code}
                       {r.supplierCode && r.supplierCode !== r.code ? (
@@ -213,5 +228,61 @@ export function DaneaOrderDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Riquadro foto a misura FISSA: tutte le foto hanno la stessa dimensione (l'immagine
+ * si adatta dentro con object-contain). Riga descrittiva senza codice articolo =
+ * nessun riquadro; articolo senza foto (o foto irraggiungibile) = segnaposto.
+ * La foto arriva dall'archivio giusto: per gli ordini del VECCHIO archivio si legge
+ * dagli Allegati del vecchio.
+ */
+function FotoArticolo({
+  code,
+  imageFile,
+  vecchio,
+}: {
+  code: string
+  imageFile?: string | null
+  vecchio: boolean
+}) {
+  const [url, setUrl] = React.useState<string | null>(null)
+  const [errore, setErrore] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!code || !imageFile) return
+    let revocato = false
+    let objectUrl: string | null = null
+    setUrl(null)
+    setErrore(false)
+    void fetchDaneaArticleImageBlob(code, vecchio)
+      .then((blob) => {
+        if (revocato) return
+        objectUrl = URL.createObjectURL(blob)
+        setUrl(objectUrl)
+      })
+      .catch(() => {
+        if (!revocato) setErrore(true)
+      })
+    return () => {
+      revocato = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [code, imageFile, vecchio])
+
+  if (!code) return null
+  return (
+    <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-white">
+      {url && !errore ? (
+        <img
+          src={url}
+          alt={`Foto articolo ${code}`}
+          className="max-h-full max-w-full object-contain"
+        />
+      ) : (
+        <ImageOff className="size-4 text-muted-foreground/40" />
+      )}
+    </div>
   )
 }

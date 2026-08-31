@@ -159,6 +159,8 @@ export interface DaneaOrderView {
 
 export interface DaneaOrderRowView {
   code: string
+  /** Nome del file foto articolo: presente solo se l'articolo una foto ce l'ha. */
+  imageFile?: string | null
   supplierCode: string
   description: string
   quantity: number

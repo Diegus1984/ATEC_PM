@@ -72,6 +72,26 @@ public class DaneaOrdersController : ControllerBase
         }
     }
 
+    // Foto dell'articolo per la riga del popup: il file sta sulla share Allegati
+    // dell'archivio giusto (vecchio o attuale). Best-effort: qualunque intoppo
+    // (share giù, campo vuoto, file sparito) risponde 404 e il client mostra il
+    // segnaposto — la foto non deve mai far fallire la consultazione dell'ordine.
+    [HttpGet("article-image")]
+    public IActionResult GetArticleImage([FromQuery] string? code, [FromQuery] bool vecchio = false)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return NotFound();
+        try
+        {
+            var img = _danea.GetArticleImage(code, vecchio);
+            if (img == null) return NotFound();
+            return File(img.Value.Contenuto, img.Value.ContentType);
+        }
+        catch
+        {
+            return NotFound();
+        }
+    }
+
     [HttpGet("{idDoc:int}")]
     public IActionResult Get(int idDoc)
     {
