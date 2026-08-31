@@ -1,6 +1,7 @@
 // ── Card di commessa con la griglia dei fabbisogni ────────────────────────
 
 import type { ColumnDef } from "@tanstack/react-table"
+import { Link } from "react-router-dom"
 import { BriefcaseBusiness, FileCheck2, ShoppingCart } from "lucide-react"
 
 import { DataTableCardFiltered } from "@/components/shared/data-table-card-filtered"
@@ -14,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import type { AcquistiInboxItem } from "@/lib/api/types"
+import { canAccessFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 
 import { COLUMN_LABELS, type GroupByProject } from "./acquisti-shared"
@@ -41,7 +43,20 @@ export function AcquistiProjectCard({
           <div>
             <div className="flex items-center gap-2">
               <CardTitle className="text-base font-bold text-foreground">
-                Commessa {group.projectCode}
+                {/* La strada del giro va anche all'indietro: dall'Inbox si torna
+                    alla distinta da cui le righe arrivano — ma solo per chi ha la
+                    voce Commesse, o il link porterebbe su «Accesso negato». */}
+                {canAccessFeature("nav.commesse") ? (
+                  <Link
+                    to={`/commesse/${group.projectId}/ddp_commercial`}
+                    className="hover:underline underline-offset-2"
+                    title="Apri la DDP Commerciale di questa commessa"
+                  >
+                    Commessa {group.projectCode}
+                  </Link>
+                ) : (
+                  <>Commessa {group.projectCode}</>
+                )}
               </CardTitle>
               {group.customerName && (
                 <Badge variant="outline" className="text-xs font-normal">

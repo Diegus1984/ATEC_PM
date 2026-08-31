@@ -82,7 +82,8 @@ export function DdpRowDialog({
   transitions?: Record<string, string[]>
   destinations: DdpDestinationItem[]
   onClose: () => void
-  onSaved: () => Promise<void>
+  /** Riceve lo stato salvato: al parent serve per il cartello «Inbox Acquisti». */
+  onSaved: (savedStatusKey: string) => Promise<void>
   /** Conflitto di concorrenza (409): il parent ricarica le righe per avere un token fresco. */
   onConflict?: () => void
 }) {
@@ -177,7 +178,7 @@ export function DdpRowDialog({
       })
     },
     onSuccess: async () => {
-      await onSaved()
+      await onSaved(form.itemStatus)
     },
     onError: (err: Error) => {
       if (err instanceof ApiError && err.status === 409) {

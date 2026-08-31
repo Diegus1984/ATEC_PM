@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   ShoppingCart,
+  X,
 } from "lucide-react"
 
 import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
@@ -15,6 +16,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
 import { DdpStatusFilterBar } from "@/features/commesse/DdpStatusFilterBar"
+import { DdpStatusLegend } from "@/features/commesse/DdpStatusLegend"
 import { ddpCommercialRowToSaveRequest } from "@/features/commesse/ddp-commercial-row"
 import { ddpTransitionsPerUtente } from "@/features/commesse/ddp-constants"
 import { fetchAcquistiInbox } from "@/lib/api/ddp-commercial-inbox"
@@ -50,11 +52,33 @@ import { CreateRfqDialog } from "./CreateRfqDialog"
 import { ProjectDaneaOrdersDialog } from "./ProjectDaneaOrdersDialog"
 import { RfqDetailDialog } from "./RfqDetailDialog"
 
+// Predicati delle card KPI cliccabili: ogni card filtra le griglie con lo STESSO
+// criterio con cui conta, così card e griglia non possono divergere. «inGara»
+// esclude le righe già ordinate (nella colonna Prossimo Passo l'ordine vince
+// sulla gara: il filtro deve mostrare le stesse righe che portano quel badge).
+const KPI_PREDICATES = {
+  daComprare: (i: AcquistiInboxItem) => isToBuy(i),
+  inOrdine: (i: AcquistiInboxItem) => rowHasDaneaOrder(i),
+  inGara: (i: AcquistiInboxItem) =>
+    !rowHasDaneaOrder(i) && (i.inActiveRfq || statusOf(i) === "RO"),
+  senzaCodice: (i: AcquistiInboxItem) => !normalizeAtec(i.atecCode),
+} as const
+type KpiFilterKey = keyof typeof KPI_PREDICATES
+
+const KPI_FILTER_LABELS: Record<KpiFilterKey, string> = {
+  daComprare: "Da comprare",
+  inOrdine: "In ordine Danea",
+  inGara: "In gara",
+  senzaCodice: "Senza codice ATEC",
+}
+
 export function AcquistiPage() {
   const queryClient = useQueryClient()
 
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<Set<string>>(new Set())
+  // Filtro della card KPI cliccata (null = nessuno). Si toglie ri-cliccando la card.
+  const [kpiFilter, setKpiFilter] = React.useState<KpiFilterKey | null>(null)
   /**
    * Le righe sono ordinate per «Prossimo Passo», che cambia appena si tocca lo stato
    * o si aggancia una RDO: senza questo l'articolo salterebbe in un altro punto della
@@ -131,7 +155,7 @@ export function AcquistiPage() {
   // Righe visibili grezze: base condivisa da griglie e barra filtri (una sola scansione).
   const visibleRawItems = React.useMemo(() => rawItems.filter(isVisible), [rawItems])
 
-  const visibleItems = React.useMemo(() => {
+  const preKpiItems = React.useMemo(() => {
     let res = visibleRawItems
     if (selectedStatusKeys.size > 0) {
       res = res.filter((i) => selectedStatusKeys.has(i.itemStatus ?? ""))
@@ -151,6 +175,30 @@ export function AcquistiPage() {
     return res
   }, [visibleRawItems, selectedStatusKeys, searchQuery])
 
+  // Il filtro della card si applica DOPO i conteggi: le card contano sempre su
+  // stato+ricerca, così i numeri non cambiano quando se ne clicca una.
+  const visibleItems = React.useMemo(
+    () => (kpiFilter ? preKpiItems.filter(KPI_PREDICATES[kpiFilter]) : preKpiItems),
+    [preKpiItems, kpiFilter]
+  )
+
+  const toggleKpiFilter = React.useCallback((k: KpiFilterKey) => {
+    setKpiFilter((cur) => (cur === k ? null : k))
+  }, [])
+
+  // Righe per commessa PRIMA del filtro card: il «Richiedi RDO» di testata deve
+  // lavorare su tutta la commessa anche quando una card KPI sta filtrando le griglie
+  // (altrimenti nascerebbe una gara parziale, o un errore che sembra un bug dei dati).
+  const preKpiByProject = React.useMemo(() => {
+    const map = new Map<number, AcquistiInboxItem[]>()
+    for (const i of preKpiItems) {
+      const arr = map.get(i.projectId)
+      if (arr) arr.push(i)
+      else map.set(i.projectId, [i])
+    }
+    return map
+  }, [preKpiItems])
+
   const statusFilterItems = React.useMemo(
     () => buildStatusCounts(visibleRawItems, statusMap),
     [visibleRawItems, statusMap]
@@ -164,7 +212,8 @@ export function AcquistiPage() {
     let lateCount = 0
     let unmappedCount = 0
     let orderedCount = 0
-    for (const i of visibleItems) {
+    let inGaraCount = 0
+    for (const i of preKpiItems) {
       if (isToBuy(i)) {
         toBuyCount++
         toBuyCost += (i.unitCost || 0) * i.quantity
@@ -175,9 +224,12 @@ export function AcquistiPage() {
       // Danea avanza lo stato a IO solo se la matrice lo ammette, ma Rif. Danea/IDDoc
       // arrivano comunque — contare il solo stato IO farebbe divergere card e griglia.
       if (rowHasDaneaOrder(i)) orderedCount++
+      // Il valore della card «In Gara» usa lo STESSO predicato del filtro: il numero
+      // cliccato e le righe mostrate devono coincidere (le gare stanno nel sottotesto).
+      if (KPI_PREDICATES.inGara(i)) inGaraCount++
     }
-    return { toBuyCount, toBuyCost, lateCount, unmappedCount, orderedCount }
-  }, [visibleItems])
+    return { toBuyCount, toBuyCost, lateCount, unmappedCount, orderedCount, inGaraCount }
+  }, [preKpiItems])
 
   const activeRfqsCount = React.useMemo(
     () => rfqs.filter((r) => r.status === "DRAFT" || r.status === "SENT").length,
@@ -198,7 +250,7 @@ export function AcquistiPage() {
 
   // Ordine congelato: `buildProjectGroups` riceve le righe già in fila e non le
   // riordina più (i gruppi-commessa restano ordinati per codice).
-  const filtersKey = `${[...selectedStatusKeys].sort().join(",")}|${searchQuery.trim()}`
+  const filtersKey = `${[...selectedStatusKeys].sort().join(",")}|${searchQuery.trim()}|${kpiFilter ?? ""}`
   const orderedItems = useDeferredItemOrder(
     visibleItems,
     sortAcquistiByProjectAndAction,
@@ -366,6 +418,8 @@ export function AcquistiPage() {
             icon={Package}
             borderClassName="border-l-red-500"
             iconClassName="text-red-500"
+            onClick={() => toggleKpiFilter("daComprare")}
+            active={kpiFilter === "daComprare"}
           >
             <div>In verifica a magazzino + da ordinare</div>
             <div>
@@ -381,18 +435,25 @@ export function AcquistiPage() {
             icon={ShoppingCart}
             borderClassName="border-l-amber-500"
             iconClassName="text-amber-500"
+            onClick={() => toggleKpiFilter("inOrdine")}
+            active={kpiFilter === "inOrdine"}
           >
             Ordini già emessi verso fornitori
           </KpiCard>
 
           <KpiCard
-            label="Gare RDO Attive / In Ritardo"
-            value={activeRfqsCount}
-            unit="gare"
+            label="In Gara (RDO)"
+            value={kpi.inGaraCount}
+            unit="articoli"
             icon={FileCheck2}
             borderClassName="border-l-purple-500"
             iconClassName="text-purple-500"
+            onClick={() => toggleKpiFilter("inGara")}
+            active={kpiFilter === "inGara"}
           >
+            <div>
+              {activeRfqsCount === 1 ? "1 gara RDO attiva" : `${activeRfqsCount} gare RDO attive`}
+            </div>
             {kpi.lateCount > 0 ? (
               <span className="font-medium text-red-500">
                 {kpi.lateCount === 1
@@ -410,6 +471,8 @@ export function AcquistiPage() {
             icon={AlertTriangle}
             borderClassName="border-l-indigo-500"
             iconClassName="text-indigo-500"
+            onClick={() => toggleKpiFilter("senzaCodice")}
+            active={kpiFilter === "senzaCodice"}
           >
             Assegna il codice con l'icona catena nella colonna Cod. ATEC
           </KpiCard>
@@ -434,7 +497,20 @@ export function AcquistiPage() {
                   className="pl-9 h-9 text-xs"
                 />
               </div>
+              {kpiFilter && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 gap-1 text-xs shrink-0"
+                  title="Togli il filtro della card"
+                  onClick={() => setKpiFilter(null)}
+                >
+                  Filtro: {KPI_FILTER_LABELS[kpiFilter]}
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
+            <DdpStatusLegend statuses={statuses} />
           </div>
         </div>
 
@@ -442,8 +518,9 @@ export function AcquistiPage() {
         <div className="space-y-6">
           {groupsByProject.length === 0 ? (
             <Card className="p-8 text-center text-muted-foreground text-sm">
-              Nessun articolo da acquistare qui: aggiungi righe nella DDP Commerciale della
-              commessa, oppure allarga i filtri.
+              {kpiFilter
+                ? `Nessuna riga «${KPI_FILTER_LABELS[kpiFilter]}» con i filtri attivi: clicca di nuovo la card (o il pulsante Filtro) per mostrare tutto.`
+                : "Nessun articolo da acquistare qui: aggiungi righe nella DDP Commerciale della commessa, oppure allarga i filtri."}
             </Card>
           ) : (
             groupsByProject.map((group) => (
@@ -452,7 +529,11 @@ export function AcquistiPage() {
                 group={group}
                 columns={columnsByProject.get(group.projectId) ?? []}
                 rowStyle={rowStyle}
-                onRequestRfq={handleOpenRfqModal}
+                // Dal pulsante di card si pesca la commessa INTERA (pre-filtro KPI);
+                // il pulsante di riga continua a passare la sola riga dalle colonne.
+                onRequestRfq={() =>
+                  handleOpenRfqModal(preKpiByProject.get(group.projectId) ?? group.items)
+                }
                 onOrderDanea={setOrderProject}
               />
             ))

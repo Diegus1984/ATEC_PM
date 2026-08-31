@@ -56,7 +56,9 @@ export function DaneaOrderBadge({
 }
 
 /** Card di riepilogo in testa alla pagina. Le classi colore arrivano complete
- *  (mai interpolate) altrimenti Tailwind non le include nel bundle. */
+ *  (mai interpolate) altrimenti Tailwind non le include nel bundle.
+ *  Con `onClick` la card diventa un filtro: click = applica, ri-click = toglie
+ *  (`active` accende l'anello e lo dice anche nel title). */
 export function KpiCard({
   label,
   value,
@@ -64,6 +66,8 @@ export function KpiCard({
   icon: Icon,
   borderClassName,
   iconClassName,
+  onClick,
+  active = false,
   children,
 }: {
   label: string
@@ -72,10 +76,40 @@ export function KpiCard({
   icon: LucideIcon
   borderClassName: string
   iconClassName: string
+  onClick?: () => void
+  active?: boolean
   children: React.ReactNode
 }) {
   return (
-    <Card className={cn("border-l-4 shadow-sm", borderClassName)}>
+    <Card
+      className={cn(
+        "border-l-4 shadow-sm",
+        borderClassName,
+        onClick && "cursor-pointer transition-shadow hover:shadow-md",
+        active && "ring-2 ring-primary/60"
+      )}
+      role={onClick ? "button" : undefined}
+      aria-pressed={onClick ? active : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      title={
+        onClick
+          ? active
+            ? "Filtro attivo: clicca di nuovo per mostrare tutto"
+            : "Clicca per vedere solo queste righe nelle griglie"
+          : undefined
+      }
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
+    >
       <CardHeader className="p-4 pb-2">
         <CardDescription className="text-xs font-semibold uppercase">{label}</CardDescription>
         <CardTitle className="text-2xl font-bold flex items-center justify-between">

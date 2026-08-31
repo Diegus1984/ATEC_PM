@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils"
 import { CodexPickerDialog } from "./CodexPickerDialog"
 import { DdpItemHistoryDialog } from "./DdpItemHistoryDialog"
 import { DdpStatusFilterBar } from "./DdpStatusFilterBar"
+import { DdpStatusLegend } from "./DdpStatusLegend"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { ddpTransitionsPerUtente } from "./ddp-constants"
 import { WORK_TYPE_META } from "./ddp-work-type"
@@ -567,6 +568,7 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
         }}
         toolbarActions={
           <>
+            <DdpStatusLegend statuses={statuses} />
             <span className="self-center text-sm font-medium">
               Totale:{" "}
               <span className="text-lg font-bold tabular-nums ml-1 text-blue-600 dark:text-blue-400">

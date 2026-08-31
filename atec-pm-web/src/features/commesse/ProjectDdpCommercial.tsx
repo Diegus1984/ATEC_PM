@@ -11,10 +11,10 @@ import {
   Plus,
   Trash2,
 } from "lucide-react"
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
-import { notifyError } from "@/lib/toast"
+import { notifyError, notifyInfo } from "@/lib/toast"
 import { formatDateShort } from "@/lib/date-iso"
 import { DataTableCardFiltered } from "@/components/shared/data-table-card-filtered"
 import { StackedDateLabel } from "@/components/shared/date-field"
@@ -32,7 +32,7 @@ import {
 import { fetchDdpRows, updateDdpRow, deleteDdpRow } from "@/lib/api/project-ddp"
 import type { DdpRowItem, SupplierLookupItem } from "@/lib/api/types"
 import { euro } from "@/lib/format"
-import { canWriteFeature } from "@/lib/auth/permissions"
+import { canAccessFeature, canWriteFeature } from "@/lib/auth/permissions"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 
 import { AtecPickerDialog } from "./AtecPickerDialog"
@@ -55,7 +55,12 @@ import { DdpStatusMenu } from "./DdpStatusMenu"
 import { ddpCommercialRowToSaveRequest } from "./ddp-commercial-row"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { isRawRow, RawRowBadge } from "./ddp-raw-row"
-import { ddpTransitionsPerUtente, isCommercialQtyEditable } from "./ddp-constants"
+import {
+  DDP_STATUS_TO_ORDER,
+  ddpTransitionsPerUtente,
+  isCommercialQtyEditable,
+} from "./ddp-constants"
+import { DdpStatusLegend } from "./DdpStatusLegend"
 import {
   buildCompositionRows,
   collectParentIds,
@@ -118,6 +123,17 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   const readOnly = !canWriteFeature("project.ddp_commerciale")
   const canHardDelete = canWriteFeature("action.delete_ddp_row") && !readOnly
   const canMapAtec = canWriteFeature("action.assign_atec_code") && !readOnly
+  // Link e cartello verso l'Inbox Acquisti solo per chi la può aprire: indicare
+  // una pagina che risponde «Accesso negato» non aiuta nessuno.
+  const canOpenAcquisti = canAccessFeature("nav.acquisti_inbox")
+  // Cartello unico «la riga si lavora nell'Inbox Acquisti»: lo usano sia il cambio
+  // stato in griglia sia il dialogo Modifica riga. Tace per chi non può aprirla.
+  const avvisaInboxAcquisti = React.useCallback(() => {
+    if (!canOpenAcquisti) return
+    notifyInfo(
+      "Riga in DA ORDINARE: gare e ordini si fanno da Acquisti → Inbox Acquisti (pulsante qui sopra)."
+    )
+  }, [canOpenAcquisti])
   const [searchParams] = useSearchParams()
   const highlightRowId = searchParams.get("item")
   const [dialogTarget, setDialogTarget] = React.useState<DdpRowItem | null>(null)
@@ -223,7 +239,10 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         row.id,
         ddpCommercialRowToSaveRequest(projectId, row, { itemStatus: statusKey })
       ),
-    onSuccess: () => invalidate(),
+    onSuccess: (_res, variables) => {
+      invalidate()
+      if (variables.statusKey === DDP_STATUS_TO_ORDER) avvisaInboxAcquisti()
+    },
     onError: onRowMutationError,
   })
 
@@ -1256,6 +1275,18 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         visibilityStorageKey="table-visibility-ddp-commerciale-v7"
         toolbarActions={
           <>
+            <DdpStatusLegend statuses={statuses} />
+            {/* Andata del giro acquisti: le righe in DA ORDINARE si lavorano lì. */}
+            {canOpenAcquisti ? (
+              <Button
+                size="sm"
+                variant="outline"
+                asChild
+                title="Le righe in DA ORDINARE si lavorano nell'Inbox Acquisti (gare RDO e ordini Danea)"
+              >
+                <Link to="/acquisti">Inbox Acquisti</Link>
+              </Button>
+            ) : null}
             <span className="self-center text-sm font-medium">
               Totale:{" "}
               <span className="text-lg font-bold tabular-nums ml-1 text-blue-600 dark:text-blue-400">
@@ -1308,9 +1339,19 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         transitions={transitionMap}
         destinations={destinations}
         onClose={() => setDialogTarget(null)}
-        onSaved={async () => {
+        onSaved={async (savedStatusKey) => {
+          // Lo stato di partenza va letto PRIMA di azzerare il target.
+          const statoPrima = dialogTarget?.itemStatus
           setDialogTarget(null)
           await invalidate()
+          // Stesso cartello del cambio stato in griglia: senza, chi passa dal
+          // dialogo Modifica non saprebbe che il giro prosegue nell'Inbox.
+          if (
+            savedStatusKey === DDP_STATUS_TO_ORDER &&
+            statoPrima !== DDP_STATUS_TO_ORDER
+          ) {
+            avvisaInboxAcquisti()
+          }
         }}
         onConflict={() => void invalidate()}
       />
