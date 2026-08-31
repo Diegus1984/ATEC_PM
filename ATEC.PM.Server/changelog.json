@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-1114",
+                     "data":  "2026-08-31T11:14:55",
+                     "hash":  "572396bc6d298fa52089958f791ccb0bcccb38fc",
+                     "modifiche":  [
+                                       "Popup ordine Danea: le descrizioni lunghe vanno a capo invece di traboccare",
+                                       "Mappa endpoint rigenerata dai test (article-image e by-ref del popup ordini)"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-1026",
                      "data":  "2026-08-31T10:26:44",
                      "hash":  "a33f3db387d2819e3df07f743084317379e09f67",
