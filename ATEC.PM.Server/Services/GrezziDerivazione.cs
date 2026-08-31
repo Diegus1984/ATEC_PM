@@ -41,6 +41,24 @@ namespace ATEC.PM.Server.Services;
 /// </summary>
 public static class GrezziDerivazione
 {
+    /// <summary>
+    /// Frammento SQL «questa riga è un grezzo <b>scoperto</b>» (#142): ha la derivazione
+    /// (<c>raw_codex_code</c>) ma il suo 201 non è associato a NESSUN articolo Danea attivo.
+    /// Il progettista può creare un 2xx prima di avere l'articolo da assegnargli: finché
+    /// resta scoperto la riga non cambia stato e non entra in RDO — prima si associa.
+    /// <para>Una copia sola, come la regola di smistamento: la usano il GET delle righe
+    /// (flag <c>RawNeedsMapping</c> in griglia), il PUT (blocco del cambio stato), la
+    /// creazione RDO e i test. Niente colonne nuove: appena l'associazione esiste la
+    /// condizione diventa falsa da sola.</para>
+    /// </summary>
+    /// <param name="aliasBom">Alias della <c>bom_items</c> nella query chiamante.</param>
+    public static string SqlGrezzoScoperto(string aliasBom) =>
+        $@"(COALESCE({aliasBom}.raw_codex_code,'') <> '' AND NOT EXISTS (
+            SELECT 1 FROM catalog_items ci_g
+            JOIN codex_items cx_g ON cx_g.id = ci_g.codex_item_id
+            WHERE ci_g.is_active = 1
+              AND REPLACE(cx_g.codice, '.', '') = {aliasBom}.raw_codex_code))";
+
     /// <summary>Cosa ha fatto una sincronizzazione: serve ai log e ai test.</summary>
     public sealed record Esito(int Creati, int Aggiornati, int Eliminati, int Sganciati)
     {
@@ -255,6 +273,84 @@ public static class GrezziDerivazione
             });
 
         return toccate > 0;
+    }
+
+    /// <summary>Esito di <see cref="ApplicaFornitore"/>: <c>Errore</c> pieno = niente scritto.</summary>
+    public sealed record EsitoFornitore(int RigaId, string? Errore)
+    {
+        public bool Ok => Errore == null && RigaId > 0;
+    }
+
+    /// <summary>
+    /// #142 — applica la SCELTA del fornitore alla riga grezzo di una commessa. Il motore
+    /// risolve da solo il solo caso «un articolo esatto» (<see cref="ArticoloDaCodex"/>);
+    /// con più alternative «la scelta è dell'utente, non nostra» — e arriva qui, dai
+    /// pannelli dei picker. Lo snapshot (codice, costo, produttore) si legge dal DB, mai
+    /// dal client. Vive nel servizio e non nel controller per essere testabile con la
+    /// stessa infrastruttura dei test del ricalcolo.
+    /// </summary>
+    public static EsitoFornitore ApplicaFornitore(
+        IDbConnection c, int projectId, string? rawCodexCode, int catalogItemId, int? updatedBy)
+    {
+        string chiave = ComposizioneDdp.Chiave(rawCodexCode);
+        if (chiave.Length == 0 || catalogItemId <= 0)
+            return new EsitoFornitore(0, "Richiesta incompleta.");
+
+        var riga = c.QueryFirstOrDefault<RigaGrezzo>(@"
+            SELECT b.id AS Id, COALESCE(b.raw_codex_code,'') AS RawCodexCode,
+                   b.quantity AS Quantity, b.raw_auto_qty AS RawAutoQty,
+                   COALESCE(b.item_status,'') AS ItemStatus,
+                   b.danea_order_iddoc AS DaneaOrderIddoc,
+                   (SELECT COUNT(*) FROM purchase_rfq_items i WHERE i.bom_item_id = b.id) AS RigheRdo
+            FROM bom_items b
+            WHERE b.project_id = @Id AND b.raw_codex_code = @Chiave",
+            new { Id = projectId, Chiave = chiave });
+        if (riga == null)
+            return new EsitoFornitore(0, "Riga grezzo non trovata in questa commessa.");
+
+        // Stessa nozione di «riga libera» del ricalcolo: su una riga già impegnata il
+        // fornitore non si cambia da un pannello — si gestisce dal giro acquisti.
+        if (!riga.Libera)
+            return new EsitoFornitore(riga.Id,
+                "La riga del grezzo è già impegnata (RDO, ordine o stato avanzato): il fornitore si gestisce da lì.");
+
+        // L'articolo scelto deve essere DAVVERO uno degli abbinamenti del 201 di derivazione.
+        var art = c.QueryFirstOrDefault<(int Id, string Code, string Unit, decimal? UnitCost, int? SupplierId, string Manufacturer)>(@"
+            SELECT ci.id, COALESCE(ci.code,''), COALESCE(ci.unit,''), ci.unit_cost,
+                   ci.supplier_id, COALESCE(ci.manufacturer,'')
+            FROM catalog_items ci
+            JOIN codex_items g ON g.id = ci.codex_item_id
+            WHERE ci.id = @CatalogItemId AND ci.is_active = 1
+              AND REPLACE(g.codice, '.', '') = @Chiave",
+            new { CatalogItemId = catalogItemId, Chiave = chiave });
+        if (art.Id == 0)
+            return new EsitoFornitore(riga.Id,
+                "L'articolo scelto non è fra quelli associati al 201 di derivazione.");
+
+        // Le condizioni di libertà anche nel WHERE: fra la lettura e la scrittura la riga
+        // può essere entrata in una RDO — meglio zero righe toccate che un fornitore
+        // cambiato sotto il naso di chi compra.
+        int toccate = c.Execute(@"
+            UPDATE bom_items b
+            SET b.supplier_id = @SupplierId, b.catalog_item_id = @CatalogItemId,
+                b.part_number = IF(@Code <> '', @Code, b.part_number),
+                b.manufacturer = @Manufacturer,
+                b.unit = IF(@Unit <> '', @Unit, b.unit),
+                b.unit_cost = COALESCE(@UnitCost, b.unit_cost),
+                b.updated_at = NOW(), b.updated_by = @By
+            WHERE b.id = @RigaId AND b.project_id = @Id
+              AND b.danea_order_iddoc IS NULL
+              AND UPPER(COALESCE(b.item_status,'')) IN ('VER','DO')
+              AND NOT EXISTS (SELECT 1 FROM purchase_rfq_items i WHERE i.bom_item_id = b.id)",
+            new
+            {
+                art.SupplierId, CatalogItemId = catalogItemId, art.Code, art.Manufacturer,
+                art.Unit, art.UnitCost, By = updatedBy, RigaId = riga.Id, Id = projectId
+            });
+        return toccate == 0
+            ? new EsitoFornitore(riga.Id,
+                "La riga del grezzo è stata impegnata nel frattempo: fornitore non cambiato.")
+            : new EsitoFornitore(riga.Id, null);
     }
 
     private static string Tronca(string? testo, int max)

@@ -1436,7 +1436,7 @@ public class ProjectsController : ControllerBase
             using var c = _db.Open();
             // COALESCE su tutte le colonne testo nullable: righe storiche/importate possono
             // avere NULL (lo schema lo permette) e un null manderebbe in crash le combo web.
-            var rows = c.Query<BomItemListItem>(@"
+            var rows = c.Query<BomItemListItem>($@"
             SELECT b.id, b.project_id AS ProjectId, b.catalog_item_id AS CatalogItemId,
                    COALESCE(b.part_number,'') AS PartNumber, COALESCE(b.description,'') AS Description,
                    COALESCE(b.unit,'') AS Unit, b.quantity,
@@ -1458,6 +1458,8 @@ public class ProjectsController : ControllerBase
                    -- #135: grezzo derivato da un 101 (vuoto = riga commerciale normale).
                    COALESCE(b.raw_codex_code,'') AS RawCodexCode,
                    COALESCE(b.raw_sources,'') AS RawSources, b.raw_auto_qty AS RawAutoQty,
+                   -- #142: grezzo «scoperto» → la riga si ferma finché il 201 non è associato.
+                   {GrezziDerivazione.SqlGrezzoScoperto("b")} AS RawNeedsMapping,
                    -- «Consegnato il»: valore salvato sulla riga oppure ultimo passaggio a DISP nella cronistoria.
                    COALESCE(b.delivered_at,
                              (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
@@ -1539,6 +1541,35 @@ public class ProjectsController : ControllerBase
         }
     }
 
+    // #142: applica la SCELTA del fornitore a una riga grezzo (nata dalla derivazione #135).
+    // La logica vera sta in GrezziDerivazione.ApplicaFornitore (testata coi test del
+    // ricalcolo): qui solo permessi, esiti HTTP e notifica real-time.
+    [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox", "project.ddp_officina")]
+    [HttpPost("{id}/ddp/raw-supplier")]
+    public IActionResult SetRawSupplier(int id, [FromBody] RawSupplierRequest req, [FromQuery] string? conn = null)
+    {
+        try
+        {
+            using var c = _db.Open();
+            int? firma = GetCurrentEmployeeId() > 0 ? GetCurrentEmployeeId() : null;
+            GrezziDerivazione.EsitoFornitore esito =
+                GrezziDerivazione.ApplicaFornitore(c, id, req.RawCodexCode, req.CatalogItemId, firma);
+            if (!esito.Ok)
+            {
+                return esito.RigaId == 0 && esito.Errore != null && esito.Errore.Contains("non trovata")
+                    ? NotFound(ApiResponse<bool>.Fail(esito.Errore))
+                    : BadRequest(ApiResponse<bool>.Fail(esito.Errore ?? "Fornitore non applicato."));
+            }
+
+            NotifyDdpChange(id, conn, "update", esito.RigaId);
+            return Ok(ApiResponse<bool>.Ok(true, "Fornitore applicato al grezzo"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
+
     [RequireFeature("project.ddp_commerciale", "nav.gestore_ddp", "nav.acquisti_inbox", "project.ddp_officina")]
     [HttpPut("{id}/ddp/{itemId}")]
     public IActionResult UpdateDdpItem(int id, int itemId, [FromBody] BomItemSaveRequest req, [FromQuery] string? conn = null)
@@ -1571,6 +1602,22 @@ public class ProjectsController : ControllerBase
             string? transitionError = DdpTransitionService.Validate(c, DdpTransitionService.TypeCommercial, oldStatus, req.ItemStatus, _cache, PuoScavalcareMatriceDdp());
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
+
+            // #142: un grezzo «scoperto» (201 senza articolo Danea associato) non avanza di
+            // stato — prima si associa il commerciale vero. Le altre modifiche (quantità,
+            // note, date) restano libere: fermo l'oggetto, non chi ci lavora attorno.
+            if (!string.Equals(oldStatus ?? "", req.ItemStatus ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                bool grezzoScoperto = c.ExecuteScalar<int>($@"
+                    SELECT COUNT(*) FROM bom_items b
+                    WHERE b.id = @ItemId AND b.project_id = @Id
+                      AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+                    new { ItemId = itemId, Id = id }) > 0;
+                if (grezzoScoperto)
+                    return BadRequest(ApiResponse<DateTime?>.Fail(
+                        "Grezzo da associare: il codice 201 di derivazione non è ancora associato " +
+                        "a nessun articolo commerciale. Associa l'articolo (Codex → Articoli Danea) e riprova."));
+            }
 
             // Quantità modificabile in VER (ingresso) o DO (da ordinare), o tornando in uno
             // di questi nella stessa save.

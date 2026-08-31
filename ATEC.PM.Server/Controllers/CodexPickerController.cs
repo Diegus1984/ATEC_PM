@@ -136,4 +136,100 @@ public class CodexPickerController : ControllerBase
             return Ok(ApiResponse<PagedResult<CodexPickerRow>>.Fail(ex.Message));
         }
     }
+
+    // #142: i lavorati 101 con grezzo commerciale (derivazione #135), visti dal lato
+    // acquisti — CodexId/CodiceAtec sono del 101, articolo/fornitore/costo vengono
+    // dall'abbinamento Danea del SUO 201. Un abbinamento = una riga, come sopra; un 201
+    // senza articoli resta visibile con una riga sola (fornitore di ripiego dal Codex),
+    // perché è proprio il caso «scoperto» che l'operatore deve vedere e sistemare.
+    [HttpGet("derivati-101")]
+    public IActionResult GetDerivati101(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
+        [FromQuery] string? codice = null,
+        [FromQuery] string? descr = null,
+        [FromQuery] string? articolo = null,
+        [FromQuery] string? fornitore = null,
+        [FromQuery] string? produttore = null)
+    {
+        try
+        {
+            (page, pageSize, int offset) = PagedQueryHelper.Normalize(page, pageSize);
+            // La derivazione vive solo sui particolari a disegno, ma il vincolo esplicito
+            // tiene fuori eventuali refusi storici di codex_item_references.
+            var clauses = new List<string>
+            {
+                "COALESCE(NULLIF(cx.codice_nuovo,''), cx.codice) LIKE '1%'"
+            };
+            var dp = new Dapper.DynamicParameters();
+
+            void AddLike(string sqlExpr, string? filter, string param)
+            {
+                string? pat = PagedQueryHelper.ToLikePattern(filter);
+                if (pat == null) return;
+                clauses.Add($"{sqlExpr} LIKE @{param}");
+                dp.Add(param, pat);
+            }
+
+            if (codice != null) codice = codice.Replace(".", "");
+            AddLike("REPLACE(COALESCE(NULLIF(cx.codice_nuovo,''), cx.codice), '.', '')", codice, "Codice");
+            string? descrPat = PagedQueryHelper.ToLikePattern(descr);
+            if (descrPat != null)
+            {
+                clauses.Add("(cx.descr LIKE @Descr OR ci.description LIKE @Descr)");
+                dp.Add("Descr", descrPat);
+            }
+            AddLike("ci.code", articolo, "Articolo");
+            AddLike("COALESCE(s.company_name, g.fornitore)", fornitore, "Fornitore");
+            AddLike("ci.manufacturer", produttore, "Produttore");
+
+            string from = @"
+            FROM codex_items cx
+            JOIN codex_item_references r ON r.source_codex_id = cx.id AND r.ref_type = '201'
+            JOIN codex_items g ON g.id = r.ref_codex_id
+            LEFT JOIN catalog_items ci ON ci.codex_item_id = g.id AND ci.is_active = 1
+            LEFT JOIN suppliers s ON s.id = ci.supplier_id";
+            string where = "WHERE " + string.Join(" AND ", clauses);
+
+            using var c = _db.Open();
+            int total = c.ExecuteScalar<int>($"SELECT COUNT(*) {from} {where}", dp);
+            dp.Add("Limit", pageSize);
+            dp.Add("Offset", offset);
+
+            var rows = c.Query<CodexPickerRow>($@"
+            SELECT cx.id AS CodexId,
+                   COALESCE(NULLIF(cx.codice_nuovo,''), cx.codice) AS CodiceAtec,
+                   COALESCE(cx.descr,'') AS Descr,
+                   COALESCE(cx.um,'') AS UmCodex,
+                   COALESCE(g.fornitore,'') AS FornitoreCodex,
+                   g.prezzo_forn AS PrezzoCodex,
+                   ci.id AS CatalogItemId,
+                   COALESCE(ci.code,'') AS CodiceArticolo,
+                   COALESCE(ci.unit,'') AS UnitArticolo,
+                   ci.unit_cost AS CostoArticolo,
+                   ci.supplier_id AS SupplierId,
+                   COALESCE(s.company_name,'') AS FornitoreNome,
+                   COALESCE(ci.manufacturer,'') AS Produttore,
+                   g.id AS GrezzoCodexId,
+                   COALESCE(NULLIF(g.codice_nuovo,''), g.codice) AS GrezzoCodice
+            {from}
+            {where}
+            ORDER BY CodiceAtec, ci.code
+            LIMIT @Limit OFFSET @Offset", dp).ToList();
+
+            int loaded = offset + rows.Count;
+            return Ok(ApiResponse<PagedResult<CodexPickerRow>>.Ok(new PagedResult<CodexPickerRow>
+            {
+                Items = rows,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize,
+                HasMore = loaded < total,
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<PagedResult<CodexPickerRow>>.Fail(ex.Message));
+        }
+    }
 }

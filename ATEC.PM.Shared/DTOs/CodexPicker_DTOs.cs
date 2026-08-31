@@ -28,4 +28,10 @@ public class CodexPickerRow
     public int? SupplierId { get; set; }
     public string FornitoreNome { get; set; } = "";
     public string Produttore { get; set; } = "";
+
+    // #142, solo righe di /api/codex/picker/derivati-101: il 201 di derivazione del 101.
+    // Lì CodexId/CodiceAtec sono del LAVORATO, mentre articolo/fornitore/costo vengono
+    // dall'abbinamento Danea del grezzo. Null/vuoto = riga del picker normale.
+    public int? GrezzoCodexId { get; set; }
+    public string GrezzoCodice { get; set; } = "";
 }

@@ -245,6 +245,7 @@ public class CodexController : ControllerBase
                    ubicazione AS Ubicazione, codexforn AS Codexforn,
                    -- #135: il grezzo 201 da cui deriva il particolare, già nella lista.
                    rc.ref_id AS RefCommercialeId,
+                   rc.ref_codex_item_id AS RefCommercialeCodexId,
                    COALESCE(rc.ref_codice,'') AS RefCommercialeCodice,
                    COALESCE(rc.ref_descr,'') AS RefCommercialeDescr
             FROM codex_items
@@ -254,6 +255,7 @@ public class CodexController : ControllerBase
             -- facendo esplodere ogni filtro e ogni ordinamento, non solo la colonna nuova.
             LEFT JOIN (
                 SELECT r.source_codex_id AS ref_source_id, r.id AS ref_id,
+                       x.id AS ref_codex_item_id,
                        x.codice AS ref_codice, COALESCE(x.descr,'') AS ref_descr
                 FROM codex_item_references r
                 JOIN codex_items x ON x.id = r.ref_codex_id

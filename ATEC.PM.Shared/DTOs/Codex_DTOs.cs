@@ -60,6 +60,10 @@ public class CodexListItem
     /// <summary>Id della riga di <c>codex_item_references</c>: serve alla DELETE.</summary>
     public int? RefCommercialeId { get; set; }
 
+    /// <summary>Id Codex del 201 di derivazione: da qui si arriva ai suoi articoli Danea
+    /// (<c>/catalog-mapping/by-codex</c>) senza un giro in più (#142).</summary>
+    public int? RefCommercialeCodexId { get; set; }
+
     private string _refCommercialeCodice = "";
     /// <summary>Codice del 201 di derivazione, col punto come tutti gli altri codici Codex.</summary>
     public string RefCommercialeCodice

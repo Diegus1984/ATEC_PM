@@ -147,6 +147,20 @@ public class PurchaseRfqController : ControllerBase
                 "crearne un'altra. Per rifare la gara, annulla prima quella esistente."));
         }
 
+        // #142: un grezzo «scoperto» (201 di derivazione senza articoli Danea associati) non
+        // entra in gara: non esiste nemmeno il listino da cui pescare le offerte. Rifiuto
+        // esplicito, non skip silenzioso: chi l'ha selezionato deve capire cosa manca.
+        var grezziScoperti = c.Query<string>($@"
+            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
+            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+            new { Ids = bomRows.Select(r => r.Id).ToList() }).ToList();
+        if (grezziScoperti.Count > 0)
+            return Ok(ApiResponse<List<int>>.Fail(
+                "Grezzo da associare: il codice " +
+                string.Join(", ", grezziScoperti.Select(CodexListItem.FormatCodice)) +
+                " non è associato a nessun articolo commerciale. Associa l'articolo " +
+                "(Codex → Articoli Danea) e riprova."));
+
         // Una gara = UN articolo, e la regola deve valere anche QUI, non solo nel client:
         // il raggruppamento per codice lo fa CreateRfqDialog, ma un bundle web vecchio in
         // cache (o una chiamata diretta) manderebbe ancora righe di articoli diversi sotto
@@ -334,6 +348,18 @@ public class PurchaseRfqController : ControllerBase
             return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
                 "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
                 "Per rifare la gara, annulla prima quella esistente."));
+        // #142: stessa guardia del Create — un grezzo scoperto non entra in gara.
+        var grezziScopertiOffers = c.Query<string>($@"
+            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
+            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+            new { Ids = rows.Select(r => r.Id).ToList() }).ToList();
+        if (grezziScopertiOffers.Count > 0)
+            return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
+                "Grezzo da associare: il codice " +
+                string.Join(", ", grezziScopertiOffers.Select(CodexListItem.FormatCodice)) +
+                " non è associato a nessun articolo commerciale. Associa l'articolo " +
+                "(Codex → Articoli Danea) e riprova."));
+
         var suppliersByRow = selections
             .GroupBy(s => s.BomItemId)
             .ToDictionary(g => g.Key, g => g.SelectMany(s => s.SupplierIds).Distinct().ToList());

@@ -278,6 +278,26 @@ public class CatalogMappingController : ControllerBase
 
         c.Execute(@"UPDATE catalog_items SET atec_code = @Code, codex_item_id = @CodexId WHERE id = @Id",
             new { Code = newCode, CodexId = codexItemId, Id = catalogItemId });
+
+        // #142: se il codice appena associato è il 201 di qualche grezzo, quelle righe erano
+        // FERME («grezzo da associare», bordo lampeggiante): un DdpChanged per commessa e le
+        // griglie aperte si sbloccano da sole, senza aspettare un ricarico.
+        string chiaveGrezzo = c.ExecuteScalar<string?>(
+            "SELECT REPLACE(codice, '.', '') FROM codex_items WHERE id = @Id",
+            new { Id = codexItemId }) ?? "";
+        if (chiaveGrezzo.Length > 0)
+        {
+            foreach (int projectId in c.Query<int>(
+                "SELECT DISTINCT project_id FROM bom_items WHERE raw_codex_code = @Chiave",
+                new { Chiave = chiaveGrezzo }))
+            {
+                var payload = new DdpChange
+                    { ProjectId = projectId, Action = "update", ItemId = 0, DdpType = "COMMERCIAL" };
+                foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
+                    _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+            }
+        }
+
         return (ApiResponse<CatalogMappingAssignResult>.Ok(
             new CatalogMappingAssignResult { Assigned = true },
             $"Associato a {CodexListItem.FormatCodice(newCode)}"), newCode);

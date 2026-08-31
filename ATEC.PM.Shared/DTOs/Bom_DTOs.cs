@@ -96,11 +96,32 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// </summary>
     public decimal? RawAutoQty { get; set; }
 
+    /// <summary>
+    /// #142 — grezzo <b>scoperto</b>: il suo 201 non è associato a nessun articolo Danea.
+    /// La riga non cambia stato e non entra in RDO finché qualcuno non fa l'associazione
+    /// (il flag è calcolato dal server: allo sblocco sparisce da solo).
+    /// </summary>
+    public bool RawNeedsMapping { get; set; }
+
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// #142 — scelta del fornitore per una riga <b>grezzo</b> (POST <c>/projects/{id}/ddp/raw-supplier</c>).
+/// Con più articoli Danea sullo stesso 201 il motore lascia la riga senza fornitore
+/// («la scelta è dell'utente, non nostra»): la scelta arriva da qui, dai pannelli dei picker.
+/// </summary>
+public class RawSupplierRequest
+{
+    /// <summary>Codice del 201 di derivazione (con o senza punti): identifica la riga grezzo della commessa.</summary>
+    public string RawCodexCode { get; set; } = "";
+
+    /// <summary>L'articolo Danea scelto fra quelli associati al 201.</summary>
+    public int CatalogItemId { get; set; }
 }
 
 public class BomItemSaveRequest
