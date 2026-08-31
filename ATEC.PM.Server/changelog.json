@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-0948",
+                     "data":  "2026-08-31T09:48:15",
+                     "hash":  "7bd125901466f64c7def0eff7c1f7af4dafcbdec",
+                     "modifiche":  [
+                                       "Ordini Danea: ricerca per numero con ripiego sul VECCHIO archivio"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-0917",
                      "data":  "2026-08-31T09:17:50",
                      "hash":  "5db10b5774294212d5b181c27801df95d4fb9b5e",
