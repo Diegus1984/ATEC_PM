@@ -27,11 +27,12 @@ public class DaneaOrderService
     public record OrderLine(string CodArticolo, decimal Qta, decimal PrezzoNetto);
     public record OrderResult(int IdDoc, int Num);
 
-    private string ConnStr()
+    private string ConnStr(bool vecchioArchivio = false)
     {
-        string filePath = _config["DaneaSync:EftFilePath"] ?? "";
+        string chiave = vecchioArchivio ? "DaneaSync:EftFilePathOld" : "DaneaSync:EftFilePath";
+        string filePath = _config[chiave] ?? "";
         if (string.IsNullOrEmpty(filePath))
-            throw new InvalidOperationException("DaneaSync:EftFilePath non configurato.");
+            throw new InvalidOperationException($"{chiave} non configurato.");
 
         int serverType = int.TryParse(_config["DaneaSync:FbServerType"], out int st) ? st : 1;
         var csb = new FbConnectionStringBuilder
@@ -310,7 +311,77 @@ public class DaneaOrderService
     {
         using var c = new FbConnection(ConnStr());
         c.Open();
+        return CaricaOrdine(c, idDoc);
+    }
 
+    /// <summary>
+    /// Rif. Danea scritto a mano («123», «123/26», «123/2026») → numero e anno.
+    /// La numerazione Danea riparte ogni anno, quindi l'anno conta quando c'è.
+    /// </summary>
+    public static bool TryParseRif(string? rif, out int num, out int? anno)
+    {
+        num = 0;
+        anno = null;
+        // [0-9] e non \d: nel regex .NET \d accetta anche le cifre Unicode (es. «１２３»
+        // da un copia-incolla) che poi int.Parse rifiuta — e un Try* non deve lanciare.
+        var m = System.Text.RegularExpressions.Regex.Match(
+            (rif ?? "").Trim(), @"^([0-9]{1,6})(?:\s*/\s*([0-9]{2}|[0-9]{4}))?$");
+        if (!m.Success) return false;
+        num = int.Parse(m.Groups[1].Value);
+        if (m.Groups[2].Success)
+        {
+            int a = int.Parse(m.Groups[2].Value);
+            anno = a < 100 ? 2000 + a : a;
+        }
+        return num > 0;
+    }
+
+    /// <summary>
+    /// Cerca un ordine fornitore per numero (e anno, se noto) nell'archivio scelto:
+    /// serve durante la migrazione, quando un Rif. Danea scritto a mano può puntare
+    /// al vecchio archivio. Senza anno si prende il documento più recente.
+    /// </summary>
+    public ATEC.PM.Shared.DTOs.DaneaOrderView? GetOrderByNumero(int num, int? anno, bool vecchioArchivio)
+    {
+        using var c = new FbConnection(ConnStr(vecchioArchivio));
+        c.Open();
+
+        int? idDoc = TrovaIdDoc(c, num, anno);
+        return idDoc.HasValue ? CaricaOrdine(c, idDoc.Value) : null;
+    }
+
+    /// <summary>
+    /// C'è un ordine fornitore con questo numero nell'archivio scelto? Serve al
+    /// controllo di ambiguità fra archivio attuale e vecchio durante la migrazione.
+    /// </summary>
+    public bool EsisteOrdine(int num, int? anno, bool vecchioArchivio)
+    {
+        using var c = new FbConnection(ConnStr(vecchioArchivio));
+        c.Open();
+        return TrovaIdDoc(c, num, anno).HasValue;
+    }
+
+    private static int? TrovaIdDoc(FbConnection c, int num, int? anno)
+    {
+        // Danea riparte da 1 per ogni serie di numerazione («Numeraz»): a parità di
+        // numero si PREFERISCE la serie base (vuota, quella che usa ATEC PM), ma le
+        // serie con suffisso non si escludono — nel VECCHIO archivio gli ordini 2026
+        // stanno proprio in una serie nominata, e il «123/26» scritto a mano è quello.
+        string sql = @"
+            SELECT FIRST 1 ""IDDoc"" FROM ""TDocTestate""
+            WHERE ""TipoDoc"" = 'E' AND ""Num"" = @Num" +
+            (anno.HasValue ? @" AND EXTRACT(YEAR FROM ""Data"") = @Anno" : "") +
+            @" ORDER BY CASE WHEN ""Numeraz"" IS NULL OR ""Numeraz"" = '' THEN 0 ELSE 1 END, ""Data"" DESC";
+        using var cmd = new FbCommand(sql, c);
+        cmd.Parameters.AddWithValue("@Num", num);
+        if (anno.HasValue) cmd.Parameters.AddWithValue("@Anno", anno.Value);
+        var res = cmd.ExecuteScalar();
+        if (res == null || res == DBNull.Value) return null;
+        return Convert.ToInt32(res);
+    }
+
+    private static ATEC.PM.Shared.DTOs.DaneaOrderView? CaricaOrdine(FbConnection c, int idDoc)
+    {
         ATEC.PM.Shared.DTOs.DaneaOrderView view;
         using (var cmd = new FbCommand(@"
             SELECT ""IDDoc"", ""Num"", ""Data"", ""DescDoc"", ""StatoOrdine"", ""Magazz"",

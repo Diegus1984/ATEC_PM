@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 30/08/2026 12:44.
+> Fotografia del 31/08/2026 09:45.
 
 ## Chiavi con endpoint
 
@@ -199,6 +199,7 @@
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
+- `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
 - `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `GET /api/purchase-rfqs` (PurchaseRfqController.List)
@@ -750,6 +751,8 @@
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
+- `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)

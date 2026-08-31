@@ -146,6 +146,10 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   const [assignTarget, setAssignTarget] = React.useState<DdpRowItem | null>(null)
   /** IDDoc dell'ordine Danea da mostrare nel popup di rendering (link sul Rif. Danea). */
   const [daneaOrderIdDoc, setDaneaOrderIdDoc] = React.useState<number | null>(null)
+  // Rif. Danea a mano senza IdDoc (migrazione): il popup cerca per numero,
+  // anche nel vecchio archivio. Attivo solo in sola lettura (in modifica la
+  // cella è un campo di testo).
+  const [daneaOrderRef, setDaneaOrderRef] = React.useState<string | null>(null)
   const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<
     Set<string>
   >(() => new Set())
@@ -958,7 +962,23 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               {row.original.daneaRef || "—"}
             </button>
           ) : readOnly ? (
-            <span>{row.original.daneaRef || "—"}</span>
+            row.original.daneaRef?.trim() ? (
+              // Rif. scritto a mano, senza IdDoc: ricerca per numero (in
+              // migrazione l'ordine può stare ancora nel VECCHIO archivio).
+              <button
+                type="button"
+                className="font-medium text-teal-700 underline underline-offset-2 hover:text-teal-800"
+                title={`Cerca l'ordine n. ${row.original.daneaRef.trim()} in Danea (anche nel vecchio archivio)`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDaneaOrderRef(row.original.daneaRef!.trim())
+                }}
+              >
+                {row.original.daneaRef}
+              </button>
+            ) : (
+              <span>—</span>
+            )
           ) : (
             <DdpInlineTextCell
               value={row.original.daneaRef ?? ""}
@@ -1413,7 +1433,11 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
 
       <DaneaOrderDialog
         idDoc={daneaOrderIdDoc}
-        onClose={() => setDaneaOrderIdDoc(null)}
+        daneaRef={daneaOrderRef}
+        onClose={() => {
+          setDaneaOrderIdDoc(null)
+          setDaneaOrderRef(null)
+        }}
       />
     </>
   )

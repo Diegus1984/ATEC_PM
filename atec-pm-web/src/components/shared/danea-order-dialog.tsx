@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
-import { fetchDaneaOrder } from "@/lib/api/danea-orders"
+import { fetchDaneaOrder, fetchDaneaOrderByRef } from "@/lib/api/danea-orders"
 import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 
@@ -35,20 +35,32 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
  */
 export function DaneaOrderDialog({
   idDoc,
+  daneaRef = null,
   onClose,
 }: {
   idDoc: number | null
+  /**
+   * Rif. Danea scritto a mano (es. «123/26»): si usa quando l'IdDoc non c'è —
+   * il server cerca per numero, prima nell'archivio attuale e poi nel VECCHIO
+   * (siamo in migrazione: gli ordini storici stanno ancora lì).
+   */
+  daneaRef?: string | null
   onClose: () => void
 }) {
+  const aperto = idDoc != null || !!daneaRef
   const query = useQuery({
-    queryKey: ["danea-order", idDoc],
-    queryFn: () => fetchDaneaOrder(idDoc!),
-    enabled: idDoc != null,
+    queryKey: ["danea-order", idDoc, daneaRef],
+    queryFn: () =>
+      idDoc != null ? fetchDaneaOrder(idDoc) : fetchDaneaOrderByRef(daneaRef!),
+    enabled: aperto,
+    // «Non trovato» e «rif malformato» sono esiti deterministici: il retry
+    // rifarebbe solo l'intera doppia scansione Firebird (nuovo + vecchio).
+    retry: false,
   })
   const order = query.data
 
   return (
-    <Dialog open={idDoc != null} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={aperto} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -61,9 +73,21 @@ export function DaneaOrderDialog({
             {/* Il nome leggibile dell'archivio è «Danea»: «Atec_PM» da solo si
                 confonde col programma ATEC PM (resta tra parentesi nel caricamento). */}
             {order
-              ? `Danea · ${ORDER_STATUS_LABELS[order.orderStatus] ?? order.orderStatus} · Magazzino ${order.warehouse || "—"}`
-              : "Lettura da Danea (Atec_PM)…"}
+              ? `${order.archivio === "VECCHIO" ? "Danea — VECCHIO archivio (Srl-2020-2021)" : "Danea"} · ${ORDER_STATUS_LABELS[order.orderStatus] ?? order.orderStatus} · Magazzino ${order.warehouse || "—"}`
+              : "Lettura da Danea…"}
           </DialogDescription>
+          {order?.archivio === "VECCHIO" ? (
+            <p className="rounded border border-amber-500/60 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+              Questo ordine sta nel VECCHIO archivio Danea: non è ancora stato
+              migrato in Atec_PM.
+            </p>
+          ) : order?.ambiguoConVecchio ? (
+            <p className="rounded border border-amber-500/60 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+              Attenzione: un ordine con lo stesso numero esiste anche nel VECCHIO
+              archivio Danea. Questo è quello dell'archivio attuale — controlla che
+              il fornitore sia quello che ti aspetti.
+            </p>
+          ) : null}
         </DialogHeader>
 
         {query.isError ? (

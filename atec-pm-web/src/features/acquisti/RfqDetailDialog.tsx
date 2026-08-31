@@ -52,6 +52,7 @@ export function RfqDetailDialog({
   onChanged,
   onUpdateRow,
   onOpenDaneaOrder,
+  onOpenDaneaOrderByRef,
 }: {
   rfqId: number | null
   onClose: () => void
@@ -65,6 +66,8 @@ export function RfqDetailDialog({
     dateNeeded?: string | null
   }) => void
   onOpenDaneaOrder: (idDoc: number) => void
+  /** Numero ordine senza IdDoc (migrazione): ricerca per numero, anche nel vecchio archivio. */
+  onOpenDaneaOrderByRef: (rif: string) => void
 }) {
   const confirm = useConfirm()
   const [expectedDate, setExpectedDate] = React.useState<string | null>(null)
@@ -828,10 +831,12 @@ export function RfqDetailDialog({
               <DaneaOrderBadge
                 label={`Ordine Danea n. ${rfqOrder.num ?? rfqOrder.idDoc ?? "Registrato"}`}
                 idDoc={rfqOrder.idDoc}
+                daneaRef={rfqOrder.num != null ? String(rfqOrder.num) : null}
                 icon={FileCheck2}
                 iconClassName="size-4 text-teal-600"
                 className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 underline-offset-2 hover:underline bg-teal-50 dark:bg-teal-950/40 px-3 py-1.5 rounded-lg border border-teal-200"
                 onOpen={onOpenDaneaOrder}
+                onOpenByRef={onOpenDaneaOrderByRef}
               />
             ) : rfqDetail &&
               rfqDetail.status !== "CANCELLED" &&

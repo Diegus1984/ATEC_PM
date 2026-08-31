@@ -19,21 +19,27 @@ import { cn } from "@/lib/utils"
 
 import { buildStatusCounts } from "./acquisti-shared"
 
-/** Badge «Ordine Danea»: link che apre il documento se c'è l'IDDoc, altrimenti testo. */
+/** Badge «Ordine Danea»: link che apre il documento se c'è l'IDDoc; senza IDDoc
+ *  ma con un Rif. Danea scritto a mano apre la ricerca per numero (che in
+ *  migrazione pesca anche dal VECCHIO archivio); altrimenti testo. */
 export function DaneaOrderBadge({
   label,
   idDoc,
+  daneaRef = null,
   icon: Icon,
   className,
   iconClassName = "size-4",
   onOpen,
+  onOpenByRef,
 }: {
   label: string
   idDoc: number | null
+  daneaRef?: string | null
   icon: LucideIcon
   className?: string
   iconClassName?: string
   onOpen: (idDoc: number) => void
+  onOpenByRef?: (rif: string) => void
 }) {
   const inner = (
     <>
@@ -41,18 +47,32 @@ export function DaneaOrderBadge({
       {label}
     </>
   )
-  return idDoc != null ? (
-    <button
-      type="button"
-      className={className}
-      title="Apri ordine Danea"
-      onClick={() => onOpen(idDoc)}
-    >
-      {inner}
-    </button>
-  ) : (
-    <span className={className}>{inner}</span>
-  )
+  if (idDoc != null) {
+    return (
+      <button
+        type="button"
+        className={className}
+        title="Apri ordine Danea"
+        onClick={() => onOpen(idDoc)}
+      >
+        {inner}
+      </button>
+    )
+  }
+  if (daneaRef?.trim() && onOpenByRef) {
+    const rif = daneaRef.trim()
+    return (
+      <button
+        type="button"
+        className={className}
+        title={`Cerca l'ordine n. ${rif} in Danea (anche nel vecchio archivio)`}
+        onClick={() => onOpenByRef(rif)}
+      >
+        {inner}
+      </button>
+    )
+  }
+  return <span className={className}>{inner}</span>
 }
 
 /** Card di riepilogo in testa alla pagina. Le classi colore arrivano complete

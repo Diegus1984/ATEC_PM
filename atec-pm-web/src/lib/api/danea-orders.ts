@@ -8,3 +8,14 @@ export async function fetchDaneaOrder(idDoc: number): Promise<DaneaOrderView> {
   )
   return unwrapApi(response)
 }
+
+/**
+ * Ricerca per numero d'ordine (Rif. Danea scritto a mano, es. «123/26»):
+ * il server guarda prima l'archivio attuale e poi il vecchio (migrazione).
+ */
+export async function fetchDaneaOrderByRef(rif: string): Promise<DaneaOrderView> {
+  const response = await apiGet<ApiResponse<DaneaOrderView>>(
+    `/api/danea-orders/by-ref?rif=${encodeURIComponent(rif)}`
+  )
+  return unwrapApi(response)
+}

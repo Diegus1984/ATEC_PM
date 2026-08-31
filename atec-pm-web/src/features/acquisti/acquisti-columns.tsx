@@ -27,6 +27,7 @@ export function buildAcquistiColumns({
   onAssignAtec,
   onOpenRfqDetail,
   onOpenDaneaOrder,
+  onOpenDaneaOrderByRef,
   onRequestRfq,
 }: {
   /** Righe di QUESTA griglia: alimentano il combo di filtro della colonna Stato. */
@@ -40,6 +41,8 @@ export function buildAcquistiColumns({
   onAssignAtec: (item: AcquistiInboxItem) => void
   onOpenRfqDetail: (rfqId: number) => void
   onOpenDaneaOrder: (idDoc: number) => void
+  /** Rif. Danea a mano senza IdDoc: ricerca per numero (anche vecchio archivio). */
+  onOpenDaneaOrderByRef: (rif: string) => void
   onRequestRfq: (items: AcquistiInboxItem[]) => void
 }): ColumnDef<AcquistiInboxItem>[] {
   return [
@@ -221,10 +224,12 @@ export function buildAcquistiColumns({
             <DaneaOrderBadge
               label={`In Ordine${item.daneaRef ? ` #${item.daneaRef}` : ""}`}
               idDoc={item.daneaOrderIdDoc ?? null}
+              daneaRef={item.daneaRef ?? null}
               icon={CheckCircle2}
               iconClassName="size-3"
               className="inline-flex items-center gap-1 font-mono text-xs font-semibold underline-offset-2 hover:underline"
               onOpen={onOpenDaneaOrder}
+              onOpenByRef={onOpenDaneaOrderByRef}
             />
           )
         }

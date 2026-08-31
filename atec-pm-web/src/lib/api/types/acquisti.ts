@@ -132,6 +132,10 @@ export interface PurchaseRfqEmailCandidate {
 export interface DaneaOrderView {
   idDoc: number
   num: number
+  /** "VECCHIO" se il documento arriva dal vecchio archivio Danea (migrazione). */
+  archivio?: string
+  /** Trovato nell'attuale, ma un ordine con lo stesso numero esiste anche nel vecchio. */
+  ambiguoConVecchio?: boolean
   date: string | null
   descDoc: string
   orderStatus: string
@@ -145,9 +149,10 @@ export interface DaneaOrderView {
   supplierProvince: string
   supplierCountry: string
   supplierVat: string
-  totNet: number
-  totVat: number
-  totDoc: number
+  // Campi economici [DatoSensibile]: assenti per chi non ha il micro «prices».
+  totNet?: number | null
+  totVat?: number | null
+  totDoc?: number | null
   rows: DaneaOrderRowView[]
   vatSummary: DaneaOrderVatView[]
 }
@@ -158,14 +163,14 @@ export interface DaneaOrderRowView {
   description: string
   quantity: number
   unit: string
-  unitPrice: number
+  unitPrice?: number | null
   vatCode: string
-  netAmount: number
-  grossAmount: number
+  netAmount?: number | null
+  grossAmount?: number | null
 }
 
 export interface DaneaOrderVatView {
   vatCode: string
-  netAmount: number
-  vatAmount: number
+  netAmount?: number | null
+  vatAmount?: number | null
 }

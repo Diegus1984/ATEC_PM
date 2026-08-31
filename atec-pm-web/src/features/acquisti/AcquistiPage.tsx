@@ -96,6 +96,8 @@ export function AcquistiPage() {
     projectCode: string
   } | null>(null)
   const [daneaOrderIdDoc, setDaneaOrderIdDoc] = React.useState<number | null>(null)
+  // Rif. Danea a mano senza IdDoc (migrazione): il popup cerca per numero.
+  const [daneaOrderRef, setDaneaOrderRef] = React.useState<string | null>(null)
   const [createRfqTargetItems, setCreateRfqTargetItems] = React.useState<
     AcquistiInboxItem[] | null
   >(null)
@@ -360,6 +362,7 @@ export function AcquistiPage() {
                 onAssignAtec: setAssignDialogItem,
                 onOpenRfqDetail: setSelectedRfqDetailId,
                 onOpenDaneaOrder: setDaneaOrderIdDoc,
+                onOpenDaneaOrderByRef: setDaneaOrderRef,
                 onRequestRfq: handleOpenRfqModal,
               }),
             ] as const
@@ -557,6 +560,7 @@ export function AcquistiPage() {
         onChanged={invalidateLists}
         onUpdateRow={(data) => updateRowMutation.mutate(data)}
         onOpenDaneaOrder={setDaneaOrderIdDoc}
+        onOpenDaneaOrderByRef={setDaneaOrderRef}
       />
 
       {/* Dialog Assegnazione Codice ATEC */}
@@ -585,7 +589,14 @@ export function AcquistiPage() {
       />
 
       {/* Popup anteprima ordine fornitore come su Danea */}
-      <DaneaOrderDialog idDoc={daneaOrderIdDoc} onClose={() => setDaneaOrderIdDoc(null)} />
+      <DaneaOrderDialog
+        idDoc={daneaOrderIdDoc}
+        daneaRef={daneaOrderRef}
+        onClose={() => {
+          setDaneaOrderIdDoc(null)
+          setDaneaOrderRef(null)
+        }}
+      />
     </div>
   )
 }
