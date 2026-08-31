@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-0917",
+                     "data":  "2026-08-31T09:17:50",
+                     "hash":  "5db10b5774294212d5b181c27801df95d4fb9b5e",
+                     "modifiche":  [
+                                       "Inbox Acquisti: card KPI cliccabili, legenda stati, link DDP-Inbox"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-0754",
                      "data":  "2026-08-31T07:55:03",
                      "hash":  "f196d071a99a7b25cf920e391ac4460486dbbc6a",
