@@ -31,7 +31,12 @@ import {
   fetchDdpStatusTransitions,
 } from "@/lib/api/ddp-config"
 import { fetchDdpRows, updateDdpRow, deleteDdpRow } from "@/lib/api/project-ddp"
-import type { DdpRowItem, SupplierLookupItem } from "@/lib/api/types"
+import { fetchCodex } from "@/lib/api/codex"
+import type {
+  CodexListItem,
+  DdpRowItem,
+  SupplierLookupItem,
+} from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { canAccessFeature, canWriteFeature } from "@/lib/auth/permissions"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
@@ -40,6 +45,7 @@ import { AtecPickerDialog } from "./AtecPickerDialog"
 import { CodexPickerDialog } from "./CodexPickerDialog"
 import { DdpAtecAlternativesDialog } from "./DdpAtecAlternativesDialog"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
+import { CodexDaneaMappingDialog } from "@/features/codex/CodexDaneaMappingDialog"
 import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
 import {
   DdpDestinationCell,
@@ -145,6 +151,9 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   const [storiaTarget, setStoriaTarget] = React.useState<DdpRowItem | null>(null)
   /** Riga senza ATEC: apre CatalogAtecAssignDialog (come Inbox Acquisti). */
   const [assignTarget, setAssignTarget] = React.useState<DdpRowItem | null>(null)
+  /** #142 — 201 del grezzo «da associare»: apre CodexDaneaMappingDialog dalla riga. */
+  const [rawMappingTarget, setRawMappingTarget] =
+    React.useState<CodexListItem | null>(null)
   /** IDDoc dell'ordine Danea da mostrare nel popup di rendering (link sul Rif. Danea). */
   const [daneaOrderIdDoc, setDaneaOrderIdDoc] = React.useState<number | null>(null)
   // Rif. Danea a mano senza IdDoc (migrazione): il popup cerca per numero,
@@ -206,6 +215,32 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         queryKey: ["project-ddp", projectId, "COMMERCIAL"],
       }),
     [queryClient, projectId]
+  )
+
+  // #142 — dalla pillola «da associare» al dialog di associazione del 201: la riga
+  // porta solo il CODICE del grezzo, la riga Codex vera si ripesca dall'archivio.
+  const apriAssociaGrezzo = React.useCallback(
+    async (row: DdpRowItem) => {
+      const raw = (row.rawCodexCode ?? "").replace(/\./g, "").trim()
+      if (!raw) return
+      try {
+        const page = await fetchCodex({ search: raw, pageSize: 20 })
+        const codex =
+          page.items.find(
+            (i) =>
+              i.codice.replace(/\./g, "") === raw ||
+              (i.codiceNuovo ?? "").replace(/\./g, "") === raw
+          ) ?? null
+        if (!codex) {
+          notifyError(`Codice ${row.rawCodexCode} non trovato nel Codex.`)
+          return
+        }
+        setRawMappingTarget(codex)
+      } catch (err) {
+        notifyError(err)
+      }
+    },
+    []
   )
 
   const onDdpChange = React.useCallback(
@@ -791,8 +826,18 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               ) : null}
               {item.partNumber || "—"}
               {/* #135: la riga è il grezzo di uno o più particolari a disegno — non è
-                  una riga come le altre e non si toglie da qui (title del badge). */}
-              {isRawRow(item) ? <RawRowBadge row={item} /> : null}
+                  una riga come le altre e non si toglie da qui (title del badge).
+                  #142: se il grezzo è «scoperto» la pillola apre l'associazione del 201. */}
+              {isRawRow(item) ? (
+                <RawRowBadge
+                  row={item}
+                  onAssocia={
+                    canMapAtec && item.rawNeedsMapping
+                      ? () => void apriAssociaGrezzo(item)
+                      : undefined
+                  }
+                />
+              ) : null}
             </span>
           )
         },
@@ -926,8 +971,20 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               <span className="min-w-0 flex-1 truncate font-semibold whitespace-nowrap">
                 {s ? s.label : row.original.itemStatus || "—"}
               </span>
-              {/* Il menu «⋮» cambia lo stato della riga: in sola lettura non compare. */}
-              {readOnly ? null : (
+              {/* Il menu «⋮» cambia lo stato della riga: in sola lettura non compare.
+                  #142: un grezzo «scoperto» non avanza — menu spento (il server
+                  rifiuterebbe comunque), la spiegazione sta nel title. */}
+              {readOnly ? null : row.original.rawNeedsMapping ? (
+                <span title="Grezzo da associare: il 201 di derivazione non è associato a nessun articolo commerciale. Associa l'articolo (pillola «da associare» sul Codice) e lo stato si sblocca.">
+                  <DdpStatusMenu
+                    currentStatusKey={row.original.itemStatus}
+                    statuses={statuses}
+                    transitions={transitionMap}
+                    disabled
+                    onSelect={() => undefined}
+                  />
+                </span>
+              ) : (
                 <DdpStatusMenu
                   currentStatusKey={row.original.itemStatus}
                   statuses={statuses}
@@ -1237,6 +1294,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       excludedSet,
       transitionMap,
       canMapAtec,
+      apriAssociaGrezzo,
       // Senza questa dipendenza le celle resterebbero quelle scrivibili della prima
       // costruzione delle colonne (memo non ricalcolato) nonostante la sola lettura.
       readOnly,
@@ -1259,9 +1317,17 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
   const excludedValue = excludedRows.reduce((s, r) => s + (r.totalCost || 0), 0)
 
   const rowStyle = React.useCallback(
-    (row: DdpRowItem) => {
+    (row: DdpRowItem): React.CSSProperties | undefined => {
       const s = statusMap.get(row.itemStatus)
-      return s ? { backgroundColor: s.colorBg, color: s.colorFg } : undefined
+      const base: React.CSSProperties = s
+        ? { backgroundColor: s.colorBg, color: s.colorFg }
+        : {}
+      // #142: grezzo «scoperto» — bordo interno ambra che pulsa (keyframes in index.css)
+      // finché il 201 non viene associato a un articolo commerciale.
+      if (row.rawNeedsMapping) {
+        return { ...base, animation: "ddp-raw-blink 1.4s ease-in-out infinite" }
+      }
+      return s ? base : undefined
     },
     [statusMap]
   )
@@ -1460,6 +1526,19 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
           setDaneaOrderRef(null)
         }}
       />
+
+      {/* #142 — associazione del 201 del grezzo, aperta dalla pillola «da associare».
+          Alla chiusura la lista si ricarica: se l'articolo è stato agganciato, flag e
+          lampeggio spariscono da soli (il server li calcola, non li salviamo noi). */}
+      {rawMappingTarget ? (
+        <CodexDaneaMappingDialog
+          item={rawMappingTarget}
+          onClose={() => {
+            setRawMappingTarget(null)
+            void invalidate()
+          }}
+        />
+      ) : null}
     </>
   )
 }

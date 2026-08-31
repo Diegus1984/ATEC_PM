@@ -92,6 +92,8 @@ export interface CodexListItem {
   refCommercialeId: number | null
   refCommercialeCodice: string
   refCommercialeDescr: string
+  /** Id Codex del 201 di derivazione: apre le sue alternative Danea (by-codex) senza giri extra (#142). */
+  refCommercialeCodexId: number | null
 }
 
 export interface CodexRecodeStats {

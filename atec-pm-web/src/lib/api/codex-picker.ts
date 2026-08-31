@@ -20,6 +20,13 @@ export interface CodexPickerRow {
   supplierId: number | null
   fornitoreNome: string
   produttore: string
+  /**
+   * #142, solo righe di `derivati-101`: il 201 di derivazione del lavorato. Lì
+   * codexId/codiceAtec sono del 101, articolo/fornitore/costo del grezzo.
+   * Null/vuoto = riga del picker normale.
+   */
+  grezzoCodexId?: number | null
+  grezzoCodice?: string
 }
 
 export async function fetchCodexPickerRows(params: {
@@ -44,6 +51,33 @@ export async function fetchCodexPickerRows(params: {
   }
   const response = await apiGet<ApiResponse<PagedResult<CodexPickerRow>>>(
     `/api/codex/picker?${query.toString()}`
+  )
+  return unwrapApi(response)
+}
+
+/**
+ * #142 — i lavorati 101 con grezzo commerciale (derivazione #135), visti dal lato
+ * acquisti: articolo/fornitore/costo vengono dall'abbinamento Danea del 201.
+ * Un abbinamento = una riga; un 201 senza articoli resta visibile (caso «scoperto»).
+ */
+export async function fetchCodexDerivati101(params: {
+  page?: number
+  pageSize?: number
+  /** Chiavi = parametri server: codice, descr, articolo, fornitore, produttore. */
+  filters?: Record<string, string>
+}): Promise<PagedResult<CodexPickerRow>> {
+  const query = new URLSearchParams({
+    page: String(params.page ?? 1),
+    pageSize: String(params.pageSize ?? 50),
+  })
+  if (params.filters) {
+    for (const [key, value] of Object.entries(params.filters)) {
+      const trimmed = value.trim()
+      if (trimmed) query.set(key, trimmed)
+    }
+  }
+  const response = await apiGet<ApiResponse<PagedResult<CodexPickerRow>>>(
+    `/api/codex/picker/derivati-101?${query.toString()}`
   )
   return unwrapApi(response)
 }

@@ -61,6 +61,24 @@ export async function createDdpRow(
 }
 
 /**
+ * #142 — applica la SCELTA del fornitore alla riga grezzo della commessa (derivazione
+ * #135): il motore risolve da solo il solo caso «un articolo esatto», con più alternative
+ * la scelta arriva dai pannelli dei picker. Lo snapshot (codice/costo/produttore) lo
+ * legge il server dal catalogo — di qui passano solo i due id.
+ */
+export async function setRawSupplier(
+  projectId: number,
+  rawCodexCode: string,
+  catalogItemId: number
+): Promise<void> {
+  const response = await apiPost<ApiResponse<boolean>>(
+    `/api/projects/${projectId}/ddp/raw-supplier`,
+    { rawCodexCode, catalogItemId }
+  )
+  unwrapApi(response)
+}
+
+/**
  * Aggiorna una riga DDP commerciale. Ritorna il nuovo `updated_at` (token di
  * concorrenza). In caso di conflitto ottimistico il server risponde 409 e
  * `apiPut` lancia un `ApiError` (status 409) col messaggio del server.

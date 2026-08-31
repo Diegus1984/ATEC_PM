@@ -206,6 +206,12 @@ export interface DdpRowItem {
    * (da una barra escono più pezzi) e da lì in poi il ricalcolo non la tocca più.
    */
   rawAutoQty?: number | null
+  /**
+   * #142 — grezzo «scoperto»: il 201 di derivazione non è associato a nessun articolo Danea.
+   * La riga non cambia stato e non entra in RDO (il server rifiuta); la griglia la mostra
+   * col bordo lampeggiante. Sparisce da solo appena l'associazione esiste.
+   */
+  rawNeedsMapping?: boolean
 }
 
 /** Una voce della cronistoria di una riga di distinta (commerciale o officina). */

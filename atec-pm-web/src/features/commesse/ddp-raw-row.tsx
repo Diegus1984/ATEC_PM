@@ -37,10 +37,52 @@ export function rawRowTitle(row: Pick<DdpRowItem, "rawSources">): string {
 /**
  * Pillola «Grezzo» sullo stile dei badge di destinazione del picker Codex.
  *
+ * #142 — grezzo «scoperto» (`rawNeedsMapping`): pillola ambra «da associare», e con
+ * `onAssocia` diventa il bottone che apre il dialog di associazione del 201 — il
+ * rimedio sta sulla riga stessa, non in un'altra pagina.
+ *
  * 🪤 I colori del testo sono espliciti (non ereditati): la riga della griglia porta un
  * `color` inline preso dallo stato, e senza classe propria la scritta prenderebbe quello.
  */
-export function RawRowBadge({ row }: { row: DdpRowItem }) {
+export function RawRowBadge({
+  row,
+  onAssocia,
+}: {
+  row: DdpRowItem
+  /** #142: presente (e riga scoperta) = la pillola apre l'associazione del 201. */
+  onAssocia?: () => void
+}) {
+  if (row.rawNeedsMapping) {
+    const titolo =
+      `${rawRowLabel(row)}: il 201 di derivazione non è associato a NESSUN articolo ` +
+      `commerciale — la riga non cambia stato e non entra in RDO finché non lo associ` +
+      (onAssocia ? " (clic per associare)." : " (Codex → Articoli Danea).")
+    const classi =
+      "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+    const contenuto = (
+      <>
+        <span className="size-1.5 rounded-full bg-amber-500" />
+        Grezzo — da associare
+      </>
+    )
+    return onAssocia ? (
+      <button
+        type="button"
+        className={`${classi} cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40`}
+        title={titolo}
+        onClick={(e) => {
+          e.stopPropagation()
+          onAssocia()
+        }}
+      >
+        {contenuto}
+      </button>
+    ) : (
+      <span className={classi} title={titolo}>
+        {contenuto}
+      </span>
+    )
+  }
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"

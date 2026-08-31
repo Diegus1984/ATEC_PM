@@ -284,3 +284,16 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+/* #142 — riga «grezzo da associare» nella DDP Commerciale: bordo interno ambra che
+   pulsa finché il 201 di derivazione non viene associato a un articolo commerciale.
+   Sta sul box-shadow (inset) e non sull'opacità: il testo della riga resta leggibile. */
+@keyframes ddp-raw-blink {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 2px oklch(0.769 0.188 70.08);
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}

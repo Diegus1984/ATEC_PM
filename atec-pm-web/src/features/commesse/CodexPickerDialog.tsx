@@ -33,6 +33,7 @@ import { GridScroller } from "@/components/shared/grid-scroller"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
 import { fetchCatalogItems } from "@/lib/api/catalog"
 import {
+  fetchCodexDerivati101,
   fetchCodexPickerRows,
   type CodexPickerRow,
 } from "@/lib/api/codex-picker"
@@ -63,6 +64,7 @@ import {
   DDP_STATUS_VERIFY,
   isCommercialQtyEditable,
 } from "./ddp-constants"
+import { inserisciOfficina, type GrezzoScelto } from "./officina-insert"
 
 const PAGE_SIZE = 50
 const ALL_FAMILIES = "__all__"
@@ -151,6 +153,9 @@ const CODEX_COLUMNS: PickerColumn[] = [
 type PickEntry =
   | { kind: "catalog"; item: CatalogItemListItem }
   | { kind: "codex"; item: CodexPickerRow }
+  // #142: riga della sezione «Lavorati con grezzo commerciale» (vista 2xx) —
+  // codiceAtec è il 101, articolo/fornitore sono dell'abbinamento del SUO grezzo.
+  | { kind: "derivato101"; item: CodexPickerRow }
 
 /**
  * Picker UNICO delle due DDP di commessa (`ddpType` = la distinta da cui è aperto).
@@ -375,6 +380,27 @@ export function CodexPickerDialog({
     enabled: open && vista === "codex",
   })
 
+  // ── #142: lavorati 101 col grezzo commerciale, in sezione dedicata della vista 2xx.
+  //    I filtri di colonna del Catalogo si traducono sulle chiavi dell'endpoint derivati
+  //    (il codice ATEC digitato filtra il 101, articolo/fornitore filtrano il grezzo).
+  const derivatiFilters = React.useMemo(() => {
+    const f: Record<string, string> = {}
+    if (debouncedFilters.atecCode) f.codice = debouncedFilters.atecCode
+    if (debouncedFilters.description) f.descr = debouncedFilters.description
+    if (debouncedFilters.code) f.articolo = debouncedFilters.code
+    if (debouncedFilters.supplier) f.fornitore = debouncedFilters.supplier
+    if (debouncedFilters.manufacturer) f.produttore = debouncedFilters.manufacturer
+    return f
+  }, [debouncedFilters])
+  const derivatiQuery = useQuery({
+    queryKey: ["ddp-picker-derivati-101", derivatiFilters],
+    queryFn: () =>
+      fetchCodexDerivati101({ pageSize: 100, filters: derivatiFilters }),
+    enabled: open && vista === "catalog",
+  })
+  const derivati = derivatiQuery.data?.items ?? []
+  const derivatiTotal = derivatiQuery.data?.totalCount ?? 0
+
   const query = vista === "catalog" ? catalogQuery : codexQuery
   const catalogItems = React.useMemo(
     () => catalogQuery.data?.pages.flatMap((p) => p.items) ?? [],
@@ -518,83 +544,29 @@ export function CodexPickerDialog({
     }
   }
 
-  // ── Inserimento nella DDP OFFICINA (1xx) — il flusso del picker officina storico ──
-  async function aggiungiOfficina(item: CodexPickerRow) {
-    let existing
-    try {
-      existing = await fetchOfficinaItems(projectId)
-    } catch {
-      throw new Error(
-        "Impossibile leggere la DDP Officina: inserimento annullato per non creare doppioni."
-      )
-    }
-    const duplicate =
-      existing.find(
-        (r) =>
-          r.partNumber === item.codiceAtec &&
-          r.itemStatus === DDP_STATUS_TO_ORDER
-      ) ?? null
-    if (duplicate) {
-      const ok = await confirm({
-        title: "Articolo già presente",
-        description: `L'articolo ${formatCodice(item.codiceAtec)} è già nella DDP Officina in stato Da Ordinare (Qtà attuale: ${duplicate.quantity}).\n\nVuoi aggiungere +1 alla quantità?`,
-        confirmLabel: "Aggiungi +1",
-        destructive: false,
-      })
-      if (!ok) return null
-      // L'update officina riscrive tutti i campi editabili: ricopiati dalla riga esistente.
-      await updateOfficinaItem(projectId, duplicate.id, {
-        id: duplicate.id,
-        projectId,
-        partNumber: duplicate.partNumber,
-        description: duplicate.description,
-        quantity: duplicate.quantity + 1,
-        quantityProduced: duplicate.quantityProduced ?? 0,
-        unitCost: duplicate.unitCost,
-        material: duplicate.material,
-        treatment: duplicate.treatment,
-        supplierName: duplicate.supplierName,
-        itemStatus: duplicate.itemStatus,
-        requestedBy: duplicate.requestedBy,
-        daneaRef: duplicate.daneaRef,
-        dateNeeded: duplicate.dateNeeded,
-        orderDate: duplicate.orderDate,
-        destination: duplicate.destination,
-        destinationSpec: duplicate.destinationSpec ?? "",
-        notes: duplicate.notes,
-        expectedUpdatedAt: null,
-      })
-      return { code: formatCodice(item.codiceAtec), testo: "Qtà aggiornata" }
-    }
-
-    await addOfficinaItem(projectId, {
-      id: 0,
+  // ── Inserimento nella DDP OFFICINA (1xx) — il flusso storico vive in
+  //    `officina-insert.ts` (#142: lo condivide col picker «per codice ATEC»).
+  //    Con `grezzo` la riga nasce a costo 0 e senza fornitore: il materiale sta
+  //    sulla riga del grezzo in Commerciale, che genera il motore #135.
+  async function aggiungiOfficina(
+    item: CodexPickerRow,
+    grezzo?: GrezzoScelto | null
+  ) {
+    return inserisciOfficina({
       projectId,
-      partNumber: item.codiceAtec,
-      description: item.descr,
-      quantity: 1,
-      quantityProduced: 0,
-      unitCost: item.prezzoCodex ?? 0,
-      material: "",
-      treatment: "",
-      supplierName: item.fornitoreCodex,
-      itemStatus: DDP_STATUS_TO_ORDER,
+      codiceAtec: item.codiceAtec,
+      descrizione: item.descr,
+      unitCost: grezzo ? 0 : item.prezzoCodex ?? 0,
+      supplierName: grezzo ? "" : item.fornitoreCodex,
       requestedBy,
-      daneaRef: "",
-      dateNeeded: null,
-      orderDate: null,
-      destination: "",
-      destinationSpec: "",
-      notes: "",
-    })
-    return {
-      code: formatCodice(item.codiceAtec),
+      confirm,
       // Riga smistata dall'ALTRA distinta: si dice anche DOVE ritrovarla.
-      testo:
+      notaScheda:
         ddpType === "COMMERCIAL"
-          ? 'aggiunto alla DDP Officina — la trovi nella scheda "DDP Officina" di questa commessa'
-          : "aggiunto alla DDP Officina",
-    }
+          ? ' — la trovi nella scheda "DDP Officina" di questa commessa'
+          : "",
+      grezzo: grezzo ?? null,
+    })
   }
 
   // ── Gruppo di SOLI componenti commerciali (fix 26/08/2026): nella DDP Officina non
@@ -834,6 +806,32 @@ export function CodexPickerDialog({
   const addMutation = useMutation({
     mutationFn: async (entry: PickEntry) => {
       setError(null)
+
+      // ── #142: lavorato con grezzo commerciale — riga 101 in Officina, il grezzo
+      //    lo genera il motore #135; qui al più si applica la scelta del fornitore.
+      if (entry.kind === "derivato101") {
+        const item = entry.item
+        const grezzoVis = formatCodice(item.grezzoCodice ?? "")
+        const scoperto = item.catalogItemId == null
+        const ok = await confirm({
+          title: "Lavorato con grezzo commerciale",
+          description:
+            `${formatCodice(item.codiceAtec)} è un particolare a disegno (1xx): la riga andrà nella DDP Officina.\n` +
+            (scoperto
+              ? `Il suo grezzo ${grezzoVis} comparirà nella DDP Commerciale DA ASSOCIARE a un articolo commerciale (resterà bloccato finché non lo associ).`
+              : `Il suo grezzo ${grezzoVis} comparirà nella DDP Commerciale con fornitore ${item.fornitoreNome || "da definire"}.`) +
+            `\n\nVuoi continuare?`,
+          confirmLabel: "Inserisci",
+          destructive: false,
+        })
+        if (!ok) return null
+        return aggiungiOfficina(item, {
+          codice: item.grezzoCodice ?? "",
+          catalogItemId: item.catalogItemId,
+          fornitoreNome: item.fornitoreNome,
+          scoperto,
+        })
+      }
 
       // Codice ATEC e destinazione: senza codice non si entra in nessuna distinta.
       let atecRaw: string
@@ -1128,6 +1126,104 @@ export function CodexPickerDialog({
             />
           ) : null}
         </div>
+
+        {/* #142: i lavorati 101 con grezzo commerciale si scelgono anche dal lato
+            acquisti — un gesto inserisce la COPPIA (101 in Officina, grezzo qui). */}
+        {vista === "catalog" && derivati.length > 0 ? (
+          <div className="shrink-0 rounded-lg border border-amber-200 dark:border-amber-800">
+            <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50/60 px-3 py-1.5 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+              <span className="font-semibold text-amber-800 dark:text-amber-300">
+                Lavorati con grezzo commerciale (derivazione)
+              </span>
+              <span className="text-muted-foreground">
+                un inserimento = riga 101 in Officina + grezzo in Commerciale
+              </span>
+            </div>
+            <div className="max-h-44 overflow-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border/40 bg-muted/20 text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-1.5 font-medium">Cod. ATEC (101)</th>
+                    <th className="px-3 py-1.5 font-medium">Descrizione</th>
+                    <th className="px-3 py-1.5 font-medium">Grezzo (201)</th>
+                    <th className="px-3 py-1.5 font-medium">Cod. articolo</th>
+                    <th className="px-3 py-1.5 font-medium">Fornitore</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Costo</th>
+                    <th className="w-12 px-3 py-1.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {derivati.map((row) => (
+                    <tr
+                      key={`drv-${row.codexId}-${row.catalogItemId ?? 0}`}
+                      className="cursor-pointer transition-colors hover:bg-muted/30"
+                      onDoubleClick={() =>
+                        handleAdd({ kind: "derivato101", item: row })
+                      }
+                    >
+                      <td className="px-3 py-1.5 font-mono font-medium tabular-nums text-primary">
+                        {formatCodice(row.codiceAtec)}
+                      </td>
+                      <td
+                        className="max-w-[260px] truncate px-3 py-1.5"
+                        title={row.descr}
+                      >
+                        {dash(row.descr)}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono tabular-nums">
+                        {formatCodice(row.grezzoCodice ?? "")}
+                      </td>
+                      {row.catalogItemId == null ? (
+                        <td colSpan={2} className="px-3 py-1.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                            <span className="size-1.5 rounded-full bg-amber-500" />
+                            grezzo da associare a un articolo
+                          </span>
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-1.5 font-medium" title={row.codiceArticolo}>
+                            {dash(row.codiceArticolo)}
+                          </td>
+                          <td
+                            className="max-w-[160px] truncate px-3 py-1.5"
+                            title={row.fornitoreNome}
+                          >
+                            {dash(row.fornitoreNome)}
+                          </td>
+                        </>
+                      )}
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {euro(row.costoArticolo ?? row.prezzoCodex)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Inserisci: riga 101 in Officina + grezzo in Commerciale"
+                          disabled={addMutation.isPending}
+                          onClick={() =>
+                            handleAdd({ kind: "derivato101", item: row })
+                          }
+                        >
+                          <Plus />
+                          <span className="sr-only">
+                            Aggiungi {row.codiceAtec}
+                          </span>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {derivatiTotal > derivati.length ? (
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
+                  … e altri {derivatiTotal - derivati.length}: restringi coi filtri.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <GridScroller fill className="rounded-lg border" onScroll={handleScroll}>
           <Table>

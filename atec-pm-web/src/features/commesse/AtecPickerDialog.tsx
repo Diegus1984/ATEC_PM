@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { GridScroller } from "@/components/shared/grid-scroller"
+import { useConfirm } from "@/components/shared/confirm"
 import { fetchCatalogByAtec, fetchCatalogByCodex } from "@/lib/api/catalog"
 import { fetchCodex } from "@/lib/api/codex"
 import { createDdpRow } from "@/lib/api/project-ddp"
@@ -30,11 +31,17 @@ import { notifyError } from "@/lib/toast"
 import { euro } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 import { DDP_STATUS_VERIFY } from "./ddp-constants"
+import { inserisciOfficina } from "./officina-insert"
 
 /**
  * Picker «per codice ATEC»: cerca nel Codex (codice nuovo), mostra le alternative
  * Danea del mapping e permette di (a) scegliere subito un fornitore oppure
  * (b) inserire solo il codice ATEC con fornitore da definire (stato DO).
+ *
+ * #142 — i 1xx non finiscono più in Commerciale: vanno in DDP Officina (specchio di
+ * DdpSmistamento, con conferma), e se il 101 ha la derivazione il pannello mostra i
+ * fornitori del SUO grezzo 201 — la riga del grezzo in Commerciale la genera il motore
+ * #135 dentro il POST officina, qui al più si applica la scelta del fornitore.
  */
 export function AtecPickerDialog({
   open,
@@ -48,11 +55,19 @@ export function AtecPickerDialog({
   onAdded: () => void
 }) {
   const requestedBy = getSession()?.user.fullName ?? ""
+  const confirm = useConfirm()
   const [searchInput, setSearchInput] = React.useState("")
   const search = useDebounced(searchInput.trim(), 300)
   const [selected, setSelected] = React.useState<CodexListItem | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  // #142 — smistamento per famiglia, specchio di DdpSmistamento: i 1xx sono particolari
+  // d'officina. Se il 101 ha la derivazione, le alternative fornitore sono del SUO 201.
+  const selectedRaw = (selected?.codiceNuovo ?? "").replace(/\./g, "")
+  const isLavorato = selectedRaw.startsWith("1")
+  const derivazioneCodexId = isLavorato ? selected?.refCommercialeCodexId ?? null : null
+  const derivazioneCodice = isLavorato ? selected?.refCommercialeCodice ?? "" : ""
 
   React.useEffect(() => {
     if (open) {
@@ -76,9 +91,18 @@ export function AtecPickerDialog({
   })
 
   const altsQuery = useQuery({
-    queryKey: ["atec-picker-alts", selected?.id, selected?.codiceNuovo],
+    queryKey: [
+      "atec-picker-alts",
+      selected?.id,
+      selected?.codiceNuovo,
+      derivazioneCodexId,
+    ],
     queryFn: async () => {
       if (!selected) return [] as CatalogItemListItem[]
+      // #142: per un 101 con derivazione le alternative sono gli articoli del SUO 201.
+      if (derivazioneCodexId != null) return fetchCatalogByCodex(derivazioneCodexId)
+      // 101 senza derivazione: non si compra — niente alternative da mostrare.
+      if (isLavorato) return [] as CatalogItemListItem[]
       if (selected.id > 0) return fetchCatalogByCodex(selected.id)
       return fetchCatalogByAtec(selected.codiceNuovo)
     },
@@ -91,8 +115,55 @@ export function AtecPickerDialog({
       description: string
       catalog?: CatalogItemListItem | null
       tbd?: boolean
-    }) => {
+    }): Promise<string | null> => {
       setError(null)
+
+      // #142 — 1xx: riga in DDP OFFICINA (con conferma); il grezzo 201, se c'è la
+      // derivazione, lo genera il motore #135 dentro il POST — qui si applica al più
+      // la scelta del fornitore fatta nel pannello.
+      if (isLavorato) {
+        const conGrezzo = derivazioneCodice.length > 0
+        const scoperto =
+          conGrezzo && !altsQuery.isLoading && (altsQuery.data?.length ?? 0) === 0
+        const ok = await confirm({
+          title: "Particolare d'officina",
+          description:
+            `${opts.atecCode} è un particolare a disegno (1xx): la riga andrà nella DDP Officina.` +
+            (conGrezzo
+              ? `\nIl suo grezzo ${derivazioneCodice} comparirà nella DDP Commerciale` +
+                (opts.catalog
+                  ? ` con fornitore ${opts.catalog.supplierName || "scelto"}.`
+                  : scoperto
+                    ? " (da associare a un articolo commerciale)."
+                    : " (fornitore da definire).")
+              : "") +
+            `\n\nVuoi continuare?`,
+          confirmLabel: "Inserisci",
+          destructive: false,
+        })
+        if (!ok) return null
+        const esito = await inserisciOfficina({
+          projectId,
+          codiceAtec: opts.atecCode,
+          descrizione: opts.description,
+          // Il costo della riga officina è la LAVORAZIONE: il materiale sta sul grezzo.
+          unitCost: 0,
+          supplierName: "",
+          requestedBy,
+          confirm,
+          notaScheda: ' — la trovi nella scheda "DDP Officina" di questa commessa',
+          grezzo: conGrezzo
+            ? {
+                codice: derivazioneCodice,
+                catalogItemId: opts.catalog?.id ?? null,
+                fornitoreNome: opts.catalog?.supplierName ?? "",
+                scoperto,
+              }
+            : null,
+        })
+        return esito ? `✓ ${esito.code} ${esito.testo}` : null
+      }
+
       const cat = opts.catalog
       await createDdpRow(projectId, {
         id: 0,
@@ -116,10 +187,11 @@ export function AtecPickerDialog({
         atecCode: opts.atecCode,
         expectedUpdatedAt: null,
       })
-      return opts.atecCode
+      return `✓ ${opts.atecCode} aggiunto`
     },
-    onSuccess: (code) => {
-      setMessage(`✓ ${code} aggiunto`)
+    onSuccess: (msg) => {
+      if (!msg) return
+      setMessage(msg)
       onAdded()
     },
     // Oltre alla riga nel dialogo, il toast: come nel picker gemello
@@ -214,11 +286,22 @@ export function AtecPickerDialog({
                     <p className="text-xs text-muted-foreground">
                       {selected.descr || "—"}
                     </p>
+                    {derivazioneCodice ? (
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                        Fornitori del grezzo {derivazioneCodice} (derivazione)
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    title="La riga entra in distinta con fornitore da definire"
+                    title={
+                      isLavorato
+                        ? derivazioneCodice
+                          ? "Riga 101 in DDP Officina; il grezzo nasce in DDP Commerciale con fornitore da definire"
+                          : "Riga 101 in DDP Officina (nessun grezzo: manca la derivazione)"
+                        : "La riga entra in distinta con fornitore da definire"
+                    }
                     disabled={addMutation.isPending || !selected.codiceNuovo}
                     onClick={() =>
                       addMutation.mutate({
@@ -229,7 +312,7 @@ export function AtecPickerDialog({
                     }
                   >
                     <Link2 />
-                    Inserisci senza fornitore
+                    {isLavorato ? "Inserisci (Officina)" : "Inserisci senza fornitore"}
                   </Button>
                 </div>
                 <GridScroller className="rounded-md border">
@@ -253,9 +336,11 @@ export function AtecPickerDialog({
                     ) : alts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-muted-foreground">
-                          Questo codice non ha ancora fornitori collegati. Puoi
-                          inserire la riga senza fornitore, oppure collegare gli
-                          articoli dei fornitori dal Catalogo (icona catena).
+                          {isLavorato && derivazioneCodice
+                            ? `Il grezzo ${derivazioneCodice} non è associato a nessun articolo commerciale: se inserisci, la riga del grezzo resterà BLOCCATA (bordo lampeggiante) finché non associ l'articolo (Codex → Articoli Danea, icona catena).`
+                            : isLavorato
+                              ? "Particolare a disegno senza derivazione: la riga va in DDP Officina e qui non servono fornitori. Se questo 101 si ricava da un commerciale, compila la derivazione nella scheda Codex."
+                              : "Questo codice non ha ancora fornitori collegati. Puoi inserire la riga senza fornitore, oppure collegare gli articoli dei fornitori dal Catalogo (icona catena)."}
                         </TableCell>
                       </TableRow>
                     ) : (
