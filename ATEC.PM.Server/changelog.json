@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-1026",
+                     "data":  "2026-08-31T10:26:44",
+                     "hash":  "a33f3db387d2819e3df07f743084317379e09f67",
+                     "modifiche":  [
+                                       "Popup ordine Danea: dialogo largo + colonna foto articolo a misura fissa"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-1013",
                      "data":  "2026-08-31T10:14:02",
                      "hash":  "f2f33aff6349f69e2cc00bcd7c16668dbaac5a9d",
