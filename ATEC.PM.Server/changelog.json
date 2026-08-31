@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-1013",
+                     "data":  "2026-08-31T10:14:02",
+                     "hash":  "f2f33aff6349f69e2cc00bcd7c16668dbaac5a9d",
+                     "modifiche":  [
+                                       "Sigle DDP/RDO spiegate nei menu + occhio apri-ordine sul Rif. Danea"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-0948",
                      "data":  "2026-08-31T09:48:15",
                      "hash":  "7bd125901466f64c7def0eff7c1f7af4dafcbdec",
