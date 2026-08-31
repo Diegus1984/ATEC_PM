@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 31/08/2026 10:25.
+> Fotografia del 31/08/2026 17:03.
 
 ## Chiavi con endpoint
 
@@ -198,6 +198,7 @@
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/danea-orders/article-image` (DaneaOrdersController.GetArticleImage)
 - `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
@@ -210,6 +211,7 @@
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
 - `POST /api/purchase-rfqs` (PurchaseRfqController.Create)
 - `POST /api/purchase-rfqs/{id}/cancel` (PurchaseRfqController.Cancel)
 - `POST /api/purchase-rfqs/{id}/create-danea-order` (PurchaseRfqController.CreateDaneaOrder)
@@ -418,6 +420,7 @@
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/ddp-feedback/acquisti` (DdpFeedbackController.GetAcquisti)
 - `GET /api/ddp-feedback/magazzino` (DdpFeedbackController.GetMagazzino)
 - `GET /api/ddp-manager/{projectId:int}` (DdpManagerController.GetDetail)
@@ -438,6 +441,7 @@
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
 - `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/hidden` (DdpFeedbackController.SetAcquistiHidden)
 - `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/note` (DdpFeedbackController.SetAcquistiNote)
 - `PUT /api/ddp-feedback/magazzino/{projectId:int}/{ddpType}/{itemId:int}/hidden` (DdpFeedbackController.SetMagazzinoHidden)
@@ -543,6 +547,7 @@
 ### `nav.officina_inbox` — Inbox Officina (endpoint)
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
@@ -752,6 +757,7 @@
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/danea-orders/article-image` (DaneaOrdersController.GetArticleImage)
 - `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
@@ -763,6 +769,7 @@
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
 - `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 
@@ -773,6 +780,7 @@
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
+- `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
 - `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
@@ -784,6 +792,7 @@
 - `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
 - `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
 - `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
 - `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
 - `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
 

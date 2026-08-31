@@ -70,6 +70,7 @@
 | Documento | Cosa contiene |
 |-----------|---------------|
 | [piani/PIANO-GESTORE-DDP-V41.md](piani/PIANO-GESTORE-DDP-V41.md) | Port del prototipo `Gestione_DDP_New_V41.html` (5 schede) |
+| [piani/PIANO-142-GREZZI-PICKER.md](piani/PIANO-142-GREZZI-PICKER.md) | **#142**: lavorati 101 col grezzo 201 nei picker DDP (derivazione visibile, coppia officina+commerciale, scelta fornitore) |
 | [piani/PIANO-ACQUISTI-CODICE-ATEC.md](piani/PIANO-ACQUISTI-CODICE-ATEC.md) | Codici ATEC ↔ Danea + Inbox Acquisti |
 | [piani/PIANO-MIGRAZIONE-DANEA-ATEC.md](piani/PIANO-MIGRAZIONE-DANEA-ATEC.md) | Ripartenza archivio Danea «Atec» + trasferimento catalogo |
 
