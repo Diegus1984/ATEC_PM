@@ -189,6 +189,7 @@ function NavSubmenuItem({
       <SidebarMenuButton
         isActive={isParentActive}
         tooltip={item.label}
+        title={item.hint}
         onClick={handleParentClick}
         className="cursor-pointer"
       >
@@ -215,7 +216,11 @@ function NavSubmenuItem({
                   asChild
                   isActive={isNavActive(subItem, pathname)}
                 >
-                  <button type="button" onClick={() => onNavigate(subItem.path)}>
+                  <button
+                    type="button"
+                    title={subItem.hint}
+                    onClick={() => onNavigate(subItem.path)}
+                  >
                     <SubIcon />
                     <span className="truncate">{subItem.label}</span>
                   </button>
@@ -517,7 +522,11 @@ export function AppShell() {
                               isActive={active}
                               tooltip={item.label}
                             >
-                              <button type="button" onClick={() => navigate(item.path)}>
+                              <button
+                                type="button"
+                                title={item.hint}
+                                onClick={() => navigate(item.path)}
+                              >
                                 <Icon className={cn(daVerificare && "text-success")} />
                                 <span className={cn(daVerificare && "font-bold text-success")}>
                                   {item.label}

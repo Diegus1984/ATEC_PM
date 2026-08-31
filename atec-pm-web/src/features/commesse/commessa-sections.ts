@@ -16,6 +16,8 @@ export interface CommessaSection {
   label: string
   /** Emoji come nel WPF (le altre sezioni); Dashboard Commessa usa 📈 in web. */
   icon?: string
+  /** Tooltip per il novizio: scioglie le sigle (DDP…) al primo punto di contatto. */
+  hint?: string
   /** Visibile solo a PM/ADMIN (Prev vs Consuntivo). */
   economicsOnly?: boolean
   /**
@@ -69,12 +71,14 @@ export const COMMESSA_SECTIONS: CommessaSection[] = [
     label: "DDP Commerciali",
     icon: "📋",
     featureKey: "project.ddp_commerciale",
+    hint: "DDP = Distinta Di Produzione. Qui i materiali da COMPRARE (commerciali) della commessa: da qui parte il giro gare (RDO) e ordini.",
   },
   {
     key: "ddp_officina",
     label: "DDP Officina",
     icon: "🔧",
     featureKey: "project.ddp_officina",
+    hint: "DDP = Distinta Di Produzione. Qui i particolari a disegno da COSTRUIRE in officina.",
   },
   {
     key: "work_requests",

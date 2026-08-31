@@ -782,6 +782,7 @@ export function CommessaTree({
                       "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[13px] hover:bg-accent",
                       active && "bg-primary/10 font-medium text-primary"
                     )}
+                    title={section.hint}
                     onClick={() => onSelect(project, section.key)}
                   >
                     {section.icon ? (

@@ -5,6 +5,7 @@ import {
   Ban,
   ChevronDown,
   ChevronRight,
+  Eye,
   History,
   Link2,
   Pencil,
@@ -980,12 +981,32 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               <span>—</span>
             )
           ) : (
-            <DdpInlineTextCell
-              value={row.original.daneaRef ?? ""}
-              disabled={daneaRefMutation.isPending}
-              placeholder="—"
-              onCommit={(value) => handleDaneaRefCommit(row.original, value)}
-            />
+            // In modifica la cella resta un campo di testo; l'occhio a fianco apre
+            // l'ordine (ricerca per numero, anche nel VECCHIO archivio) — cliccare
+            // il rif per vederlo lo trasformava in editing, e l'ordine non si apriva mai.
+            <div className="flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <DdpInlineTextCell
+                  value={row.original.daneaRef ?? ""}
+                  disabled={daneaRefMutation.isPending}
+                  placeholder="—"
+                  onCommit={(value) => handleDaneaRefCommit(row.original, value)}
+                />
+              </div>
+              {row.original.daneaRef?.trim() ? (
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+                  title={`Apri l'ordine n. ${row.original.daneaRef.trim()} (cerca in Danea, anche nel vecchio archivio)`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDaneaOrderRef(row.original.daneaRef!.trim())
+                  }}
+                >
+                  <Eye className="size-4" />
+                </button>
+              ) : null}
+            </div>
           ),
       },
       {

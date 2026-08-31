@@ -68,6 +68,8 @@ export interface NavItemConfig {
   icon: LucideIcon
   status: ModuleStatus
   description?: string
+  /** Tooltip per il novizio: scioglie le sigle (DDP, RDO, ODA…) al primo contatto. */
+  hint?: string
   children?: NavItemConfig[]
 }
 
@@ -166,6 +168,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         featureKey: "nav.gestore_ddp",
         icon: ClipboardList,
         status: "live",
+        hint: "DDP = Distinta Di Produzione: la distinta materiali della commessa. Qui il controllo di tutte le DDP: stati, consegne, feedback.",
         description:
           "Riepilogo DDP per commessa (cartelle hover-popover come MoM, card Commerciale/Officina, realtime) + sintesi completa: KPI, stati avanzamento, ripartizione/consegne/top10/destinazioni/mancanti/feedback, stampa ed Excel.",
       },
@@ -265,6 +268,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         featureKey: "nav.acquisti_inbox",
         icon: ShoppingCart,
         status: "live",
+        hint: "Qui si comprano i materiali delle DDP: gara d'offerta ai fornitori (RDO = Richiesta D'Offerta), scelta del vincitore, ordine d'acquisto in Danea (ODA).",
         description:
           "Inbox Acquisti raggruppata per commessa con card e griglie dedicate: fabbisogni, RDO, ordini Danea.",
       },
@@ -512,6 +516,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         featureKey: "nav.ddp_destinazioni",
         icon: ClipboardList,
         status: "live",
+        hint: "DDP = Distinta Di Produzione. Qui si configurano stati, destinazioni e aggregazioni delle distinte.",
         children: [
           {
             id: "ddp-destinazioni",
