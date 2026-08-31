@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-0754",
+                     "data":  "2026-08-31T07:55:03",
+                     "hash":  "f196d071a99a7b25cf920e391ac4460486dbbc6a",
+                     "modifiche":  [
+                                       "Acquisti: giro DDP-RDO-ODA a prova di novizio (collaudo 30/08)"
+                                   ]
+                 },
+                 {
                      "build":  "20260829-1959",
                      "data":  "2026-08-29T19:59:47",
                      "hash":  "cb9d4e8f01d88d457e417a4a8d5dbc3215d469d6",
