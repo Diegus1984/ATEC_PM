@@ -176,7 +176,11 @@ export function DaneaOrderDialog({
                         </div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="max-w-[240px]">
+                    {/* La cella base è whitespace-nowrap: senza il normal/break la
+                        descrizione lunga TRABOCCA sopra Qtà e prezzi (visto in
+                        produzione sull'ordine 144/26). Qui va a capo su più righe,
+                        la finestra resta della stessa misura. */}
+                    <TableCell className="min-w-[240px] max-w-[380px] whitespace-normal break-words">
                       {r.description}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
