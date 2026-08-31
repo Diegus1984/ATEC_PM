@@ -1,6 +1,17 @@
 {
     "voci":  [
                  {
+                     "build":  "20260831-1716",
+                     "data":  "2026-08-31T17:16:17",
+                     "hash":  "d37b8a49eedaf1e00d566dd6ae4aacec8e433777",
+                     "modifiche":  [
+                                       "Piano della #142 e mappa endpoint rigenerata",
+                                       "Grezzi #142 (client): coppia 101+grezzo dai picker, pannello derivazione, riga da associare lampeggiante, nuovo 2xx al volo",
+                                       "Grezzi #142 (server): derivazione nei picker, grezzo scoperto fermo finche non associato, scelta fornitore",
+                                       "Catalogo: ricerca anche per codice articolo fornitore (#142)"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-1114",
                      "data":  "2026-08-31T11:14:55",
                      "hash":  "572396bc6d298fa52089958f791ccb0bcccb38fc",
