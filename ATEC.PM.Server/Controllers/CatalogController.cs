@@ -83,6 +83,7 @@ public class CatalogController : ControllerBase
         [FromQuery] string? code = null,
         [FromQuery] string? description = null,
         [FromQuery] string? supplier = null,
+        [FromQuery] string? supplierCode = null,
         [FromQuery] string? manufacturer = null,
         [FromQuery] string? category = null,
         [FromQuery] string? subcategory = null,
@@ -109,14 +110,17 @@ public class CatalogController : ControllerBase
             string? searchPat = PagedQueryHelper.ToLikePattern(search);
             if (searchPat != null)
             {
+                // #142: anche i.supplier_code — è il codice con cui il fornitore chiama
+                // l'articolo (B0D12Z9NQP, 17RF…), spesso l'unica chiave che chi cerca ha in mano.
                 clauses.Add(@"(i.code LIKE @Search OR i.description LIKE @Search OR s.company_name LIKE @Search
-                    OR i.manufacturer LIKE @Search OR i.category LIKE @Search)");
+                    OR i.manufacturer LIKE @Search OR i.category LIKE @Search OR i.supplier_code LIKE @Search)");
                 dp.Add("Search", searchPat);
             }
 
             AddLike("i.code", code, "Code");
             AddLike("i.description", description, "Description");
             AddLike("s.company_name", supplier, "Supplier");
+            AddLike("i.supplier_code", supplierCode, "SupplierCode");
             AddLike("i.manufacturer", manufacturer, "Manufacturer");
             AddLike("i.category", category, "Category");
             AddLike("i.subcategory", subcategory, "Subcategory");
@@ -152,7 +156,8 @@ public class CatalogController : ControllerBase
                        COALESCE(i.subcategory,'') AS Subcategory, i.unit,
                        i.unit_cost AS UnitCost, i.list_price AS ListPrice,
                        i.supplier_id AS SupplierId,
-                       s.company_name AS SupplierName, i.manufacturer,
+                       s.company_name AS SupplierName,
+                       COALESCE(i.supplier_code,'') AS SupplierCode, i.manufacturer,
                        COALESCE(i.atec_code,'') AS AtecCode, i.codex_item_id AS CodexItemId,
                        i.easyfatt_id AS EasyfattId
                 {from} {where}
