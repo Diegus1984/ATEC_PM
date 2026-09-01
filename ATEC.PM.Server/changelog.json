@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260901-1357",
+                     "data":  "2026-09-01T20:33:33",
+                     "hash":  "615b7c07d705243d2a49b810255bda2e79d83bc0",
+                     "modifiche":  [
+                                       "Terzo turno: il turno di notte vale per il giorno in cui comincia"
+                                   ]
+                 },
+                 {
+                     "build":  "20260901-1357",
                      "data":  "2026-09-01T14:36:59",
                      "hash":  "e58a55f52d8789745f20e94941c7e1660fb69c24",
                      "modifiche":  [
