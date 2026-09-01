@@ -272,6 +272,19 @@ public class PurchaseRfqController : ControllerBase
                 "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
                 "Per rifare la gara, annulla prima quella esistente."));
 
+        // #142: se fra le righe c'è un grezzo scoperto il piano direbbe il generico «nessun
+        // fornitore da interpellare» — meglio dire subito COSA manca e dove si sistema.
+        var grezziScopertiPlan = c.Query<string>($@"
+            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
+            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+            new { Ids = rows.Select(r => r.Id).ToList() }).ToList();
+        if (grezziScopertiPlan.Count > 0)
+            return Ok(ApiResponse<List<OfferPlanSupplier>>.Fail(
+                "Grezzo da associare: il codice " +
+                string.Join(", ", grezziScopertiPlan.Select(CodexListItem.FormatCodice)) +
+                " non è associato a nessun articolo commerciale. Associa l'articolo " +
+                "(icona catena sulla riga, o Codex → Articoli Danea) e riprova."));
+
         var plan = new Dictionary<int, OfferPlanSupplier>();
         foreach (var row in rows)
         {

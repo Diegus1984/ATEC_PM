@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { CatalogAtecAssignDialog } from "@/features/catalogo/CatalogAtecAssignDialog"
+import { CodexDaneaMappingDialog } from "@/features/codex/CodexDaneaMappingDialog"
+import { fetchCodex } from "@/lib/api/codex"
 import { DdpStatusFilterBar } from "@/features/commesse/DdpStatusFilterBar"
 import { DdpStatusLegend } from "@/features/commesse/DdpStatusLegend"
 import { ddpCommercialRowToSaveRequest } from "@/features/commesse/ddp-commercial-row"
@@ -27,7 +29,11 @@ import {
 } from "@/lib/api/ddp-config"
 import { updateDdpRow } from "@/lib/api/project-ddp"
 import { fetchPurchaseRfqs } from "@/lib/api/purchase-rfqs"
-import type { AcquistiInboxItem, PurchaseRfqListItem } from "@/lib/api/types"
+import type {
+  AcquistiInboxItem,
+  CodexListItem,
+  PurchaseRfqListItem,
+} from "@/lib/api/types"
 import { euro } from "@/lib/format"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 import { notifyError, notifyInfo } from "@/lib/toast"
@@ -90,6 +96,33 @@ export function AcquistiPage() {
   const [assignDialogItem, setAssignDialogItem] = React.useState<AcquistiInboxItem | null>(
     null
   )
+  /** Codice ATEC (o 201 del grezzo) senza articoli: apre CodexDaneaMappingDialog. */
+  const [codexMappingTarget, setCodexMappingTarget] =
+    React.useState<CodexListItem | null>(null)
+
+  // Catena ambra / pillola grezzo (01/09/2026): dal codice al dialog di associazione —
+  // la riga porta solo il CODICE, la riga Codex si ripesca dall'archivio (stesso
+  // pattern delle DDP di commessa).
+  const apriAssociaCodice = React.useCallback(async (codice: string) => {
+    const raw = (codice ?? "").replace(/\./g, "").trim()
+    if (!raw) return
+    try {
+      const page = await fetchCodex({ search: raw, pageSize: 20 })
+      const codex =
+        page.items.find(
+          (i) =>
+            i.codice.replace(/\./g, "") === raw ||
+            (i.codiceNuovo ?? "").replace(/\./g, "") === raw
+        ) ?? null
+      if (!codex) {
+        notifyError(`Codice ${codice} non trovato nel Codex.`)
+        return
+      }
+      setCodexMappingTarget(codex)
+    } catch (err) {
+      notifyError(err)
+    }
+  }, [])
   const [selectedRfqDetailId, setSelectedRfqDetailId] = React.useState<number | null>(null)
   const [orderProject, setOrderProject] = React.useState<{
     projectId: number
@@ -360,6 +393,7 @@ export function AcquistiPage() {
                 statusChangePending: updateRowMutation.isPending,
                 onStatusChange: handleStatusChange,
                 onAssignAtec: setAssignDialogItem,
+                onAssociaAtec: (codice) => void apriAssociaCodice(codice),
                 onOpenRfqDetail: setSelectedRfqDetailId,
                 onOpenDaneaOrder: setDaneaOrderIdDoc,
                 onOpenDaneaOrderByRef: setDaneaOrderRef,
@@ -375,6 +409,7 @@ export function AcquistiPage() {
       transitionMap,
       updateRowMutation.isPending,
       handleStatusChange,
+      apriAssociaCodice,
       handleOpenRfqModal,
     ]
   )
@@ -579,6 +614,18 @@ export function AcquistiPage() {
           }}
         />
       )}
+
+      {/* Associazione articoli Danea a un codice (catena ambra / pillola grezzo). Alla
+          chiusura l'inbox si ricarica: se l'articolo è stato agganciato, l'icona sparisce. */}
+      {codexMappingTarget ? (
+        <CodexDaneaMappingDialog
+          item={codexMappingTarget}
+          onClose={() => {
+            setCodexMappingTarget(null)
+            queryClient.invalidateQueries({ queryKey: ["acquisti-inbox"] })
+          }}
+        />
+      ) : null}
 
       {/* Dialog «Ordina Danea» di commessa (batch multi-RDO per fornitore) */}
       <ProjectDaneaOrdersDialog

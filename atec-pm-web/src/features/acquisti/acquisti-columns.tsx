@@ -13,6 +13,8 @@ import type { AcquistiInboxItem, DdpStatusItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 
+import { isRawRow, RawRowBadge } from "@/features/commesse/ddp-raw-row"
+
 import { DaneaOrderBadge, StatusFilterCombobox } from "./acquisti-ui"
 import { getSmartActionSortKey, rowHasDaneaOrder, statusOf } from "./acquisti-shared"
 import { rfqStatusLabel } from "./rfq-status"
@@ -25,6 +27,7 @@ export function buildAcquistiColumns({
   statusChangePending,
   onStatusChange,
   onAssignAtec,
+  onAssociaAtec,
   onOpenRfqDetail,
   onOpenDaneaOrder,
   onOpenDaneaOrderByRef,
@@ -39,6 +42,8 @@ export function buildAcquistiColumns({
   statusChangePending: boolean
   onStatusChange: (item: AcquistiInboxItem, statusKey: string) => void
   onAssignAtec: (item: AcquistiInboxItem) => void
+  /** Codice ATEC (o 201 del grezzo) senza articoli Danea: apre l'associazione al volo. */
+  onAssociaAtec: (codice: string) => void
   onOpenRfqDetail: (rfqId: number) => void
   onOpenDaneaOrder: (idDoc: number) => void
   /** Rif. Danea a mano senza IdDoc: ricerca per numero (anche vecchio archivio). */
@@ -74,7 +79,26 @@ export function buildAcquistiColumns({
       cell: ({ row }) => {
         const item = row.original
         if (item.atecCode) {
-          return <span className="font-medium tabular-nums text-xs">{item.atecCode}</span>
+          // Codice ATEC senza articoli commerciali (01/09/2026): catena ambra per
+          // associare al volo — i grezzi hanno già la pillola sul Codice.
+          return (
+            <span className="flex items-center gap-1">
+              <span className="font-medium tabular-nums text-xs">{item.atecCode}</span>
+              {item.atecNeedsMapping && !isRawRow(item) ? (
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-black/10 dark:text-amber-400"
+                  title={`Il codice ${item.atecCode} non ha nessun articolo commerciale associato: clic per associarlo a un articolo Danea`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAssociaAtec(item.atecCode ?? "")
+                  }}
+                >
+                  <Link2 className="size-4" />
+                </button>
+              ) : null}
+            </span>
+          )
         }
         return (
           <button
@@ -94,8 +118,22 @@ export function buildAcquistiColumns({
     {
       accessorKey: "partNumber",
       header: "Codice",
+      // #142: il grezzo si riconosce anche qui — e se è «da associare» la pillola
+      // apre l'associazione del 201, come nelle DDP di commessa.
       cell: ({ row }) => (
-        <span className="font-medium text-xs">{row.original.partNumber || "—"}</span>
+        <span className="flex items-center gap-1.5 font-medium text-xs">
+          {row.original.partNumber || "—"}
+          {isRawRow(row.original) ? (
+            <RawRowBadge
+              row={row.original}
+              onAssocia={
+                row.original.rawNeedsMapping
+                  ? () => onAssociaAtec(row.original.rawCodexCode ?? "")
+                  : undefined
+              }
+            />
+          ) : null}
+        </span>
       ),
     },
     {

@@ -89,6 +89,15 @@ public class DdpCommercialController : ControllerBase
                        -- dell'articolo Danea (catalog_items.atec_code): appena l'associazione
                        -- esiste, TUTTE le righe di quell'articolo la mostrano senza backfill.
                        COALESCE(NULLIF(b.atec_code,''), ci.atec_code, '') AS AtecCode,
+                       -- #142 anche qui (01/09/2026): il grezzo «scoperto» e i codici senza
+                       -- articoli si vedono PRIMA di provare la gara, non solo nel rifiuto.
+                       COALESCE(b.raw_codex_code,'') AS RawCodexCode,
+                       COALESCE(b.raw_sources,'') AS RawSources,
+                       {GrezziDerivazione.SqlGrezzoScoperto("b")} AS RawNeedsMapping,
+                       (COALESCE(NULLIF(b.atec_code,''), ci.atec_code) IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM catalog_items ca
+                                        WHERE ca.is_active = 1
+                                          AND ca.atec_code = COALESCE(NULLIF(b.atec_code,''), ci.atec_code))) AS AtecNeedsMapping,
                        b.created_by AS CreatedById,
                        COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
                        b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,
@@ -122,8 +131,12 @@ public class DdpCommercialController : ControllerBase
                 new { ProjectId = projectId }).ToList();
 
             foreach (AcquistiInboxItem row in rows)
+            {
                 if (row.AtecCode.Length > 0)
                     row.AtecCode = CodexListItem.FormatCodice(row.AtecCode);
+                if (row.RawCodexCode.Length > 0)
+                    row.RawCodexCode = CodexListItem.FormatCodice(row.RawCodexCode);
+            }
 
             return Ok(ApiResponse<List<AcquistiInboxItem>>.Ok(rows));
         }
