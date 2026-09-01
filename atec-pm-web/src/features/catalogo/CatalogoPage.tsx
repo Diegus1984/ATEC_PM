@@ -104,6 +104,16 @@ const COLUMNS: CatalogColumn[] = [
     cell: (item) => dash(item.supplierName),
   },
   {
+    // «Cod. prod. forn.» di Danea (CodArticoloForn): il codice con cui il PRODUTTORE
+    // chiama il pezzo (KTR M19…), diverso dal codice del venditore (01/09/2026, Diego).
+    key: "supplierCode",
+    label: "Cod. fornitore",
+    filterParam: "supplierCode",
+    cell: (item) => (
+      <span className="font-mono text-xs">{dash(item.supplierCode)}</span>
+    ),
+  },
+  {
     key: "manufacturer",
     label: "Produttore",
     defaultHidden: true,

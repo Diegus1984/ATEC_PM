@@ -412,8 +412,14 @@ public class DaneaSyncService : BackgroundService
                         @Listino, @SuppId, @CodForn, @Produttore, @Barcode, @Note, 1, @EftId,
                         @AtecCode, @CodexItemId)
                 ON DUPLICATE KEY UPDATE
-                    is_active=1, description=@Desc, category=@Cat, subcategory=@SubCat, unit_cost=@CostoForn,
-                    list_price=@Listino, supplier_id=@SuppId, notes=@Note, easyfatt_id=@EftId{mappingSet}",
+                    is_active=1, description=@Desc, category=@Cat, subcategory=@SubCat, unit=@Udm,
+                    unit_cost=@CostoForn, list_price=@Listino, supplier_id=@SuppId,
+                    -- Specchio VERO anche su questi (01/09/2026, Diego): il «Cod. prod. forn.»
+                    -- di Danea (CodArticoloForn) arrivava solo alla NASCITA della riga — chi
+                    -- era nato col campo vuoto restava vuoto per sempre. Idem produttore,
+                    -- barcode e UM: l'UPDATE ora riflette tutto quello che scrive l'INSERT.
+                    supplier_code=@CodForn, manufacturer=@Produttore, barcode=@Barcode,
+                    notes=@Note, easyfatt_id=@EftId{mappingSet}",
                 new
                 {
                     Code = code,
