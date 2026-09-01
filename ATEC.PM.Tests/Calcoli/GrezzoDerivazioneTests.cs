@@ -306,8 +306,10 @@ public class GrezzoDerivazioneTests
 
     /// <summary>
     /// «Questo grezzo ce l'abbiamo già a magazzino»: chi compra annulla la riga, e il
-    /// ricalcolo non deve rimettercela in ordine al primo salvataggio in officina. Fuori dagli
-    /// stati d'ingresso la quantità non è più cosa nostra.
+    /// ricalcolo non deve rimettercela in ordine. REGOLA B (01/09/2026): l'annullata resta
+    /// com'è e COPRE la sua quantità; se la distinta chiede di più, il residuo nasce su
+    /// una riga nuova — prima quei pezzi in più non li ordinava nessuno, e l'unica spia
+    /// era la matita su una riga che nessuno guardava più.
     /// </summary>
     [FactRichiedeMySql]
     public void Il_grezzo_annullato_da_chi_compra_non_torna_indietro()
@@ -326,9 +328,14 @@ public class GrezzoDerivazioneTests
         c.Execute("UPDATE ddp_officina_items SET quantity = 10 WHERE id = @Id", new { Id = riga });
         GrezziDerivazione.Sincronizza(c, commessa, null);
 
-        Grezzo dopo = SoloGrezzo(c, commessa);
-        Assert.Equal(4m, dopo.Quantity);       // la quantità resta quella annullata
-        Assert.Equal(10m, dopo.RawAutoQty);    // il conto della distinta si vede lo stesso
+        List<Grezzo> righe = Grezzi(c, commessa);
+        Assert.Equal(2, righe.Count);
+        Grezzo annullata = righe.Single(r => r.Id == idGrezzo);
+        Assert.Equal(4m, annullata.Quantity);        // la quantità resta quella annullata
+        Assert.Equal("ANN", annullata.ItemStatus);   // e la riga NON torna in ordine
+        Grezzo residuo = righe.Single(r => r.Id != idGrezzo);
+        Assert.Equal(6m, residuo.Quantity);          // 10 chiesti − 4 coperti dall'annullata
+        Assert.Equal("DO", residuo.ItemStatus);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -356,6 +363,102 @@ public class GrezzoDerivazioneTests
 
         Assert.True(secondo.NienteDaFare);
         Assert.Single(Grezzi(c, commessa));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 5. REGOLA B (01/09/2026) — L'IMPEGNATO COPRE, IL RESIDUO NASCE A PARTE
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Lo scenario di Diego sulla NIVE: 20+20 → grezzo 40; un 101 esce → 20; il grezzo
+    /// viene ordinato e consegnato; il 101 torna. PRIMA di questa regola quei 20 pezzi
+    /// non li ordinava nessuno, senza nessun errore a dirlo.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Riattivato_il_101_dopo_la_consegna_il_residuo_nasce_su_una_riga_nuova()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int commessa = Commessa(c);
+        int grezzo = Articolo(c, "201240826001", "Barra alluminio 40x40");
+        Deriva(c, Particolare(c, "101240826001", "Giunto D10"), grezzo);
+        Deriva(c, Particolare(c, "101240826002", "Giunto D12"), grezzo);
+
+        RigaOfficina(c, commessa, "101240826.001", quantita: 20);
+        int rigaB = RigaOfficina(c, commessa, "101240826.002", quantita: 20);
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+        Assert.Equal(40m, SoloGrezzo(c, commessa).Quantity);
+
+        // Il secondo 101 esce dalla distinta → il grezzo scala a 20, e viene comprato.
+        c.Execute("DELETE FROM ddp_officina_items WHERE id = @Id", new { Id = rigaB });
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+        Grezzo ordinato = SoloGrezzo(c, commessa);
+        Assert.Equal(20m, ordinato.Quantity);
+        c.Execute("UPDATE bom_items SET item_status='DISP' WHERE id = @Id", new { Id = ordinato.Id });
+
+        // Il 101 torna: la storica resta a 20 com'è andata, il residuo nasce a parte.
+        RigaOfficina(c, commessa, "101240826.002", quantita: 20);
+        GrezziDerivazione.Esito esito = GrezziDerivazione.Sincronizza(c, commessa, null);
+
+        Assert.Equal(1, esito.Creati);
+        List<Grezzo> righe = Grezzi(c, commessa);
+        Assert.Equal(2, righe.Count);
+        Grezzo storica = righe.Single(r => r.Id == ordinato.Id);
+        Grezzo residuo = righe.Single(r => r.Id != ordinato.Id);
+        Assert.Equal(20m, storica.Quantity);
+        Assert.Equal("DISP", storica.ItemStatus);
+        // Niente matita bugiarda sulla storia: il conto automatico segue la SUA quantità.
+        Assert.Equal(storica.Quantity, storica.RawAutoQty);
+        Assert.Equal(20m, residuo.Quantity);
+        Assert.Equal("DO", residuo.ItemStatus);
+    }
+
+    [FactRichiedeMySql]
+    public void Aumentata_la_quantita_dopo_l_impegno_il_residuo_nasce_a_parte()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int commessa = Commessa(c);
+        Deriva(c, Particolare(c, "101240826001", "Piastra"),
+            Articolo(c, "201240826001", "Barra alluminio 40x40"));
+
+        int riga101 = RigaOfficina(c, commessa, "101240826.001", quantita: 20);
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+        Grezzo ordinato = SoloGrezzo(c, commessa);
+        c.Execute("UPDATE bom_items SET item_status='DISP' WHERE id = @Id", new { Id = ordinato.Id });
+
+        c.Execute("UPDATE ddp_officina_items SET quantity = 30 WHERE id = @Id", new { Id = riga101 });
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+
+        List<Grezzo> righe = Grezzi(c, commessa);
+        Assert.Equal(2, righe.Count);
+        Assert.Equal(20m, righe.Single(r => r.Id == ordinato.Id).Quantity);
+        Assert.Equal(10m, righe.Single(r => r.Id != ordinato.Id).Quantity);
+    }
+
+    [FactRichiedeMySql]
+    public void Se_il_coperto_basta_di_nuovo_la_riga_del_residuo_se_ne_va()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int commessa = Commessa(c);
+        Deriva(c, Particolare(c, "101240826001", "Piastra"),
+            Articolo(c, "201240826001", "Barra alluminio 40x40"));
+
+        int riga101 = RigaOfficina(c, commessa, "101240826.001", quantita: 20);
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+        Grezzo ordinato = SoloGrezzo(c, commessa);
+        c.Execute("UPDATE bom_items SET item_status='DISP' WHERE id = @Id", new { Id = ordinato.Id });
+
+        // Cresce (nasce il residuo) e poi torna come prima (il residuo se ne va).
+        c.Execute("UPDATE ddp_officina_items SET quantity = 30 WHERE id = @Id", new { Id = riga101 });
+        GrezziDerivazione.Sincronizza(c, commessa, null);
+        Assert.Equal(2, Grezzi(c, commessa).Count);
+
+        c.Execute("UPDATE ddp_officina_items SET quantity = 20 WHERE id = @Id", new { Id = riga101 });
+        GrezziDerivazione.Esito esito = GrezziDerivazione.Sincronizza(c, commessa, null);
+
+        Assert.Equal(1, esito.Eliminati);
+        Grezzo rimasta = SoloGrezzo(c, commessa);
+        Assert.Equal(ordinato.Id, rimasta.Id);
+        Assert.Equal(20m, rimasta.Quantity);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -416,7 +519,8 @@ public class GrezzoDerivazioneTests
             SELECT id AS Id, COALESCE(part_number,'') AS PartNumber,
                    COALESCE(description,'') AS Description, quantity AS Quantity,
                    raw_auto_qty AS RawAutoQty, COALESCE(raw_sources,'') AS RawSources,
-                   raw_internal_share AS RawInternalShare
+                   raw_internal_share AS RawInternalShare,
+                   COALESCE(item_status,'') AS ItemStatus
             FROM bom_items
             WHERE project_id = @P AND COALESCE(raw_codex_code,'') <> ''
             ORDER BY id", new { P = commessa }).ToList();
@@ -438,5 +542,6 @@ public class GrezzoDerivazioneTests
         public decimal? RawAutoQty { get; set; }
         public string RawSources { get; set; } = "";
         public decimal? RawInternalShare { get; set; }
+        public string ItemStatus { get; set; } = "";
     }
 }

@@ -15,14 +15,18 @@ namespace ATEC.PM.Server.Services;
 /// officina c'è il 101 (disegno e ore), in commerciale il suo grezzo (materiale). Nel
 /// Bilancio i due costi sono diversi e si sommano una volta sola.</para>
 ///
-/// <para><b>Le regole, decise il 28/08/2026:</b></para>
+/// <para><b>Le regole, decise il 28/08/2026 (integrazione «delta» del 01/09/2026):</b></para>
 /// <list type="number">
 /// <item><b>Quantità 1:1</b> col 101 — 4 pezzi, 4 grezzi — <b>correggibile a mano</b>: da una
 /// barra ne escono di più, e chi compra deve poter scrivere il numero vero. Il conto
 /// automatico resta in <c>raw_auto_qty</c>: finché <c>quantity</c> gli è uguale, la riga
 /// segue i 101; appena qualcuno la cambia, il ricalcolo non la tocca più.</item>
-/// <item><b>Più 101 con lo stesso grezzo = UNA riga sola</b>, con le quantità sommate. Togli
-/// un 101 e la quantità si scala da sé.</item>
+/// <item><b>Più 101 con lo stesso grezzo = UNA riga LIBERA</b>, con le quantità sommate.
+/// Togli un 101 e la quantità si scala da sé. Le righe <b>impegnate</b> (in RDO, ordinate,
+/// avanzate) sono <b>storia che COPRE parte del fabbisogno</b>: se la richiesta supera il
+/// coperto — 101 riattivato dopo la consegna, quantità alzata a materiale già partito —
+/// il residuo nasce su una <b>riga nuova</b> («regola B» chiesta da Diego: prima quei
+/// pezzi non li ordinava nessuno, senza nessun errore a dirlo).</item>
 /// <item><b>Un grezzo = un fornitore</b>: nessuno split di quantità. Con più articoli Danea
 /// sullo stesso codice ATEC la riga nasce senza fornitore e sceglie la RDO.</item>
 /// </list>
@@ -125,7 +129,11 @@ public static class GrezziDerivazione
             WHERE b.project_id = @ProjectId AND b.raw_codex_code IS NOT NULL AND b.raw_codex_code <> ''",
             new { ProjectId = projectId }).ToList();
 
-        var perCodice = esistenti.ToDictionary(r => r.RawCodexCode, r => r);
+        // «Regola B» (01/09/2026): per una chiave possono esistere PIÙ righe — le impegnate
+        // (storia) più al massimo una libera che porta il residuo.
+        var perCodice = esistenti
+            .GroupBy(r => r.RawCodexCode)
+            .ToDictionary(g => g.Key, g => g.ToList());
         int creati = 0, aggiornati = 0, eliminati = 0, sganciati = 0;
 
         foreach (Richiesta richiesta in richieste)
@@ -133,22 +141,54 @@ public static class GrezziDerivazione
             string chiave = ComposizioneDdp.Chiave(richiesta.Codice);
             if (chiave.Length == 0) continue;
 
-            if (!perCodice.TryGetValue(chiave, out RigaGrezzo? riga))
+            perCodice.TryGetValue(chiave, out List<RigaGrezzo>? gruppo);
+            perCodice.Remove(chiave);
+            gruppo ??= new List<RigaGrezzo>();
+
+            // Le impegnate sono storia che COPRE il fabbisogno: quantità mai toccata,
+            // si riallineano solo etichetta e quota (e la matita si spegne).
+            var impegnate = gruppo.Where(r => !r.Libera).ToList();
+            foreach (RigaGrezzo storica in impegnate)
+                if (AggiornaStorica(c, storica, richiesta, updatedBy)) aggiornati++;
+
+            // Al più UNA riga libera per chiave; eventuali doppioni (stati storici anomali)
+            // si consolidano sulla prima.
+            var libere = gruppo.Where(r => r.Libera).ToList();
+            RigaGrezzo? libera = libere.FirstOrDefault();
+            foreach (RigaGrezzo doppione in libere.Skip(1))
             {
-                if (richiesta.Totale <= 0) continue;
-                Crea(c, projectId, chiave, richiesta, updatedBy, requestedBy);
-                creati++;
-                continue;
+                c.Execute("DELETE FROM bom_items WHERE id = @Id", new { Id = doppione.Id });
+                eliminati++;
             }
 
-            if (Aggiorna(c, riga, richiesta, updatedBy)) aggiornati++;
-            perCodice.Remove(chiave);
+            decimal coperto = impegnate.Sum(r => r.Quantity);
+            decimal residuo = richiesta.Totale - coperto;
+
+            if (residuo > 0)
+            {
+                if (libera == null)
+                {
+                    Crea(c, projectId, chiave, richiesta, residuo, updatedBy, requestedBy);
+                    creati++;
+                }
+                else if (Aggiorna(c, libera, richiesta, residuo, updatedBy))
+                {
+                    aggiornati++;
+                }
+            }
+            else if (libera != null)
+            {
+                // Il fabbisogno è già tutto coperto dalle righe impegnate: la riga libera
+                // non chiede più niente e se ne va.
+                c.Execute("DELETE FROM bom_items WHERE id = @Id", new { Id = libera.Id });
+                eliminati++;
+            }
         }
 
         // Quel che resta nel dizionario è grezzo che non serve più: nessun 101 in distinta lo
         // chiede. Se la riga è ancora libera se ne va col suo 101; se è già impegnata resta,
         // ma sganciata dalla derivazione.
-        foreach (RigaGrezzo orfana in perCodice.Values)
+        foreach (RigaGrezzo orfana in perCodice.Values.SelectMany(g => g))
         {
             if (orfana.Libera)
             {
@@ -209,9 +249,14 @@ public static class GrezziDerivazione
         return toccate;
     }
 
-    /// <summary>Riga nuova: nasce come una qualunque riga commerciale importata dal Codex.</summary>
+    /// <summary>
+    /// Riga nuova: nasce come una qualunque riga commerciale importata dal Codex.
+    /// <paramref name="quantita"/> è il RESIDUO da chiedere (regola B): la richiesta
+    /// totale meno quanto già coperto dalle righe impegnate.
+    /// </summary>
     private static void Crea(
-        IDbConnection c, int projectId, string chiave, Richiesta richiesta, int? updatedBy, string? requestedBy)
+        IDbConnection c, int projectId, string chiave, Richiesta richiesta, decimal quantita,
+        int? updatedBy, string? requestedBy)
     {
         ArticoloDaCodex.Esito art = ArticoloDaCodex.Risolvi(c, richiesta.Codice, richiesta.CodiceNuovo);
 
@@ -233,7 +278,7 @@ public static class GrezziDerivazione
                 art.PartNumber,
                 AtecCode = art.AtecCode,
                 Description = richiesta.Descr,
-                Quantity = richiesta.Totale,
+                Quantity = quantita,
                 // Col prezzo dell'articolo Danea si resta omogenei al resto della distinta
                 // commerciale; senza articolo vale quello del Codex.
                 UnitCost = art.UnitCost ?? richiesta.PrezzoForn,
@@ -251,9 +296,12 @@ public static class GrezziDerivazione
             });
     }
 
-    /// <summary>Riga già presente: si aggiorna solo quello che è ancora nostro.</summary>
+    /// <summary>
+    /// Riga LIBERA già presente: si aggiorna solo quello che è ancora nostro.
+    /// <paramref name="residuo"/> è la quantità che questa riga deve chiedere (regola B).
+    /// </summary>
     /// <returns><c>true</c> se qualcosa è cambiato davvero.</returns>
-    private static bool Aggiorna(IDbConnection c, RigaGrezzo riga, Richiesta richiesta, int? updatedBy)
+    private static bool Aggiorna(IDbConnection c, RigaGrezzo riga, Richiesta richiesta, decimal residuo, int? updatedBy)
     {
         string origini = Tronca(richiesta.Origini, 300);
 
@@ -267,26 +315,56 @@ public static class GrezziDerivazione
         // griglia aperta su quella riga.
         int toccate = c.Execute(@"
             UPDATE bom_items
-            SET quantity = CASE WHEN @Segui = 1 THEN @Totale ELSE quantity END,
-                raw_auto_qty = @Totale,
+            SET quantity = CASE WHEN @Segui = 1 THEN @Residuo ELSE quantity END,
+                raw_auto_qty = @Residuo,
                 raw_sources = @Origini,
                 raw_internal_share = @Quota,
                 updated_at = NOW(), updated_by = @By
             WHERE id = @Id
-              AND ((@Segui = 1 AND quantity <> @Totale)
-                   OR NOT (raw_auto_qty <=> @Totale)
+              AND ((@Segui = 1 AND quantity <> @Residuo)
+                   OR NOT (raw_auto_qty <=> @Residuo)
                    OR NOT (raw_internal_share <=> @Quota)
                    OR COALESCE(raw_sources,'') <> @Origini)",
             new
             {
                 Id = riga.Id,
-                Totale = richiesta.Totale,
+                Residuo = residuo,
                 Origini = origini,
                 Quota = richiesta.QuotaBilancio,
                 Segui = seguiLaDistinta ? 1 : 0,
                 By = updatedBy
             });
 
+        return toccate > 0;
+    }
+
+    /// <summary>
+    /// Riga IMPEGNATA (regola B): è storia — quantità mai toccata. Si riallineano solo
+    /// l'etichetta «Grezzo di …» e la quota Bilancio, e <c>raw_auto_qty</c> si tiene
+    /// uguale alla quantità della riga: la matita «corretta a mano» non deve raccontare
+    /// bugie su una riga che ormai è com'è andata davvero (il residuo, se c'è, vive su
+    /// una riga sua).
+    /// </summary>
+    private static bool AggiornaStorica(IDbConnection c, RigaGrezzo riga, Richiesta richiesta, int? updatedBy)
+    {
+        string origini = Tronca(richiesta.Origini, 300);
+        int toccate = c.Execute(@"
+            UPDATE bom_items
+            SET raw_auto_qty = quantity,
+                raw_sources = @Origini,
+                raw_internal_share = @Quota,
+                updated_at = NOW(), updated_by = @By
+            WHERE id = @Id
+              AND (NOT (raw_auto_qty <=> quantity)
+                   OR NOT (raw_internal_share <=> @Quota)
+                   OR COALESCE(raw_sources,'') <> @Origini)",
+            new
+            {
+                Id = riga.Id,
+                Origini = origini,
+                Quota = richiesta.QuotaBilancio,
+                By = updatedBy
+            });
         return toccate > 0;
     }
 
