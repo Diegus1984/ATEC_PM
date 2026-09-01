@@ -321,6 +321,7 @@ export function AtecPickerDialog({
                     <TableRow>
                       <TableHead>Fornitore</TableHead>
                       <TableHead>Codice</TableHead>
+                      <TableHead>Cod. fornitore</TableHead>
                       <TableHead>Produttore</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead />
@@ -329,13 +330,13 @@ export function AtecPickerDialog({
                   <TableBody>
                     {altsQuery.isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground">
+                        <TableCell colSpan={6} className="text-muted-foreground">
                           Caricamento alternative…
                         </TableCell>
                       </TableRow>
                     ) : alts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-muted-foreground">
+                        <TableCell colSpan={6} className="text-muted-foreground">
                           {isLavorato && derivazioneCodice
                             ? `Il grezzo ${derivazioneCodice} non è associato a nessun articolo commerciale: se inserisci, la riga del grezzo resterà BLOCCATA (bordo lampeggiante) finché non associ l'articolo (Codex → Articoli Danea, icona catena).`
                             : isLavorato
@@ -350,6 +351,9 @@ export function AtecPickerDialog({
                             {alt.supplierName || "—"}
                           </TableCell>
                           <TableCell className="font-medium">{alt.code}</TableCell>
+                          <TableCell className="font-medium">
+                            {alt.supplierCode || "—"}
+                          </TableCell>
                           <TableCell className="max-w-[140px] truncate">
                             {alt.manufacturer || "—"}
                           </TableCell>

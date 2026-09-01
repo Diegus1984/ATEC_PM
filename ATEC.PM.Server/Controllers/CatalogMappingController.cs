@@ -107,7 +107,8 @@ public class CatalogMappingController : ControllerBase
             SELECT i.id, i.code, i.description, i.category, i.unit,
                    i.unit_cost AS UnitCost, i.list_price AS ListPrice,
                    i.supplier_id AS SupplierId,
-                   s.company_name AS SupplierName, i.manufacturer,
+                   s.company_name AS SupplierName,
+                   COALESCE(i.supplier_code,'') AS SupplierCode, i.manufacturer,
                    COALESCE(i.atec_code,'') AS AtecCode, i.codex_item_id AS CodexItemId,
                    i.easyfatt_id AS EasyfattId
             FROM catalog_items i
@@ -133,7 +134,8 @@ public class CatalogMappingController : ControllerBase
             SELECT i.id, i.code, i.description, i.category, i.unit,
                    i.unit_cost AS UnitCost, i.list_price AS ListPrice,
                    i.supplier_id AS SupplierId,
-                   s.company_name AS SupplierName, i.manufacturer,
+                   s.company_name AS SupplierName,
+                   COALESCE(i.supplier_code,'') AS SupplierCode, i.manufacturer,
                    COALESCE(i.atec_code,'') AS AtecCode, i.codex_item_id AS CodexItemId,
                    i.easyfatt_id AS EasyfattId
             FROM catalog_items i

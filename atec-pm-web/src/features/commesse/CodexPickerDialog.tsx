@@ -127,6 +127,7 @@ interface PickerColumn {
 const CATALOG_COLUMNS: PickerColumn[] = [
   { key: "atecCode", label: "Cod. ATEC", filterParam: "atecCode" },
   { key: "code", label: "Codice", filterParam: "code" },
+  { key: "supplierCode", label: "Cod. fornitore", filterParam: "supplierCode" },
   { key: "description", label: "Descrizione", filterParam: "description" },
   { key: "unit", label: "UM" },
   { key: "supplierName", label: "Fornitore", filterParam: "supplier" },
@@ -144,6 +145,7 @@ const CODEX_COLUMNS: PickerColumn[] = [
   { key: "codice", label: "Cod. ATEC", filterParam: "codice" },
   { key: "descr", label: "Descrizione", filterParam: "descr" },
   { key: "articolo", label: "Cod. articolo", filterParam: "articolo" },
+  { key: "codiceFornitore", label: "Cod. fornitore", filterParam: "codiceFornitore" },
   { key: "fornitore", label: "Fornitore", filterParam: "fornitore" },
   { key: "produttore", label: "Produttore", filterParam: "produttore" },
   { key: "um", label: "UM" },
@@ -214,8 +216,10 @@ export function CodexPickerDialog({
     Record<number, CompositionChildItem[] | "loading">
   >({})
 
+  // v2 (01/09/2026): arriva «Cod. fornitore» — chiave versionata o chi ha già una
+  // scelta salvata non vedrebbe mai la colonna nuova (trappola localStorage).
   const [visibility, setVisibility] = usePersistedColumnVisibility(
-    "ddp-catalog-picker-cols-v1",
+    "ddp-catalog-picker-cols-v2",
     CATALOG_COLUMNS_DEFAULTS
   )
 
@@ -968,6 +972,9 @@ export function CodexPickerDialog({
         )
       case "code":
         return <span className="font-medium">{item.code}</span>
+      case "supplierCode":
+        // Stesso carattere della colonna «Codice» (regola di Diego, 01/09).
+        return <span className="font-medium">{dash(item.supplierCode)}</span>
       case "description":
         return (
           <span className="block max-w-[320px] truncate" title={item.description}>
@@ -1009,6 +1016,13 @@ export function CodexPickerDialog({
         return (
           <span className="font-medium" title={row.codiceArticolo}>
             {dash(row.codiceArticolo)}
+          </span>
+        )
+      case "codiceFornitore":
+        // Stesso carattere della colonna «Cod. articolo» (regola di Diego, 01/09).
+        return (
+          <span className="font-medium" title={row.codiceFornitore}>
+            {dash(row.codiceFornitore)}
           </span>
         )
       case "fornitore":
@@ -1147,6 +1161,7 @@ export function CodexPickerDialog({
                     <th className="px-3 py-1.5 font-medium">Descrizione</th>
                     <th className="px-3 py-1.5 font-medium">Grezzo (201)</th>
                     <th className="px-3 py-1.5 font-medium">Cod. articolo</th>
+                    <th className="px-3 py-1.5 font-medium">Cod. fornitore</th>
                     <th className="px-3 py-1.5 font-medium">Fornitore</th>
                     <th className="px-3 py-1.5 text-right font-medium">Costo</th>
                     <th className="w-12 px-3 py-1.5" />
@@ -1174,7 +1189,7 @@ export function CodexPickerDialog({
                         {formatCodice(row.grezzoCodice ?? "")}
                       </td>
                       {row.catalogItemId == null ? (
-                        <td colSpan={2} className="px-3 py-1.5">
+                        <td colSpan={3} className="px-3 py-1.5">
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
                             <span className="size-1.5 rounded-full bg-amber-500" />
                             grezzo da associare a un articolo
@@ -1184,6 +1199,9 @@ export function CodexPickerDialog({
                         <>
                           <td className="px-3 py-1.5 font-medium" title={row.codiceArticolo}>
                             {dash(row.codiceArticolo)}
+                          </td>
+                          <td className="px-3 py-1.5 font-medium" title={row.codiceFornitore}>
+                            {dash(row.codiceFornitore)}
                           </td>
                           <td
                             className="max-w-[160px] truncate px-3 py-1.5"

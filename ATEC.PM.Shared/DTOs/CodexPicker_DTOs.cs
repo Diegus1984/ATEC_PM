@@ -22,6 +22,8 @@ public class CodexPickerRow
     // Articolo Danea abbinato (CatalogItemId null = codice senza abbinamento).
     public int? CatalogItemId { get; set; }
     public string CodiceArticolo { get; set; } = "";
+    /// <summary>«Cod. prod. forn.» di Danea (CodArticoloForn): come lo chiama il produttore.</summary>
+    public string CodiceFornitore { get; set; } = "";
     public string UnitArticolo { get; set; } = "";
     [DatoSensibile]
     public decimal? CostoArticolo { get; set; }

@@ -15,6 +15,8 @@ export interface CodexPickerRow {
   prezzoCodex: number | null
   catalogItemId: number | null
   codiceArticolo: string
+  /** «Cod. prod. forn.» di Danea: come lo chiama il produttore (KTR M19…). */
+  codiceFornitore: string
   unitArticolo: string
   costoArticolo: number | null
   supplierId: number | null

@@ -32,6 +32,7 @@ public class CodexPickerController : ControllerBase
         [FromQuery] string? codice = null,
         [FromQuery] string? descr = null,
         [FromQuery] string? articolo = null,
+        [FromQuery] string? codiceFornitore = null,
         [FromQuery] string? fornitore = null,
         [FromQuery] string? produttore = null)
     {
@@ -88,6 +89,7 @@ public class CodexPickerController : ControllerBase
                 dp.Add("Descr", descrPat);
             }
             AddLike("ci.code", articolo, "Articolo");
+            AddLike("ci.supplier_code", codiceFornitore, "CodiceFornitore");
             AddLike("COALESCE(s.company_name, cx.fornitore)", fornitore, "Fornitore");
             AddLike("ci.manufacturer", produttore, "Produttore");
 
@@ -111,6 +113,7 @@ public class CodexPickerController : ControllerBase
                    cx.prezzo_forn AS PrezzoCodex,
                    ci.id AS CatalogItemId,
                    COALESCE(ci.code,'') AS CodiceArticolo,
+                   COALESCE(ci.supplier_code,'') AS CodiceFornitore,
                    COALESCE(ci.unit,'') AS UnitArticolo,
                    ci.unit_cost AS CostoArticolo,
                    ci.supplier_id AS SupplierId,
@@ -149,6 +152,7 @@ public class CodexPickerController : ControllerBase
         [FromQuery] string? codice = null,
         [FromQuery] string? descr = null,
         [FromQuery] string? articolo = null,
+        [FromQuery] string? codiceFornitore = null,
         [FromQuery] string? fornitore = null,
         [FromQuery] string? produttore = null)
     {
@@ -180,6 +184,7 @@ public class CodexPickerController : ControllerBase
                 dp.Add("Descr", descrPat);
             }
             AddLike("ci.code", articolo, "Articolo");
+            AddLike("ci.supplier_code", codiceFornitore, "CodiceFornitore");
             AddLike("COALESCE(s.company_name, g.fornitore)", fornitore, "Fornitore");
             AddLike("ci.manufacturer", produttore, "Produttore");
 
@@ -205,6 +210,7 @@ public class CodexPickerController : ControllerBase
                    g.prezzo_forn AS PrezzoCodex,
                    ci.id AS CatalogItemId,
                    COALESCE(ci.code,'') AS CodiceArticolo,
+                   COALESCE(ci.supplier_code,'') AS CodiceFornitore,
                    COALESCE(ci.unit,'') AS UnitArticolo,
                    ci.unit_cost AS CostoArticolo,
                    ci.supplier_id AS SupplierId,
