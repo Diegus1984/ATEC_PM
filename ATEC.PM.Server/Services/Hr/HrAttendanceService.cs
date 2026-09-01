@@ -530,6 +530,7 @@ public class HrAttendanceService
 
         int nuove = 0, aggiornate = 0, rimosse = 0;
         var giorniToccati = new HashSet<(int EmployeeId, DateTime WorkDate)>();
+        var daRifare = new HashSet<(int EmployeeId, DateTime WorkDate)>();
 
         using (MySqlTransaction tran = c.BeginTransaction())
         {
@@ -548,7 +549,7 @@ public class HrAttendanceService
                         new { EmployeeId = employeeIdMappato, WorkDate = work_date, t.PunchedAt, t.Direction, t.ExternalId, t.Location },
                         tran);
                     nuove++;
-                    giorniToccati.Add((employeeIdMappato, work_date));
+                    SegnaConVicine(giorniToccati, daRifare, employeeIdMappato, work_date);
                     continue;
                 }
 
@@ -566,15 +567,15 @@ public class HrAttendanceService
                         new { EmployeeId = employeeId, WorkDate = work_date, t.PunchedAt, t.Direction, t.Location, vecchia.Id },
                         tran);
                     aggiornate++;
-                    giorniToccati.Add((vecchia.EmployeeId, vecchia.WorkDate));
-                    giorniToccati.Add((employeeId, work_date));
+                    SegnaConVicine(giorniToccati, daRifare, vecchia.EmployeeId, vecchia.WorkDate);
+                    SegnaConVicine(giorniToccati, daRifare, employeeId, work_date);
                 }
             }
 
             if (finestra != null)
-                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, giorniToccati);
+                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, giorniToccati, daRifare);
             else if (full)
-                rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, giorniToccati);
+                rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, giorniToccati, daRifare);
 
             tran.Commit();
         }
@@ -583,10 +584,19 @@ public class HrAttendanceService
             "SELECT employee_id AS EmployeeId, work_date AS WorkDate FROM hr_days WHERE note = 'Giornata in corso' AND work_date < CURDATE()"))
         {
             giorniToccati.Add(sospesa);
+            daRifare.Add(sospesa);
         }
 
-        foreach ((int employeeId, DateTime work_date) in giorniToccati)
-            RecalculateDay(c, employeeId, work_date);
+        // 🪤 Si RIFANNO anche le vicine — una timbratura che arriva oggi può chiudere la
+        // notte di ieri — ma il numero che si mostra è quello delle giornate cambiate
+        // davvero: contando anche le vicine, un import di dieci giornate ne dichiarerebbe
+        // trenta.
+        int ricalcolate = 0;
+        foreach ((int employeeId, DateTime work_date) in daRifare)
+        {
+            bool scritta = RecalculateDay(c, employeeId, work_date);
+            if (scritta && giorniToccati.Contains((employeeId, work_date))) ricalcolate++;
+        }
 
         int riparate = RepairDays(c);
 
@@ -595,7 +605,7 @@ public class HrAttendanceService
         lock (_progressoLock) _progresso.Removed = rimosse;
 
         string messaggio =
-            $"{nuove} timbrature nuove, {aggiornate} aggiornate, {giorniToccati.Count} giornate ricalcolate"
+            $"{nuove} timbrature nuove, {aggiornate} aggiornate, {ricalcolate} giornate ricalcolate"
             + (rimosse > 0 ? $", {rimosse} cancellate su Ecos rimosse" : "")
             + (riparate > 0 ? $", {riparate} giornate rimesse in pari" : "")
             + (nonAbbinati.Count > 0 ? $"; {nonAbbinati.Count} codici Ecos senza dipendente collegato" : "");
@@ -606,7 +616,7 @@ public class HrAttendanceService
             Message = messaggio,
             PunchesAdded = nuove,
             PunchesUpdated = aggiornate,
-            DaysRecalculated = giorniToccati.Count + riparate,
+            DaysRecalculated = ricalcolate + riparate,
             Unmatched = nonAbbinati.ToList(),
         };
     }
@@ -619,7 +629,7 @@ public class HrAttendanceService
     private int RimuoviSpariteNellaFinestra(
         MySqlConnection c, MySqlTransaction tran,
         IEnumerable<string> idVisti, FinestraImport finestra,
-        HashSet<(int, DateTime)> giorniToccati)
+        HashSet<(int, DateTime)> giorniToccati, HashSet<(int, DateTime)> daRifare)
     {
         var visti = new HashSet<string>(idVisti, StringComparer.OrdinalIgnoreCase);
 
@@ -640,7 +650,7 @@ public class HrAttendanceService
             c.Execute("DELETE FROM hr_punches WHERE id IN @Ids", new { Ids = blocco }, tran);
 
         foreach (RigaEsistente r in sparite)
-            giorniToccati.Add((r.EmployeeId, r.WorkDate));
+            SegnaConVicine(giorniToccati, daRifare, r.EmployeeId, r.WorkDate);
 
         _logger.LogInformation(
             "[HR] Risincronizzazione {Dal:dd/MM/yyyy}-{Al:dd/MM/yyyy}: {N} timbrature non più su Ecos rimosse.",
@@ -651,7 +661,7 @@ public class HrAttendanceService
     private int RimuoviCancellateSuEcos(
         MySqlConnection c, MySqlTransaction tran,
         IEnumerable<string> idVisti, IEnumerable<int> dipendentiMappati,
-        HashSet<(int, DateTime)> giorniToccati)
+        HashSet<(int, DateTime)> giorniToccati, HashSet<(int, DateTime)> daRifare)
     {
         var visti = new HashSet<string>(idVisti, StringComparer.OrdinalIgnoreCase);
         int[] dipendenti = dipendentiMappati.Distinct().ToArray();
@@ -673,7 +683,7 @@ public class HrAttendanceService
             c.Execute("DELETE FROM hr_punches WHERE id IN @Ids", new { Ids = blocco }, tran);
 
         foreach (RigaEsistente r in sparite)
-            giorniToccati.Add((r.EmployeeId, r.WorkDate));
+            SegnaConVicine(giorniToccati, daRifare, r.EmployeeId, r.WorkDate);
 
         _logger.LogInformation(
             "[HR] {N} timbrature cancellate su Ecos rimosse anche qui (import full).", sparite.Count);
@@ -690,7 +700,14 @@ public class HrAttendanceService
                      ON g.employee_id = t.employee_id AND g.work_date = t.work_date
               WHERE g.id IS NULL
                  OR g.rules_version < @Versione
-                 OR g.calculated_at < t.ultima
+                 -- 🪤 Non basta guardare le timbrature della giornata: con il terzo turno
+                 -- una giornata dipende anche da quelle del giorno prima e del giorno dopo.
+                 -- Se il ricalcolo a catena salta (un riavvio nel mezzo), è questa la rete.
+                 OR g.calculated_at < (SELECT MAX(p.created_at)
+                                         FROM hr_punches p
+                                        WHERE p.employee_id = t.employee_id
+                                          AND p.work_date BETWEEN DATE_SUB(t.work_date, INTERVAL 1 DAY)
+                                                              AND DATE_ADD(t.work_date, INTERVAL 1 DAY))
               ORDER BY t.work_date DESC
               LIMIT @Limite",
             new { Versione = TimesheetRules.Version, Limite = MaxDaysToRepair }).ToList();
@@ -713,7 +730,11 @@ public class HrAttendanceService
 
     // ── RICALCOLO GIORNATE ────────────────────────────────────────────────────
 
-    public void RecalculateDay(MySqlConnection c, int employeeId, DateTime work_date)
+    /// <returns>
+    /// true se la giornata ha prodotto un cartellino; false se non c'era niente da
+    /// calcolare (giorno senza timbrature: il cartellino, se c'era, viene tolto).
+    /// </returns>
+    public bool RecalculateDay(MySqlConnection c, int employeeId, DateTime work_date)
     {
         List<RawPunch> grezze = c.Query<(DateTime PunchedAt, string Direction)>(
                 @"SELECT punched_at AS PunchedAt, direction AS Direction
@@ -728,7 +749,7 @@ public class HrAttendanceService
         {
             c.Execute("DELETE FROM hr_days WHERE employee_id = @EmployeeId AND work_date = @WorkDate",
                 new { EmployeeId = employeeId, WorkDate = work_date.Date });
-            return;
+            return false;
         }
 
         bool countsOvertime = c.ExecuteScalar<bool?>(
@@ -736,7 +757,8 @@ public class HrAttendanceService
                 new { EmployeeId = employeeId })
             ?? true;
         TimesheetDay cart = TimesheetEngine.Calcola(
-            work_date.Date, grezze, DateTime.Today, new TimesheetEngine.EmployeeConfig(countsOvertime));
+            work_date.Date, grezze, DateTime.Today, new TimesheetEngine.EmployeeConfig(countsOvertime),
+            NightContextOf(c, employeeId, work_date.Date));
 
         c.Execute(@"
             INSERT INTO hr_days
@@ -770,6 +792,86 @@ public class HrAttendanceService
                 cart.HasAnomaly,
                 RulesVersion = TimesheetRules.Version,
             });
+
+        return true;
+    }
+
+    /// <summary>
+    /// Le due timbrature che confinano con la giornata: l'ultima di ieri e la prima di
+    /// domani. Servono a <see cref="NightShift"/> per capire se un'entrata serale o
+    /// un'uscita mattutina sono i due monconi dello stesso turno di notte.
+    ///
+    /// <para>Una query sola: <c>RecalculateDay</c> gira in ciclo su tutte le giornate da
+    /// rimettere in pari, e due andate e ritorno per giornata si sentirebbero.</para>
+    /// </summary>
+    private static NightContext NightContextOf(MySqlConnection c, int employeeId, DateTime work_date)
+    {
+        DateTime ieri = work_date.Date.AddDays(-1);
+        DateTime domani = work_date.Date.AddDays(1);
+
+        List<(DateTime WorkDate, DateTime PunchedAt, string Direction)> vicine =
+            c.Query<(DateTime, DateTime, string)>(
+                @"SELECT work_date AS WorkDate, punched_at AS PunchedAt, direction AS Direction
+                    FROM hr_punches
+                   WHERE employee_id = @EmployeeId AND work_date IN (@Prev, @Next)
+                   ORDER BY punched_at",
+                new { EmployeeId = employeeId, Prev = ieri, Next = domani }).ToList();
+
+        List<RawPunch> Del(DateTime giorno) => vicine
+            .Where(v => v.WorkDate.Date == giorno)
+            .Select(v => new RawPunch(v.PunchedAt, v.Direction))
+            .ToList();
+
+        return new NightContext(Del(ieri), Del(domani));
+    }
+
+    /// <summary>
+    /// Lo stesso contesto di <see cref="NightContextOf"/>, ma preso da timbrature che si
+    /// hanno già in mano invece che dal database: lo usa il cartellino mensile, che ripassa
+    /// nel motore un mese intero e non può permettersi due query per giornata.
+    ///
+    /// <para>Le liste arrivano ordinate per orario dalla query che le ha caricate.</para>
+    /// </summary>
+    private static NightContext ContestoNotte(
+        IReadOnlyDictionary<DateTime, List<PunchRow>> perGiorno, DateTime work_date)
+    {
+        List<RawPunch> Del(DateTime giorno) =>
+            perGiorno.TryGetValue(giorno, out List<PunchRow>? righe)
+                ? righe.Select(t => new RawPunch(t.PunchedAt, t.Direction)).ToList()
+                : new List<RawPunch>();
+
+        return new NightContext(Del(work_date.Date.AddDays(-1)), Del(work_date.Date.AddDays(1)));
+    }
+
+    /// <summary>
+    /// Rifà la giornata <b>e le sue vicine</b>. Serve dopo una rettifica a mano: l'uscita
+    /// delle 06:03 aggiunta oggi chiude la notte cominciata ieri, e il cartellino di ieri
+    /// va rifatto anche se nessuno l'ha toccato.
+    /// </summary>
+    private void RicalcolaConVicine(MySqlConnection c, int employeeId, DateTime work_date)
+    {
+        RecalculateDay(c, employeeId, work_date.Date.AddDays(-1));
+        RecalculateDay(c, employeeId, work_date.Date);
+        RecalculateDay(c, employeeId, work_date.Date.AddDays(1));
+    }
+
+    /// <summary>
+    /// Segna una giornata da ricalcolare <b>insieme alle sue vicine</b>: una timbratura che
+    /// arriva oggi può chiudere la notte cominciata ieri (o aprire quella che finisce
+    /// domani), e quelle giornate vanno rifatte anche se non le ha toccate nessuno.
+    /// </summary>
+    /// <param name="toccate">Le giornate cambiate davvero: è questo il numero da mostrare.</param>
+    /// <param name="daRifare">Quelle da ricalcolare, vicine comprese.</param>
+    private static void SegnaConVicine(
+        HashSet<(int EmployeeId, DateTime WorkDate)> toccate,
+        HashSet<(int EmployeeId, DateTime WorkDate)> daRifare,
+        int employeeId,
+        DateTime work_date)
+    {
+        toccate.Add((employeeId, work_date.Date));
+        daRifare.Add((employeeId, work_date.Date));
+        daRifare.Add((employeeId, work_date.Date.AddDays(-1)));
+        daRifare.Add((employeeId, work_date.Date.AddDays(1)));
     }
 
     // ── CARTELLINO MENSILE ────────────────────────────────────────────────────
@@ -811,7 +913,10 @@ public class HrAttendanceService
                   LEFT JOIN employees e ON e.id = t.created_by
                   WHERE t.employee_id = @Id AND t.work_date BETWEEN @Da AND @A
                   ORDER BY t.punched_at",
-                new { Id = employeeId, Da = primo, A = ultimo })
+                // 🪤 Un giorno in più da ogni parte: serve a riconoscere il turno di notte
+                // a cavallo del 1° e dell'ultimo del mese. Il ciclo resta sulle sole
+                // giornate del mese, quindi i due giorni in più non finiscono a video.
+                new { Id = employeeId, Da = primo.AddDays(-1), A = ultimo.AddDays(1) })
             .GroupBy(t => t.WorkDate.Date)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -916,7 +1021,9 @@ public class HrAttendanceService
                 TimesheetDay stadi = TimesheetEngine.Calcola(
                     work_date,
                     grezze.Select(t => new RawPunch(t.PunchedAt, t.Direction, null)),
-                    DateTime.Today);
+                    DateTime.Today,
+                    null,
+                    ContestoNotte(timbrature, work_date));
 
                 riga.Raw = new HrDayStageDto
                 {
@@ -1548,6 +1655,15 @@ public class HrAttendanceService
                     decimal oreMancanti = emp.DailyHours - oreLavorate;
                     bool anomalia = dayData?.HasAnomaly == true;
 
+                    // 🪤 Mezzo turno di notte non è mezza giornata mancante: le ore stanno
+                    // tutte lì, spartite fra i due giorni che la mezzanotte separa. Senza
+                    // questo un turno di notte regolare tinge di rosso DUE caselle.
+                    // Vale SOLO per il rosso: se quel giorno c'è anche un permesso, il ramo
+                    // qui sotto deve continuare a scriverlo sulla sua riga. E vale solo per
+                    // la giornata che ha CEDUTO le ore: quella che se le è prese ce le ha
+                    // tutte, e se le mancano il rosso ci va come sempre.
+                    bool mezzaNotte = NightShift.HasHandedHours(dayData?.Note);
+
                     if (oreMancanti >= 0.25m && dayAbsence != null)
                     {
                         decimal ore = dayAbsence.Hours ?? emp.DailyHours;
@@ -1568,7 +1684,7 @@ public class HrAttendanceService
                             Scrivi(rowOrd, giorno, "", "RED");
                         }
                     }
-                    else if (oreMancanti >= 0.25m || anomalia)
+                    else if ((oreMancanti >= 0.25m && !mezzaNotte) || anomalia)
                     {
                         Cella(rowPres, giorno).Color = "RED";
 
@@ -2380,7 +2496,7 @@ public class HrAttendanceService
                 Autore = autoreId,
             });
 
-        RecalculateDay(c, req.EmployeeId, req.PunchedAt.Date);
+        RicalcolaConVicine(c, req.EmployeeId, req.PunchedAt.Date);
         return null;
     }
 
@@ -2405,7 +2521,7 @@ public class HrAttendanceService
             "sul cartellino di {Dipendente}, motivo «{Reason}».",
             autoreId, riga.Direction, riga.PunchedAt, riga.EmployeeId, riga.Reason);
 
-        RecalculateDay(c, riga.EmployeeId, riga.WorkDate);
+        RicalcolaConVicine(c, riga.EmployeeId, riga.WorkDate);
         return null;
     }
 

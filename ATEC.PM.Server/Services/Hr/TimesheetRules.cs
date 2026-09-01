@@ -19,9 +19,11 @@ public static class TimesheetRules
     /// bassa le ricalcola da sé <c>HrPresenzeService.RiparaGiornate</c> al primo import.
     ///
     /// <para>Storia: <b>1</b> primo port del motore VB · <b>2</b> aggiunto il filtro dei
-    /// doppioni di strisciata sotto i 5 minuti (era nella CTE SQL del VB, fuori dal motore).</para>
+    /// doppioni di strisciata sotto i 5 minuti (era nella CTE SQL del VB, fuori dal motore)
+    /// · <b>3</b> turno a cavallo della mezzanotte tagliato in due (<see cref="NightShift"/>)
+    /// e notte riconosciuta anche fra mezzanotte e le 6 del mattino.</para>
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int StandardDayMinutes = 480;
@@ -39,6 +41,29 @@ public static class TimesheetRules
     /// <summary>BreakTime dedotta d'ufficio quando non è stata timbrata.</summary>
     public const int ForcedBreakMinutes = 60;
 
+    // ── Turno a cavallo della mezzanotte ──────────────────────────────────────
+    //
+    // Il motore originale non conosceva le notti: le sue giornate cominciano e finiscono
+    // dentro lo stesso giorno solare. Una notte va quindi TAGLIATA a mezzanotte, e i due
+    // tronconi si comportano come due giornate normali. Le soglie qui sotto servono solo
+    // a riconoscere la notte: si taglia soltanto quando la controparte esiste davvero,
+    // altrimenti una strisciata dimenticata diventerebbe lavoro fino alle 24:00.
+
+    /// <summary>Un'entrata prima di quest'ora non apre una notte: è una giornata normale.</summary>
+    public const int NightShiftEarliestStartHour = 12;
+
+    /// <summary>Un'uscita dopo quest'ora non chiude una notte: è una giornata normale.</summary>
+    public const int NightShiftLatestEndHour = 12;
+
+    /// <summary>Oltre questa durata la coppia entrata/uscita non è un turno: è un errore di timbratura.</summary>
+    public const int NightShiftMaxMinutes = 14 * 60;
+
+    /// <summary>
+    /// Lo stacco più lungo che dentro un turno di notte è ancora una PAUSA (la cena, il
+    /// caffè delle tre). Oltre, non è una pausa: è la fine del turno.
+    /// </summary>
+    public const int NightShiftMaxBreakMinutes = 2 * 60;
+
     /// <summary>Passo dell'arrotondamento delle timbrature.</summary>
     public const int RoundingStepMinutes = 30;
 
@@ -47,6 +72,12 @@ public static class TimesheetRules
 
     /// <summary>Dalle 22:00 il lavoro è notturno.</summary>
     public const int NightShiftStartHour = 22;
+
+    /// <summary>
+    /// …e lo resta fino alle 6:00 del mattino. Il motore originale questa metà non l'aveva
+    /// mai vista: senza turni di notte una giornata non arrivava mai a cavallo delle 6.
+    /// </summary>
+    public const int NightShiftEndHour = 6;
 
     // ── Maggiorazioni (Circolare n. 12 del 23.12.2024, «Non a turni») ──────────
     public const double OvertimeRateA = 0.20;   // a. straordinario diurno

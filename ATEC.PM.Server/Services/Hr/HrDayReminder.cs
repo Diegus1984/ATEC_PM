@@ -131,6 +131,16 @@ public static class HrDayReminder
             sb.AppendLine("  ℹ Il permesso richiesto è stato annullato: risulta una giornata lavorativa completa.");
             sb.AppendLine($"  {nota}");
         }
+        else if (nota.Contains("manca una timbratura della notte", StringComparison.Ordinal))
+        {
+            sb.AppendLine("  ⚠ Turno di notte: le timbrature non si accoppiano.");
+            sb.AppendLine("  Verifica l'entrata e l'uscita del turno.");
+        }
+        else if (nota.Contains("due turni nella stessa giornata", StringComparison.Ordinal))
+        {
+            sb.AppendLine("  ⚠ Nella stessa giornata risultano due turni distinti.");
+            sb.AppendLine("  Verifica che le timbrature siano tutte corrette.");
+        }
         else if (nota.Contains("INCOMPLETO", StringComparison.Ordinal))
         {
             sb.AppendLine("  ⚠ Timbrature incomplete — manca l'uscita.");
