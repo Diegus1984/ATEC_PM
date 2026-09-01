@@ -106,11 +106,13 @@ export function OrdiniDaneaEye({
     )
   }
 
+  // Colore EREDITATO dalla riga, come il carattere a fianco (regola di Diego 01/09):
+  // sui colori pieni degli stati il teal spariva.
   if (voci.length === 1) {
     return (
       <button
         type="button"
-        className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+        className="shrink-0 rounded p-0.5 hover:bg-black/10"
         title={`Apri: ${voci[0].label} (cerca in Danea, anche nel vecchio archivio)`}
         onClick={(e) => {
           e.stopPropagation()
@@ -128,7 +130,7 @@ export function OrdiniDaneaEye({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+          className="shrink-0 rounded p-0.5 hover:bg-black/10"
           title="Questa riga ha due ordini Danea: lavorazione e grezzo — scegli quale aprire"
           onClick={(e) => e.stopPropagation()}
         >

@@ -1047,9 +1047,10 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               ? () => setDaneaOrderRef(rif)
               : null
           const occhio = apriOrdine ? (
+            // Colore ereditato dalla riga, come il carattere a fianco (regola 01/09).
             <button
               type="button"
-              className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+              className="shrink-0 rounded p-0.5 hover:bg-black/10"
               title={
                 perIdDoc
                   ? "Apri ordine Danea"
