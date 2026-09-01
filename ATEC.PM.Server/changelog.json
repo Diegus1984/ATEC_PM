@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-0910",
+                     "data":  "2026-09-01T09:11:00",
+                     "hash":  "f2d6a4a5f2ea8a757b8feeab678c8418cba84683",
+                     "modifiche":  [
+                                       "DDP: il link all ordine Danea e sempre e solo l occhio (Commerciale e Officina)"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-0902",
                      "data":  "2026-09-01T09:03:10",
                      "hash":  "f2e813d21b630139e1703e5c25c8adf306a51eb8",
