@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260901-1204",
+                     "data":  "2026-09-01T12:27:42",
+                     "hash":  "22a328daf7070d4a3c2c0d8aac2876b6a22ee882",
+                     "modifiche":  [
+                                       "Associazione articolo: le righe libere prendono da sole fornitore e codice commerciale (snapshot automatico)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260901-1204",
                      "data":  "2026-09-01T12:05:06",
                      "hash":  "096ceacf0775e3ceae027723c84839729d967fe6",
                      "modifiche":  [
