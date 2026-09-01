@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260901-1357",
+                     "data":  "2026-09-01T14:36:59",
+                     "hash":  "e58a55f52d8789745f20e94941c7e1660fb69c24",
+                     "modifiche":  [
+                                       "Grezzi regola B: le righe impegnate coprono il fabbisogno, il residuo nasce su una riga nuova (riattivi dopo consegna = si ordina il mancante)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260901-1357",
                      "data":  "2026-09-01T14:10:13",
                      "hash":  "252191a5cbdf7b230096a0fa5f89c3fab516e640",
                      "modifiche":  [
