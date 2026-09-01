@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1327",
+                     "data":  "2026-09-01T13:27:34",
+                     "hash":  "72dca93e2ef337710aaf0f78b8d8d033b59879e3",
+                     "modifiche":  [
+                                       "Catalogo: il sync rinfresca anche Cod. fornitore, produttore, barcode e UM; colonna Cod. fornitore in pagina"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1311",
                      "data":  "2026-09-01T13:11:17",
                      "hash":  "60a658cca91cb37e388fdb64fd31f21aa0a7b284",
