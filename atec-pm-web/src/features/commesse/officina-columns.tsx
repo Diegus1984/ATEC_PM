@@ -292,9 +292,10 @@ export function buildOfficinaColumns({
             {/* Grezzo senza articoli Danea (01/09/2026): la catena ambra apre
                 l'associazione del 201 al volo, come nella DDP Commerciale. */}
             {onAssociaGrezzo && item.grezzoNeedsMapping ? (
+              // Colore ereditato dalla riga, come il codice a fianco (regola 01/09).
               <button
                 type="button"
-                className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-black/10 dark:text-amber-400"
+                className="shrink-0 rounded p-0.5 hover:bg-black/10"
                 title={`Il grezzo ${item.grezzoCodice ?? ""} non ha nessun articolo commerciale associato: clic per associarlo a un articolo Danea`}
                 onClick={(e) => {
                   e.stopPropagation()

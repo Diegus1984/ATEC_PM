@@ -85,9 +85,10 @@ export function buildAcquistiColumns({
             <span className="flex items-center gap-1">
               <span className="font-medium tabular-nums text-xs">{item.atecCode}</span>
               {item.atecNeedsMapping && !isRawRow(item) ? (
+                // Colore ereditato dalla riga, come il codice a fianco (regola 01/09).
                 <button
                   type="button"
-                  className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-black/10 dark:text-amber-400"
+                  className="shrink-0 rounded p-0.5 hover:bg-black/10"
                   title={`Il codice ${item.atecCode} non ha nessun articolo commerciale associato: clic per associarlo a un articolo Danea`}
                   onClick={(e) => {
                     e.stopPropagation()
