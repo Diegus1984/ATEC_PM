@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-0921",
+                     "data":  "2026-09-01T09:21:54",
+                     "hash":  "016d30928e2bc0a808ad9af131a0eb330fc6dcf9",
+                     "modifiche":  [
+                                       "DDP Officina: un solo occhiolino con dentro ordine lavorazione e ordine grezzo"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-0910",
                      "data":  "2026-09-01T09:11:00",
                      "hash":  "f2d6a4a5f2ea8a757b8feeab678c8418cba84683",
