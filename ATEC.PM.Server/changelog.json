@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1113",
+                     "data":  "2026-09-01T11:14:01",
+                     "hash":  "0098d53dcbe65f6dee1034c9bd84548ab227715c",
+                     "modifiche":  [
+                                       "Inbox Acquisti: pillola grezzo da associare e catena ambra sui codici senza articoli, messaggio parlante nel piano offerte"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1106",
                      "data":  "2026-09-01T11:06:26",
                      "hash":  "fb39912c9fa3505b12ada89676c109ceefdac7a3",
