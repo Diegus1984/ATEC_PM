@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1335",
+                     "data":  "2026-09-01T13:35:49",
+                     "hash":  "3717c9a6b7066e2bee64fde6f0b7b2314ee9be2a",
+                     "modifiche":  [
+                                       "Inbox Acquisti: colonna Cod. fornitore (dall articolo Danea agganciato), carattere come la colonna Codice",
+                                       "Picker DDP: colonna Cod. fornitore ovunque (viste Catalogo e Codex, derivati, pannello per codice ATEC), carattere come la colonna Codice"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1327",
                      "data":  "2026-09-01T13:27:34",
                      "hash":  "72dca93e2ef337710aaf0f78b8d8d033b59879e3",
