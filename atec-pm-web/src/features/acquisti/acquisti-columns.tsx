@@ -138,6 +138,15 @@ export function buildAcquistiColumns({
       ),
     },
     {
+      // «Cod. prod. forn.» dell'articolo Danea (01/09/2026, Diego) — stesso carattere
+      // della colonna «Codice».
+      accessorKey: "supplierCode",
+      header: "Cod. fornitore",
+      cell: ({ row }) => (
+        <span className="font-medium text-xs">{row.original.supplierCode || "—"}</span>
+      ),
+    },
+    {
       accessorKey: "description",
       header: "Descrizione",
       cell: ({ row }) => (

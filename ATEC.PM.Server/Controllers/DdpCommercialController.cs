@@ -54,6 +54,8 @@ public class DdpCommercialController : ControllerBase
                        b.supplier_id AS SupplierId,
                        COALESCE(s.company_name,'') AS SupplierName,
                        COALESCE(b.manufacturer,'') AS Manufacturer,
+                       -- «Cod. prod. forn.» dell'articolo Danea agganciato (01/09/2026).
+                       COALESCE(ci.supplier_code,'') AS SupplierCode,
                        COALESCE(b.item_status,'VER') AS ItemStatus,
                        COALESCE(b.requested_by,'') AS RequestedBy,
                        COALESCE(b.danea_ref,'') AS DaneaRef,

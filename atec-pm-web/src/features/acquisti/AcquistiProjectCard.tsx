@@ -113,7 +113,9 @@ export function AcquistiProjectCard({
           columns={columns}
           data={group.items}
           columnLabels={COLUMN_LABELS}
-          visibilityStorageKey={`table-visibility-acquisti-ag-commessa-${group.projectCode}`}
+          // v2 (01/09/2026): arriva «Cod. fornitore» — chiave versionata o chi ha già
+          // una scelta salvata non vedrebbe mai la colonna nuova (trappola localStorage).
+          visibilityStorageKey={`table-visibility-acquisti-ag-commessa-v2-${group.projectCode}`}
           rowStyle={rowStyle}
         />
       </CardContent>

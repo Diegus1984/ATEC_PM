@@ -126,6 +126,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   requestedBy: "Inserito da",
   atecCode: "Cod. ATEC",
   partNumber: "Codice",
+  supplierCode: "Cod. fornitore",
   description: "Descrizione",
   rfqAction: "RDO (oggetto)",
   quantity: "Qtà",

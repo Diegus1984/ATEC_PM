@@ -185,6 +185,9 @@ public class BomItemSaveRequest
 /// <summary>Riga inbox Acquisti cross-commessa (DDP commerciale, stati VER/CHEK/RO/DO).</summary>
 public class AcquistiInboxItem : BomItemListItem
 {
+    /// <summary>«Cod. prod. forn.» dell'articolo Danea agganciato ("" = riga senza articolo).</summary>
+    public string SupplierCode { get; set; } = "";
+
     public string ProjectCode { get; set; } = "";
     public string ProjectTitle { get; set; } = "";
     public string CustomerName { get; set; } = "";

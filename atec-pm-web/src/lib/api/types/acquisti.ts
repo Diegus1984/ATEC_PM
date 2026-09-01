@@ -4,6 +4,8 @@ import type { DdpRowItem } from "./ddp"
 
 /** Riga inbox Acquisti cross-commessa. */
 export interface AcquistiInboxItem extends DdpRowItem {
+  /** «Cod. prod. forn.» dell'articolo Danea agganciato ("" = riga senza articolo). */
+  supplierCode: string
   projectCode: string
   projectTitle: string
   customerName: string
