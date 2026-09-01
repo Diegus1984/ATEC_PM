@@ -279,9 +279,44 @@ public class CatalogMappingController : ControllerBase
         c.Execute(@"UPDATE catalog_items SET atec_code = @Code, codex_item_id = @CodexId WHERE id = @Id",
             new { Code = newCode, CodexId = codexItemId, Id = catalogItemId });
 
+        // Auto-snapshot sulle righe (01/09/2026, Diego): l'associazione deve ARRIVARE alle
+        // righe di distinta — fornitore e codice commerciale — non restare solo in
+        // anagrafica. Solo se l'articolo è l'UNICO attivo del codice (con più alternative
+        // la scelta è dell'utente, regola di sempre) e solo sulle righe LIBERE (VER/DO,
+        // niente RDO, niente ordine) mai agganciate a un articolo.
+        int righeAllineate = 0;
+        int articoliAttivi = c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM catalog_items WHERE is_active = 1 AND atec_code = @Code",
+            new { Code = newCode });
+        if (articoliAttivi == 1)
+        {
+            var art = c.QueryFirst<(string Code, string Unit, decimal? UnitCost, int? SupplierId, string Manufacturer)>(@"
+                SELECT COALESCE(code,''), COALESCE(unit,''), unit_cost, supplier_id, COALESCE(manufacturer,'')
+                FROM catalog_items WHERE id = @Id", new { Id = catalogItemId });
+            righeAllineate = c.Execute(@"
+                UPDATE bom_items b
+                SET b.supplier_id = @SupplierId, b.catalog_item_id = @CatalogItemId,
+                    b.part_number = IF(@ArtCode <> '', @ArtCode, b.part_number),
+                    b.manufacturer = @Manufacturer,
+                    b.unit = IF(@Unit <> '', @Unit, b.unit),
+                    b.unit_cost = COALESCE(@UnitCost, b.unit_cost),
+                    b.updated_at = NOW()
+                WHERE b.ddp_type = 'COMMERCIAL'
+                  AND b.catalog_item_id IS NULL
+                  AND NULLIF(b.atec_code,'') = @Code
+                  AND b.danea_order_iddoc IS NULL
+                  AND UPPER(COALESCE(b.item_status,'')) IN ('VER','DO')
+                  AND NOT EXISTS (SELECT 1 FROM purchase_rfq_items i WHERE i.bom_item_id = b.id)",
+                new
+                {
+                    art.SupplierId, CatalogItemId = catalogItemId, ArtCode = art.Code,
+                    art.Manufacturer, art.Unit, art.UnitCost, Code = newCode
+                });
+        }
+
         // #142: se il codice appena associato è il 201 di qualche grezzo, quelle righe erano
-        // FERME («grezzo da associare», bordo lampeggiante): un DdpChanged per commessa e le
-        // griglie aperte si sbloccano da sole, senza aspettare un ricarico.
+        // FERME («grezzo da associare», bordo lampeggiante): fornitore applicato dov'è
+        // possibile e un DdpChanged per commessa — le griglie aperte si aggiornano da sole.
         string chiaveGrezzo = c.ExecuteScalar<string?>(
             "SELECT REPLACE(codice, '.', '') FROM codex_items WHERE id = @Id",
             new { Id = codexItemId }) ?? "";
@@ -290,6 +325,22 @@ public class CatalogMappingController : ControllerBase
             foreach (int projectId in c.Query<int>(
                 "SELECT DISTINCT project_id FROM bom_items WHERE raw_codex_code = @Chiave",
                 new { Chiave = chiaveGrezzo }))
+            {
+                if (articoliAttivi == 1)
+                    GrezziDerivazione.ApplicaFornitore(c, projectId, chiaveGrezzo, catalogItemId, null);
+                var payload = new DdpChange
+                    { ProjectId = projectId, Action = "update", ItemId = 0, DdpType = "COMMERCIAL" };
+                foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
+                    _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+            }
+        }
+
+        // Le griglie con righe appena allineate si aggiornano in tempo reale anche loro.
+        if (righeAllineate > 0)
+        {
+            foreach (int projectId in c.Query<int>(
+                "SELECT DISTINCT project_id FROM bom_items WHERE catalog_item_id = @Cat",
+                new { Cat = catalogItemId }))
             {
                 var payload = new DdpChange
                     { ProjectId = projectId, Action = "update", ItemId = 0, DdpType = "COMMERCIAL" };
@@ -300,7 +351,10 @@ public class CatalogMappingController : ControllerBase
 
         return (ApiResponse<CatalogMappingAssignResult>.Ok(
             new CatalogMappingAssignResult { Assigned = true },
-            $"Associato a {CodexListItem.FormatCodice(newCode)}"), newCode);
+            $"Associato a {CodexListItem.FormatCodice(newCode)}" +
+            (righeAllineate > 0
+                ? $" — {righeAllineate} righe di distinta allineate (fornitore e codice)"
+                : "")), newCode);
     }
 
     [HttpPost("unassign")]
