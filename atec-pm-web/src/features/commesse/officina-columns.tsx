@@ -14,6 +14,12 @@ import {
 } from "lucide-react"
 
 import { RowActionsMenu, type RowAction } from "@/components/shared/row-actions"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type {
   DdpDestinationItem,
   DdpStatusItem,
@@ -42,15 +48,19 @@ import type { OfficinaRowMutations } from "./use-officina-row-mutations"
 import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
 
 /**
- * #142 — l'«occhio» sull'ordine Danea del GREZZO (derivazione #135): la riga 101 sta in
- * Officina ma il suo materiale si compra dalla DDP Commerciale — da qui si apre l'ordine
- * senza cambiare scheda. Grezzo non ancora ordinato = occhio spento col perché nel title.
+ * L'«occhio» sugli ordini Danea di una riga d'officina — UNO SOLO per riga (regola di
+ * Diego, 01/09/2026). Un 101 può averne fino a DUE, con numerazioni diverse:
+ * - l'ordine della LAVORAZIONE, quando il pezzo è affidato a un'officina esterna
+ *   (il Rif. Danea della riga, ricerca per numero — la riga officina non ha IdDoc);
+ * - l'ordine del GREZZO (derivazione #135/#142), che vive sulla riga di DDP Commerciale.
+ * Con tutti e due il click apre un menu di scelta; con uno solo apre diretto; grezzo
+ * presente ma non ordinato (e niente rif lavorazione) = occhio spento col perché.
  * Lo usano la colonna Rif. Danea e la sua resa in sola lettura (ProjectDdpOfficina).
  *
  * 🪤 Colori del testo NON espliciti apposta: la riga porta un `color` inline dallo stato
  * (verde, giallo…) e l'occhio deve restare leggibile su tutti — eredita quello.
  */
-export function GrezzoOrdineEye({
+export function OrdiniDaneaEye({
   item,
   onOpen,
   onOpenByRef,
@@ -59,39 +69,86 @@ export function GrezzoOrdineEye({
   onOpen: (idDoc: number) => void
   onOpenByRef: (rif: string) => void
 }) {
-  const codice = (item.grezzoCodice ?? "").trim()
-  if (!codice) return null
-  const ref = (item.grezzoDaneaRef ?? "").trim()
-  const idDoc = item.grezzoDaneaOrderIdDoc ?? null
-  if (idDoc == null && !ref) {
+  const rifLavorazione = (item.daneaRef ?? "").trim()
+  const grezzoCodice = (item.grezzoCodice ?? "").trim()
+  const grezzoRef = (item.grezzoDaneaRef ?? "").trim()
+  const grezzoIdDoc = item.grezzoDaneaOrderIdDoc ?? null
+
+  const voci: { label: string; apri: () => void }[] = []
+  if (rifLavorazione) {
+    voci.push({
+      label: `Ordine lavorazione n. ${rifLavorazione}`,
+      apri: () => onOpenByRef(rifLavorazione),
+    })
+  }
+  if (grezzoIdDoc != null) {
+    voci.push({
+      label: `Ordine grezzo ${grezzoCodice}${grezzoRef ? ` n. ${grezzoRef}` : ""}`,
+      apri: () => onOpen(grezzoIdDoc),
+    })
+  } else if (grezzoCodice && grezzoRef) {
+    voci.push({
+      label: `Ordine grezzo ${grezzoCodice} n. ${grezzoRef}`,
+      apri: () => onOpenByRef(grezzoRef),
+    })
+  }
+
+  if (voci.length === 0) {
+    if (!grezzoCodice) return null
     return (
       <span
         className="inline-flex shrink-0 opacity-40"
-        title={`Grezzo ${codice}: non ancora ordinato (si ordina dalla DDP Commerciale)`}
+        title={`Grezzo ${grezzoCodice}: non ancora ordinato (si ordina dalla DDP Commerciale)`}
       >
-        <Eye className="size-3.5" />
+        <Eye className="size-4" />
       </span>
     )
   }
-  // REGOLA (01/09/2026, Diego): SOLO l'occhio — il numero d'ordine sta nel title
-  // e nel popup, mai come testo-link accanto. Uguale alla DDP Commerciale.
+
+  if (voci.length === 1) {
+    return (
+      <button
+        type="button"
+        className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+        title={`Apri: ${voci[0].label} (cerca in Danea, anche nel vecchio archivio)`}
+        onClick={(e) => {
+          e.stopPropagation()
+          voci[0].apri()
+        }}
+      >
+        <Eye className="size-4" />
+      </button>
+    )
+  }
+
+  // Due ordini con numerazioni diverse: si sceglie quale aprire.
   return (
-    <button
-      type="button"
-      className="inline-flex shrink-0 rounded p-0.5 hover:bg-black/10"
-      title={
-        idDoc != null
-          ? `Apri l'ordine Danea del grezzo ${codice}${ref ? ` (rif. ${ref})` : ""}`
-          : `Apri l'ordine n. ${ref} del grezzo ${codice} (cerca in Danea, anche nel vecchio archivio)`
-      }
-      onClick={(e) => {
-        e.stopPropagation()
-        if (idDoc != null) onOpen(idDoc)
-        else onOpenByRef(ref)
-      }}
-    >
-      <Eye className="size-3.5" />
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+          title="Questa riga ha due ordini Danea: lavorazione e grezzo — scegli quale aprire"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Eye className="size-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {voci.map((voce) => (
+          <DropdownMenuItem
+            key={voce.label}
+            onClick={(e) => {
+              e.stopPropagation()
+              voce.apri()
+            }}
+          >
+            <Eye className="size-4" />
+            {voce.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -405,42 +462,26 @@ export function buildOfficinaColumns({
       // compila. La visibilità di partenza sta in ProjectDdpOfficina (chiave `…-v2`).
       accessorKey: "daneaRef",
       header: "Rif. Danea",
-      // REGOLA (01/09/2026, Diego): il link all'ordine è SEMPRE E SOLO l'occhio, come
-      // nella DDP Commerciale — uno per il rif della LAVORAZIONE (ricerca per numero,
-      // anche nel vecchio archivio), uno per l'ordine del GREZZO (#142, title distinto).
-      cell: ({ row }) => {
-        const rif = (row.original.daneaRef ?? "").trim()
-        return (
-          <span className="flex items-center gap-1">
-            <span className="min-w-0 flex-1">
-              <DdpInlineTextCell
-                value={row.original.daneaRef ?? ""}
-                disabled={pending.daneaRef}
-                placeholder="—"
-                onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
-              />
-            </span>
-            {rif ? (
-              <button
-                type="button"
-                className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
-                title={`Apri l'ordine n. ${rif} (cerca in Danea, anche nel vecchio archivio)`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onOpenDaneaOrderByRef(rif)
-                }}
-              >
-                <Eye className="size-4" />
-              </button>
-            ) : null}
-            <GrezzoOrdineEye
-              item={row.original}
-              onOpen={onOpenDaneaOrder}
-              onOpenByRef={onOpenDaneaOrderByRef}
+      // REGOLA (01/09/2026, Diego): il link all'ordine è SEMPRE E SOLO l'occhio — e qui
+      // UN occhio solo, che dà accesso a TUTTI gli ordini della riga: lavorazione
+      // esterna e grezzo (menu di scelta quando ci sono entrambi).
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1">
+          <span className="min-w-0 flex-1">
+            <DdpInlineTextCell
+              value={row.original.daneaRef ?? ""}
+              disabled={pending.daneaRef}
+              placeholder="—"
+              onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
             />
           </span>
-        )
-      },
+          <OrdiniDaneaEye
+            item={row.original}
+            onOpen={onOpenDaneaOrder}
+            onOpenByRef={onOpenDaneaOrderByRef}
+          />
+        </span>
+      ),
     },
     {
       accessorKey: "orderDate",

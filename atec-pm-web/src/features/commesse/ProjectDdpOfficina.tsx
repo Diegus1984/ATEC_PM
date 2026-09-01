@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { CellContext, ColumnDef } from "@tanstack/react-table"
-import { Eye, History, Plus } from "lucide-react"
+import { History, Plus } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
@@ -43,7 +43,7 @@ import { ddpTransitionsPerUtente } from "./ddp-constants"
 import { WORK_TYPE_META } from "./ddp-work-type"
 import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
 import { OfficinaDialog } from "./OfficinaDialog"
-import { buildOfficinaColumns, GrezzoOrdineEye } from "./officina-columns"
+import { buildOfficinaColumns, OrdiniDaneaEye } from "./officina-columns"
 import {
   buildOfficinaRows,
   collectParentIdsWithChildren,
@@ -131,34 +131,18 @@ function buildReadOnlyOfficinaCells(
       </span>
     ),
     dateNeeded: (item) => date(item.dateNeeded),
-    // REGOLA (01/09/2026): il link all'ordine è sempre e solo l'occhio — anche in
-    // sola lettura, dove resta consultazione: rif della lavorazione + ordine del grezzo.
-    daneaRef: (item) => {
-      const rif = (item.daneaRef ?? "").trim()
-      return (
-        <span className="flex items-center gap-1">
-          {text(item.daneaRef)}
-          {rif ? (
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
-              title={`Apri l'ordine n. ${rif} (cerca in Danea, anche nel vecchio archivio)`}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenDaneaOrderByRef(rif)
-              }}
-            >
-              <Eye className="size-4" />
-            </button>
-          ) : null}
-          <GrezzoOrdineEye
-            item={item}
-            onOpen={onOpenDaneaOrder}
-            onOpenByRef={onOpenDaneaOrderByRef}
-          />
-        </span>
-      )
-    },
+    // REGOLA (01/09/2026): il link all'ordine è sempre e solo l'occhio — UNO per riga,
+    // con dentro lavorazione esterna e grezzo (consultazione, resta anche qui).
+    daneaRef: (item) => (
+      <span className="flex items-center gap-1">
+        {text(item.daneaRef)}
+        <OrdiniDaneaEye
+          item={item}
+          onOpen={onOpenDaneaOrder}
+          onOpenByRef={onOpenDaneaOrderByRef}
+        />
+      </span>
+    ),
     orderDate: (item) => date(item.orderDate),
     deliveredAt: (item) => date(item.deliveredAt ?? null),
     destination: (item) => (
