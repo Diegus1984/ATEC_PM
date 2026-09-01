@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1054",
+                     "data":  "2026-09-01T10:54:41",
+                     "hash":  "9ede7526ed95c46d6f271529e6bbf8dec0def369",
+                     "modifiche":  [
+                                       "DDP Commerciale: icona catena ambra sui codici ATEC senza articoli commerciali (associazione al volo)"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-0921",
                      "data":  "2026-09-01T09:21:54",
                      "hash":  "016d30928e2bc0a808ad9af131a0eb330fc6dcf9",
