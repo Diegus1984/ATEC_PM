@@ -217,11 +217,13 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
     [queryClient, projectId]
   )
 
-  // #142 — dalla pillola «da associare» al dialog di associazione del 201: la riga
-  // porta solo il CODICE del grezzo, la riga Codex vera si ripesca dall'archivio.
-  const apriAssociaGrezzo = React.useCallback(
-    async (row: DdpRowItem) => {
-      const raw = (row.rawCodexCode ?? "").replace(/\./g, "").trim()
+  // #142 — dal codice al dialog di associazione degli articoli Danea: la riga porta
+  // solo il CODICE (del grezzo, o l'ATEC della riga), la riga Codex vera si ripesca
+  // dall'archivio. Lo usano la pillola «da associare» dei grezzi E l'icona sul
+  // codice ATEC senza articoli (rovescio della codifica dal Catalogo, 01/09/2026).
+  const apriAssociaCodice = React.useCallback(
+    async (codice: string) => {
+      const raw = (codice ?? "").replace(/\./g, "").trim()
       if (!raw) return
       try {
         const page = await fetchCodex({ search: raw, pageSize: 20 })
@@ -232,7 +234,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
               (i.codiceNuovo ?? "").replace(/\./g, "") === raw
           ) ?? null
         if (!codex) {
-          notifyError(`Codice ${row.rawCodexCode} non trovato nel Codex.`)
+          notifyError(`Codice ${codice} non trovato nel Codex.`)
           return
         }
         setRawMappingTarget(codex)
@@ -760,9 +762,27 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
         cell: ({ row }) => {
           const item = row.original
           if (item.atecCode) {
+            // Codice ATEC senza NESSUN articolo commerciale (01/09/2026): l'icona
+            // catena ambra apre l'associazione al volo — il rovescio della codifica
+            // dal Catalogo. I grezzi hanno già la loro pillola sul Codice: esclusi.
+            const daAssociare =
+              canMapAtec && item.atecNeedsMapping && !isRawRow(item)
             return (
-              <span className="font-medium tabular-nums">
-                {item.atecCode}
+              <span className="flex items-center gap-1">
+                <span className="font-medium tabular-nums">{item.atecCode}</span>
+                {daAssociare ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-black/10 dark:text-amber-400"
+                    title={`Il codice ${item.atecCode} non ha nessun articolo commerciale associato: clic per associarlo a un articolo Danea`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void apriAssociaCodice(item.atecCode ?? "")
+                    }}
+                  >
+                    <Link2 className="size-4" />
+                  </button>
+                ) : null}
               </span>
             )
           }
@@ -833,7 +853,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                   row={item}
                   onAssocia={
                     canMapAtec && item.rawNeedsMapping
-                      ? () => void apriAssociaGrezzo(item)
+                      ? () => void apriAssociaCodice(item.rawCodexCode ?? "")
                       : undefined
                   }
                 />
@@ -1288,7 +1308,7 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       excludedSet,
       transitionMap,
       canMapAtec,
-      apriAssociaGrezzo,
+      apriAssociaCodice,
       // Senza questa dipendenza le celle resterebbero quelle scrivibili della prima
       // costruzione delle colonne (memo non ricalcolato) nonostante la sola lettura.
       readOnly,

@@ -212,6 +212,12 @@ export interface DdpRowItem {
    * col bordo lampeggiante. Sparisce da solo appena l'associazione esiste.
    */
   rawNeedsMapping?: boolean
+  /**
+   * Il codice ATEC della riga non ha NESSUN articolo commerciale associato (01/09/2026):
+   * niente blocco, ma la griglia mostra l'icona per associare al volo (rovescio della
+   * codifica dal Catalogo). Calcolato dal server.
+   */
+  atecNeedsMapping?: boolean
 }
 
 /** Una voce della cronistoria di una riga di distinta (commerciale o officina). */

@@ -1460,6 +1460,13 @@ public class ProjectsController : ControllerBase
                    COALESCE(b.raw_sources,'') AS RawSources, b.raw_auto_qty AS RawAutoQty,
                    -- #142: grezzo «scoperto» → la riga si ferma finché il 201 non è associato.
                    {GrezziDerivazione.SqlGrezzoScoperto("b")} AS RawNeedsMapping,
+                   -- Codice ATEC senza NESSUN articolo commerciale associato (01/09/2026):
+                   -- niente blocco — è legittimo — ma l'icona in griglia offre
+                   -- l'associazione al volo, il rovescio della codifica dal Catalogo.
+                   (COALESCE(NULLIF(b.atec_code,''), ci.atec_code) IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM catalog_items ca
+                                    WHERE ca.is_active = 1
+                                      AND ca.atec_code = COALESCE(NULLIF(b.atec_code,''), ci.atec_code))) AS AtecNeedsMapping,
                    -- «Consegnato il»: valore salvato sulla riga oppure ultimo passaggio a DISP nella cronistoria.
                    COALESCE(b.delivered_at,
                              (SELECT MAX(ev.changed_at) FROM ddp_item_events ev

@@ -103,6 +103,13 @@ public class BomItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// </summary>
     public bool RawNeedsMapping { get; set; }
 
+    /// <summary>
+    /// Il codice ATEC della riga non ha NESSUN articolo commerciale associato (01/09/2026).
+    /// Niente blocco — è legittimo — ma la griglia mostra l'icona di associazione al volo.
+    /// Calcolato dal server, come <see cref="RawNeedsMapping"/>.
+    /// </summary>
+    public bool AtecNeedsMapping { get; set; }
+
     // Concorrenza ottimistica: versione vista al caricamento (rispedita nel PUT come ExpectedUpdatedAt).
     public DateTime? UpdatedAt { get; set; }
 
