@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1357",
+                     "data":  "2026-09-01T14:10:13",
+                     "hash":  "252191a5cbdf7b230096a0fa5f89c3fab516e640",
+                     "modifiche":  [
+                                       "Danea: i prezzi degli articoli già trasferiti seguono il vecchio archivio (specchio automatico ogni 12 ore)"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1335",
                      "data":  "2026-09-01T13:35:49",
                      "hash":  "3717c9a6b7066e2bee64fde6f0b7b2314ee9be2a",
