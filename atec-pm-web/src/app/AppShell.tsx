@@ -266,6 +266,16 @@ export function AppShell() {
     }
   })
 
+  // Il menu è più alto dello schermo: aprendo una pagina che sta in fondo all'elenco, la
+  // voce accesa resterebbe fuori vista e non si capirebbe dove si è. Ci si porta sopra da
+  // sé. `nearest` = si muove solo se serve davvero, e solo il menu: la pagina non si sposta.
+  React.useEffect(() => {
+    const attiva = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-content"] [data-active="true"]'
+    )
+    attiva?.scrollIntoView({ block: "nearest" })
+  }, [location.pathname])
+
   const toggleGroupCollapse = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
       const next = new Set(prev)

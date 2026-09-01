@@ -368,7 +368,11 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // 🪤 shadcn nasce con `no-scrollbar`: con tutte le sezioni aperte il menu scorre
+        // ma NON si vede che scorre, e il fondo dell'elenco sembra non esistere. È lo
+        // stesso difetto delle tendine lunghe (segnalazione #59), e si risolve con la
+        // stessa classe: barra sottile, uguale a quella delle griglie.
+        "scrollbar-visible flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}
