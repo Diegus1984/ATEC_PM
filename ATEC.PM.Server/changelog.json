@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-2052",
+                     "data":  "2026-09-01T20:53:04",
+                     "hash":  "e1f4614317b845dbcb27b42f83c236beeee7be24",
+                     "modifiche":  [
+                                       "Menu laterale: si vede che scorre, e la voce accesa si porta in vista"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1357",
                      "data":  "2026-09-01T20:33:33",
                      "hash":  "615b7c07d705243d2a49b810255bda2e79d83bc0",
