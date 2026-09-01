@@ -104,6 +104,10 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
     /// <summary>IDDoc dell'ordine Danea del grezzo (null = ordine non generato da ATEC PM).</summary>
     public int? GrezzoDaneaOrderIdDoc { get; set; }
 
+    /// <summary>Il 201 di derivazione non ha NESSUN articolo Danea (01/09/2026): la catena
+    /// ambra in griglia apre l'associazione al volo. Calcolato dal server.</summary>
+    public bool GrezzoNeedsMapping { get; set; }
+
     public DateTime? DateNeeded { get; set; }
     /// <summary>Data in cui la riga è passata a In Ordine (IO); auto-compilata al primo IO.</summary>
     public DateTime? OrderDate { get; set; }

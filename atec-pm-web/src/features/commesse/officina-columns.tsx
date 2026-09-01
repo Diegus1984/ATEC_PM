@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Eye,
   History,
+  Link2,
   Pencil,
   Trash2,
 } from "lucide-react"
@@ -170,6 +171,7 @@ export function buildOfficinaColumns({
   onStoria,
   onOpenDaneaOrder,
   onOpenDaneaOrderByRef,
+  onAssociaGrezzo,
 }: {
   statuses: DdpStatusItem[]
   statusMap: Map<string, DdpStatusItem>
@@ -191,6 +193,9 @@ export function buildOfficinaColumns({
   /** #142: aprono l'ordine Danea del grezzo (occhio in colonna Rif. Danea). */
   onOpenDaneaOrder: (idDoc: number) => void
   onOpenDaneaOrderByRef: (rif: string) => void
+  /** Grezzo senza articoli Danea: catena ambra sul Codice per associare al volo
+   *  (assente = niente permesso o sola lettura → icona non mostrata). */
+  onAssociaGrezzo?: (item: OfficinaItem) => void
 }): ColumnDef<OfficinaItem>[] {
   const { pending } = mutations
 
@@ -284,6 +289,21 @@ export function buildOfficinaColumns({
               </button>
             ) : null}
             {formatCodexCode(item.partNumber) || "—"}
+            {/* Grezzo senza articoli Danea (01/09/2026): la catena ambra apre
+                l'associazione del 201 al volo, come nella DDP Commerciale. */}
+            {onAssociaGrezzo && item.grezzoNeedsMapping ? (
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-black/10 dark:text-amber-400"
+                title={`Il grezzo ${item.grezzoCodice ?? ""} non ha nessun articolo commerciale associato: clic per associarlo a un articolo Danea`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAssociaGrezzo(item)
+                }}
+              >
+                <Link2 className="size-4" />
+              </button>
+            ) : null}
           </span>
         )
       },

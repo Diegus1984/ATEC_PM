@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/project-ddp-officina"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import type {
+  CodexListItem,
   DdpStatusItem,
   OfficinaItem,
   OfficinaItemSaveRequest,
@@ -42,6 +43,8 @@ import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { ddpTransitionsPerUtente } from "./ddp-constants"
 import { WORK_TYPE_META } from "./ddp-work-type"
 import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
+import { CodexDaneaMappingDialog } from "@/features/codex/CodexDaneaMappingDialog"
+import { fetchCodex } from "@/lib/api/codex"
 import { OfficinaDialog } from "./OfficinaDialog"
 import { buildOfficinaColumns, OrdiniDaneaEye } from "./officina-columns"
 import {
@@ -214,6 +217,9 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
   // per IDDoc quando l'ordine è nato da ATEC PM, per numero altrimenti.
   const [daneaOrderIdDoc, setDaneaOrderIdDoc] = React.useState<number | null>(null)
   const [daneaOrderRef, setDaneaOrderRef] = React.useState<string | null>(null)
+  /** 201 del grezzo senza articoli: apre CodexDaneaMappingDialog dalla catena ambra. */
+  const [grezzoMappingTarget, setGrezzoMappingTarget] =
+    React.useState<CodexListItem | null>(null)
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<Set<string>>(
     () => new Set()
@@ -424,6 +430,31 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     [readOnly]
   )
 
+  // Catena ambra sul Codice (01/09/2026): dal 101 al dialog di associazione del SUO
+  // grezzo — la riga porta solo il codice del 201, la riga Codex si ripesca dall'archivio.
+  const canAssociaGrezzo =
+    canWriteFeature("action.assign_atec_code") && !readOnly
+  const apriAssociaGrezzo = React.useCallback(async (item: OfficinaItem) => {
+    const raw = (item.grezzoCodice ?? "").replace(/\./g, "").trim()
+    if (!raw) return
+    try {
+      const page = await fetchCodex({ search: raw, pageSize: 20 })
+      const codex =
+        page.items.find(
+          (i) =>
+            i.codice.replace(/\./g, "") === raw ||
+            (i.codiceNuovo ?? "").replace(/\./g, "") === raw
+        ) ?? null
+      if (!codex) {
+        notifyError(`Codice ${item.grezzoCodice} non trovato nel Codex.`)
+        return
+      }
+      setGrezzoMappingTarget(codex)
+    } catch (err) {
+      notifyError(err)
+    }
+  }, [])
+
   // Ordine congelato sui soli padri: `buildOfficinaRows` riaggancia comunque i
   // componenti sotto al loro padre, quindi l'albero regge anche sulle righe nuove.
   const rawItems = React.useMemo(() => query.data ?? [], [query.data])
@@ -494,6 +525,9 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
       onStoria: setStoriaTarget,
       onOpenDaneaOrder: setDaneaOrderIdDoc,
       onOpenDaneaOrderByRef: setDaneaOrderRef,
+      onAssociaGrezzo: canAssociaGrezzo
+        ? (item) => void apriAssociaGrezzo(item)
+        : undefined,
     })
     if (!readOnly) return editable
     return applyReadOnlyCells(
@@ -521,6 +555,8 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
     handleDeleteRow,
     handleQuantityAdjust,
     setStoriaTarget,
+    canAssociaGrezzo,
+    apriAssociaGrezzo,
     readOnly,
   ])
 
@@ -679,6 +715,18 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
           setDaneaOrderRef(null)
         }}
       />
+
+      {/* Associazione del 201 del grezzo dalla catena ambra (01/09/2026). Alla chiusura
+          la lista si ricarica: se l'articolo è stato agganciato, l'icona sparisce da sola. */}
+      {grezzoMappingTarget ? (
+        <CodexDaneaMappingDialog
+          item={grezzoMappingTarget}
+          onClose={() => {
+            setGrezzoMappingTarget(null)
+            void invalidate()
+          }}
+        />
+      ) : null}
     </>
   )
 }

@@ -1868,13 +1868,20 @@ public class ProjectsController : ControllerBase
                    -- derivazione #135) — chi costruisce vede da qui se il materiale è ordinato.
                    COALESCE(drv.gz_codice, '') AS GrezzoCodice,
                    COALESCE(gz.danea_ref, '') AS GrezzoDaneaRef,
-                   gz.danea_order_iddoc AS GrezzoDaneaOrderIdDoc
+                   gz.danea_order_iddoc AS GrezzoDaneaOrderIdDoc,
+                   -- Grezzo «scoperto» visto dall'officina (01/09/2026): il 201 non ha
+                   -- NESSUN articolo Danea — la catena ambra in griglia apre l'associazione
+                   -- al volo, senza passare dalla DDP Commerciale.
+                   (drv.gz_id IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM catalog_items ca
+                                    WHERE ca.is_active = 1
+                                      AND ca.codex_item_id = drv.gz_id)) AS GrezzoNeedsMapping
             FROM ddp_officina_items o
             LEFT JOIN employees e ON e.id = o.created_by
             -- Stessa catena del ricalcolo (GrezziDerivazione): 101 → riferimento 201 → riga
             -- grezzo della commessa (bom_items.raw_codex_code = codice del 201 senza punti).
             LEFT JOIN (
-                SELECT src.codice AS src_codice,
+                SELECT src.codice AS src_codice, rif.id AS gz_id,
                        REPLACE(rif.codice, '.', '') AS gz_codice
                 FROM codex_items src
                 JOIN codex_item_references r ON r.source_codex_id = src.id AND r.ref_type = '201'

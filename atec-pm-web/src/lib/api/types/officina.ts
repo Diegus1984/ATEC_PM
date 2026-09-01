@@ -36,6 +36,8 @@ export interface OfficinaItem {
   grezzoDaneaRef?: string
   /** #142 — IDDoc dell'ordine Danea del grezzo (null = ordine non generato da ATEC PM). */
   grezzoDaneaOrderIdDoc?: number | null
+  /** Il 201 di derivazione non ha NESSUN articolo Danea: catena ambra per associare al volo. */
+  grezzoNeedsMapping?: boolean
   dateNeeded: string | null
   /** Data In Ordine (auto al passaggio IO; editabile). */
   orderDate: string | null
