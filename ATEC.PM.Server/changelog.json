@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-0902",
+                     "data":  "2026-09-01T09:03:10",
+                     "hash":  "f2e813d21b630139e1703e5c25c8adf306a51eb8",
+                     "modifiche":  [
+                                       "DDP Officina: occhio sull ordine Danea del grezzo (derivazione #142)"
+                                   ]
+                 },
+                 {
                      "build":  "20260831-1716",
                      "data":  "2026-08-31T17:16:17",
                      "hash":  "d37b8a49eedaf1e00d566dd6ae4aacec8e433777",
