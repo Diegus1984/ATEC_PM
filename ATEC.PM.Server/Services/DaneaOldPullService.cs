@@ -9,10 +9,16 @@ namespace ATEC.PM.Server.Services;
 /// trasferiti in Atec_PM da soli — di default ogni 12 ore — piu' il pulsante in pagina.
 ///
 /// Il criterio e' IDArticolo &gt; cursore, NON «codice mancante»: cosi' non si toccano
-/// ne' gli articoli storici mai trasferiti (la migrazione resta selettiva) ne' le
-/// modifiche ai gia' trasferiti (per quelli la verita' e' Atec_PM). Al primo giro si
+/// gli articoli storici mai trasferiti (la migrazione resta selettiva). Al primo giro si
 /// fissa solo lo spartiacque al MAX corrente: l'arretrato gia' codificato dal collega
 /// si trasferisce UNA volta a mano dalla griglia («Piu' recenti prima»).
+///
+/// Nello stesso giro passa anche lo SPECCHIO PREZZI (01/09/2026): per gli articoli gia'
+/// trasferiti il prezzo torna a seguire il vecchio archivio. Il trasferimento lo copia
+/// una volta sola e i ritocchi successivi restavano indietro — FCA00017733 stava a
+/// Catalogo 10,64 quando in Danea era gia' 8,78. Solo i campi prezzo: il resto
+/// dell'articolo, codice ATEC in testa, resta di Atec_PM. Gira anche quando non c'e'
+/// nessun articolo nuovo, e si spegne con DaneaSync:MirrorPricesFromOld=false.
 ///
 /// Errori: un articolo fallito che esiste ancora nel vecchio tiene il cursore fermo
 /// prima di se' e si ritenta al giro dopo (i gia' passati vengono skippati per codice);
@@ -53,6 +59,10 @@ public class DaneaOldPullService : BackgroundService
         if (hours > 720) hours = 720;
         _interval = TimeSpan.FromHours(hours);
     }
+
+    /// <summary>Lo specchio prezzi si spegne da config, senza toccare il ripescaggio.</summary>
+    public bool MirrorEnabled =>
+        !bool.TryParse(_config["DaneaSync:MirrorPricesFromOld"], out bool on) || on;
 
     public bool Enabled =>
         _interval > TimeSpan.Zero
@@ -121,7 +131,7 @@ public class DaneaOldPullService : BackgroundService
             if (!cursor.HasValue)
             {
                 await SaveCursor(maxId);
-                return Done(new DaneaPullReport
+                return await Done(new DaneaPullReport
                 {
                     LastSeenId = maxId,
                     Message = $"Spartiacque impostato all'ID {maxId} del vecchio archivio: da adesso i " +
@@ -130,7 +140,7 @@ public class DaneaOldPullService : BackgroundService
                 });
             }
             if (newIds.Count == 0)
-                return Done(new DaneaPullReport
+                return await Done(new DaneaPullReport
                 {
                     LastSeenId = cursor.Value,
                     Message = "Nessun articolo nuovo nel vecchio archivio.",
@@ -183,7 +193,7 @@ public class DaneaOldPullService : BackgroundService
                 "{Errors} errori. Cursore {Cursor}.",
                 newIds.Count, total.Ok, total.Skipped, total.Errors, newCursor);
 
-            return Done(new DaneaPullReport
+            return await Done(new DaneaPullReport
             {
                 Ran = true,
                 NewArticles = newIds.Count,
@@ -199,11 +209,69 @@ public class DaneaOldPullService : BackgroundService
         }
     }
 
-    private DaneaPullReport Done(DaneaPullReport report)
+    /// <summary>
+    /// Chiude il giro: prima lo specchio prezzi — che gira anche quando non e' nato
+    /// nessun articolo nuovo, perche' un listino cambia per conto suo — poi il timbro
+    /// dell'ultimo esito mostrato in pagina.
+    /// </summary>
+    private async Task<DaneaPullReport> Done(DaneaPullReport report)
     {
+        report.Mirror = await RispecchiaPrezzi();
+        if (!string.IsNullOrEmpty(report.Mirror.Message))
+            report.Message = $"{report.Message} {report.Mirror.Message}".Trim();
+
         LastRun = DateTime.Now;
         LastMessage = report.Message;
         return report;
+    }
+
+    /// <summary>
+    /// Specchio prezzi: i gia' trasferiti seguono il vecchio archivio (vedi la testa di
+    /// questa classe). Non deve MAI far fallire il ripescaggio — se salta, gli articoli
+    /// nuovi sono passati lo stesso e si ritenta al giro dopo.
+    /// </summary>
+    private async Task<DaneaMirrorReport> RispecchiaPrezzi()
+    {
+        if (!MirrorEnabled)
+            return new DaneaMirrorReport();
+
+        try
+        {
+            var mirror = _migration.RispecchiaPrezzi();
+
+            // Stesso specchio del trasferimento: senza, in Catalogo il prezzo vecchio
+            // resta fino al sync delle 6 ore.
+            var idArticoli = mirror.Changes.Select(c => c.IdInAtecPm).Distinct().ToList();
+            if (idArticoli.Count > 0)
+            {
+                try
+                {
+                    mirror.CatalogAligned = await _sync.AllineaArticoli(idArticoli);
+                }
+                catch (Exception ex)
+                {
+                    mirror.CatalogWarning =
+                        $"Catalogo articoli non aggiornato ({ex.Message}): usare «Sincronizza Danea».";
+                }
+            }
+
+            // Un prezzo che cambia da solo si deve poter ricostruire a posteriori.
+            foreach (var c in mirror.Changes)
+                _log.LogInformation("[DaneaOldPull] Specchio {Cod} ({Id}): {Campo} {Prima} -> {Dopo}",
+                    c.CodArticolo, c.IdInAtecPm, c.Campo, c.Prima, c.Dopo);
+            if (mirror.Aligned > 0 || !string.IsNullOrEmpty(mirror.CatalogWarning))
+                _log.LogInformation("[DaneaOldPull] {Msg} Catalogo: {N} righe. {Warn}",
+                    mirror.Message, mirror.CatalogAligned, mirror.CatalogWarning);
+
+            return mirror;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[DaneaOldPull] Specchio prezzi fallito");
+            LastError ??= $"Specchio prezzi non riuscito: {ex.Message}";
+            return new DaneaMirrorReport
+            { Message = $"Specchio prezzi non riuscito: {ex.Message}" };
+        }
     }
 
     private async Task<long?> ReadCursor()

@@ -79,6 +79,36 @@ public class DaneaPullReport
     /// <summary>Cursore dopo il giro (ultimo IDArticolo del vecchio considerato).</summary>
     public long LastSeenId { get; set; }
     public DaneaTransferReport? Transfer { get; set; }
+    /// <summary>Specchio prezzi sugli articoli già trasferiti (gira a ogni giro, anche senza articoli nuovi).</summary>
+    public DaneaMirrorReport? Mirror { get; set; }
+}
+
+// Specchio prezzi (01/09/2026): per gli articoli GIÀ trasferiti il vecchio archivio
+// resta il padrone del prezzo, finché i colleghi ritoccano i listini là dentro.
+
+public class DaneaMirrorReport
+{
+    /// <summary>Articoli di Atec_PM che esistono anche nel vecchio archivio.</summary>
+    public int Checked { get; set; }
+    /// <summary>Articoli riscritti in Atec_PM in questo giro.</summary>
+    public int Aligned { get; set; }
+    /// <summary>Righe riallineate nel Catalogo articoli di ATEC PM.</summary>
+    public int CatalogAligned { get; set; }
+    /// <summary>Se l'allineamento del Catalogo non è riuscito: in Danea i prezzi SONO corretti.</summary>
+    public string CatalogWarning { get; set; } = "";
+    public string Message { get; set; } = "";
+    /// <summary>Registro di cosa è cambiato: un articolo può comparire su più campi.</summary>
+    public List<DaneaMirrorChange> Changes { get; set; } = new();
+}
+
+public class DaneaMirrorChange
+{
+    public string CodArticolo { get; set; } = "";
+    public int IdInAtecPm { get; set; }
+    /// <summary>Campo Danea riscritto (vedi PrezziSpecchio.Campi).</summary>
+    public string Campo { get; set; } = "";
+    public decimal Prima { get; set; }
+    public decimal Dopo { get; set; }
 }
 
 public class DaneaPullStatus

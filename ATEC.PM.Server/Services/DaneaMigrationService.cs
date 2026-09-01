@@ -572,6 +572,124 @@ public class DaneaMigrationService
         return (copied, missing.Count > 0 ? $"File immagine non trovato: {missing[0]}" : "");
     }
 
+    // ── SPECCHIO PREZZI (vecchio → Atec_PM) ───────────────────────────────
+
+    /// <summary>
+    /// Riallinea in Atec_PM i prezzi degli articoli GIA' trasferiti, prendendo per buono
+    /// il vecchio archivio (ordine di Diego, 01/09/2026).
+    ///
+    /// <para>Il trasferimento copia l'articolo una volta sola: da li' in poi un ritocco
+    /// di prezzo nel vecchio non arrivava piu'. Si e' visto su FCA00017733, a Catalogo
+    /// 10,64 quando in Danea era gia' 8,78 — e su altri 3 codici su 98 trasferiti.
+    /// Finche' i colleghi codificano e ritoccano i listini nel vecchio archivio, per il
+    /// PREZZO il padrone e' quello; gli altri campi restano di Atec_PM (vedi
+    /// <see cref="PrezziSpecchio.Campi"/> per cosa resta fuori e perche').</para>
+    ///
+    /// <para>Scrive solo gli articoli che risultano diversi: un giro senza differenze
+    /// non tocca nulla.</para>
+    /// </summary>
+    public DaneaMirrorReport RispecchiaPrezzi()
+    {
+        var report = new DaneaMirrorReport();
+
+        // Serializzato col trasferimento: scrivono entrambi TArticoli in Atec_PM, e il
+        // trasferimento legge le sue snapshot a inizio lotto.
+        if (!TransferGate.Wait(TimeSpan.FromSeconds(30)))
+        {
+            report.Message = "Trasferimento in corso: specchio prezzi rimandato al giro dopo.";
+            return report;
+        }
+        try
+        {
+            using var src = new FbConnection(ConnStr(old: true));
+            src.Open();
+            using var dst = new FbConnection(ConnStr(old: false));
+            dst.Open();
+
+            var vecchi = PrezziPerCodice(src);
+            string colList = string.Join(", ", PrezziSpecchio.Campi.Select(c => $"\"{c}\""));
+
+            // Lettura completa PRIMA di aprire la transazione: con un tx pendente il
+            // driver rifiuta i comandi nudi (stessa regola del trasferimento).
+            var daScrivere = new List<(int Id, decimal?[] Valori)>();
+            using (var cmd = new FbCommand(
+                $"SELECT \"IDArticolo\", \"CodArticolo\", {colList} FROM \"TArticoli\"", dst))
+            using (var r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    string cod = (Convert.ToString(r[1]) ?? "").Trim();
+                    if (cod.Length == 0 || !vecchi.TryGetValue(cod, out var vecchio)) continue;
+
+                    report.Checked++;
+                    int id = Convert.ToInt32(r[0]);
+                    var differenze = PrezziSpecchio.Differenze(cod, id, vecchio, LeggiPrezzi(r, 2));
+                    if (differenze.Count == 0) continue;
+
+                    report.Changes.AddRange(differenze);
+                    daScrivere.Add((id, vecchio));
+                }
+            }
+
+            if (daScrivere.Count > 0)
+            {
+                string setList = string.Join(", ",
+                    PrezziSpecchio.Campi.Select((c, i) => $"\"{c}\" = @p{i}"));
+                using var tx = dst.BeginTransaction();
+                foreach (var (id, valori) in daScrivere)
+                {
+                    using var upd = new FbCommand(
+                        $"UPDATE \"TArticoli\" SET {setList} WHERE \"IDArticolo\" = @id", dst, tx);
+                    for (int i = 0; i < valori.Length; i++)
+                        upd.Parameters.AddWithValue("@p" + i, (object?)valori[i] ?? DBNull.Value);
+                    upd.Parameters.AddWithValue("@id", id);
+                    upd.ExecuteNonQuery();
+                    report.Aligned++;
+                }
+                tx.Commit();
+            }
+
+            string quanti = report.Aligned == 1 ? "1 articolo riallineato" : $"{report.Aligned} articoli riallineati";
+            report.Message = report.Checked == 0
+                ? "Specchio prezzi: nessun articolo in comune coi due archivi."
+                : report.Aligned == 0
+                    ? $"Specchio prezzi: gia' allineati ({report.Checked} articoli controllati)."
+                    : $"Specchio prezzi: {quanti} sul vecchio archivio (su {report.Checked} controllati).";
+            return report;
+        }
+        finally
+        {
+            TransferGate.Release();
+        }
+    }
+
+    /// <summary>Codice → prezzi del vecchio archivio. Codice doppio: vince l'ultimo letto.</summary>
+    private static Dictionary<string, decimal?[]> PrezziPerCodice(FbConnection src)
+    {
+        string colList = string.Join(", ", PrezziSpecchio.Campi.Select(c => $"\"{c}\""));
+        var map = new Dictionary<string, decimal?[]>(StringComparer.OrdinalIgnoreCase);
+        using var cmd = new FbCommand($"SELECT \"CodArticolo\", {colList} FROM \"TArticoli\"", src);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            string cod = (Convert.ToString(r[0]) ?? "").Trim();
+            if (cod.Length == 0) continue;
+            map[cod] = LeggiPrezzi(r, 1);
+        }
+        return map;
+    }
+
+    private static decimal?[] LeggiPrezzi(FbDataReader r, int primaColonna)
+    {
+        var valori = new decimal?[PrezziSpecchio.Campi.Length];
+        for (int i = 0; i < valori.Length; i++)
+        {
+            int col = primaColonna + i;
+            valori[i] = r.IsDBNull(col) ? null : Convert.ToDecimal(r[col]);
+        }
+        return valori;
+    }
+
     // ── HELPER COPIA GENERICA (pattern bootstrap F1) ──────────────────────
 
     private static int Count(FbConnection c, string table)
