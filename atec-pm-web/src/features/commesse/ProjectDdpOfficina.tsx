@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { CellContext, ColumnDef } from "@tanstack/react-table"
-import { History, Plus } from "lucide-react"
+import { Eye, History, Plus } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { useConfirm } from "@/components/shared/confirm"
@@ -131,16 +131,34 @@ function buildReadOnlyOfficinaCells(
       </span>
     ),
     dateNeeded: (item) => date(item.dateNeeded),
-    daneaRef: (item) => (
-      <span className="flex items-center gap-1.5">
-        {text(item.daneaRef)}
-        <GrezzoOrdineEye
-          item={item}
-          onOpen={onOpenDaneaOrder}
-          onOpenByRef={onOpenDaneaOrderByRef}
-        />
-      </span>
-    ),
+    // REGOLA (01/09/2026): il link all'ordine è sempre e solo l'occhio — anche in
+    // sola lettura, dove resta consultazione: rif della lavorazione + ordine del grezzo.
+    daneaRef: (item) => {
+      const rif = (item.daneaRef ?? "").trim()
+      return (
+        <span className="flex items-center gap-1">
+          {text(item.daneaRef)}
+          {rif ? (
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+              title={`Apri l'ordine n. ${rif} (cerca in Danea, anche nel vecchio archivio)`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDaneaOrderByRef(rif)
+              }}
+            >
+              <Eye className="size-4" />
+            </button>
+          ) : null}
+          <GrezzoOrdineEye
+            item={item}
+            onOpen={onOpenDaneaOrder}
+            onOpenByRef={onOpenDaneaOrderByRef}
+          />
+        </span>
+      )
+    },
     orderDate: (item) => date(item.orderDate),
     deliveredAt: (item) => date(item.deliveredAt ?? null),
     destination: (item) => (

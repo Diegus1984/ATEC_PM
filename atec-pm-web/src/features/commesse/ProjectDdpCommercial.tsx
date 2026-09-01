@@ -1002,69 +1002,63 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       {
         accessorKey: "daneaRef",
         header: "Rif. Danea",
-        // Riga con ordine generato da ATEC PM: il riferimento È il link al popup
-        // dell'ordine (niente edit inline; si può sempre cambiare dal dialog Modifica,
-        // e il server in quel caso stacca il link). Senza ordine: edit inline classico.
-        // Il link resta anche in sola lettura: apre l'ordine in consultazione.
-        cell: ({ row }) =>
-          row.original.daneaOrderIdDoc != null ? (
+        // REGOLA (01/09/2026, Diego): il link all'ordine è SEMPRE E SOLO l'occhio —
+        // il numero resta testo (o campo editabile), mai un link sottolineato. Uguale
+        // in tutte le combinazioni e uguale alla DDP Officina. Con l'ordine generato
+        // da ATEC PM l'occhio apre per IDDoc e il rif non si edita inline (si cambia
+        // dal dialog Modifica, e il server in quel caso stacca il link); con un rif
+        // scritto a mano apre la ricerca per numero (anche nel VECCHIO archivio).
+        cell: ({ row }) => {
+          const item = row.original
+          const rif = (item.daneaRef ?? "").trim()
+          const perIdDoc = item.daneaOrderIdDoc != null
+          const apriOrdine = perIdDoc
+            ? () => setDaneaOrderIdDoc(item.daneaOrderIdDoc!)
+            : rif
+              ? () => setDaneaOrderRef(rif)
+              : null
+          const occhio = apriOrdine ? (
             <button
               type="button"
-              className="font-medium text-teal-700 underline underline-offset-2 hover:text-teal-800"
-              title="Apri ordine Danea"
+              className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+              title={
+                perIdDoc
+                  ? "Apri ordine Danea"
+                  : `Apri l'ordine n. ${rif} (cerca in Danea, anche nel vecchio archivio)`
+              }
               onClick={(e) => {
                 e.stopPropagation()
-                setDaneaOrderIdDoc(row.original.daneaOrderIdDoc!)
+                apriOrdine()
               }}
             >
-              {row.original.daneaRef || "—"}
+              <Eye className="size-4" />
             </button>
-          ) : readOnly ? (
-            row.original.daneaRef?.trim() ? (
-              // Rif. scritto a mano, senza IdDoc: ricerca per numero (in
-              // migrazione l'ordine può stare ancora nel VECCHIO archivio).
-              <button
-                type="button"
-                className="font-medium text-teal-700 underline underline-offset-2 hover:text-teal-800"
-                title={`Cerca l'ordine n. ${row.original.daneaRef.trim()} in Danea (anche nel vecchio archivio)`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setDaneaOrderRef(row.original.daneaRef!.trim())
-                }}
-              >
-                {row.original.daneaRef}
-              </button>
-            ) : (
-              <span>—</span>
+          ) : null
+
+          if (perIdDoc || readOnly) {
+            return (
+              <div className="flex items-center gap-1">
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {rif || "—"}
+                </span>
+                {occhio}
+              </div>
             )
-          ) : (
-            // In modifica la cella resta un campo di testo; l'occhio a fianco apre
-            // l'ordine (ricerca per numero, anche nel VECCHIO archivio) — cliccare
-            // il rif per vederlo lo trasformava in editing, e l'ordine non si apriva mai.
+          }
+          return (
             <div className="flex items-center gap-1">
               <div className="min-w-0 flex-1">
                 <DdpInlineTextCell
-                  value={row.original.daneaRef ?? ""}
+                  value={item.daneaRef ?? ""}
                   disabled={daneaRefMutation.isPending}
                   placeholder="—"
-                  onCommit={(value) => handleDaneaRefCommit(row.original, value)}
+                  onCommit={(value) => handleDaneaRefCommit(item, value)}
                 />
               </div>
-              {row.original.daneaRef?.trim() ? (
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
-                  title={`Apri l'ordine n. ${row.original.daneaRef.trim()} (cerca in Danea, anche nel vecchio archivio)`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setDaneaOrderRef(row.original.daneaRef!.trim())
-                  }}
-                >
-                  <Eye className="size-4" />
-                </button>
-              ) : null}
+              {occhio}
             </div>
-          ),
+          )
+        },
       },
       {
         accessorKey: "dateNeeded",

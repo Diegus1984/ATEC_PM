@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 
 import { RowActionsMenu, type RowAction } from "@/components/shared/row-actions"
-import { DaneaOrderBadge } from "@/features/acquisti/acquisti-ui"
 import type {
   DdpDestinationItem,
   DdpStatusItem,
@@ -74,17 +73,25 @@ export function GrezzoOrdineEye({
       </span>
     )
   }
+  // REGOLA (01/09/2026, Diego): SOLO l'occhio — il numero d'ordine sta nel title
+  // e nel popup, mai come testo-link accanto. Uguale alla DDP Commerciale.
   return (
-    <DaneaOrderBadge
-      label={ref ? `#${ref}` : ""}
-      idDoc={idDoc}
-      daneaRef={ref || null}
-      icon={Eye}
-      iconClassName="size-3.5"
-      className="inline-flex shrink-0 items-center gap-1 font-mono text-xs font-semibold underline-offset-2 hover:underline"
-      onOpen={onOpen}
-      onOpenByRef={onOpenByRef}
-    />
+    <button
+      type="button"
+      className="inline-flex shrink-0 rounded p-0.5 hover:bg-black/10"
+      title={
+        idDoc != null
+          ? `Apri l'ordine Danea del grezzo ${codice}${ref ? ` (rif. ${ref})` : ""}`
+          : `Apri l'ordine n. ${ref} del grezzo ${codice} (cerca in Danea, anche nel vecchio archivio)`
+      }
+      onClick={(e) => {
+        e.stopPropagation()
+        if (idDoc != null) onOpen(idDoc)
+        else onOpenByRef(ref)
+      }}
+    >
+      <Eye className="size-3.5" />
+    </button>
   )
 }
 
@@ -398,22 +405,42 @@ export function buildOfficinaColumns({
       // compila. La visibilità di partenza sta in ProjectDdpOfficina (chiave `…-v2`).
       accessorKey: "daneaRef",
       header: "Rif. Danea",
-      // #142: accanto al riferimento della LAVORAZIONE, l'occhio sull'ordine del GREZZO.
-      cell: ({ row }) => (
-        <span className="flex items-center gap-1.5">
-          <DdpInlineTextCell
-            value={row.original.daneaRef ?? ""}
-            disabled={pending.daneaRef}
-            placeholder="—"
-            onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
-          />
-          <GrezzoOrdineEye
-            item={row.original}
-            onOpen={onOpenDaneaOrder}
-            onOpenByRef={onOpenDaneaOrderByRef}
-          />
-        </span>
-      ),
+      // REGOLA (01/09/2026, Diego): il link all'ordine è SEMPRE E SOLO l'occhio, come
+      // nella DDP Commerciale — uno per il rif della LAVORAZIONE (ricerca per numero,
+      // anche nel vecchio archivio), uno per l'ordine del GREZZO (#142, title distinto).
+      cell: ({ row }) => {
+        const rif = (row.original.daneaRef ?? "").trim()
+        return (
+          <span className="flex items-center gap-1">
+            <span className="min-w-0 flex-1">
+              <DdpInlineTextCell
+                value={row.original.daneaRef ?? ""}
+                disabled={pending.daneaRef}
+                placeholder="—"
+                onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
+              />
+            </span>
+            {rif ? (
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-teal-700 hover:bg-accent hover:text-teal-800"
+                title={`Apri l'ordine n. ${rif} (cerca in Danea, anche nel vecchio archivio)`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpenDaneaOrderByRef(rif)
+                }}
+              >
+                <Eye className="size-4" />
+              </button>
+            ) : null}
+            <GrezzoOrdineEye
+              item={row.original}
+              onOpen={onOpenDaneaOrder}
+              onOpenByRef={onOpenDaneaOrderByRef}
+            />
+          </span>
+        )
+      },
     },
     {
       accessorKey: "orderDate",
