@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260901-1204",
+                     "data":  "2026-09-01T12:05:06",
+                     "hash":  "096ceacf0775e3ceae027723c84839729d967fe6",
+                     "modifiche":  [
+                                       "DDP: lampeggio del bordo piu spesso (5px) e catena col colore del testo della riga"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-1129",
                      "data":  "2026-09-01T11:29:41",
                      "hash":  "aa548ecaff30d3bced2c0d73a94060f060503556",
