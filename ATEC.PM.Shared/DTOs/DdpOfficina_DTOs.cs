@@ -95,6 +95,15 @@ public class OfficinaItemListItem : System.ComponentModel.INotifyPropertyChanged
 
     public string RequestedBy { get; set; } = "";
     public string DaneaRef { get; set; } = "";
+
+    // ── #142: l'ordine Danea del GREZZO (derivazione #135), per l'occhio in griglia ──
+    /// <summary>Codice del 201 di derivazione, col punto. Vuoto = il 101 non ha grezzo.</summary>
+    public string GrezzoCodice { get; set; } = "";
+    /// <summary>Rif. Danea della riga grezzo in DDP Commerciale ("" = non ancora ordinato).</summary>
+    public string GrezzoDaneaRef { get; set; } = "";
+    /// <summary>IDDoc dell'ordine Danea del grezzo (null = ordine non generato da ATEC PM).</summary>
+    public int? GrezzoDaneaOrderIdDoc { get; set; }
+
     public DateTime? DateNeeded { get; set; }
     /// <summary>Data in cui la riga è passata a In Ordine (IO); auto-compilata al primo IO.</summary>
     public DateTime? OrderDate { get; set; }

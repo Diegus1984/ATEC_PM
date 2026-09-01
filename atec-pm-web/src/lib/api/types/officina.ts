@@ -30,6 +30,12 @@ export interface OfficinaItem {
   workType: string
   requestedBy: string
   daneaRef: string
+  /** #142 — codice del 201 di derivazione (col punto). Vuoto/assente = il 101 non ha grezzo. */
+  grezzoCodice?: string
+  /** #142 — Rif. Danea della riga grezzo in DDP Commerciale ("" = non ancora ordinato). */
+  grezzoDaneaRef?: string
+  /** #142 — IDDoc dell'ordine Danea del grezzo (null = ordine non generato da ATEC PM). */
+  grezzoDaneaOrderIdDoc?: number | null
   dateNeeded: string | null
   /** Data In Ordine (auto al passaggio IO; editabile). */
   orderDate: string | null

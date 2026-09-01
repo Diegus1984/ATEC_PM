@@ -1856,15 +1856,33 @@ public class ProjectsController : ControllerBase
                    o.parent_officina_item_id AS ParentOfficinaItemId, o.composition_qty AS CompositionQty,
                    o.created_by AS CreatedById,
                    COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
-                   o.created_at AS CreatedAt, o.updated_at AS UpdatedAt
+                   o.created_at AS CreatedAt, o.updated_at AS UpdatedAt,
+                   -- #142: l'ordine Danea del GREZZO (riga di DDP Commerciale generata dalla
+                   -- derivazione #135) — chi costruisce vede da qui se il materiale è ordinato.
+                   COALESCE(drv.gz_codice, '') AS GrezzoCodice,
+                   COALESCE(gz.danea_ref, '') AS GrezzoDaneaRef,
+                   gz.danea_order_iddoc AS GrezzoDaneaOrderIdDoc
             FROM ddp_officina_items o
             LEFT JOIN employees e ON e.id = o.created_by
+            -- Stessa catena del ricalcolo (GrezziDerivazione): 101 → riferimento 201 → riga
+            -- grezzo della commessa (bom_items.raw_codex_code = codice del 201 senza punti).
+            LEFT JOIN (
+                SELECT src.codice AS src_codice,
+                       REPLACE(rif.codice, '.', '') AS gz_codice
+                FROM codex_items src
+                JOIN codex_item_references r ON r.source_codex_id = src.id AND r.ref_type = '201'
+                JOIN codex_items rif ON rif.id = r.ref_codex_id
+            ) drv ON drv.src_codice = REPLACE(REPLACE(COALESCE(o.part_number,''), '.', ''), ' ', '')
+            LEFT JOIN bom_items gz
+              ON gz.project_id = o.project_id AND gz.raw_codex_code = drv.gz_codice
             WHERE o.project_id = @Id
             ORDER BY o.id", new { Id = id }).ToList();
             foreach (OfficinaItemListItem row in rows)
             {
                 if (row.PartNumber.Length > 0)
                     row.PartNumber = CodexListItem.FormatCodice(row.PartNumber);
+                if (row.GrezzoCodice.Length > 0)
+                    row.GrezzoCodice = CodexListItem.FormatCodice(row.GrezzoCodice);
             }
 
             return Ok(ApiResponse<List<OfficinaItemListItem>>.Ok(rows));

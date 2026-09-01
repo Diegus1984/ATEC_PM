@@ -41,8 +41,9 @@ import { DdpStatusLegend } from "./DdpStatusLegend"
 import { confirmDdpRowAnnul, DDP_STATUS_CANCELLED } from "./ddp-annul-row"
 import { ddpTransitionsPerUtente } from "./ddp-constants"
 import { WORK_TYPE_META } from "./ddp-work-type"
+import { DaneaOrderDialog } from "@/components/shared/danea-order-dialog"
 import { OfficinaDialog } from "./OfficinaDialog"
-import { buildOfficinaColumns } from "./officina-columns"
+import { buildOfficinaColumns, GrezzoOrdineEye } from "./officina-columns"
 import {
   buildOfficinaRows,
   collectParentIdsWithChildren,
@@ -72,7 +73,10 @@ function formatQuantity(quantity: number): string {
  */
 function buildReadOnlyOfficinaCells(
   statusMap: Map<string, DdpStatusItem>,
-  onStoria: (item: OfficinaItem) => void
+  onStoria: (item: OfficinaItem) => void,
+  // #142: l'occhio sull'ordine del grezzo resta anche in sola lettura (è consultazione).
+  onOpenDaneaOrder: (idDoc: number) => void,
+  onOpenDaneaOrderByRef: (rif: string) => void
 ): Record<string, (item: OfficinaItem) => React.ReactNode> {
   const text = (value: string) => (
     <span className="whitespace-nowrap">{value.trim() ? value : "—"}</span>
@@ -127,7 +131,16 @@ function buildReadOnlyOfficinaCells(
       </span>
     ),
     dateNeeded: (item) => date(item.dateNeeded),
-    daneaRef: (item) => text(item.daneaRef),
+    daneaRef: (item) => (
+      <span className="flex items-center gap-1.5">
+        {text(item.daneaRef)}
+        <GrezzoOrdineEye
+          item={item}
+          onOpen={onOpenDaneaOrder}
+          onOpenByRef={onOpenDaneaOrderByRef}
+        />
+      </span>
+    ),
     orderDate: (item) => date(item.orderDate),
     deliveredAt: (item) => date(item.deliveredAt ?? null),
     destination: (item) => (
@@ -195,6 +208,10 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
   const [dialog, setDialog] = React.useState<OfficinaItemSaveRequest | null>(null)
   /** Riga di cui si sta guardando la cronistoria degli stati. */
   const [storiaTarget, setStoriaTarget] = React.useState<OfficinaItem | null>(null)
+  // #142 — popup dell'ordine Danea del GREZZO (occhio in colonna Rif. Danea):
+  // per IDDoc quando l'ordine è nato da ATEC PM, per numero altrimenti.
+  const [daneaOrderIdDoc, setDaneaOrderIdDoc] = React.useState<number | null>(null)
+  const [daneaOrderRef, setDaneaOrderRef] = React.useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedStatusKeys, setSelectedStatusKeys] = React.useState<Set<string>>(
     () => new Set()
@@ -473,11 +490,18 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
       onDelete: (item) => void handleDeleteRow(item),
       onQuantityAdjust: (item, delta) => void handleQuantityAdjust(item, delta),
       onStoria: setStoriaTarget,
+      onOpenDaneaOrder: setDaneaOrderIdDoc,
+      onOpenDaneaOrderByRef: setDaneaOrderRef,
     })
     if (!readOnly) return editable
     return applyReadOnlyCells(
       editable,
-      buildReadOnlyOfficinaCells(statusMap, setStoriaTarget)
+      buildReadOnlyOfficinaCells(
+        statusMap,
+        setStoriaTarget,
+        setDaneaOrderIdDoc,
+        setDaneaOrderRef
+      )
     )
   }, [
     statuses,
@@ -641,6 +665,17 @@ export function ProjectDdpOfficina({ projectId }: { projectId: number }) {
         ddpType="OFFICINA"
         onClose={() => setPickerOpen(false)}
         onAdded={() => void invalidate()}
+      />
+
+      {/* #142 — popup dell'ordine Danea del grezzo (stesso dialog della Commerciale:
+          per IDDoc, o ricerca per numero anche nel vecchio archivio). */}
+      <DaneaOrderDialog
+        idDoc={daneaOrderIdDoc}
+        daneaRef={daneaOrderRef}
+        onClose={() => {
+          setDaneaOrderIdDoc(null)
+          setDaneaOrderRef(null)
+        }}
       />
     </>
   )

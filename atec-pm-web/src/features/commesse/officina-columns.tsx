@@ -7,12 +7,14 @@ import {
   Ban,
   ChevronDown,
   ChevronRight,
+  Eye,
   History,
   Pencil,
   Trash2,
 } from "lucide-react"
 
 import { RowActionsMenu, type RowAction } from "@/components/shared/row-actions"
+import { DaneaOrderBadge } from "@/features/acquisti/acquisti-ui"
 import type {
   DdpDestinationItem,
   DdpStatusItem,
@@ -40,6 +42,52 @@ import { OfficinaProducedCell } from "./OfficinaProducedCell"
 import type { OfficinaRowMutations } from "./use-officina-row-mutations"
 import { formatDateOrDash, toDateOnly } from "@/lib/date-iso"
 
+/**
+ * #142 — l'«occhio» sull'ordine Danea del GREZZO (derivazione #135): la riga 101 sta in
+ * Officina ma il suo materiale si compra dalla DDP Commerciale — da qui si apre l'ordine
+ * senza cambiare scheda. Grezzo non ancora ordinato = occhio spento col perché nel title.
+ * Lo usano la colonna Rif. Danea e la sua resa in sola lettura (ProjectDdpOfficina).
+ *
+ * 🪤 Colori del testo NON espliciti apposta: la riga porta un `color` inline dallo stato
+ * (verde, giallo…) e l'occhio deve restare leggibile su tutti — eredita quello.
+ */
+export function GrezzoOrdineEye({
+  item,
+  onOpen,
+  onOpenByRef,
+}: {
+  item: OfficinaItem
+  onOpen: (idDoc: number) => void
+  onOpenByRef: (rif: string) => void
+}) {
+  const codice = (item.grezzoCodice ?? "").trim()
+  if (!codice) return null
+  const ref = (item.grezzoDaneaRef ?? "").trim()
+  const idDoc = item.grezzoDaneaOrderIdDoc ?? null
+  if (idDoc == null && !ref) {
+    return (
+      <span
+        className="inline-flex shrink-0 opacity-40"
+        title={`Grezzo ${codice}: non ancora ordinato (si ordina dalla DDP Commerciale)`}
+      >
+        <Eye className="size-3.5" />
+      </span>
+    )
+  }
+  return (
+    <DaneaOrderBadge
+      label={ref ? `#${ref}` : ""}
+      idDoc={idDoc}
+      daneaRef={ref || null}
+      icon={Eye}
+      iconClassName="size-3.5"
+      className="inline-flex shrink-0 items-center gap-1 font-mono text-xs font-semibold underline-offset-2 hover:underline"
+      onOpen={onOpen}
+      onOpenByRef={onOpenByRef}
+    />
+  )
+}
+
 export function buildOfficinaColumns({
   statuses,
   statusMap,
@@ -56,6 +104,8 @@ export function buildOfficinaColumns({
   onDelete,
   onQuantityAdjust,
   onStoria,
+  onOpenDaneaOrder,
+  onOpenDaneaOrderByRef,
 }: {
   statuses: DdpStatusItem[]
   statusMap: Map<string, DdpStatusItem>
@@ -74,6 +124,9 @@ export function buildOfficinaColumns({
   onQuantityAdjust: (item: OfficinaItem, delta: 1 | -1) => void
   /** Apre la cronistoria dei passaggi di stato della riga. */
   onStoria: (item: OfficinaItem) => void
+  /** #142: aprono l'ordine Danea del grezzo (occhio in colonna Rif. Danea). */
+  onOpenDaneaOrder: (idDoc: number) => void
+  onOpenDaneaOrderByRef: (rif: string) => void
 }): ColumnDef<OfficinaItem>[] {
   const { pending } = mutations
 
@@ -345,13 +398,21 @@ export function buildOfficinaColumns({
       // compila. La visibilità di partenza sta in ProjectDdpOfficina (chiave `…-v2`).
       accessorKey: "daneaRef",
       header: "Rif. Danea",
+      // #142: accanto al riferimento della LAVORAZIONE, l'occhio sull'ordine del GREZZO.
       cell: ({ row }) => (
-        <DdpInlineTextCell
-          value={row.original.daneaRef ?? ""}
-          disabled={pending.daneaRef}
-          placeholder="—"
-          onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
-        />
+        <span className="flex items-center gap-1.5">
+          <DdpInlineTextCell
+            value={row.original.daneaRef ?? ""}
+            disabled={pending.daneaRef}
+            placeholder="—"
+            onCommit={(value) => mutations.commitDaneaRef(row.original, value)}
+          />
+          <GrezzoOrdineEye
+            item={row.original}
+            onOpen={onOpenDaneaOrder}
+            onOpenByRef={onOpenDaneaOrderByRef}
+          />
+        </span>
       ),
     },
     {
