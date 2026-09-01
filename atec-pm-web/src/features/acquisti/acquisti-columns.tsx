@@ -230,18 +230,31 @@ export function buildAcquistiColumns({
       },
       cell: ({ row }) => {
         const s = statusMap.get(row.original.itemStatus)
+        // #142: riga «scoperta» (grezzo o codice senza articoli) — stato fermo anche
+        // da qui: menu spento col perché nel title (il server rifiuterebbe comunque).
+        const scoperta = Boolean(
+          row.original.rawNeedsMapping || row.original.atecNeedsMapping
+        )
         return (
           <div className="flex min-w-[120px] items-center gap-1">
             <span className="min-w-0 flex-1 truncate font-semibold whitespace-nowrap text-xs">
               {s ? s.label : row.original.itemStatus || "—"}
             </span>
-            <DdpStatusMenu
-              currentStatusKey={row.original.itemStatus}
-              statuses={statuses}
-              transitions={transitionMap}
-              disabled={statusChangePending}
-              onSelect={(statusKey) => onStatusChange(row.original, statusKey)}
-            />
+            <span
+              title={
+                scoperta
+                  ? "Da associare: il codice non è associato a nessun articolo commerciale. Associa l'articolo (icona catena / pillola sulla riga) e lo stato si sblocca."
+                  : undefined
+              }
+            >
+              <DdpStatusMenu
+                currentStatusKey={row.original.itemStatus}
+                statuses={statuses}
+                transitions={transitionMap}
+                disabled={statusChangePending || scoperta}
+                onSelect={(statusKey) => onStatusChange(row.original, statusKey)}
+              />
+            </span>
           </div>
         )
       },

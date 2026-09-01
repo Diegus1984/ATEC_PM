@@ -40,6 +40,40 @@ public class PurchaseRfqController : ControllerBase
         _log = log;
     }
 
+    /// <summary>
+    /// #142 — righe «scoperte» fuori dalla gara: un grezzo il cui 201 non ha articoli, o
+    /// una riga col codice ATEC senza NESSUN articolo commerciale, non entrano in RDO —
+    /// prima si associa («altrimenti risulta ordinato» un articolo che Danea non conosce,
+    /// regola di Diego 01/09/2026). Una copia sola per le tre porte (piano offerte,
+    /// richiesta offerte, creazione RDO). Ritorna il messaggio di rifiuto, o null se ok.
+    /// </summary>
+    private static string? MessaggioRigheScoperte(System.Data.IDbConnection c, List<int> ids)
+    {
+        if (ids.Count == 0) return null;
+        var grezzi = c.Query<string>($@"
+            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
+            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+            new { Ids = ids }).ToList();
+        if (grezzi.Count > 0)
+            return "Grezzo da associare: il codice " +
+                string.Join(", ", grezzi.Select(CodexListItem.FormatCodice)) +
+                " non è associato a nessun articolo commerciale. Associa l'articolo " +
+                "(icona catena sulla riga, o Codex → Articoli Danea) e riprova.";
+
+        const string exprAtec =
+            "COALESCE(NULLIF(b.atec_code,''), (SELECT ci2.atec_code FROM catalog_items ci2 WHERE ci2.id = b.catalog_item_id))";
+        var codici = c.Query<string?>($@"
+            SELECT DISTINCT {exprAtec} FROM bom_items b
+            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlAtecScoperto(exprAtec)}",
+            new { Ids = ids }).Where(x => !string.IsNullOrEmpty(x)).ToList();
+        if (codici.Count > 0)
+            return "Codice da associare: il codice ATEC " +
+                string.Join(", ", codici.Select(x => CodexListItem.FormatCodice(x!))) +
+                " non è associato a nessun articolo commerciale. Associa l'articolo " +
+                "(icona catena sulla riga) e riprova.";
+        return null;
+    }
+
     private int CurrentEmployeeId =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out int id) ? id : 0;
 
@@ -147,19 +181,12 @@ public class PurchaseRfqController : ControllerBase
                 "crearne un'altra. Per rifare la gara, annulla prima quella esistente."));
         }
 
-        // #142: un grezzo «scoperto» (201 di derivazione senza articoli Danea associati) non
-        // entra in gara: non esiste nemmeno il listino da cui pescare le offerte. Rifiuto
-        // esplicito, non skip silenzioso: chi l'ha selezionato deve capire cosa manca.
-        var grezziScoperti = c.Query<string>($@"
-            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
-            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
-            new { Ids = bomRows.Select(r => r.Id).ToList() }).ToList();
-        if (grezziScoperti.Count > 0)
-            return Ok(ApiResponse<List<int>>.Fail(
-                "Grezzo da associare: il codice " +
-                string.Join(", ", grezziScoperti.Select(CodexListItem.FormatCodice)) +
-                " non è associato a nessun articolo commerciale. Associa l'articolo " +
-                "(Codex → Articoli Danea) e riprova."));
+        // #142: righe «scoperte» (grezzo o codice senza articoli) non entrano in gara: non
+        // esiste nemmeno il listino da cui pescare le offerte. Rifiuto esplicito, non skip
+        // silenzioso: chi le ha selezionate deve capire cosa manca.
+        string? scoperteCreate = MessaggioRigheScoperte(c, bomRows.Select(r => r.Id).ToList());
+        if (scoperteCreate != null)
+            return Ok(ApiResponse<List<int>>.Fail(scoperteCreate));
 
         // Una gara = UN articolo, e la regola deve valere anche QUI, non solo nel client:
         // il raggruppamento per codice lo fa CreateRfqDialog, ma un bundle web vecchio in
@@ -272,18 +299,11 @@ public class PurchaseRfqController : ControllerBase
                 "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
                 "Per rifare la gara, annulla prima quella esistente."));
 
-        // #142: se fra le righe c'è un grezzo scoperto il piano direbbe il generico «nessun
-        // fornitore da interpellare» — meglio dire subito COSA manca e dove si sistema.
-        var grezziScopertiPlan = c.Query<string>($@"
-            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
-            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
-            new { Ids = rows.Select(r => r.Id).ToList() }).ToList();
-        if (grezziScopertiPlan.Count > 0)
-            return Ok(ApiResponse<List<OfferPlanSupplier>>.Fail(
-                "Grezzo da associare: il codice " +
-                string.Join(", ", grezziScopertiPlan.Select(CodexListItem.FormatCodice)) +
-                " non è associato a nessun articolo commerciale. Associa l'articolo " +
-                "(icona catena sulla riga, o Codex → Articoli Danea) e riprova."));
+        // #142: righe scoperte (grezzo o codice senza articoli) — meglio dire subito COSA
+        // manca e dove si sistema, del generico «nessun fornitore da interpellare».
+        string? scoperte = MessaggioRigheScoperte(c, rows.Select(r => r.Id).ToList());
+        if (scoperte != null)
+            return Ok(ApiResponse<List<OfferPlanSupplier>>.Fail(scoperte));
 
         var plan = new Dictionary<int, OfferPlanSupplier>();
         foreach (var row in rows)
@@ -361,17 +381,10 @@ public class PurchaseRfqController : ControllerBase
             return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
                 "Queste righe sono già dentro una gara (RDO) in corso: non serve crearne un'altra. " +
                 "Per rifare la gara, annulla prima quella esistente."));
-        // #142: stessa guardia del Create — un grezzo scoperto non entra in gara.
-        var grezziScopertiOffers = c.Query<string>($@"
-            SELECT DISTINCT COALESCE(b.raw_codex_code,'') FROM bom_items b
-            WHERE b.id IN @Ids AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
-            new { Ids = rows.Select(r => r.Id).ToList() }).ToList();
-        if (grezziScopertiOffers.Count > 0)
-            return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(
-                "Grezzo da associare: il codice " +
-                string.Join(", ", grezziScopertiOffers.Select(CodexListItem.FormatCodice)) +
-                " non è associato a nessun articolo commerciale. Associa l'articolo " +
-                "(Codex → Articoli Danea) e riprova."));
+        // #142: stessa guardia del Create — le righe scoperte non entrano in gara.
+        string? scoperteOffers = MessaggioRigheScoperte(c, rows.Select(r => r.Id).ToList());
+        if (scoperteOffers != null)
+            return Ok(ApiResponse<List<PurchaseRfqEmailCandidate>>.Fail(scoperteOffers));
 
         var suppliersByRow = selections
             .GroupBy(s => s.BomItemId)

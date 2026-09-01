@@ -94,10 +94,7 @@ public class DdpCommercialController : ControllerBase
                        COALESCE(b.raw_codex_code,'') AS RawCodexCode,
                        COALESCE(b.raw_sources,'') AS RawSources,
                        {GrezziDerivazione.SqlGrezzoScoperto("b")} AS RawNeedsMapping,
-                       (COALESCE(NULLIF(b.atec_code,''), ci.atec_code) IS NOT NULL
-                        AND NOT EXISTS (SELECT 1 FROM catalog_items ca
-                                        WHERE ca.is_active = 1
-                                          AND ca.atec_code = COALESCE(NULLIF(b.atec_code,''), ci.atec_code))) AS AtecNeedsMapping,
+                       {GrezziDerivazione.SqlAtecScoperto("COALESCE(NULLIF(b.atec_code,''), ci.atec_code)")} AS AtecNeedsMapping,
                        b.created_by AS CreatedById,
                        COALESCE(CONCAT(e.first_name, ' ', e.last_name), '') AS CreatedByName,
                        b.created_at AS CreatedAt, b.updated_at AS UpdatedAt,

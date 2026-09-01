@@ -992,10 +992,17 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
                 {s ? s.label : row.original.itemStatus || "—"}
               </span>
               {/* Il menu «⋮» cambia lo stato della riga: in sola lettura non compare.
-                  #142: un grezzo «scoperto» non avanza — menu spento (il server
+                  #142: una riga «scoperta» non avanza — menu spento (il server
                   rifiuterebbe comunque), la spiegazione sta nel title. */}
-              {readOnly ? null : row.original.rawNeedsMapping ? (
-                <span title="Grezzo da associare: il 201 di derivazione non è associato a nessun articolo commerciale. Associa l'articolo (pillola «da associare» sul Codice) e lo stato si sblocca.">
+              {readOnly ? null : row.original.rawNeedsMapping ||
+                row.original.atecNeedsMapping ? (
+                <span
+                  title={
+                    row.original.rawNeedsMapping
+                      ? "Grezzo da associare: il 201 di derivazione non è associato a nessun articolo commerciale. Associa l'articolo (pillola «da associare» sul Codice) e lo stato si sblocca."
+                      : "Codice da associare: il codice ATEC della riga non è associato a nessun articolo commerciale. Associa l'articolo (icona catena sul Cod. ATEC) e lo stato si sblocca."
+                  }
+                >
                   <DdpStatusMenu
                     currentStatusKey={row.original.itemStatus}
                     statuses={statuses}
@@ -1336,9 +1343,9 @@ export function ProjectDdpCommercial({ projectId }: { projectId: number }) {
       const base: React.CSSProperties = s
         ? { backgroundColor: s.colorBg, color: s.colorFg }
         : {}
-      // #142: grezzo «scoperto» — bordo interno ambra che pulsa (keyframes in index.css)
-      // finché il 201 non viene associato a un articolo commerciale.
-      if (row.rawNeedsMapping) {
+      // #142: riga «scoperta» (grezzo senza articoli, o codice ATEC senza articoli) —
+      // bordo interno ambra che pulsa (keyframes in index.css) finché non si associa.
+      if (row.rawNeedsMapping || row.atecNeedsMapping) {
         return { ...base, animation: "ddp-raw-blink 1.4s ease-in-out infinite" }
       }
       return s ? base : undefined

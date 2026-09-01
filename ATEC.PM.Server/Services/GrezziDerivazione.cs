@@ -59,6 +59,21 @@ public static class GrezziDerivazione
             WHERE ci_g.is_active = 1
               AND REPLACE(cx_g.codice, '.', '') = {aliasBom}.raw_codex_code))";
 
+    /// <summary>
+    /// Frammento SQL «il codice ATEC di questa riga è <b>scoperto</b>» (regola di Diego,
+    /// 01/09/2026): il codice c'è ma non è associato a NESSUN articolo commerciale attivo.
+    /// La riga si inserisce e si associa, ma NON cambia stato (né va in gara) finché
+    /// l'associazione non esiste — «altrimenti risulta ordinato» un articolo che Danea
+    /// non conosce. Stessa filosofia (e stessa vita) di <see cref="SqlGrezzoScoperto"/>:
+    /// una copia sola per GET righe, GET inbox, PUT, guardie RDO e test.
+    /// </summary>
+    /// <param name="exprAtec">Espressione SQL del codice ATEC EFFETTIVO della riga
+    /// (snapshot di riga o mapping vivo dell'articolo), senza punti come sta in DB.</param>
+    public static string SqlAtecScoperto(string exprAtec) =>
+        $@"({exprAtec} IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM catalog_items ca_x
+            WHERE ca_x.is_active = 1 AND ca_x.atec_code = {exprAtec}))";
+
     /// <summary>Cosa ha fatto una sincronizzazione: serve ai log e ai test.</summary>
     public sealed record Esito(int Creati, int Aggiornati, int Eliminati, int Sganciati)
     {

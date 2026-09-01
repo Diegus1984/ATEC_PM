@@ -355,11 +355,17 @@ export function AcquistiPage() {
 
   // Stile di riga nativo basato sulla configurazione di Conf. DDP (s.colorBg / s.colorFg)
   const rowStyle = React.useCallback(
-    (row: AcquistiInboxItem) => {
+    (row: AcquistiInboxItem): React.CSSProperties | undefined => {
       const s = statusMap.get(row.itemStatus)
-      return s && s.colorBg
-        ? { backgroundColor: s.colorBg, color: s.colorFg ?? undefined }
-        : undefined
+      const base: React.CSSProperties =
+        s && s.colorBg
+          ? { backgroundColor: s.colorBg, color: s.colorFg ?? undefined }
+          : {}
+      // #142: riga «scoperta» — stesso bordo ambra lampeggiante delle DDP di commessa.
+      if (row.rawNeedsMapping || row.atecNeedsMapping) {
+        return { ...base, animation: "ddp-raw-blink 1.4s ease-in-out infinite" }
+      }
+      return s && s.colorBg ? base : undefined
     },
     [statusMap]
   )

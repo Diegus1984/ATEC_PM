@@ -1460,13 +1460,9 @@ public class ProjectsController : ControllerBase
                    COALESCE(b.raw_sources,'') AS RawSources, b.raw_auto_qty AS RawAutoQty,
                    -- #142: grezzo «scoperto» → la riga si ferma finché il 201 non è associato.
                    {GrezziDerivazione.SqlGrezzoScoperto("b")} AS RawNeedsMapping,
-                   -- Codice ATEC senza NESSUN articolo commerciale associato (01/09/2026):
-                   -- niente blocco — è legittimo — ma l'icona in griglia offre
-                   -- l'associazione al volo, il rovescio della codifica dal Catalogo.
-                   (COALESCE(NULLIF(b.atec_code,''), ci.atec_code) IS NOT NULL
-                    AND NOT EXISTS (SELECT 1 FROM catalog_items ca
-                                    WHERE ca.is_active = 1
-                                      AND ca.atec_code = COALESCE(NULLIF(b.atec_code,''), ci.atec_code))) AS AtecNeedsMapping,
+                   -- Codice ATEC «scoperto» (01/09/2026): la riga si inserisce e si
+                   -- associa, ma non cambia stato finché il codice non ha un articolo.
+                   {GrezziDerivazione.SqlAtecScoperto("COALESCE(NULLIF(b.atec_code,''), ci.atec_code)")} AS AtecNeedsMapping,
                    -- «Consegnato il»: valore salvato sulla riga oppure ultimo passaggio a DISP nella cronistoria.
                    COALESCE(b.delivered_at,
                              (SELECT MAX(ev.changed_at) FROM ddp_item_events ev
@@ -1610,20 +1606,31 @@ public class ProjectsController : ControllerBase
             if (transitionError != null)
                 return BadRequest(ApiResponse<DateTime?>.Fail(transitionError));
 
-            // #142: un grezzo «scoperto» (201 senza articolo Danea associato) non avanza di
-            // stato — prima si associa il commerciale vero. Le altre modifiche (quantità,
-            // note, date) restano libere: fermo l'oggetto, non chi ci lavora attorno.
+            // #142: una riga «scoperta» non avanza di stato — prima si associa il
+            // commerciale vero, «altrimenti risulta ordinato» un articolo che Danea non
+            // conosce (regola di Diego, 01/09/2026). Vale per il grezzo da derivazione E
+            // per qualunque riga col codice ATEC senza articoli. Le altre modifiche
+            // (quantità, note, date) restano libere: fermo l'oggetto, non chi ci lavora.
             if (!string.Equals(oldStatus ?? "", req.ItemStatus ?? "", StringComparison.OrdinalIgnoreCase))
             {
-                bool grezzoScoperto = c.ExecuteScalar<int>($@"
-                    SELECT COUNT(*) FROM bom_items b
-                    WHERE b.id = @ItemId AND b.project_id = @Id
-                      AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
-                    new { ItemId = itemId, Id = id }) > 0;
-                if (grezzoScoperto)
+                const string exprAtec =
+                    "COALESCE(NULLIF(b.atec_code,''), (SELECT ci2.atec_code FROM catalog_items ci2 WHERE ci2.id = b.catalog_item_id))";
+                var scoperta = c.QueryFirstOrDefault<(bool Grezzo, bool Atec, string? AtecCode)>($@"
+                    SELECT {GrezziDerivazione.SqlGrezzoScoperto("b")} AS Grezzo,
+                           {GrezziDerivazione.SqlAtecScoperto(exprAtec)} AS Atec,
+                           {exprAtec} AS AtecCode
+                    FROM bom_items b
+                    WHERE b.id = @ItemId AND b.project_id = @Id",
+                    new { ItemId = itemId, Id = id });
+                if (scoperta.Grezzo)
                     return BadRequest(ApiResponse<DateTime?>.Fail(
                         "Grezzo da associare: il codice 201 di derivazione non è ancora associato " +
                         "a nessun articolo commerciale. Associa l'articolo (Codex → Articoli Danea) e riprova."));
+                if (scoperta.Atec)
+                    return BadRequest(ApiResponse<DateTime?>.Fail(
+                        $"Codice da associare: il codice ATEC {CodexListItem.FormatCodice(scoperta.AtecCode ?? "")} " +
+                        "non è associato a nessun articolo commerciale. Associa l'articolo " +
+                        "(icona catena sulla riga) e riprova."));
             }
 
             // Quantità modificabile in VER (ingresso) o DO (da ordinare), o tornando in uno

@@ -50,6 +50,28 @@ public class GrezzoScopertoTests
     }
 
     [FactRichiedeMySql]
+    public void Il_codice_atec_senza_articoli_e_scoperto_e_l_associazione_lo_sblocca()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int commessa = Commessa(c);
+        // Riga commerciale NORMALE (niente derivazione) con un codice ATEC che nessun
+        // articolo Danea porta: la regola di Diego (01/09/2026) la vuole FERMA.
+        c.Execute(@"
+            INSERT INTO bom_items (project_id, part_number, description, quantity, item_status, ddp_type, atec_code)
+            VALUES (@P, 'RND-1', 'Rondella con codice scoperto', 1, 'DO', 'COMMERCIAL', '301999990901')",
+            new { P = commessa });
+
+        Assert.Equal(1, AtecScoperti(c, commessa));
+
+        // L'associazione vera (AssignCore) scrive atec_code sull'articolo: la condizione
+        // si spegne da sola, senza campi da aggiornare sulla riga.
+        c.Execute(@"
+            INSERT INTO catalog_items (code, description, is_active, atec_code)
+            VALUES ('ART-TEST-301', 'Articolo associato di prova', 1, '301999990901')");
+        Assert.Equal(0, AtecScoperti(c, commessa));
+    }
+
+    [FactRichiedeMySql]
     public void Una_riga_commerciale_normale_non_e_mai_scoperta()
     {
         using MySqlConnection c = _schema.Apri();
@@ -201,6 +223,14 @@ public class GrezzoScopertoTests
         c.ExecuteScalar<int>($@"
             SELECT COUNT(*) FROM bom_items b
             WHERE b.project_id = @P AND {GrezziDerivazione.SqlGrezzoScoperto("b")}",
+            new { P = commessa });
+
+    /// <summary>Idem per il codice ATEC scoperto, con l'espressione dell'atec effettivo del PUT.</summary>
+    private static int AtecScoperti(MySqlConnection c, int commessa) =>
+        c.ExecuteScalar<int>($@"
+            SELECT COUNT(*) FROM bom_items b
+            WHERE b.project_id = @P AND {GrezziDerivazione.SqlAtecScoperto(
+                "COALESCE(NULLIF(b.atec_code,''), (SELECT ci2.atec_code FROM catalog_items ci2 WHERE ci2.id = b.catalog_item_id))")}",
             new { P = commessa });
 
     private static RigaLetta Riga(MySqlConnection c, int commessa) =>
