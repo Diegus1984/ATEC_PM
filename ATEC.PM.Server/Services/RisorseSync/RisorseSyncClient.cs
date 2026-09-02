@@ -156,6 +156,18 @@ public sealed class RisorseSyncClient
     public Task<List<SyncUpsertResultDto>> DeleteAssignmentsAsync(SyncDeleteRequest req, CancellationToken ct = default) =>
         ChiamaAsync<List<SyncUpsertResultDto>>(HttpMethod.Post, "/api/sync/assignments/delete", req, ct);
 
+    // Le tre letture delle anagrafiche del VPS (Fase 1): servono al seme della mappa
+    // dipendenti e ai controlli. Tornano TUTTO (anche i cessati e gli account «[…]»);
+    // PasswordHash è sempre null: le credenziali dal VPS non escono mai.
+    public Task<List<SyncEmployeeDto>> GetEmployeesAsync(CancellationToken ct = default) =>
+        ChiamaAsync<List<SyncEmployeeDto>>(HttpMethod.Get, "/api/sync/employees", null, ct);
+
+    public Task<List<SyncProjectDto>> GetProjectsAsync(CancellationToken ct = default) =>
+        ChiamaAsync<List<SyncProjectDto>>(HttpMethod.Get, "/api/sync/projects", null, ct);
+
+    public Task<SyncDepartmentsRequest> GetDepartmentsAsync(CancellationToken ct = default) =>
+        ChiamaAsync<SyncDepartmentsRequest>(HttpMethod.Get, "/api/sync/departments", null, ct);
+
     public Task<List<SyncUpsertResultDto>> UpsertEmployeesAsync(List<SyncEmployeeDto> righe, CancellationToken ct = default) =>
         ChiamaAsync<List<SyncUpsertResultDto>>(HttpMethod.Put, "/api/sync/employees", righe, ct);
 

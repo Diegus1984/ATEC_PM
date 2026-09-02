@@ -198,6 +198,23 @@ public sealed class RisorseSyncSettingsStore
         Set(c, "sync.last_error", Tronca(errore, 480) ?? "");
     }
 
+    /// <summary>
+    /// Una chiave <c>sync.*</c> qualsiasi (es. <c>sync.anagrafiche_full_at</c>,
+    /// <c>sync.hash.reparti</c>): il motore ci tiene i suoi segnalibri. null se manca o vuota.
+    /// </summary>
+    public string? LeggiChiave(string chiave)
+    {
+        using MySqlConnection c = _rdb.Open();
+        string? v = c.ExecuteScalar<string>("SELECT `value` FROM res_settings WHERE `key` = @K", new { K = chiave });
+        return string.IsNullOrEmpty(v) ? null : v;
+    }
+
+    public void ScriviChiave(string chiave, string valore)
+    {
+        using MySqlConnection c = _rdb.Open();
+        Set(c, chiave, valore);
+    }
+
     private static void Set(MySqlConnection c, string chiave, string valore) => c.Execute(
         "INSERT INTO res_settings (`key`, `value`) VALUES (@K, @V) " +
         "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",

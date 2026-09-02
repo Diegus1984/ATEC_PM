@@ -15,6 +15,13 @@ namespace ATEC.PM.Shared.DTOs;
 // l'ora né con il fuso. UpdatedAt/CreatedAt sono UTC (DateTimeKind.Utc,
 // cioè con la Z nel JSON).
 //
+// Endpoint (base {BaseUrl}/api/sync, ruolo SYNC o ADMIN):
+//  GET status · GET assignments · POST assignments (List<SyncAssignmentUpsertDto>)
+//  · POST assignments/delete (SyncDeleteRequest) · GET employees (TUTTI i dipendenti,
+//  PasswordHash sempre null) · PUT employees · GET projects · PUT projects
+//  · GET departments (SyncDepartmentsRequest completa) · PUT departments.
+// La copia di riferimento con le regole di scrittura è Sync_DTOs.cs sul VPS.
+//
 // Regole anagrafiche (PM comanda): il VPS manda EmployeesChanged
 // sull'hub SOLO se almeno una riga è created/updated — un giro che
 // non cambia niente non riceve alcun eco dall'hub. L'account di
