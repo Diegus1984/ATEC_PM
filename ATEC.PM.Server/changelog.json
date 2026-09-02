@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260902-1214",
+                     "data":  "2026-09-02T12:14:28",
+                     "hash":  "32040eecab62b8c1fd7328f27eb6114505e97e50",
+                     "modifiche":  [
+                                       "HR presenze in tempo reale: ogni modifica aggiorna le pagine aperte"
+                                   ]
+                 },
+                 {
                      "build":  "20260902-1146",
                      "data":  "2026-09-02T11:47:03",
                      "hash":  "2a92f3c3cff051869168a524e31cd65df603317e",
