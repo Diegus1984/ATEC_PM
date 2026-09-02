@@ -123,17 +123,22 @@ public sealed class RisorseSyncSettingsStore
             ? Decifra(cifrata) ?? ""
             : _config["RisorseSync:Password"] ?? "";
 
-        string enabledRaw = Get("sync.enabled", _config["RisorseSync:Enabled"] ?? "false");
-        bool enabled = enabledRaw == "1" || enabledRaw.Equals("true", StringComparison.OrdinalIgnoreCase);
-
         return new RisorseSyncSettings(
-            Enabled: enabled,
+            Enabled: EnabledDa(righe),
             BaseUrl: Get("sync.baseurl", _config["RisorseSync:BaseUrl"] ?? "").Trim(),
             Username: Get("sync.username", _config["RisorseSync:Username"] ?? "").Trim(),
             Password: password,
             LastRun: GetOpzionale("sync.last_run"),
             LastEsito: GetOpzionale("sync.last_esito"),
             LastError: GetOpzionale("sync.last_error"));
+    }
+
+    private bool EnabledDa(Dictionary<string, string> righe)
+    {
+        string raw = righe.TryGetValue("sync.enabled", out string? v) && !string.IsNullOrEmpty(v)
+            ? v
+            : _config["RisorseSync:Enabled"] ?? "false";
+        return raw == "1" || raw.Equals("true", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Le impostazioni per il pannello: la password non esce mai, esce se c'è.</summary>

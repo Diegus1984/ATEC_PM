@@ -145,20 +145,120 @@ public class PlanNotificationService
         return new Changes(added, changed, deleted, false);
     }
 
-    private static void TakeSnapshot(MySqlConnector.MySqlConnection c, List<Row> current)
+    /// <summary>Una riga della foto, per gli INSERT di <see cref="TakeSnapshot"/> e <see cref="AllineaFotoAlPiano"/>.</summary>
+    private const string InsertSnapshotSql = @"
+        INSERT INTO res_plan_snapshots
+            (batch_id, assignment_id, employee_id, tipo, data_inizio, data_fine, project_id, service_id, other_activity_id, descrizione)
+        VALUES (@BatchId, @AssignmentId, @EmployeeId, @Tipo, @DataInizio, @DataFine, @ProjectId, @ServiceId, @OtherActivityId, @Descrizione)";
+
+    private static object ParametriFoto(int batchId, Row r) =>
+        new { BatchId = batchId, r.AssignmentId, r.EmployeeId, r.Tipo, r.DataInizio, r.DataFine, r.ProjectId, r.ServiceId, r.OtherActivityId, r.Descrizione };
+
+    private static void TakeSnapshot(MySqlConnector.MySqlConnection c, List<Row> current, MySqlConnector.MySqlTransaction? tx = null)
     {
         int batchId = c.ExecuteScalar<int>(
             "INSERT INTO res_plan_snapshot_batches (created_utc) VALUES (@Now); SELECT LAST_INSERT_ID()",
-            new { Now = DateTime.UtcNow });
+            new { Now = DateTime.UtcNow }, tx);
 
         foreach (Row r in current)
+            c.Execute(InsertSnapshotSql, ParametriFoto(batchId, r), tx);
+    }
+
+    /// <summary>
+    /// res_plan_snapshots non ha una chiave unica su (batch_id, assignment_id): un
+    /// <c>ON DUPLICATE KEY UPDATE</c> non aggiornerebbe mai e metterebbe un secondo rigo per lo
+    /// stesso assignment_id, che poi fa saltare il <c>ToDictionary</c> di <see cref="ComputeChanges"/>.
+    /// L'upsert si fa a mano: UPDATE se la riga c'è già nel batch, INSERT se manca.
+    /// </summary>
+    private static void ScriviNellaFoto(MySqlConnector.MySqlConnection c, int batchId, Row r, bool giaInFoto, MySqlConnector.MySqlTransaction? tx = null)
+    {
+        if (!giaInFoto)
         {
-            c.Execute(@"
-                INSERT INTO res_plan_snapshots
-                    (batch_id, assignment_id, employee_id, tipo, data_inizio, data_fine, project_id, service_id, other_activity_id, descrizione)
-                VALUES (@BatchId, @AssignmentId, @EmployeeId, @Tipo, @DataInizio, @DataFine, @ProjectId, @ServiceId, @OtherActivityId, @Descrizione)",
-                new { BatchId = batchId, r.AssignmentId, r.EmployeeId, r.Tipo, r.DataInizio, r.DataFine, r.ProjectId, r.ServiceId, r.OtherActivityId, r.Descrizione });
+            c.Execute(InsertSnapshotSql, ParametriFoto(batchId, r), tx);
+            return;
         }
+        c.Execute(@"
+            UPDATE res_plan_snapshots
+            SET employee_id=@EmployeeId, tipo=@Tipo, data_inizio=@DataInizio, data_fine=@DataFine,
+                project_id=@ProjectId, service_id=@ServiceId, other_activity_id=@OtherActivityId, descrizione=@Descrizione
+            WHERE batch_id=@BatchId AND assignment_id=@AssignmentId", ParametriFoto(batchId, r), tx);
+    }
+
+    /// <summary>Gli assignment_id già presenti nella foto del batch (a prescindere dai JOIN di
+    /// <see cref="SnapshotSql"/>, che perdono le righe di un dipendente cancellato).</summary>
+    private static HashSet<int> IdNellaFoto(MySqlConnector.MySqlConnection c, int batchId, MySqlConnector.MySqlTransaction? tx = null) =>
+        c.Query<int>("SELECT assignment_id FROM res_plan_snapshots WHERE batch_id = @BatchId", new { BatchId = batchId }, tx).ToHashSet();
+
+    /// <summary>Toglie dal batch gli eventuali doppioni dello stesso assignment_id (resta il più vecchio):
+    /// eredità del vecchio ON DUPLICATE KEY UPDATE senza chiave unica.</summary>
+    private static void TogliDoppioni(MySqlConnector.MySqlConnection c, int batchId, MySqlConnector.MySqlTransaction? tx = null) =>
+        c.Execute(@"
+            DELETE s1 FROM res_plan_snapshots s1
+            JOIN res_plan_snapshots s2 ON s2.batch_id = s1.batch_id AND s2.assignment_id = s1.assignment_id AND s2.id < s1.id
+            WHERE s1.batch_id = @BatchId", new { BatchId = batchId }, tx);
+
+    // ── Foto allineata al piano (sincronizzazione col VPS accesa) ─
+
+    /// <summary>
+    /// Rende l'ultima foto identica al piano attuale, senza notificare nessuno. Serve quando la
+    /// sincronizzazione col VPS è accesa: a notificare i dipendenti è il VPS (PIANO-SYNC-RISORSE.md
+    /// §7, decisione 6), quindi in PM il badge «modifiche da notificare» sarebbe solo rumore e, se
+    /// un giorno la sincronizzazione si spegne, il digest di PM deve ripartire da uno stato pulito
+    /// e non da centinaia di modifiche accumulate.
+    /// <para>Legge le righe correnti (la stessa lettura di <see cref="ComputeChanges"/>); se non
+    /// esiste nessun batch scatta la prima foto (<see cref="TakeSnapshot"/>), altrimenti nel batch
+    /// più recente aggiorna o inserisce ogni riga corrente e toglie gli assignment_id che non
+    /// esistono più; consuma da <c>res_notify_pending</c> le cancellazioni già consegnate al VPS.
+    /// Tutto in una transazione. Ritorna il numero di righe nella foto.</para>
+    /// </summary>
+    public int AllineaFotoAlPiano()
+    {
+        using var c = _rdb.Open();
+        using MySqlConnector.MySqlTransaction tx = c.BeginTransaction();
+
+        List<Row> current = c.Query<Row>(CurrentSql, transaction: tx).ToList();
+        int? batchId = c.ExecuteScalar<int?>("SELECT MAX(id) FROM res_plan_snapshot_batches", transaction: tx);
+
+        if (batchId == null)
+        {
+            TakeSnapshot(c, current, tx);
+        }
+        else
+        {
+            TogliDoppioni(c, batchId.Value, tx);
+
+            // Le allocazioni sparite escono dalla foto.
+            if (current.Count == 0)
+                c.Execute("DELETE FROM res_plan_snapshots WHERE batch_id = @BatchId", new { BatchId = batchId }, tx);
+            else
+                c.Execute("DELETE FROM res_plan_snapshots WHERE batch_id = @BatchId AND assignment_id NOT IN @Ids",
+                    new { BatchId = batchId, Ids = current.Select(r => r.AssignmentId).ToList() }, tx);
+
+            // Chi c'è già nella foto e con che contenuto: si scrive solo quello che è diverso.
+            HashSet<int> nellaFoto = IdNellaFoto(c, batchId.Value, tx);
+            var fotoById = c.Query<Row>(SnapshotSql, new { BatchId = batchId }, tx).ToDictionary(r => r.AssignmentId);
+
+            foreach (Row r in current)
+            {
+                bool giaInFoto = nellaFoto.Contains(r.AssignmentId);
+                if (giaInFoto && fotoById.TryGetValue(r.AssignmentId, out Row? foto) && foto.EmployeeId == r.EmployeeId && SameContent(r, foto))
+                    continue;
+                ScriviNellaFoto(c, batchId.Value, r, giaInFoto, tx);
+            }
+        }
+
+        // Le cancellazioni annotate per il digest si consumano SOLO se già consegnate al VPS:
+        // res_notify_pending serve anche al giro, che ci legge il made_by da mandare al VPS
+        // (RisorseSyncService.SyncAllocazioniAsync). Una riga cancellata in PM mentre il giro era
+        // in corso ha ancora la sua voce in res_sync_map (RisorseSyncMap.Rimuovi gira solo dopo la
+        // DELETE sul VPS): resta, altrimenti il giro dopo la cancellerebbe di là senza autore.
+        // Senza voce in mappa = consegnata, cancellata dal VPS stesso o mai arrivata di là.
+        c.Execute(@"
+            DELETE np FROM res_notify_pending np
+            LEFT JOIN res_sync_map m ON m.kind = @Kind AND m.local_id = np.assignment_id
+            WHERE m.local_id IS NULL", new { Kind = RisorseSync.RisorseSyncMap.Assignment }, tx);
+        tx.Commit();
+        return current.Count;
     }
 
     // ── Conteggio pendenti (badge toolbar, nessun invio) ─────────
@@ -433,16 +533,14 @@ public class PlanNotificationService
             c.Execute("DELETE FROM res_notify_pending WHERE assignment_id IN @Ids", new { Ids = ids });
         }
 
+        // Upsert a mano (vedi ScriviNellaFoto): il vecchio ON DUPLICATE KEY UPDATE, senza chiave
+        // unica, metteva un doppione a ogni «Notifica subito» su una riga modificata.
+        TogliDoppioni(c, batchId.Value);
+        HashSet<int> nellaFoto = IdNellaFoto(c, batchId.Value);
         foreach (Row r in filtered.New.Concat(filtered.Changed))
         {
-            c.Execute(@"
-                INSERT INTO res_plan_snapshots
-                    (batch_id, assignment_id, employee_id, tipo, data_inizio, data_fine, project_id, service_id, other_activity_id, descrizione)
-                VALUES (@BatchId, @AssignmentId, @EmployeeId, @Tipo, @DataInizio, @DataFine, @ProjectId, @ServiceId, @OtherActivityId, @Descrizione)
-                ON DUPLICATE KEY UPDATE
-                    employee_id=VALUES(employee_id), tipo=VALUES(tipo), data_inizio=VALUES(data_inizio), data_fine=VALUES(data_fine),
-                    project_id=VALUES(project_id), service_id=VALUES(service_id), other_activity_id=VALUES(other_activity_id), descrizione=VALUES(descrizione)",
-                new { BatchId = batchId, r.AssignmentId, r.EmployeeId, r.Tipo, r.DataInizio, r.DataFine, r.ProjectId, r.ServiceId, r.OtherActivityId, r.Descrizione });
+            ScriviNellaFoto(c, batchId.Value, r, nellaFoto.Contains(r.AssignmentId));
+            nellaFoto.Add(r.AssignmentId);
         }
     }
 

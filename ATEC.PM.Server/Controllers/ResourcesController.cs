@@ -376,7 +376,17 @@ public class ResourcesController : ControllerBase
     [RequireFeature("resources.edit")]
     public IActionResult GetNotifyPending()
     {
-        try { return Ok(ApiResponse<NotifyPendingDto>.Ok(_notify.ComputePending())); }
+        try
+        {
+            // Con la sincronizzazione col VPS attiva (accesa E configurata: la stessa condizione
+            // che fa girare il motore) a notificare i dipendenti è il VPS (PIANO-SYNC-RISORSE.md
+            // §7, decisione 6): il badge di PM tace e non si calcola niente (la foto la tiene
+            // allineata al piano il motore, a ogni giro che scrive). Accesa ma incompleta = motore
+            // a riposo, nessuno notifica: il badge torna a contare come a sincronizzazione spenta.
+            if (_sync.IsAttiva)
+                return Ok(ApiResponse<NotifyPendingDto>.Ok(new NotifyPendingDto { TotalChanges = 0, EmailConfigurata = false, Employees = new() }));
+            return Ok(ApiResponse<NotifyPendingDto>.Ok(_notify.ComputePending()));
+        }
         catch (Exception ex) { return Ok(ApiResponse<NotifyPendingDto>.Fail($"Errore: {ex.Message}")); }
     }
 

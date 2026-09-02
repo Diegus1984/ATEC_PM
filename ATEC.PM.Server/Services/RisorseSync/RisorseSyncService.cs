@@ -65,6 +65,16 @@ public sealed class RisorseSyncService : BackgroundService
     /// planner aperto vede la barra comparire come se l'avesse messa un collega. Null nei test.
     /// </summary>
     private readonly IHubContext<ResourcePlannerHub>? _hubPm;
+    /// <summary>
+    /// Il digest di PM, per tenere la sua foto del piano uguale al piano: con la sincronizzazione
+    /// accesa a notificare i dipendenti è il VPS (PIANO-SYNC-RISORSE.md §7, decisione 6), quindi
+    /// il badge «modifiche da notificare» di PM deve stare a zero e, se un giorno la
+    /// sincronizzazione si spegne, il digest di PM riparte da uno stato pulito e non da 189
+    /// modifiche accumulate. Null nei test che non lo provano (nessun allineamento).
+    /// </summary>
+    private readonly PlanNotificationService? _notify;
+    /// <summary>La foto del piano è già stata allineata almeno una volta da quando il servizio è partito.</summary>
+    private bool _fotoAllineata;
 
     /// <summary>Coda da UN posto: più Trigger ravvicinati = un solo giro in più.</summary>
     private readonly Channel<string> _inneschi = Channel.CreateBounded<string>(
@@ -99,24 +109,39 @@ public sealed class RisorseSyncService : BackgroundService
     public DateTime? LastRun { get; private set; }
     public string? LastError { get; private set; }
 
+    /// <summary>
+    /// Il costruttore della DI. <paramref name="notify"/> è il digest di PM (singleton registrato
+    /// prima di questo in Program.cs; dipende da ResourcesDbService ed EmailService, mai da qui:
+    /// niente cicli).
+    /// </summary>
     public RisorseSyncService(ResourcesDbService rdb, IConfiguration config, ILogger<RisorseSyncService> logger,
-        IHubContext<ResourcePlannerHub>? hubPm = null)
-        : this(rdb, config, logger, null, hubPm)
+        PlanNotificationService notify, IHubContext<ResourcePlannerHub>? hubPm = null)
+        : this(rdb, config, logger, null, hubPm, notify)
     {
     }
 
-    /// <summary>Per i test: stesso motore, ma le chiamate HTTP passano dall'<paramref name="http"/> dato (handler finto) e l'hub di PM può mancare.</summary>
+    /// <summary>Per i test: stesso motore, ma le chiamate HTTP passano dall'<paramref name="http"/> dato (handler finto), l'hub di PM può mancare e senza <paramref name="notify"/> la foto del piano non si tocca.</summary>
     internal RisorseSyncService(ResourcesDbService rdb, IConfiguration config, ILogger<RisorseSyncService> logger, HttpClient? http,
-        IHubContext<ResourcePlannerHub>? hubPm = null)
+        IHubContext<ResourcePlannerHub>? hubPm = null, PlanNotificationService? notify = null)
     {
         _rdb = rdb;
         _logger = logger;
         _http = http;
         _hubPm = hubPm;
+        _notify = notify;
         _store = new RisorseSyncSettingsStore(rdb, config, logger);
     }
 
     // ── API pubblica ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Il motore è in gioco: interruttore acceso E indirizzo, utente e password al loro posto
+    /// (lo stesso <see cref="RisorseSyncSettings.IsConfigured"/> che fa partire i giri). Acceso ma
+    /// incompleto = motore a riposo, il VPS non riceve e non notifica nessuno: allora il badge di
+    /// PM e la foto del piano si comportano come a sincronizzazione spenta. Badge e allineamento
+    /// della foto leggono tutti e due di qui, così restano legati allo stesso stato.
+    /// </summary>
+    public bool IsAttiva => _store.Leggi().IsConfigured;
 
     /// <summary>Accoda un giro (non aspetta). Chi lo chiama dice da dove viene: hub | pm | timer | manuale | impostazioni.</summary>
     public void Trigger(string innesco) => _inneschi.Writer.TryWrite(innesco);
@@ -362,6 +387,8 @@ public sealed class RisorseSyncService : BackgroundService
                             + anagrafiche.Abbinati + (anagrafiche.RepartiInviati ? 1 : 0)
                             + allocazioni.Modifiche;
             Registra(voce, modifiche, contatori);
+            if (voce.Esito == "ok")
+                AllineaFotoDelPiano(modifiche);
             _giro.Release();
         }
 
@@ -369,6 +396,34 @@ public sealed class RisorseSyncService : BackgroundService
             _logger.LogInformation("[RisorseSync] Giro ({Innesco}) ok in {Ms} ms: {Dettaglio}",
                 innesco, voce.DurataMs, voce.Dettaglio);
         return voce;
+    }
+
+    /// <summary>
+    /// A giro riuscito, con la sincronizzazione attiva (<see cref="IsAttiva"/>, lo stesso stato
+    /// che zittisce il badge): la foto del piano del digest di PM si rimette uguale al piano
+    /// (<see cref="PlanNotificationService.AllineaFotoAlPiano"/>). Con la sincronizzazione
+    /// accesa a notificare i dipendenti è il VPS (PIANO-SYNC-RISORSE.md §7, decisione 6): la
+    /// foto di PM deve restare uguale al piano, così il badge «modifiche da notificare» sta a
+    /// zero e, se un giorno la sincronizzazione si spegne, il digest di PM riparte da uno stato
+    /// pulito e non da 189 modifiche accumulate. Si fa quando il giro ha scritto qualcosa (in
+    /// PM, sul VPS o sulla mappa: <paramref name="modifiche"/> &gt; 0) e al primo giro riuscito
+    /// dopo l'avvio (la foto può essere rimasta indietro a servizio fermo). Un errore qui va nel
+    /// log come avviso e NON cambia l'esito del giro.
+    /// </summary>
+    private void AllineaFotoDelPiano(int modifiche)
+    {
+        if (_notify == null || (modifiche == 0 && _fotoAllineata)) return;
+        try
+        {
+            if (!IsAttiva) return;
+            int righe = _notify.AllineaFotoAlPiano();
+            _fotoAllineata = true;
+            _logger.LogDebug("[RisorseSync] Foto del piano allineata: {Righe} righe (notifica il VPS).", righe);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RisorseSync] Foto del piano non allineata (il badge di PM può restare sporco): {Msg}", ex.Message);
+        }
     }
 
     // ── Fase 1: anagrafiche PM → VPS ─────────────────────────────
