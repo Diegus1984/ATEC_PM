@@ -1,6 +1,20 @@
 {
     "voci":  [
                  {
+                     "build":  "20260902-1647",
+                     "data":  "2026-09-02T16:48:06",
+                     "hash":  "eba966616ad1b4f9690e032285f67cf11df1dcf2",
+                     "modifiche":  [
+                                       "Risorse: Fase 2 della sincronizzazione — allocazioni nei due versi e ferie HR in sovrapposizione",
+                                       "Piano sync Risorse: Fase 1 segnata come fatta, letture del VPS nel contratto",
+                                       "Risorse: Fase 1 della sincronizzazione — anagrafiche ATEC PM → VPS e seme della mappa dipendenti",
+                                       "HR: fascia b del CCNL, il lavoro notturno ordinario è maggiorato (#145)",
+                                       "Risorse: Fase 0 della sincronizzazione col programma ATEC Risorse (VPS)",
+                                       "Gestore DDP: descrizione commessa anche in Report di Controllo e Feedback (#146)",
+                                       "Gestore DDP: nel titolo la descrizione della commessa fra numero e cliente (#146)"
+                                   ]
+                 },
+                 {
                      "build":  "20260902-1214",
                      "data":  "2026-09-02T12:14:28",
                      "hash":  "32040eecab62b8c1fd7328f27eb6114505e97e50",
