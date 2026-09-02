@@ -88,6 +88,10 @@ function spiegazione(g: HrDay, nome: string, canWrite: boolean): string | null {
   const st = statoGiornata(g)
   const chi = nome.split(" ")[0] || "il dipendente"
   if (st.tone === "bad") {
+    if (st.label.startsWith("Nessuna timbratura"))
+      return canWrite
+        ? `Giorno lavorativo senza nessuna timbratura e senza assenza registrata su Ecos: da chiarire con ${chi}. Se era assente, l'assenza va registrata su Ecos; se ha lavorato, inserisci qui le timbrature con il motivo.`
+        : "Giorno lavorativo senza timbrature e senza assenza registrata. Segnalalo a chi gestisce le presenze."
     if (st.label.startsWith("Manca l'uscita"))
       return canWrite
         ? `Senza l'uscita non si possono contare le ore del pomeriggio. Chiedi a ${chi} a che ora è uscito e inserisci l'orario qui sotto: la timbratura originale resta, la correzione si aggiunge con il tuo nome.`
@@ -98,10 +102,6 @@ function spiegazione(g: HrDay, nome: string, canWrite: boolean): string | null {
   }
   if (st.tone === "warn" && st.label.startsWith("Uscita non timbrata"))
     return "L'uscita non è stata timbrata: il motore ha contato la giornata fino alle 17:00. Se l'orario vero è diverso, aggiungi la rettifica."
-  if (st.tone === "warn" && st.label.startsWith("Nessuna timbratura"))
-    return canWrite
-      ? `Giorno lavorativo senza nessuna timbratura e senza assenza registrata su Ecos: da chiarire con ${chi}.`
-      : "Giorno lavorativo senza timbrature e senza assenza registrata."
   if (st.label === "Giornata in corso") return "La giornata è ancora aperta: le ore si contano alla fine."
   return null
 }

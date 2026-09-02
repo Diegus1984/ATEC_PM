@@ -74,12 +74,18 @@ export function statoGiornata(g: HrDay): StatoLetto {
       return { label: "Fine del turno di notte", tone: "dim", riposo: false, assenza: false, assenzaParziale: false }
     }
     const oggi = new Date().toISOString().slice(0, 10)
-    if (g.workDate.slice(0, 10) > oggi) {
+    const data = g.workDate.slice(0, 10)
+    if (data > oggi) {
       return { label: "", tone: "dim", riposo: false, assenza: false, assenzaParziale: false }
     }
+    if (data === oggi) {
+      return { label: "Oggi, nessuna timbratura ancora", tone: "dim", riposo: false, assenza: false, assenzaParziale: false }
+    }
+    // Giorno lavorativo passato senza timbrature e senza assenza su Ecos: è un'anomalia
+    // come le altre (Diego, 02/09), rossa e contata fra le giornate da sistemare.
     return {
-      label: g.canRemind ? "Nessuna timbratura" + segnalata : "Nessuna timbratura",
-      tone: g.canRemind ? "warn" : "dim",
+      label: "Nessuna timbratura" + segnalata,
+      tone: "bad",
       riposo: false,
       assenza: false,
       assenzaParziale: false,

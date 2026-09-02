@@ -11,7 +11,6 @@ import {
   MailCheck,
   RotateCw,
   Search,
-  User,
 } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -288,6 +287,16 @@ export function TimbraturePage() {
     [cartellino, giornoAperto]
   )
 
+  // Chi ha la scrittura è il responsabile HR e controlla gli altri: niente «Il mio
+  // cartellino» nell'elenco, e all'apertura è già selezionato il primo (Diego, 02/09).
+  // Con la sola lettura la query dei dipendenti non parte e resta il proprio cartellino.
+  const primoDipendente = dipendentiQuery.data?.[0]?.id
+  React.useEffect(() => {
+    if (canWrite && employeeId === null && primoDipendente != null) {
+      setEmployeeId(primoDipendente)
+    }
+  }, [canWrite, employeeId, primoDipendente])
+
   // L'elenco laterale è più comodo della tendina (Diego, 02/09): si scorre con l'occhio
   // e si cambia persona con un clic, senza aprire e chiudere niente.
   const dipendentiFiltrati = React.useMemo(() => {
@@ -331,8 +340,14 @@ export function TimbraturePage() {
     let assenzeParziali = 0
     const fasce = new Set<string>()
     for (const g of giornate) {
-      if (!g.hasData) continue
       const st = statoGiornata(g)
+      // «Da sistemare» = tutto ciò che la pillola mostra in rosso: le anomalie del motore
+      // e i giorni lavorativi passati senza timbrature né assenza.
+      if (st.tone === "bad") {
+        anomalie++
+        if (g.lastReminderAt) segnalate++
+      }
+      if (!g.hasData) continue
       if (st.assenza) {
         if (st.assenzaParziale) assenzeParziali++
         else assenzeIntere++
@@ -343,10 +358,6 @@ export function TimbraturePage() {
       if (!isZero(g.overtime)) {
         giorniStraordinario++
         for (const k of Object.keys(g.bands)) fasce.add(k)
-      }
-      if (g.hasAnomaly) {
-        anomalie++
-        if (g.lastReminderAt) segnalate++
       }
     }
     return {
@@ -614,20 +625,6 @@ export function TimbraturePage() {
                 />
               </div>
               <div className="max-h-[calc(100vh-20rem)] min-h-[300px] space-y-0.5 overflow-y-auto pr-1">
-                <button
-                  type="button"
-                  onClick={() => setEmployeeId(null)}
-                  className={cn(
-                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
-                    employeeId === null
-                      ? "bg-primary font-semibold text-primary-foreground shadow-xs"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                >
-                  <User className="size-4 shrink-0" />
-                  <span className="flex-1 truncate">Il mio cartellino</span>
-                </button>
-                <div className="my-1.5 border-t" />
                 {dipendentiQuery.isLoading ? (
                   <p className="p-2 text-sm text-muted-foreground">Caricamento…</p>
                 ) : dipendentiFiltrati.length === 0 ? (
@@ -805,7 +802,7 @@ export function TimbraturePage() {
                           className={cn(
                             "h-11",
                             riposo && "bg-muted/40 text-muted-foreground",
-                            g.hasAnomaly && "bg-destructive/10",
+                            st.tone === "bad" && "bg-destructive/10",
                             oggi && "bg-amber-500/10 shadow-[inset_3px_0_0_0_theme(colors.amber.400)]",
                             cliccabile && "cursor-pointer hover:bg-muted/60"
                           )}
