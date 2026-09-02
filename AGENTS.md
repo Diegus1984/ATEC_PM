@@ -31,7 +31,7 @@
 | `docs/handoff/` | Consegne di fine sessione, datate |
 | `docs/archivio/` | Superato, generato o storico: si legge, non si aggiorna |
 
-**Fuori da `docs/` (di proposito):** `AGENTS.md` (questo) / `CLAUDE.md` — indice master (Codex / Claude Code), **tienili allineati**; `atec-pm-web/README.md` — avvio rapido SPA; `.claude/skills/**`.
+**Fuori da `docs/` (di proposito):** `AGENTS.md` (questo) / `CLAUDE.md` — indice master (Codex / Claude Code), **tienili allineati**; `atec-pm-web/README.md` — avvio rapido SPA.
 
 ## 🐛 Segnalazioni e Ticket (Accesso Diretto)
 
