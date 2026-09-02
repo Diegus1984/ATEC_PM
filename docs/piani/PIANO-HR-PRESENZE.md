@@ -417,6 +417,38 @@ escluso.
 `LIVE_ROUTES` di `AppRoutes.tsx`, e `status: "live"` in `navigation.ts` (fatto per
 Timbrature il 27/08).
 
+**Fatto il 02/09/2026 — il cartellino letto da chi non usa il computer tutti i giorni.**
+Richiesta di Diego: la scheda «Cartellino di una persona» deve essere leggibile da chi ha poca
+dimestichezza col computer, **senza perdere l'ora timbrata**. Com'è ora (`TimbraturePage.tsx`,
+`GiornataDialog.tsx`, `stato-giornata.tsx`):
+- **quattro riquadri** in testa (ore ordinarie, straordinario con le fasce, ferie e assenze,
+  giornate da sistemare con «di cui già segnalate»);
+- **una riga per giorno**, righe da 44 px, testo 14 px: in ogni cella di orario l'ora che
+  vale in grande e sotto «timbrato 07:58» quando è diversa (è il vecchio blocco 🔸 Grezzo,
+  messo dentro la cella). Pausa e ore prima dell'arrotondamento stanno dietro la colonna
+  «Prima dell'arrotondamento», spenta di default (menu Colonne, chiave `v4`);
+- colonna **«Com'è la giornata»**: la nota del motore tradotta in parole da
+  `statoGiornata()` («Manca l'uscita», «Ferie 4h», «Tutto regolare», «Uscita non timbrata,
+  stimata alle 17:00», «Riposo»…) più «segnalata il gg/mm/aa». La regola di cosa è
+  anomalia resta del server (`hasAnomaly`): qui si scelgono solo le parole;
+- dipendente da **tendina con ricerca** in testa («Il mio cartellino» = prima voce, id 0),
+  mese con frecce grandi e «Torna a oggi»; schede e pulsanti coi nomi di chi li usa
+  («Aggiorna da Ecos», «Scarica Excel», «Tutti, mese per mese», «Ore sulle commesse»);
+- le due azioni per riga (📧 sollecito, 🔄 risincronizza) sono diventate **pulsanti con
+  il nome per esteso nel dettaglio della giornata**, che ora apre con i quattro orari in
+  grande, l'ora timbrata sotto, una frase che dice cosa fare e la rettifica già su
+  «Uscita» quando manca l'uscita.
+
+**🔜 Fase 2 — ritorno verso Ecos delle ore arrotondate** (chiesto da Diego il 02/09, da fare
+quando le API in scrittura saranno attive, vedi §5 e [[ecos_api_guida_ufficiale]]):
+colonna «Ecos» con tre stati in parole («Allineato», «Da inviare», «Inviato il gg/mm») e
+un pulsante che manda a Ecos **solo le giornate in cui l'ora arrotondata è diversa da
+quella timbrata**, con `PeopleStampPost` in modifica (`Edit=true` + chiave `StampID`
+salvata da noi all'import: senza si crea un doppione, e un retry dopo timeout ne crea un
+altro), ogni invio registrato con data e autore. Prima serve l'utente API dedicato con i
+diritti di scrittura (§11). Punto di aggancio nel client: la pillola di `stato-giornata.tsx`
+e il riquadro «Giornate da sistemare».
+
 ## 8. Punti delicati — da non sbagliare
 
 **Art. 4 dello Statuto dei lavoratori.** Registrare entrata e uscita per finalità
