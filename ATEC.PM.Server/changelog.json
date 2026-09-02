@@ -2,6 +2,15 @@
     "voci":  [
                  {
                      "build":  "20260902-1647",
+                     "data":  "2026-09-02T17:19:10",
+                     "hash":  "7d41d4a524b1d58f7ff6211de6a2ae6d81b6a2e9",
+                     "modifiche":  [
+                                       "Risorse: con la sincronizzazione accesa il badge «modifiche da notificare» tace, notifica il VPS",
+                                       "Sync Risorse: go-live del 02/09/2026 (guida §5.1 e piano)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260902-1647",
                      "data":  "2026-09-02T16:48:06",
                      "hash":  "eba966616ad1b4f9690e032285f67cf11df1dcf2",
                      "modifiche":  [
