@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260902-1134",
+                     "data":  "2026-09-02T11:34:26",
+                     "hash":  "eafa46ec362bef40dd042de858d09ad35c54c0c2",
+                     "modifiche":  [
+                                       "Timbrature: torna l\u0027elenco laterale dei dipendenti al posto della tendina"
+                                   ]
+                 },
+                 {
                      "build":  "20260902-1128",
                      "data":  "2026-09-02T11:29:07",
                      "hash":  "429fbaf7fc0ed34769df9b7171ed1f2b79f336cf",
