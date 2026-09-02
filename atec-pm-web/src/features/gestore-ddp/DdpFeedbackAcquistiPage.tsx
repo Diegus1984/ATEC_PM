@@ -178,6 +178,7 @@ export function DdpFeedbackAcquistiPage() {
       .sort((a, b) => a[0].localeCompare(b[0], "it"))
       .map(([code, items]) => ({
         code,
+        title: items[0]?.title || "",
         customerName: items[0]?.customerName || "",
         items: items
           .slice()
@@ -218,8 +219,9 @@ export function DdpFeedbackAcquistiPage() {
         <div className="space-y-6">
           {groupedByCode.map((group) => (
             <div key={group.code} className="space-y-2">
-              <div className="flex items-baseline gap-2">
+              <div className="flex flex-wrap items-baseline gap-2">
                 <span className="font-semibold">{group.code}</span>
+                {group.title ? <span className="text-sm">{group.title}</span> : null}
                 <span className="text-sm text-muted-foreground">
                   {group.customerName}
                 </span>

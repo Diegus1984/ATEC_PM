@@ -56,17 +56,17 @@ public class DdpFeedbackController : ControllerBase
 
     // Universo delle DDP esistenti (commessa + tipo), come in Gestore DDP.
     // #88: per-utente, non piu static — le DDP di una commessa in bozza si vedono solo con la chiave.
-    private List<(int ProjectId, string Code, string CustomerName, string DdpType)> LoadDdpUniverse(System.Data.IDbConnection c)
+    private List<(int ProjectId, string Code, string Title, string CustomerName, string DdpType)> LoadDdpUniverse(System.Data.IDbConnection c)
     {
         string filtroBozze = _guard.FiltroBozzeSql(User);
-        return c.Query<(int, string, string, string)>($@"
-            SELECT DISTINCT b.project_id, p.code, COALESCE(cu.company_name, ''), 'COMMERCIAL'
+        return c.Query<(int, string, string, string, string)>($@"
+            SELECT DISTINCT b.project_id, p.code, COALESCE(p.title, ''), COALESCE(cu.company_name, ''), 'COMMERCIAL'
             FROM bom_items b
             JOIN projects p ON p.id = b.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
             WHERE b.ddp_type = 'COMMERCIAL'{filtroBozze}
             UNION
-            SELECT DISTINCT o.project_id, p.code, COALESCE(cu.company_name, ''), 'OFFICINA'
+            SELECT DISTINCT o.project_id, p.code, COALESCE(p.title, ''), COALESCE(cu.company_name, ''), 'OFFICINA'
             FROM ddp_officina_items o
             JOIN projects p ON p.id = o.project_id
             LEFT JOIN customers cu ON cu.id = p.customer_id
@@ -109,6 +109,7 @@ public class DdpFeedbackController : ControllerBase
                 {
                     ProjectId = u.ProjectId,
                     Code = u.Code,
+                    Title = u.Title,
                     CustomerName = u.CustomerName,
                     DdpType = u.DdpType,
                 };
@@ -249,6 +250,7 @@ public class DdpFeedbackController : ControllerBase
             {
                 ProjectId = u.ProjectId,
                 Code = u.Code,
+                Title = u.Title,
                 CustomerName = u.CustomerName,
                 DdpType = u.DdpType,
                 Rows = rows

@@ -41,6 +41,8 @@ export interface DdpStatusCount {
 export interface DdpProjectDetail {
   projectId: number
   code: string
+  /** Descrizione della commessa (#146). */
+  title: string
   customerName: string
   totalRows: number
   /** Sensibile (§12.3): assente/null per chi non ha il micro «vede prezzi» — a video diventa «—». */
@@ -63,6 +65,8 @@ export interface DdpControlSummaryEntry {
 export interface DdpControlReportRow {
   projectId: number
   projectCode: string
+  /** Descrizione della commessa (#146). */
+  projectTitle: string
   customerName: string
   ddpType: string
   id: number
@@ -106,6 +110,8 @@ export interface DdpDeliveriesDay {
 export interface DdpFeedbackAcquistiGroup {
   projectId: number
   code: string
+  /** Descrizione della commessa (#146). */
+  title: string
   customerName: string
   ddpType: string // "COMMERCIAL" | "OFFICINA"
   rows: DdpFeedbackAcquistiRow[]
@@ -122,6 +128,8 @@ export interface DdpFeedbackAcquistiRow {
 export interface DdpFeedbackMagazzinoGroup {
   projectId: number
   code: string
+  /** Descrizione della commessa (#146). */
+  title: string
   customerName: string
   ddpType: string
   rows: DdpFeedbackMagazzinoRow[]

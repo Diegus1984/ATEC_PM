@@ -10,6 +10,8 @@ public class DdpFeedbackAcquistiGroup
 {
     public int ProjectId { get; set; }
     public string Code { get; set; } = "";
+    /// <summary>Descrizione della commessa (#146): intestazione «codice · descrizione — cliente».</summary>
+    public string Title { get; set; } = "";
     public string CustomerName { get; set; } = "";
     public string DdpType { get; set; } = "COMMERCIAL";   // "COMMERCIAL" | "OFFICINA"
     public List<DdpFeedbackAcquistiRow> Rows { get; set; } = new();
@@ -36,6 +38,8 @@ public class DdpFeedbackMagazzinoGroup
 {
     public int ProjectId { get; set; }
     public string Code { get; set; } = "";
+    /// <summary>Descrizione della commessa (#146): intestazione «codice · descrizione — cliente».</summary>
+    public string Title { get; set; } = "";
     public string CustomerName { get; set; } = "";
     public string DdpType { get; set; } = "COMMERCIAL";
     public List<DdpFeedbackMagazzinoRow> Rows { get; set; } = new();

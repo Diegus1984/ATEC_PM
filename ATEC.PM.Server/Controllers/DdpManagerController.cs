@@ -318,6 +318,7 @@ public class DdpManagerController : ControllerBase
 
             DdpProjectDetail? head = c.QueryFirstOrDefault<DdpProjectDetail>($@"
                 SELECT b.project_id AS ProjectId, p.code AS Code,
+                       COALESCE(p.title, '') AS Title,
                        COALESCE(cu.company_name, '') AS CustomerName,
                        COUNT(*) AS TotalRows,
                        COALESCE(SUM(CASE WHEN COALESCE(b.item_status,'') NOT IN @Excluded THEN b.quantity * b.unit_cost ELSE 0 END), 0) AS TotalValue,
@@ -333,7 +334,7 @@ public class DdpManagerController : ControllerBase
                 JOIN projects p ON p.id = b.project_id
                 LEFT JOIN customers cu ON cu.id = p.customer_id
                 WHERE {typeFilter}b.project_id = @pid
-                GROUP BY b.project_id, p.code, cu.company_name", new { pid = projectId, Delivered = deliveredOrExcluded, Excluded = excluded });
+                GROUP BY b.project_id, p.code, p.title, cu.company_name", new { pid = projectId, Delivered = deliveredOrExcluded, Excluded = excluded });
 
             if (head == null)
                 return Ok(ApiResponse<DdpProjectDetail>.Fail(officina
@@ -498,6 +499,7 @@ public class DdpManagerController : ControllerBase
             // prima del filtro: è il numero riga "vero" che l'utente vede nel Gestore DDP.
             string inner = officina
                 ? @"SELECT o.project_id AS ProjectId, p.code AS ProjectCode,
+                           COALESCE(p.title, '') AS ProjectTitle,
                            COALESCE(cu.company_name, '') AS CustomerName, 'OFFICINA' AS DdpType,
                            o.id AS Id,
                            ROW_NUMBER() OVER (PARTITION BY o.project_id ORDER BY o.id) AS RowNumber,
@@ -519,6 +521,7 @@ public class DdpManagerController : ControllerBase
                     LEFT JOIN employees eo ON eo.id = o.created_by
                     WHERE o.id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)"
                 : @"SELECT b.project_id AS ProjectId, p.code AS ProjectCode,
+                           COALESCE(p.title, '') AS ProjectTitle,
                            COALESCE(cu.company_name, '') AS CustomerName, 'COMMERCIAL' AS DdpType,
                            b.id AS Id,
                            ROW_NUMBER() OVER (PARTITION BY b.project_id ORDER BY b.id) AS RowNumber,

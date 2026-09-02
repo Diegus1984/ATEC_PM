@@ -32,6 +32,8 @@ public class DdpProjectDetail
 {
     public int ProjectId { get; set; }
     public string Code { get; set; } = "";
+    /// <summary>Descrizione della commessa (#146).</summary>
+    public string Title { get; set; } = "";
     public string CustomerName { get; set; } = "";
 
     public int TotalRows { get; set; }
@@ -67,6 +69,8 @@ public class DdpControlReportRow
 {
     public int ProjectId { get; set; }
     public string ProjectCode { get; set; } = "";
+    /// <summary>Descrizione della commessa (#146).</summary>
+    public string ProjectTitle { get; set; } = "";
     public string CustomerName { get; set; } = "";
     public string DdpType { get; set; } = "COMMERCIAL";   // "COMMERCIAL" | "OFFICINA"
 

@@ -34,3 +34,18 @@ export interface DdpViewProps {
   parentIdsWithChildren: Set<number>
   toggleParentCollapse: (id: number) => void
 }
+
+/**
+ * Intestazione di una commessa nel Gestore DDP (#146, Zanoni): «codice · descrizione — cliente».
+ * Le parti vuote si saltano, così senza descrizione resta il vecchio «codice — cliente».
+ */
+export function intestazioneCommessa(
+  code: string,
+  title: string | null | undefined,
+  customerName: string | null | undefined
+): string {
+  const t = (title ?? "").trim()
+  const testa = t ? `${code} · ${t}` : code
+  const cliente = (customerName ?? "").trim()
+  return cliente ? `${testa} — ${cliente}` : testa
+}

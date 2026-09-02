@@ -27,6 +27,7 @@ import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibil
 import { cn } from "@/lib/utils"
 
 import { type ControlReportDef } from "./ddp-control-defs"
+import { intestazioneCommessa } from "./ddp-view-props"
 import { printDdpTables, type ExportTable } from "./ddp-export"
 
 // ── Colonne ─────────────────────────────────────────────────────
@@ -51,9 +52,7 @@ function reportColumns(officina: boolean, withCommessa: boolean): ReportColumn[]
             id: "commessa",
             label: "Commessa",
             value: (row: DdpControlReportRow) =>
-              row.customerName
-                ? `${row.projectCode} — ${row.customerName}`
-                : row.projectCode,
+              intestazioneCommessa(row.projectCode, row.projectTitle, row.customerName),
           },
         ]
       : []),
@@ -180,6 +179,7 @@ function dayLabel(day: string | null): string {
 // Gruppi per commessa (tutti i report tranne IO): una card per commessa.
 interface ProjectGroup {
   code: string
+  title: string
   customerName: string
   rows: DdpControlReportRow[]
   value: number
@@ -193,6 +193,7 @@ function groupByProject(rows: DdpControlReportRow[], today: string): ProjectGrou
     if (!group) {
       group = {
         code: row.projectCode,
+        title: row.projectTitle ?? "",
         customerName: row.customerName,
         rows: [],
         value: 0,
@@ -468,7 +469,7 @@ export function DdpControlReportView({
       : groupByProject(active, today).map((group) =>
           exportTable(
             group.rows,
-            `${group.code}${group.customerName ? ` — ${group.customerName}` : ""} — ${group.rows.length} righe · ${euro(group.value)}`
+            `${intestazioneCommessa(group.code, group.title, group.customerName)} — ${group.rows.length} righe · ${euro(group.value)}`
           )
         )
     printDdpTables(`Report di Controllo — ${def.badge}`, subtitle, tables)
@@ -715,6 +716,9 @@ export function DdpControlReportView({
                 <CardContent className="space-y-2 pt-4">
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-semibold">{group.code}</span>
+                    {group.title ? (
+                      <span className="text-sm">{group.title}</span>
+                    ) : null}
                     <span className="text-sm text-muted-foreground">
                       {group.customerName}
                     </span>
