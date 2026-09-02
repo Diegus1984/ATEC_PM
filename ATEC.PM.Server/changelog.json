@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260902-1146",
+                     "data":  "2026-09-02T11:47:03",
+                     "hash":  "2a92f3c3cff051869168a524e31cd65df603317e",
+                     "modifiche":  [
+                                       "Timbrature: «Nessuna timbratura» è rossa, via «Il mio cartellino», primo dipendente già scelto"
+                                   ]
+                 },
+                 {
                      "build":  "20260902-1134",
                      "data":  "2026-09-02T11:34:26",
                      "hash":  "eafa46ec362bef40dd042de858d09ad35c54c0c2",
