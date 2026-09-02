@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260902-1128",
+                     "data":  "2026-09-02T11:29:07",
+                     "hash":  "429fbaf7fc0ed34769df9b7171ed1f2b79f336cf",
+                     "modifiche":  [
+                                       "Timbrature: cartellino leggibile, con l\u0027ora timbrata sotto quella che vale"
+                                   ]
+                 },
+                 {
                      "build":  "20260901-2052",
                      "data":  "2026-09-02T10:02:24",
                      "hash":  "432fb2ab0d966abaf0786fb3963dc84bd380e255",
