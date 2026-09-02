@@ -2,6 +2,15 @@
     "voci":  [
                  {
                      "build":  "20260901-2052",
+                     "data":  "2026-09-02T10:02:24",
+                     "hash":  "432fb2ab0d966abaf0786fb3963dc84bd380e255",
+                     "modifiche":  [
+                                       "Rimosse le skill WPF di progetto (WPF in dismissione)",
+                                       "Rimosso graphify: grafo tracciato e regole .gitignore"
+                                   ]
+                 },
+                 {
+                     "build":  "20260901-2052",
                      "data":  "2026-09-01T20:53:04",
                      "hash":  "e1f4614317b845dbcb27b42f83c236beeee7be24",
                      "modifiche":  [
