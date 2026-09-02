@@ -489,6 +489,10 @@ public class PlanNotificationService
         List<DigestLogEntry> log = c.Query<DigestLogEntry>(@"
             SELECT run_utc AS RunUtc, trigger_kind AS `Trigger`, email_inviate AS EmailInviate, senza_email AS SenzaEmail, esito AS Esito
             FROM res_digest_log ORDER BY id DESC LIMIT 20").ToList();
+        // run_utc è scritto in UTC ma Dapper lo legge senza fuso: marcato Utc, nel JSON esce con la Z
+        // e il browser lo mostra nell'ora locale giusta (prima arrivava 2 ore indietro d'estate).
+        foreach (DigestLogEntry voce in log)
+            voce.RunUtc = DateTime.SpecifyKind(voce.RunUtc, DateTimeKind.Utc);
 
         DateTime nowUtc = DateTime.UtcNow;
         return new DigestStatusDto

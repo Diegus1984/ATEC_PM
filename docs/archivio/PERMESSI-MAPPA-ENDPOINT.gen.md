@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 01/09/2026 20:30.
+> Fotografia del 02/09/2026 13:20.
 
 ## Chiavi con endpoint
 
@@ -404,10 +404,15 @@
 ### `nav.digest_email` — Digest Email
 - `GET /api/resource-planner/digest/settings` (ResourcesController.GetDigestSettings)
 - `GET /api/resource-planner/digest/status` (ResourcesController.GetDigestStatus)
+- `GET /api/resource-planner/sync/settings` (ResourcesController.GetSyncSettings)
+- `GET /api/resource-planner/sync/status` (ResourcesController.GetSyncStatus)
 - `GET /api/settings/email` (SettingsController.GetEmail)
+- `POST /api/resource-planner/sync/run-now` (ResourcesController.RunSyncNow)
+- `POST /api/resource-planner/sync/test` (ResourcesController.TestSync)
 - `POST /api/settings/email` (SettingsController.SaveEmail)
 - `POST /api/settings/email/test` (SettingsController.TestEmail)
 - `PUT /api/resource-planner/digest/settings` (ResourcesController.SaveDigestSettings)
+- `PUT /api/resource-planner/sync/settings` (ResourcesController.SaveSyncSettings)
 
 ### `nav.fornitori` — Fornitori
 - `DELETE /api/suppliers/{id}` (SuppliersController.Delete)

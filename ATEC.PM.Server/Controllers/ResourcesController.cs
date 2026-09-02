@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Dapper;
 using ATEC.PM.Shared.DTOs;
 using ATEC.PM.Server.Services;
+using ATEC.PM.Server.Services.RisorseSync;
 using ATEC.PM.Server.Authorization;
 using ATEC.PM.Server.Hubs;
 
@@ -19,6 +20,8 @@ namespace ATEC.PM.Server.Controllers;
 // manuale; la configurazione del digest ha la sua, [RequireFeature("nav.digest_email")].
 // Le modifiche registrano autore+timestamp (audit collaborazione multi-utente)
 // e vengono notificate in real-time agli altri client via ResourcePlannerHub.
+// Ogni scrittura riuscita sulle allocazioni sveglia anche il motore di sincronizzazione col
+// VPS (_sync.Trigger("pm"), PIANO-SYNC-RISORSE.md §4.1): la modifica arriva di là in 1-2 s.
 [ApiController]
 [Route("api/resource-planner")]
 [Authorize]
@@ -27,11 +30,14 @@ public class ResourcesController : ControllerBase
     private readonly ResourcesDbService _rdb;
     private readonly IHubContext<ResourcePlannerHub> _hub;
     private readonly PlanNotificationService _notify;
-    public ResourcesController(ResourcesDbService rdb, IHubContext<ResourcePlannerHub> hub, PlanNotificationService notify)
+    private readonly RisorseSyncService _sync;
+    public ResourcesController(ResourcesDbService rdb, IHubContext<ResourcePlannerHub> hub,
+        PlanNotificationService notify, RisorseSyncService sync)
     {
         _rdb = rdb;
         _hub = hub;
         _notify = notify;
+        _sync = sync;
     }
 
     // Id dipendente/utente dal token (claim NameIdentifier), per l'audit "ultima modifica".
@@ -115,6 +121,7 @@ public class ResourcesController : ControllerBase
                 n++;
             }
             NotifyChange(conn, "create");
+            _sync.Trigger("pm");
             return Ok(ApiResponse<int>.Ok(n, $"{n} allocazioni create"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -158,6 +165,7 @@ public class ResourcesController : ControllerBase
                       UpdatedBy = caller > 0 ? caller : (int?)null, Id = id });
             if (rows == 0) return Ok(ApiResponse<int>.Fail("Allocazione non trovata"));
             NotifyChange(conn, "update", id);
+            _sync.Trigger("pm");
             return Ok(ApiResponse<int>.Ok(id, "Allocazione aggiornata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -186,6 +194,7 @@ public class ResourcesController : ControllerBase
             int rows = c.Execute("DELETE FROM res_assignments WHERE id=@Id", new { Id = id });
             if (rows == 0) return Ok(ApiResponse<bool>.Fail("Allocazione non trovata"));
             NotifyChange(conn, "delete", id);
+            _sync.Trigger("pm");
             return Ok(ApiResponse<bool>.Ok(true, "Allocazione eliminata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<bool>.Fail($"Errore: {ex.Message}")); }
@@ -446,6 +455,93 @@ public class ResourcesController : ControllerBase
     {
         try { return Ok(ApiResponse<DigestStatusDto>.Ok(_notify.GetStatus())); }
         catch (Exception ex) { return Ok(ApiResponse<DigestStatusDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // SINCRONIZZAZIONE CON ATEC RISORSE (VPS) — pannello admin
+    // Stessa chiave del digest (nav.digest_email): è la pagina dove vive il riquadro.
+    // ═══════════════════════════════════════════════════════
+
+    [HttpGet("sync/settings")]
+    [RequireFeature("nav.digest_email")]
+    public IActionResult GetSyncSettings()
+    {
+        try { return Ok(ApiResponse<RisorseSyncSettingsDto>.Ok(_sync.GetSettingsDto())); }
+        catch (Exception ex) { return Ok(ApiResponse<RisorseSyncSettingsDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    [HttpPut("sync/settings")]
+    [RequireFeature("nav.digest_email")]
+    public IActionResult SaveSyncSettings([FromBody] RisorseSyncSettingsDto dto)
+    {
+        try
+        {
+            string baseUrl = (dto.BaseUrl ?? "").Trim();
+            // La regola sull'indirizzo (URL assoluto, http solo in LAN) sta in un posto solo: la usa anche il «Prova».
+            string? erroreIndirizzo = RisorseSyncSettings.ErroreIndirizzo(baseUrl);
+            if (erroreIndirizzo != null)
+                return Ok(ApiResponse<bool>.Fail(erroreIndirizzo));
+            if (dto.Enabled && string.IsNullOrEmpty(baseUrl))
+                return Ok(ApiResponse<bool>.Fail("Per accendere la sincronizzazione serve l'indirizzo del VPS"));
+            if (dto.Enabled && string.IsNullOrWhiteSpace(dto.Username))
+                return Ok(ApiResponse<bool>.Fail("Per accendere la sincronizzazione serve l'utente di servizio"));
+            if (dto.Enabled && string.IsNullOrEmpty(dto.Password) && !_sync.GetSettingsDto().HasPassword)
+                return Ok(ApiResponse<bool>.Fail("Per accendere la sincronizzazione serve la password dell'utente di servizio"));
+
+            _sync.SaveSettings(dto);
+            // Le impostazioni nuove valgono subito: un giro (o lo spegnimento) senza aspettare il timer.
+            _sync.Trigger("impostazioni");
+            return Ok(ApiResponse<bool>.Ok(true, "Impostazioni sincronizzazione salvate"));
+        }
+        catch (Exception ex) { return Ok(ApiResponse<bool>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // «Prova»: login + stato del VPS con le impostazioni salvate, senza toccare il registro.
+    [HttpPost("sync/test")]
+    [RequireFeature("nav.digest_email")]
+    public async Task<IActionResult> TestSync()
+    {
+        try
+        {
+            // Niente RequestAborted: la prova appartiene al servizio, non alla richiesta HTTP.
+            SyncStatusDto stato = await _sync.TestAsync();
+            return Ok(ApiResponse<SyncStatusDto>.Ok(stato,
+                $"VPS raggiunto: {stato.Employees} dipendenti, {stato.Assignments} allocazioni, {stato.Projects} commesse"));
+        }
+        catch (Exception ex)
+        {
+            return Ok(ApiResponse<SyncStatusDto>.Fail(RisorseSyncService.MessaggioLeggibile(ex)));
+        }
+    }
+
+    [HttpGet("sync/status")]
+    [RequireFeature("nav.digest_email")]
+    public IActionResult GetSyncStatus()
+    {
+        try { return Ok(ApiResponse<RisorseSyncStatusDto>.Ok(_sync.GetStatus())); }
+        catch (Exception ex) { return Ok(ApiResponse<RisorseSyncStatusDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
+    // «Esegui ora»: un giro adesso (aspetta quello eventualmente in corso) e ne ritorna l'esito.
+    [HttpPost("sync/run-now")]
+    [RequireFeature("nav.digest_email")]
+    public async Task<IActionResult> RunSyncNow()
+    {
+        try
+        {
+            // Niente RequestAborted: il giro appartiene al servizio (token dell'host), chi chiude
+            // il browser a metà non lo interrompe.
+            RisorseSyncLogEntry esito = await _sync.RunNowAsync("manuale");
+            // La riga di registro torna SEMPRE (anche a giro fallito: il pannello la mostra);
+            // Success dice com'è andata.
+            return Ok(new ApiResponse<RisorseSyncLogEntry>
+            {
+                Success = esito.Esito == "ok",
+                Data = esito,
+                Message = esito.Dettaglio ?? (esito.Esito == "ok" ? "Giro completato" : "Giro fallito"),
+            });
+        }
+        catch (Exception ex) { return Ok(ApiResponse<RisorseSyncLogEntry>.Fail(RisorseSyncService.MessaggioLeggibile(ex))); }
     }
 
     // ═══════════════════════════════════════════════════════

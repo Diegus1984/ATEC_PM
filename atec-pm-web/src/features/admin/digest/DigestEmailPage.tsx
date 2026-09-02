@@ -31,6 +31,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { canAccessFeature } from "@/lib/auth/permissions"
+import { formatDateTimeOrDash } from "@/lib/date-iso"
+
+import { RisorseSyncCard } from "./RisorseSyncCard"
 
 const EMPTY_EMAIL: EmailSettingsDto = {
   enabled: false,
@@ -411,7 +414,7 @@ export function DigestEmailPage() {
               <div>
                 <div className="text-muted-foreground">Ora server (Italia)</div>
                 <div className="font-medium">
-                  {new Date(status.serverTimeLocal).toLocaleString("it-IT")}
+                  {formatDateTimeOrDash(status.serverTimeLocal)}
                 </div>
               </div>
               <div>
@@ -445,7 +448,7 @@ export function DigestEmailPage() {
                     className="flex items-center justify-between border-b px-3 py-1.5 text-xs last:border-b-0"
                   >
                     <span>
-                      {new Date(log.runUtc).toLocaleString("it-IT")} · {log.trigger}
+                      {formatDateTimeOrDash(log.runUtc)} · {log.trigger}
                     </span>
                     <span className="text-muted-foreground">{log.esito}</span>
                   </div>
@@ -455,6 +458,9 @@ export function DigestEmailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sincronizzazione con ATEC Risorse sul VPS */}
+      <RisorseSyncCard />
     </div>
   )
 }

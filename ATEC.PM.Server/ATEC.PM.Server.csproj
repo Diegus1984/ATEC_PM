@@ -23,6 +23,9 @@
 		<PackageReference Include="EPPlus" Version="8.5.0" />
 		<PackageReference Include="Mammoth" Version="1.11.0" />
 		<PackageReference Include="MailKit" Version="4.17.0" />
+		<!-- Client SignalR verso l'hub del VPS ATEC Risorse (PIANO-SYNC-RISORSE.md §4.1): il motore
+		     di sincronizzazione riceve AssignmentsChanged/EmployeesChanged e parte in 1-2 s. -->
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.11" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\ATEC.PM.Shared\ATEC.PM.Shared.csproj" />

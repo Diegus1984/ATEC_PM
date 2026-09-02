@@ -93,6 +93,7 @@
 | [piani/FASE-E-SOSTITUZIONE-LIVELLI.md](piani/FASE-E-SOSTITUZIONE-LIVELLI.md) | La scala di livello sparisce per sostituzione |
 | [piani/PIANO-MIGLIORIE-TECNICHE.md](piani/PIANO-MIGLIORIE-TECNICHE.md) | **Debito tecnico**: blocchi A-F (migrazioni, rete di sicurezza, prestazioni, sicurezza) |
 | [piani/MIGLIORIE-GESTIONE-BUG.md](piani/MIGLIORIE-GESTIONE-BUG.md) | Modulo Segnalazioni — piano operativo (L1-L9) |
+| [piani/PIANO-SYNC-RISORSE.md](piani/PIANO-SYNC-RISORSE.md) | **Sincronizzazione in tempo reale Risorse PM ⇄ ATEC Risorse (VPS)**: confronto dei due programmi, dati reali, motore, regole di merge, fasi, decisioni |
 
 ## 📦 Handoff datati (storia delle sessioni)
 

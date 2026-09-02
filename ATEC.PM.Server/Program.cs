@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Services.Hr;
+using ATEC.PM.Server.Services.RisorseSync;
 using ATEC.PM.Server;
 using ATEC.PM.Server.Controllers;
 using ATEC.PM.Server.Hubs;
@@ -310,6 +311,18 @@ if (svcBackup)
 builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailService>());
 if (svcPlanDigest)
     builder.Services.AddHostedService<PlanDigestService>();
+
+// Sincronizzazione Risorse ATEC PM ⇄ VPS (PIANO-SYNC-RISORSE.md). Il singleton c'è sempre
+// (ResourcesController lo usa per Trigger e per il pannello); il loop in sottofondo parte solo
+// con Services:RisorseSync (default true) — e comunque resta a riposo, senza toccare la rete,
+// finché dal pannello non si accende e non si mettono indirizzo del VPS, utente e password.
+// Le impostazioni vivono in res_settings (chiavi sync.*); la sezione "RisorseSync" di
+// appsettings.json (Enabled/BaseUrl/Username/Password) è solo il RIPIEGO per il primo avvio,
+// stessa via della configurazione SMTP.
+builder.Services.AddSingleton<RisorseSyncService>();
+bool svcRisorseSync = builder.Configuration.GetValue("Services:RisorseSync", true);
+if (svcRisorseSync)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<RisorseSyncService>());
 
 var app = builder.Build();
 
