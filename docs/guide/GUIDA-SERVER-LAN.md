@@ -272,6 +272,33 @@ si configura l'SMTP dal gestionale.
 
 ---
 
+### 5.1 Sincronizzazione con ATEC Risorse (VPS) — dal 02/09/2026
+
+Il planner Risorse di ATEC PM e il programma **ATEC Risorse** sul VPS (`https://178-32-137-221.sslip.io`)
+si tengono allineati da soli, nei due versi (piano e regole in `docs/piani/PIANO-SYNC-RISORSE.md`).
+Il motore (`RisorseSyncService`) gira **dentro il servizio ATEC PM** e parla col VPS in HTTPS.
+
+| Cosa | Dove |
+|---|---|
+| Indirizzo del VPS, utente di servizio, interruttore | `C:\ATEC_PM\Serverppsettings.json`, sezione `RisorseSync` (`Enabled`, `BaseUrl`, `Username`) + `Services:RisorseSync` |
+| Password dell'utente di servizio `sync.pm` | `appsettings.Secrets.json`, chiave `RisorseSync:Password` (cifrata DPAPI, ambito macchina). **Non sta in chiaro da nessuna parte.** Sul VPS la stessa password vive in `/opt/atec-risorse/appsettings.json`, sezione `Sync` |
+| Stato, ultimo giro, registro, «Sincronizza adesso», «Prova collegamento» | nel gestionale: **Gestione avanzata → Digest Email → scheda «Sincronizzazione ATEC Risorse (VPS)»** (solo Admin) |
+| Registro dei giri | tabella `res_sync_log` (solo i giri con scritture o errori; i giri a vuoto non scrivono); mappa id PM ↔ VPS in `res_sync_map` |
+| Log del servizio | righe con prefisso `[RisorseSync]` in `C:\ATEC_PM\Logs\server-AAAAMMGG.log` |
+
+**Spegnere/accendere**: dalla scheda (interruttore «Attiva», vale subito) oppure `Enabled: false`
+nella sezione `RisorseSync` e `Restart-Service AtecPmServer`. Spento, i due programmi continuano a
+funzionare da soli e si riallineano alla riaccensione (confronto completo, niente da perdere).
+
+**Se il VPS non risponde**: il motore riprova ogni 60 s e lo scrive nel registro; le modifiche fatte
+in PM restano in attesa e partono al primo giro buono. Un VPS che risponde con **zero allocazioni**
+o con più di metà delle righe sparite **ferma il motore** (protezione contro le cancellazioni di
+massa): si guarda cos'è successo e si riparte con «Sincronizza adesso».
+
+**Copie fatte al go-live (02/09/2026)**: `appsettings.json.prima-sync-20260902` e
+`appsettings.Secrets.json.prima-sync-20260902` accanto agli originali; sul VPS
+`/var/lib/atec-risorse/backup/risorse-pre-sync-20260902.db`.
+
 ## 6. Comandi utili (sul server)
 
 ```powershell

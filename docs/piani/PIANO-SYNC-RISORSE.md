@@ -200,10 +200,32 @@ l'esito (le righe sono già scritte: rispondere «errore» farebbe duplicare al 
 | **0 — Preparazione** ✅ **fatta il 02/09/2026** | VPS: `SyncController` + DTO del contratto, ruolo `SYNC`, account `sync.pm` dalla sezione `Sync` dell'appsettings di produzione (password solo lì), regole del planner condivise in `PlannerRules`, guardia sulla chiave JWT di sviluppo; **pubblicato alle 13:24**. PM: migrazione M119, `Services/RisorseSync/` (impostazioni DPAPI, client HTTP, motore con i tre inneschi che in Fase 0 fa solo login + stato), 5 endpoint `sync/*`, scheda «Sincronizzazione ATEC Risorse (VPS)» in Digest Email, 37 test; committato, **non ancora deployato** | VPS: login `sync.pm` dal PC, `GET /api/sync/status` → 39 dipendenti / 182 allocazioni / 2 commesse / 13 reparti, `GET /api/sync/assignments` → 182 righe con date `yyyy-MM-dd` e UTC con la Z, `/api/users` negato al ruolo SYNC (403); prova funzionale locale di tutti gli endpoint (created / unchanged / updated / skipped / deleted, account di sistema protetti); PM: build 0 errori, 530 test verdi, web `tsc -b` + eslint puliti |
 | **1 — Anagrafiche PM → VPS + seme mappa** ✅ **fatta il 02/09/2026** | `RisorseSyncMap` + `AnagraficheSync` (logica pura: normalizzazione, abbinamento username → nome+cognome → cognome+token del nome solo se unico, impronte senza credenziali) + `SyncAnagraficheAsync` (seme, invio delle sole righe cambiate, invio completo ogni 24 h, credenziali solo ai nuovi, esterni e wildcard esclusi, righe rifiutate ricordate); VPS: `GET employees/projects/departments` **pubblicati alle 15:19**; PM committato, non deployato | 61 test nel filtro Risorse, suite 556 verdi; **prova end-to-end** su una copia del DB di produzione del VPS con il motore PM in locale: 27 abbinati (PM 38 → VPS 36 Abatangelo per nome, Obreja per token), 0 doppioni, 15 commesse create, MEC rinominato, legami MAG/MAN del VPS intatti, un solo eco dall'hub, timer silenzioso. 🪤 Il DB di **sviluppo** di PM aveva «Larganà»/«Qualità» in mojibake (`├á`): ripulito; la produzione è corretta (verificata in esadecimale) |
 | **2 — Allocazioni bidirezionali in tempo reale** ✅ **fatta il 02/09/2026** | `AllocazioniSync` (logica pura: impronta senza audit, `Decidi` = tabella §4.3, abbinamento per contenuto, fusi Europe/Rome) + `SyncAllocazioniAsync` (una POST per creazioni+aggiornamenti, una per autore per le cancellazioni con l'autore da `res_notify_pending`, poi una transazione MySQL con guardia di concorrenza e SAVEPOINT per riga, mappa, hub PM notificato dopo il commit); freni anti-cancellazione di massa; fix HR in sovrapposizione con `updated_at`; 596 test in tutto (93 nel modulo). PM committato, **non deployato** | **Prova end-to-end** (VPS locale su copia del DB di produzione + motore PM locale): 182 righe copiate in PM con dipendente e commessa tradotti e `updated_at` in ora locale (12:11 UTC → 14:11); creazione in PM → sul VPS al timer, creazione sul VPS → in PM in 1 s via hub; conflitto → vince la modifica più recente (1 conflitto nel registro); cancellazione in PM → VPS con `made_by`, cancellazione sul VPS → PM; ferie senza autore come le scrive HR → VPS; alla fine 183 = 183, timer silenzioso, nessun errore |
-| **3 — Stato e avvisi** | `GET /api/resource-planner/sync/status`, `POST …/sync/run-now`; riquadro nella pagina **Digest Email** (ultimo giro, righe allineate, conflitti, VPS raggiungibile); avviso nel planner se il VPS non risponde da > 10 min; `GUIDA-SERVER-LAN.md` + memoria aggiornate | a vista |
+| **3 — Stato e avvisi** ◐ in parte | endpoint `sync/status` e `run-now`, scheda in Digest Email e `GUIDA-SERVER-LAN.md` §5.1 **fatti**; **resta** l'avviso nel planner se il VPS non risponde da > 10 min | a vista |
 
 Deploy: il VPS con `aggiorna-server-online.bat` (2–3 min, ~5 s di fermo, l'`appsettings.json` di
 produzione non si tocca); ATEC PM con il consueto `aggiorna-server.ps1`. Stima: **3 sessioni** più i due deploy.
+
+## 6-bis. Go-live — fatto il 02/09/2026 alle 16:49
+
+1. Cancello dei test verde e registrato (596), copia `.backup` del DB del VPS
+   (`backup/risorse-pre-sync-20260902.db`).
+2. ATEC PM produzione: dump (nello scratch della sessione) e cancellazione delle 7 allocazioni
+   di prova di giugno (id 10-19).
+3. Password di `sync.pm` copiata dal VPS ai segreti cifrati del server PM
+   (`RisorseSync:Password` in `appsettings.Secrets.json`, DPAPI macchina) e sezione `RisorseSync`
+   in `appsettings.json` (`Enabled: true`, indirizzo, utente) con copie `.prima-sync-20260902`.
+   Fatto via SSH con un file temporaneo, cancellato subito: la password non è mai passata in chat.
+4. Deploy di ATEC PM (build `20260902-1647`, 40 s, migrazione v119 applicata, health 200).
+5. **Primo giro alle 16:49:46 (958 ms)**: 27 dipendenti abbinati (PM 38 → VPS 36 Abatangelo per
+   nome, Obreja per token), Monticone non abbinato (esterno), zamputo solo VPS; reparti inviati
+   (MEC → «Officina Meccanica», MAG e MAN del VPS intatti); **15 commesse create sul VPS**;
+   **182 allocazioni copiate in PM** con autore e ora locale; VPS intatto (182 righe, ultimo
+   `updated_at` invariato). Un solo eco dall'hub, a vuoto.
+6. Tolte dal VPS le 2 commesse demo (nessun riferimento). Service/altre attività demo lasciate:
+   il VPS le riseminerebbe a ogni riavvio se la tabella fosse vuota, e nessuno le usa.
+
+Da qui in poi i due programmi si tengono allineati da soli. Istruzioni operative in
+`docs/guide/GUIDA-SERVER-LAN.md` §5.1.
 
 ## 7. Decisioni da confermare (col default proposto)
 
