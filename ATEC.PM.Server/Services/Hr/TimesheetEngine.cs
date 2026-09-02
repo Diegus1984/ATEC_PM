@@ -61,9 +61,12 @@ public class TimesheetDay
     /// <summary>true se la giornata richiede un intervento umano (timbratura mancante o incoerente).</summary>
     public bool HasAnomaly => Note.StartsWith("⚠");
 
+    // B1/B2 (#145): il lavoro notturno ORDINARIO, che nel motore VB non esisteva — la fascia b
+    // non era mai stata applicata. Due chiavi perché la tabella ha due percentuali.
     internal static Dictionary<string, string> NewBands() =>
-        new() { ["A"] = "0h 0m", ["C"] = "0h 0m", ["D"] = "0h 0m", ["E"] = "0h 0m", ["F"] = "0h 0m",
-                ["G"] = "0h 0m", ["H"] = "0h 0m", ["L"] = "0h 0m", ["M"] = "0h 0m" };
+        new() { ["A"] = "0h 0m", ["B1"] = "0h 0m", ["B2"] = "0h 0m", ["C"] = "0h 0m", ["D"] = "0h 0m",
+                ["E"] = "0h 0m", ["F"] = "0h 0m", ["G"] = "0h 0m", ["H"] = "0h 0m", ["L"] = "0h 0m",
+                ["M"] = "0h 0m" };
 }
 
 /// <summary>
@@ -104,6 +107,9 @@ public static class TimesheetEngine
 
         /// <summary>Quanti di quei minuti di pausa cadono in fascia notturna.</summary>
         public int PauseNotturne;
+
+        /// <summary>Quanti cadono nella fascia serale (20-22), per la fascia b1 (#145).</summary>
+        public int PauseSerali;
 
         /// <summary>Gli stessi quattro posti PRIMA dell'arrotondamento: servono solo a mostrare il grezzo.</summary>
         public DateTime? RawEntrata1, RawUscita1, RawEntrata2, RawUscita2;
@@ -181,7 +187,7 @@ public static class TimesheetEngine
         }
 
         if (minutiLavorati > 0)
-            ScomponiOvertime(cartellino, minutiLavorati, work_date, config.CountsOvertime, dati.PauseNotturne);
+            ScomponiOvertime(cartellino, minutiLavorati, work_date, config.CountsOvertime, dati.PauseNotturne, dati.PauseSerali);
         else
             ClearTotals(cartellino);
 
@@ -365,10 +371,11 @@ public static class TimesheetEngine
         var primaDiMezzanotte = coppie.Where(c => Norm(c.Uscita) <= mezzanotte).ToList();
         var dopoMezzanotte = coppie.Where(c => Norm(c.Uscita) > mezzanotte).ToList();
 
-        var sessione1 = Comprimi(primaDiMezzanotte, out int pause1, out int notte1, out bool staccoLungo1);
-        var sessione2 = Comprimi(dopoMezzanotte, out int pause2, out int notte2, out bool staccoLungo2);
+        var sessione1 = Comprimi(primaDiMezzanotte, out int pause1, out int notte1, out int sera1, out bool staccoLungo1);
+        var sessione2 = Comprimi(dopoMezzanotte, out int pause2, out int notte2, out int sera2, out bool staccoLungo2);
         dati.PauseTimbrate = pause1 + pause2;
         dati.PauseNotturne = notte1 + notte2;
+        dati.PauseSerali = sera1 + sera2;
 
         // Uno stacco troppo lungo per essere una pausa: nella stessa giornata ci sono due
         // turni distinti. Le ore si contano lo stesso, ma la giornata va guardata.
@@ -406,10 +413,11 @@ public static class TimesheetEngine
     /// </summary>
     private static (RawPunch Entrata, RawPunch Uscita)? Comprimi(
         List<(RawPunch Entrata, RawPunch Uscita)> sessioni,
-        out int pause, out int pauseNotturne, out bool staccoLungo)
+        out int pause, out int pauseNotturne, out int pauseSerali, out bool staccoLungo)
     {
         pause = 0;
         pauseNotturne = 0;
+        pauseSerali = 0;
         staccoLungo = false;
         if (sessioni.Count == 0) return null;
 
@@ -426,6 +434,7 @@ public static class TimesheetEngine
             // maggiorazione si paga sulle ore lavorate, e una pausa alle due è comunque
             // notturna. Senza, di sabato la fascia arrivava a valere più delle ore pagate.
             pauseNotturne += NotturniFra(da.Hour * 60 + da.Minute, a.Hour * 60 + a.Minute);
+            pauseSerali += SeraliFra(da.Hour * 60 + da.Minute, a.Hour * 60 + a.Minute);
         }
 
         return (sessioni[0].Entrata, sessioni[^1].Uscita);
@@ -746,17 +755,19 @@ public static class TimesheetEngine
     /// fasce della circolare. Feriale, sabato e festivo hanno regole diverse.
     /// </summary>
     private static void ScomponiOvertime(
-        TimesheetDay c, int minutiLavorati, DateTime work_date, bool conStraordinari, int pauseNotturne)
+        TimesheetDay c, int minutiLavorati, DateTime work_date, bool conStraordinari, int pauseNotturne,
+        int pauseSerali = 0)
     {
         bool festivo = TimesheetRules.IsHoliday(work_date);
         bool sabato = work_date.DayOfWeek == DayOfWeek.Saturday;
 
         int minutiNotturni = Math.Max(0, MinutiNotturni(c) - pauseNotturne);
         int minutiDiurni = minutiLavorati - minutiNotturni;
+        int minutiSerali = Math.Max(0, MinutiSerali(c) - pauseSerali);
 
         if (festivo) FasceFestivo(c, minutiLavorati, minutiNotturni, minutiDiurni);
         else if (sabato) FasceSabato(c, minutiLavorati, minutiNotturni, minutiDiurni);
-        else FasceFeriale(c, minutiLavorati, minutiNotturni);
+        else FasceFeriale(c, minutiLavorati, minutiNotturni, minutiSerali);
 
         int ordinari, straordinari;
         if (festivo || sabato)
@@ -781,18 +792,33 @@ public static class TimesheetEngine
         }
     }
 
-    /// <summary>Feriale: oltre le 8 ore è straordinario, notturno (g) prima di diurno (a).</summary>
-    private static void FasceFeriale(TimesheetDay c, int minutiTotali, int minutiNotturni)
+    /// <summary>
+    /// Feriale: oltre le 8 ore è straordinario, notturno (g) prima di diurno (a). Le ore
+    /// notturne che restano ORDINARIE prendono la fascia b (#145): b2 dalle 22 alle 6, b1 la
+    /// sera dalle 20 alle 22. Lo straordinario serale (20-22) resta diurno, come prima.
+    /// </summary>
+    private static void FasceFeriale(TimesheetDay c, int minutiTotali, int minutiNotturni, int minutiSerali = 0)
     {
         int straordinario = Math.Max(0, minutiTotali - TimesheetRules.StandardDayMinutes);
-        if (straordinario == 0) return;
 
         // 🪤 Notturno sì, ma solo quello che cade DENTRO lo straordinario. In una giornata
         // normale è lo stesso conto di sempre (il notturno sta in coda, e in coda sta lo
         // straordinario); nel moncone di un turno di notte le ore notturne sono in TESTA,
         // e sono ordinarie: senza questo distinguo uno straordinario fatto di pomeriggio
         // si prenderebbe la maggiorazione del notturno.
-        int notturnoStraord = minutiNotturni > 0 ? Math.Min(minutiNotturni, MinutiNotturniInCoda(c, straordinario)) : 0;
+        int notturnoStraord = minutiNotturni > 0 && straordinario > 0
+            ? Math.Min(minutiNotturni, MinutiInCoda(c, straordinario, NotturniFra)) : 0;
+
+        // Fascia b: quel che di notte e di sera NON è straordinario. Niente doppio conto
+        // con g: i minuti notturni in coda allo straordinario sono già suoi.
+        int notturnoOrdinario = minutiNotturni - notturnoStraord;
+        int seraleStraord = minutiSerali > 0 && straordinario > 0
+            ? Math.Min(minutiSerali, MinutiInCoda(c, straordinario, SeraliFra)) : 0;
+        int seraleOrdinario = minutiSerali - seraleStraord;
+        if (seraleOrdinario > 0) c.Fasce["B1"] = TimesheetRules.FormatDuration(seraleOrdinario);
+        if (notturnoOrdinario > 0) c.Fasce["B2"] = TimesheetRules.FormatDuration(notturnoOrdinario);
+
+        if (straordinario == 0) return;
 
         if (notturnoStraord > 0)
         {
@@ -879,11 +905,30 @@ public static class TimesheetEngine
         return dallaSera + finoAllAlba;
     }
 
+    /// <summary>Minuti nella fascia SERALE (20:00-22:00) dentro l'intervallo (fascia b1, #145).</summary>
+    private static int SeraliFra(int daMinuti, int aMinuti)
+    {
+        if (aMinuti <= daMinuti) return 0;
+        int sera = TimesheetRules.NightEveningStartHour * 60;   // 20:00
+        int notte = TimesheetRules.NightShiftStartHour * 60;    // 22:00
+        return Math.Max(0, Math.Min(aMinuti, notte) - Math.Max(daMinuti, sera));
+    }
+
+    /// <summary>Minuti lavorati fra le 20:00 e le 22:00, letti dagli orari del cartellino.</summary>
+    private static int MinutiSerali(TimesheetDay c) =>
+        SeraliDi(c.Entrata1, c.Uscita1) + SeraliDi(c.Entrata2, c.Uscita2);
+
+    private static int SeraliDi(string entrata, string uscita) =>
+        ProvaOrario(entrata, out int daMinuti) && ProvaOrario(uscita, out int aMinuti)
+            ? SeraliFra(daMinuti, aMinuti)
+            : 0;
+
     /// <summary>
-    /// I minuti di notte che cadono negli <b>ultimi</b> <paramref name="minuti"/> lavorati:
-    /// è lì che matura lo straordinario. Si scorrono le sessioni dall'ultima alla prima.
+    /// I minuti di una fascia (<paramref name="finestra"/> = notte o sera) che cadono negli
+    /// <b>ultimi</b> <paramref name="minuti"/> lavorati: è lì che matura lo straordinario.
+    /// Si scorrono le sessioni dall'ultima alla prima.
     /// </summary>
-    private static int MinutiNotturniInCoda(TimesheetDay c, int minuti)
+    private static int MinutiInCoda(TimesheetDay c, int minuti, Func<int, int, int> finestra)
     {
         if (minuti <= 0) return 0;
 
@@ -893,17 +938,17 @@ public static class TimesheetEngine
             (c.Entrata1, c.Uscita1),
         };
 
-        int notturni = 0, restanti = minuti;
+        int dentro = 0, restanti = minuti;
         foreach ((string entrata, string uscita) in sessioni)
         {
             if (restanti <= 0) break;
             if (!ProvaOrario(entrata, out int da) || !ProvaOrario(uscita, out int a) || a <= da) continue;
 
             int presi = Math.Min(a - da, restanti);
-            notturni += NotturniFra(a - presi, a);
+            dentro += finestra(a - presi, a);
             restanti -= presi;
         }
-        return notturni;
+        return dentro;
     }
 
     private static bool ProvaOrario(string valore, out int minutiDaMezzanotte)

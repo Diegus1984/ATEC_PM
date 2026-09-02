@@ -439,6 +439,31 @@ dimestichezza col computer, **senza perdere l'ora timbrata**. Com'è ora (`Timbr
   grande, l'ora timbrata sotto, una frase che dice cosa fare e la rettifica già su
   «Uscita» quando manca l'uscita.
 
+**Fatto il 02/09/2026 — fascia b del CCNL, il lavoro notturno ordinario (segnalazione #145).**
+Fonte: tabella «Maggiorazioni per lavoro non ordinario e straordinario» del C018 Metalmecc. PMI
+Confapi data da Diego (scansione `scan0747.pdf`): «lav. notturno fino alle 22: 25%», «lav.
+notturno oltre le 22: 35%». Per il «fino alle 22» fa fede l'art. 7 del CCNL: il notturno
+«decorre dalle 12 ore successive all'inizio del turno del mattino» → con ingresso alle 8, dalle 20.
+- **Regole** (`TimesheetRules.cs`, `Version` 3 → **4**, così `RiparaGiornate` ricalcola lo
+  storico al primo import): `NightEveningStartHour = 20`; B1 = 25% (20-22), B2 = 35% (22-6).
+- **Motore** (`TimesheetEngine.cs`): chiavi `B1`/`B2` in `NewBands()`; `FasceFeriale` le
+  assegna alle ore notturne/serali che **restano ordinarie** (notturno − quello già in g,
+  serale − quello in coda allo straordinario): niente doppio conto con g. Sabato e festivo
+  non cambiano (lì è tutto straordinario o festivo, già maggiorato). Lo straordinario serale
+  20-22 resta fascia a. Pause: `PauseSerali` accanto a `PauseNotturne`, così una pausa alle
+  21 non è pagata come notturno. `MinutiNotturniInCoda` è diventata `MinutiInCoda(c, minuti,
+  finestra)` con `NotturniFra`/`SeraliFra`.
+- **Calendario/Excel**: `VociStraordinario` ha due voci nuove (`NOTT_B1`, `NOTT_B2`) e
+  `EtichetteFasceTooltip` le due etichette (l'indicizzatore senza chiave rompeva il calendario).
+- **Client**: `FASCE_LABELS` B1/B2; pillola «Regolare, con notturno [e straordinario]»;
+  colonna Straord. mostra «notte» col tooltip quando non c'è straordinario ma ci sono ore
+  notturne; riquadro «Straordinario e maggiorazioni» con «notturno ordinario Xh».
+- **Test** (`TurnoNotturnoTests`): Monge 19/08 → B1 2h, B2 6h, G 2h; Sinapi 17/08 (19-7:30) →
+  B1 2h, B2 5h, G 3h, A 1h30; giornata diurna → 0; straordinario serale fino alle 21 → A 4h,
+  B1 0. Il banco di prova delle 379 giornate non cambia (confronta solo le fasce del VB).
+- ⚠ **Chi non fa straordinario** (`CountsOvertime=false`): come per le altre fasce, la
+  maggiorazione si azzera — da confermare con le paghe se il notturno va pagato lo stesso.
+
 **Fatto il 02/09/2026 — tutto il modulo presenze è real-time (SignalR).** Ordine di Diego:
 «tutte le operazioni della sezione HR devono essere SignalR». Pattern canonico del progetto
 (gruppo globale su `/hubs/project`, vedi `docs/HANDOFF-WEB.md`):

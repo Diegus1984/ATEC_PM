@@ -21,9 +21,11 @@ public static class TimesheetRules
     /// <para>Storia: <b>1</b> primo port del motore VB · <b>2</b> aggiunto il filtro dei
     /// doppioni di strisciata sotto i 5 minuti (era nella CTE SQL del VB, fuori dal motore)
     /// · <b>3</b> turno a cavallo della mezzanotte tagliato in due (<see cref="NightShift"/>)
-    /// e notte riconosciuta anche fra mezzanotte e le 6 del mattino.</para>
+    /// e notte riconosciuta anche fra mezzanotte e le 6 del mattino · <b>4</b> fascia b
+    /// (segnalazione #145): il lavoro notturno ORDINARIO prende la maggiorazione, 25% dalle
+    /// 20 alle 22 (B1) e 35% dalle 22 alle 6 (B2).</para>
     /// </summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int StandardDayMinutes = 480;
@@ -70,6 +72,14 @@ public static class TimesheetRules
     /// <summary>Entro questi minuti l'punched_at resta allo scatto in corso invece di saltare al successivo.</summary>
     public const int RoundingToleranceMinutes = 10;
 
+    /// <summary>
+    /// Dalle 20:00 comincia la fascia SERALE del lavoro notturno («notturno fino alle 22»,
+    /// 25%). Il CCNL metalmeccanici (art. 7) fa decorrere il notturno «dalle 12 ore successive
+    /// all'inizio del turno del mattino»: con l'ingresso alle 8, le 20. Vale per le ore
+    /// ordinarie: lo straordinario fra le 20 e le 22 resta diurno (fascia a), come prima.
+    /// </summary>
+    public const int NightEveningStartHour = 20;
+
     /// <summary>Dalle 22:00 il lavoro è notturno.</summary>
     public const int NightShiftStartHour = 22;
 
@@ -81,8 +91,11 @@ public static class TimesheetRules
 
     // ── Maggiorazioni (Circolare n. 12 del 23.12.2024, «Non a turni») ──────────
     public const double OvertimeRateA = 0.20;   // a. straordinario diurno
-    public const double OvertimeRateB1 = 0.25;  // b. notturno fino alle 22
-    public const double OvertimeRateB2 = 0.35;  // b. notturno oltre le 22
+    // b. lavoro notturno ORDINARIO (non straordinario, non festivo) — tabella «Maggiorazioni
+    //    per lavoro non ordinario e straordinario» C018 Confapi, letta il 02/09/2026 (#145):
+    //    «lav. notturno fino alle 22: 25%», «lav. notturno oltre le 22: 35%».
+    public const double OvertimeRateB1 = 0.25;  // b1. notturno dalle 20 alle 22
+    public const double OvertimeRateB2 = 0.35;  // b2. notturno dalle 22 alle 6
     public const double OvertimeRateC = 0.55;   // c. festivo
     public const double OvertimeRateD = 0.10;   // d. festivo con riposo compensativo
     public const double OvertimeRateE = 0.55;   // e. straordinario festivo (oltre 8h)

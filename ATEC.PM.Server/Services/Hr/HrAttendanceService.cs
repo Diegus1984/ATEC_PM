@@ -1467,10 +1467,13 @@ public class HrAttendanceService
     // colore e tooltip li decide QUI il server, così la pagina web e il file Excel
     // disegnano la stessa griglia invece di due interpretazioni della stessa cosa.
 
-    /// <summary>Le nove voci di straordinario, nell'ordine e con le etichette del VB.</summary>
+    /// <summary>Le voci di maggiorazione (nove del VB + le due della fascia b), nell'ordine del CCNL.</summary>
     private static readonly (string VoceType, string Band, string Label)[] VociStraordinario =
     {
         ("STRAORD_A", "A", "STRAORD. 20%"),
+        // Fascia b (#145): lavoro notturno ordinario, due percentuali della tabella Confapi.
+        ("NOTT_B1", "B1", "NOTT. FINO ALLE 22 25%"),
+        ("NOTT_B2", "B2", "NOTT. OLTRE LE 22 35%"),
         ("STRAORD_C", "C", "STRAORD. FEST. 55%"),
         ("STRAORD_D", "D", "STRAORD. FEST. RIP. 10%"),
         ("STRAORD_E", "E", "STRAORD. FEST. >8h 55%"),
@@ -1484,7 +1487,8 @@ public class HrAttendanceService
     /// <summary>Etichette del dettaglio straordinario nel tooltip (BuildStraordDetail).</summary>
     private static readonly Dictionary<string, string> EtichetteFasceTooltip = new()
     {
-        ["A"] = "20%", ["C"] = "Fest.55%", ["D"] = "Fest.Rip.10%", ["E"] = "Fest.>8h 55%",
+        ["A"] = "20%", ["B1"] = "Nott.<22 25%", ["B2"] = "Nott.>22 35%",
+        ["C"] = "Fest.55%", ["D"] = "Fest.Rip.10%", ["E"] = "Fest.>8h 55%",
         ["F"] = "Fest.Rip.>8h 35%", ["G"] = "Nott.50/60%", ["H"] = "Nott.Fest.35%",
         ["L"] = "Nott.Fest.75%", ["M"] = "Nott.Fest.Rip.55%",
     };

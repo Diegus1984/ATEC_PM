@@ -89,6 +89,8 @@ const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v4"
 /** Le fasce della Circolare n. 12 del 23.12.2024 (colonna «Non a turni»). */
 const FASCE_LABELS: Record<string, string> = {
   A: "Straordinario diurno (20%)",
+  B1: "Lavoro notturno fino alle 22 (25%)",
+  B2: "Lavoro notturno oltre le 22 (35%)",
   C: "Festivo (55%)",
   D: "Festivo con riposo comp. (10%)",
   E: "Straord. festivo (55%)",
@@ -352,6 +354,7 @@ export function TimbraturePage() {
     let straordinario = 0
     let giorniLavorati = 0
     let giorniStraordinario = 0
+    let notturno = 0
     let anomalie = 0
     let segnalate = 0
     let assenzeIntere = 0
@@ -373,14 +376,15 @@ export function TimbraturePage() {
       ordinarie += minutiDa(g.regularHours)
       straordinario += minutiDa(g.overtime)
       if (!isZero(g.regularHours) && !st.assenza) giorniLavorati++
-      if (!isZero(g.overtime)) {
-        giorniStraordinario++
-        for (const k of Object.keys(g.bands)) fasce.add(k)
-      }
+      if (!isZero(g.overtime)) giorniStraordinario++
+      for (const k of Object.keys(g.bands ?? {})) fasce.add(k)
+      // Fascia b (#145): il notturno ordinario non è straordinario, ma è maggiorato.
+      notturno += minutiDa(g.bands?.B1 ?? "") + minutiDa(g.bands?.B2 ?? "")
     }
     return {
       ordinarie,
       straordinario,
+      notturno,
       giorniLavorati,
       giorniStraordinario,
       anomalie,
@@ -703,23 +707,26 @@ export function TimbraturePage() {
                   }
                 />
                 <Riquadro
-                  etichetta="Straordinario"
+                  etichetta="Straordinario e maggiorazioni"
                   valore={durata(totali.straordinario)}
                   dettaglio={
-                    totali.giorniStraordinario === 0
-                      ? "nessuna giornata"
-                      : `${totali.giorniStraordinario} ${
-                          totali.giorniStraordinario === 1 ? "giornata" : "giornate"
-                        }${
-                          totali.fasce.length > 0
-                            ? " · " +
-                              totali.fasce
-                                .map((k) => (FASCE_LABELS[k] ?? `fascia ${k}`).toLowerCase())
-                                .join(", ")
-                            : ""
-                        }`
+                    [
+                      totali.giorniStraordinario === 0
+                        ? "nessuno straordinario"
+                        : `${totali.giorniStraordinario} ${
+                            totali.giorniStraordinario === 1 ? "giornata" : "giornate"
+                          }`,
+                      totali.notturno > 0 ? `notturno ordinario ${durata(totali.notturno)}` : "",
+                      totali.fasce.length > 0
+                        ? totali.fasce
+                            .map((k) => (FASCE_LABELS[k] ?? `fascia ${k}`).toLowerCase())
+                            .join(", ")
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
                   }
-                  tone={totali.straordinario > 0 ? "warn" : undefined}
+                  tone={totali.straordinario > 0 || totali.notturno > 0 ? "warn" : undefined}
                 />
                 <Riquadro
                   etichetta="Ferie e assenze"
@@ -852,7 +859,25 @@ export function TimbraturePage() {
                           )}
                           {show("straordinario") && (
                             <TableCell className="text-right tabular-nums">
-                              {isZero(g.overtime) ? (
+                              {isZero(g.overtime) && fasceEntries.length > 0 ? (
+                                // Fascia b (#145): niente straordinario ma ore notturne
+                                // maggiorate — si vede «notte» col dettaglio nel tooltip.
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help text-xs text-muted-foreground underline decoration-dotted">
+                                      notte
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">
+                                    <p className="mb-1 font-semibold">Maggiorazioni CCNL:</p>
+                                    {fasceEntries.map(([k, v]) => (
+                                      <div key={k}>
+                                        <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
+                                      </div>
+                                    ))}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : isZero(g.overtime) ? (
                                 <span className="text-muted-foreground">—</span>
                               ) : fasceEntries.length > 0 ? (
                                 <Tooltip>

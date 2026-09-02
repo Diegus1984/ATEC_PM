@@ -62,6 +62,65 @@ public class TurnoNotturnoTests
         // Le due ore di straordinario sono in fondo alla notte: fascia g, non a.
         Assert.Equal("2h 0m", c.Fasce["G"]);
         Assert.Equal("0h 0m", c.Fasce["A"]);
+
+        // #145 — le otto ore ORDINARIE della notte prendono la fascia b: dalle 20 alle 22
+        // la serale (b1, 25%), dalle 22 alle 4 la notturna (b2, 35%). Le due dalle 4 alle 6
+        // sono già in g e non si contano due volte.
+        Assert.Equal("2h 0m", c.Fasce["B1"]);
+        Assert.Equal("6h 0m", c.Fasce["B2"]);
+    }
+
+    // ── Fascia b: il lavoro notturno che NON è straordinario (#145) ───────────
+
+    [Fact]
+    public void La_notte_ordinaria_prende_la_fascia_b_e_lo_straordinario_resta_in_g()
+    {
+        // Sinapi, domenica sera → lunedì: entra alle 19:00 ed esce alle 07:30. Dodici ore e
+        // mezza: otto ordinarie fino alle 3, poi quattro e mezza di straordinario.
+        TimesheetDay c = Calcola(
+            "2026-08-17",
+            new[] { T("2026-08-17 19:00", "IN") },
+            new NightContext(Tomorrow: new[] { T("2026-08-18 07:30", "OUT") }));
+
+        Assert.Equal("8h 0m", c.RegularHours);
+        Assert.Equal("4h 30m", c.Overtime);
+        // Straordinario dalle 3 alle 7:30: tre ore notturne (g) e una e mezza diurne (a).
+        Assert.Equal("3h 0m", c.Fasce["G"]);
+        Assert.Equal("1h 30m", c.Fasce["A"]);
+        // Ordinario: dalle 19 alle 20 niente, dalle 20 alle 22 b1, dalle 22 alle 3 b2.
+        Assert.Equal("2h 0m", c.Fasce["B1"]);
+        Assert.Equal("5h 0m", c.Fasce["B2"]);
+    }
+
+    [Fact]
+    public void La_giornata_di_giorno_non_ha_fascia_b()
+    {
+        TimesheetDay c = Calcola(
+            "2026-08-19",
+            new[] { T("2026-08-19 07:58", "IN"), T("2026-08-19 12:02", "OUT"),
+                    T("2026-08-19 13:01", "IN"), T("2026-08-19 17:04", "OUT") });
+
+        Assert.Equal("8h 0m", c.RegularHours);
+        Assert.Equal("0h 0m", c.Fasce["B1"]);
+        Assert.Equal("0h 0m", c.Fasce["B2"]);
+    }
+
+    [Fact]
+    public void Lo_straordinario_serale_resta_diurno_non_prende_la_b1()
+    {
+        // Giornata normale tirata fino alle 21: le ore dopo le 17 sono straordinario
+        // (fascia a). La sera fra le 20 e le 21 sta dentro lo straordinario, quindi NON
+        // è lavoro notturno ordinario: b1 resta a zero, come prima della #145.
+        TimesheetDay c = Calcola(
+            "2026-08-19",
+            new[] { T("2026-08-19 08:00", "IN"), T("2026-08-19 12:00", "OUT"),
+                    T("2026-08-19 13:00", "IN"), T("2026-08-19 21:00", "OUT") });
+
+        Assert.Equal("8h 0m", c.RegularHours);
+        Assert.Equal("4h 0m", c.Overtime);
+        Assert.Equal("4h 0m", c.Fasce["A"]);
+        Assert.Equal("0h 0m", c.Fasce["B1"]);
+        Assert.Equal("0h 0m", c.Fasce["B2"]);
     }
 
     [Fact]

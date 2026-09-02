@@ -110,8 +110,13 @@ export function statoGiornata(g: HrDay): StatoLetto {
   }
 
   const straordinario = !/^0h 0+m$/.test(g.overtime) && g.overtime !== "" && g.overtime !== "---"
+  // Fascia b (#145): ore ordinarie di notte, maggiorate anche senza straordinario.
+  const notturno = Boolean(g.bands?.B1 || g.bands?.B2)
+  const extra = [notturno ? "notturno" : "", straordinario ? "straordinario" : ""]
+    .filter(Boolean)
+    .join(" e ")
   return {
-    label: (straordinario ? "Regolare, con straordinario" : "Tutto regolare") + segnalata,
+    label: (extra ? `Regolare, con ${extra}` : "Tutto regolare") + segnalata,
     tone: "ok",
     riposo: false,
     assenza: false,
