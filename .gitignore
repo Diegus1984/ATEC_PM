@@ -74,19 +74,6 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
-# ── Graphify (knowledge graph server+web) ───────────────────
-# Ogni graphify-out ANNIDATO (cache di scansione lasciate nei sorgenti) è ignorato...
-**/graphify-out/
-# ...ma alla ROOT del repo si tracciano solo il grafo interrogabile, il report e i
-# label delle community (condivisi col team). graph.html (~5MB), l'analysis e le cache
-# restano ignorati e rigenerabili con `graphify cluster-only .`.
-!/graphify-out/
-/graphify-out/*
-!/graphify-out/graph.json
-!/graphify-out/GRAPH_REPORT.md
-!/graphify-out/.graphify_labels.json
-!/graphify-out/.graphify_labels.json.sig
-
 # ── Temporanei di lavoro e allegati segnalazioni (20/08/2026) ──
 _bug_atts/
 _tmp/
