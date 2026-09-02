@@ -3,6 +3,8 @@
 export interface DdpProjectSummary {
   projectId: number
   code: string
+  /** Descrizione della commessa (#146). */
+  title: string
   customerName: string
   ddpType: string // COMMERCIAL | OFFICINA
   totalRows: number

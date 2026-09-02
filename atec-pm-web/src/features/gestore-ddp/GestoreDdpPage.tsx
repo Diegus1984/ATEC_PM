@@ -366,13 +366,21 @@ export function GestoreDdpPage() {
             />
           ),
         },
+        // #146: sotto il numero la descrizione della commessa, così l'elenco si legge
+        // senza aprire la Sintesi.
         cell: ({ row }) => (
           <button
             type="button"
-            className="font-medium hover:underline"
+            className="max-w-72 text-left leading-tight hover:underline"
             onClick={() => openSintesi(row.original)}
+            title={row.original.title || undefined}
           >
-            {row.original.code}
+            <span className="font-medium">{row.original.code}</span>
+            {row.original.title ? (
+              <span className="block truncate text-xs font-normal text-muted-foreground">
+                {row.original.title}
+              </span>
+            ) : null}
           </button>
         ),
       },

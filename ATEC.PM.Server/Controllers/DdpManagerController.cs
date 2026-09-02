@@ -57,6 +57,7 @@ public class DdpManagerController : ControllerBase
             // Una entry per (commessa, tipo distinta): card COMMERCIALE e OFFICINA affiancate nella pagina.
             List<DdpProjectSummary> summaries = c.Query<DdpProjectSummary>($@"
                 SELECT b.project_id AS ProjectId, p.code AS Code,
+                       COALESCE(p.title, '') AS Title,
                        COALESCE(cu.company_name, '') AS CustomerName,
                        'COMMERCIAL' AS DdpType,
                        COUNT(*) AS TotalRows,
@@ -74,9 +75,10 @@ public class DdpManagerController : ControllerBase
                 JOIN projects p ON p.id = b.project_id
                 LEFT JOIN customers cu ON cu.id = p.customer_id
                 WHERE b.ddp_type = 'COMMERCIAL'{_guard.FiltroBozzeSql(User)}
-                GROUP BY b.project_id, p.code, cu.company_name
+                GROUP BY b.project_id, p.code, p.title, cu.company_name
                 UNION ALL
                 SELECT o.project_id, p.code,
+                       COALESCE(p.title, ''),
                        COALESCE(cu.company_name, ''),
                        'OFFICINA',
                        COUNT(*),
@@ -95,7 +97,7 @@ public class DdpManagerController : ControllerBase
                 LEFT JOIN customers cu ON cu.id = p.customer_id
                 WHERE o.id NOT IN (SELECT DISTINCT parent_officina_item_id FROM ddp_officina_items WHERE parent_officina_item_id IS NOT NULL)
                   {_guard.FiltroBozzeSql(User)}
-                GROUP BY o.project_id, p.code, cu.company_name
+                GROUP BY o.project_id, p.code, p.title, cu.company_name
                 ORDER BY Code DESC, DdpType", new { Delivered = deliveredOrExcluded, Excluded = excluded }).ToList();
 
             var statusRows = c.Query<(int ProjectId, string DdpType, string StatusKey, int Count)>(@"

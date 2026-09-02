@@ -181,7 +181,11 @@ export function DdpSintesiPage() {
     ) ?? summaryQuery.data?.find((item) => item.projectId === projectId)
   const code = meta?.code ?? `#${projectId}`
   const customer = meta?.customerName ?? ""
-  const reportHeader = customer ? `${code} — ${customer}` : code
+  const title = meta?.title?.trim() ?? ""
+  // #146 (Zanoni): dopo il numero di commessa la sua descrizione, poi il cliente.
+  const reportHeader = [title ? `${code} · ${title}` : code, customer]
+    .filter(Boolean)
+    .join(" — ")
 
   const otherDdpType = officina ? "COMMERCIAL" : "OFFICINA"
   const otherSummary = React.useMemo(

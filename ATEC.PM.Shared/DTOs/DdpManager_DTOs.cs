@@ -8,6 +8,8 @@ public class DdpProjectSummary
 {
     public int ProjectId { get; set; }
     public string Code { get; set; } = "";
+    /// <summary>Descrizione della commessa (#146): nel titolo va «codice · descrizione — cliente».</summary>
+    public string Title { get; set; } = "";
     public string CustomerName { get; set; } = "";
     public string DdpType { get; set; } = "COMMERCIAL";   // "COMMERCIAL" | "OFFICINA"
 
