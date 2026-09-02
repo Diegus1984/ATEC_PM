@@ -10,13 +10,15 @@ import {
   Mail,
   MailCheck,
   RotateCw,
+  Search,
+  User,
 } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
-import { LookupCombobox } from "@/components/shared/lookup-combobox"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Table,
   TableBody,
@@ -96,9 +98,6 @@ const FASCE_LABELS: Record<string, string> = {
   L: "Straord. notturno festivo (75%)",
   M: "Straord. nott. festivo con riposo comp. (55%)",
 }
-
-/** «Il mio cartellino» nella tendina dei dipendenti: 0 non è l'id di nessuno. */
-const MIO_CARTELLINO = 0
 
 function minutiDa(durata: string): number {
   const m = /^(\d+)h (\d+)m$/.exec(durata)
@@ -229,6 +228,7 @@ export function TimbraturePage() {
     return { anno: oggi.getFullYear(), mese: oggi.getMonth() + 1 }
   })
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
+  const [searchEmployee, setSearchEmployee] = React.useState("")
   const [giornoAperto, setGiornoAperto] = React.useState<string | null>(null)
   const [mappaturaAperta, setMappaturaAperta] = React.useState(false)
   const [credenzialiAperte, setCredenzialiAperte] = React.useState(false)
@@ -288,13 +288,14 @@ export function TimbraturePage() {
     [cartellino, giornoAperto]
   )
 
-  const opzioniDipendenti = React.useMemo(
-    () => [
-      { id: MIO_CARTELLINO, name: "Il mio cartellino" },
-      ...(dipendentiQuery.data ?? []).map((e) => ({ id: e.id, name: e.name })),
-    ],
-    [dipendentiQuery.data]
-  )
+  // L'elenco laterale è più comodo della tendina (Diego, 02/09): si scorre con l'occhio
+  // e si cambia persona con un clic, senza aprire e chiudere niente.
+  const dipendentiFiltrati = React.useMemo(() => {
+    const list = dipendentiQuery.data ?? []
+    if (!searchEmployee.trim()) return list
+    const q = searchEmployee.toLowerCase()
+    return list.filter((e) => e.name.toLowerCase().includes(q))
+  }, [dipendentiQuery.data, searchEmployee])
 
   const meseLabel = new Date(periodo.anno, periodo.mese - 1, 1).toLocaleDateString(
     "it-IT",
@@ -531,22 +532,8 @@ export function TimbraturePage() {
         </Tabs>
       )}
 
-      {/* Persona e mese: i due comandi con cui si sceglie cosa guardare. */}
+      {/* Il mese: l'altra scelta, la persona, sta nell'elenco a sinistra. */}
       <div className="flex flex-wrap items-center gap-3">
-        {canWrite && vista === "cartellino" && (
-          <LookupCombobox
-            options={opzioniDipendenti}
-            value={employeeId ?? MIO_CARTELLINO}
-            onValueChange={(id) =>
-              setEmployeeId(id == null || id === MIO_CARTELLINO ? null : id)
-            }
-            placeholder="Scegli il dipendente…"
-            searchPlaceholder="Cerca per nome…"
-            emptyText="Nessun dipendente con questo nome"
-            loading={dipendentiQuery.isLoading}
-            className="h-10 w-72 text-base"
-          />
-        )}
         <div className="inline-flex items-center gap-1 rounded-lg border p-1">
           <Button
             variant="ghost"
@@ -608,7 +595,71 @@ export function TimbraturePage() {
       ) : vista === "cronologia" ? (
         <CronologiaMailView anno={periodo.anno} mese={periodo.mese} />
       ) : (
-        <div className="space-y-3">
+        <div className={cn("flex flex-col gap-4", canWrite && "md:flex-row md:items-start")}>
+          {/* Elenco dipendenti lato sinistro */}
+          {canWrite && (
+            <div className="w-full shrink-0 space-y-2 rounded-lg border bg-card p-2.5 md:w-64">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Dipendenti ({dipendentiQuery.data?.length ?? 0})
+                </span>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca per nome…"
+                  value={searchEmployee}
+                  onChange={(e) => setSearchEmployee(e.target.value)}
+                  className="h-9 pl-8 text-sm"
+                />
+              </div>
+              <div className="max-h-[calc(100vh-20rem)] min-h-[300px] space-y-0.5 overflow-y-auto pr-1">
+                <button
+                  type="button"
+                  onClick={() => setEmployeeId(null)}
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
+                    employeeId === null
+                      ? "bg-primary font-semibold text-primary-foreground shadow-xs"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                >
+                  <User className="size-4 shrink-0" />
+                  <span className="flex-1 truncate">Il mio cartellino</span>
+                </button>
+                <div className="my-1.5 border-t" />
+                {dipendentiQuery.isLoading ? (
+                  <p className="p-2 text-sm text-muted-foreground">Caricamento…</p>
+                ) : dipendentiFiltrati.length === 0 ? (
+                  <p className="p-2 text-sm text-muted-foreground">Nessun dipendente con questo nome.</p>
+                ) : (
+                  dipendentiFiltrati.map((emp) => (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => setEmployeeId(emp.id)}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                        employeeId === emp.id
+                          ? "bg-primary font-semibold text-primary-foreground shadow-xs"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          employeeId === emp.id ? "bg-primary-foreground" : "bg-muted-foreground/60"
+                        )}
+                      />
+                      <span className="flex-1 truncate">{emp.name}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1 space-y-3">
           {cartellino && !cartellino.ecosLinked && (
             <p className="text-sm text-muted-foreground">
               {employeeId == null
@@ -902,6 +953,7 @@ export function TimbraturePage() {
             onChanged={invalidate}
             azioni={giornataAperta ? azioniGiornata(giornataAperta) : null}
           />
+          </div>
         </div>
       )}
 
