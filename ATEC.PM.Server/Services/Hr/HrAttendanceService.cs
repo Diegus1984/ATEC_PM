@@ -2440,7 +2440,16 @@ public class HrAttendanceService
         };
     }
 
-    private static void SyncToResourcePlanner(
+    /// <summary>
+    /// Ferie approvate → riga FERIE nel planner Risorse; rifiutate → via. In approvazione si
+    /// cerca una FERIE dello stesso dipendente che si <b>sovrappone</b> al periodo, non una con
+    /// le date identiche (PIANO-SYNC-RISORSE.md §8, «doppie ferie»): se la ferie è già nel piano
+    /// — magari messa dal VPS con date più larghe — non se ne mette una seconda, che farebbe due
+    /// barre in conflitto su entrambi i lati. L'<c>updated_at</c> si valorizza (prima restava
+    /// NULL) perché il motore di sincronizzazione lo usa per decidere chi vince in un conflitto.
+    /// Internal, non private, per il test.
+    /// </summary>
+    internal static void SyncToResourcePlanner(
         MySqlConnection c, int employeeId, DateTime dateFrom, DateTime dateTo, string absenceType, bool isApproved)
     {
         if (!string.Equals(absenceType, "VACATION", StringComparison.OrdinalIgnoreCase)) return;
@@ -2452,19 +2461,19 @@ public class HrAttendanceService
 
         if (isApproved)
         {
-            int exists = c.ExecuteScalar<int>(@"
+            int sovrapposte = c.ExecuteScalar<int>(@"
                 SELECT COUNT(*) FROM res_assignments
                 WHERE employee_id = @EmployeeId AND tipo = 'FERIE'
-                  AND data_inizio = @DateFrom AND data_fine = @DateTo",
+                  AND data_inizio <= @DateTo AND data_fine >= @DateFrom",
                 new { EmployeeId = employeeId, DateFrom = dateFrom.Date, DateTo = dateTo.Date });
 
-            if (exists == 0)
+            if (sovrapposte == 0)
             {
                 c.Execute(@"
                     INSERT INTO res_assignments
-                        (employee_id, tipo, data_inizio, data_fine, descrizione, created_at)
+                        (employee_id, tipo, data_inizio, data_fine, descrizione, created_at, updated_at)
                     VALUES
-                        (@EmployeeId, 'FERIE', @DateFrom, @DateTo, 'Ferie approvate (HR)', NOW())",
+                        (@EmployeeId, 'FERIE', @DateFrom, @DateTo, 'Ferie approvate (HR)', NOW(), NOW())",
                     new { EmployeeId = employeeId, DateFrom = dateFrom.Date, DateTo = dateTo.Date });
             }
         }

@@ -1,6 +1,3 @@
-using System.Net;
-using System.Text;
-using System.Text.Json;
 using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Services.RisorseSync;
 using ATEC.PM.Shared.DTOs;
@@ -599,85 +596,5 @@ public class GiroAnagraficheTests
         Assert.True(Mappa(RisorseSyncMap.Employee).ContainsKey(_giulia));
         Assert.DoesNotContain("già segnalate", voce.Dettaglio);
         Assert.Null(svc.LastError);
-    }
-
-    /// <summary>
-    /// Il VPS finto: login, stato, GET employees dall'elenco dato, PUT con esiti riga per riga
-    /// (Id null → <c>created</c> con un id nuovo; Id presente → <c>updated</c>; i cognomi in
-    /// <see cref="DaSaltare"/> → <c>skipped</c>). I reparti li ricorda: come il VPS vero risponde
-    /// <c>Created</c>/<c>Updated</c> solo per quelli nuovi o cambiati, 0/0 se cambiano solo i
-    /// legami. Tiene ogni chiamata col suo corpo.
-    /// </summary>
-    private sealed class VpsFinto : HttpMessageHandler
-    {
-        private const string LoginOk = "{\"success\":true,\"data\":{\"token\":\"jwt-finto\",\"employeeId\":1,\"fullName\":\"[SYNC] ATEC PM\",\"userRole\":\"SYNC\"},\"message\":\"\"}";
-        private const string StatoOk = "{\"success\":true,\"data\":{\"serverUtc\":\"2026-09-02T10:00:00Z\",\"employees\":2,\"projects\":0,\"departments\":0,\"assignments\":0,\"version\":\"1.4.0\"},\"message\":\"\"}";
-
-        public List<SyncEmployeeDto> Dipendenti { get; } = new();
-        public HashSet<string> DaSaltare { get; } = new();
-        public List<(string Metodo, string Percorso, string Corpo)> Chiamate { get; } = new();
-        private int _prossimoId = 100;
-        /// <summary>I reparti già sul VPS: codice → firma dei campi.</summary>
-        private readonly Dictionary<string, string> _reparti = new();
-
-        public int Put => Chiamate.Count(x => x.Metodo == "PUT");
-
-        /// <summary>Il corpo dell'ULTIMA PUT su quel percorso, deserializzato come lo legge il VPS.</summary>
-        public T Corpo<T>(string percorso) =>
-            JsonSerializer.Deserialize<T>(Chiamate.Last(x => x.Metodo == "PUT" && x.Percorso == percorso).Corpo, RisorseSyncClient.JsonOptions)!;
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            string corpo = request.Content == null ? "" : await request.Content.ReadAsStringAsync(ct);
-            string percorso = request.RequestUri!.AbsolutePath;
-            Chiamate.Add((request.Method.Method, percorso, corpo));
-
-            if (percorso.EndsWith("/api/auth/login")) return Json(LoginOk);
-            if (percorso.EndsWith("/api/sync/status")) return Json(StatoOk);
-            if (request.Method == HttpMethod.Get && percorso.EndsWith("/api/sync/employees"))
-                return Ok(Dipendenti);
-            if (request.Method == HttpMethod.Put && percorso.EndsWith("/api/sync/employees"))
-                return Ok(Esiti(JsonSerializer.Deserialize<List<SyncEmployeeDto>>(corpo, RisorseSyncClient.JsonOptions)!,
-                    d => d.Id, d => DaSaltare.Contains(d.LastName)));
-            if (request.Method == HttpMethod.Put && percorso.EndsWith("/api/sync/departments"))
-            {
-                SyncDepartmentsRequest r = JsonSerializer.Deserialize<SyncDepartmentsRequest>(corpo, RisorseSyncClient.JsonOptions)!;
-                int creati = 0, aggiornati = 0, invariati = 0;
-                foreach (SyncDepartmentDto d in r.Departments)
-                {
-                    string firma = $"{d.Name}|{d.SortOrder}|{d.IsActive}";
-                    if (!_reparti.TryGetValue(d.Code, out string? prima)) creati++;
-                    else if (prima != firma) aggiornati++;
-                    else invariati++;
-                    _reparti[d.Code] = firma;
-                }
-                return Ok(new SyncCountsDto { Created = creati, Updated = aggiornati, Unchanged = invariati, Links = r.Links.Count });
-            }
-            if (request.Method == HttpMethod.Put && percorso.EndsWith("/api/sync/projects"))
-                return Ok(Esiti(JsonSerializer.Deserialize<List<SyncProjectDto>>(corpo, RisorseSyncClient.JsonOptions)!,
-                    p => p.Id, _ => false));
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        }
-
-        private List<SyncUpsertResultDto> Esiti<T>(List<T> righe, Func<T, int?> id, Func<T, bool> salta)
-        {
-            var esiti = new List<SyncUpsertResultDto>();
-            for (int i = 0; i < righe.Count; i++)
-            {
-                if (salta(righe[i]))
-                    esiti.Add(new SyncUpsertResultDto { Index = i, Action = "skipped", Error = "EmployeeId inesistente" });
-                else if (id(righe[i]) is int esistente)
-                    esiti.Add(new SyncUpsertResultDto { Index = i, Id = esistente, Action = "updated" });
-                else
-                    esiti.Add(new SyncUpsertResultDto { Index = i, Id = _prossimoId++, Action = "created" });
-            }
-            return esiti;
-        }
-
-        private static HttpResponseMessage Ok<T>(T data) =>
-            Json(JsonSerializer.Serialize(ApiResponse<T>.Ok(data), RisorseSyncClient.JsonOptions));
-
-        private static HttpResponseMessage Json(string corpo) =>
-            new(HttpStatusCode.OK) { Content = new StringContent(corpo, Encoding.UTF8, "application/json") };
     }
 }

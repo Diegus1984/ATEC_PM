@@ -130,8 +130,10 @@ solo dopo):
 | `synced_at` | quando |
 
 L'impronta di un'allocazione = dipendente (**mappato**), tipo, data inizio, data fine, commessa
-(**mappata**), descrizione. `updated_by` viaggia mappato attraverso `EMPLOYEE` (VPS 36 → PM 38, ecc.)
-e diventa `null` se non abbinabile.
+(**mappata**), descrizione (tagliata a 500 caratteri, il limite della colonna in PM, prima di
+calcolarla). `updated_by` e `updated_at` non entrano nell'impronta: sono audit, servono solo a
+decidere i conflitti. `updated_by` viaggia mappato attraverso `EMPLOYEE` (VPS 36 → PM 38, ecc.) e
+diventa `null` se non abbinabile.
 
 ### 4.3 Regole di merge delle allocazioni
 
@@ -144,7 +146,12 @@ e diventa `null` se non abbinabile.
 | impronta ≠ `synced_hash` su **un lato solo** | copia da quel lato all'altro |
 | cambiata **su entrambi** | vince l'`updated_at` più recente, **normalizzato in UTC** (PM è ora locale, VPS è UTC); se un lato non ha `updated_at` vince l'altro; riga `CONFLITTO` nel log |
 | cancellata da una parte e modificata dall'altra | **la cancellazione vince** (riga nel log) |
-| dipendente non mappato | riga **saltata** e segnalata, mai cancellata |
+| dipendente non mappato (da un lato o dall'altro) | riga **saltata** e segnalata, mai cancellata, mai creata |
+| commessa non mappata (riga PM su una commessa che il VPS non ha, o riga VPS su una commessa che PM non conosce) | riga **saltata** e segnalata; riparte da sola quando la Fase 1 mappa la commessa (mai azzerare la commessa in silenzio) |
+| dipendente **cancellato** in PM (raro: di norma è TERMINATED) | le sue allocazioni sul VPS **restano** (segnalate come «dipendente non mappato»); le coppie orfane escono dalla mappa |
+| scrittura in PM | `UPDATE`/`DELETE` solo se `updated_at` è ancora quello letto a inizio giro; altrimenti la riga si rimanda al giro dopo (l'utente che ha salvato nel frattempo non perde niente). Un conflitto si conta e si racconta («vince …») solo quando la scrittura è avvenuta davvero, su entrambi i versi |
+| il VPS risponde **0 allocazioni** con ≥ 10 coppie mappate, oppure più di metà delle coppie sparite (minimo 10) | **freno**: il giro si ferma con errore visibile, niente cancellazioni di massa in PM; solo «Sincronizza adesso» dal pannello procede (l'operatore ha guardato) |
+| riga MySQL rifiutata (dato fuori misura, vincolo) | solo quella riga viene saltata e segnalata (SAVEPOINT), il resto del giro passa |
 
 Niente eco: dopo l'applicazione i due lati hanno la stessa impronta, il giro successivo non fa nulla;
 l'evento hub che il VPS manda per le scritture del motore innesca solo un giro vuoto.
@@ -192,7 +199,7 @@ l'esito (le righe sono già scritte: rispondere «errore» farebbe duplicare al 
 |---|---|---|
 | **0 — Preparazione** ✅ **fatta il 02/09/2026** | VPS: `SyncController` + DTO del contratto, ruolo `SYNC`, account `sync.pm` dalla sezione `Sync` dell'appsettings di produzione (password solo lì), regole del planner condivise in `PlannerRules`, guardia sulla chiave JWT di sviluppo; **pubblicato alle 13:24**. PM: migrazione M119, `Services/RisorseSync/` (impostazioni DPAPI, client HTTP, motore con i tre inneschi che in Fase 0 fa solo login + stato), 5 endpoint `sync/*`, scheda «Sincronizzazione ATEC Risorse (VPS)» in Digest Email, 37 test; committato, **non ancora deployato** | VPS: login `sync.pm` dal PC, `GET /api/sync/status` → 39 dipendenti / 182 allocazioni / 2 commesse / 13 reparti, `GET /api/sync/assignments` → 182 righe con date `yyyy-MM-dd` e UTC con la Z, `/api/users` negato al ruolo SYNC (403); prova funzionale locale di tutti gli endpoint (created / unchanged / updated / skipped / deleted, account di sistema protetti); PM: build 0 errori, 530 test verdi, web `tsc -b` + eslint puliti |
 | **1 — Anagrafiche PM → VPS + seme mappa** ✅ **fatta il 02/09/2026** | `RisorseSyncMap` + `AnagraficheSync` (logica pura: normalizzazione, abbinamento username → nome+cognome → cognome+token del nome solo se unico, impronte senza credenziali) + `SyncAnagraficheAsync` (seme, invio delle sole righe cambiate, invio completo ogni 24 h, credenziali solo ai nuovi, esterni e wildcard esclusi, righe rifiutate ricordate); VPS: `GET employees/projects/departments` **pubblicati alle 15:19**; PM committato, non deployato | 61 test nel filtro Risorse, suite 556 verdi; **prova end-to-end** su una copia del DB di produzione del VPS con il motore PM in locale: 27 abbinati (PM 38 → VPS 36 Abatangelo per nome, Obreja per token), 0 doppioni, 15 commesse create, MEC rinominato, legami MAG/MAN del VPS intatti, un solo eco dall'hub, timer silenzioso. 🪤 Il DB di **sviluppo** di PM aveva «Larganà»/«Qualità» in mojibake (`├á`): ripulito; la produzione è corretta (verificata in esadecimale) |
-| **2 — Allocazioni bidirezionali in tempo reale** | motore completo, regole di merge come **funzioni pure con test**, i tre inneschi, `Trigger` nel controller, hub PM notificato; fix HR (§8) | due browser (PM e VPS): crea/sposta/cancella da un lato → dall'altro entro ~2 s; VPS staccato → modifiche in PM accodate → riacceso → allineate; HR approva una ferie → compare sul VPS |
+| **2 — Allocazioni bidirezionali in tempo reale** ✅ **fatta il 02/09/2026** | `AllocazioniSync` (logica pura: impronta senza audit, `Decidi` = tabella §4.3, abbinamento per contenuto, fusi Europe/Rome) + `SyncAllocazioniAsync` (una POST per creazioni+aggiornamenti, una per autore per le cancellazioni con l'autore da `res_notify_pending`, poi una transazione MySQL con guardia di concorrenza e SAVEPOINT per riga, mappa, hub PM notificato dopo il commit); freni anti-cancellazione di massa; fix HR in sovrapposizione con `updated_at`; 596 test in tutto (93 nel modulo). PM committato, **non deployato** | **Prova end-to-end** (VPS locale su copia del DB di produzione + motore PM locale): 182 righe copiate in PM con dipendente e commessa tradotti e `updated_at` in ora locale (12:11 UTC → 14:11); creazione in PM → sul VPS al timer, creazione sul VPS → in PM in 1 s via hub; conflitto → vince la modifica più recente (1 conflitto nel registro); cancellazione in PM → VPS con `made_by`, cancellazione sul VPS → PM; ferie senza autore come le scrive HR → VPS; alla fine 183 = 183, timer silenzioso, nessun errore |
 | **3 — Stato e avvisi** | `GET /api/resource-planner/sync/status`, `POST …/sync/run-now`; riquadro nella pagina **Digest Email** (ultimo giro, righe allineate, conflitti, VPS raggiungibile); avviso nel planner se il VPS non risponde da > 10 min; `GUIDA-SERVER-LAN.md` + memoria aggiornate | a vista |
 
 Deploy: il VPS con `aggiorna-server-online.bat` (2–3 min, ~5 s di fermo, l'`appsettings.json` di
