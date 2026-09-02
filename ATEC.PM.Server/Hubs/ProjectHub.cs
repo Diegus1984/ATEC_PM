@@ -50,6 +50,11 @@ public class ProjectHub : Hub
     // commessa, così il badge si aggiorna anche se non sei dentro quella commessa.
     public const string ChatInboxGroup = "chat-inbox-all";
 
+    // Gruppo globale PRESENZE (modulo HR): cartellino, calendario, quadratura, cronologia email
+    // e richieste di assenza ricevono HrChanged per ogni modifica — import da Ecos (anche
+    // quello automatico), rettifiche, solleciti, causali, richieste, mappatura, credenziali.
+    public const string HrGroup = "hr-all";
+
     public static string ProjectGroup(int projectId) => $"project-{projectId}";
 
     // Gruppo PERSONALE dei permessi: uno per dipendente. Quando i permessi di quella persona
@@ -117,6 +122,10 @@ public class ProjectHub : Hub
     public Task JoinCostSections() => Groups.AddToGroupAsync(Context.ConnectionId, CostSectionsGroup);
 
     public Task LeaveCostSections() => Groups.RemoveFromGroupAsync(Context.ConnectionId, CostSectionsGroup);
+
+    public Task JoinHr() => Groups.AddToGroupAsync(Context.ConnectionId, HrGroup);
+
+    public Task LeaveHr() => Groups.RemoveFromGroupAsync(Context.ConnectionId, HrGroup);
 
     public Task JoinChatInbox() => Groups.AddToGroupAsync(Context.ConnectionId, ChatInboxGroup);
 

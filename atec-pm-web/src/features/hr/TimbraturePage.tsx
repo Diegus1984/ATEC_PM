@@ -43,6 +43,7 @@ import {
 } from "@/lib/api/hr"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { formatDateShort, formatDateTimeShort } from "@/lib/date-iso"
+import { useHrHub } from "@/lib/signalr/use-hr-hub"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
@@ -278,6 +279,23 @@ export function TimbraturePage() {
     void queryClient.invalidateQueries({ queryKey: ["hr-reminder-log"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-day-reminder"] })
   }
+
+  // Real-time (gruppo hr-all): ogni modifica fatta da altri — o dall'import automatico —
+  // ricarica le viste aperte. Durante un import arrivano solo gli avanzamenti: si rilegge
+  // lo stato (la barra del dialogo) e basta, il cartellino si rilegge a import finito.
+  useHrHub(true, (change) => {
+    if (change.action === "import-progress") {
+      void queryClient.invalidateQueries({ queryKey: ["hr-status"] })
+      return
+    }
+    invalidate()
+    void queryClient.invalidateQueries({ queryKey: ["hr-giustifica"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-mapping"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-absences"] })
+    if (change.action === "settings") {
+      void queryClient.invalidateQueries({ queryKey: ["hr-ecos-settings"] })
+    }
+  })
 
   const cartellino = cartellinoQuery.data
   const stato = statoQuery.data

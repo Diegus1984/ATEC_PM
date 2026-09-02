@@ -18,14 +18,19 @@ public class HrController : ControllerBase
     private readonly EcosClient _ecos;
     private readonly FeatureAccessService _access;
     private readonly EmailService _email;
+    // Real-time: ogni modifica riuscita manda «HrChanged» alle pagine presenze aperte
+    // (gruppo hr-all su /hubs/project). L'import lo notifica il servizio da sé.
+    private readonly HrChangeNotifier _realtime;
 
     public HrController(
-        HrAttendanceService attendance, EcosClient ecos, FeatureAccessService access, EmailService email)
+        HrAttendanceService attendance, EcosClient ecos, FeatureAccessService access, EmailService email,
+        HrChangeNotifier realtime)
     {
         _attendance = attendance;
         _ecos = ecos;
         _access = access;
         _email = email;
+        _realtime = realtime;
     }
 
     private int MeId
@@ -162,6 +167,7 @@ public class HrController : ControllerBase
         _attendance.MarkDayReminder(
             req.EmployeeId, req.Date, sollecito.Email, sollecito.Subject, sollecito.Body,
             MeId, mailto ? "MAILTO" : "SMTP");
+        _realtime.Notify("reminder", req.EmployeeId, req.Date);
 
         return Ok(ApiResponse<bool>.Ok(true, mailto
             ? "Sollecito aperto nel client di posta e registrato."
@@ -237,6 +243,7 @@ public class HrController : ControllerBase
         if (req.EmployeeId <= 0) return Ok(ApiResponse<bool>.Fail("Dipendente non indicato."));
 
         string? errore = _attendance.SaveGiustifica(req, MeId);
+        if (errore == null) _realtime.Notify("giustifica", req.EmployeeId, req.Date);
         return Ok(errore == null
             ? ApiResponse<bool>.Ok(true, string.IsNullOrWhiteSpace(req.Causale)
                 ? "Causale rimossa"
@@ -273,6 +280,7 @@ public class HrController : ControllerBase
         try
         {
             _ecos.SalvaCredenziali(dto);
+            _realtime.Notify("settings");
             return Ok(ApiResponse<HrEcosSettingsDto>.Ok(
                 _ecos.LeggiCredenziali(), "Credenziali Ecos salvate."));
         }
@@ -375,7 +383,10 @@ public class HrController : ControllerBase
         }
 
         if (inviati.Count > 0)
+        {
             _attendance.MarkReminders(year, month, inviati, MeId, "SMTP");
+            _realtime.Notify("reminder");
+        }
 
         esito.Message = esito.Sent == 0 && esito.WithoutEmail.Count == 0 && esito.Failed == 0
             ? "Nessun sollecito da inviare."
@@ -412,6 +423,7 @@ public class HrController : ControllerBase
             .ToList();
 
         _attendance.MarkReminders(request.Year, request.Month, daSegnare, MeId, "MAILTO");
+        _realtime.Notify("reminder");
         return Ok(ApiResponse<bool>.Ok(true, $"Registrati {daSegnare.Count} solleciti."));
     }
 
@@ -583,6 +595,7 @@ public class HrController : ControllerBase
                 ApiResponse<string>.Fail("La modifica della mappatura richiede la scrittura su Timbrature."));
 
         string? error = _attendance.UpdateEcosMapping(employeeId, req.EcosEmplCode);
+        if (error == null) _realtime.Notify("mapping", employeeId);
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, "Mappatura aggiornata")
             : ApiResponse<bool>.Fail(error));
@@ -598,6 +611,7 @@ public class HrController : ControllerBase
                 ApiResponse<string>.Fail("L'inserimento di rettifiche richiede la scrittura su Timbrature."));
 
         string? error = _attendance.AddAdjustment(req, MeId);
+        if (error == null) _realtime.Notify("adjustment", req.EmployeeId, req.PunchedAt.Date);
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, "Rettifica registrata")
             : ApiResponse<bool>.Fail(error));
@@ -611,6 +625,7 @@ public class HrController : ControllerBase
                 ApiResponse<string>.Fail("L'eliminazione di rettifiche richiede la scrittura su Timbrature."));
 
         string? error = _attendance.DeleteAdjustment(id, MeId);
+        if (error == null) _realtime.Notify("adjustment");
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, "Rettifica eliminata")
             : ApiResponse<bool>.Fail(error));
@@ -634,6 +649,7 @@ public class HrController : ControllerBase
     {
         bool isManagerOrAdmin = CanManageRichieste || IsAdmin;
         var (id, error) = _attendance.CreateAbsenceRequest(req, MeId, isManagerOrAdmin);
+        if (error == null) _realtime.Notify("absence", req.EmployeeId);
         return Ok(error == null
             ? ApiResponse<int>.Ok(id ?? 0, "Richiesta inserita con successo")
             : ApiResponse<int>.Fail(error));
@@ -644,6 +660,7 @@ public class HrController : ControllerBase
     {
         bool isManagerOrAdmin = CanManageRichieste || IsAdmin;
         string? error = _attendance.ApproveAbsenceRequest(id, req.Approved, req.RejectionReason, MeId, isManagerOrAdmin);
+        if (error == null) _realtime.Notify("absence");
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, req.Approved ? "Richiesta approvata" : "Richiesta rifiutata")
             : ApiResponse<bool>.Fail(error));
@@ -653,6 +670,7 @@ public class HrController : ControllerBase
     public IActionResult CancelAbsence(int id)
     {
         string? error = _attendance.CancelAbsenceRequest(id, MeId, IsAdmin);
+        if (error == null) _realtime.Notify("absence");
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, "Richiesta annullata")
             : ApiResponse<bool>.Fail(error));

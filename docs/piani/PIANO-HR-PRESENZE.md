@@ -439,6 +439,24 @@ dimestichezza col computer, **senza perdere l'ora timbrata**. Com'è ora (`Timbr
   grande, l'ora timbrata sotto, una frase che dice cosa fare e la rettifica già su
   «Uscita» quando manca l'uscita.
 
+**Fatto il 02/09/2026 — tutto il modulo presenze è real-time (SignalR).** Ordine di Diego:
+«tutte le operazioni della sezione HR devono essere SignalR». Pattern canonico del progetto
+(gruppo globale su `/hubs/project`, vedi `docs/HANDOFF-WEB.md`):
+- **Server**: `ProjectHub.HrGroup = "hr-all"` (+ `JoinHr`/`LeaveHr`); `HrChangeNotifier`
+  (singleton, `Services/Hr/`) manda `HrChanged {action, employeeId, date}` al gruppo.
+  `HrController` lo chiama dopo ogni modifica riuscita (sollecito singolo e di massa,
+  causale, credenziali, mappatura, rettifica e sua eliminazione, richiesta di assenza
+  creata/approvata/annullata). `HrAttendanceService` lo riceve come dipendenza opzionale
+  (null nei test) e notifica **da sé**: `import-progress` a ogni fase e `import` a fine
+  import — così anche l'**import automatico delle 12 ore** aggiorna le pagine aperte.
+- **Client**: hook `lib/signalr/use-hr-hub.ts` (JoinHr, debounce 400 ms tranne
+  `import-progress` che passa subito). Montato in `TimbraturePage` (tutte e quattro le
+  schede: cartellino, calendario, quadratura, cronologia — invalida tutte le chiavi `hr-*`;
+  su `import-progress` solo `hr-status`, cioè la barra del dialogo «Aggiorna da Ecos») e
+  in `RichiestePage` (assenze, cartellino, calendario). Alla riconnessione rilegge tutto.
+- Niente self-exclusion né concurrency token: le scritture HR sono append-only (grezzo,
+  rettifiche, solleciti) o a stato (richieste): niente da sovrascrivere in silenzio.
+
 **🔜 Fase 2 — ritorno verso Ecos delle ore arrotondate** (chiesto da Diego il 02/09, da fare
 quando le API in scrittura saranno attive, vedi §5 e [[ecos_api_guida_ufficiale]]):
 colonna «Ecos» con tre stati in parole («Allineato», «Da inviare», «Inviato il gg/mm») e

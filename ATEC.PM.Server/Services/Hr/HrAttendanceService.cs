@@ -32,14 +32,18 @@ public class HrAttendanceService
     private readonly NotificationService _notif;
     private readonly ILogger<HrAttendanceService> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    // Real-time: null nei test (niente hub), pieno in produzione via DI.
+    private readonly HrChangeNotifier? _realtime;
 
     public HrAttendanceService(
-        DbService db, EcosClient ecos, NotificationService notif, ILogger<HrAttendanceService> logger)
+        DbService db, EcosClient ecos, NotificationService notif, ILogger<HrAttendanceService> logger,
+        HrChangeNotifier? realtime = null)
     {
         _db = db;
         _ecos = ecos;
         _notif = notif;
         _logger = logger;
+        _realtime = realtime;
     }
 
     public HrAttendanceService(
@@ -108,6 +112,8 @@ public class HrAttendanceService
             _progresso.Percent = percento;
             AggiungiRiga(fase);
         }
+        // Chi ha aperto «Aggiorna da Ecos» vede la barra muoversi senza aspettare il polling.
+        _realtime?.Notify("import-progress");
     }
 
     private void ProgressoLog(string riga)
@@ -131,6 +137,9 @@ public class HrAttendanceService
             }
             AggiungiRiga(riga);
         }
+        // Fine import (riuscito o no, anche quello automatico delle 12 ore): le pagine
+        // presenze aperte rileggono cartellino, calendario, quadratura e stato.
+        _realtime?.Notify("import");
     }
 
     /// <summary>Da chiamare già dentro il lock: tiene le ultime 200 righe, come il txtLog.</summary>

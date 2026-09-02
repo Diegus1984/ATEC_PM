@@ -379,3 +379,11 @@ export interface HrReminderLog {
   month: number
   rows: HrReminderLogRow[]
 }
+
+/** Evento real-time «HrChanged» (gruppo hr-all su /hubs/project). */
+export interface HrChange {
+  /** import-progress · import · adjustment · reminder · giustifica · absence · mapping · settings */
+  action: string
+  employeeId: number | null
+  date: string | null
+}

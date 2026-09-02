@@ -34,6 +34,7 @@ import {
 import type { HrAbsence } from "@/lib/api/types"
 import { canWriteFeature } from "@/lib/auth/permissions"
 import { formatDateShort } from "@/lib/date-iso"
+import { useHrHub } from "@/lib/signalr/use-hr-hub"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
@@ -176,6 +177,12 @@ export function RichiestePage() {
     void queryClient.invalidateQueries({ queryKey: ["hr-timesheet"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-calendar"] })
   }
+
+  // Real-time: una richiesta inserita, approvata o annullata da un altro utente (o un
+  // import di assenze da Ecos) ricarica la lista senza aspettare il refresh.
+  useHrHub(true, (change) => {
+    if (change.action !== "import-progress") invalidate()
+  })
 
   const approvaMutation = useMutation({
     mutationFn: ({ id, approved, reason }: { id: number; approved: boolean; reason?: string }) =>

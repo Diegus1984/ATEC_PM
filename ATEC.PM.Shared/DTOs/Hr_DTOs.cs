@@ -601,3 +601,16 @@ public class HrReminderLogDto
     public int Month { get; set; }
     public List<HrReminderLogRowDto> Rows { get; set; } = new();
 }
+
+/// <summary>
+/// Evento real-time «HrChanged» (gruppo <c>hr-all</c> su /hubs/project): qualcosa del modulo
+/// presenze è cambiato — import da Ecos, rettifica, sollecito, causale, richiesta di assenza,
+/// mappatura, credenziali. I client rileggono; il payload dice solo cosa e, se ha senso, per chi.
+/// </summary>
+public class HrChange
+{
+    /// <summary>import-progress · import · adjustment · reminder · giustifica · absence · mapping · settings</summary>
+    public string Action { get; set; } = "";
+    public int? EmployeeId { get; set; }
+    public DateTime? Date { get; set; }
+}
