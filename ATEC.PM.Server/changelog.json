@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260903-0935",
+                     "data":  "2026-09-03T09:35:44",
+                     "hash":  "4a7f5dc4720d28c019276796af4027bb947da574",
+                     "modifiche":  [
+                                       "Menu laterale: voce attiva in azzurrino (token sidebar-active), distinta dal grigio dei titoli di sezione"
+                                   ]
+                 },
+                 {
                      "build":  "20260903-0932",
                      "data":  "2026-09-03T09:32:32",
                      "hash":  "ba4cea3a7c59de54ca82b9d8f14d65d4fd88b151",
