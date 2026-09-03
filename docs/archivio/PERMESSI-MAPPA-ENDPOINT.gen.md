@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 02/09/2026 17:16.
+> Fotografia del 03/09/2026 08:46.
 
 ## Chiavi con endpoint
 
@@ -625,6 +625,7 @@
 - `GET /api/resource-planner/lookups/resources` (ResourcesController.GetResourceLookups)
 - `GET /api/resource-planner/others` (ResourcesController.GetOthers)
 - `GET /api/resource-planner/services` (ResourcesController.GetServices)
+- `GET /api/resource-planner/sync/salute` (ResourcesController.GetSyncSalute)
 
 ### `nav.sal` — SAL / Fatturazione
 - `DELETE /api/sal/conditions/{id}` (SalController.DeleteCondition)

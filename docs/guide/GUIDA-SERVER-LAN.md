@@ -291,7 +291,14 @@ nella sezione `RisorseSync` e `Restart-Service AtecPmServer`. Spento, i due prog
 funzionare da soli e si riallineano alla riaccensione (confronto completo, niente da perdere).
 
 **Se il VPS non risponde**: il motore riprova ogni 60 s e lo scrive nel registro; le modifiche fatte
-in PM restano in attesa e partono al primo giro buono. Un VPS che risponde con **zero allocazioni**
+in PM restano in attesa e partono al primo giro buono. **Dopo 10 minuti senza un giro riuscito il
+planner Risorse mostra a tutti una barra ambra** («ATEC Risorse (VPS) non risponde da N minuti»,
+con l'ultimo scambio riuscito e il dettaglio dell'errore; sparisce da sola al primo giro buono).
+Un servizio appena riavviato ha i suoi 10 minuti prima che la barra compaia.
+
+**Campanella (dal 03/09/2026)**: le allocazioni create, modificate o tolte nel planner — da ATEC PM o
+dal programma sul VPS — arrivano nelle notifiche a campanella del dipendente assegnato (mai a chi fa
+la modifica); il clic apre il planner sulla riga e sul periodo giusti. Un VPS che risponde con **zero allocazioni**
 o con più di metà delle righe sparite **ferma il motore** (protezione contro le cancellazioni di
 massa): si guarda cos'è successo e si riparte con «Sincronizza adesso».
 
