@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260903-0932",
+                     "data":  "2026-09-03T09:32:32",
+                     "hash":  "ba4cea3a7c59de54ca82b9d8f14d65d4fd88b151",
+                     "modifiche":  [
+                                       "Menu laterale: titoli di sezione in maiuscoletto con freccia a sinistra e riquadro grigio leggero (variante A1 scelta da Diego)"
+                                   ]
+                 },
+                 {
                      "build":  "20260903-0849",
                      "data":  "2026-09-03T08:50:05",
                      "hash":  "4f22c6cecc86cbf984a0b4b2891745dccf3d1ee7",
