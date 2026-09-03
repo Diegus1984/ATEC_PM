@@ -34,6 +34,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -87,6 +89,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-active: oklch(0.955 0.03 245);
+  --sidebar-active-foreground: oklch(0.45 0.16 258);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -230,6 +234,16 @@
    finito lì e non c'era niente da trascinare (segnalazione #59). Barra sottile,
    stesso aspetto di quella delle griglie. Le regole stanno FUORI da `@layer`,
    così vincono su `no-scrollbar` che Tailwind mette nel layer `utilities`. */
+/* Voce attiva del menu laterale in azzurrino (scelta di Diego, 03/09/2026): i titoli di
+   sezione hanno preso il grigio di shadcn e la voce attiva, grigia anche lei, non si
+   distingueva più. Fuori da @layer, come .scrollbar-visible: le utility di Tailwind stanno
+   in un layer e una regola senza layer vince sempre, hover compreso. */
+[data-sidebar="menu-button"][data-active="true"],
+[data-sidebar="menu-sub-button"][data-active="true"] {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-active-foreground);
+}
+
 .scrollbar-visible {
   scrollbar-width: thin;
   -ms-overflow-style: auto;
@@ -283,6 +297,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-active: oklch(0.32 0.07 262);
+  --sidebar-active-foreground: oklch(0.88 0.06 262);
 }
 
 /* #142 — riga «grezzo da associare» nella DDP Commerciale: bordo interno ambra che
