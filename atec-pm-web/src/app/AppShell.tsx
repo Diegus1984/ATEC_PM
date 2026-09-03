@@ -469,28 +469,36 @@ export function AppShell() {
                 key={group.id}
                 className={group.pinBottom ? "mt-auto" : undefined}
               >
-                <SidebarGroupLabel asChild>
+                {/* Titolo di sezione (scelta di Diego, 03/09/2026 — variante «A1»): maiuscoletto
+                    spaziato, colore pieno, freccia A SINISTRA e riquadro grigio leggero. Così
+                    si distingue a colpo d'occhio da una voce (icona + testo) e da una voce con
+                    sottomenu (freccia a destra). Le classi che cambiano dimensione e colore
+                    stanno su SidebarGroupLabel, che le fonde con le sue di base via twMerge:
+                    messe sul bottone si sommerebbero a `text-xs` e `text-sidebar-foreground/70`
+                    senza vincere. */}
+                <SidebarGroupLabel
+                  asChild
+                  className="bg-sidebar-accent/70 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                >
                   <button
                     type="button"
                     onClick={() => toggleGroupCollapse(group.id)}
-                    className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground select-none group-data-[collapsible=icon]:pointer-events-none"
+                    className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 transition-colors select-none group-data-[collapsible=icon]:pointer-events-none"
                     aria-expanded={isGroupOpen}
                   >
+                    <ChevronDown
+                      className={cn(
+                        "size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200",
+                        !isGroupOpen && "-rotate-90"
+                      )}
+                      aria-hidden="true"
+                    />
                     <span className="truncate">{group.label}</span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {!isGroupOpen && groupBadgeCount > 0 ? (
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1.5 font-mono text-[10px] font-semibold tabular-nums text-destructive-foreground">
-                          {groupBadgeCount}
-                        </span>
-                      ) : null}
-                      <ChevronDown
-                        className={cn(
-                          "size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
-                          !isGroupOpen && "-rotate-90"
-                        )}
-                        aria-hidden="true"
-                      />
-                    </div>
+                    {!isGroupOpen && groupBadgeCount > 0 ? (
+                      <span className="ml-auto flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-destructive px-1.5 font-mono text-[10px] font-semibold normal-case tracking-normal tabular-nums text-destructive-foreground">
+                        {groupBadgeCount}
+                      </span>
+                    ) : null}
                   </button>
                 </SidebarGroupLabel>
                 <Collapsible
