@@ -2,6 +2,7 @@ import { apiGet, apiPost, apiPut, unwrapApi } from "@/lib/api/client"
 import type {
   ApiResponse,
   RisorseSyncLogEntry,
+  RisorseSyncSaluteDto,
   RisorseSyncSettingsDto,
   RisorseSyncStatusDto,
   SyncStatusDto,
@@ -34,6 +35,12 @@ export async function testSync(): Promise<SyncStatusDto> {
 
 export async function fetchSyncStatus(): Promise<RisorseSyncStatusDto> {
   const response = await apiGet<ApiResponse<RisorseSyncStatusDto>>(`${BASE}/status`)
+  return unwrapApi(response)
+}
+
+/** La salute del collegamento per l'avviso nel planner (#147): chiave della pagina, non admin. */
+export async function fetchSyncSalute(): Promise<RisorseSyncSaluteDto> {
+  const response = await apiGet<ApiResponse<RisorseSyncSaluteDto>>(`${BASE}/salute`)
   return unwrapApi(response)
 }
 

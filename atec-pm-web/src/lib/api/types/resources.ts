@@ -142,3 +142,14 @@ export interface SyncStatusDto {
   assignments: number
   version: string
 }
+
+/** GET sync/salute — l'avviso nel planner (#147): il collegamento col VPS funziona? */
+export interface RisorseSyncSaluteDto {
+  attiva: boolean
+  /** Sincronizzazione attiva ma nessun giro riuscito da oltre 10 minuti. */
+  vpsNonRisponde: boolean
+  /** Ultimo giro riuscito, ISO datetime UTC; null se dall'avvio non ce n'è stato uno. */
+  ultimoGiroOkUtc?: string | null
+  minutiSenzaRisposta: number
+  errore?: string | null
+}

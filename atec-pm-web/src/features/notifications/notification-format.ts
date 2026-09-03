@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   AlertTriangle,
+  CalendarRange,
   CheckCircle2,
   Clock,
   Info,
@@ -30,6 +31,13 @@ export function severityStyle(
   severity: string,
   notificationType?: string
 ): SeverityStyle {
+  // Allocazioni del planner Risorse (#148): calendario; ambra se è una rimozione (WARNING).
+  if (notificationType && notificationType.toUpperCase() === "RES_ASSIGNMENT") {
+    return (severity || "").toUpperCase() === "WARNING"
+      ? { icon: CalendarRange, className: "text-amber-500" }
+      : { icon: CalendarRange, className: "text-primary" }
+  }
+
   // Notifiche di scadenza (CHECKLIST_DUE / MOM_DUE / PROJECT_DUE): icona orologio,
   // rosso se scaduta (ALARM), giallo se in scadenza (WARNING).
   if (notificationType && notificationType.toUpperCase().endsWith("_DUE")) {

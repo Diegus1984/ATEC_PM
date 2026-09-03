@@ -257,6 +257,8 @@ builder.Services.AddSingleton<ResourcesDbService>();
 builder.Services.AddSingleton<UserPresenceService>();
 builder.Services.AddSingleton<QuotePdfService>();
 builder.Services.AddSingleton<NotificationService>();
+// Campanella del planner Risorse (#148): dipende da DbService e NotificationService, mai dal motore di sync.
+builder.Services.AddSingleton<AllocazioniCampanella>();
 builder.Services.AddSingleton<ProjectTemplateCopyService>();
 builder.Services.AddSingleton<CodexGeneratorService>();
 builder.Services.AddSingleton<EmailService>();

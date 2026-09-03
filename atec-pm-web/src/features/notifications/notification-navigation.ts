@@ -36,6 +36,14 @@ export function getNotificationHref(
   const type = (notification.notificationType || "").toUpperCase()
   const ref = (notification.referenceType || "").toUpperCase()
 
+  // Allocazioni del planner Risorse (#148): il planner, sulla riga e sul periodo giusti —
+  // anche quando la notifica porta una commessa (la pagina è il planner, non la commessa).
+  if (ref === "RES_ASSIGNMENT") {
+    return notification.referenceId > 0
+      ? `/risorse?alloc=${notification.referenceId}`
+      : "/risorse"
+  }
+
   if (!notification.projectId) {
     if (type === "TIMESHEET_ANOMALY") {
       return "/timesheet"

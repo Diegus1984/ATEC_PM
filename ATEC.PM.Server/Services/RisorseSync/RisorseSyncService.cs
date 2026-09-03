@@ -73,6 +73,12 @@ public sealed class RisorseSyncService : BackgroundService
     /// modifiche accumulate. Null nei test che non lo provano (nessun allineamento).
     /// </summary>
     private readonly PlanNotificationService? _notify;
+    /// <summary>
+    /// La campanella del planner (#148): il dipendente viene avvisato delle allocazioni che il
+    /// motore scrive in PM perché nate, cambiate o sparite sul VPS, con l'autore tradotto. Null
+    /// nei test che non la provano.
+    /// </summary>
+    private readonly AllocazioniCampanella? _campanella;
     /// <summary>La foto del piano è già stata allineata almeno una volta da quando il servizio è partito.</summary>
     private bool _fotoAllineata;
 
@@ -108,6 +114,12 @@ public sealed class RisorseSyncService : BackgroundService
     public bool HubConnected => _hub?.State == HubConnectionState.Connected;
     public DateTime? LastRun { get; private set; }
     public string? LastError { get; private set; }
+    /// <summary>Ultimo giro riuscito (UTC): la base dell'avviso nel planner (#147, <see cref="GetSalute"/>).</summary>
+    public DateTime? LastOkUtc { get; private set; }
+    /// <summary>Quando è partito il loop (UTC): prima nessun giro poteva riuscire, l'avviso tace. Null = loop mai partito (Services:RisorseSync spento).</summary>
+    private DateTime? _avvioLoopUtc;
+    /// <summary>Oltre questo tempo senza un giro riuscito il planner mostra «ATEC Risorse (VPS) non risponde» (#147).</summary>
+    public static readonly TimeSpan SogliaVpsMuto = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Il costruttore della DI. <paramref name="notify"/> è il digest di PM (singleton registrato
@@ -115,20 +127,21 @@ public sealed class RisorseSyncService : BackgroundService
     /// niente cicli).
     /// </summary>
     public RisorseSyncService(ResourcesDbService rdb, IConfiguration config, ILogger<RisorseSyncService> logger,
-        PlanNotificationService notify, IHubContext<ResourcePlannerHub>? hubPm = null)
-        : this(rdb, config, logger, null, hubPm, notify)
+        PlanNotificationService notify, IHubContext<ResourcePlannerHub>? hubPm = null, AllocazioniCampanella? campanella = null)
+        : this(rdb, config, logger, null, hubPm, notify, campanella)
     {
     }
 
     /// <summary>Per i test: stesso motore, ma le chiamate HTTP passano dall'<paramref name="http"/> dato (handler finto), l'hub di PM può mancare e senza <paramref name="notify"/> la foto del piano non si tocca.</summary>
     internal RisorseSyncService(ResourcesDbService rdb, IConfiguration config, ILogger<RisorseSyncService> logger, HttpClient? http,
-        IHubContext<ResourcePlannerHub>? hubPm = null, PlanNotificationService? notify = null)
+        IHubContext<ResourcePlannerHub>? hubPm = null, PlanNotificationService? notify = null, AllocazioniCampanella? campanella = null)
     {
         _rdb = rdb;
         _logger = logger;
         _http = http;
         _hubPm = hubPm;
         _notify = notify;
+        _campanella = campanella;
         _store = new RisorseSyncSettingsStore(rdb, config, logger);
     }
 
@@ -241,11 +254,46 @@ public sealed class RisorseSyncService : BackgroundService
             ? utc
             : null;
 
+    /// <summary>
+    /// La salute del collegamento per l'avviso nel planner (#147). L'ultimo giro riuscito è
+    /// quello in memoria; dopo un riavvio del servizio, finché non ne passa uno, vale l'esito
+    /// persistito in res_settings se era «ok» — ma mai più indietro dell'avvio del loop (vedi
+    /// <see cref="ValutaSalute"/>).
+    /// </summary>
+    public RisorseSyncSaluteDto GetSalute()
+    {
+        RisorseSyncSettings s = _store.Leggi();
+        DateTime? ultimoOk = LastOkUtc
+            ?? (string.Equals(s.LastEsito, "ok", StringComparison.OrdinalIgnoreCase) ? ParseLastRun(s.LastRun) : null);
+        return ValutaSalute(s.IsConfigured, _avvioLoopUtc, ultimoOk, LastError ?? s.LastError, DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// La regola pura dell'avviso: sincronizzazione attiva, loop partito, e nessun giro riuscito
+    /// da almeno <see cref="SogliaVpsMuto"/>. Il tempo si conta dal più recente fra l'ultimo giro
+    /// riuscito e l'avvio del loop: un «ok» vecchio di giorni, prima di un riavvio, non deve far
+    /// scattare l'avviso al primo secondo, e un servizio appena partito ha diritto ai suoi 10 minuti.
+    /// <c>LastRun</c> non c'entra: si aggiorna anche a giro fallito, quindi con un VPS muto
+    /// sarebbe sempre «un minuto fa».
+    /// </summary>
+    internal static RisorseSyncSaluteDto ValutaSalute(bool attiva, DateTime? avvioLoopUtc, DateTime? ultimoOkUtc, string? errore, DateTime adessoUtc)
+    {
+        var salute = new RisorseSyncSaluteDto { Attiva = attiva, UltimoGiroOkUtc = ultimoOkUtc, Errore = errore };
+        if (!attiva || avvioLoopUtc is not DateTime avvio) return salute;
+        DateTime riferimento = ultimoOkUtc is DateTime ok && ok > avvio ? ok : avvio;
+        TimeSpan silenzio = adessoUtc - riferimento;
+        if (silenzio < SogliaVpsMuto) return salute;
+        salute.VpsNonRisponde = true;
+        salute.MinutiSenzaRisposta = (int)Math.Floor(silenzio.TotalMinutes);
+        return salute;
+    }
+
     // ── Il loop ──────────────────────────────────────────────────
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         _ctHost = ct;
+        _avvioLoopUtc = DateTime.UtcNow;
         try { await Task.Delay(RitardoIniziale, ct); }
         catch (OperationCanceledException) { return; }
 
@@ -365,6 +413,7 @@ public sealed class RisorseSyncService : BackgroundService
             orologio.Stop();
             voce.DurataMs = (int)Math.Min(orologio.ElapsedMilliseconds, int.MaxValue);
             LastRun = runUtc;
+            if (voce.Esito == "ok") LastOkUtc = runUtc;
             IsSyncing = false;
             // Contatori per le colonne di res_sync_log, da quello che è stato fatto davvero (anche a giro fallito).
             var contatori = new ContatoriGiro(
@@ -826,6 +875,8 @@ public sealed class RisorseSyncService : BackgroundService
         Dictionary<int, int> allVpsPm = AllocazioniSync.Inversa(mappaAll);
         // L'updated_at letto adesso: la guardia di concorrenza delle scritture in PM (passo E).
         Dictionary<int, DateTime?> vistoPm = righePm.ToDictionary(a => a.Id, a => a.UpdatedAt);
+        // Com'erano le righe PM prima del giro: per dire al dipendente cosa è cambiato (#148).
+        Dictionary<int, AllocazionePm> primaPm = righePm.ToDictionary(a => a.Id);
 
         string Etichetta(RigaAlloc r) =>
             $"{(nomi.TryGetValue(r.EmployeeId, out string? nome) && nome.Length > 0 ? nome : "dipendente " + r.EmployeeId)} {AllocazioniSync.Periodo(r)}";
@@ -1063,6 +1114,9 @@ public sealed class RisorseSyncService : BackgroundService
         var creati = new List<int>();
         var aggiornati = new List<int>();
         var cancellati = new List<int>();
+        // I fatti per la campanella (#148): si raccolgono dentro le scritture riuscite e si
+        // raccontano SOLO dopo il commit — un rollback non deve lasciare avvisi fantasma.
+        var eventi = new List<EventoAllocazione>();
         if (creaPm.Count > 0 || aggiornaPm.Count > 0 || cancellaPm.Count > 0 || soloImpronta.Count > 0 || mappeDaTogliere.Count > 0)
         {
             using MySqlConnection c = _rdb.Open();
@@ -1126,6 +1180,7 @@ public sealed class RisorseSyncService : BackgroundService
                     int id = c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()", transaction: tx);
                     RisorseSyncMap.Salva(c, RisorseSyncMap.Assignment, id, idVps, impronta, tx);
                     creati.Add(id);
+                    eventi.Add(new EventoAllocazione("creata", id, PerCampanella(r), null, r.UpdatedBy, "vps"));
                     return true;
                 });
             }
@@ -1147,6 +1202,8 @@ public sealed class RisorseSyncService : BackgroundService
                     if (righe == 0) return false;
                     RisorseSyncMap.Salva(c, RisorseSyncMap.Assignment, idPm, idVps, impronta, tx);
                     aggiornati.Add(idPm);
+                    eventi.Add(new EventoAllocazione("modificata", idPm, PerCampanella(r),
+                        primaPm.TryGetValue(idPm, out AllocazionePm? prima) ? PerCampanella(prima) : null, r.UpdatedBy, "vps"));
                     return true;
                 });
             }
@@ -1170,6 +1227,8 @@ public sealed class RisorseSyncService : BackgroundService
                     if (righe == 0) return false;   // il SAVEPOINT riporta indietro anche la riga del digest
                     RisorseSyncMap.Rimuovi(c, RisorseSyncMap.Assignment, idPm, tx);
                     cancellati.Add(idPm);
+                    // Chi ha cancellato sul VPS non si sa (la riga di là è già sparita): autore nullo.
+                    eventi.Add(new EventoAllocazione("rimossa", idPm, PerCampanella(r), null, null, "vps"));
                     return true;
                 });
             }
@@ -1188,10 +1247,50 @@ public sealed class RisorseSyncService : BackgroundService
             NotificaPlannerPm("create", creati);
             NotificaPlannerPm("update", aggiornati);
             NotificaPlannerPm("delete", cancellati);
+            SegnalaCampanella(eventi);
         }
 
         if (esito.Modifiche > 0)
             _logger.LogInformation("[RisorseSync] Allocazioni ({Innesco}): {Dettaglio}", innesco, esito.Dettaglio());
+    }
+
+    /// <summary>
+    /// Quante notifiche a campanella al massimo da un giro solo (#148): oltre non è il lavoro di
+    /// un collega ma un ripristino o un primo giro (182 righe al go-live), e si tace.
+    /// </summary>
+    private const int SogliaCampanellaMassa = 50;
+
+    private static AllocazioneCampanella PerCampanella(RigaAlloc r) =>
+        new(r.EmployeeId, r.Tipo, r.Inizio, r.Fine, r.ProjectId, null, null, r.Descrizione);
+
+    /// <summary>Una riga PM com'era prima del giro, nella forma della campanella (service e altra attività non viaggiano: null).</summary>
+    private static AllocazioneCampanella PerCampanella(AllocazionePm a)
+    {
+        string tipo = AllocazioniSync.NormalizzaTipo(a.Tipo);
+        return new AllocazioneCampanella(a.EmployeeId, tipo, DateOnly.FromDateTime(a.DataInizio), DateOnly.FromDateTime(a.DataFine),
+            tipo == "FERIE" ? null : a.ProjectId, null, null, AllocazioniSync.NormalizzaDescrizione(a.Descrizione));
+    }
+
+    /// <summary>Dopo il commit: la campanella per le righe scritte in PM dal VPS. Un errore qui non tocca l'esito del giro.</summary>
+    private void SegnalaCampanella(List<EventoAllocazione> eventi)
+    {
+        if (_campanella == null || eventi.Count == 0) return;
+        if (eventi.Count > SogliaCampanellaMassa)
+        {
+            _logger.LogWarning("[RisorseSync] {N} allocazioni scritte in PM in un giro solo: nessuna notifica a campanella (soglia {Soglia}).",
+                eventi.Count, SogliaCampanellaMassa);
+            return;
+        }
+        try
+        {
+            int n = _campanella.Segnala(eventi);
+            if (n > 0)
+                _logger.LogInformation("[RisorseSync] Campanella: {N} notifiche per {E} allocazioni dal VPS.", n, eventi.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RisorseSync] Campanella non scritta: {Msg}", ex.Message);
+        }
     }
 
     /// <summary>

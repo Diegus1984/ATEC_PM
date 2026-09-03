@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { NAME_COL_WIDTH_EXPANDED } from "./planner-geometry"
-import { addDays, diffDays, monthName } from "./planner-logic"
+import { addDays, diffDays, monthName, startOfDay } from "./planner-logic"
 
 export function usePlannerViewport({
   bandStart,
@@ -92,6 +92,16 @@ export function usePlannerViewport({
     const idx = diffDays(today, bandStart)
     el.scrollLeft = Math.max(0, (idx - 2) * dayW)
   }, [today, bandStart, dayW])
+  /** Porta in vista una data (a due giorni dal bordo sinistro, come «Oggi»): il salto da una notifica (#148). */
+  const scrollToDate = React.useCallback(
+    (date: Date) => {
+      const el = scrollRef.current
+      if (!el) return
+      const idx = diffDays(startOfDay(date), bandStart)
+      el.scrollLeft = Math.max(0, (idx - 2) * dayW)
+    },
+    [bandStart, dayW]
+  )
 
   // ── Stampa: finestra "fotografata" per adattare il Gantt a una pagina A4 ──
   // Durante la stampa il rendering usa questi valori al posto di bandStart/bandDays/dayW
@@ -166,6 +176,7 @@ export function usePlannerViewport({
     handleScroll,
     scrollByWeek,
     scrollToToday,
+    scrollToDate,
     printing,
     printGantt,
     activeBandStart,

@@ -124,6 +124,7 @@ public class ResourcesDbService
             service_id INT NULL,
             other_activity_id INT NULL,
             descrizione VARCHAR(500) NULL,
+            UNIQUE KEY uq_snap_batch_assignment (batch_id, assignment_id),
             KEY idx_snap_batch (batch_id),
             KEY idx_snap_assignment (assignment_id),
             CONSTRAINT fk_snap_batch FOREIGN KEY (batch_id) REFERENCES res_plan_snapshot_batches(id) ON DELETE CASCADE

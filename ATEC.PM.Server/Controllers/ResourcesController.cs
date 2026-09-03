@@ -8,6 +8,7 @@ using ATEC.PM.Server.Services;
 using ATEC.PM.Server.Services.RisorseSync;
 using ATEC.PM.Server.Authorization;
 using ATEC.PM.Server.Hubs;
+using MySqlConnector;
 
 namespace ATEC.PM.Server.Controllers;
 
@@ -31,13 +32,15 @@ public class ResourcesController : ControllerBase
     private readonly IHubContext<ResourcePlannerHub> _hub;
     private readonly PlanNotificationService _notify;
     private readonly RisorseSyncService _sync;
+    private readonly AllocazioniCampanella _campanella;
     public ResourcesController(ResourcesDbService rdb, IHubContext<ResourcePlannerHub> hub,
-        PlanNotificationService notify, RisorseSyncService sync)
+        PlanNotificationService notify, RisorseSyncService sync, AllocazioniCampanella campanella)
     {
         _rdb = rdb;
         _hub = hub;
         _notify = notify;
         _sync = sync;
+        _campanella = campanella;
     }
 
     // Id dipendente/utente dal token (claim NameIdentifier), per l'audit "ultima modifica".
@@ -107,8 +110,10 @@ public class ResourcesController : ControllerBase
             (int? projectId, int? serviceId, int? otherId) = StripAssocIfFerie(tipo, req.ProjectId, req.ServiceId, req.OtherActivityId);
 
             int caller = CallerId();
+            int? autore = caller > 0 ? caller : null;
+            var creati = new List<int>();
+            var eventi = new List<EventoAllocazione>();
             using var c = _rdb.Open();
-            int n = 0;
             foreach (int empId in req.EmployeeIds.Distinct())
             {
                 c.Execute(@"
@@ -117,12 +122,17 @@ public class ResourcesController : ControllerBase
                     VALUES (@EmployeeId, @Tipo, @DataInizio, @DataFine, @ProjectId, @ServiceId, @OtherActivityId, @Descrizione, @UpdatedBy, NOW())",
                     new { EmployeeId = empId, Tipo = tipo, req.DataInizio, req.DataFine,
                           ProjectId = projectId, ServiceId = serviceId, OtherActivityId = otherId, req.Descrizione,
-                          UpdatedBy = caller > 0 ? caller : (int?)null });
-                n++;
+                          UpdatedBy = autore });
+                int id = c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
+                creati.Add(id);
+                eventi.Add(new EventoAllocazione("creata", id,
+                    PerCampanella(empId, tipo, req.DataInizio, req.DataFine, projectId, serviceId, otherId, req.Descrizione), null, autore, "pm"));
             }
-            NotifyChange(conn, "create");
+            NotifyChange(conn, "create", creati.ToArray());
             _sync.Trigger("pm");
-            return Ok(ApiResponse<int>.Ok(n, $"{n} allocazioni create"));
+            // Campanella (#148): al dipendente assegnato, mai a chi assegna. Non solleva.
+            _campanella.Segnala(eventi);
+            return Ok(ApiResponse<int>.Ok(creati.Count, $"{creati.Count} allocazioni create"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
     }
@@ -154,6 +164,8 @@ public class ResourcesController : ControllerBase
             }
 
             int caller = CallerId();
+            // Com'era prima, per raccontare al dipendente cosa è cambiato (#148).
+            AllocazioneCampanella? prima = LeggiPerCampanella(c, id);
             int rows = c.Execute(@"
                 UPDATE res_assignments SET
                     employee_id=@EmployeeId, tipo=@Tipo, data_inizio=@DataInizio, data_fine=@DataFine,
@@ -166,6 +178,10 @@ public class ResourcesController : ControllerBase
             if (rows == 0) return Ok(ApiResponse<int>.Fail("Allocazione non trovata"));
             NotifyChange(conn, "update", id);
             _sync.Trigger("pm");
+            // Campanella (#148): solo se è cambiato qualcosa di visibile (un salvataggio identico non avvisa nessuno).
+            AllocazioneCampanella dopo = PerCampanella(req.EmployeeId, tipo, req.DataInizio, req.DataFine, projectId, serviceId, otherId, req.Descrizione);
+            if (prima != null && prima != dopo)
+                _campanella.Segnala(new[] { new EventoAllocazione("modificata", id, dopo, prima, caller > 0 ? caller : null, "pm") });
             return Ok(ApiResponse<int>.Ok(id, "Allocazione aggiornata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<int>.Fail($"Errore: {ex.Message}")); }
@@ -178,6 +194,9 @@ public class ResourcesController : ControllerBase
         try
         {
             using var c = _rdb.Open();
+            int caller = CallerId();
+            // Com'era, per la campanella (#148): dopo la DELETE non c'è più niente da leggere.
+            AllocazioneCampanella? prima = LeggiPerCampanella(c, id);
 
             // Prima di perdere la riga: registra chi cancella + lo stato originale, per il digest
             // email (la DELETE la fa sparire da res_assignments, "chi l'ha fatto" andrebbe perso).
@@ -189,12 +208,14 @@ public class ResourcesController : ControllerBase
                        project_id, service_id, other_activity_id, descrizione
                 FROM res_assignments WHERE id=@Id
                 ON DUPLICATE KEY UPDATE made_by=VALUES(made_by), touched_at=NOW()",
-                new { Id = id, MadeBy = CallerId() });
+                new { Id = id, MadeBy = caller });
 
             int rows = c.Execute("DELETE FROM res_assignments WHERE id=@Id", new { Id = id });
             if (rows == 0) return Ok(ApiResponse<bool>.Fail("Allocazione non trovata"));
             NotifyChange(conn, "delete", id);
             _sync.Trigger("pm");
+            if (prima != null)
+                _campanella.Segnala(new[] { new EventoAllocazione("rimossa", id, prima, null, caller > 0 ? caller : null, "pm") });
             return Ok(ApiResponse<bool>.Ok(true, "Allocazione eliminata"));
         }
         catch (Exception ex) { return Ok(ApiResponse<bool>.Fail($"Errore: {ex.Message}")); }
@@ -532,6 +553,16 @@ public class ResourcesController : ControllerBase
         catch (Exception ex) { return Ok(ApiResponse<RisorseSyncStatusDto>.Fail($"Errore: {ex.Message}")); }
     }
 
+    // #147: l'avviso nel planner «ATEC Risorse (VPS) non risponde». Chiave della PAGINA
+    // (nav.risorse), non del pannello admin: lo deve vedere chiunque abbia il planner davanti.
+    [HttpGet("sync/salute")]
+    [RequireFeature("nav.risorse")]
+    public IActionResult GetSyncSalute()
+    {
+        try { return Ok(ApiResponse<RisorseSyncSaluteDto>.Ok(_sync.GetSalute())); }
+        catch (Exception ex) { return Ok(ApiResponse<RisorseSyncSaluteDto>.Fail($"Errore: {ex.Message}")); }
+    }
+
     // «Esegui ora»: un giro adesso (aspetta quello eventualmente in corso) e ne ritorna l'esito.
     [HttpPost("sync/run-now")]
     [RequireFeature("nav.digest_email")]
@@ -559,6 +590,23 @@ public class ResourcesController : ControllerBase
     // ═══════════════════════════════════════════════════════
 
     private static string NormTipo(string t) => t is "OP" or "FLEX" or "FERIE" ? t : "OP";
+
+    // ── Campanella (#148): la riga nella forma che serve ai testi ──
+    private static AllocazioneCampanella PerCampanella(int employeeId, string tipo, DateTime inizio, DateTime fine,
+        int? projectId, int? serviceId, int? otherId, string? descrizione) =>
+        new(employeeId, tipo, DateOnly.FromDateTime(inizio.Date), DateOnly.FromDateTime(fine.Date),
+            projectId, serviceId, otherId, AllocazioniSync.NormalizzaDescrizione(descrizione));
+
+    private static AllocazioneCampanella? LeggiPerCampanella(MySqlConnection c, int id)
+    {
+        List<(int EmployeeId, string Tipo, DateTime DataInizio, DateTime DataFine, int? ProjectId, int? ServiceId, int? OtherActivityId, string? Descrizione)> righe =
+            c.Query<(int, string, DateTime, DateTime, int?, int?, int?, string?)>(@"
+                SELECT employee_id, tipo, data_inizio, data_fine, project_id, service_id, other_activity_id, descrizione
+                FROM res_assignments WHERE id = @Id", new { Id = id }).ToList();
+        if (righe.Count == 0) return null;
+        var r = righe[0];
+        return PerCampanella(r.EmployeeId, NormTipo(r.Tipo), r.DataInizio, r.DataFine, r.ProjectId, r.ServiceId, r.OtherActivityId, r.Descrizione);
+    }
 
     // Le ferie non si agganciano a commessa/service/altra attività: azzera le associazioni.
     private static (int? ProjectId, int? ServiceId, int? OtherId) StripAssocIfFerie(

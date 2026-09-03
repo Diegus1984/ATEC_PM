@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 import "./risorse-gantt.css"
 
@@ -11,6 +11,7 @@ import { getSession } from "@/lib/auth/session"
 import { useConfirm } from "@/components/shared/confirm"
 import { AssignmentDialog } from "@/features/risorse/AssignmentDialog"
 import { NotifyNowDialog } from "@/features/risorse/NotifyNowDialog"
+import { SyncVpsWarning } from "@/features/risorse/SyncVpsWarning"
 
 import { PlannerGantt } from "./planner-gantt"
 import {
@@ -35,7 +36,7 @@ import { PlannerFilters, PlannerToolbar } from "./planner-toolbar"
 import { usePlannerData } from "./use-planner-data"
 import { usePlannerDrag } from "./use-planner-drag"
 import { usePlannerRows } from "./use-planner-rows"
-import { usePlannerSettings } from "./use-planner-settings"
+import { usePlannerSettings, type PlannerUiSettings } from "./use-planner-settings"
 import { usePlannerViewport } from "./use-planner-viewport"
 
 export function ResourcePlannerPage() {
@@ -109,6 +110,7 @@ export function ResourcePlannerPage() {
     handleScroll,
     scrollByWeek,
     scrollToToday,
+    scrollToDate,
     printing,
     printGantt,
     activeBandStart,
@@ -147,6 +149,70 @@ export function ResourcePlannerPage() {
     sideSearch,
     myEmployeeId,
   })
+
+  // ── Arrivo da una notifica a campanella (#148): /risorse?alloc=ID ───────
+  // Si porta in vista la riga del dipendente e il periodo dell'allocazione, selezionandola;
+  // se un filtro la nasconde (risorsa spenta, fuori lista, tipo nascosto, «solo mie», «solo
+  // conflitti», ricerca) lo si allenta. Il parametro si toglie subito dall'URL (replace), così
+  // un ricarico o il tasto indietro non ripetono il salto.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const allocParam = searchParams.get("alloc")
+  const deepLinkDone = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (loading || !allocParam || deepLinkDone.current === allocParam) return
+    deepLinkDone.current = allocParam
+    setSearchParams(
+      (prev) => {
+        prev.delete("alloc")
+        return prev
+      },
+      { replace: true }
+    )
+    const id = Number(allocParam)
+    const a = assignments.find((x) => x.id === id)
+    if (!a) {
+      flashStatus("L'attività della notifica non è più nel planner")
+      return
+    }
+    const p: Partial<PlannerUiSettings> = {}
+    if (settings.ganttOffIds.includes(a.employeeId)) {
+      p.ganttOffIds = settings.ganttOffIds.filter((x) => x !== a.employeeId)
+    }
+    if (settings.resourceFilterActive && !settings.selectedResourceIds.includes(a.employeeId)) {
+      p.selectedResourceIds = [...settings.selectedResourceIds, a.employeeId]
+    }
+    if (!settings.tipiVisibili.includes(a.tipo)) {
+      p.tipiVisibili = [...settings.tipiVisibili, a.tipo]
+    }
+    if (settings.mineOnly && a.employeeId !== myEmployeeId) p.mineOnly = false
+    if (settings.conflictsOnly && !a.hasConflict) p.conflictsOnly = false
+    if (Object.keys(p).length > 0) patch(p)
+    if (resSearch) setResSearch("")
+    setSelectedId(a.id)
+    scrollToDate(parseDate(a.dataInizio))
+    // La riga: dopo il render con i filtri allentati. Solo lo scroll verticale, quello
+    // orizzontale è già sul periodo.
+    window.setTimeout(() => {
+      const scroller = scrollRef.current
+      const row = scroller?.querySelector<HTMLElement>(`[data-emp-id="${a.employeeId}"]`)
+      if (!scroller || !row) return
+      const r = row.getBoundingClientRect()
+      const s = scroller.getBoundingClientRect()
+      scroller.scrollTop += r.top - s.top - s.height / 2 + r.height / 2
+    }, 60)
+  }, [
+    loading,
+    allocParam,
+    assignments,
+    settings,
+    patch,
+    resSearch,
+    myEmployeeId,
+    flashStatus,
+    scrollToDate,
+    scrollRef,
+    setSearchParams,
+  ])
 
   // ── Overlay calendario e sfondo track (banda attiva = reale o "stampa") ──
   const overlays = React.useMemo(
@@ -254,6 +320,8 @@ export function ResourcePlannerPage() {
         <div className="gantt-print-title">Pianificazione Risorse</div>
         <div className="gantt-print-subtitle">{periodLabel}</div>
       </div>
+
+      <SyncVpsWarning />
 
       <PlannerToolbar
         canEdit={canEdit}

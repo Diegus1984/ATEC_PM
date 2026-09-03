@@ -186,3 +186,20 @@ public class RisorseSyncLogEntry
     public int DurataMs { get; set; }
     public string? Dettaglio { get; set; }
 }
+
+/// <summary>
+/// GET sync/salute — la salute del collegamento col VPS per l'avviso nel planner (#147; chiave
+/// nav.risorse, cioè chiunque veda il planner): <c>VpsNonRisponde</c> è vero quando la
+/// sincronizzazione è attiva ma non c'è un giro riuscito da oltre la soglia (10 minuti).
+/// </summary>
+public class RisorseSyncSaluteDto
+{
+    public bool Attiva { get; set; }
+    public bool VpsNonRisponde { get; set; }
+    /// <summary>Ultimo giro riuscito (UTC, con la Z); null se dall'avvio non ce n'è stato uno.</summary>
+    public DateTime? UltimoGiroOkUtc { get; set; }
+    /// <summary>Da quanti minuti manca un giro riuscito (0 quando tutto va bene).</summary>
+    public int MinutiSenzaRisposta { get; set; }
+    /// <summary>L'ultimo errore leggibile del motore, se c'è.</summary>
+    public string? Errore { get; set; }
+}

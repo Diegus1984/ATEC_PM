@@ -299,7 +299,7 @@ export function PlannerGantt({
                 : ""
             const { preview } = interaction
             return (
-              <div className="g2-row" key={row.resource.id}>
+              <div className="g2-row" key={row.resource.id} data-emp-id={row.resource.id}>
                 <div className={`g2-name ${nameRowClass}`} style={{ height: rowH }}>
                   {nameColCollapsed ? (
                     geometry.nameColMode === "surname" ? (

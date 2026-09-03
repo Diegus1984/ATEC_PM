@@ -84,14 +84,15 @@ public class NotificheConSyncTests
         return new PlanNotificationService(rdb, email, NullLogger<PlanNotificationService>.Instance);
     }
 
-    private RisorseSyncService Servizio(VpsFinto vps, PlanNotificationService notify)
+    private RisorseSyncService Servizio(VpsFinto vps, PlanNotificationService notify, AllocazioniCampanella? campanella = null)
     {
         var svc = new RisorseSyncService(
             new ResourcesDbService(_schema.Servizio()),
             new ConfigurationBuilder().Build(),
             NullLogger<RisorseSyncService>.Instance,
             new HttpClient(vps),
-            notify: notify);
+            notify: notify,
+            campanella: campanella);
         svc.SaveSettings(new RisorseSyncSettingsDto { Enabled = true, BaseUrl = "https://vps.esempio", Username = "sync.pm", Password = "segreta" });
         return svc;
     }
@@ -360,5 +361,73 @@ public class NotificheConSyncTests
         Assert.Equal(IdNelPiano(), IdNellaFoto());
         Assert.Equal(0, PendentiDaCancellare());                    // la cancellazione è già del VPS: niente da notificare
         Assert.Equal(0, notifiche.ComputePending().TotalChanges);
+    }
+
+    // ── La campanella (#148): le righe scritte in PM dal VPS avvisano il dipendente ──
+
+    private AllocazioniCampanella Campanella() =>
+        new(_schema.Servizio(),
+            new NotificationService(_schema.Servizio(), new AnagraficheCache(NullLogger<AnagraficheCache>.Instance)),
+            NullLogger<AllocazioniCampanella>.Instance);
+
+    private List<(int Destinatario, string Tipo, string Titolo, string Messaggio, int? CreatedBy, int RefId)> NotificheScritte()
+    {
+        using MySqlConnection c = _schema.Apri();
+        return c.Query<(int, string, string, string, int?, int)>(@"
+            SELECT nr.employee_id, n.notification_type, n.title, n.message, n.created_by, n.reference_id
+            FROM notification_recipients nr JOIN notifications n ON n.id = nr.notification_id
+            ORDER BY n.id, nr.id").ToList();
+    }
+
+    [FactRichiedeMySql]
+    public async Task Un_allocazione_nata_sul_VPS_arriva_nella_campanella_del_dipendente_con_l_autore_tradotto()
+    {
+        VpsFinto vps = Vps();
+        var quando = new DateTime(2026, 9, 2, 10, 0, 0, DateTimeKind.Utc);
+        vps.Allocazione(RossiVps, "OP", Inizio, Fine, "Manutenzione Minebea", updatedBy: VerdiVps, updatedAtUtc: quando);
+        RisorseSyncService svc = Servizio(vps, Notifiche(), Campanella());
+
+        RisorseSyncLogEntry voce = await svc.RunNowAsync("hub");
+
+        Assert.Equal("ok", voce.Esito);
+        int idPm = Assert.Single(IdNelPiano());
+        var n = Assert.Single(NotificheScritte());
+        Assert.Equal(_rossi, n.Destinatario);                          // al dipendente assegnato…
+        Assert.Equal(AllocazioniCampanella.Tipo, n.Tipo);
+        Assert.Equal(idPm, n.RefId);                                   // …sull'id PM della riga (il clic apre il planner lì)
+        Assert.Equal(_verdi, n.CreatedBy);                             // …con l'autore vero, tradotto in id PM
+        Assert.Equal("Nuova attività nel planner — Manutenzione Minebea", n.Titolo);
+        Assert.Equal("Anna Verdi ti ha assegnato l'attività Manutenzione Minebea dal 07/09/2026 al 11/09/2026 (dal programma ATEC Risorse).", n.Messaggio);
+
+        // Un giro senza modifiche non rinotifica niente.
+        voce = await svc.RunNowAsync("timer");
+        Assert.Equal("ok", voce.Esito);
+        Assert.Single(NotificheScritte());
+
+        // La riga sparisce sul VPS (chi l'ha tolta non si sa): «tolta», dal programma ATEC Risorse.
+        vps.Allocazioni.Clear();
+        voce = await svc.RunNowAsync("hub");
+        Assert.Equal("ok", voce.Esito);
+        Assert.Empty(IdNelPiano());
+        var tutte = NotificheScritte();
+        Assert.Equal(2, tutte.Count);
+        Assert.Equal(_rossi, tutte[1].Destinatario);
+        Assert.Null(tutte[1].CreatedBy);
+        Assert.Equal("Attività tolta dal planner — Manutenzione Minebea", tutte[1].Titolo);
+        Assert.Equal("Il programma ATEC Risorse ha tolto la tua attività Manutenzione Minebea dal 07/09/2026 al 11/09/2026.", tutte[1].Messaggio);
+    }
+
+    [FactRichiedeMySql]
+    public async Task Chi_si_assegna_da_solo_sul_VPS_non_riceve_la_campanella()
+    {
+        VpsFinto vps = Vps();
+        vps.Allocazione(RossiVps, "FLEX", Inizio, Fine, "Supporto", updatedBy: RossiVps, updatedAtUtc: DateTime.UtcNow);
+        RisorseSyncService svc = Servizio(vps, Notifiche(), Campanella());
+
+        RisorseSyncLogEntry voce = await svc.RunNowAsync("hub");
+
+        Assert.Equal("ok", voce.Esito);
+        Assert.Single(IdNelPiano());
+        Assert.Empty(NotificheScritte());
     }
 }
