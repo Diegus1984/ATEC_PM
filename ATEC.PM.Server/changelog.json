@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260903-0849",
+                     "data":  "2026-09-03T08:50:05",
+                     "hash":  "4f22c6cecc86cbf984a0b4b2891745dccf3d1ee7",
+                     "modifiche":  [
+                                       "Docs: piano sync Risorse (Fase 3 fatta e campanella), guida LAN §5.1 (avviso e campanella), handoff web, mappa endpoint",
+                                       "Risorse: avviso nel planner se il VPS non risponde (#147) e campanella per le allocazioni assegnate (#148)"
+                                   ]
+                 },
+                 {
                      "build":  "20260902-1647",
                      "data":  "2026-09-02T17:19:10",
                      "hash":  "7d41d4a524b1d58f7ff6211de6a2ae6d81b6a2e9",
