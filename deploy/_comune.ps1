@@ -412,6 +412,10 @@ function Publish-Server {
                 & npm install | Out-Host
                 if ($LASTEXITCODE -ne 0) { throw 'npm install fallito.' }
             }
+            # I test della logica pura del client (vitest, ~1 s) girano PRIMA della build: se un
+            # calcolo o una formattazione si rompe, il server non viene toccato.
+            & npm test | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'Test del client web falliti: niente è stato toccato sul server.' }
             & npm run build | Out-Host
             if ($LASTEXITCODE -ne 0) { throw 'Build del client web fallita: niente è stato toccato sul server.' }
         }

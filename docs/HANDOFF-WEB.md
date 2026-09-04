@@ -157,7 +157,11 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
 3. **Menu:** tasto **destro** → `ContextMenu`; pulsante **`⋮`** → `DropdownMenu`.
 4. **Wiring:** aggiungi la pagina a `LIVE_ROUTES` in `src/app/AppRoutes.tsx` e porta
    la voce a `status: "live"` in `src/config/navigation.ts`.
-5. **Verifica obbligatoria** prima di chiudere: `tsc -b` e `eslint` puliti (vedi nota PATH).
+5. **Verifica obbligatoria** prima di chiudere: `tsc -b`, `eslint` e **`npm test`** puliti (vedi nota PATH).
+   I test (vitest, `src/**/*.test.ts`, dal 04/09/2026) coprono la LOGICA PURA — formattazioni,
+   date, codici commessa, distribuzione costi, check list, planner, sintesi DDP, cash flow SAL —
+   e girano in Node in un secondo; il deploy li lancia prima di `npm run build`. Una regola di
+   calcolo nuova nasce con il suo test accanto al modulo (`x.test.ts`); la UI resta a runtime.
 6. **Ruoli:** gli endpoint admin (`/api/users`, `/api/employees`, `/api/auth-levels/features`,
    `/api/backup`) sono **ADMIN-only**. Le pagine funzionano solo con login ADMIN.
 7. **Freschezza dati (14/07/2026, richiesta esplicita di Diego):** il default globale

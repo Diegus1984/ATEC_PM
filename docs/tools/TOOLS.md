@@ -21,6 +21,13 @@ python tools/segnalazioni.py --aperte
 
 # Ultime N segnalazioni (default 15)
 python tools/segnalazioni.py -n 20
+```
+
+Client web, dentro `atec-pm-web/`:
+```powershell
+npm test          # vitest: logica pura del client (~1 s), gira anche nel deploy prima della build
+npx tsc -b        # type-check vero (npx tsc --noEmit esce 0 senza controllare)
+npm run lint
 
 # Stessa cosa in PowerShell
 .\tools\leggi-segnalazione.ps1 140
