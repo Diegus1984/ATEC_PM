@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260904-0921",
+                     "data":  "2026-09-04T11:29:50",
+                     "hash":  "083555d369c41f66388c9dfbd5b69c954395d89f",
+                     "modifiche":  [
+                                       "Specchio Danea: con partite IVA doppie si scrive solo l\u0027ultima copia"
+                                   ]
+                 },
+                 {
+                     "build":  "20260904-0921",
                      "data":  "2026-09-04T11:05:08",
                      "hash":  "bbff41b479cc80f9f5f0b14af11ba346651a5727",
                      "modifiche":  [
