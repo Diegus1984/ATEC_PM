@@ -580,3 +580,31 @@ un'operazione che ne cambia un migliaio non si conferma alla cieca.
   - 🪤 **Il colore resta agganciato all'anno**, non alla posizione fra quelli accesi: spegnere il 2023 non ridipinge il 2024. Verificato a runtime — riaccendendo il solo 2026 resta blu come quando erano cinque.
   - 🪤 Solo un `false` esplicito spegne. Lo stato si legge da `localStorage` al primo montaggio, quando le serie non sono ancora arrivate: se un anno assente valesse «spento», al primo caricamento il grafico sarebbe vuoto. Un anno nuovo nasce acceso.
 - **L'avviso sulla conversione ha due forme**, perché il sintomo cambia con l'anno. Sull'anno **in corso** le perse sono zero e ogni conversione della pagina dice «100 %» — un muro di percentuali che sembrano un trionfo; sull'anno **chiuso** restano centinaia di offerte aperte che nessuno ha chiuso. La causa è la stessa (nel vecchio Excel le perse non si registravano) e la pagina la dice in tutti e due i casi.
+
+---
+
+## 19. Chiusura in blocco fino al 2025 (04/09/2026)
+
+Eseguita in produzione: **1.285 offerte** passate da `aperta` a `persa` — 2022: 471 · 2023: 402 ·
+2024: 205 · 2025: 207 — e le **79 aperte del 2026 intatte**. Le 1.285 righe scritte in
+`sales_offer_log` con `old_value = 'aperta'` rendono l'operazione **reversibile**. `changed_by` è
+NULL: nessuno ha cliccato, è un'operazione di servizio, e attribuirla a una persona sarebbe stato
+falso.
+
+### Cosa ha fatto vedere, e va detto alla proprietà
+
+| Anno | Prese | Perse | Conversione |
+|---|---|---|---|
+| 2022 | 8 | 441 | **1,8%** |
+| 2023 | 41 | 382 | **9,7%** |
+| 2024 | 119 | 189 | 38,6% |
+| 2025 | 155 | 181 | 46,1% |
+| 2026 | 72 | 0 | 100% *(anno in corso, nessuna persa registrata)* |
+
+**I primi due anni non sono utilizzabili.** La chiusura in blocco assume «non segnata come vinta =
+persa»: regge dove le vinte venivano registrate, non dove nemmeno quelle lo erano. E nel vecchio
+Excel la colonna OK è compilata **8 volte nel 2022 e 42 nel 2023**, contro 123 nel 2024 e 157 nel
+2025 — nei primi due anni non si registrava né chi vinceva né chi perdeva.
+
+Quindi: **l'andamento delle offerte si legge dal 2024 in poi.** Sul 2022 e 2023 il registro dice
+quante offerte sono state fatte, e quello è un dato buono; quante ne sono entrate, no.
