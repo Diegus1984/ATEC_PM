@@ -718,7 +718,29 @@ falsa. Provato al contrario: cambiato `ms` in `millisecondi`, il test diventa ro
 
 #### Cosa resta da fare (è il lavoro vero di E1: aspettare)
 
-- [ ] **Accendere lo slow query log sul server** — si può fare **subito, senza deploy**:
+> ✅ **Fatto e letto.** Acceso il **24/08/2026 08:00** (attività pianificata + `deploy/accendi-slow-log.ps1`,
+> password root letta sul server), letto il **27/08** (3 giorni: **una** query oltre 0,5 s, un `INSERT INTO
+> suppliers` a 601 ms del sync Danea; registro poi svuotato alle 15:30) e di nuovo il **04/09/2026**. Il 04/09
+> lo slow log è stato **trovato spento, ai valori di installazione** (10 s, FILE) dopo i tre riavvii per
+> stacco di corrente del 28/08, 31/08 e 02/09 — nonostante `SET PERSIST` e `persisted_globals_load=ON`;
+> `mysqld-auto.cnf` non c'era più e il log errori di MySQL non dice niente: causa non accertata. Riacceso alle
+> 09:40 e ripersistito (file e `persisted_variables` verificati). **Dopo il prossimo riavvio ricontrollare
+> con `-Azione stato`.**
+>
+> **Esito della misura (04/09, 30 giorni di log HTTP + 2 giorni di `performance_schema`):**
+> - Richieste oltre 500 ms: **23 in 30 giorni**. In testa `POST api/hr/import` (3 volte, ~40 s: è l'import
+>   Ecos, API esterna con barra di avanzamento), allegati segnalazioni 1–1,5 s (BLOB), prova destinazione
+>   backup 4,2 s (share), migrazione Danea 1,3 s (Firebird), login 0,6 s (bcrypt). **Tutto I/O o API esterne,
+>   niente che passi dal database.**
+> - Database: **210 s di lavoro in 2 giorni su 507.641 query** (0,4 ms di media). In testa i **sync a specchio**:
+>   `INSERT INTO suppliers` 40.032 volte / 67 s e `UPDATE codex_items` 375.016 volte / 59 s in 2 giorni —
+>   riscrivono TUTTE le righe a ogni giro invece delle sole cambiate (`res_sync_map` invece confronta un hash).
+>   È l'unico candidato E3 emerso, e non tocca nessun utente: è lavoro periodico.
+> - **Conclusione: E2 (altri indici), E3 (N+1) ed E5 (async) NON sono giustificati dai dati.** Il piano
+>   voleva proprio questo: sapere prima di spendere. Restano come voci da rivalutare solo se una misura
+>   futura dice altro.
+
+- [x] ~~**Accendere lo slow query log sul server**~~ — fatto il 24/08/2026 (e rifatto il 04/09, vedi sopra); si può fare **subito, senza deploy**:
       ```
       scp -i "$env:USERPROFILE\.ssh\atec_vps" deploy\misura-prestazioni.ps1 atec@192.168.2.150:C:/ATEC_PM/Updates/
       ssh -i "$env:USERPROFILE\.ssh\atec_vps" atec@192.168.2.150
