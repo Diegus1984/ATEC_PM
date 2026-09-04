@@ -8,7 +8,7 @@ import { canAccessFeature } from "@/lib/auth/permissions"
 import { fetchSalProspetto } from "@/lib/api/sal"
 import type { SalProspettoRow } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
-import { salRowClass } from "@/features/commesse/sal-utils"
+import { salRowClass } from "@/features/commesse/sal/sal-utils"
 import { Button } from "@/components/ui/button"
 
 import {

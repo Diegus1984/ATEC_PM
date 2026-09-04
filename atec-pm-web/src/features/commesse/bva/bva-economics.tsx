@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { num } from "@/features/commesse/preventivo-dialogs"
+import { num } from "@/features/commesse/preventivo/preventivo-dialogs"
 import {
   updateActualTravelCost,
   updateFinalPriceOverride,

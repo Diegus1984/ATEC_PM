@@ -36,7 +36,7 @@ import {
 import type { PhaseAssignmentDto, PhaseListItem } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 
-import { bvaPhaseHoursClass } from "./bva-shared"
+import { bvaPhaseHoursClass } from "./bva/bva-shared"
 
 const NO_SECTION = "__none__"
 const SENZA_SEZIONE = "Senza sezione di costo"

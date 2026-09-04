@@ -189,7 +189,7 @@ public sealed class RisorseSyncSettingsStore
         // Write-only, come la password SMTP: chi riapre la pagina non se la ritrova a video
         // e salvando senza toccarla non la cancella.
         if (!string.IsNullOrEmpty(dto.Password))
-            Set(c, "sync.password", ProtectedConfigHelper.Encrypt(dto.Password));
+            Set(c, "sync.password", Segreti.Cifra(dto.Password));
     }
 
     /// <summary>Esito dell'ultimo giro (lo scrive il motore, non il pannello).</summary>
@@ -232,7 +232,7 @@ public sealed class RisorseSyncSettingsStore
     {
         try
         {
-            return ProtectedConfigHelper.Decrypt(cifrataBase64);
+            return Segreti.Decifra(cifrataBase64);
         }
         catch
         {

@@ -20,13 +20,13 @@ import { notifyError, notifySuccess } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
 
-import { CommessaDocumentsTree } from "./CommessaDocumentsTree"
+import { CommessaDocumentsTree } from "./documenti/CommessaDocumentsTree"
 import {
   CommessaProjectContextMenu,
   CommessaSectionContextMenu,
   CommessaTreeBackgroundMenu,
 } from "./CommessaTreeContextMenu"
-import { FolderDocContextMenu, toFolderFileItem } from "./FolderDocContextMenu"
+import { FolderDocContextMenu, toFolderFileItem } from "./documenti/FolderDocContextMenu"
 import { sezioniVisibili } from "./commessa-sections"
 import {
   PROJECT_STATUS_META,

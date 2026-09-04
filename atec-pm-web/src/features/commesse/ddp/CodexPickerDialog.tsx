@@ -58,7 +58,7 @@ import { notifyError } from "@/lib/toast"
 import { useDebounced } from "@/lib/use-debounced"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 
-import { CodexGeneratePanel } from "../codex/CodexGeneratePanel"
+import { CodexGeneratePanel } from "../../codex/CodexGeneratePanel"
 import {
   DDP_STATUS_TO_ORDER,
   DDP_STATUS_VERIFY,

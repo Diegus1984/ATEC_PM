@@ -62,6 +62,7 @@ import { getSession } from "@/lib/auth/session"
 import { useChatInboxHub } from "@/lib/signalr/use-chat-inbox-hub"
 import { useProjectChatHub } from "@/lib/signalr/use-project-chat-hub"
 import { cn } from "@/lib/utils"
+import { formatDateFull } from "@/lib/date-iso"
 
 /**
  * Dove sta girando la chat: dentro una commessa (tab «Chat» del dettaglio) oppure nella
@@ -97,14 +98,8 @@ function fmtListTime(value: string | null): string {
 }
 
 function fmtDateSeparator(value: string): string {
-  const d = new Date(value)
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleDateString("it-IT", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
+  // gg/mm/aaaa (separatore di giornata, non una cella di griglia): lo stesso helper dei documenti.
+  return formatDateFull(value)
 }
 
 function canDeleteMessage(message: ChatMessage): boolean {

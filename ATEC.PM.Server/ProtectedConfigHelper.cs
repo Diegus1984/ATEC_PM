@@ -7,6 +7,30 @@ namespace ATEC.PM.Server;
 using System.Runtime.Versioning;
 
 // aggiungi questo attributo sopra la classe
+/// <summary>
+/// I segreti di configurazione (password SMTP, Ecos, VPS) passano da qui, non da
+/// <see cref="ProtectedConfigHelper"/> direttamente: quello è marcato «solo Windows» (DPAPI) e ogni
+/// chiamata diretta da codice neutro è un warning CA1416. Il programma gira solo su Windows
+/// (servizio win-x64), ma il compilatore non lo sa: la guardia sta in un posto solo, qui.
+/// </summary>
+public static class Segreti
+{
+    public static string Cifra(string chiaro)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("La cifratura DPAPI dei segreti esiste solo su Windows.");
+        return ProtectedConfigHelper.Encrypt(chiaro);
+    }
+
+    /// <summary>Lancia se il testo non è decifrabile (altra macchina/utente): chi chiama decide cosa farne.</summary>
+    public static string Decifra(string cifrataBase64)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("La cifratura DPAPI dei segreti esiste solo su Windows.");
+        return ProtectedConfigHelper.Decrypt(cifrataBase64);
+    }
+}
+
 [SupportedOSPlatform("windows")]
 public static class ProtectedConfigHelper
 {

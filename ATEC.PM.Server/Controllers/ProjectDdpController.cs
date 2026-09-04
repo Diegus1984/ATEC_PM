@@ -350,7 +350,7 @@ public class ProjectDdpController : ProjectsControllerBase
                     };
 
                     string title = $"Cambio stato DDP — {projCode}";
-                    string msg = $"Stato modificato da {DdpStatusMap.ToLabel(oldStatus)} a {DdpStatusMap.ToLabel(req.ItemStatus)}";
+                    string msg = $"Stato modificato da {DdpStatusMap.ToLabel(oldStatus ?? "")} a {DdpStatusMap.ToLabel(req.ItemStatus ?? "")}";
 
                     List<int> recipients = _notif.GetProjectPmIds(id);
                     recipients.AddRange(_notif.GetAcqEmployeeIds());

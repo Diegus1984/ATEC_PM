@@ -5,7 +5,8 @@ import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // `public/` è vendor (TinyMCE 5 con il suo .d.ts pieno di `any`): 206 «errori» che non sono nostri.
+  { ignores: ["dist", "public"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

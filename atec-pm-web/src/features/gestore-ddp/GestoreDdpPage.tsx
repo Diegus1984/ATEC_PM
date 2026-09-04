@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils"
 
 import { DdpPieWithLegend } from "./DdpPieWithLegend"
 import { buildRipartizioneBars, type BarRow } from "./ddp-sintesi-logic"
-import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
+import { ddpTypeLabel } from "@/features/commesse/ddp/ddp-constants"
 
 const COLUMN_LABELS: Record<string, string> = {
   code: "Commessa",

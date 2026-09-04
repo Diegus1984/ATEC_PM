@@ -18,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { hours } from "@/features/commesse/preventivo-dialogs"
+import { hours } from "@/features/commesse/preventivo/preventivo-dialogs"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 

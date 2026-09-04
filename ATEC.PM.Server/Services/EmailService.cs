@@ -115,13 +115,13 @@ public class EmailService : BackgroundService
     // programma gira come servizio (nessun profilo utente caricato) e ProtectedConfigHelper
     // sceglie da solo l'ambito giusto. Cifrare qui "per utente" renderebbe la password
     // SMTP illeggibile al primo riavvio del servizio.
-    private static string EncryptPassword(string plain) => ProtectedConfigHelper.Encrypt(plain);
+    private static string EncryptPassword(string plain) => Segreti.Cifra(plain);
 
     private static string? DecryptPassword(string encryptedBase64)
     {
         try
         {
-            return ProtectedConfigHelper.Decrypt(encryptedBase64);
+            return Segreti.Decifra(encryptedBase64);
         }
         catch
         {

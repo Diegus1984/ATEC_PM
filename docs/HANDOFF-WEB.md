@@ -176,6 +176,11 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
    Un hub nuovo = 15 righe (`hub`, `deps`, `subscribe`, `join`); **non si ricopia lo scheletro**.
    Filtri pre-debounce con `when`, eventi immediati con `debounceMs: 0` o `immediate`;
    `onConnected`/`onClosed` per il `connectionId` della self-exclusion.
+8. **`features/commesse/` è a sottocartelle** (04/09/2026): `ddp/` (distinte commerciale e officina,
+   picker, celle, stati), `documenti/`, `bva/` (Preventivo vs Consuntivo + calcolatrice officina),
+   `preventivo/`, `sal/`, `chat/`; alla radice restano pagina, albero, dialoghi di commessa e le
+   sezioni trasversali. Un file nuovo nasce nella sottocartella del suo argomento. I percorsi citati
+   più sotto in questo documento senza sottocartella sono precedenti al riordino.
 
 ## Metodo di lavoro consigliato (come abbiamo proceduto finora)
 

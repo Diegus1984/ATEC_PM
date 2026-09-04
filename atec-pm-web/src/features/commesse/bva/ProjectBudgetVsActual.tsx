@@ -17,7 +17,7 @@ import {
   initProjectCosting,
   fetchProjectCosting,
 } from "@/lib/api/project-costing"
-import { AddSectionDialog } from "@/features/commesse/preventivo-dialogs"
+import { AddSectionDialog } from "@/features/commesse/preventivo/preventivo-dialogs"
 import type { PhaseListItem } from "@/lib/api/types"
 import { useBudgetHub } from "@/lib/signalr/use-budget-hub"
 import { notifyError } from "@/lib/toast"
@@ -27,7 +27,7 @@ import { CostSummaryBlock, OrderLinesBlock } from "./bva-order"
 import { GroupBlock, MaterialSectionBlock } from "./bva-sections"
 import { BvaExpandContext, type BvaExpandCommand } from "./bva-expand"
 import { BlueSection, ThreeColumn } from "./bva-shared"
-import { costTravelRowsKey } from "./preventivo-travel-shared"
+import { costTravelRowsKey } from "../preventivo/preventivo-travel-shared"
 import { WorkshopCalcDialog } from "./WorkshopCalcDialog"
 
 export function ProjectBudgetVsActual({ projectId }: { projectId: number }) {

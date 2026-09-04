@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { salTestoSuFondo } from "@/features/commesse/sal-utils"
+import { salTestoSuFondo } from "@/features/commesse/sal/sal-utils"
 import { ENTRY_TYPES } from "@/features/timesheet/entry-types"
 import {
   deleteTimesheetEntry,

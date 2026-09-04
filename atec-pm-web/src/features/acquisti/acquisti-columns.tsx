@@ -8,12 +8,12 @@ import { CheckCircle2, Clock, FileCheck2, Link2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { DdpStatusMenu } from "@/features/commesse/DdpStatusMenu"
+import { DdpStatusMenu } from "@/features/commesse/ddp/DdpStatusMenu"
 import type { AcquistiInboxItem, DdpStatusItem } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
 import { euro } from "@/lib/format"
 
-import { isRawRow, RawRowBadge } from "@/features/commesse/ddp-raw-row"
+import { isRawRow, RawRowBadge } from "@/features/commesse/ddp/ddp-raw-row"
 
 import { DaneaOrderBadge, StatusFilterCombobox } from "./acquisti-ui"
 import { getSmartActionSortKey, rowHasDaneaOrder, statusOf } from "./acquisti-shared"

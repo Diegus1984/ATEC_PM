@@ -24,7 +24,7 @@ import type {
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { formatDateOrDash } from "@/lib/date-iso"
 import { projectStatusMeta } from "@/features/commesse/project-status"
-import { economicKpis } from "@/features/commesse/bva-economics"
+import { economicKpis } from "@/features/commesse/bva/bva-economics"
 // Un solo stile di riquadro (quello del Bilancio): segnalazione #46 chiede che tutte le
 // finestre della Dashboard abbiano la stessa estetica delle prime.
 import {
@@ -33,8 +33,8 @@ import {
   bvaHoursClass,
   bvaMoneyClass,
   deltaText,
-} from "@/features/commesse/bva-shared"
-import { hours } from "@/features/commesse/preventivo-dialogs"
+} from "@/features/commesse/bva/bva-shared"
+import { hours } from "@/features/commesse/preventivo/preventivo-dialogs"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 

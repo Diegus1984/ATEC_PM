@@ -7,7 +7,7 @@ import { DataTableCard } from "@/components/shared/data-table-card"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { fetchSalProspetto } from "@/lib/api/sal"
 import { cn } from "@/lib/utils"
-import { salRowClass } from "@/features/commesse/sal-utils"
+import { salRowClass } from "@/features/commesse/sal/sal-utils"
 import { Button } from "@/components/ui/button"
 
 import {

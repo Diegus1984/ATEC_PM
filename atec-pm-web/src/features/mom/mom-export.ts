@@ -1,5 +1,5 @@
 import type { MoMActionItem } from "@/lib/api/types"
-import { isoToDate } from "@/lib/date-iso"
+import { formatDateFull, isoToDate } from "@/lib/date-iso"
 import { WEEKDAYS_SHORT, isRedDay } from "@/lib/it-holidays"
 import { printHtml, escapeHtml } from "@/lib/print-template"
 
@@ -49,9 +49,8 @@ function responsibleText(item: MoMActionItem): string {
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return ""
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("it-IT")
+  // Export documentale: gg/mm/aaaa dal helper di casa (regola: mai toLocaleDateString nudo).
+  return formatDateFull(value)
 }
 
 /** Data + giorno della settimana (rosso se festivo) per la stampa, come v9. */

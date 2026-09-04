@@ -914,7 +914,7 @@ public class CodexController : ControllerBase
                 string? hierarchyError = ValidateHierarchy(parentPrefix, childPrefix);
                 results.Add(new CodexImportPreviewResult
                 {
-                    Code = item.Code,
+                    Code = item.Code ?? "",
                     Quantity = item.Quantity,
                     Descr = codexItem.Descr,
                     Id = codexItem.Id,
@@ -934,7 +934,7 @@ public class CodexController : ControllerBase
                 {
                     results.Add(new CodexImportPreviewResult
                     {
-                        Code = item.Code,
+                        Code = item.Code ?? "",
                         Quantity = item.Quantity,
                         Descr = catalogItem.Description,
                         Id = catalogItem.Id,
@@ -950,7 +950,7 @@ public class CodexController : ControllerBase
                 {
                     results.Add(new CodexImportPreviewResult
                     {
-                        Code = item.Code,
+                        Code = item.Code ?? "",
                         Quantity = item.Quantity,
                         Descr = null,
                         Id = null,

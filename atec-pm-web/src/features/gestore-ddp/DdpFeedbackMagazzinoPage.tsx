@@ -30,7 +30,7 @@ import type { DdpFeedbackMagazzinoGroup, DdpStatusItem } from "@/lib/api/types"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
-import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
+import { ddpTypeLabel } from "@/features/commesse/ddp/ddp-constants"
 
 /**
  * Colonne della griglia (unione DDP Commerciale + Officina): «Materiale/Trattamento»

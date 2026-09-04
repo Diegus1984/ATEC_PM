@@ -10,7 +10,7 @@ import {
   salAlertState,
   salIncassoScaduto,
   salIsPagata,
-} from "@/features/commesse/sal-utils"
+} from "@/features/commesse/sal/sal-utils"
 
 /** Bucket v10 mutuamente esclusivi: Incassate / Emesse / da Fatturare. */
 export type SalBucket = "inc" | "em" | "daf"

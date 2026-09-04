@@ -430,7 +430,7 @@ public class SalController : ControllerBase
         // CHIUSA: lì il SAL è storia, e ci mette mano solo chi ha `action.sal_edit_closed`.
         bool wasPagata = string.Equals(currentPagamento, "Pagata", StringComparison.OrdinalIgnoreCase);
         if (current != null && !CanEditClosedSal()
-            && IsProjectClosed(c, (int)current.project_id))
+            && IsProjectClosed(c, (int)current!.project_id))
         {
             return Ok(ApiResponse<int>.Fail(
                 "Commessa chiusa: il foglio SAL è in sola lettura (serve il permesso «Modifica SAL di commessa chiusa»)"));
@@ -510,7 +510,7 @@ public class SalController : ControllerBase
         var current = c.QueryFirstOrDefault<dynamic>(
             "SELECT pagamento, project_id FROM sal_rows WHERE id=@Id", new { Id = id });
         if (current != null && !CanEditClosedSal()
-            && IsProjectClosed(c, (int)current.project_id))
+            && IsProjectClosed(c, (int)current!.project_id))
         {
             return Ok(ApiResponse<bool>.Fail(
                 "Commessa chiusa: il foglio SAL è in sola lettura (serve il permesso «Modifica SAL di commessa chiusa»)"));

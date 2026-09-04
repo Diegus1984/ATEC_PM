@@ -33,7 +33,7 @@ import {
   ResourceDialog,
   hours,
   type ResourceDialogItem,
-} from "@/features/commesse/preventivo-dialogs"
+} from "@/features/commesse/preventivo/preventivo-dialogs"
 import {
   deleteProjectCostSection,
   deleteProjectMaterialItem,
@@ -59,8 +59,8 @@ import {
   bvaHoursClass,
   bvaMoneyClass,
 } from "./bva-shared"
-import { PreventivoTravelTable } from "./preventivo-travel-table"
-import { useCostTravelRows } from "./preventivo-travel-shared"
+import { PreventivoTravelTable } from "../preventivo/preventivo-travel-table"
+import { useCostTravelRows } from "../preventivo/preventivo-travel-shared"
 
 /**
  * Risorse a CONSUNTIVO della sezione, a due livelli: una riga per dipendente che si apre

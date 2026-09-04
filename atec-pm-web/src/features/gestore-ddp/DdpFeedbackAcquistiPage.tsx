@@ -21,7 +21,7 @@ import { fetchDdpStatuses } from "@/lib/api/ddp-config"
 import type { DdpFeedbackAcquistiGroup, DdpStatusItem } from "@/lib/api/types"
 import { useProjectHub } from "@/lib/signalr/use-project-hub"
 import { cn } from "@/lib/utils"
-import { ddpTypeLabel } from "@/features/commesse/ddp-constants"
+import { ddpTypeLabel } from "@/features/commesse/ddp/ddp-constants"
 
 function DdpGroupCard({
   group,

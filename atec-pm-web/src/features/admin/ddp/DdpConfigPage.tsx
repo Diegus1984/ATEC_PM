@@ -51,8 +51,8 @@ import {
   updateDdpStatus,
 } from "@/lib/api/ddp-config"
 import type { DdpDestinationItem, DdpStatusItem, DdpTreatmentItem } from "@/lib/api/types"
-import { DdpDestinationFormDialog } from "@/features/commesse/DdpDestinationFormDialog"
-import { DdpTreatmentFormDialog } from "@/features/commesse/DdpTreatmentFormDialog"
+import { DdpDestinationFormDialog } from "@/features/commesse/ddp/DdpDestinationFormDialog"
+import { DdpTreatmentFormDialog } from "@/features/commesse/ddp/DdpTreatmentFormDialog"
 
 /** Export CSV stati DDP (separatore `;`, BOM UTF-8 — come Prospetto SAL / Ferie). */
 function downloadDdpStatusesCsv(rows: DdpStatusItem[]): void {

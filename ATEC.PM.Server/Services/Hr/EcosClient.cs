@@ -168,7 +168,7 @@ public class EcosClient
         // Write-only, come la password SMTP: chi riapre la pagina non se la ritrova a video
         // e salvando senza toccarla non la cancella.
         if (!string.IsNullOrEmpty(dto.Password))
-            Set("ecos.password", ProtectedConfigHelper.Encrypt(dto.Password));
+            Set("ecos.password", Segreti.Cifra(dto.Password));
     }
 
     /// <summary>Le impostazioni per la pagina: la password non esce mai, esce se c'è.</summary>
@@ -190,7 +190,7 @@ public class EcosClient
     {
         try
         {
-            return ProtectedConfigHelper.Decrypt(cifrataBase64);
+            return Segreti.Decifra(cifrataBase64);
         }
         catch
         {
