@@ -1183,6 +1183,7 @@ public class DbService
             ubicazione VARCHAR(200) NOT NULL DEFAULT '',
             codexforn VARCHAR(200) NOT NULL DEFAULT '',
             synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            sync_hash CHAR(64) NULL,
             UNIQUE KEY uq_codex_remote_id (remote_id),
             UNIQUE KEY uq_codex_codice_nuovo (codice_nuovo),
             INDEX idx_codice (codice),

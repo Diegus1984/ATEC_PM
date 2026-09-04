@@ -736,6 +736,11 @@ falsa. Provato al contrario: cambiato `ms` in `millisecondi`, il test diventa ro
 >   `INSERT INTO suppliers` 40.032 volte / 67 s e `UPDATE codex_items` 375.016 volte / 59 s in 2 giorni —
 >   riscrivono TUTTE le righe a ogni giro invece delle sole cambiate (`res_sync_map` invece confronta un hash).
 >   È l'unico candidato E3 emerso, e non tocca nessun utente: è lavoro periodico.
+>   **Fatto il 04/09/2026 stesso**: Codex confronta un'impronta SHA256 della riga remota salvata in
+>   `codex_items.sync_hash` (M121, `SpecchioCodex`), fornitori/clienti Danea confrontano le colonne
+>   che l'UPDATE riscrive con quelle già in tabella (`SpecchioDanea`); si scrive solo ciò che è
+>   diverso, semantica invariata (prezzo locale vuoto ripreso dal remoto, «vince l'ultima» sulle
+>   partite IVA doppie, cancellazione delle righe sparite). Test in `ATEC.PM.Tests/Specchi/`.
 > - **Conclusione: E2 (altri indici), E3 (N+1) ed E5 (async) NON sono giustificati dai dati.** Il piano
 >   voleva proprio questo: sapere prima di spendere. Restano come voci da rivalutare solo se una misura
 >   futura dice altro.

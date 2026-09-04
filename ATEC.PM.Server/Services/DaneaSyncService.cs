@@ -1,5 +1,6 @@
 using FirebirdSql.Data.FirebirdClient;
 using Dapper;
+using MySqlConnector;
 
 namespace ATEC.PM.Server.Services;
 
@@ -134,96 +135,121 @@ public class DaneaSyncService : BackgroundService
     private async Task SyncSuppliers(FbConnection fb, DbService db)
     {
         var remote = (await fb.QueryAsync(@"
-            SELECT ""Nome"", ""Referente"", ""Email"", ""Tel"", ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"", 
+            SELECT ""Nome"", ""Referente"", ""Email"", ""Tel"", ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"",
                    ""PartitaIva"", ""CodiceFiscale"", ""Note""
             FROM ""TAnagrafica"" WHERE ""Fornitore"" = 1")).ToList();
 
-        using var local = db.Open();
-        int count = 0;
+        var fornitori = new List<SpecchioDanea.Fornitore>();
         foreach (var s in remote)
         {
-            string vat = ((string?)s.PartitaIva)?.Trim() ?? "";
-            if (string.IsNullOrEmpty(vat)) continue;
-
-            string indirizzo = ((string?)s.Indirizzo)?.Trim() ?? "";
-            string cap = ((string?)s.Cap)?.Trim() ?? "";
-            string citta = ((string?)s.Citta)?.Trim() ?? "";
-            string prov = ((string?)s.Prov)?.Trim() ?? "";
-            string address = $"{indirizzo}, {cap} {citta} ({prov})".Trim(' ', ',');
-
-            await local.ExecuteAsync(@"
-                INSERT INTO suppliers (company_name, contact_name, email, phone, address, vat_number, fiscal_code, notes, is_active)
-                VALUES (@Nome, @Referente, @Email, @Tel, @Address, @Vat, @Cf, @Note, 1)
-                ON DUPLICATE KEY UPDATE 
-                    company_name=@Nome, contact_name=@Referente, email=@Email, phone=@Tel, address=@Address, notes=@Note",
-                new
-                {
-                    Nome = ((string?)s.Nome)?.Trim() ?? "",
-                    Referente = ((string?)s.Referente)?.Trim() ?? "",
-                    Email = ((string?)s.Email)?.Trim() ?? "",
-                    Tel = ((string?)s.Tel)?.Trim() ?? "",
-                    Address = address,
-                    Vat = vat,
-                    Cf = ((string?)s.CodiceFiscale)?.Trim() ?? "",
-                    Note = ((string?)s.Note)?.Trim() ?? ""
-                });
-            count++;
+            var f = SpecchioDanea.DaFornitore((IDictionary<string, object?>)s);
+            if (f != null) fornitori.Add(f);
         }
-        SuppliersCount = count;
-        _log.LogInformation($"[DaneaSync] Fornitori: {count} sincronizzati");
+
+        using var local = db.Open();
+        (int scritti, int invariati) = await ApplicaFornitori(fornitori, local);
+        SuppliersCount = fornitori.Count;
+        _log.LogInformation("[DaneaSync] Fornitori: {Count} sincronizzati ({Scritti} scritti, {Invariati} invariati)",
+            fornitori.Count, scritti, invariati);
     }
 
     private async Task SyncCustomers(FbConnection fb, DbService db)
     {
         var remote = (await fb.QueryAsync(@"
-            SELECT ""IDAnagr"", ""CodAnagr"", ""Nome"", ""Referente"", ""Email"", ""Pec"", ""Tel"", ""Cell"", 
-                   ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"", ""PartitaIva"", ""CodiceFiscale"", 
+            SELECT ""IDAnagr"", ""CodAnagr"", ""Nome"", ""Referente"", ""Email"", ""Pec"", ""Tel"", ""Cell"",
+                   ""Indirizzo"", ""Cap"", ""Citta"", ""Prov"", ""PartitaIva"", ""CodiceFiscale"",
                    ""PagamentoDefault"", ""FE_CodUfficio"", ""Note""
             FROM ""TAnagrafica"" WHERE ""Cliente"" = 1")).ToList();
 
-        using var local = db.Open();
-        int count = 0;
+        var clienti = new List<SpecchioDanea.Cliente>();
         foreach (var c in remote)
         {
-            string vat = ((string?)c.PartitaIva)?.Trim() ?? "";
-            if (string.IsNullOrEmpty(vat)) continue;
-
-            string indirizzo = ((string?)c.Indirizzo)?.Trim() ?? "";
-            string cap = ((string?)c.Cap)?.Trim() ?? "";
-            string citta = ((string?)c.Citta)?.Trim() ?? "";
-            string prov = ((string?)c.Prov)?.Trim() ?? "";
-            string address = $"{indirizzo}, {cap} {citta} ({prov})".Trim(' ', ',');
-
-            await local.ExecuteAsync(@"
-                INSERT INTO customers (company_name, contact_name, email, pec, phone, cell, address, 
-                                     vat_number, fiscal_code, payment_terms, sdi_code, easyfatt_code, 
-                                     easyfatt_id, notes, is_active)
-                VALUES (@Nome, @Referente, @Email, @Pec, @Tel, @Cell, @Address, @Vat, 
-                        @Cf, @Pagamento, @Sdi, @CodAnagr, @IDAnagr, @Note, 1)
-                ON DUPLICATE KEY UPDATE 
-                    company_name=@Nome, email=@Email, pec=@Pec, phone=@Tel, address=@Address, 
-                    sdi_code=@Sdi, notes=@Note, easyfatt_id=@IDAnagr",
-                new
-                {
-                    Nome = ((string?)c.Nome)?.Trim() ?? "",
-                    Referente = ((string?)c.Referente)?.Trim() ?? "",
-                    Email = ((string?)c.Email)?.Trim() ?? "",
-                    Pec = ((string?)c.Pec)?.Trim() ?? "",
-                    Tel = ((string?)c.Tel)?.Trim() ?? "",
-                    Cell = ((string?)c.Cell)?.Trim() ?? "",
-                    Address = address,
-                    Vat = vat,
-                    Cf = ((string?)c.CodiceFiscale)?.Trim() ?? "",
-                    Pagamento = ((string?)c.PagamentoDefault)?.Trim() ?? "",
-                    Sdi = ((string?)c.FE_CodUfficio)?.Trim() ?? "",
-                    CodAnagr = ((string?)c.CodAnagr)?.Trim() ?? "",
-                    IDAnagr = (int?)c.IDAnagr,
-                    Note = ((string?)c.Note)?.Trim() ?? ""
-                });
-            count++;
+            var cl = SpecchioDanea.DaCliente((IDictionary<string, object?>)c);
+            if (cl != null) clienti.Add(cl);
         }
-        CustomersCount = count;
-        _log.LogInformation($"[DaneaSync] Clienti: {count} sincronizzati");
+
+        using var local = db.Open();
+        (int scritti, int invariati) = await ApplicaClienti(clienti, local);
+        CustomersCount = clienti.Count;
+        _log.LogInformation("[DaneaSync] Clienti: {Count} sincronizzati ({Scritti} scritti, {Invariati} invariati)",
+            clienti.Count, scritti, invariati);
+    }
+
+    // Le colonne dopo ON DUPLICATE KEY UPDATE sono ESATTAMENTE quelle che SpecchioDanea confronta
+    // (un test lo controlla): una colonna riscritta ma non confrontata cambierebbe in Danea senza
+    // arrivare mai qui.
+    internal const string UpsertFornitoreSql = @"
+        INSERT INTO suppliers (company_name, contact_name, email, phone, address, vat_number, fiscal_code, notes, is_active)
+        VALUES (@Nome, @Referente, @Email, @Tel, @Address, @Vat, @Cf, @Note, 1)
+        ON DUPLICATE KEY UPDATE
+            company_name=@Nome, contact_name=@Referente, email=@Email, phone=@Tel, address=@Address, notes=@Note";
+
+    internal const string UpsertClienteSql = @"
+        INSERT INTO customers (company_name, contact_name, email, pec, phone, cell, address,
+                             vat_number, fiscal_code, payment_terms, sdi_code, easyfatt_code,
+                             easyfatt_id, notes, is_active)
+        VALUES (@Nome, @Referente, @Email, @Pec, @Tel, @Cell, @Address, @Vat,
+                @Cf, @Pagamento, @Sdi, @CodAnagr, @IDAnagr, @Note, 1)
+        ON DUPLICATE KEY UPDATE
+            company_name=@Nome, email=@Email, pec=@Pec, phone=@Tel, address=@Address,
+            sdi_code=@Sdi, notes=@Note, easyfatt_id=@IDAnagr";
+
+    /// <summary>
+    /// Scrive in <c>suppliers</c> solo i fornitori nuovi o diversi da quello che c'è già
+    /// (confronto sulle colonne che l'UPDATE riscrive). Danea può avere più anagrafiche con
+    /// la stessa partita IVA: vince l'ultima, come da sempre, perché dopo ogni scrittura il
+    /// confronto delle successive parte da quello che si è appena scritto.
+    /// Separato da <see cref="RunSync"/> per provarlo su un database di prova senza Firebird.
+    /// </summary>
+    internal static async Task<(int Scritti, int Invariati)> ApplicaFornitori(
+        IReadOnlyList<SpecchioDanea.Fornitore> remoti, MySqlConnection local)
+    {
+        var locali = new Dictionary<string, SpecchioDanea.FornitoreLocale>(StringComparer.Ordinal);
+        foreach (var r in await local.QueryAsync<(string Vat, string? Nome, string? Referente, string? Email, string? Tel, string? Address, string? Note)>(
+            "SELECT vat_number, company_name, contact_name, email, phone, address, notes FROM suppliers WHERE vat_number IS NOT NULL AND vat_number <> ''"))
+        {
+            locali[r.Vat] = new SpecchioDanea.FornitoreLocale(r.Nome, r.Referente, r.Email, r.Tel, r.Address, r.Note);
+        }
+
+        int scritti = 0, invariati = 0;
+        foreach (var f in remoti)
+        {
+            if (!SpecchioDanea.DaRiscrivere(locali.GetValueOrDefault(f.Vat), f))
+            {
+                invariati++;
+                continue;
+            }
+            await local.ExecuteAsync(UpsertFornitoreSql, f);
+            locali[f.Vat] = SpecchioDanea.DopoScrittura(f);
+            scritti++;
+        }
+        return (scritti, invariati);
+    }
+
+    /// <summary>Come <see cref="ApplicaFornitori"/>, per <c>customers</c>.</summary>
+    internal static async Task<(int Scritti, int Invariati)> ApplicaClienti(
+        IReadOnlyList<SpecchioDanea.Cliente> remoti, MySqlConnection local)
+    {
+        var locali = new Dictionary<string, SpecchioDanea.ClienteLocale>(StringComparer.Ordinal);
+        foreach (var r in await local.QueryAsync<(string Vat, string? Nome, string? Email, string? Pec, string? Tel, string? Address, string? Sdi, int? IDAnagr, string? Note)>(
+            "SELECT vat_number, company_name, email, pec, phone, address, sdi_code, easyfatt_id, notes FROM customers WHERE vat_number IS NOT NULL AND vat_number <> ''"))
+        {
+            locali[r.Vat] = new SpecchioDanea.ClienteLocale(r.Nome, r.Email, r.Pec, r.Tel, r.Address, r.Sdi, r.IDAnagr, r.Note);
+        }
+
+        int scritti = 0, invariati = 0;
+        foreach (var c in remoti)
+        {
+            if (!SpecchioDanea.DaRiscrivere(locali.GetValueOrDefault(c.Vat), c))
+            {
+                invariati++;
+                continue;
+            }
+            await local.ExecuteAsync(UpsertClienteSql, c);
+            locali[c.Vat] = SpecchioDanea.DopoScrittura(c);
+            scritti++;
+        }
+        return (scritti, invariati);
     }
 
     /// <summary>

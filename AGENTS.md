@@ -63,7 +63,7 @@ cd atec-pm-web; npm run dev               # SPA → http://localhost:5173 (proxy
 
 - **UI**: React 19 + Vite 7 + TypeScript + shadcn (`atec-pm-web`)
 - **Backend**: ASP.NET Core 8 Web API · **DB**: MySQL con Dapper (no EF Core)
-- **Shared**: `ATEC.PM.Shared` (DTO + PermissionEngine)
+- **Shared**: `ATEC.PM.Shared` (DTO; `PermissionEngine` rimosso il 04/09/2026, era del WPF)
 
 ## Comandi
 
