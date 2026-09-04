@@ -242,6 +242,24 @@ Non c'è nessun equivalente di «forza lo sblocco del file»: quel diritto esist
 l'archivio era un file solo con un lucchetto sopra. Qui il database è di tutti e la concorrenza
 la regge `row_version`.
 
+### ✅ Come sono state aperte davvero (04/09/2026)
+
+🪤🪤 **In produzione il `min_level` non decide niente**: `app_config.PermissionsEngine = NEW`, cioè
+il motore **a persone** — contano solo le righe di `employee_feature_access` (793, su 37 persone).
+Alzare il livello a 2 e riavviare il servizio per la cache di `auth_features` non serve a nulla.
+Le concessioni per persona hanno una **cache a 60 secondi**: nessun riavvio, basta alzare
+`employees.permissions_version` perché il client di quella persona rilegga i suoi permessi.
+
+🪤 **E «livello PM» qui sarebbe stato sbagliato comunque**: nessuno dei cinque venditori attivi è
+PM — Carretta e Vottero sono RESP_REPARTO, Maracich, Spinello e Chiantia sono TECH. Con `min_level`
+a 2 il registro lo avrebbero visto tre persone, e nessuna di loro fa offerte.
+
+Concesse (`FULL`, origin `MANO`) le tre chiavi `nav.offerte`, `action.edit_offerta` e
+`nav.andamento` a **Admin ATEC e Edoardo Carretta**: si parte in due, gli altri venditori si
+aggiungono quando il modulo è rodato. Le altre quattro chiavi restano all'amministratore.
+
+---
+
 ### 🪤 Di serie sono chiuse
 
 `CatalogoPermessiSync` registra ogni chiave nuova a **`min_level = 3` (solo Amministratore)**, ed
