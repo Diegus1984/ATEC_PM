@@ -173,6 +173,46 @@ function Test-Prerequisiti {
     }
 }
 
+# --- Lavoro non committato ---------------------------------------------------
+# Il deploy compila dal WORKING TREE, non dall'ultimo commit: tutto quello che sta nella
+# cartella parte per il server, committato o no. Il 28/08/2026 è andato in produzione il
+# lavoro non committato di un'ALTRA sessione aperta sullo stesso repo (v117 e v118), senza
+# che nessuno l'avesse deciso. Da qui il deploy si ferma se c'è qualcosa di non committato —
+# e lo elenca, così si sa cosa si sta per spedire. `-AncheSporco` lo lascia passare.
+#
+# Fanno eccezione i due file che il deploy STESSO riscrive (changelog e mappa endpoint):
+# restano modificati fino al commit di servizio che li registra, e fermare il deploy dopo
+# per colpa del deploy prima sarebbe un cane che si morde la coda.
+function Get-LavoroNonCommittato {
+    $radice = Get-RadiceProgetto
+    # core.safecrlf=false: senza, git avvisa su stderr dei file con LF («will be replaced by
+    # CRLF») e con $ErrorActionPreference = 'Stop' un avviso su stderr può diventare un errore.
+    $righe = @(& git -C $radice -c core.safecrlf=false status --porcelain --untracked-files=normal)
+    if ($LASTEXITCODE -ne 0) { throw 'git status fallito: la cartella del progetto non è un repository?' }
+    $esclusi = @('ATEC.PM.Server/changelog.json', 'docs/archivio/PERMESSI-MAPPA-ENDPOINT.gen.md')
+    return @($righe | Where-Object {
+        # Formato: due lettere di stato, uno spazio, il percorso (con «vecchio -> nuovo» se rinominato).
+        $percorso = $_.Substring(3).Trim()
+        -not ($esclusi -contains $percorso)
+    })
+}
+
+function Test-LavoroNonCommittato {
+    param([switch]$AncheSporco)
+    $sporco = Get-LavoroNonCommittato
+    if ($sporco.Count -eq 0) { return }
+    if ($AncheSporco) {
+        Write-Host "[Git] $($sporco.Count) file non committati: si pubblica lo stesso (-AncheSporco)." -ForegroundColor Yellow
+        $sporco | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+        return
+    }
+    Write-Host ''
+    Write-Host "FERMATO: $($sporco.Count) file non committati, e il deploy compila dalla cartella, non dal commit." -ForegroundColor Red
+    $sporco | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
+    Write-Host '      Committa (o scarta) prima di pubblicare; -AncheSporco pubblica lo stesso, sapendo cosa parte.' -ForegroundColor Red
+    throw 'Lavoro non committato nel working tree: deploy fermato prima di toccare qualsiasi cosa.'
+}
+
 function Invoke-TestAutomatici {
     <#
       I test automatici PRIMA di toccare il server: se qualcosa si è rotto, l'aggiornamento

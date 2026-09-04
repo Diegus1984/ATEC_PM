@@ -26,6 +26,9 @@
 #   -ConClient        ricompila il client web anche se i sorgenti non sono cambiati.
 #                     (di norma `npm build` si salta: sono 30 secondi per rifare un bundle
 #                     identico quando si è toccato solo C#)
+#   -AncheSporco      pubblica anche con lavoro NON committato nella cartella. Di norma lo
+#                     script si ferma e lo elenca: compila dalla cartella, non dal commit, e
+#                     il 28/08/2026 è partito il lavoro non committato di un'altra sessione.
 # =============================================================================
 
 param(
@@ -33,7 +36,8 @@ param(
     [switch]$ConServizioFermo,
     [switch]$SenzaTest,
     [switch]$ConTest,
-    [switch]$ConClient
+    [switch]$ConClient,
+    [switch]$AncheSporco
 )
 
 . (Join-Path $PSScriptRoot '_comune.ps1')
@@ -44,6 +48,7 @@ Write-Host ''
 
 Start-Cronometro
 Test-Prerequisiti
+Test-LavoroNonCommittato -AncheSporco:$AncheSporco
 
 if ($SenzaTest) {
     Write-Host '[Test] SALTATI su richiesta (-SenzaTest): si pubblica senza rete.' -ForegroundColor Yellow
