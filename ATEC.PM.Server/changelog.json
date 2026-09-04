@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260904-1237",
+                     "data":  "2026-09-04T12:37:35",
+                     "hash":  "cb63182b28a89cd69dafef1283c7dbf933d0dcae",
+                     "modifiche":  [
+                                       "Editor descrizioni: TinyMCE 8 provato a runtime nei due dialoghi (catalogo e preventivo): immagine incollata caricata da sola, salvataggio, riapertura, tabella 50/50 intatta",
+                                       "Editor descrizioni: TinyMCE aggiornato dalla 5.10.9 (fuori supporto dal 2023) alla 8.9 da npm, in un chunk Vite caricato a richiesta; via i 190 file del vendor da public/"
+                                   ]
+                 },
+                 {
                      "build":  "20260904-1203",
                      "data":  "2026-09-04T12:04:00",
                      "hash":  "51a330e99c9a8d59ae69ea6eccd8c913e5a645aa",
