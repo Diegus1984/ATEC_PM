@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260904-0921",
+                     "data":  "2026-09-04T09:21:27",
+                     "hash":  "f28b39b7161839c8ec9f0af65e968a3c3dee4e96",
+                     "modifiche":  [
+                                       "Client web: hook SignalR unificati su useHubSubscription"
+                                   ]
+                 },
+                 {
                      "build":  "20260903-0935",
                      "data":  "2026-09-03T09:35:44",
                      "hash":  "4a7f5dc4720d28c019276796af4027bb947da574",
