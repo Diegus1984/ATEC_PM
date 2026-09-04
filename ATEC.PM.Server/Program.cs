@@ -249,6 +249,8 @@ builder.Services.AddSingleton<PermissionChangeService>();
 builder.Services.AddSingleton<PermissionSeedService>();
 builder.Services.AddSingleton<PermissionAdminService>();
 builder.Services.AddSingleton<QuoteDbService>();
+// Import una-tantum dello storico offerte (Registro Offerte, fase 2): senza stato, un'istanza basta.
+builder.Services.AddSingleton<SalesOfferImportService>();
 builder.Services.AddSingleton<GammaRobotDbService>();
 builder.Services.AddSingleton<MoMDbService>();
 builder.Services.AddSingleton<CheckListDbService>();

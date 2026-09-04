@@ -142,6 +142,25 @@
       "kind": "sezione",
       "label": "Commerciale",
       "figli": [
+        {
+          "kind": "voce",
+          "chiave": "nav.offerte",
+          "label": "Registro Offerte",
+          "figli": [
+            { "kind": "azione", "chiave": "action.edit_offerta", "label": "Crea e modifica le proprie offerte" },
+            { "kind": "azione", "chiave": "action.edit_offerta_altrui", "label": "Modifica offerte di altri venditori", "nota": "Senza questa, chi ha action.edit_offerta tocca solo le offerte con una sigla venditore agganciata alla sua scheda: e' il ruolo «solo proprie offerte» del vecchio applicativo ATEC Offerte." },
+            { "kind": "azione", "chiave": "action.delete_offerta", "label": "Elimina offerte" },
+            { "kind": "azione", "chiave": "action.bulk_close_offerte", "label": "Chiude in blocco le offerte degli anni passati" },
+            { "kind": "azione", "chiave": "action.edit_offer_types", "label": "Modifica tipi impianto e venditori del registro" },
+            { "kind": "azione", "chiave": "action.import_offerte", "label": "Importa lo storico offerte dal vecchio archivio", "nota": "Operazione una tantum: simula per default, scrive solo con simulazione=false." }
+          ]
+        },
+        {
+          "kind": "voce",
+          "chiave": "nav.andamento",
+          "label": "Andamento",
+          "nota": "Il cruscotto con cui il venditore riferisce alla proprieta'. Gli importi restano coperti da data.revenue: chi non vede il fatturato vede i conteggi e le percentuali, non gli euro."
+        },
         { "kind": "voce", "chiave": "nav.preventivi", "label": "Preventivi" },
         { "kind": "voce", "chiave": "nav.cat_preventivi", "label": "Cat. Preventivi" },
         {

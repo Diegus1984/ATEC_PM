@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 04/09/2026 11:59.
+> Fotografia del 04/09/2026 16:22.
 
 ## Chiavi con endpoint
 
@@ -22,9 +22,15 @@
 - `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
 
+### `action.bulk_close_offerte` — Chiude in blocco le offerte degli anni passati
+- `POST /api/sales-offers/bulk-close` (SalesOffersController.BulkClose)
+
 ### `action.delete_ddp_row` — Elimina righe DDP
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
 - `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.DeleteDdpItem)
+
+### `action.delete_offerta` — Elimina offerte
+- `DELETE /api/sales-offers/{id}` (SalesOffersController.Delete)
 
 ### `action.delete_project` — Elimina commessa
 - `DELETE /api/projects/{id}/hard` (ProjectsController.HardDelete)
@@ -51,6 +57,10 @@
 - `PUT /api/gamma-robot/quadri/{id}` (GammaRobotController.UpdateQuadro)
 - `PUT /api/gamma-robot/robots/{id}` (GammaRobotController.UpdateRobot)
 
+### `action.edit_offer_types` — Modifica tipi impianto e venditori del registro
+- `PUT /api/sales-offers/sellers` (SalesOffersController.SaveSellers)
+- `PUT /api/sales-offers/types` (SalesOffersController.SaveTypes)
+
 ### `action.edit_project` — Modifica commessa
 - `PUT /api/projects/{id}` (ProjectsController.Update)
 
@@ -63,6 +73,9 @@
 - `POST /api/import/easyfatt/articles` (ImportController.ImportArticles)
 - `POST /api/import/easyfatt/customers` (ImportController.ImportCustomers)
 - `POST /api/import/easyfatt/suppliers` (ImportController.ImportSuppliers)
+
+### `action.import_offerte` — Importa lo storico offerte dal vecchio archivio
+- `POST /api/sales-offers/import-seed` (SalesOffersController.ImportSeed)
 
 ### `action.manage_bug_reports` — Gestisce le segnalazioni (stati, risposte)
 - `POST /api/bug-reports/{id}/archive` (BugReportsController.Archive)
@@ -230,6 +243,9 @@
 - `POST /api/activity-catalog/reorder` (ActivityCatalogController.Reorder)
 - `POST /api/activity-catalog/reset` (ActivityCatalogController.Reset)
 - `PUT /api/activity-catalog/{id}` (ActivityCatalogController.Update)
+
+### `nav.andamento` — Andamento
+- `GET /api/andamento/offerte` (AndamentoController.GetOfferte)
 
 ### `nav.backup` — Backup DB
 - `DELETE /api/backup/{fileName}` (BackupController.DeleteBackup)
@@ -544,6 +560,21 @@
 - `PUT /api/mom/{id}` (MoMController.Update)
 - `PUT /api/mom/items/{id}` (MoMController.UpdateItem)
 - `PUT /api/mom/notes/{id}` (MoMController.UpdateNote)
+
+### `nav.offerte` — Registro Offerte
+- `DELETE /api/sales-offers/{id}` (SalesOffersController.Delete)
+- `GET /api/sales-offers` (SalesOffersController.GetList)
+- `GET /api/sales-offers/{id}` (SalesOffersController.GetById)
+- `GET /api/sales-offers/next-number` (SalesOffersController.GetNextNumber)
+- `GET /api/sales-offers/sellers` (SalesOffersController.GetSellers)
+- `GET /api/sales-offers/types` (SalesOffersController.GetTypes)
+- `POST /api/sales-offers` (SalesOffersController.Create)
+- `POST /api/sales-offers/{id}/followup` (SalesOffersController.AddFollowup)
+- `POST /api/sales-offers/bulk-close` (SalesOffersController.BulkClose)
+- `POST /api/sales-offers/import-seed` (SalesOffersController.ImportSeed)
+- `PUT /api/sales-offers/{id}` (SalesOffersController.Update)
+- `PUT /api/sales-offers/sellers` (SalesOffersController.SaveSellers)
+- `PUT /api/sales-offers/types` (SalesOffersController.SaveTypes)
 
 ### `nav.officina_inbox` — Inbox Officina (endpoint)
 - `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
@@ -910,6 +941,8 @@
 
 ## Chiavi usate solo inline (CanAccessUser/CanWriteUser, senza attributo)
 - `action.ddp_status_override` — ATEC.PM.Server/Services/DdpTransitionService.cs
+- `action.edit_offerta` — ATEC.PM.Server/Controllers/SalesOffersController.cs
+- `action.edit_offerta_altrui` — ATEC.PM.Server/Controllers/SalesOffersController.cs
 - `action.moderate_chat` — ATEC.PM.Server/Controllers/ChatController.cs
 - `action.sal_edit_closed` — ATEC.PM.Server/Controllers/SalController.cs
 - `action.timesheet_any_employee` — ATEC.PM.Server/Controllers/TimesheetController.cs

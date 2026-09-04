@@ -5,16 +5,22 @@
 export type ChiaveCatalogo =
   | "action.app_config"
   | "action.assign_atec_code"
+  | "action.bulk_close_offerte"
   | "action.create_project"
   | "action.ddp_status_override"
   | "action.delete_ddp_row"
+  | "action.delete_offerta"
   | "action.delete_project"
   | "action.edit_bilancio_settings"
   | "action.edit_codex_composition"
   | "action.edit_dashboard_settings"
   | "action.edit_gamma_robot"
+  | "action.edit_offer_types"
+  | "action.edit_offerta"
+  | "action.edit_offerta_altrui"
   | "action.edit_project"
   | "action.import_easyfatt"
+  | "action.import_offerte"
   | "action.import_project_phases"
   | "action.manage_bug_reports"
   | "action.manage_codex"
@@ -36,6 +42,7 @@ export type ChiaveCatalogo =
   | "data.timesheet_all_phases"
   | "nav.acquisti_inbox"
   | "nav.anagrafica_attivita"
+  | "nav.andamento"
   | "nav.backup"
   | "nav.bilancio"
   | "nav.bug_reports"
@@ -60,6 +67,7 @@ export type ChiaveCatalogo =
   | "nav.hr_timbrature"
   | "nav.milestones"
   | "nav.mom"
+  | "nav.offerte"
   | "nav.officina_inbox"
   | "nav.ore_commessa"
   | "nav.permessi"
@@ -434,6 +442,48 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
     "figli": [
       {
         "kind": "voce",
+        "chiave": "nav.offerte",
+        "label": "Registro Offerte",
+        "figli": [
+          {
+            "kind": "azione",
+            "chiave": "action.edit_offerta",
+            "label": "Crea e modifica le proprie offerte"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.edit_offerta_altrui",
+            "label": "Modifica offerte di altri venditori"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.delete_offerta",
+            "label": "Elimina offerte"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.bulk_close_offerte",
+            "label": "Chiude in blocco le offerte degli anni passati"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.edit_offer_types",
+            "label": "Modifica tipi impianto e venditori del registro"
+          },
+          {
+            "kind": "azione",
+            "chiave": "action.import_offerte",
+            "label": "Importa lo storico offerte dal vecchio archivio"
+          }
+        ]
+      },
+      {
+        "kind": "voce",
+        "chiave": "nav.andamento",
+        "label": "Andamento"
+      },
+      {
+        "kind": "voce",
         "chiave": "nav.preventivi",
         "label": "Preventivi"
       },
@@ -654,16 +704,22 @@ export const CATALOGO_PERMESSI: readonly VoceCatalogoGen[] = [
 export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "action.app_config",
   "action.assign_atec_code",
+  "action.bulk_close_offerte",
   "action.create_project",
   "action.ddp_status_override",
   "action.delete_ddp_row",
+  "action.delete_offerta",
   "action.delete_project",
   "action.edit_bilancio_settings",
   "action.edit_codex_composition",
   "action.edit_dashboard_settings",
   "action.edit_gamma_robot",
+  "action.edit_offer_types",
+  "action.edit_offerta",
+  "action.edit_offerta_altrui",
   "action.edit_project",
   "action.import_easyfatt",
+  "action.import_offerte",
   "action.import_project_phases",
   "action.manage_bug_reports",
   "action.manage_codex",
@@ -685,6 +741,7 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "data.timesheet_all_phases",
   "nav.acquisti_inbox",
   "nav.anagrafica_attivita",
+  "nav.andamento",
   "nav.backup",
   "nav.bilancio",
   "nav.bug_reports",
@@ -709,6 +766,7 @@ export const CHIAVI_CATALOGO: readonly ChiaveCatalogo[] = [
   "nav.hr_timbrature",
   "nav.milestones",
   "nav.mom",
+  "nav.offerte",
   "nav.officina_inbox",
   "nav.ore_commessa",
   "nav.permessi",

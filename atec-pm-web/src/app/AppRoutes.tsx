@@ -56,6 +56,8 @@ import { TimbraturePage } from "@/features/hr/TimbraturePage"
 import { RichiestePage } from "@/features/hr/RichiestePage"
 import { WorkRequestsPage } from "@/features/work-requests/WorkRequestsPage"
 import { BilancioPage } from "@/features/bilancio/BilancioPage"
+import { AndamentoPage } from "@/features/andamento/AndamentoPage"
+import { OffertePage } from "@/features/offerte/OffertePage"
 
 const LIVE_ROUTES: Record<string, ReactNode> = {
   dashboard: <DashboardPage />,
@@ -98,6 +100,8 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   codex: <CodexPage />,
   "codex-composizione": <CodexCompositionPage />,
   "gestore-ddp": <DdpControlloPage defaultView="gestore" />,
+  offerte: <OffertePage />,
+  andamento: <AndamentoPage />,
   preventivi: <QuotesHomePage />,
   utenti: <UtentiPage />,
   permessi: <PermessiPage />,

@@ -40,6 +40,12 @@ public class ProjectHub : Hub
     // commessa viene creata, modificata o eliminata, e ricarica la lista.
     public const string ProjectsGroup = "projects-all";
 
+    // Gruppo globale REGISTRO OFFERTE: la pagina Offerte riceve SalesOffersChanged a ogni
+    // creazione, modifica, eliminazione o contatto. Il registro non è legato a una commessa,
+    // e ci lavorano più venditori insieme sullo stesso elenco: senza avviso il secondo tira
+    // un numero già preso dal primo e se ne accorge solo al salvataggio.
+    public const string SalesOffersGroup = "sales-offers-all";
+
     // Gruppo globale CONFIGURAZIONE SEZIONI DI COSTO: gruppi, sezioni, reparti, anagrafica
     // delle fasi e tariffe. È una pagina che si lavora in due (uno assegna le fasi, l'altro
     // sistema i reparti) e ogni modifica cambia l'albero sotto gli occhi dell'altro: senza
@@ -118,6 +124,10 @@ public class ProjectHub : Hub
     public Task JoinProjects() => Groups.AddToGroupAsync(Context.ConnectionId, ProjectsGroup);
 
     public Task LeaveProjects() => Groups.RemoveFromGroupAsync(Context.ConnectionId, ProjectsGroup);
+
+    public Task JoinSalesOffers() => Groups.AddToGroupAsync(Context.ConnectionId, SalesOffersGroup);
+
+    public Task LeaveSalesOffers() => Groups.RemoveFromGroupAsync(Context.ConnectionId, SalesOffersGroup);
 
     public Task JoinCostSections() => Groups.AddToGroupAsync(Context.ConnectionId, CostSectionsGroup);
 

@@ -26,6 +26,8 @@ import {
   Clock,
   Database,
   DatabaseBackup,
+  ChartNoAxesCombined,
+  FileSignature,
   FileStack,
   FileText,
   Fingerprint,
@@ -278,6 +280,26 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     id: "commerciale",
     label: "Commerciale",
     items: [
+      {
+        id: "offerte",
+        label: "Registro Offerte",
+        path: "/offerte",
+        featureKey: "nav.offerte",
+        icon: FileSignature,
+        status: "live",
+        description:
+          "Registro di tutte le offerte emesse: numerazione univoca tipo+numero+anno+venditore, esito e chance, forbice di prezzo, ordine a corpo o a consuntivo, percorsi NAS, contatti col referente. Serie parallela ai Preventivi, agganciabile a preventivo e commessa.",
+      },
+      {
+        id: "andamento",
+        label: "Andamento",
+        path: "/andamento",
+        featureKey: "nav.andamento",
+        icon: ChartNoAxesCombined,
+        status: "live",
+        description:
+          "Il cruscotto con cui il venditore riferisce alla proprietà: KPI dell'anno, cinque anni a confronto, mese per mese, chance e portafoglio ponderato, analisi di mercato per categoria, per venditore, per tipo, primi clienti e le quindici aperte più grandi. Gli importi seguono il permesso «Vede il fatturato».",
+      },
       {
         id: "preventivi",
         label: "Preventivi",

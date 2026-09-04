@@ -284,7 +284,13 @@ public class DbService
             pec VARCHAR(255) DEFAULT '',
             phone VARCHAR(100) DEFAULT '',
             cell VARCHAR(50) DEFAULT '',
+            fax VARCHAR(50) NOT NULL DEFAULT '',
             address VARCHAR(300) DEFAULT '',
+            postal_code VARCHAR(20) NOT NULL DEFAULT '',
+            city VARCHAR(100) NOT NULL DEFAULT '',
+            province VARCHAR(10) NOT NULL DEFAULT '',
+            country VARCHAR(100) NOT NULL DEFAULT '',
+            website VARCHAR(200) NOT NULL DEFAULT '',
             vat_number VARCHAR(50) DEFAULT '',
             fiscal_code VARCHAR(50) DEFAULT '',
             payment_terms VARCHAR(255) DEFAULT '',
@@ -1426,6 +1432,10 @@ public class DbService
         SalDbService.SeedSapCausali(c, _logger);
         SalDbService.SeedPaymentStates(c, _logger);
 
+        // Anagrafiche del Registro Offerte (idem: solo a tabella vuota)
+        SalesOffersDbService.SeedTypes(c, _logger);
+        SalesOffersDbService.SeedSellers(c, _logger);
+
         // Migrazioni versionate (dopo le CREATE TABLE idempotenti).
         //
         // Su un database APPENA CREATO le migrazioni girano su uno schema che le contiene già
@@ -1455,6 +1465,10 @@ public class DbService
         QuoteDbService quoteDb = new(this);
         quoteDb.InitTables(c);
         quoteDb.ApplyMigrations(c);
+
+        // Registro Offerte (serie commerciale parallela ai preventivi).
+        // DOPO il modulo Preventivi: sales_offers ha una FK verso quotes, che nasce lì sopra.
+        SalesOffersDbService.InitTables(c, _logger);
 
         // Modulo Gamma Robot (distinta schede/componenti per robot+quadro)
         new GammaRobotDbService(this).InitTables(c);

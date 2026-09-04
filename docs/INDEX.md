@@ -65,6 +65,7 @@
 | [piani/PIANO-FASI-MULTISEZIONE.md](piani/PIANO-FASI-MULTISEZIONE.md) | Fasi dettaglio multi-sezione (libreria unica di fasi) |
 | [piani/PIANO-DASHBOARD-STATI-88.md](piani/PIANO-DASHBOARD-STATI-88.md) | Dashboard PM e stati della commessa (segnalazione #88) |
 | [piani/HANDOFF-PREVENTIVO-INLINE.md](piani/HANDOFF-PREVENTIVO-INLINE.md) | Preventivo editabile inline in «Preventivo vs Consuntivo» |
+| [piani/PIANO-ANDAMENTO-COMMERCIALE.md](piani/PIANO-ANDAMENTO-COMMERCIALE.md) | **Registro Offerte + Andamento**: port di ATEC Offerte, serie parallela agganciata, cruscotto per la proprietà |
 
 **DDP / acquisti / magazzino**
 | Documento | Cosa contiene |

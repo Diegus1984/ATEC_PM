@@ -3,6 +3,7 @@
  *  "@/lib/api/types", mai dai singoli file. */
 
 export * from "./acquisti"
+export * from "./andamento"
 export * from "./admin"
 export * from "./anagrafiche"
 export * from "./auth"
@@ -27,6 +28,7 @@ export * from "./projects"
 export * from "./quotes"
 export * from "./resources"
 export * from "./sal"
+export * from "./sales-offers"
 export * from "./tariffs"
 export * from "./templates"
 export * from "./timesheet"
