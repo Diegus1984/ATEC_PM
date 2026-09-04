@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260904-0921",
+                     "data":  "2026-09-04T09:35:38",
+                     "hash":  "916761ae3568795a08dd3e1065b22bf7f3c65ca5",
+                     "modifiche":  [
+                                       "Pulizia codice morto: PermissionEngine, 25 classi Shared, MaterialCategoriesController, script one-off"
+                                   ]
+                 },
+                 {
+                     "build":  "20260904-0921",
                      "data":  "2026-09-04T09:21:27",
                      "hash":  "f28b39b7161839c8ec9f0af65e968a3c3dee4e96",
                      "modifiche":  [

@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 03/09/2026 08:46.
+> Fotografia del 04/09/2026 09:33.
 
 ## Chiavi con endpoint
 
@@ -297,21 +297,17 @@
 
 ### `nav.catalogo` — Catalogo Articoli
 - `DELETE /api/catalog/{id}` (CatalogController.Delete)
-- `DELETE /api/material-categories/{id}` (MaterialCategoriesController.Delete)
 - `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/catalog/{id}` (CatalogController.GetById)
 - `GET /api/catalog/filter-meta` (CatalogController.GetFilterMeta)
-- `PATCH /api/material-categories/{id}/field` (MaterialCategoriesController.UpdateField)
 - `POST /api/catalog` (CatalogController.Create)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
-- `POST /api/material-categories` (MaterialCategoriesController.Create)
 - `PUT /api/catalog/{id}` (CatalogController.Update)
-- `PUT /api/material-categories/{id}` (MaterialCategoriesController.Update)
 
 ### `nav.changelog` — Changelog versioni
 - `GET /api/changelog` (ChangelogController.Get)
@@ -957,7 +953,6 @@
 - DepartmentsController: 1 endpoint
 - EmployeesController: 4 endpoint
 - GammaRobotController: 5 endpoint
-- MaterialCategoriesController: 1 endpoint
 - NotificationsController: 7 endpoint
 - PhasesController: 14 endpoint
 - ProjectsController: 8 endpoint
