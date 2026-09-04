@@ -50,11 +50,19 @@ public class ElencoCommesseTests
         // GetDashboard è in questo elenco per una ragione imparata a caro prezzo: il primo giro
         // chiuse l'elenco e lasciò aperta la Dashboard, che dei soldi ne porta anche di più
         // (costo consuntivo, materiali, trasferta, totale). Chiudere UNA strada non basta.
-        foreach (string metodo in new[] { "GetAll", "GetTree", "GetById", "NextCode", "GetDashboard" })
+        // Dal 04/09/2026 il cruscotto sta in ProjectDashboardController (stessa rotta): il
+        // vincolo è lo stesso, cambia solo la classe in cui cercarlo.
+        var strade = new (Type Controller, string Metodo)[]
         {
-            string[] chiavi = Gate.ChiaviDi(typeof(ProjectsController), metodo);
+            (typeof(ProjectsController), "GetAll"), (typeof(ProjectsController), "GetTree"),
+            (typeof(ProjectsController), "GetById"), (typeof(ProjectsController), "NextCode"),
+            (typeof(ProjectDashboardController), "GetDashboard"),
+        };
+        foreach ((Type controller, string metodo) in strade)
+        {
+            string[] chiavi = Gate.ChiaviDi(controller, metodo);
             Assert.True(chiavi.Contains("nav.commesse"),
-                $"ProjectsController.{metodo} ha perso [RequireFeature(\"nav.commesse\")]: " +
+                $"{controller.Name}.{metodo} ha perso [RequireFeature(\"nav.commesse\")]: " +
                 "i numeri della commessa (revenue, budget, costo consuntivo) tornerebbero leggibili a chiunque.");
         }
     }

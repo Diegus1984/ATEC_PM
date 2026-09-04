@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 04/09/2026 10:08.
+> Fotografia del 04/09/2026 10:32.
 
 ## Chiavi con endpoint
 
@@ -23,8 +23,8 @@
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
 
 ### `action.delete_ddp_row` — Elimina righe DDP
-- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
-- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.DeleteDdpItem)
 
 ### `action.delete_project` — Elimina commessa
 - `DELETE /api/projects/{id}/hard` (ProjectsController.HardDelete)
@@ -192,7 +192,7 @@
 - `PUT /api/projects/{projectId}/cashflow/header` (CashFlowController.UpdateHeader)
 
 ### `nav.acquisti_inbox` — Inbox Acquisti
-- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.DeleteDdpItem)
 - `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
@@ -203,15 +203,15 @@
 - `GET /api/danea-orders/article-image` (DaneaOrdersController.GetArticleImage)
 - `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
 - `GET /api/ddp-commercial/inbox` (DdpCommercialController.GetInbox)
-- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
+- `GET /api/projects/{id}/ddp` (ProjectDdpController.GetDdpItems)
 - `GET /api/purchase-rfqs` (PurchaseRfqController.List)
 - `GET /api/purchase-rfqs/{id}` (PurchaseRfqController.Get)
 - `GET /api/purchase-rfqs/email-candidates` (PurchaseRfqController.EmailCandidates)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
-- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
-- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
+- `POST /api/projects/{id}/ddp` (ProjectDdpController.AddDdpItem)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectDdpController.SetRawSupplier)
 - `POST /api/purchase-rfqs` (PurchaseRfqController.Create)
 - `POST /api/purchase-rfqs/{id}/cancel` (PurchaseRfqController.Cancel)
 - `POST /api/purchase-rfqs/{id}/create-danea-order` (PurchaseRfqController.CreateDaneaOrder)
@@ -221,7 +221,7 @@
 - `POST /api/purchase-rfqs/mark-emailed` (PurchaseRfqController.MarkEmailed)
 - `POST /api/purchase-rfqs/offer-plan` (PurchaseRfqController.OfferPlan)
 - `POST /api/purchase-rfqs/request-offers` (PurchaseRfqController.RequestOffers)
-- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.UpdateDdpItem)
 - `PUT /api/purchase-rfqs/{id}/offers/{offerId}` (PurchaseRfqController.SaveOffer)
 
 ### `nav.anagrafica_attivita` — Anagrafica attività
@@ -344,7 +344,7 @@
 ### `nav.commesse` — Commesse
 - `GET /api/projects` (ProjectsController.GetAll)
 - `GET /api/projects/{id}` (ProjectsController.GetById)
-- `GET /api/projects/{id}/dashboard` (ProjectsController.GetDashboard)
+- `GET /api/projects/{id}/dashboard` (ProjectDashboardController.GetDashboard)
 - `GET /api/projects/next-code` (ProjectsController.NextCode)
 - `GET /api/projects/tree` (ProjectsController.GetTree)
 
@@ -418,8 +418,8 @@
 - `PUT /api/suppliers/{id}` (SuppliersController.Update)
 
 ### `nav.gestore_ddp` — Gestore DDP
-- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
-- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.DeleteDdpItem)
 - `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
 - `GET /api/ddp-feedback/acquisti` (DdpFeedbackController.GetAcquisti)
@@ -432,23 +432,23 @@
 - `GET /api/ddp-manager/deliveries-by-day` (DdpManagerController.GetDeliveriesByDay)
 - `GET /api/ddp-manager/summary` (DdpManagerController.GetSummary)
 - `GET /api/ddp-row-off/{projectId:int}/{ddpType}` (DdpRowOffController.Get)
-- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
-- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `GET /api/projects/{id}/ddp` (ProjectDdpController.GetDdpItems)
+- `GET /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.GetOfficinaItems)
 - `POST /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/reset` (DdpFeedbackController.ResetAcquistiHidden)
 - `POST /api/ddp-feedback/magazzino/{projectId:int}/{ddpType}/reset` (DdpFeedbackController.ResetMagazzinoHidden)
 - `POST /api/ddp-manager/{projectId:int}/seen` (DdpManagerController.MarkSeen)
 - `POST /api/ddp-row-off/{projectId:int}/{ddpType}/{sectionKey}/bulk` (DdpRowOffController.SetBulk)
 - `POST /api/ddp-row-off/{projectId:int}/{ddpType}/reset` (DdpRowOffController.Reset)
-- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
-- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
-- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
-- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
+- `POST /api/projects/{id}/ddp` (ProjectDdpController.AddDdpItem)
+- `POST /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectDdpOfficinaController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectDdpController.SetRawSupplier)
 - `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/hidden` (DdpFeedbackController.SetAcquistiHidden)
 - `PUT /api/ddp-feedback/acquisti/{projectId:int}/{ddpType}/{statusKey}/note` (DdpFeedbackController.SetAcquistiNote)
 - `PUT /api/ddp-feedback/magazzino/{projectId:int}/{ddpType}/{itemId:int}/hidden` (DdpFeedbackController.SetMagazzinoHidden)
 - `PUT /api/ddp-row-off/{projectId:int}/{ddpType}/{sectionKey}/{itemId:int}` (DdpRowOffController.SetOne)
-- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
-- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.UpdateOfficinaItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.UpdateDdpItem)
 
 ### `nav.hr_richieste` — Ferie e permessi
 - `DELETE /api/hr/absences/{id:int}` (HrController.CancelAbsence)
@@ -546,13 +546,13 @@
 - `PUT /api/mom/notes/{id}` (MoMController.UpdateNote)
 
 ### `nav.officina_inbox` — Inbox Officina (endpoint)
-- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
 - `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
-- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
-- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
-- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
-- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
+- `GET /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.GetOfficinaItems)
+- `POST /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectDdpOfficinaController.ImportOfficinaComposition)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.UpdateOfficinaItem)
 
 ### `nav.ore_commessa` — Ore Commessa
 - `GET /api/projects/{projectId:int}/hours` (ProjectHoursController.Get)
@@ -753,7 +753,7 @@
 - `PUT /api/checklist/items/{id}` (CheckListController.UpdateItem)
 
 ### `project.ddp_commerciale` — DDP Commerciali
-- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectsController.DeleteDdpItem)
+- `DELETE /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.DeleteDdpItem)
 - `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
@@ -763,53 +763,53 @@
 - `GET /api/danea-orders/{idDoc:int}` (DaneaOrdersController.Get)
 - `GET /api/danea-orders/article-image` (DaneaOrdersController.GetArticleImage)
 - `GET /api/danea-orders/by-ref` (DaneaOrdersController.GetByRef)
-- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
-- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `GET /api/projects/{id}/ddp` (ProjectDdpController.GetDdpItems)
+- `GET /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.GetOfficinaItems)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
-- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
-- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
-- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
-- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
-- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
-- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+- `POST /api/projects/{id}/ddp` (ProjectDdpController.AddDdpItem)
+- `POST /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectDdpOfficinaController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectDdpController.SetRawSupplier)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.UpdateOfficinaItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.UpdateDdpItem)
 
 ### `project.ddp_officina` — DDP Officina
-- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.DeleteOfficinaItem)
+- `DELETE /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.DeleteOfficinaItem)
 - `GET /api/catalog` (CatalogController.GetAll)
 - `GET /api/catalog-mapping/by-atec/{atecCode}` (CatalogMappingController.GetByAtec)
 - `GET /api/catalog-mapping/by-codex/{codexItemId}` (CatalogMappingController.GetByCodex)
 - `GET /api/catalog-mapping/orphans` (CatalogMappingController.GetOrphans)
 - `GET /api/codex/picker` (CodexPickerController.Get)
 - `GET /api/codex/picker/derivati-101` (CodexPickerController.GetDerivati101)
-- `GET /api/projects/{id}/ddp` (ProjectsController.GetDdpItems)
-- `GET /api/projects/{id}/ddp-officina` (ProjectsController.GetOfficinaItems)
+- `GET /api/projects/{id}/ddp` (ProjectDdpController.GetDdpItems)
+- `GET /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.GetOfficinaItems)
 - `POST /api/catalog-mapping/assign` (CatalogMappingController.Assign)
 - `POST /api/catalog-mapping/assign-from-bom` (CatalogMappingController.AssignFromBom)
 - `POST /api/catalog-mapping/unassign` (CatalogMappingController.Unassign)
 - `POST /api/codex/confirm` (CodexController.ConfirmReservation)
 - `POST /api/codex/release/{reservationId}` (CodexController.ReleaseReservation)
 - `POST /api/codex/reserve` (CodexController.ReserveCode)
-- `POST /api/projects/{id}/ddp` (ProjectsController.AddDdpItem)
-- `POST /api/projects/{id}/ddp-officina` (ProjectsController.AddOfficinaItem)
-- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectsController.ImportOfficinaComposition)
-- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectsController.SetRawSupplier)
-- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectsController.UpdateOfficinaItem)
-- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectsController.UpdateDdpItem)
+- `POST /api/projects/{id}/ddp` (ProjectDdpController.AddDdpItem)
+- `POST /api/projects/{id}/ddp-officina` (ProjectDdpOfficinaController.AddOfficinaItem)
+- `POST /api/projects/{id}/ddp-officina/import-composition` (ProjectDdpOfficinaController.ImportOfficinaComposition)
+- `POST /api/projects/{id}/ddp/raw-supplier` (ProjectDdpController.SetRawSupplier)
+- `PUT /api/projects/{id}/ddp-officina/{itemId}` (ProjectDdpOfficinaController.UpdateOfficinaItem)
+- `PUT /api/projects/{id}/ddp/{itemId}` (ProjectDdpController.UpdateDdpItem)
 
 ### `project.documenti` — Documenti
-- `GET /api/projects/{id}/download` (ProjectsController.DownloadFile)
-- `GET /api/projects/{id}/file-tree` (ProjectsController.GetFileTree)
-- `GET /api/projects/{id}/files` (ProjectsController.GetFiles)
-- `GET /api/projects/{id}/preview` (ProjectsController.PreviewFile)
-- `POST /api/projects/{id}/create-folder` (ProjectsController.CreateFolder)
-- `POST /api/projects/{id}/create-subfolder` (ProjectsController.CreateSubfolder)
-- `POST /api/projects/{id}/delete-item` (ProjectsController.DeleteItem)
-- `POST /api/projects/{id}/move-item` (ProjectsController.MoveItem)
-- `POST /api/projects/{id}/rename` (ProjectsController.RenameItem)
-- `POST /api/projects/{id}/upload` (ProjectsController.UploadFile)
-- `POST /api/projects/{id}/upload-multiple` (ProjectsController.UploadMultiple)
+- `GET /api/projects/{id}/download` (ProjectFilesController.DownloadFile)
+- `GET /api/projects/{id}/file-tree` (ProjectFilesController.GetFileTree)
+- `GET /api/projects/{id}/files` (ProjectFilesController.GetFiles)
+- `GET /api/projects/{id}/preview` (ProjectFilesController.PreviewFile)
+- `POST /api/projects/{id}/create-folder` (ProjectFilesController.CreateFolder)
+- `POST /api/projects/{id}/create-subfolder` (ProjectFilesController.CreateSubfolder)
+- `POST /api/projects/{id}/delete-item` (ProjectFilesController.DeleteItem)
+- `POST /api/projects/{id}/move-item` (ProjectFilesController.MoveItem)
+- `POST /api/projects/{id}/rename` (ProjectFilesController.RenameItem)
+- `POST /api/projects/{id}/upload` (ProjectFilesController.UploadFile)
+- `POST /api/projects/{id}/upload-multiple` (ProjectFilesController.UploadMultiple)
 
 ### `project.milestones` — Milestone
 - `DELETE /api/milestones/{id}` (MilestonesController.Delete)
@@ -953,8 +953,9 @@
 - DepartmentsController: 1 endpoint
 - EmployeesController: 4 endpoint
 - GammaRobotController: 5 endpoint
+- LookupController: 2 endpoint
 - NotificationsController: 7 endpoint
 - PhasesController: 14 endpoint
-- ProjectsController: 8 endpoint
+- ProjectsController: 6 endpoint
 - SuppliersController: 1 endpoint
 - TravelTariffsController: 1 endpoint
