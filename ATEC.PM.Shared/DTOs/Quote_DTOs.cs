@@ -287,41 +287,6 @@ public class QuoteStatusChangeDto
     public string Notes { get; set; } = "";
 }
 
-public class QuoteRevisionDto
-{
-    public int Id { get; set; }
-    public int QuoteId { get; set; }
-    public int Revision { get; set; }
-    public string ChangeNotes { get; set; } = "";
-    public int CreatedBy { get; set; }
-    public string CreatedByName { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
-}
-
-public class QuoteDocumentDto
-{
-    public int Id { get; set; }
-    public int QuoteId { get; set; }
-    public string FileName { get; set; } = "";
-    public string FilePath { get; set; } = "";
-    public long FileSize { get; set; }
-    public string MimeType { get; set; } = "";
-    public int UploadedBy { get; set; }
-    public string UploadedByName { get; set; } = "";
-    public DateTime UploadedAt { get; set; }
-}
-
-public class QuoteStatusLogDto
-{
-    public int Id { get; set; }
-    public string OldStatus { get; set; } = "";
-    public string NewStatus { get; set; } = "";
-    public int ChangedBy { get; set; }
-    public string ChangedByName { get; set; } = "";
-    public DateTime ChangedAt { get; set; }
-    public string Notes { get; set; } = "";
-}
-
 // ══════════════════════════════════════════════════════════
 // IMPORT
 // ══════════════════════════════════════════════════════════

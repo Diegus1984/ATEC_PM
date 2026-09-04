@@ -77,35 +77,3 @@ public class ImportArticlesRequest
 {
     public List<EasyfattArticleDto> Articles { get; set; } = new();
 }
-
-public class EasyfattCustomersPreviewDto
-{
-    public int TotalFound { get; set; }
-    public int NewCount { get; set; }
-    public int DuplicateCount { get; set; }
-    public List<EasyfattCustomerDto> Customers { get; set; } = new();
-}
-
-public class EasyfattSuppliersPreviewDto
-{
-    public int TotalFound { get; set; }
-    public int NewCount { get; set; }
-    public int DuplicateCount { get; set; }
-    public List<EasyfattSupplierDto> Suppliers { get; set; } = new();
-}
-
-public class EasyfattArticlesPreviewDto
-{
-    public int TotalFound { get; set; }
-    public int NewCount { get; set; }
-    public int DuplicateCount { get; set; }
-    public int WithSupplier { get; set; }
-    public List<EasyfattArticleDto> Articles { get; set; } = new();
-}
-
-public class EasyfattImportResultDto
-{
-    public int Imported { get; set; }
-    public int Updated { get; set; }
-    public int Skipped { get; set; }
-}

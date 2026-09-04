@@ -107,12 +107,6 @@ public class CodexConfirmRequest
     public string Descrizione { get; set; } = "";
 }
 
-public class CodexNewItemRequest
-{
-    public string Prefisso { get; set; } = "";
-    public string Descrizione { get; set; } = "";
-}
-
 public class CodexGeneratedCode
 {
     public string Codice { get; set; } = "";

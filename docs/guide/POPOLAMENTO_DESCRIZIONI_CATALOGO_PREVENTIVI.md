@@ -40,7 +40,7 @@ Stesso DB `atec_pm`. Tre sistemi distinti e indipendenti:
 |---|---|---|---|
 | Radice | `quote_price_lists` (3) | `catalog_items` (~8973) | `material_categories` (8) |
 | Categorie | `quote_categories` (148, FK+tree) | colonna `category` (stringa libera) | la tabella stessa |
-| Controller | `QuoteCatalogController` `/api/quote-catalog/*` | `CatalogController` `/api/catalog/*` | `MaterialCategoriesController` |
+| Controller | `QuoteCatalogController` `/api/quote-catalog/*` | `CatalogController` `/api/catalog/*` | nessuno (il `MaterialCategoriesController` è stato rimosso il 04/09/2026: nessuna pagina web lo chiamava; la tabella si legge dentro `ProjectCostingController`) |
 | Service | `QuoteDbService` (→ `DbService`) | `DbService` | `DbService` |
 | Scopo | offerte commerciali | anagrafica articoli/magazzino | markup costing |
 

@@ -61,7 +61,9 @@ Il manuale completo — installazione da zero, aggiornamenti, backup, problemi t
 ## 🤖 Gamma Ricambi — import distinte robot ABB (cartella `tools/`)
 
 Script Python di **una tantum**: importano le distinte dei robot dai manuali ABB e
-popolano il catalogo Gamma. Il runbook con i prerequisiti e la procedura completa è in
+popolano il catalogo Gamma. Dal 04/09/2026 **non sono più tracciati dal repo** (`.gitignore`
+`tools/*.py`, vivo solo `segnalazioni.py`): restano su questo PC e nella storia git.
+Il runbook con i prerequisiti e la procedura completa è in
 [../guide/GAMMA-IMPORT-DISTINTA.md](../guide/GAMMA-IMPORT-DISTINTA.md); le descrizioni HTML
 del catalogo in [../guide/CATALOGO-DESCRIZIONI.md](../guide/CATALOGO-DESCRIZIONI.md).
 

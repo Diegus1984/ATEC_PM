@@ -188,12 +188,6 @@ public class ProjectCostingData
     public bool IsInitialized { get; set; }
 }
 
-public class AvailableCostTemplatesDto
-{
-    public List<CostSectionGroupDto> Groups { get; set; } = new();
-    public List<CostSectionTemplateDto> Templates { get; set; } = new();
-}
-
 public class PricingDistributionRow
 {
     public int Id { get; set; }

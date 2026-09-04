@@ -78,7 +78,7 @@ public class TimesheetController : ControllerBase
 
     // ── Controllo accessi timesheet (anti-IDOR) ─────────────────────────
     // L'employeeId arriva da query/body: senza questo check chiunque potrebbe
-    // leggere/scrivere le ore di chiunque. Regola speculare a PermissionEngine:
+    // leggere/scrivere le ore di chiunque. Regola speculare a quella del client:
     //   self  OR  «Ore per chiunque»  OR  «Ore per altri» sul proprio reparto.
     // Due chiavi e non una: chi imputa a chiunque e chi imputa solo dentro il proprio
     // reparto sono due permessi diversi, e una chiave sola avrebbe allargato o ristretto.

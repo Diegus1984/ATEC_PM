@@ -51,16 +51,3 @@ public class UpdateAuthFeatureRequest
 // 🧹 `CreateAuthFeatureRequest` è uscito col passo 7 del rebuild: le funzioni si registrano
 // aggiungendo la voce a `catalogo-permessi.json` (EnsureCatalogo le mette in tabella al primo
 // avvio), non da un form — vedi AuthLevelController.
-
-public class AuthFeaturesContextDto
-{
-    public int UserLevel { get; set; }
-    public List<AuthFeatureDto> Features { get; set; } = new();
-    public List<AuthLevelDto> Levels { get; set; } = new();
-
-    /// <summary>Modalità del ruolo dell'utente: 'LEVEL' o 'GRANTS' (ruolo di reparto).</summary>
-    public string AccessMode { get; set; } = "LEVEL";
-
-    /// <summary>Concessioni del ruolo dell'utente (feature_key → 'READ'/'FULL').</summary>
-    public Dictionary<string, string> Grants { get; set; } = new();
-}

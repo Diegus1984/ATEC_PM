@@ -207,22 +207,3 @@ public class OfficinaImportCompositionRequest
     public int AddedOfficina { get; set; }
     public int AddedCommerciale { get; set; }
 }
-
-/// <summary>
-/// Riga inbox Officina (cross-commessa) per il Responsabile: stessa shape della distinta
-/// + contesto commessa e collegamento lavorazione (se codice 101).
-/// </summary>
-public class OfficinaInboxItem : OfficinaItemListItem
-{
-    public string ProjectCode { get; set; } = "";
-    public string ProjectTitle { get; set; } = "";
-    public string CustomerName { get; set; } = "";
-    /// <summary>Lavorazione collegata (project_work_requests), se esiste.</summary>
-    public int? WorkRequestId { get; set; }
-    /// <summary>Priorità WR (0=P0 … 2=P2); null se senza lavorazione o senza priorità.</summary>
-    public int? WrPriority { get; set; }
-    /// <summary>Flag ultra-critico della lavorazione collegata.</summary>
-    public bool IsUltraCritical { get; set; }
-    /// <summary>Giorni di ritardo (negativo = in anticipo); null se senza date_needed.</summary>
-    public int? DaysLate { get; set; }
-}

@@ -68,19 +68,6 @@ public class SaveEmployeeCompetencesRequest
     public List<EmployeeCompetenceDto> Competences { get; set; } = new();
 }
 
-public class UserContext
-{
-    public int EmployeeId { get; set; }
-    public string UserRole { get; set; } = "";
-    public List<string> DepartmentCodes { get; set; } = new();
-    public List<string> ResponsibleDepartmentCodes { get; set; } = new();
-    public List<string> CompetenceCodes { get; set; } = new();
-
-    public bool IsAdmin => UserRole == "ADMIN";
-    public bool IsPm => UserRole == "PM" || UserRole == "ADMIN";
-    public bool IsResponsible => UserRole == "RESP_REPARTO" || IsPm;
-}
-
 public class SetCredentialsRequest
 {
     public int EmployeeId { get; set; }

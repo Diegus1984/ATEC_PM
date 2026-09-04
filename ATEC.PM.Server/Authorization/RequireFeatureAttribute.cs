@@ -9,7 +9,7 @@ namespace ATEC.PM.Server.Authorization;
 /// <summary>
 /// Richiede che il ruolo dell'utente abbia un livello &gt;= <c>min_level</c> della feature
 /// indicata (tabelle <c>auth_levels</c>/<c>auth_features</c>). È l'enforcement server-side
-/// speculare a <c>PermissionEngine</c>, finora applicato solo lato client.
+/// speculare al controllo di navigazione del client web.
 ///
 /// Va usato INSIEME a <c>[Authorize]</c>: l'autenticazione resta a carico di [Authorize],
 /// qui si valuta solo l'autorizzazione per livello. Su accesso negato → 403 con envelope ApiResponse.

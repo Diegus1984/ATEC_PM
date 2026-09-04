@@ -15,11 +15,11 @@ namespace ATEC.PM.Tests.Permessi;
 /// SQL, la prima volta che diverge, farebbe dire all'invariante «resta un amministratore» mentre
 /// il motore ne nega l'accesso.</para>
 ///
-/// <para><b>Nota per chi cerca il motore dei permessi.</b> Non è
-/// <c>ATEC.PM.Shared/PermissionEngine.cs</c>: quello è il motore del client WPF ritirato il
-/// 20/07/2026 e oggi non è referenziato da nessun file di codice (solo da documenti). Ha un
-/// fallback opposto a quello attuale — <c>feature non registrata → accesso libero</c> — quindi
-/// testarlo darebbe sicurezza su regole che non governano più niente.</para>
+/// <para><b>Nota per chi cerca il motore dei permessi.</b> Non cercarlo in un
+/// <c>PermissionEngine.cs</c>: era il motore del client WPF ritirato il 20/07/2026, rimosso da
+/// <c>ATEC.PM.Shared</c> il 04/09/2026 perché non referenziato da nessun file di codice. Aveva
+/// un fallback opposto a quello attuale — <c>feature non registrata → accesso libero</c> —
+/// quindi testarlo avrebbe dato sicurezza su regole che non governavano più niente.</para>
 /// </summary>
 public class RegoleAccessoTests
 {

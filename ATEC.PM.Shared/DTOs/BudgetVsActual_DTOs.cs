@@ -398,17 +398,6 @@ public class BvaBudgetResourceDto
     public decimal TotalTravelCost => TravelCost + AccommodationCost + AllowanceCost;
 }
 
-/// <summary>Riga consuntivo: ore versate aggregate per dipendente + fase (causale)</summary>
-public class BvaActualEntryDto
-{
-    public string EmployeeName { get; set; } = "";
-    public string PhaseName { get; set; } = "";   // causale = nome fase
-    public string EntryType { get; set; } = "";    // REGULAR, OVERTIME, TRAVEL
-    public decimal Hours { get; set; }
-    public decimal HourlyCost { get; set; }
-    public decimal TotalCost { get; set; }
-}
-
 /// <summary>Raggruppamento per dipendente con dettaglio entry</summary>
 public class BvaActualEmployeeDto
 {
@@ -597,4 +586,3 @@ public class BvaEconomicSummary
     public int CompletedPhases { get; set; }
     public int ProgressPct { get; set; }
 }
-

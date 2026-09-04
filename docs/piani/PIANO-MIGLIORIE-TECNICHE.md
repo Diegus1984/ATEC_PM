@@ -128,7 +128,7 @@ Zero DataAnnotations su 53 file di DTO: ogni action rivalida a mano, in modo div
       agganciato a `InvalidModelStateResponseFactory`. Va **prima** delle annotazioni: senza, la
       prima validazione che scatta risponde nel formato `ProblemDetails` che il client non sa
       leggere. Toglie anche il `$.` con cui il binder nomina i campi del corpo JSON.
-- [x] **Primi DTO annotati**: `DepartmentSaveRequest`, `MaterialCategorySaveRequest`.
+- [x] **Primi DTO annotati**: `DepartmentSaveRequest`, `MaterialCategorySaveRequest` (il secondo rimosso il 04/09/2026 insieme al controller, che nessuna pagina web chiamava).
 
 ### 🧭 Il criterio (misurato, non intuito) — vale per i prossimi DTO
 
