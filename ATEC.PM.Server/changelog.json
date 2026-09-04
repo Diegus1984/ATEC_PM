@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260904-1637",
+                     "data":  "2026-09-04T16:37:00",
+                     "hash":  "234760d992ff9e6141841276eca1bba77b3850aa",
+                     "modifiche":  [
+                                       "Registro Offerte e Andamento: il registro commerciale di tutte le offerte, in serie parallela ai preventivi"
+                                   ]
+                 },
+                 {
                      "build":  "20260904-1237",
                      "data":  "2026-09-04T12:37:35",
                      "hash":  "cb63182b28a89cd69dafef1283c7dbf933d0dcae",
