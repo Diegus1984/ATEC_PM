@@ -65,8 +65,12 @@ try {
 
     # L'attività ha finito il suo lavoro: si toglie di mezzo da sola, così non resta
     # in giro un lavoro pianificato che nessuno ricorda di aver creato.
-    schtasks /delete /tn 'AtecPm-SlowQueryLogOn' /f 2>$null | Out-Null
-    Scrivi 'Attività pianificata rimossa (aveva un solo compito).'
+    # Via cmd e non nudo: con $ErrorActionPreference = 'Stop' lo stderr di un comando nativo
+    # diventa un errore terminante, e se l'attività non c'è più (già rimossa il 24/08/2026,
+    # o script lanciato a mano) il registro direbbe «FALLITO» a slow log già acceso.
+    cmd /c 'schtasks /delete /tn AtecPm-SlowQueryLogOn /f >nul 2>&1'
+    if ($LASTEXITCODE -eq 0) { Scrivi 'Attività pianificata rimossa (aveva un solo compito).' }
+    else { Scrivi 'Nessuna attività pianificata da rimuovere (lancio a mano).' }
     exit 0
 }
 catch {
