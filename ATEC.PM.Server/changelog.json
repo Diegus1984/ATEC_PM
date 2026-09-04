@@ -2,6 +2,19 @@
     "voci":  [
                  {
                      "build":  "20260904-0921",
+                     "data":  "2026-09-04T11:05:08",
+                     "hash":  "bbff41b479cc80f9f5f0b14af11ba346651a5727",
+                     "modifiche":  [
+                                       "Piano tecnico: blocco F aggiornato con quanto fatto il 04/09 (F1, F3, split, audit interpolazioni, guardiano schema)",
+                                       "Schema scritto due volte: guardiano bootstrap = migrazioni, e l\u0027indice che mancava",
+                                       "F1: transazione su 16 scritture multi-tabella (da 47 a 63 nei controller)",
+                                       "ProjectsController spaccato per dominio: 5 controller + base condivisa, rotte invariate",
+                                       "F3: le notifiche SignalR «senza attesa» scrivono nel log se il push fallisce",
+                                       "Deploy: si ferma se c\u0027è lavoro non committato (compila dalla cartella, non dal commit)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260904-0921",
                      "data":  "2026-09-04T10:11:19",
                      "hash":  "fabeb6f9c0c3430cf56788fb3e44bfc2cf53fc29",
                      "modifiche":  [
