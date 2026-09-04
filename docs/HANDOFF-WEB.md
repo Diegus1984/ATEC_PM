@@ -166,6 +166,12 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
    placeholder visivo. **NON reintrodurre `staleTime` lunghi** (né globali né per-query)
    su dati operativi: sono ammessi solo su configurazioni statiche (es. causali SAL).
    A pagina aperta la diretta la fanno gli hub SignalR (vedi registro realtime in memoria).
+   **Ogni hook `lib/signalr/use-*-hub.ts` è un wrapper di `useHubSubscription`**
+   (`lib/signalr/use-hub-subscription.ts`, 04/09/2026): connessione, debounce per evento
+   (default `HUB_DEBOUNCE_MS` = 400 ms), `join` ripetuto dopo ogni riconnessione, cleanup.
+   Un hub nuovo = 15 righe (`hub`, `deps`, `subscribe`, `join`); **non si ricopia lo scheletro**.
+   Filtri pre-debounce con `when`, eventi immediati con `debounceMs: 0` o `immediate`;
+   `onConnected`/`onClosed` per il `connectionId` della self-exclusion.
 
 ## Metodo di lavoro consigliato (come abbiamo proceduto finora)
 

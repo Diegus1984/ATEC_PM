@@ -1,7 +1,5 @@
-import * as React from "react"
-
 import type { HrChange } from "@/lib/api/types"
-import { createHubConnection, startHub, stopHub } from "@/lib/signalr/hubs"
+import { useHubSubscription, useLatestRef } from "@/lib/signalr/use-hub-subscription"
 
 /**
  * Sottoscrive l'hub commesse (`/hubs/project`), gruppo globale `hr-all`, e richiama
@@ -10,57 +8,26 @@ import { createHubConnection, startHub, stopHub } from "@/lib/signalr/hubs"
  * mappatura, credenziali.
  *
  * - `enabled: false` → nessuna connessione.
- * - Eventi debounced (400 ms) per coalescere i burst (un import ne manda a raffica).
+ * - Eventi debounced per coalescere i burst (un import ne manda a raffica).
  *   `import-progress` NON è debounced: è la barra di avanzamento, deve muoversi subito.
+ * - Dopo una disconnessione si può essere persi qualcosa: arriva un `reconnected` e la
+ *   pagina rilegge tutto.
  * - Best-effort: se l'hub è spento la pagina resta usabile con l'aggiornamento manuale
  *   e il refetch-on-focus di react-query.
  */
 export function useHrHub(enabled: boolean, onChange: (change: HrChange) => void): void {
-  const handlerRef = React.useRef(onChange)
-  React.useEffect(() => {
-    handlerRef.current = onChange
-  }, [onChange])
-
-  React.useEffect(() => {
-    if (!enabled) return
-
-    let disposed = false
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    const connection = createHubConnection("project")
-
-    connection.on("HrChanged", (change: HrChange) => {
-      if (change.action === "import-progress") {
-        handlerRef.current(change)
-        return
-      }
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => handlerRef.current(change), 400)
-    })
-
-    const rejoin = async () => {
-      try {
-        await connection.invoke("JoinHr")
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    connection.onreconnected(() => {
-      void rejoin()
-      // Dopo una disconnessione si può essere persi qualcosa: si rilegge tutto.
-      handlerRef.current({ action: "reconnected", employeeId: null, date: null })
-    })
-
-    void (async () => {
-      const ok = await startHub(connection)
-      if (!ok || disposed) return
-      await rejoin()
-    })()
-
-    return () => {
-      disposed = true
-      if (debounce) clearTimeout(debounce)
-      void stopHub(connection)
-    }
-  }, [enabled])
+  const handlerRef = useLatestRef(onChange)
+  useHubSubscription({
+    hub: "project",
+    enabled,
+    deps: [],
+    subscribe: (on) =>
+      on("HrChanged", (change: HrChange) => handlerRef.current(change), {
+        immediate: (change) => change.action === "import-progress",
+      }),
+    join: (connection) => connection.invoke("JoinHr"),
+    onConnected: ({ reconnected }) => {
+      if (reconnected) handlerRef.current({ action: "reconnected", employeeId: null, date: null })
+    },
+  })
 }

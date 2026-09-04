@@ -1,59 +1,24 @@
-import * as React from "react"
-
-import { createHubConnection, startHub, stopHub } from "@/lib/signalr/hubs"
+import { useHubSubscription, useLatestRef } from "@/lib/signalr/use-hub-subscription"
 
 /**
  * Bilancio commessa in ambiente condiviso: l'ordine cliente e il Totale Vendita sono
  * dati che più persone toccano. Chi ha aperto il tab «Preventivo vs Consuntivo» di una
  * commessa (gruppo `project-{id}`) ricarica quando qualcun altro li modifica.
- * Eventi debounced (400 ms); best-effort: se l'hub è spento resta l'Aggiorna manuale.
+ * Eventi debounced; best-effort: se l'hub è spento resta l'Aggiorna manuale.
  */
 export function useBudgetHub(
   enabled: boolean,
   onChange: () => void,
   projectId: number
 ): void {
-  const handlerRef = React.useRef(onChange)
-  React.useEffect(() => {
-    handlerRef.current = onChange
-  }, [onChange])
-
-  React.useEffect(() => {
-    if (!enabled || !projectId || projectId <= 0) return
-
-    let disposed = false
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    const connection = createHubConnection("project")
-
-    connection.on("BudgetChanged", () => {
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => handlerRef.current(), 400)
-    })
-
-    const rejoin = async () => {
-      try {
-        await connection.invoke("JoinProject", projectId)
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    connection.onreconnected(() => {
-      void rejoin()
-    })
-
-    void (async () => {
-      const ok = await startHub(connection)
-      if (!ok || disposed) return
-      await rejoin()
-    })()
-
-    return () => {
-      disposed = true
-      if (debounce) clearTimeout(debounce)
-      void stopHub(connection)
-    }
-  }, [enabled, projectId])
+  const handlerRef = useLatestRef(onChange)
+  useHubSubscription({
+    hub: "project",
+    enabled: enabled && projectId > 0,
+    deps: [projectId],
+    subscribe: (on) => on("BudgetChanged", () => handlerRef.current()),
+    join: (connection) => connection.invoke("JoinProject", projectId),
+  })
 }
 
 /**
@@ -61,45 +26,12 @@ export function useBudgetHub(
  * così l'elenco delle card si riallinea appena cambia l'economia di una commessa qualsiasi.
  */
 export function useGlobalBudgetHub(enabled: boolean, onChange: () => void): void {
-  const handlerRef = React.useRef(onChange)
-  React.useEffect(() => {
-    handlerRef.current = onChange
-  }, [onChange])
-
-  React.useEffect(() => {
-    if (!enabled) return
-
-    let disposed = false
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    const connection = createHubConnection("project")
-
-    connection.on("BudgetChanged", () => {
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => handlerRef.current(), 400)
-    })
-
-    const rejoin = async () => {
-      try {
-        await connection.invoke("JoinProjects")
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    connection.onreconnected(() => {
-      void rejoin()
-    })
-
-    void (async () => {
-      const ok = await startHub(connection)
-      if (!ok || disposed) return
-      await rejoin()
-    })()
-
-    return () => {
-      disposed = true
-      if (debounce) clearTimeout(debounce)
-      void stopHub(connection)
-    }
-  }, [enabled])
+  const handlerRef = useLatestRef(onChange)
+  useHubSubscription({
+    hub: "project",
+    enabled,
+    deps: [],
+    subscribe: (on) => on("BudgetChanged", () => handlerRef.current()),
+    join: (connection) => connection.invoke("JoinProjects"),
+  })
 }

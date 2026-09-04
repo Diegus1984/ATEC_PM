@@ -1,7 +1,5 @@
-import * as React from "react"
-
 import type { ChatChange, ChatMessageAlert } from "@/lib/api/types"
-import { createHubConnection, startHub, stopHub } from "@/lib/signalr/hubs"
+import { useHubSubscription, useLatestRef } from "@/lib/signalr/use-hub-subscription"
 
 /**
  * Inbox globale: ChatChanged di qualsiasi commessa (gruppo `chat-inbox-all`) e, sul gruppo
@@ -18,55 +16,20 @@ export function useChatInboxHub(
     onMessage?: (alert: ChatMessageAlert) => void
   }
 ): void {
-  const enabled = options?.enabled ?? true
-  const handlerRef = React.useRef(onChange)
-  React.useEffect(() => {
-    handlerRef.current = onChange
-  }, [onChange])
-
-  const messageRef = React.useRef(options?.onMessage)
-  React.useEffect(() => {
-    messageRef.current = options?.onMessage
-  }, [options?.onMessage])
-
-  React.useEffect(() => {
-    if (!enabled) return
-
-    let disposed = false
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    const connection = createHubConnection("project")
-
-    connection.on("ChatChanged", (change: ChatChange) => {
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => handlerRef.current(change), 300)
-    })
-
-    connection.on("ChatMessageReceived", (alert: ChatMessageAlert) => {
-      messageRef.current?.(alert)
-    })
-
-    const rejoin = async () => {
-      try {
-        await connection.invoke("JoinChatInbox")
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    connection.onreconnected(() => {
-      void rejoin()
-    })
-
-    void (async () => {
-      const ok = await startHub(connection)
-      if (!ok || disposed) return
-      await rejoin()
-    })()
-
-    return () => {
-      disposed = true
-      if (debounce) clearTimeout(debounce)
-      void stopHub(connection)
-    }
-  }, [enabled])
+  const handlerRef = useLatestRef(onChange)
+  const messageRef = useLatestRef(options?.onMessage)
+  useHubSubscription({
+    hub: "project",
+    enabled: options?.enabled ?? true,
+    deps: [],
+    subscribe: (on) => {
+      on("ChatChanged", (change: ChatChange) => handlerRef.current(change), {
+        debounceMs: 300,
+      })
+      on("ChatMessageReceived", (alert: ChatMessageAlert) => messageRef.current?.(alert), {
+        debounceMs: 0,
+      })
+    },
+    join: (connection) => connection.invoke("JoinChatInbox"),
+  })
 }

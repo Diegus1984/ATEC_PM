@@ -1,6 +1,4 @@
-import * as React from "react"
-
-import { createHubConnection, startHub, stopHub } from "@/lib/signalr/hubs"
+import { useHubSubscription, useLatestRef } from "@/lib/signalr/use-hub-subscription"
 
 /** Cosa è cambiato: serve solo a distinguere i log, la pagina ricarica comunque tutto. */
 export interface CostSectionsChange {
@@ -17,52 +15,20 @@ export interface CostSectionsChange {
  * secondo trascina fasi su una sezione che nel frattempo è stata rinominata o spenta, e se ne
  * accorge solo ricaricando.
  *
- * Debounce 400 ms come gli altri hub: un riordino manda una PATCH per riga, e senza attesa
+ * Debounce come gli altri hub: un riordino manda una PATCH per riga, e senza attesa
  * sarebbero N ricariche invece di una. Best-effort: se l'hub è spento resta «Aggiorna».
  */
 export function useCostSectionsHub(
   enabled: boolean,
   onChange: (change: CostSectionsChange) => void
 ): void {
-  const handlerRef = React.useRef(onChange)
-  React.useEffect(() => {
-    handlerRef.current = onChange
-  }, [onChange])
-
-  React.useEffect(() => {
-    if (!enabled) return
-
-    let disposed = false
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    const connection = createHubConnection("project")
-
-    connection.on("CostSectionsChanged", (change: CostSectionsChange) => {
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => handlerRef.current(change), 400)
-    })
-
-    const rejoin = async () => {
-      try {
-        await connection.invoke("JoinCostSections")
-      } catch {
-        /* best-effort */
-      }
-    }
-
-    connection.onreconnected(() => {
-      void rejoin()
-    })
-
-    void (async () => {
-      const ok = await startHub(connection)
-      if (!ok || disposed) return
-      await rejoin()
-    })()
-
-    return () => {
-      disposed = true
-      if (debounce) clearTimeout(debounce)
-      void stopHub(connection)
-    }
-  }, [enabled])
+  const handlerRef = useLatestRef(onChange)
+  useHubSubscription({
+    hub: "project",
+    enabled,
+    deps: [],
+    subscribe: (on) =>
+      on("CostSectionsChanged", (change: CostSectionsChange) => handlerRef.current(change)),
+    join: (connection) => connection.invoke("JoinCostSections"),
+  })
 }
