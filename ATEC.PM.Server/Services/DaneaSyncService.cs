@@ -211,8 +211,11 @@ public class DaneaSyncService : BackgroundService
             locali[r.Vat] = new SpecchioDanea.FornitoreLocale(r.Nome, r.Referente, r.Email, r.Tel, r.Address, r.Note);
         }
 
+        // Danea ha anagrafiche doppie con la stessa partita IVA (10 su 2.224 il 04/09): vince l'ultima,
+        // come da sempre — ma si scrive SOLO l'ultima. Confrontandole tutte, una coppia diversa fra
+        // loro veniva riscritta due volte a ogni giro (22 scritture su 2.224, per sempre).
         int scritti = 0, invariati = 0;
-        foreach (var f in remoti)
+        foreach (var f in SpecchioDanea.UltimaPerPartitaIva(remoti))
         {
             if (!SpecchioDanea.DaRiscrivere(locali.GetValueOrDefault(f.Vat), f))
             {
@@ -238,7 +241,7 @@ public class DaneaSyncService : BackgroundService
         }
 
         int scritti = 0, invariati = 0;
-        foreach (var c in remoti)
+        foreach (var c in SpecchioDanea.UltimaPerPartitaIva(remoti))
         {
             if (!SpecchioDanea.DaRiscrivere(locali.GetValueOrDefault(c.Vat), c))
             {

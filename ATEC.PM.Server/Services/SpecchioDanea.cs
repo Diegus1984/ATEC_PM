@@ -106,6 +106,29 @@ public static class SpecchioDanea
     public static ClienteLocale DopoScrittura(Cliente c) =>
         new(c.Nome, c.Email, c.Pec, c.Tel, c.Address, c.Sdi, c.IDAnagr, c.Note);
 
+    /// <summary>
+    /// Una riga per partita IVA: l'ULTIMA in ordine di arrivo, nell'ordine in cui compare per la
+    /// prima volta. È la regola «vince l'ultima» di sempre, applicata prima del confronto invece
+    /// che scrivendo tutte le copie una sopra l'altra.
+    /// </summary>
+    public static IReadOnlyList<Fornitore> UltimaPerPartitaIva(IEnumerable<Fornitore> righe) => Ultime(righe, f => f.Vat);
+
+    /// <summary>Idem per i clienti.</summary>
+    public static IReadOnlyList<Cliente> UltimaPerPartitaIva(IEnumerable<Cliente> righe) => Ultime(righe, c => c.Vat);
+
+    private static IReadOnlyList<T> Ultime<T>(IEnumerable<T> righe, Func<T, string> chiave)
+    {
+        var ordine = new List<string>();
+        var ultima = new Dictionary<string, T>(StringComparer.Ordinal);
+        foreach (T r in righe)
+        {
+            string k = chiave(r);
+            if (!ultima.ContainsKey(k)) ordine.Add(k);
+            ultima[k] = r;
+        }
+        return ordine.Select(k => ultima[k]).ToList();
+    }
+
     private static string? Campo(IDictionary<string, object?> r, string nome) =>
         r.TryGetValue(nome, out object? v) && v is not null && v is not DBNull ? Convert.ToString(v) : null;
 

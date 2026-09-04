@@ -54,6 +54,14 @@ public class SpecchioDaneaRegoleTests
     }
 
     [Fact]
+    public void Con_la_stessa_partita_iva_resta_l_ultima_nell_ordine_della_prima()
+    {
+        var righe = new[] { Forn(nome: "A1"), new SpecchioDanea.Fornitore("IT2", "B", "", "", "", "()", "", ""), Forn(nome: "A2") };
+        IReadOnlyList<SpecchioDanea.Fornitore> ultime = SpecchioDanea.UltimaPerPartitaIva(righe);
+        Assert.Equal(new[] { "A2", "B" }, ultime.Select(f => f.Nome).ToArray());
+    }
+
+    [Fact]
     public void L_indirizzo_vuoto_resta_come_da_sempre()
     {
         // Non è bello, ma è così da sempre: «aggiustarlo» riscriverebbe ogni riga senza indirizzo.
@@ -151,9 +159,11 @@ public class SpecchioDaneaDatabaseTests
         using MySqlConnection c = _schema.Apri();
         var remoti = new[] { Forn(7, nome: "Prima"), Forn(7, nome: "Ultima") };
 
-        Assert.Equal((2, 0), await DaneaSyncService.ApplicaFornitori(remoti, c));
+        // Una scrittura sola (l'ultima), non una per copia: prima erano due a OGNI giro.
+        Assert.Equal((1, 0), await DaneaSyncService.ApplicaFornitori(remoti, c));
         Assert.Equal("Ultima", c.ExecuteScalar<string>("SELECT company_name FROM suppliers WHERE vat_number = 'PROVA-SPEC-7'"));
         Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM suppliers WHERE vat_number = 'PROVA-SPEC-7'"));
+        Assert.Equal((0, 1), await DaneaSyncService.ApplicaFornitori(remoti, c));   // e al giro dopo niente
     }
 
     [FactRichiedeMySql]
