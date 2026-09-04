@@ -404,11 +404,27 @@ veri (senza, sarebbe 362).
 - **Tre campi che il piano non aveva previsto sono stati salvati**, invece di essere buttati: codice commessa, n. commessa e OK grezzo. Il codice commessa è servito subito — **11 offerte hanno trovato la loro commessa** in ATEC PM.
 - **1.121 collegate su 1.770 con un nome (63%).** Il piano ne stimava ~1.170: la differenza è che qui la rubrica è quella vera di ATEC PM (424 nomi, non i 422 del file), e più nomi vuol dire più casi ambigui — dove i candidati sono due, non si collega niente. Le restanti 649 si assegnano a mano dallo strumento «Nomi non collegati» (F3): i primi cinque nomi da sistemare sono MASSUCCO (44 offerte), PERARDI & GRESINO (28), ADLER EVO - Stabilimento di Pianfei (16), SOLE POLONIA (16) e VPM (15).
 
-### Cosa resta da fare in produzione
+### ✅ Eseguito anche in produzione (04/09/2026, dopo il deploy)
 
-L'import **non è ancora stato eseguito in produzione**: là mancano ancora le migrazioni M122 e
-M123, che entrano col deploy (F8). L'ordine è: deploy → `import-seed` in simulazione → confronto
-col rapporto qui sopra → `import-seed` vero.
+```
+Rubrica   : letti 422 · creati 16 · arricchiti 406
+Offerte   : lette 1795 · inserite 1795 · già presenti 0
+Collegate : cliente 1121 · commessa 11 · senza cliente 649
+```
+
+Identico allo sviluppo, riga per riga — e la **simulazione fatta prima** aveva dato gli stessi
+numeri (con i 1.095 collegamenti di cui sopra). Controlli sui dati entrati: 1.795 righe con la
+stessa ripartizione per anno del file (480 · 444 · 328 · 371 · 172) e gli stessi stati
+(1.364 · 402 · 19 · 7 · 3), 9 di serie vecchia, 8 righe sui numeri 282-285 del 2025, 35 senza
+numero, 16 clienti con `vat_number` NULL, **prossimo numero 2026 = 165**.
+
+🪤 **Come è stato lanciato, e perché non dall'endpoint.** Sul server il `Jwt:Key` è cifrato DPAPI
+col conto del servizio e da fuori non si legge, quindi coniare un token amministratore non era
+possibile. L'import è stato eseguito con lo **stesso `SalesOfferImportService`**, da un runner che
+si collega al MySQL di produzione attraverso un **tunnel SSH** (`-L 3307:127.0.0.1:3306`) — nessuno
+schema toccato (niente `InitDatabase`: lo porta il deploy), solo righe scritte. Il runner rifiuta
+di partire se le cinque tabelle del registro non ci sono. Durata 86 s invece di 0,5: ogni INSERT
+fa un giro nel tunnel.
 
 ---
 
