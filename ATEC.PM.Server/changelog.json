@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260904-1203",
+                     "data":  "2026-09-04T12:04:00",
+                     "hash":  "51a330e99c9a8d59ae69ea6eccd8c913e5a645aa",
+                     "modifiche":  [
+                                       "Punto 5: build a 0 warning, features/commesse a sottocartelle, date sul helper, lint utilizzabile",
+                                       "Client web: primi test automatici (vitest) sulla logica pura, agganciati al deploy"
+                                   ]
+                 },
+                 {
                      "build":  "20260904-0921",
                      "data":  "2026-09-04T11:29:50",
                      "hash":  "083555d369c41f66388c9dfbd5b69c954395d89f",
