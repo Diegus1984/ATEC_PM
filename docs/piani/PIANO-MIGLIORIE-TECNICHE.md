@@ -1021,10 +1021,16 @@ si tocca un controller per altri motivi**.
 | `ProjectsController` | 19 | 2 |
 | `CodexController` | 19 | 2 |
 
-- [ ] Censire gli endpoint che scrivono su **più tabelle** e avvolgerli in transazione
-      (creazione commessa + copia fasi + snapshot; SAL + righe + pagamenti; DDP +
-      cronistoria stati).
-- [ ] Criterio: se un `catch` a metà lascerebbe righe orfane, serve la transazione.
+- [x] **04/09/2026** — censite con uno script (404 action di scrittura, 31 candidate, 16 vere dopo
+      lettura una per una) e avvolte in transazione: destinazioni e trattamenti DDP (rinomina +
+      propagazione), allocazione risorse, codice nuovo Codex, note e verbali MoM, ore + fase, flusso di
+      cassa, inbox check list, fase + assegnazioni, RDO (mark-emailed/send/offerta), listino e stato
+      preventivo. Da **47 a 63** `BeginTransaction` nei controller.
+      🪤 La transazione parte DOPO letture e guardie che passano la connessione a helper senza `tx`:
+      MySqlConnector rifiuta un comando senza transazione mentre ce n'è una aperta.
+- [ ] Restano fuori `ImportOfficinaComposition` e `UpdateOfficinaItem`: chiamano
+      `GrezziDerivazione.Sincronizza(c, …)`, che non accetta una transazione — va esteso prima.
+- [x] Criterio applicato: se un `catch` a metà lascerebbe righe orfane, serve la transazione.
 
 > ### ✅ Audit «comando dentro una transazione senza dichiararla» — 14/08/2026
 >
@@ -1065,15 +1071,33 @@ applicato a metà, e i controller rimasti senza sono i più grossi
 
 - [ ] Regola operativa: **quando tocchi un endpoint, la sua query si sposta** nel
       `*DbService` del modulo. Niente sessioni dedicate di refactoring.
+- [x] **Audit del 04/09/2026**: le query per interpolazione sono **67** (erano 38) e sono state
+      lette tutte: interpolano solo nomi di tabella/colonna da whitelist (`LookupTable` del SAL,
+      `allowed` di Quotes/UpdateField, colonne lette da `information_schema`, costanti di codice) o
+      numeri; nessun valore utente. Niente da parametrizzare oggi; la regola qui sotto resta.
 - [ ] Le 38 query costruite per interpolazione di stringa vanno parametrizzate durante
       lo spostamento (il `$"..."` sopravvive solo dove interpola nomi di tabella/colonna
       già passati da una whitelist, come fa `UpdateField`).
 - [ ] Un controller che scende sotto le 400 righe non ha più bisogno di essere spezzato.
+- [x] **04/09/2026** — `ProjectsController` (3.212 righe, cinque domini) spaccato in
+      `ProjectsController` (anagrafica, 845), `ProjectFilesController`, `ProjectDdpController`,
+      `ProjectDdpOfficinaController`, `ProjectDashboardController`, `LookupController` + base
+      `ProjectsControllerBase`; 38 action con gli stessi verbi/rotte/attributi, mappa endpoint
+      rigenerata identica (772 rotte). `HrAttendanceService` (2.796) in 7 classi parziali per
+      argomento. Le query restano dove sono: F2 vale «quando tocchi un endpoint».
+- [x] **Schema scritto due volte** (bootstrap vs migrazioni): confronto con la produzione fatto
+      il 04/09 (0 colonne diverse, mancava solo `travel_steps.idx_ts_phase` nel bootstrap, aggiunto)
+      e da lì un guardiano permanente, `Migrazioni/BootstrapAllineatoTests`: legge il DDL delle
+      migrazioni dai sorgenti e pretende che il database di prova (bootstrap) sia nello stato
+      finale che descrivono. Provato al contrario.
 
 ### F3 — Notifiche SignalR
 36 `_ = ...SendAsync(...)` fire-and-forget: se la chiamata fallisce, l'eccezione
 sparisce e la UI di qualcuno resta vecchia.
-- [ ] Incapsulare in un helper che logga il fallimento (non serve garantire la
+- [x] **04/09/2026** — `HubNotifica.SenzaAttesa("Evento")` (`Hubs/HubNotifica.cs`): 59 chiamate
+      (41 su una riga, 18 su più righe) invece di `_ = …SendAsync(…)`; logger unico impostato in
+      `Program.cs`. Test: nessun `SendAsync` scartato nei sorgenti + un push fallito finisce nel log.
+- [x] Incapsulare in un helper che logga il fallimento (non serve garantire la
       consegna: il client rilegge comunque, con `staleTime: 0`).
 
 ---
@@ -1084,6 +1108,9 @@ Delimitare lo scope serve a non trasformarlo in un cantiere infinito.
 
 - **Non** introduce EF Core. Dapper resta: il costo di migrare 1.848 query non è
   giustificato da nessun beneficio reale qui.
+- I 354 `catch (Exception)` dei controller restano: quasi tutti rispondono `200` con
+  `ApiResponse.Fail(ex.Message)` e il client li tratta come esito, non come errore — toglierli in
+  blocco cambierebbe le risposte (500 + messaggio generico). Si tolgono uno alla volta, passando.
 - **Non** riscrive il client web. I file grossi (`MilestoneGantt.tsx` 53 KB,
   `CatalogoPreventiviPage.tsx` 45 KB) sono grandi ma funzionanti e collaudati.
 - **Non** tocca le funzionalità aperte (import/export del blocco 2, export Excel dei
