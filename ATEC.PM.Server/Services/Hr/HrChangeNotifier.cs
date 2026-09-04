@@ -23,7 +23,7 @@ public sealed class HrChangeNotifier
     public void Notify(string action, int? employeeId = null, DateTime? date = null)
     {
         // Fire-and-forget: un hub giù non deve mai far fallire un'operazione riuscita.
-        _ = _hub.Clients.Group(ProjectHub.HrGroup)
-            .SendAsync("HrChanged", new HrChange { Action = action, EmployeeId = employeeId, Date = date });
+        _hub.Clients.Group(ProjectHub.HrGroup)
+            .SendAsync("HrChanged", new HrChange { Action = action, EmployeeId = employeeId, Date = date }).SenzaAttesa("HrChanged");
     }
 }

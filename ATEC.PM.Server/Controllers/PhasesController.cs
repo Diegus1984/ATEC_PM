@@ -40,8 +40,8 @@ public class PhasesController : ControllerBase
     {
         if (projectId <= 0) return;
         object payload = new { projectId };
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload);
-        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload);
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
+        _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
     }
 
     /// <summary>
@@ -50,8 +50,8 @@ public class PhasesController : ControllerBase
     /// Stesso evento di <c>CostSectionsController</c>.
     /// </summary>
     private void NotifyCostSectionsChanged(string action) =>
-        _ = _hub.Clients.Group(ProjectHub.CostSectionsGroup)
-            .SendAsync("CostSectionsChanged", new { action });
+        _hub.Clients.Group(ProjectHub.CostSectionsGroup)
+            .SendAsync("CostSectionsChanged", new { action }).SenzaAttesa("CostSectionsChanged");
 
     /// <summary>Commessa di una fase: le rotte per id fase non la portano nell'URL.</summary>
     private static int ProjectIdOfPhase(System.Data.IDbConnection c, int phaseId) =>
@@ -87,8 +87,8 @@ public class PhasesController : ControllerBase
             if (projectId > 0)
             {
                 object payload = new { projectId };
-                _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("TravelChanged", payload);
-                _ = _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("TravelChanged", payload);
+                _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("TravelChanged", payload).SenzaAttesa("TravelChanged");
+                _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("TravelChanged", payload).SenzaAttesa("TravelChanged");
             }
         }
         catch (Exception ex)

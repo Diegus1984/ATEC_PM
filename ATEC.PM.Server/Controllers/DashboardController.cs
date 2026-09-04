@@ -132,13 +132,13 @@ public class DashboardController : ControllerBase
 
             // Ambiente condiviso: la dashboard aperta sugli altri PC si riallinea da sola.
             // Stesso evento dell'anagrafica commesse (`projects-all`), già ascoltato altrove.
-            _ = _hub.Clients.Group(ProjectHub.ProjectsGroup)
+            _hub.Clients.Group(ProjectHub.ProjectsGroup)
                 .SendAsync("ProjectsChanged", new ProjectChange
                 {
                     ProjectId = projectId,
                     Action = "dashboard",
                     Code = code
-                });
+                }).SenzaAttesa("ProjectsChanged");
 
             return Ok(ApiResponse<bool>.Ok(true,
                 req.InDashboard ? "Commessa in dashboard" : "Commessa tolta dalla dashboard"));

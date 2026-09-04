@@ -177,8 +177,8 @@ public class PermissionChangeService
 
         // Fire-and-forget come gli altri avvisi real-time del progetto: un client che non c'è
         // non deve rallentare (né far fallire) la modifica dei permessi.
-        _ = _hub.Clients.Group(ProjectHub.PermissionsGroup(employeeId))
-            .SendAsync("PermissionsChanged", new { employeeId, version = versione });
+        _hub.Clients.Group(ProjectHub.PermissionsGroup(employeeId))
+            .SendAsync("PermissionsChanged", new { employeeId, version = versione }).SenzaAttesa("PermissionsChanged");
 
         return versione;
     }

@@ -42,11 +42,11 @@ public class CheckListController : ControllerBase
     // l'attività è di commessa, anche al gruppo della commessa (tab nel dettaglio commessa).
     private void NotifyChanged(string action, int? projectId = null)
     {
-        _ = _hub.Clients.Group(ProjectHub.CheckListGroup)
-            .SendAsync("ChecklistChanged", new { action, projectId });
+        _hub.Clients.Group(ProjectHub.CheckListGroup)
+            .SendAsync("ChecklistChanged", new { action, projectId }).SenzaAttesa("ChecklistChanged");
         if (projectId.HasValue)
-            _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value))
-                .SendAsync("ChecklistChanged", new { action, projectId });
+            _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value))
+                .SendAsync("ChecklistChanged", new { action, projectId }).SenzaAttesa("ChecklistChanged");
     }
 
     private const string ItemSelect = @"

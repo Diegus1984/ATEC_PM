@@ -30,8 +30,8 @@ public class TravelTariffsController : ControllerBase
     /// Stesso evento di <c>CostSectionsController</c>.
     /// </summary>
     private void NotifyCostSectionsChanged(string action) =>
-        _ = _hub.Clients.Group(ProjectHub.CostSectionsGroup)
-            .SendAsync("CostSectionsChanged", new { action });
+        _hub.Clients.Group(ProjectHub.CostSectionsGroup)
+            .SendAsync("CostSectionsChanged", new { action }).SenzaAttesa("CostSectionsChanged");
 
     /// <summary>Nome della tariffa (#87), ripulito e troncato al limite della colonna.</summary>
     private static string Nome(string? label)

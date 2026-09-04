@@ -48,8 +48,8 @@ public class ChatController : ControllerBase
             Action = action,
         };
         if (projectId.HasValue)
-            _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value)).SendAsync("ChatChanged", payload);
-        _ = _hub.Clients.Group(ProjectHub.ChatInboxGroup).SendAsync("ChatChanged", payload);
+            _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value)).SendAsync("ChatChanged", payload).SenzaAttesa("ChatChanged");
+        _hub.Clients.Group(ProjectHub.ChatInboxGroup).SendAsync("ChatChanged", payload).SenzaAttesa("ChatChanged");
     }
 
     /// <summary>Commessa della chat (null = chat senza commessa, o chat inesistente).</summary>
@@ -751,7 +751,7 @@ public class ChatController : ControllerBase
         };
 
         foreach (int empId in destinatari)
-            _ = _hub.Clients.Group(ProjectHub.UserGroup(empId)).SendAsync("ChatMessageReceived", alert);
+            _hub.Clients.Group(ProjectHub.UserGroup(empId)).SendAsync("ChatMessageReceived", alert).SenzaAttesa("ChatMessageReceived");
     }
 
     /// <summary>

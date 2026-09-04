@@ -221,8 +221,8 @@ public class CatalogMappingController : ControllerBase
                 ItemId = bom.Id,
                 DdpType = "COMMERCIAL",
             };
-            _ = _hub.Clients.Group($"project-{bom.ProjectId}").SendAsync("DdpChanged", payload);
-            _ = _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload);
+            _hub.Clients.Group($"project-{bom.ProjectId}").SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
+            _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
         }
         return Ok(response);
     }
@@ -333,7 +333,7 @@ public class CatalogMappingController : ControllerBase
                 var payload = new DdpChange
                     { ProjectId = projectId, Action = "update", ItemId = 0, DdpType = "COMMERCIAL" };
                 foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
-                    _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+                    _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
             }
         }
 
@@ -347,7 +347,7 @@ public class CatalogMappingController : ControllerBase
                 var payload = new DdpChange
                     { ProjectId = projectId, Action = "update", ItemId = 0, DdpType = "COMMERCIAL" };
                 foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
-                    _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+                    _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
             }
         }
 

@@ -82,7 +82,7 @@ public class PurchaseRfqController : ControllerBase
 
     // Real-time best-effort per la lista RDO (gruppo "tutte le commesse" dell'hub).
     private void NotifyRfqChange(int rfqId, string action) =>
-        _ = _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("PurchaseRfqChanged", new { RfqId = rfqId, Action = action });
+        _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("PurchaseRfqChanged", new { RfqId = rfqId, Action = action }).SenzaAttesa("PurchaseRfqChanged");
 
     [HttpGet]
     public IActionResult List([FromQuery] string? status = null)
@@ -930,8 +930,8 @@ public class PurchaseRfqController : ControllerBase
                 ItemId = plan.BomItemId,
                 DdpType = "COMMERCIAL",
             };
-            _ = _hub.Clients.Group($"project-{plan.ProjectId}").SendAsync("DdpChanged", payload);
-            _ = _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload);
+            _hub.Clients.Group($"project-{plan.ProjectId}").SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
+            _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
         }
         NotifyRfqChange(id, "winner");
 
@@ -1200,8 +1200,8 @@ public class PurchaseRfqController : ControllerBase
                 ItemId = bomItemId,
                 DdpType = "COMMERCIAL",
             };
-            _ = _hub.Clients.Group($"project-{projectId}").SendAsync("DdpChanged", payload);
-            _ = _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload);
+            _hub.Clients.Group($"project-{projectId}").SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
+            _hub.Clients.Group(ProjectHub.AllGroup).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
         }
         foreach (int id in rfqIds)
             NotifyRfqChange(id, "order");

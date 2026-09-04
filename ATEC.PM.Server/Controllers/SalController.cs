@@ -199,9 +199,9 @@ public class SalController : ControllerBase
 
     private void NotifyChanged(string action, int projectId)
     {
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
-            .SendAsync("SalChanged", new { action, projectId });
-        _ = _hub.Clients.All.SendAsync("GlobalSalChanged", new { action, projectId });
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
+            .SendAsync("SalChanged", new { action, projectId }).SenzaAttesa("SalChanged");
+        _hub.Clients.All.SendAsync("GlobalSalChanged", new { action, projectId }).SenzaAttesa("GlobalSalChanged");
     }
 
     // Broadcast per i cambi alle ANAGRAFICHE SAL (condizioni, causali SAP, stati pagamento):
@@ -209,7 +209,7 @@ public class SalController : ControllerBase
     // fire-and-forget come NotifyChanged. I client invalidano le query dei cataloghi.
     private void NotifyLookupChanged()
     {
-        _ = _hub.Clients.All.SendAsync("GlobalSalChanged", new { action = "lookup", projectId = 0 });
+        _hub.Clients.All.SendAsync("GlobalSalChanged", new { action = "lookup", projectId = 0 }).SenzaAttesa("GlobalSalChanged");
     }
 
     [RequireProjectVisible]

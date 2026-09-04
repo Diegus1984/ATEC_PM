@@ -50,7 +50,7 @@ public class CodexController : ControllerBase
             DdpType = "COMMERCIAL"
         };
         foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
-            _ = _projectHub.Clients.Group(group).SendAsync("DdpChanged", payload);
+            _projectHub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
     }
 
     // Notifica real-time ai client che guardano la Composizione (hub /hubs/codex),
@@ -66,7 +66,7 @@ public class CodexController : ControllerBase
         IClientProxy target = string.IsNullOrEmpty(conn)
             ? _codexHub.Clients.All
             : _codexHub.Clients.AllExcept(conn);
-        _ = target.SendAsync("CompositionChanged", payload);
+        target.SendAsync("CompositionChanged", payload).SenzaAttesa("CompositionChanged");
     }
 
     /// <summary>Colonne ordinabili (chiave client → colonna SQL).</summary>

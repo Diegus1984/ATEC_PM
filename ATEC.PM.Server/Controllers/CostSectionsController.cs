@@ -32,8 +32,8 @@ public class CostSectionsController : ControllerBase
     /// l'anagrafica delle fasi e da <c>DepartmentsController</c>/<c>TravelTariffsController</c>.
     /// </summary>
     private void NotifyCostSectionsChanged(string action) =>
-        _ = _hub.Clients.Group(ProjectHub.CostSectionsGroup)
-            .SendAsync("CostSectionsChanged", new { action });
+        _hub.Clients.Group(ProjectHub.CostSectionsGroup)
+            .SendAsync("CostSectionsChanged", new { action }).SenzaAttesa("CostSectionsChanged");
 
     // ══════════════════════════════════════════════════════════════
     // GRUPPI

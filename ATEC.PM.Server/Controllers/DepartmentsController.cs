@@ -28,8 +28,8 @@ public class DepartmentsController : ControllerBase
     /// Stesso evento di <c>CostSectionsController</c>.
     /// </summary>
     private void NotifyCostSectionsChanged(string action) =>
-        _ = _hub.Clients.Group(ProjectHub.CostSectionsGroup)
-            .SendAsync("CostSectionsChanged", new { action });
+        _hub.Clients.Group(ProjectHub.CostSectionsGroup)
+            .SendAsync("CostSectionsChanged", new { action }).SenzaAttesa("CostSectionsChanged");
 
 
     /// <summary>

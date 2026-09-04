@@ -110,8 +110,8 @@ public class BugReportsController : ControllerBase
         gestisce || (caricatoDa.HasValue && me > 0 && caricatoDa.Value == me);
 
     private void NotifyChanged(string action, int bugId) =>
-        _ = _hub.Clients.Group(ProjectHub.BugReportsGroup)
-            .SendAsync("BugReportsChanged", new { action, bugId });
+        _hub.Clients.Group(ProjectHub.BugReportsGroup)
+            .SendAsync("BugReportsChanged", new { action, bugId }).SenzaAttesa("BugReportsChanged");
 
     // Cartella degli allegati: FUORI da wwwroot e da /uploads/cms (serviti in anonimo) e
     // soprattutto fuori dalla cartella del programma, che l'aggiornamento sostituisce in

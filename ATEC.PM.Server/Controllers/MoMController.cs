@@ -42,8 +42,8 @@ public class MoMController : ControllerBase
     // Notifica realtime best-effort al gruppo globale MoM (pagine lista/dettaglio/note aperte).
     private void NotifyMoMChanged(int momId, string action)
     {
-        _ = _hub.Clients.Group(ProjectHub.MoMGroup)
-            .SendAsync("MoMChanged", new { momId, action });
+        _hub.Clients.Group(ProjectHub.MoMGroup)
+            .SendAsync("MoMChanged", new { momId, action }).SenzaAttesa("MoMChanged");
     }
 
     // ═══════════════════════════════════════════════════════

@@ -50,8 +50,8 @@ public class TimesheetController : ControllerBase
     {
         if (projectId <= 0) return;
         object payload = new { projectId };
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload);
-        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload);
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
+        _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
     }
 
     /// <summary>
@@ -67,8 +67,8 @@ public class TimesheetController : ControllerBase
     {
         if (projectId <= 0) return;
         object payload = new { projectId };
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("TravelChanged", payload);
-        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("TravelChanged", payload);
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("TravelChanged", payload).SenzaAttesa("TravelChanged");
+        _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("TravelChanged", payload).SenzaAttesa("TravelChanged");
     }
 
     /// <summary>Commessa a cui appartiene una fase di commessa.</summary>

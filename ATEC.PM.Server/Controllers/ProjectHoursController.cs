@@ -56,8 +56,8 @@ public class ProjectHoursController : ControllerBase
     private void NotifyChanged(int projectId)
     {
         object payload = new { projectId };
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload);
-        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload);
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId)).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
+        _hub.Clients.Group(ProjectHub.ProjectsGroup).SendAsync("BudgetChanged", payload).SenzaAttesa("BudgetChanged");
     }
 
     /// <summary>Tutte le imputazioni della commessa, comprese quelle su Extra Lavoro.</summary>

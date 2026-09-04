@@ -39,8 +39,8 @@ public class MilestonesController : ControllerBase
 
     // Notifica realtime best-effort al gruppo della commessa (tab Milestone nel dettaglio commessa).
     private void NotifyChanged(string action, int projectId) =>
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
-            .SendAsync("MilestonesChanged", new { action, projectId });
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
+            .SendAsync("MilestonesChanged", new { action, projectId }).SenzaAttesa("MilestonesChanged");
 
     private const string Select = @"
         SELECT id AS Id, project_id AS ProjectId, descrizione AS Descrizione,

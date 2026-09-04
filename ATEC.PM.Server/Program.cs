@@ -328,6 +328,10 @@ if (svcRisorseSync)
 
 var app = builder.Build();
 
+// Le notifiche SignalR fire-and-forget scrivono qui i fallimenti (blocco F3): un logger solo,
+// senza iniettarlo in ogni controller che notifica.
+HubNotifica.Log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SignalR");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

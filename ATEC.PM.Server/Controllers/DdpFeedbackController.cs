@@ -39,7 +39,7 @@ public class DdpFeedbackController : ControllerBase
     {
         var payload = new DdpChange { ProjectId = projectId, Action = "feedback", ItemId = 0, DdpType = ddpType };
         foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
-            _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+            _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
     }
 
     // Stati dell'aggregazione (A6/A7), ordinati come in "Aggregazioni DDP" (sort_order di ddp_statuses).

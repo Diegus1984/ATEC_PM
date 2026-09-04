@@ -40,7 +40,7 @@ public class DdpRowOffController : ControllerBase
     {
         var payload = new DdpChange { ProjectId = projectId, Action = "row-off", ItemId = 0, DdpType = ddpType };
         foreach (string group in new[] { $"project-{projectId}", ProjectHub.AllGroup })
-            _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+            _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
     }
 
     [HttpGet("{projectId:int}/{ddpType}")]

@@ -52,7 +52,7 @@ public class ResourcesController : ControllerBase
     private void NotifyChange(string? conn, string action, params int[] ids)
     {
         IClientProxy target = string.IsNullOrEmpty(conn) ? _hub.Clients.All : _hub.Clients.AllExcept(conn);
-        _ = target.SendAsync("AssignmentsChanged", new ResAssignmentChange { Action = action, Ids = ids.ToList() });
+        target.SendAsync("AssignmentsChanged", new ResAssignmentChange { Action = action, Ids = ids.ToList() }).SenzaAttesa("AssignmentsChanged");
     }
 
     // ═══════════════════════════════════════════════════════

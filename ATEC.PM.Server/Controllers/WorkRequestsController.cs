@@ -43,11 +43,11 @@ public class WorkRequestsController : ControllerBase
     // anche al gruppo della commessa (griglia nel dettaglio commessa).
     private void NotifyChanged(string action, int? projectId = null)
     {
-        _ = _hub.Clients.Group(ProjectHub.WorkRequestsGroup)
-            .SendAsync("WorkRequestsChanged", new { action, projectId });
+        _hub.Clients.Group(ProjectHub.WorkRequestsGroup)
+            .SendAsync("WorkRequestsChanged", new { action, projectId }).SenzaAttesa("WorkRequestsChanged");
         if (projectId.HasValue)
-            _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value))
-                .SendAsync("WorkRequestsChanged", new { action, projectId });
+            _hub.Clients.Group(ProjectHub.ProjectGroup(projectId.Value))
+                .SendAsync("WorkRequestsChanged", new { action, projectId }).SenzaAttesa("WorkRequestsChanged");
     }
 
     // Ritorno di stato verso la DDP Officina: lavorazione consegnata → riga collegata a COS.
@@ -66,7 +66,7 @@ public class WorkRequestsController : ControllerBase
                 DdpType = "OFFICINA",
             };
             foreach (string group in new[] { ProjectHub.ProjectGroup(changed.Value.ProjectId), ProjectHub.AllGroup })
-                _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+                _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
         }
         catch (Exception ex)
         {
@@ -258,7 +258,7 @@ public class WorkRequestsController : ControllerBase
                 DdpType = "OFFICINA",
             };
             foreach (string group in new[] { ProjectHub.ProjectGroup(projectId.Value), ProjectHub.AllGroup })
-                _ = _hub.Clients.Group(group).SendAsync("DdpChanged", payload);
+                _hub.Clients.Group(group).SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
 
             return Ok(ApiResponse<bool>.Ok(true));
         }

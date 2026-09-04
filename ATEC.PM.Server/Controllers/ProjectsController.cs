@@ -73,7 +73,7 @@ public class ProjectsController : ControllerBase
             IClientProxy target = string.IsNullOrEmpty(conn)
                 ? _hub.Clients.Group(group)
                 : _hub.Clients.GroupExcept(group, conn);
-            _ = target.SendAsync("DdpChanged", payload);
+            target.SendAsync("DdpChanged", payload).SenzaAttesa("DdpChanged");
         }
     }
 
@@ -82,10 +82,10 @@ public class ProjectsController : ControllerBase
     // del WorkRequestsController).
     private void NotifyWorkRequestsChanged(string action, int projectId)
     {
-        _ = _hub.Clients.Group(ProjectHub.WorkRequestsGroup)
-            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId });
-        _ = _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
-            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId });
+        _hub.Clients.Group(ProjectHub.WorkRequestsGroup)
+            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId }).SenzaAttesa("WorkRequestsChanged");
+        _hub.Clients.Group(ProjectHub.ProjectGroup(projectId))
+            .SendAsync("WorkRequestsChanged", new { action, projectId = (int?)projectId }).SenzaAttesa("WorkRequestsChanged");
     }
 
     // Notifica real-time ai client che guardano la commessa che i documenti (file/cartelle su disco)
@@ -95,7 +95,7 @@ public class ProjectsController : ControllerBase
     private void NotifyDocumentsChanged(int projectId, string action)
     {
         var payload = new DocumentsChange { ProjectId = projectId, Action = action };
-        _ = _hub.Clients.Group($"project-{projectId}").SendAsync("DocumentsChanged", payload);
+        _hub.Clients.Group($"project-{projectId}").SendAsync("DocumentsChanged", payload).SenzaAttesa("DocumentsChanged");
     }
 
     private int GetCurrentEmployeeId() =>
@@ -720,13 +720,13 @@ public class ProjectsController : ControllerBase
     // Fire-and-forget, niente self-exclusion: chi ha fatto la modifica ricarica comunque già.
     private void NotifyProjectsChanged(string action, int projectId, string code)
     {
-        _ = _hub.Clients.Group(ProjectHub.ProjectsGroup)
+        _hub.Clients.Group(ProjectHub.ProjectsGroup)
             .SendAsync("ProjectsChanged", new ProjectChange
             {
                 ProjectId = projectId,
                 Action = action,
                 Code = code
-            });
+            }).SenzaAttesa("ProjectsChanged");
     }
 
     private void NotifyProjectStatusChange(int projectId, string projectCode, string newStatus)
