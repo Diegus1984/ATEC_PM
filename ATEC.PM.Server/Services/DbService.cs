@@ -695,7 +695,8 @@ public class DbService
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             CONSTRAINT fk_ts_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            INDEX idx_ts_project (project_id, sort_order)
+            INDEX idx_ts_project (project_id, sort_order),
+            INDEX idx_ts_phase (project_phase_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // employee_id + person_name: il nominativo si sceglie dall'anagrafica ma resta scritto
