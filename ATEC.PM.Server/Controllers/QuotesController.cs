@@ -706,13 +706,16 @@ public class QuotesController : ControllerBase
                 _ => ""
             };
 
+            // Stato e registro insieme (F1): un cambio senza riga di log non si ricostruisce più.
+            using var tx = c.BeginTransaction();
             c.Execute($"UPDATE quotes SET status=@Status{extraSql} WHERE id=@Id",
-                new { Status = dto.NewStatus, Id = id });
+                new { Status = dto.NewStatus, Id = id }, tx);
 
             // Log
             c.Execute(@"INSERT INTO quote_status_log (quote_id, old_status, new_status, changed_by, notes)
                         VALUES (@Id, @Old, @New, @By, @Notes)",
-                new { Id = id, Old = currentStatus, New = dto.NewStatus, By = GetCurrentEmployeeId(), dto.Notes });
+                new { Id = id, Old = currentStatus, New = dto.NewStatus, By = GetCurrentEmployeeId(), dto.Notes }, tx);
+            tx.Commit();
 
             return Ok(ApiResponse<string>.Ok($"Stato aggiornato a {dto.NewStatus}"));
         }

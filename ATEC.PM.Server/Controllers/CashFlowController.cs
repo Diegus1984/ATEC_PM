@@ -151,16 +151,19 @@ public class CashFlowController : ControllerBase
             "SELECT COUNT(*) FROM project_cashflow WHERE project_id=@pid", new { pid = projectId });
         if (exists > 0) return BadRequest(ApiResponse<string>.Fail("Già inizializzato"));
 
+        // Testata e categorie insieme (F1): una testata senza categorie è un flusso di cassa vuoto.
+        using var tx = c.BeginTransaction();
         c.Execute(@"INSERT INTO project_cashflow (project_id, payment_amount, month_count) 
                     VALUES (@pid, @amt, @mc)",
-            new { pid = projectId, amt = req.PaymentAmount, mc = req.MonthCount });
+            new { pid = projectId, amt = req.PaymentAmount, mc = req.MonthCount }, tx);
 
         string[] defaults = { "Robot", "Pinza Schunk", "Fornitore 3", "Materiale Meccanico",
                               "Materiale Elettrico", "Ingegneria", "Lavorazione Interna", "Lavorazione Esterna" };
         for (int i = 0; i < defaults.Length; i++)
             c.Execute(@"INSERT INTO project_cashflow_categories (project_id, name, total_amount, sort_order) 
                         VALUES (@pid, @name, 0, @sort)",
-                new { pid = projectId, name = defaults[i], sort = i + 1 });
+                new { pid = projectId, name = defaults[i], sort = i + 1 }, tx);
+        tx.Commit();
 
         return Ok(ApiResponse<bool>.Ok(true));
     }
@@ -214,10 +217,12 @@ public class CashFlowController : ControllerBase
     public IActionResult DeleteCategory(int projectId, int catId)
     {
         using var c = _db.Open();
+        using var tx = c.BeginTransaction();
         c.Execute("DELETE FROM project_cashflow_data WHERE project_id=@pid AND data_type='CAT_PCT' AND ref_id=@cid",
-            new { pid = projectId, cid = catId });
+            new { pid = projectId, cid = catId }, tx);
         c.Execute("DELETE FROM project_cashflow_categories WHERE id=@id AND project_id=@pid",
-            new { id = catId, pid = projectId });
+            new { id = catId, pid = projectId }, tx);
+        tx.Commit();
         return Ok(ApiResponse<bool>.Ok(true));
     }
 }

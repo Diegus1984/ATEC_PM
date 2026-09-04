@@ -408,11 +408,14 @@ public class TimesheetController : ControllerBase
         }
         else
         {
-            req.Id = c.ExecuteScalar<int>("INSERT INTO timesheet_entries (employee_id,project_phase_id,work_date,hours,entry_type,notes) VALUES (@EmployeeId,@ProjectPhaseId,@WorkDate,@Hours,@EntryType,@Notes); SELECT LAST_INSERT_ID()", req);
+            // Ore e avanzamento della fase insieme (F1).
+            using var tx = c.BeginTransaction();
+            req.Id = c.ExecuteScalar<int>("INSERT INTO timesheet_entries (employee_id,project_phase_id,work_date,hours,entry_type,notes) VALUES (@EmployeeId,@ProjectPhaseId,@WorkDate,@Hours,@EntryType,@Notes); SELECT LAST_INSERT_ID()", req, tx);
 
             // Auto-avanzamento: NOT_STARTED → IN_PROGRESS al primo versamento ore
             c.Execute(@"UPDATE project_phases SET status = 'IN_PROGRESS'
-            WHERE id = @ProjectPhaseId AND status = 'NOT_STARTED'", req);
+            WHERE id = @ProjectPhaseId AND status = 'NOT_STARTED'", req, tx);
+            tx.Commit();
         }
         int projectId = ProjectIdOfPhase(c, req.ProjectPhaseId);
         RigeneraTrasferta(c, projectId, faseDiPrima);

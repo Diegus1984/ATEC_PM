@@ -195,17 +195,21 @@ public class MoMController : ControllerBase
             bool bump = oldDate.HasValue && newDate.HasValue && oldDate.Value != newDate.Value;
             int rev = cur.Rev + (bump ? 1 : 0);
 
+            // Verbale e riga di revisione insieme (F1): una revisione senza storico è una
+            // Rev che nessuno sa da dove viene.
+            using var tx = c.BeginTransaction();
             c.Execute(@"
                 UPDATE mom_records SET tipo=@Tipo, project_id=@ProjectId, title=@Title,
                        meeting_date=@MeetingDate, in_dashboard=@InDashboard, rev=@Rev
                  WHERE id=@Id",
                 new { Tipo = tipo, ProjectId = projectId, Title = req.Title.Trim(),
-                      MeetingDate = newDate, InDashboard = req.InDashboard ? 1 : 0, Rev = rev, Id = id });
+                      MeetingDate = newDate, InDashboard = req.InDashboard ? 1 : 0, Rev = rev, Id = id }, tx);
             if (bump)
                 c.Execute(@"
                     INSERT INTO mom_revisions (mom_id, rev, meeting_date, prev_date)
                     VALUES (@MomId, @Rev, @MeetingDate, @PrevDate)",
-                    new { MomId = id, Rev = rev, MeetingDate = newDate, PrevDate = oldDate });
+                    new { MomId = id, Rev = rev, MeetingDate = newDate, PrevDate = oldDate }, tx);
+            tx.Commit();
 
             NotifyMoMChanged(id, "update");
             return Ok(ApiResponse<int>.Ok(rev, bump ? $"Revisione {rev} registrata" : "Verbale aggiornato"));
@@ -438,6 +442,9 @@ public class MoMController : ControllerBase
             if (blocco != null) return StatusCode(403, ApiResponse<int>.Fail(blocco));
 
             string text = note.Note.Trim();
+            // Riga nel verbale e nota tolta dallo staging insieme (F1): una nota «assegnata» che
+            // resta in inbox si riassegna due volte.
+            using var tx = c.BeginTransaction();
             int? emptyId = c.ExecuteScalar<int?>(@"
                 SELECT a.id FROM mom_action_items a
                 WHERE a.mom_id=@MomId AND a.status='OPEN' AND a.is_critical=0
@@ -447,25 +454,26 @@ public class MoMController : ControllerBase
                   AND a.data_check IS NULL AND a.data_close IS NULL
                   AND NOT EXISTS (SELECT 1 FROM mom_action_item_responsibles r WHERE r.action_item_id=a.id)
                 ORDER BY a.sort_order, a.id
-                LIMIT 1", new { MomId = momId });
+                LIMIT 1", new { MomId = momId }, tx);
 
             if (emptyId.HasValue)
             {
                 c.Execute(@"UPDATE mom_action_items SET azione=@Azione, row_version=row_version+1
-                            WHERE id=@Id", new { Azione = text, Id = emptyId.Value });
+                            WHERE id=@Id", new { Azione = text, Id = emptyId.Value }, tx);
             }
             else
             {
                 int sortOrder = c.ExecuteScalar<int>(@"
                     SELECT COALESCE(MAX(sort_order), -1) + 1
-                    FROM mom_action_items WHERE mom_id=@MomId", new { MomId = momId });
+                    FROM mom_action_items WHERE mom_id=@MomId", new { MomId = momId }, tx);
                 c.Execute(@"
                     INSERT INTO mom_action_items (mom_id, attivita, azione, priorita, status, sort_order)
                     VALUES (@MomId, '', @Azione, 1, 'OPEN', @SortOrder)",
-                    new { MomId = momId, Azione = text, SortOrder = sortOrder });
+                    new { MomId = momId, Azione = text, SortOrder = sortOrder }, tx);
             }
 
-            c.Execute("DELETE FROM mom_notes WHERE id=@Id", new { Id = id });
+            c.Execute("DELETE FROM mom_notes WHERE id=@Id", new { Id = id }, tx);
+            tx.Commit();
             NotifyMoMChanged(momId, "item-add");
             return Ok(ApiResponse<int>.Ok(momId, "Nota assegnata"));
         }

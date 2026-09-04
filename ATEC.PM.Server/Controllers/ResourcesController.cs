@@ -200,6 +200,8 @@ public class ResourcesController : ControllerBase
 
             // Prima di perdere la riga: registra chi cancella + lo stato originale, per il digest
             // email (la DELETE la fa sparire da res_assignments, "chi l'ha fatto" andrebbe perso).
+            // Traccia e DELETE nella stessa transazione (F1): o entrambe o nessuna.
+            using var tx = c.BeginTransaction();
             c.Execute(@"
                 INSERT INTO res_notify_pending
                     (assignment_id, made_by, action, orig_employee_id, orig_tipo, orig_data_inizio, orig_data_fine,
@@ -208,10 +210,11 @@ public class ResourcesController : ControllerBase
                        project_id, service_id, other_activity_id, descrizione
                 FROM res_assignments WHERE id=@Id
                 ON DUPLICATE KEY UPDATE made_by=VALUES(made_by), touched_at=NOW()",
-                new { Id = id, MadeBy = caller });
+                new { Id = id, MadeBy = caller }, tx);
 
-            int rows = c.Execute("DELETE FROM res_assignments WHERE id=@Id", new { Id = id });
+            int rows = c.Execute("DELETE FROM res_assignments WHERE id=@Id", new { Id = id }, tx);
             if (rows == 0) return Ok(ApiResponse<bool>.Fail("Allocazione non trovata"));
+            tx.Commit();
             NotifyChange(conn, "delete", id);
             _sync.Trigger("pm");
             if (prima != null)

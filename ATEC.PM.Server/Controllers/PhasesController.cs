@@ -536,8 +536,11 @@ public class PhasesController : ControllerBase
 
         // La commessa va letta PRIMA: dopo la DELETE la riga non c'e' piu'.
         int projectId = ProjectIdOfPhase(c, id);
-        c.Execute("DELETE FROM phase_assignments WHERE project_phase_id=@Id", new { Id = id });
-        c.Execute("DELETE FROM project_phases WHERE id=@Id", new { Id = id });
+        // Assegnazioni e fase insieme (F1): assegnazioni orfane non si vedono da nessuna pagina.
+        using var tx = c.BeginTransaction();
+        c.Execute("DELETE FROM phase_assignments WHERE project_phase_id=@Id", new { Id = id }, tx);
+        c.Execute("DELETE FROM project_phases WHERE id=@Id", new { Id = id }, tx);
+        tx.Commit();
         NotifyBudgetChanged(projectId);
         return Ok(ApiResponse<bool>.Ok(true));
     }

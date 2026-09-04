@@ -373,11 +373,15 @@ public class CodexController : ControllerBase
             return Ok(ApiResponse<string>.Fail(
                 $"Il codice {CodexListItem.FormatCodice(raw)} risulta già usato."));
 
+        // Codice sulla riga e prenotazione chiusa insieme (F1): senza transazione un errore sulla
+        // DELETE lascerebbe il codice assegnato E la prenotazione viva fino alla scadenza.
+        using var tx = c.BeginTransaction();
         c.Execute("UPDATE codex_items SET codice_nuovo = @Code WHERE id=@Id",
-            new { Code = raw, Id = id });
+            new { Code = raw, Id = id }, tx);
 
         // Il codice ora è custodito dalla colonna (UNIQUE): la prenotazione ha finito il suo compito.
-        c.Execute("DELETE FROM codex_reservations WHERE id = @Id", new { Id = req.ReservationId.Value });
+        c.Execute("DELETE FROM codex_reservations WHERE id = @Id", new { Id = req.ReservationId.Value }, tx);
+        tx.Commit();
 
         return Ok(ApiResponse<string>.Ok(CodexListItem.FormatCodice(raw), "Codice nuovo assegnato"));
     }

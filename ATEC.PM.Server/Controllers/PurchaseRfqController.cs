@@ -580,13 +580,16 @@ public class PurchaseRfqController : ControllerBase
             return Ok(ApiResponse<bool>.Fail("Nessuna offerta indicata."));
 
         using var c = _db.Open();
+        // Offerte marcate e RDO avanzate insieme (F1).
+        using var tx = c.BeginTransaction();
         c.Execute(@"UPDATE purchase_rfq_offers SET email_sent_at = NOW()
-                    WHERE id IN @Ids AND email_sent_at IS NULL", new { Ids = ids });
+                    WHERE id IN @Ids AND email_sent_at IS NULL", new { Ids = ids }, tx);
         var rfqIds = c.Query<int>(
-            "SELECT DISTINCT rfq_id FROM purchase_rfq_offers WHERE id IN @Ids", new { Ids = ids }).ToList();
+            "SELECT DISTINCT rfq_id FROM purchase_rfq_offers WHERE id IN @Ids", new { Ids = ids }, tx).ToList();
         if (rfqIds.Count > 0)
             c.Execute(@"UPDATE purchase_rfqs SET status = 'SENT', sent_at = COALESCE(sent_at, NOW()), updated_at = NOW()
-                        WHERE id IN @Ids AND status = 'DRAFT'", new { Ids = rfqIds });
+                        WHERE id IN @Ids AND status = 'DRAFT'", new { Ids = rfqIds }, tx);
+        tx.Commit();
         foreach (int rfqId in rfqIds)
             NotifyRfqChange(rfqId, "send");
         return Ok(ApiResponse<bool>.Ok(true, "Richiesta offerta registrata"));
@@ -605,6 +608,9 @@ public class PurchaseRfqController : ControllerBase
         if (detail.Offers.Count == 0)
             return Ok(ApiResponse<bool>.Fail("Nessun fornitore in RDO."));
 
+        // Offerte contattate e stato della RDO cambiano insieme (F1): le email sono in coda,
+        // la transazione non le trattiene.
+        using var tx = c.BeginTransaction();
         int sent = 0;
         // Fornitori senza email in anagrafica: prima venivano saltati in silenzio e la RDO
         // risultava comunque «inviata» — i nomi si raccolgono per dirlo chiaro nell'esito.
@@ -632,13 +638,14 @@ public class PurchaseRfqController : ControllerBase
 
             if (_email.QueueSimpleMail(offer.SupplierEmail, offer.SupplierName, subject, body, htmlBody))
             {
-                c.Execute("UPDATE purchase_rfq_offers SET email_sent_at = NOW() WHERE id = @Id", new { Id = offer.Id });
+                c.Execute("UPDATE purchase_rfq_offers SET email_sent_at = NOW() WHERE id = @Id", new { Id = offer.Id }, tx);
                 sent++;
             }
         }
 
         c.Execute(@"UPDATE purchase_rfqs SET status = 'SENT', sent_at = COALESCE(sent_at, NOW()), updated_at = NOW() WHERE id = @Id",
-            new { Id = id });
+            new { Id = id }, tx);
+        tx.Commit();
         NotifyRfqChange(id, "send");
 
         if (sent == 0 && !_email.Enabled)
@@ -680,6 +687,8 @@ public class PurchaseRfqController : ControllerBase
         if (req.UnitPrice is <= 0)
             return Ok(ApiResponse<bool>.Fail(
                 "Il prezzo dell'offerta deve essere maggiore di zero (per toglierlo, svuota il campo)."));
+        // Offerta e «tocco» della RDO insieme (F1).
+        using var tx = c.BeginTransaction();
         int n = c.Execute(@"
             UPDATE purchase_rfq_offers SET
                 catalog_item_id = @CatalogItemId,
@@ -695,10 +704,11 @@ public class PurchaseRfqController : ControllerBase
                 req.UnitPrice,
                 req.ValidUntil,
                 Notes = req.Notes ?? "",
-            });
+            }, tx);
         if (n == 0)
             return Ok(ApiResponse<bool>.Fail("Offerta non trovata."));
-        c.Execute("UPDATE purchase_rfqs SET updated_at = NOW() WHERE id = @Id", new { Id = id });
+        c.Execute("UPDATE purchase_rfqs SET updated_at = NOW() WHERE id = @Id", new { Id = id }, tx);
+        tx.Commit();
         NotifyRfqChange(id, "offer");
         return Ok(ApiResponse<bool>.Ok(true, "Offerta aggiornata"));
     }

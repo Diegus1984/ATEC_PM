@@ -83,17 +83,21 @@ public class DdpDestinationsController : ControllerBase
             "SELECT name FROM ddp_destinations WHERE id=@Id", new { Id = id });
 
         req.Id = id;
+        // Rinomina e propagazione alle righe in UNA transazione (F1): senza, un errore a metà
+        // lascerebbe la destinazione col nome nuovo e le distinte col vecchio.
+        using var tx = c.BeginTransaction();
         c.Execute(@"UPDATE ddp_destinations SET name=@Name, is_active=@IsActive WHERE id=@Id",
-            new { req.Name, req.IsActive, Id = id });
+            new { req.Name, req.IsActive, Id = id }, tx);
 
         // Se il nome è cambiato, riallinea le righe della distinta che usavano il vecchio nome.
         if (!string.IsNullOrEmpty(oldName) && oldName != req.Name)
         {
             c.Execute("UPDATE bom_items SET destination=@New WHERE destination=@Old",
-                new { New = req.Name, Old = oldName });
+                new { New = req.Name, Old = oldName }, tx);
             c.Execute("UPDATE ddp_officina_items SET destination=@New WHERE destination=@Old",
-                new { New = req.Name, Old = oldName });
+                new { New = req.Name, Old = oldName }, tx);
         }
+        tx.Commit();
 
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }

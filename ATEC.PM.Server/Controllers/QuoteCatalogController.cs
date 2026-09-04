@@ -80,9 +80,11 @@ public class QuoteCatalogController : ControllerBase
         try
         {
             using var c = _qdb.Open();
-            // Aggiorna gruppi orfani
-            c.Execute("UPDATE quote_groups SET price_list_id=NULL WHERE price_list_id=@Id", new { Id = id });
-            c.Execute("DELETE FROM quote_price_lists WHERE id=@Id", new { Id = id });
+            // Gruppi sganciati e listino tolto insieme (F1).
+            using var tx = c.BeginTransaction();
+            c.Execute("UPDATE quote_groups SET price_list_id=NULL WHERE price_list_id=@Id", new { Id = id }, tx);
+            c.Execute("DELETE FROM quote_price_lists WHERE id=@Id", new { Id = id }, tx);
+            tx.Commit();
             return Ok(ApiResponse<string>.Ok("Listino eliminato"));
         }
         catch (Exception ex) { return Ok(ApiResponse<string>.Fail($"Errore: {ex.Message}")); }

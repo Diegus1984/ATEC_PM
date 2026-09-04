@@ -399,10 +399,12 @@ public class CheckListController : ControllerBase
             if (!ContainerExists(c, projectId, groupId))
                 return Ok(ApiResponse<int>.Fail("Commessa o gruppo non trovato"));
 
+            // Attività creata e nota tolta dall'inbox insieme (F1): una nota che resta si assegna due volte.
+            using var tx = c.BeginTransaction();
             int sortOrder = c.ExecuteScalar<int>(@"
                 SELECT COALESCE(MAX(sort_order), -1) + 1 FROM checklist_items
                 WHERE (@Pid IS NOT NULL AND project_id = @Pid) OR (@Gid IS NOT NULL AND group_id = @Gid)",
-                new { Pid = projectId, Gid = groupId });
+                new { Pid = projectId, Gid = groupId }, tx);
 
             int itemId = c.ExecuteScalar<int>(@"
                 INSERT INTO checklist_items
@@ -416,9 +418,10 @@ public class CheckListController : ControllerBase
                     Description = text.Trim(),
                     SortOrder = sortOrder,
                     CreatedBy = CurrentEmployeeId > 0 ? CurrentEmployeeId : (int?)null
-                });
+                }, tx);
 
-            c.Execute("DELETE FROM checklist_inbox WHERE id=@Id", new { Id = id });
+            c.Execute("DELETE FROM checklist_inbox WHERE id=@Id", new { Id = id }, tx);
+            tx.Commit();
             NotifyChanged("item-add", projectId);
             return Ok(ApiResponse<int>.Ok(itemId, "Attività assegnata"));
         }

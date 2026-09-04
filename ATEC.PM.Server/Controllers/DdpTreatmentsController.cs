@@ -84,15 +84,18 @@ public class DdpTreatmentsController : ControllerBase
             "SELECT name FROM ddp_treatments WHERE id=@Id", new { Id = id });
 
         req.Id = id;
+        // Rinomina e propagazione alle righe in UNA transazione (F1).
+        using var tx = c.BeginTransaction();
         c.Execute(@"UPDATE ddp_treatments SET name=@Name, is_active=@IsActive WHERE id=@Id",
-            new { req.Name, req.IsActive, Id = id });
+            new { req.Name, req.IsActive, Id = id }, tx);
 
         // Se il nome è cambiato, riallinea le righe della distinta che usavano il vecchio nome.
         if (!string.IsNullOrEmpty(oldName) && oldName != req.Name)
         {
             c.Execute("UPDATE ddp_officina_items SET treatment=@New WHERE treatment=@Old",
-                new { New = req.Name, Old = oldName });
+                new { New = req.Name, Old = oldName }, tx);
         }
+        tx.Commit();
 
         return Ok(ApiResponse<int>.Ok(id, "Aggiornato"));
     }
