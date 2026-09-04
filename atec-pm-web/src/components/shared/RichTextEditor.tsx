@@ -1,54 +1,27 @@
 import * as React from "react"
+import type { Editor, RawEditorOptions, TinyMCE } from "tinymce"
 
 import { uploadProductImage } from "@/lib/api/quote-catalog"
+import { TINYMCE_PLUGINS } from "@/lib/tinymce-plugins"
 
 // Base API (come client.ts): in dev è "" → stessa origine, /uploads è proxato a :5150.
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? ""
 
-// TinyMCE 5 self-hosted: stessi asset del client WPF, copiati in public/tinymce.
-// Riproduce fedelmente Assets/tinymce/editor.html (config, upload, tabella 50/50).
-const TINYMCE_SRC = "/tinymce/tinymce.min.js"
+// TinyMCE 8 da npm, in un chunk Vite a parte (vedi lib/tinymce.ts): si scarica alla prima
+// apertura di un dialogo con l'editor. La config è erede di Assets/tinymce/editor.html del
+// WPF (menubar, upload immagini, tabella 50/50), tradotta nelle opzioni della 8.
+let tinymceLoader: Promise<TinyMCE> | null = null
 
-// ── Tipi minimi per TinyMCE caricato via <script> (non da npm) ──
-interface TinyMceBlobInfo {
-  blob: () => Blob
-  filename: () => string
-}
-interface TinyMceEditor {
-  getContent: () => string
-  setContent: (html: string) => void
-  on: (event: string, handler: () => void) => void
-  remove: () => void
-}
-interface TinyMceGlobal {
-  init: (config: Record<string, unknown>) => Promise<TinyMceEditor[]>
-}
-declare global {
-  interface Window {
-    tinymce?: TinyMceGlobal
+/** Carica il chunk di TinyMCE una sola volta; se fallisce, il prossimo tentativo riprova. */
+function loadTinyMce(): Promise<TinyMCE> {
+  if (!tinymceLoader) {
+    tinymceLoader = import("@/lib/tinymce")
+      .then((m) => m.default)
+      .catch((err: Error) => {
+        tinymceLoader = null
+        throw new Error(`Impossibile caricare l'editor: ${err.message}`)
+      })
   }
-}
-
-let tinymceLoader: Promise<TinyMceGlobal> | null = null
-
-/** Inietta lo <script> di TinyMCE una sola volta e risolve quando è pronto. */
-function loadTinyMce(): Promise<TinyMceGlobal> {
-  if (window.tinymce) return Promise.resolve(window.tinymce)
-  if (tinymceLoader) return tinymceLoader
-  tinymceLoader = new Promise<TinyMceGlobal>((resolve, reject) => {
-    const script = document.createElement("script")
-    script.src = TINYMCE_SRC
-    script.referrerPolicy = "origin"
-    script.onload = () => {
-      if (window.tinymce) resolve(window.tinymce)
-      else reject(new Error("TinyMCE non disponibile dopo il caricamento"))
-    }
-    script.onerror = () => {
-      tinymceLoader = null
-      reject(new Error("Impossibile caricare TinyMCE"))
-    }
-    document.head.appendChild(script)
-  })
   return tinymceLoader
 }
 
@@ -77,7 +50,7 @@ interface RichTextEditorProps {
 }
 
 /**
- * Editor descrizione prodotto: TinyMCE 5 in React, fedele a editor.html del WPF.
+ * Editor descrizione prodotto: TinyMCE in React, fedele a editor.html del WPF.
  * Le immagini sono caricate sul server (POST /products/upload) e referenziate con
  * path RELATIVO /uploads/cms/products/...; tabelle 1×2 al 50/50 restano integre.
  */
@@ -86,7 +59,7 @@ export const RichTextEditor = React.forwardRef<
   RichTextEditorProps
 >(function RichTextEditor({ initialValue = "", height = 360 }, ref) {
   const targetRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const editorRef = React.useRef<TinyMceEditor | null>(null)
+  const editorRef = React.useRef<Editor | null>(null)
   const initialRef = React.useRef(initialValue)
   initialRef.current = initialValue
   const heightRef = React.useRef(height)
@@ -107,15 +80,17 @@ export const RichTextEditor = React.forwardRef<
 
   React.useEffect(() => {
     let disposed = false
-    let editor: TinyMceEditor | null = null
+    let editor: Editor | null = null
 
     loadTinyMce()
       .then((tinymce) => {
         // loadTinyMce è async: in StrictMode la cleanup del primo mount è già
         // passata qui (disposed=true) → non inizializzare l'editor "morto".
         if (disposed || !targetRef.current) return
-        return tinymce.init({
+        const config: RawEditorOptions = {
           target: targetRef.current,
+          // Self-hosted sotto GPLv2+ (vedi lib/tinymce.ts): senza questa chiave la 7+ avvisa.
+          license_key: "gpl",
           height: heightRef.current,
           menubar: "file edit view insert format table tools",
           branding: false,
@@ -125,14 +100,9 @@ export const RichTextEditor = React.forwardRef<
           // Niente conversione URL: persistiamo path relativi /uploads/cms/ come il WPF.
           relative_urls: false,
           convert_urls: false,
-          plugins: [
-            "advlist autolink lists link image charmap print preview anchor",
-            "searchreplace visualblocks code fullscreen",
-            "insertdatetime media table paste code help wordcount",
-            "imagetools hr nonbreaking pagebreak textcolor colorpicker",
-          ],
+          plugins: TINYMCE_PLUGINS.join(" "),
           toolbar: [
-            "undo redo | formatselect | bold italic underline strikethrough | forecolor backcolor",
+            "undo redo | blocks | bold italic underline strikethrough | forecolor backcolor",
             "alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table image link | hr blockquote | code fullscreen",
           ],
           content_style:
@@ -142,15 +112,13 @@ export const RichTextEditor = React.forwardRef<
           paste_data_images: true,
           automatic_uploads: true,
           // Upload di TUTTE le immagini (incolla/trascina/file picker) sul server.
-          images_upload_handler: (
-            blobInfo: TinyMceBlobInfo,
-            success: (url: string) => void,
-            failure: (message: string) => void
-          ) => {
+          // Dalla 6 l'handler ritorna una Promise: risolve con l'URL, rigetta col messaggio.
+          images_upload_handler: (blobInfo) =>
             uploadProductImage(blobInfo.blob(), blobInfo.filename() || "image.png")
-              .then((relativePath) => success(API_BASE + relativePath))
-              .catch((err: Error) => failure(err.message || "Upload fallito"))
-          },
+              .then((relativePath) => API_BASE + relativePath)
+              .catch((err: Error) => {
+                throw new Error(err.message || "Upload fallito")
+              }),
           file_picker_types: "image",
           object_resizing: true,
           resize_img_proportional: true,
@@ -159,8 +127,12 @@ export const RichTextEditor = React.forwardRef<
             "border-collapse": "collapse",
             width: "100%",
           },
-          table_responsive_width: true,
-          setup: (ed: TinyMceEditor) => {
+          // Larghezze in percentuale e scritte sui <td>, non in <colgroup>: come faceva la 5
+          // (`table_responsive_width`, colgroup spenti) e come si aspettano le descrizioni
+          // esistenti e il PDF del preventivo, che legge i <td>.
+          table_sizing_mode: "responsive",
+          table_use_colgroups: false,
+          setup: (ed) => {
             editor = ed
             ed.on("init", () => {
               if (disposed) {
@@ -172,7 +144,8 @@ export const RichTextEditor = React.forwardRef<
               setLoading(false)
             })
           },
-        })
+        }
+        return tinymce.init(config)
       })
       .catch((err: Error) => {
         if (!disposed) {

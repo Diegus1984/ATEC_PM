@@ -105,6 +105,10 @@ quote_price_lists (Listini)         id, name, currency, locale, is_active, sort_
 - TinyMCE 5: `table_use_colgroups` **disattivo** → larghezze colonna sui `<td>`, non in
   `<colgroup>`; tabelle NON in `<figure>`.
 - Stesso editor usato da `QuoteProductDialog` (catalogo) e `MaterialRtfDialog` (materiali).
+- **Client web (dal 04/09/2026)**: TinyMCE **8.9** da npm, impacchettato da Vite
+  (`atec-pm-web/src/lib/tinymce.ts`; config in `components/shared/RichTextEditor.tsx`),
+  con `table_use_colgroups: false` e `table_sizing_mode: 'responsive'` per tenere le
+  larghezze sui `<td>` come sopra. Il WPF resta sulla 5.10.9 (in dismissione).
 
 ## 6. Gestione immagini (allegate alla descrizione)
 
