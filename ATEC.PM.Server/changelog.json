@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-0909",
+                     "data":  "2026-09-08T09:09:16",
+                     "hash":  "a2b0d2c60e99fe33c6c27672106390537059f96c",
+                     "modifiche":  [
+                                       "Cartellino: la mezza giornata non è più «Tutto regolare» ma «Solo mattina, 4h 0m: pomeriggio senza timbrature»"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-0846",
                      "data":  "2026-09-08T08:46:35",
                      "hash":  "7200b3dd3c513153e75d057e095166f5c1215262",
