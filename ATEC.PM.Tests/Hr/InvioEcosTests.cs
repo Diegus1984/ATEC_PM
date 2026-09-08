@@ -16,8 +16,8 @@ public class TimbraturaEcosTests
 {
     private static readonly DateTime Giorno = new(2026, 2, 5);
 
-    private static HrAttendanceService.TimbraturaEcos T(int ore, int minuti, string verso, DateTime? suEcos = null) =>
-        new(1, "s1", verso, Giorno.AddHours(ore).AddMinutes(minuti), suEcos, null);
+    private static HrAttendanceService.TimbraturaEcos T(int ore, int minuti, string verso, DateTime? suEcos = null, int secondi = 0) =>
+        new(1, "s1", verso, Giorno.AddHours(ore).AddMinutes(minuti).AddSeconds(secondi), suEcos, null);
 
     [Theory]
     [InlineData(7, 58, "IN", 8, 0)]    // entrata: sale allo scatto
@@ -37,6 +37,8 @@ public class TimbraturaEcosTests
     {
         Assert.True(T(7, 58, "IN").DaInviare);                                   // Ecos ha 07:58, va 08:00
         Assert.False(T(8, 0, "IN").DaInviare);                                   // già allineata
+        Assert.False(T(8, 0, "IN", secondi: 52).DaInviare);                      // 08:00:52: i secondi non contano
+        Assert.True(T(17, 12, "OUT", secondi: 22).DaInviare);                    // 17:12:22 → 17:00
         Assert.False(T(7, 58, "IN", Giorno.AddHours(8)).DaInviare);              // già inviata
         Assert.True(T(7, 58, "IN", Giorno.AddHours(8).AddMinutes(30)).DaInviare); // su Ecos c'è altro
     }

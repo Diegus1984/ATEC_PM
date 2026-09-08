@@ -34,7 +34,14 @@ public partial class HrAttendanceService
         /// </summary>
         public bool Inviabile => Arrotondata.Date == PunchedAt.Date;
 
-        public bool DaInviare => Inviabile && Arrotondata != OraSuEcos;
+        /// <summary>
+        /// Si confronta al minuto: una timbratura alle 08:00:52 è già sullo scatto, e mandare
+        /// 08:00:00 sarebbe una riga «08:00 diventa 08:00» nel registro (vista l'08/09/2026 alla
+        /// prima prova in produzione). I secondi non contano né qui né su Ecos.
+        /// </summary>
+        public bool DaInviare => Inviabile && Arrotondata != AlMinuto(OraSuEcos);
+
+        private static DateTime AlMinuto(DateTime d) => new(d.Year, d.Month, d.Day, d.Hour, d.Minute, 0);
     }
 
     /// <summary>Lo stesso arrotondamento del motore (<c>TimesheetEngine.Norm</c>): una regola sola.</summary>
