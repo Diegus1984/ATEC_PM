@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T12:02:06",
+                     "hash":  "cbac0aa94ce83f0c37e170ee0b0e2e24dc9376d1",
+                     "modifiche":  [
+                                       "HR: le richieste di assenza si riconoscono per EmplID (M126) — PeopleAbsenceRequestGetAll non manda l\u0027EmplCode"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T11:49:55",
                      "hash":  "3ea68b3934134bc53d4f0fc8dc9c4953978162d2",
                      "modifiche":  [
