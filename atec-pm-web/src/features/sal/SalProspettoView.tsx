@@ -6,6 +6,8 @@ import { Download, Printer } from "lucide-react"
 import { DataTableCard } from "@/components/shared/data-table-card"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { fetchSalProspetto } from "@/lib/api/sal"
+import type { SalProspettoRow } from "@/lib/api/types"
+import { notifyError } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { salRowClass } from "@/features/commesse/sal/sal-utils"
 import { Button } from "@/components/ui/button"
@@ -17,7 +19,7 @@ import {
 import {
   type AlertCounters,
   countAlerts,
-  downloadProspettoCsv,
+  downloadProspettoExcel,
   printProspetto,
 } from "./sal-prospetto-report"
 
@@ -67,6 +69,19 @@ export function SalProspettoView() {
     [canSeeEconomics]
   )
 
+  // Excel vero dal server (#150): le righe che si vedono, con i filtri già impostati.
+  const [esportando, setEsportando] = React.useState(false)
+  async function esportaExcel(visibleRows: SalProspettoRow[]) {
+    setEsportando(true)
+    try {
+      await downloadProspettoExcel(visibleRows, canSeeEconomics)
+    } catch (e) {
+      notifyError(e, "Esportazione non riuscita.")
+    } finally {
+      setEsportando(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <DataTableCard
@@ -93,10 +108,11 @@ export function SalProspettoView() {
               variant="outline"
               size="sm"
               className="h-8 print:hidden"
-              onClick={() => downloadProspettoCsv(visibleRows, canSeeEconomics)}
+              disabled={esportando}
+              onClick={() => void esportaExcel(visibleRows)}
             >
               <Download className="size-3.5 mr-1.5" />
-              Esporta CSV
+              {esportando ? "Esporto…" : "Esporta Excel"}
             </Button>
             <Button
               variant="outline"

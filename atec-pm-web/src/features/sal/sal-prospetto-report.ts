@@ -1,16 +1,17 @@
-// Riepilogo, export CSV e stampa delle righe del Prospetto SAL.
+// Riepilogo, export Excel e stampa delle righe del Prospetto SAL.
 //
 // Stavano dentro `SalProspettoView`; sono qui perché le usano anche le due viste
 // «Warning Fatturazione SAL» e «Warning incasso fattura», che sono lo stesso elenco
 // filtrato alle sole righe in allarme.
 
-import { printHtml } from "@/lib/print-template"
+import { downloadXlsx } from "@/lib/api/export"
 import type { SalProspettoRow } from "@/lib/api/types"
 import { formatDateFull } from "@/lib/date-iso"
-import { downloadFile } from "@/lib/download"
 import { euro } from "@/lib/format"
+import { printHtml } from "@/lib/print-template"
 
-import { salProspettoAlertLabel } from "./sal-prospetto-columns"
+import { salProspettoAlertLabel } from "./sal-prospetto-alert"
+import { buildProspettoExcelTable } from "./sal-prospetto-excel"
 
 /** Contatori del sommario segnalazioni (calcolati dagli alert delle righe). */
 export interface AlertCounters {
@@ -32,37 +33,20 @@ export function countAlerts(rows: SalProspettoRow[]): AlertCounters {
   return c
 }
 
-/** Genera e scarica un CSV (separatore ;, BOM UTF-8 per Excel italiano). */
-export function downloadProspettoCsv(
+/**
+ * Scarica le righe in Excel vero (`.xlsx`): numeri, percentuali e date come valori, filtro su
+ * ogni colonna (#150). Il CSV di prima scriveva `27122.172` e Excel italiano lo leggeva
+ * come ventisette milioni.
+ */
+export async function downloadProspettoExcel(
   rows: SalProspettoRow[],
   canSeeEconomics: boolean,
-  fileName = "prospetto-sal.csv"
-): void {
-  const esc = (v: string | number | null): string => {
-    const s = v == null ? "" : String(v)
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const header = ["Segnalazione", "Commessa", "Cliente", "Scad.", "Step SAL", "%", "Condizione"]
-  if (canSeeEconomics) header.push("Importo")
-  header.push("Ipotesi Fatturazione", "Data Prevista Saldo")
-
-  const lines = rows.map((r) => {
-    const arr: (string | number | null)[] = [
-      salProspettoAlertLabel(r.alert),
-      r.code,
-      r.cliente || "",
-      r.ord,
-      r.step || "",
-      r.perc ?? "",
-      r.condizione || "",
-    ]
-    if (canSeeEconomics) arr.push(r.importo ?? "")
-    arr.push(formatDateFull(r.dataFatt))
-    arr.push(formatDateFull(r.dataSaldo))
-    return arr.map(esc).join(";")
-  })
-  const csv = "﻿" + [header.join(";"), ...lines].join("\r\n")
-  downloadFile(fileName, csv, "text/csv;charset=utf-8;")
+  options?: { fileName?: string; sheetName?: string }
+): Promise<void> {
+  await downloadXlsx(
+    options?.fileName ?? "prospetto-sal.xlsx",
+    buildProspettoExcelTable(rows, canSeeEconomics, options?.sheetName)
+  )
 }
 
 /** Riga di sommario in chiaro, usata come sottotitolo della stampa. */

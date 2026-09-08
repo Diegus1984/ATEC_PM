@@ -7,6 +7,7 @@ import { DataTableCard } from "@/components/shared/data-table-card"
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { fetchSalProspetto } from "@/lib/api/sal"
 import type { SalProspettoRow } from "@/lib/api/types"
+import { notifyError } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { salRowClass } from "@/features/commesse/sal/sal-utils"
 import { Button } from "@/components/ui/button"
@@ -17,7 +18,7 @@ import {
 } from "./sal-prospetto-columns"
 import {
   countAlerts,
-  downloadProspettoCsv,
+  downloadProspettoExcel,
   printProspetto,
 } from "./sal-prospetto-report"
 
@@ -41,7 +42,8 @@ const MODES: Record<
     /** Alert che entrano in questa vista. */
     alerts: string[]
     empty: string
-    csvName: string
+    /** Nome del file `.xlsx` scaricato (#150: Excel vero, non più CSV). */
+    excelName: string
     /** Sommario in testata: costruito sui contatori delle righe filtrate. */
     summary: (c: ReturnType<typeof countAlerts>) => React.ReactNode
     printSubtitle: (c: ReturnType<typeof countAlerts>) => string
@@ -51,7 +53,7 @@ const MODES: Record<
     title: "Warning Fatturazione SAL",
     alerts: ["warn", "pre"],
     empty: "Nessuna ipotesi di fatturazione da segnalare.",
-    csvName: "warning-fatturazione-sal.csv",
+    excelName: "warning-fatturazione-sal.xlsx",
     summary: (c) => (
       <>
         <Chip dot="bg-red-500" text={`${c.warn} scadute`} />
@@ -66,7 +68,7 @@ const MODES: Record<
     title: "Warning incasso fattura",
     alerts: ["incasso"],
     empty: "Nessuna fattura scaduta di incasso.",
-    csvName: "warning-incasso-sal.csv",
+    excelName: "warning-incasso-sal.xlsx",
     summary: (c) => <Chip dot="bg-rose-700" text={`${c.incasso} fatture non incassate`} />,
     printSubtitle: (c) =>
       `${c.incasso} fatture emesse e non incassate oltre la data prevista di saldo`,
@@ -106,6 +108,22 @@ export function SalWarningView({ mode }: { mode: SalWarningMode }) {
     [canSeeEconomics]
   )
 
+  // Excel vero dal server (#150): le righe che si vedono, con i filtri già impostati.
+  const [esportando, setEsportando] = React.useState(false)
+  async function esportaExcel(visibleRows: SalProspettoRow[]) {
+    setEsportando(true)
+    try {
+      await downloadProspettoExcel(visibleRows, canSeeEconomics, {
+        fileName: cfg.excelName,
+        sheetName: cfg.title,
+      })
+    } catch (e) {
+      notifyError(e, "Esportazione non riuscita.")
+    } finally {
+      setEsportando(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <DataTableCard
@@ -140,10 +158,11 @@ export function SalWarningView({ mode }: { mode: SalWarningMode }) {
               variant="outline"
               size="sm"
               className="h-8 print:hidden"
-              onClick={() => downloadProspettoCsv(visibleRows, canSeeEconomics, cfg.csvName)}
+              disabled={esportando}
+              onClick={() => void esportaExcel(visibleRows)}
             >
               <Download className="mr-1.5 size-3.5" />
-              Esporta CSV
+              {esportando ? "Esporto…" : "Esporta Excel"}
             </Button>
             <Button
               variant="outline"

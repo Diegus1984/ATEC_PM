@@ -212,6 +212,38 @@ export async function apiGetBlob(path: string): Promise<Blob> {
   return response.blob()
 }
 
+/**
+ * POST autenticato che ritorna un Blob: un file che il server compone a partire da un corpo
+ * JSON (es. `POST /api/export/xlsx`). Se il server rifiuta con `ApiResponse.Fail`, il
+ * messaggio dell'errore è quello, non lo statusText.
+ */
+export async function apiPostBlob(path: string, body: unknown): Promise<Blob> {
+  const token = tokenProvider()
+  const headers = new Headers({ "Content-Type": "application/json" })
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  })
+
+  if (response.status === 401 && tokenProvider()) {
+    window.dispatchEvent(new CustomEvent("atec:session-expired"))
+    throw new ApiError("Sessione scaduta", 401)
+  }
+  if (!response.ok) {
+    const payload = parseJson<ApiResponse<unknown>>(await response.text())
+    const errorMsg = payload?.message || response.statusText || "Download non riuscito"
+    recordLastError({ method: "POST", url: path, status: response.status, message: errorMsg })
+    throw new ApiError(errorMsg, response.status)
+  }
+
+  return response.blob()
+}
+
 export function buildApiUrl(path: string): string {
   return buildUrl(path)
 }

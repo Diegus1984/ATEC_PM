@@ -9,6 +9,12 @@ import { canAccessFeature } from "@/lib/auth/permissions"
 import { euro } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
+import { salProspettoAlertLabel, salProspettoAlertRank } from "./sal-prospetto-alert"
+
+// Rango ed etichetta stanno in `sal-prospetto-alert.ts` (senza React): da qui si
+// riesportano per chi li importava dalle colonne.
+export { salProspettoAlertLabel, salProspettoAlertRank }
+
 /**
  * Cella data del prospetto: stesso chip readonly del foglio SAL (icona
  * calendario + giorno della settimana impilato sopra la data gg/mm/aa,
@@ -29,25 +35,6 @@ function ProspettoDateCell({ value }: { value: string | null }) {
       className="min-w-[8.5rem] border-zinc-200 bg-white/70 shadow-none dark:bg-zinc-950/40"
     />
   )
-}
-
-/** Ordine di gravità della segnalazione (per ordinamento colonna). */
-export const salProspettoAlertRank = (a: string): number =>
-  a === "incasso" ? 0 : a === "warn" ? 1 : a === "pre" ? 2 : a === "attesa" ? 3 : 4
-
-export function salProspettoAlertLabel(a: string): string {
-  switch (a) {
-    case "incasso":
-      return "Fattura no incasso"
-    case "warn":
-      return "Scaduto"
-    case "pre":
-      return "Pre-warning"
-    case "attesa":
-      return "Emessa – attesa incasso"
-    default:
-      return "In programma"
-  }
 }
 
 export const SAL_PROSPETTO_COLUMN_LABELS: Record<string, string> = {
