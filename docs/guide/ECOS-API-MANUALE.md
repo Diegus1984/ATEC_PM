@@ -1,6 +1,6 @@
 # EcosAgile API — manuale operativo di ATEC PM
 
-> **Punto d'ingresso per qualunque lavoro che tocchi Ecos («eTime»).** Scritto il 07/09/2026
+> **Punto d'ingresso per qualunque lavoro che tocchi Ecos («eTime»).** Scritto il 08/09/2026
 > studiando la cartella `ECOS/` data da Diego (guida ufficiale v4.1.1, «Source Samples»,
 > progetto C# `EcosApiGetData`, collezione Postman) e confrontandola con il nostro client
 > `ATEC.PM.Server/Services/Hr/EcosClient.cs`. Deve bastare **da solo**: non serve riaprire i
@@ -72,7 +72,7 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 |---|---|---|
 | Host / istanza | `https://ha.ecosagile.com/dd/api.pm` → istanza **`dd`** | ✅ in uso; la guida elenca `ha.ecosagile.com` fra gli host legittimi (§2.2): la URL di login definisce host e istanza |
 | ClientID | **10305** | ✅ `res_settings` di produzione |
-| Utente API | **`api.it`** — utente dedicato, salvato dalla pagina il 07/09/2026 («Prova collegamento» ok) | ✅ `res_settings` di produzione. Prima c'era `maria.carretta`, account personale che la guida vieta (§21.1); i diritti di `api.it` sono ancora da misurare (§2.1) |
+| Utente API | **`api.it`** — utente dedicato, salvato dalla pagina il 08/09/2026 («Prova collegamento» ok) | ✅ `res_settings` di produzione. Prima c'era `maria.carretta`, account personale che la guida vieta (§21.1); i diritti di `api.it` sono ancora da misurare (§2.1) |
 | Dove stanno le credenziali | `res_settings` chiavi `ecos.baseurl`, `ecos.userid`, `ecos.clientid`, `ecos.password` (cifrata con `ProtectedConfigHelper`/DPAPI a scope macchina, write-only); ripiego `appsettings.json` sezione `Ecos` (`BaseUrl`, `UserId`, `Password`, `ClientId`) | `EcosClient.ResolveCredenziali()` |
 | Come si cambiano | Pagina `/hr/timbrature` → dialogo **«Credenziali Ecos»** (+ «Prova collegamento» = una `TokenGet`); endpoint `GET/POST /api/hr/ecos/settings`, `POST /api/hr/ecos/settings/test` | `HrController.cs:260-297` |
 | Rilettura | a ogni uso: cambiare la password **non richiede riavvio** | |
@@ -82,7 +82,7 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 
 ### 2.1 Cosa il nostro utente può e non può chiamare (✅ provato)
 
-> Esiti misurati con l'utente precedente `maria.carretta` (27/08 e 29/08/2026). Dal 07/09 l'utente
+> Esiti misurati con l'utente precedente `maria.carretta` (27/08 e 29/08/2026). Dal 08/09 l'utente
 > è **`api.it`**, con profili API dedicati: le righe ❌ vanno **rimisurate**
 > (`python tools/sonda_ecos.py … --calibra`), le ✅ le conferma il primo «Aggiorna da Ecos».
 
@@ -499,7 +499,7 @@ originale non deve mai sparire — se Ecos non tiene la storia, l'originale rest
 
 ### 9.4 Utente API dedicato — cosa chiedere a SoftAgile (info@ecosagile.com, 02 89054136)
 
-- ✅ **fatto il 07/09/2026**: utente di servizio **`api.it`**. Da confermare che abbia livello
+- ✅ **fatto il 08/09/2026**: utente di servizio **`api.it`**. Da confermare che abbia livello
   **2 - Professional**, profilo **`1642-APIRead`** (libreria API + Test Panel) e **solo** i
   profili delle API elencate;
 - ServiceID **`request`** per `PeopleAbsenceRequestPost` / `PeopleOvertimeRequestPost`;
@@ -545,12 +545,12 @@ Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano
 19. `-98` ritentato in automatico blocca l'utente (`-97`).
 20. Il `App.config` del sample SoftAgile ha due blocchi: vince l'ultimo (valori interni loro).
 21. Paginazione a offset: una riga può scivolare fra due pagine durante uno scarico lungo.
-22. Account personale come utente API: vietato dalla guida; lo è stato fino al 07/09/2026, ora c'è `api.it` (§9.4).
+22. Account personale come utente API: vietato dalla guida; lo è stato fino al 08/09/2026, ora c'è `api.it` (§9.4).
 23. Il **ClientID è del tenant, non della persona**: 10305 vale per ogni utente ATEC; la persona in Ecos è `EmplID`/`EmplCode`.
 
 ---
 
-## 11. Trovato durante lo studio (07/09/2026) — da sistemare, non ancora fatto
+## 11. Trovato durante lo studio (08/09/2026) — da sistemare, non ancora fatto
 
 ### 11.1 🔴 Non leggiamo il flag `Delete`
 

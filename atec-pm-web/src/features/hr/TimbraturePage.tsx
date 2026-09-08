@@ -122,7 +122,7 @@ function isZero(valore: string): boolean {
 
 /**
  * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero — sempre,
- * anche quando coincide (Diego, 07/09/2026: il riferimento resta sotto, così si legge a colpo
+ * anche quando coincide (Diego, 08/09/2026: il riferimento resta sotto, così si legge a colpo
  * d'occhio che la riga è stata confrontata). «??:??» del motore (uscita mai timbrata)
  * diventa una parola.
  */
@@ -146,7 +146,9 @@ function CellaOra({
     return (
       <TableCell className="leading-tight">
         <span className="text-muted-foreground">—</span>
-        {timbrato && (
+        {/* «--:--» è il segnaposto del grezzo per la timbratura che non c'è: sotto un
+            trattino non dice niente. */}
+        {timbrato && timbrato !== "--:--" && (
           <span className="block text-[11px] text-muted-foreground">timbrato {timbrato}</span>
         )}
       </TableCell>

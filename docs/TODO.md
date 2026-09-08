@@ -580,7 +580,7 @@ già calcolati da `GET /api/auth-levels/features/my`.
 
 ---
 
-## 11 · HR / Ecos — trovato studiando la guida ufficiale (07/09/2026)
+## 11 · HR / Ecos — trovato studiando la guida ufficiale (08/09/2026)
 
 Dettagli e ricette in [guide/ECOS-API-MANUALE.md](guide/ECOS-API-MANUALE.md) §11. Sono
 modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativa.
@@ -600,7 +600,7 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       · log di `RECORDCOUNT`/`LASTPAGE` per pagina · `ResultFields` sulle API larghe (release
       Ecos ≥ 6.10, da verificare).
 - [~] Utente API **dedicato** al posto dell'account personale (la guida lo vieta): **fatto il
-      07/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok.** Restano da misurare i
+      08/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok.** Restano da misurare i
       diritti (`sonda_ecos.py … --calibra`, poi «Aggiorna da Ecos») e, se mancano, i ServiceID
       `request` e `TimesheetAnalysis` da chiedere a SoftAgile: testo nel manuale §9.4.
 

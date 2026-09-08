@@ -109,6 +109,25 @@ export function statoGiornata(g: HrDay): StatoLetto {
     }
   }
 
+  // Una entrata e una uscita sole: per il motore è un turno di mezza giornata («Turno
+  // mattutino» / «Turno pomeridiano», come nel VB), non un errore di timbratura — ma non è
+  // nemmeno «tutto regolare» (Diego, 08/09/2026: un 08:00-12:00 passava per una giornata a
+  // posto). Se l'altra metà sia coperta da un permesso lo dice il Calendario, che ha le
+  // assenze: qui si dice solo cosa manca.
+  if (nota.startsWith("Turno mattutino") || nota.startsWith("Turno pomeridiano")) {
+    const mattina = nota.startsWith("Turno mattutino")
+    const ore = g.regularHours && g.regularHours !== "---" ? `, ${g.regularHours}` : ""
+    return {
+      label:
+        (mattina ? `Solo mattina${ore}: pomeriggio senza timbrature` : `Solo pomeriggio${ore}: mattina senza timbrature`)
+        + segnalata,
+      tone: "warn",
+      riposo: false,
+      assenza: false,
+      assenzaParziale: false,
+    }
+  }
+
   const straordinario = !/^0h 0+m$/.test(g.overtime) && g.overtime !== "" && g.overtime !== "---"
   // Fascia b (#145): ore ordinarie di notte, maggiorate anche senza straordinario.
   const notturno = Boolean(g.bands?.B1 || g.bands?.B2)
