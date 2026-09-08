@@ -127,6 +127,17 @@ function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.path === "/config-sezioni") {
     return pathname === "/config-sezioni"
   }
+  if (item.id === "gestore-ddp") {
+    // Il riepilogo e le sintesi per commessa (/gestore-ddp/:projectId), non le altre viste.
+    return pathname === "/gestore-ddp" || (
+      pathname.startsWith("/gestore-ddp/") &&
+      !pathname.startsWith("/gestore-ddp/controllo") &&
+      !pathname.startsWith("/gestore-ddp/feedback")
+    )
+  }
+  if (item.id === "gestore-ddp-controllo") {
+    return pathname.startsWith("/gestore-ddp/controllo") && pathname !== "/gestore-ddp/controllo/consegne"
+  }
   if (item.id === "hr-richieste") {
     return pathname === "/hr/richieste"
   }
@@ -489,6 +500,7 @@ export function AppShell() {
               "ore-commessa": oreCommessaPending,
               sal: salWarningsCount,
               "gestore-ddp": ddpDaVerificare,
+              "gestore-ddp-group": ddpDaVerificare,
               "hr-richieste-group": hrDaApprovare,
               "hr-richieste-da-approvare": hrDaApprovare,
             }
