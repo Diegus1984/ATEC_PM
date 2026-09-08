@@ -621,6 +621,10 @@ con gli orari `Stamp1`…`Stamp6`, filtrata per **`StampDate`** (ultimi 90 giorn
 per giorno che serve alla risincronizzazione, anche se senza `StampID`.
 Inoltre `PeopleStampGetAll` accetta il filtro **`Delete`**: si può chiedere `Delete==1` per
 sapere cosa è stato cancellato negli ultimi 60 giorni invece di dedurlo per differenza.
+Da calibrare anche **`StampPresenceMonthCardGetAll`** (catalogo): cartellino giornaliero di Ecos
+con `StampCode1…8`, **senza criterio implicito** — se risponde per `YearMonthS` vecchi è la via
+per la storia oltre i 60 giorni. E per le assenze **`PeopleAbsenceRequestRefineWorkAll`** (per
+giorno, `TSDate`, servizio già di `api.it`) toglie il problema della finestra dei 90 giorni.
 
 ### 11.1 🔴 Non leggiamo il flag `Delete`
 

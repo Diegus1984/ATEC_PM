@@ -359,3 +359,109 @@ dati retributivi». Criteria `inForce=1`. **Campi (21)**: `EmplID`, `NameComplet
 (il responsabile del reparto), `FatherID`/`FatherCode`/`FatherDescShort` (gerarchia), `TypeDescShort`,
 `StatusCode`, `StatusDescShort`, `InsertDate`, `UpdateDate`, `RowOrder`, `RootLevel`.
 **Filtri (6)**: `BranchCode`, `BranchID`, `InsertDate`, `ReadLanguage`, `StatusCode`, + 1 non letto.
+
+## Sei API fuori dalla Library, lette dalla scheda dopo la tendina del Test Panel
+
+| ApiName | Service · livello | Criteria | Campi | Filtri ammessi |
+|---|---|---|---|---|
+| **`StampPresenceMonthCardGetAll`** «informazione presa dal cartellino persone» | PersonStamp · 2 | **nessuno** (❓ forse tutta la storia, per `YearMonthS`) | `EmplID`, `StampDate`, `YearMonthS`, `PresenceHour`, `WorkHourExpectTotalTime`, `WorkHourExpectedRealTime`, `DeltaHourDayTime`, `DayHourList`, **`StampCode1`…`StampCode8`**, `WorkshiftCode`, `Abnormal`, `ToApprove`, `PeopleExpenseIndemnityList` | `Abnormal`, `EmplID`, `StampDate`, `YearMonthS` |
+| **`PeopleAbsenceRequestRefineWorkAll`** (la richiesta «raffinata» giorno per giorno) | PeopleAbsenceRequest · 2 — **`api.it` ce l'ha già** | nessuno | `AbsenceRequestRefineID`, `AbsenceRequestID`, `EmplID`, `EmplCode`, `NameComplete`, **`TSDate`**, `HourBegin`, `HourEnd`, `StatusCode`, `SourceCode`, `CompanyCode`, `CompanyDescShort`, `CategoryCode`, `CategoryDescShort`, `UpdateDate` | `AbsenceRequestID`, `CategoryCode`, `CompanyCode`, `EmplID`, `ReadLanguage`, `SourceCode`, `StatusCode`, **`TSDate`**, `UpdateDate` |
+| `PeopleWorkHourMonthGetAll` (totali del mese) | PersonWorkshift · 2 | nessuno | `EmplID`, `YearI`, `MonthI`, `WorkHourExpected`, `WorkHourReal`, `OvertimeHour`, `AbsenceHour`, `OvertimeForfaitHourSum`, `VacationHour`, `IllnessHour`, `MaternityHour`, `AccidentHour`, `OtherAbsenceHour` | `EmplID`, `MonthI`, `YearI` |
+| `HolidayPeopleGetAll` (festività per persona) | PersonWorkshiftESS · 2 | da −12 a +15 mesi, ultima versione valida | `EmplID`, `YearI`, `MonthI`, `DayI` | `DayI`, `EmplID`, `MonthI`, `YearI` |
+| `PeopleWorkShiftPlanGetAll` (turni pianificati) | PersonWorkScheduleMSS · 2 | ultima `EffDate` per persona/data/giorno non cancellata | `EmplID`, `UniqueID`, `EffDate`, `EndDate`, `StartDate`, `DayCode`, `HourBegin`, `HourEnd`, `HourBeginPause`, `HourEndPause`, `BreakTime`, `DepartmentID`/`Code`/`DescShort`, `StatusCode`, `Delete`, `Note`, `UpdateDate`, `UpdateEmplID`, `UpdateNameComplete`, `UserTZ`, `YearMonthS`, `StartYearWeekID` | `CompanyID`, `DepartmentID`, `EmplID`, `EmploymentDepartmentID`, `StartDate` |
+| `PeopleBadgeStampGetAll` (solo badge di timbratura di persone non cessate) | Badge · 2 | `(BadgeTypeCode='TIMBR' OR IsStampCard=1) AND (TerminationDate is NULL or > oggi−1 mese)` | `EmplID`, `StartDate`, `PeopleBadgeID`, `EmplCode`, `BadgeCode`, `NameComplete`, `BirthDate`, `StatusCode`, `EnableGuest`, `LocationID`, `CompanyCode`, `InForce` | `LocationID`, `PeopleBadgeID`, `UpdateDate` |
+
+📌 Due piste che cambiano le carte: **`PeopleAbsenceRequestRefineWorkAll`** dà le assenze
+**per giorno** (`TSDate`, ore inizio/fine, causale, stato) senza finestra implicita e con un
+servizio che `api.it` ha già — è la riconciliazione per giornata che ci manca;
+**`StampPresenceMonthCardGetAll`** è il cartellino giornaliero di Ecos con fino a otto orari e
+nessun criterio implicito: da calibrare con `api.it` (servizio `PersonStamp`, non `PeopleStamp`)
+per capire se restituisce anche la storia oltre i 60 giorni. `ServerTimeGet` (servizio
+`ServerTime`, livello 6 External User, campi `ServerDateTime` e `ServerTZ`) dà l'orologio di
+Ecos: utile per il cursore. `StampCausalGetALL` (PersonStamp): `StampCausalID`, `StampCausalCode`,
+`DescShort`, `StatusCode`, `RowOrder`, `DefaultValue`, `Delete`, `UpdateDate`.
+
+---
+
+# Tendina dell'API Test Panel — tutte le 230 API GET del tenant (08/09/2026)
+
+> Letta dopo il `TokenGet` di Diego nel pannello. Sono **solo le API di lettura** (il pannello
+> chiama «Get Api Data»): le `Post*` non ci sono. Le 84 della Library sono un sottoinsieme.
+> In **grassetto** quelle che riguardano presenze e persone e che non avevamo mai visto.
+
+**Timbrature e presenze**: PeopleStampActiveGetESS, PeopleStampDenialGetAll, PeopleStampGetAll,
+PeopleStampGetESS, PeopleStampGetMSS, PeopleStampGetPSS, PeopleStampPeriodDayGetAll,
+PeopleStampPeriodDayGetESS, PeopleStampPeriodGetAll, **PeopleBadgeStampGetAll**,
+PeopleBadgeStampGetPSS, **PeopleBadgeCheckGet**, PeopleBadgeCheckGetPSS, PeopleBadgeMeetingCheckGet,
+PeopleBadgeGetAll, ActivityPeopleStampGetESS, **StampCausalGetALL**, StampCausalGetESS,
+**StampDeviceGetAll**, StampDeviceGetPSS, **StampPresenceMonthCardGetAll**,
+PeopleTimePresenceExpectGetAll, PeopleTimePresenceExpectGetESS,
+PeopleTimePresenceExpectEventGETESS, PeopleTimePresenceExpectEventGETPSS,
+**PeopleWorkHourMonthGetAll**, **PeopleWorkShiftPlanGetAll**, PeopleWorkShiftPlanGetPSS,
+PeopleWorkGetESS, PeopleTimesheetGetESS, **ServerTimeGet**, DeviceAccessLimitationGetAll,
+DeviceSirenTimeGetAll, BeaconGetAll.
+
+**Assenze, ferie, straordinari, festività**: PeopleAbsenceDayGetAll, PeopleAbsenceRequestGetAll,
+PeopleAbsenceRequestGetESS, PeopleAbsenceRequestGetMSS, PeopleAbsenceRequestGetPSS,
+**PeopleAbsenceRequestRefineWorkAll**, PeopleOvertimeRequestGetAll, PeopleSmartWorkRequestGetAll,
+PeopleAccidentAbstentionGetAll, PeopleDismissalAbstentionGetAll, PeopleDismissalGetAll,
+**HolidayPeopleGetAll**, HolidayPeopleGetPSS, AnagTSCategoryGetAll, AnagTSCategoryGetESS,
+TSCategoryOverlapCheckGetESS, **PeopleCalendarGetMSS**.
+
+**Persone, reparti, organigramma**: PeopleEmploymentGetALL, PeopleEmploymentGetMSS,
+PeopleEmploymentGetPSS, **PeopleEmploymentLightGetALL**, PeopleExpressGetAll, PeopleExpressLightGetAll,
+PeopleExpressMidGetAll, PeopleJobGetAll, PeopleJobMidGetAll, PeopleJobMonthHistoryGetAll,
+**PeopleSearchGetAll**, PeoplePhoneGetAll, PhonebookGetAll, PeopleSetGetESS, PeopleSectionGenGetESS,
+PeopleCompanyTaskGetAll, PeopleCompanyOwnGetAll, PeopleCompetenceGetAll, PeopleCompetenceHistoryGetAll,
+PeoplePhysicExamGetAll, PeopleSkillGetMSS, PeopleEvaluationGetMSS, PeopleDocumentGetMSS,
+PeopleDocumentGetListMSS, PeopleBusinessCardGetESS, PeopleBusinessCardGetPSS, PeopleNotificationGetESS,
+PeopleNotificationGetListESS, AnagDepartmentGetAll, **DepartmentListGetPSS**, **DepartmentPeopleGetPSS**,
+**OrgChartTreeLastGetALL**, ManagerSecurityListMSS, AnagPositionGetAll, AnagPositionPeopleGetAll,
+AnagJobCodeGetAll, AnagJobCodeCompetenceGetAll, AnagBranchGetAll, AnagCompanyGetAll,
+AnagCompanyLightGetAll, AnagLocationGetAll, AnagLocationGetESS, AnagCountryGetAll, AnagStateGetAll,
+AnagGenGetAll, AnagCurrencyGetAll, CurrencyExchangeGetAll, TextGENGetAll.
+
+**Paghe e compensi**: PayrollChangeGetAll, PayrollCostDetailGetAll, PayrollResultGetAll,
+PayrollResultLastGet, PeopleCompensationCurrentGetAll, PeopleCompensationMonthHistoryGetAll,
+PeopleCompensationProjectCurrentGetAll, PeopleCompensationProjectMonthHistoryGetAll,
+PeopleCompensationRateCodeMonthHistoryGetAll, SalaryPlanRequestGetAll, TicketRestaurantAccruedGetAll.
+
+**Progetti e timesheet**: ActivityBModelGetAll, ActivityBModelOtherCostGetAll,
+ActivityBModelOtherRevenueGetAll, ActivityBModelResourceGetAll, ActivityBModelTrancheGetAll,
+ActivityConsumptiveEconomicsMonthGetAll, ActivityGroupGetAll, ActivityPeopleGetAll, ActivityPeopleGetESS,
+ActivityPeopleGetMSS, ActivityPeopleLightGetAll, ActivityPeopleTaskWBSGetAll, ActivityPeopleTaskWBSGetESS,
+ActivityProjectTrancheGetAll, ActivityTaskWBSPeoplePlanGetAll, ActivityWBSTaskAdvanceGetAll,
+ActivityWBSTaskGetAll, AnagActivityGet, AnagActivityOpportunityGetAll, AnagActivityOtherCostGetAll,
+AnagActivityOtherReturnGetAll, AnagActivityProjectGet, AnagActivityProjectTypeGetAll, AnagProductGetAll,
+BudgetModelVersionValueGetAll, ProjectEconomicsGetAll, ProjectWBSEconomicsGetAll, Timesheet2GetAll,
+TimesheetActivityTask2GetAll, TimesheetActivityTaskGetAll, TimesheetGetAll, TimesheetListGetAll,
+ProductBacklogItemGetAll, ProductBacklogItemGetESS, ProductBacklogItemCommunicationGetESS,
+ProductRequirementGetAll.
+
+**Spese e trasferte**: AnagExpenseCarGroupGetAll, AnagExpenseCarGroupGetESS, AnagExpenseTypeGetAll,
+AnagExpenseTypeGetESS, AnagPaymentTypeGetESS, CompanyOwnCarPoolGetESS, CreditCardBalanceTransactionCleanGetESS,
+CreditCardResidualGetESS, CreditCardTransactionGetAll, ExpensePictureGetMSS, PeopleExpenseAdvanceApproveGetMSS,
+PeopleExpenseAdvanceGetESS, PeopleExpenseApproveGetMSS, PeopleExpenseByTypeGetMSS, PeopleExpenseCarGet,
+PeopleExpenseCarGetESS, PeopleExpenseGeneralGet, PeopleExpenseGeneralSplitGetESS, PeopleExpenseGetAll,
+PeopleExpenseGetESS, PeopleExpenseGetFullESS, PeopleExpenseGetMSS, PeopleExpenseIndemnityGet,
+PeopleExpenseIndemnityGetESS, PeopleExpenseReimbursementYearMonthGetAll, PeopleTravelApproveGetMSS,
+PeopleTravelAttachmentListFullGetAll, PeopleTravelAttachmentListGetAll, PeopleTravelGetESS,
+PeopleTravelSetGetESS, TransferTypeGetAll, TransferTypeGetESS.
+
+**CRM, acquisti, beni**: AccountCRMDataGetAll, AnagAccountClientAPPGetESS, AnagAccountClientLogoGet,
+AnagAccountCurrentGetAll, AnagAccountCurrentGetESS, AnagAccountGetAll, AnagAccountGetOne,
+AnagAccountReferenceGetAll, MarketAreaGetAll, MarketGetAll, OrderPurchaseGetAll, NewAccountClientSet,
+CompanyOwnEquipmentControlGetAll, CompanyOwnGetAll, CompanyOwnGetFullAll, AnagCdCGettAll.
+
+**Recruiting, formazione, valutazione**: AnagCompetenceGetAll, AnagCourseCompetenceGetAll,
+AnagInterviewCompetenceGetAll, AnagInterviewGetAll, AnagJobRequisitionGetAll, AnagVideoInterviewGet,
+AppraisalPeopleEvaluationGetAll, CVExternalFormSettingGetAll, CVGetAll, CVLimitedGetAll,
+CVQuestionAnswerGetAll, CVSourceGetAll, JobRequisitionActiveGet, JobRequisitionCareerSiteGet,
+JobRequisitionCVGetAll, JobRequisitionTagGet, PeopleCourseCompanyGetAll, RecruitingSettingCompanyGetAll,
+RecruitingSettingGetAll, VideoInterviewRunAnswerGetAll, VideoInterviewRunGetAll,
+VideoInterviewTemplateQuestionGetAll.
+
+**Altro**: AdvertsBoardGetAll, AdvertsBoardGetListAll, APPMobileGetAll, ApplicationClientEvaluateGetAll,
+ClientAPPModuleGetESS, EcosAgileAIBotDataGetAll, GreenPassControlGetAll, GreenPassControlGetPSS,
+GreenPassSetGetAll, MeetingGetAll, MeetingPeopleGetAll, MeetingRoomDeviceGetPSS, MeetingRoomGetAll,
+TokenGet.
