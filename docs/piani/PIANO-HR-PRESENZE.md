@@ -407,10 +407,10 @@ Indice di copertura: quanta parte della giornata pagata finisce davvero su una c
 È il dato che nessun software presenze generalista può dare, perché non sa cosa sia una
 commessa. **Prerequisito**: contenitori per le ore indirette (riunioni, formazione, fermo
 macchina). ⚠️ **`projects.is_internal` NON esiste** (verificato l'08/09/2026: la quadratura
-lo leggeva e rispondeva 500 in produzione). Oggi la colonna «interne» della quadratura è a
-zero e tutte le ore stanno nelle dirette; quando si deciderà come contrassegnare le commesse
-interne (colonna su `projects`, o il cliente ATEC stesso), basta cambiare la query in
-`HrAttendanceService.Quadratura.cs`.
+lo leggeva e rispondeva 500 in produzione). REGOLA di Diego (08/09/2026): sono «interne» le ore
+sulle commesse del cliente **«ATEC — Sistema»** (`HrAttendanceService.ClienteInternoPattern`,
+riconosciuto dal nome con qualsiasi trattino). 🪤 Se quel cliente viene rinominato, la colonna
+«interne» della quadratura torna a zero.
 
 ### Fase 4 — export al consulente e spegnimento di eTime — *solo se si sceglie lo scenario B*
 Parallelo di 2-3 mesi; eTime si spegne solo quando i totali coincidono per un mese intero.

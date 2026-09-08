@@ -12,6 +12,9 @@ public partial class HrAttendanceService
 {
     // ── QUADRATURA PRESENZE ↔ COMMESSE (FASE 3) ─────────────────────────────
 
+    /// <summary>Il cliente delle commesse interne: «ATEC — Sistema» (il trattino può variare).</summary>
+    internal const string ClienteInternoPattern = "ATEC%Sistema";
+
     public HrQuadraturaMonthDto GetQuadratura(int year, int month, int? departmentId)
     {
         var primo = new DateTime(year, month, 1);
@@ -103,13 +106,19 @@ public partial class HrAttendanceService
 
         // 3. Ore consuntivate su commesse da timesheet_entries.
         // 🪤 Il piano (Fase 3) dava per esistente `projects.is_internal`: la colonna non c'è mai
-        // stata, e la pagina rispondeva 500 (08/09/2026). Finché una commessa non ha un
-        // contrassegno «interna», tutte le ore stanno nelle dirette e le interne restano a zero.
+        // stata, e la pagina rispondeva 500 (08/09/2026). REGOLA di Diego (08/09): sono «interne»
+        // le ore sulle commesse del cliente «ATEC — Sistema», il contenitore delle attività
+        // di casa (riunioni, formazione, fermo macchina). Si riconosce dal nome (con qualsiasi
+        // trattino): se il cliente venisse rinominato, la colonna «interne» tornerebbe a zero.
+        p.Add("ClienteInterno", ClienteInternoPattern);
         var timesheet = c.Query<(int EmployeeId, decimal DirectHours, decimal InternalHours)>(@"
             SELECT te.employee_id AS EmployeeId,
-                   SUM(te.hours) AS DirectHours,
-                   0 AS InternalHours
+                   SUM(CASE WHEN cl.company_name LIKE @ClienteInterno THEN 0 ELSE te.hours END) AS DirectHours,
+                   SUM(CASE WHEN cl.company_name LIKE @ClienteInterno THEN te.hours ELSE 0 END) AS InternalHours
             FROM timesheet_entries te
+            JOIN project_phases pp ON pp.id = te.project_phase_id
+            JOIN projects pr ON pr.id = pp.project_id
+            JOIN customers cl ON cl.id = pr.customer_id
             WHERE te.work_date BETWEEN @Primo AND @Ultimo
             GROUP BY te.employee_id", p)
             .ToDictionary(x => x.EmployeeId);

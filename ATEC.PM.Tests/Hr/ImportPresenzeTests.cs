@@ -443,9 +443,41 @@ public class ImportPresenzeTests
         HrAttendanceService servizio = CreaServizio();
         servizio.ImportPunches(c, GiornataRegolare("42"));
 
+        // Ore su una commessa vera e su una del cliente «ATEC — Sistema»: dirette e interne.
+        int clienteInterno = Cliente(c, "ATEC — Sistema");
+        int clienteVero = Cliente(c, "Rossi Automazioni");
+        int faseInterna = Fase(c, Commessa(c, "C20260205.001", clienteInterno, mario));
+        int faseVera = Fase(c, Commessa(c, "C20260205.002", clienteVero, mario));
+        c.Execute(@"INSERT INTO timesheet_entries (employee_id, project_phase_id, work_date, hours)
+                    VALUES (@E, @Interna, @Giorno, 2), (@E, @Vera, @Giorno, 5.5)",
+            new { E = mario, Interna = faseInterna, Vera = faseVera, Giorno });
+
         HrQuadraturaMonthDto mese = servizio.GetQuadratura(Giorno.Year, Giorno.Month, null);
 
-        Assert.Contains(mese.Rows, r => r.EmployeeId == mario);
+        HrQuadraturaRowDto riga = Assert.Single(mese.Rows, r => r.EmployeeId == mario);
+        Assert.Equal(5.5m, riga.DirectTimesheetHours);
+        Assert.Equal(2m, riga.InternalTimesheetHours);
+    }
+
+    private static int Cliente(MySqlConnection c, string nome)
+    {
+        // 🪤 `UQ_Customer_Vat`: due clienti con partita IVA vuota non convivono, serve una finta diversa.
+        c.Execute("INSERT INTO customers (company_name, vat_number) VALUES (@Nome, @Piva)",
+            new { Nome = nome, Piva = "IT" + Math.Abs(nome.GetHashCode() % 100000000).ToString("D9") });
+        return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
+    }
+
+    private static int Commessa(MySqlConnection c, string codice, int clienteId, int pmId)
+    {
+        c.Execute("INSERT INTO projects (code, title, customer_id, pm_id, status) VALUES (@Codice, 'Commessa di prova', @Cliente, @Pm, 'ACTIVE')",
+            new { Codice = codice, Cliente = clienteId, Pm = pmId });
+        return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
+    }
+
+    private static int Fase(MySqlConnection c, int commessaId)
+    {
+        c.Execute("INSERT INTO project_phases (project_id, custom_name) VALUES (@P, 'Montaggio')", new { P = commessaId });
+        return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
     }
 
     /// <summary>
