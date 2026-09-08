@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1605",
+                     "data":  "2026-09-08T16:06:06",
+                     "hash":  "2f39ffb1be2daed5ee4ee40690468c423d75f4c2",
+                     "modifiche":  [
+                                       "Timbrature: import di useNavigate mancante",
+                                       "Timbrature: le quattro viste come sottovoci del menu, una rotta per vista"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1519",
                      "data":  "2026-09-08T15:20:02",
                      "hash":  "78161171a8ccfaa58624ae95e8e7e4f643d903e3",
