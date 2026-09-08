@@ -47,6 +47,7 @@
 |-----------|---------------|
 | [guide/GUIDA-SERVER-LAN.md](guide/GUIDA-SERVER-LAN.md) | **Deploy sul server aziendale** (192.168.2.150): installazione, aggiornamenti, backup, problemi tipici |
 | [guide/ECOS-API-MANUALE.md](guide/ECOS-API-MANUALE.md) | **API EcosAgile («eTime»)**: protocollo, filtri, paginazione, errori, scrittura `Post*`, catalogo e diritti del nostro tenant, ricette per le chiamate nuove, trappole, sonda |
+| [guide/ECOS-API-CATALOGO.md](guide/ECOS-API-CATALOGO.md) | Le **84 API dell'API Library** del tenant con ServiceID, filtri impliciti (🪤 timbrature solo ultimi 60 giorni) e ordinamento |
 | [guide/SEZIONI_COSTO_GUIDA.md](guide/SEZIONI_COSTO_GUIDA.md) | Configurazione Sezioni Costo — guida d'uso |
 | [guide/ANAGRAFICHE-FASI-SEZIONI.md](guide/ANAGRAFICHE-FASI-SEZIONI.md) | Anagrafiche aggiornate: sezioni di costo e fasi |
 | [guide/POPOLAMENTO_DESCRIZIONI_CATALOGO_PREVENTIVI.md](guide/POPOLAMENTO_DESCRIZIONI_CATALOGO_PREVENTIVI.md) | Architettura Commerciale, i 3 cataloghi, runbook descrizioni |

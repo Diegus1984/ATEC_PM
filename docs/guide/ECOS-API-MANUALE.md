@@ -90,7 +90,7 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 
 | ApiName | Esito con `api.it` | Dettagli |
 |---|---|---|
-| `PeopleStampGetAll` | ✅ lettura | timbrature; filtri usati da noi: `UpdateDate>=`, `YearMonth='aaaamm'` |
+| `PeopleStampGetAll` | ✅ lettura | timbrature; filtri usati da noi: `UpdateDate>=`, `YearMonth='aaaamm'`. 🪤 **Ecos rimanda solo gli ultimi 60 giorni** (§5) |
 | `PeopleBadgeGetAll` | ✅ lettura | anagrafica badge; 🪤 `UpdateDate` dei badge è vecchio (2019): chiedere dal 1900, non dal 2020 |
 | `PeopleAbsenceRequestGetAll` | ✅ lettura | **34 campi**, ne leggiamo 14 (§6.2) |
 | `PeopleOvertimeRequestGetAll` | ✅ lettura | **0 record nel 2026**: in ATEC gli straordinari non passano da lì |
@@ -351,6 +351,18 @@ specchia i dati deve propagare il flag (📘 §7.8, §16.5). Vedi §11.1: noi no
   tengono quelle che toccano la finestra; upsert per `ecos_absence_id`;
 - **rettifiche nostre** (`source='ADJUSTMENT'`) non si cancellano mai dall'import.
 
+🪤🪤 **Ecos rimanda solo gli ultimi 60 giorni.** `PeopleStampGetAll` ha un filtro implicito lato
+server, `UpdateDate>=oggi-60` (catalogo, Criteria), che si somma in AND al nostro: chiedere «dal
+2020» o «dal 1900» non cambia niente. Conseguenze, scoperte il 08/09/2026 (TODO §11):
+- l'**import completo NON è una fotografia intera**: le righe `ECOS` più vecchie di 60 giorni
+  non tornano e `RimuoviCancellateSuEcos` **le cancellerebbe da noi**;
+- la risincronizzazione di un giorno o di un mese **oltre i 60 giorni** riceve zero righe; per
+  «tutti» la rete regge, per la **singola persona** cancellerebbe le sue timbrature del giorno;
+- la storia oltre i 60 giorni **esiste solo da noi**: l'import va tenuto acceso e non si
+  riparte mai da zero. **Finché non è corretto: non premere «Reimporta tutto» e non
+  risincronizzare giorni più vecchi di 60 giorni.**
+Anche `PeopleAbsenceRequestGetAll` ha una finestra: `DateBegin>=oggi-90 OR DateEnd>=oggi-60`.
+
 Cosa loggare per ogni chiamata (📘 §16.7): `ApiName`, pagina, nomi dei campi filtrati (non i
 valori con dati personali), `CODE`/`ERROR_CODE`/`MESSAGE`, `RECORDCOUNT`/`LASTPAGE`, status
 HTTP. **Mai `Userid`, `Password`, `AuthToken`.**
@@ -358,6 +370,12 @@ HTTP. **Mai `Userid`, `Password`, `AuthToken`.**
 ---
 
 ## 6. Catalogo API
+
+> **Il catalogo vero del nostro tenant** (84 API dell'API Library, con **ServiceID**, filtri
+> impliciti e ordinamento, letto il 08/09/2026) sta in **[ECOS-API-CATALOGO.md](ECOS-API-CATALOGO.md)**.
+> Lì ci sono anche le API che il 27/08 avevamo cercato coi nomi sbagliati (`AnagTSCategoryGetAll`
+> per le causali, `AnagDepartmentGetAll` per i reparti, `PeopleEmploymentGetALL` per le persone
+> in forza) e le trappole dei filtri impliciti (§5).
 
 ### 6.1 Le più comuni (📘 §19) — i nomi vanno confermati in `IT Operation > Api > Gestione Api`
 
@@ -584,6 +602,21 @@ Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano
 ---
 
 ## 11. Trovato durante lo studio (08/09/2026) — da sistemare, non ancora fatto
+
+### 11.0 🔴🔴 Import completo e finestra dei 60 giorni (scoperto il 08/09 dal catalogo)
+
+`PeopleStampGetAll` torna solo `UpdateDate>=oggi-60` (§5). `ImportAsync(full:true)` chiama
+`RimuoviCancellateSuEcos`, che toglie ogni riga `source='ECOS'` dei dipendenti mappati non
+presente nello scarico: **oggi cancellerebbe tutta la storia più vecchia di 60 giorni**
+(`hr_punches` parte dal 25/06). `ImportWindowAsync` con persona indicata cancella nella finestra
+anche se Ecos torna zero righe: su un giorno oltre i 60 giorni **cancella le timbrature di
+quella persona**. Da fare:
+1. limitare le cancellazioni dell'import completo alle righe con `work_date` dentro la finestra
+   che Ecos può restituire (60 giorni meno un margine, o il minimo `UpdateDate` ricevuto);
+2. in `ImportWindowAsync` non cancellare mai fuori dalla finestra dei 60 giorni, persona o no;
+3. dirlo a video: «Reimporta tutto» rilegge gli ultimi 60 giorni, non la storia.
+Nel frattempo: **non premere «Reimporta tutto»** e non risincronizzare giorni vecchi.
+Alternativa da valutare: `PeopleStampPeriodDayGetAll` filtra per `StampDate` (90 giorni).
 
 ### 11.1 🔴 Non leggiamo il flag `Delete`
 

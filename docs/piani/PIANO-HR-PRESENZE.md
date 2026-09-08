@@ -283,6 +283,11 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   esistono più (l'incrementale no: non ha la fotografia intera). Prima una timbratura
 >   spuria cancellata su Ecos restava a sballare il cartellino, e dalla UI non si poteva
 >   togliere (il grezzo non si cancella a mano).
+>   🪤🪤 **08/09/2026: Ecos rimanda solo gli ultimi 60 giorni** (filtro implicito di
+>   `PeopleStampGetAll`, vedi `docs/guide/ECOS-API-CATALOGO.md`): l'import completo NON è una
+>   fotografia intera e oggi **cancellerebbe da noi la storia più vecchia di 60 giorni**. Finché
+>   non è corretto (TODO §11) **non premere «Reimporta tutto»** e non risincronizzare giorni
+>   più vecchi di 60 giorni.
 > - **Cursore dall'orologio DI ECOS** (massimo `UpdateDate` ricevuto): il nostro non è
 >   confrontabile col loro, e uno scarto apriva una finestra cieca da cui le correzioni non
 >   tornavano più. Ripiego sul nostro solo se manca, con un'ora di margine (cambio d'ora).

@@ -585,6 +585,13 @@ già calcolati da `GET /api/auth-levels/features/my`.
 Dettagli e ricette in [guide/ECOS-API-MANUALE.md](guide/ECOS-API-MANUALE.md) §11. Sono
 modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativa.
 
+- [ ] 🔴🔴 **«Reimporta tutto» cancellerebbe la storia oltre i 60 giorni.** `PeopleStampGetAll`
+      ha un filtro implicito `UpdateDate>=oggi-60` (catalogo del tenant, letto il 08/09): l'import
+      completo non è una fotografia intera, e `RimuoviCancellateSuEcos` toglierebbe da noi tutte
+      le timbrature più vecchie. Stesso rischio in `ImportWindowAsync` con persona indicata su un
+      giorno oltre i 60 giorni (Ecos torna zero righe → cancellazione). Correzione: cancellare
+      solo dentro la finestra che Ecos può restituire; avviso a video. **Intanto non premere
+      «Reimporta tutto»** né risincronizzare giorni vecchi. Dettagli: manuale §11.0.
 - [ ] 🔴 **Flag `Delete` non letto.** La guida dice che i record cancellati in Ecos restano
       visibili con `Delete=1`: una timbratura tolta là continua ad arrivare e a contare nel
       cartellino, e nemmeno l'import completo la rimuove (confronta gli ID, e l'ID c'è ancora).
