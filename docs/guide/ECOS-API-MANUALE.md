@@ -159,6 +159,22 @@ chiamate con lo stesso token**: vedi §11.
 
 Richiede **TLS 1.2** (ok su .NET 8).
 
+**Cosa torna davvero `TokenGet`** (✅ visto nell'API Test Panel del tenant, 08/09/2026, con
+l'account di Diego): oltre ad `AuthToken` la riga contiene `EmplID` (la persona dell'utente:
+è quello che le `*GetESS` usano per restringere), `UserID`, `Timeout` (30), `UserLevel` (2 =
+Professional), `UserStatusCode` (`A` = attivo), `AppLogPost`. Il pannello mostra anche due
+parametri facoltativi di `TokenGet` non citati nella guida: `OpenIdToken` (SSO) e
+`PresenceDeviceCode` (terminale di timbratura).
+
+**API Test Panel** (`IT Operation > Api > API Test Panel`, ✅ raggiungibile con l'account di
+Diego): tendina con **tutte le API del tenant** (comincia da `AccountCRMDataGetAll`), scheda
+«Api Group», campi `N. Top Results` (conferma il `TopResult` dei vecchi sample, §3.8),
+`Page Number`, `Rows Per Page`, `ReadLanguage`, `ReturnAllPostedRecord`, `Fields` (=
+`ResultFields`). I filtri si scrivono come coppie `"Campo":"<op><valore>"` separate da
+virgola — è la sintassi del pannello, non dell'API — e devono stare nella **ALLOWED LIST** della
+configurazione dell'API: è da lì che nasce il `-13`. È il posto dove leggere il tracciato di
+un'API (campi ammessi e obbligatori) senza chiederlo a SoftAgile.
+
 ### 3.3 Filtri (body delle GET)
 
 Sintassi: `Campo=<operatore><valore>`, un parametro per campo, combinati in **AND**.
