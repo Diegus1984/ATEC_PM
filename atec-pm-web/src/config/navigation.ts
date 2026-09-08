@@ -31,6 +31,10 @@ import {
   FileStack,
   FileText,
   Fingerprint,
+  IdCard,
+  CalendarDays,
+  Briefcase,
+  MailCheck,
   FolderCog,
   FolderKanban,
   Group,
@@ -340,14 +344,53 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     label: "HR",
     items: [
       {
-        id: "hr-timbrature",
+        // Le quattro viste della pagina sono anche sottovoci del menu (Diego, 08/09/2026),
+        // come «Costi e tariffe»: la pagina è una sola, cambia la vista dalla rotta.
+        id: "hr-timbrature-group",
         label: "Timbrature",
         path: "/hr/timbrature",
         featureKey: "nav.hr_timbrature",
         icon: Fingerprint,
         status: "live",
-        description:
-          "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
+        children: [
+          {
+            id: "hr-timbrature",
+            label: "Cartellino di una persona",
+            path: "/hr/timbrature",
+            featureKey: "nav.hr_timbrature",
+            icon: IdCard,
+            status: "live",
+            description:
+              "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
+          },
+          {
+            id: "hr-timbrature-calendario",
+            label: "Tutti, mese per mese",
+            path: "/hr/timbrature/calendario",
+            featureKey: "nav.hr_timbrature",
+            icon: CalendarDays,
+            status: "live",
+            description: "Il calendario presenze di tutti, un mese alla volta.",
+          },
+          {
+            id: "hr-timbrature-quadratura",
+            label: "Ore sulle commesse",
+            path: "/hr/timbrature/quadratura",
+            featureKey: "nav.hr_timbrature",
+            icon: Briefcase,
+            status: "live",
+            description: "Quadratura fra le ore timbrate e le ore caricate sulle commesse.",
+          },
+          {
+            id: "hr-timbrature-cronologia",
+            label: "Email inviate",
+            path: "/hr/timbrature/cronologia",
+            featureKey: "nav.hr_timbrature",
+            icon: MailCheck,
+            status: "live",
+            description: "La cronologia dei solleciti e delle email mandate ai dipendenti.",
+          },
+        ],
       },
       {
         id: "hr-richieste",

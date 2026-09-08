@@ -124,6 +124,11 @@ function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.path === "/config-sezioni") {
     return pathname === "/config-sezioni"
   }
+  if (item.id === "hr-timbrature") {
+    // La prima sottovoce ha il percorso del gruppo: senza il confronto esatto resterebbe
+    // accesa anche sulle altre viste (/hr/timbrature/calendario…).
+    return pathname === "/hr/timbrature"
+  }
   if (item.path === "/admin/sal-conditions") {
     return pathname === "/admin/sal-conditions"
   }

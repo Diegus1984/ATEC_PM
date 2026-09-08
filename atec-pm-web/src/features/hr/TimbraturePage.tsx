@@ -225,12 +225,20 @@ function Riquadro({
 
 type Vista = "cartellino" | "calendario" | "quadratura" | "cronologia"
 
-export function TimbraturePage() {
+/** Ogni vista è una rotta: così le sottovoci del menu e le schede in pagina dicono la stessa cosa. */
+const PERCORSO_VISTA: Record<Vista, string> = {
+  cartellino: "/hr/timbrature",
+  calendario: "/hr/timbrature/calendario",
+  quadratura: "/hr/timbrature/quadratura",
+  cronologia: "/hr/timbrature/cronologia",
+}
+
+export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const canWrite = canWriteFeature("nav.hr_timbrature")
 
-  const [vista, setVista] = React.useState<Vista>("cartellino")
   const [periodo, setPeriodo] = React.useState(() => {
     const oggi = new Date()
     return { anno: oggi.getFullYear(), mese: oggi.getMonth() + 1 }
@@ -561,7 +569,7 @@ export function TimbraturePage() {
 
       {/* Schede: le quattro letture delle presenze, coi nomi di chi le legge. */}
       {canWrite && (
-        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+        <Tabs value={vista} onValueChange={(v) => navigate(PERCORSO_VISTA[v as Vista])}>
           <TabsList>
             <TabsTrigger value="cartellino">Cartellino di una persona</TabsTrigger>
             <TabsTrigger value="calendario">Tutti, mese per mese</TabsTrigger>
