@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1519",
+                     "data":  "2026-09-08T15:20:02",
+                     "hash":  "78161171a8ccfaa58624ae95e8e7e4f643d903e3",
+                     "modifiche":  [
+                                       "Richieste nate su Ecos: si decidono su Ecos, qui niente Approva/Rifiuta/Annulla"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1511",
                      "data":  "2026-09-08T15:11:49",
                      "hash":  "e9668408f1053cc9f5a268080c4c6d30d40fa950",
