@@ -29,7 +29,7 @@ public partial class HrAttendanceService
             using MySqlConnection c = _db.Open();
             DateTime? cursore = full ? null : LeggiCursore(c);
             ProgressoLog(cursore == null
-                ? "Nessun cursore: si scarica tutto lo storico"
+                ? $"Nessun cursore: si rilegge tutto quello che Ecos restituisce (gli ultimi {FinestraEcosGiorni} giorni)"
                 : $"Dal cursore: timbrature modificate dal {cursore:dd/MM/yyyy HH:mm}");
 
             ProgressoFase("[1/4] Richiesta token…", 10);
@@ -179,25 +179,25 @@ public partial class HrAttendanceService
                 timbrature.AddRange(await _ecos.GetPunchesMonthAsync(token, anno, mese, ct, ProgressoLog));
             }
 
-            // 🪤 Zero righe dall'intero mese non è un mese vuoto: è molto più probabile che
-            // il filtro non abbia funzionato o che Ecos abbia risposto a vuoto. Qui dentro
-            // vale la fotografia completa, quindi proseguire vorrebbe dire cancellare il
-            // mese di TUTTI in silenzio. Ci si ferma senza toccare niente.
-            //
-            // La rete vale SOLO per la finestra larga (tutti i dipendenti). Quando la
-            // persona è indicata — «Risincronizza questo giorno» — la cancellazione è già
-            // ristretta a lei e a quel giorno, e fermarsi tradirebbe proprio quello che
-            // l'utente ha chiesto: togliere la timbratura che su Ecos non c'è più.
+            // 🪤 Zero righe dall'intero mese non è un mese vuoto: o il filtro non ha
+            // funzionato, o — più spesso — il mese è più vecchio dei 60 giorni che Ecos
+            // restituisce. Sulla finestra di TUTTI ci si ferma senza toccare niente e lo si
+            // dice. Sulla singola persona si prosegue, ma tanto senza orizzonte (sotto) non
+            // si cancella comunque: le sue righe del giorno restano com'erano.
             if (timbrature.Count == 0 && employeeId is null)
             {
                 ProgressoFine("Nessuna timbratura ricevuta da Ecos: niente è stato modificato.", null);
                 return new HrImportResultDto
                 {
                     Success = true,
-                    Message = "Ecos non ha restituito nessuna timbratura per il periodo: "
-                              + "niente è stato modificato.",
+                    Message = "Ecos non ha restituito nessuna timbratura per il periodo "
+                              + $"(più vecchio di {FinestraEcosGiorni} giorni?): niente è stato modificato.",
                 };
             }
+
+            // 🪤 L'orizzonte si misura sullo scarico INTERO, prima di tenere la sola persona
+            // chiesta: è la prova che Ecos ha risposto per quel mese, e fin dove.
+            DateTime? orizzonte = OrizzonteEcos(timbrature);
 
             // Il mese scaricato serve intero per gli aggiornamenti; se si chiede una sola
             // persona però si tengono solo le sue, altrimenti la finestra cancellerebbe
@@ -212,7 +212,8 @@ public partial class HrAttendanceService
 
             ProgressoFase("[3/3] Confronto e scrittura…", 60);
             HrImportResultDto esito = ImportPunches(
-                c, timbrature, full: false, finestra: new FinestraImport(employeeId, dal, al));
+                c, timbrature, full: false, finestra: new FinestraImport(employeeId, dal, al),
+                orizzonteEcos: orizzonte);
 
             if (conAssenze)
             {
@@ -369,11 +370,17 @@ public partial class HrAttendanceService
         return (added, updated);
     }
 
+    /// <param name="orizzonteEcos">
+    /// L'<see cref="OrizzonteEcos"/> dello scarico da cui vengono le <paramref name="timbrature"/>.
+    /// Si passa quando la lista è già stata ridotta (la sola persona chiesta) e l'orizzonte
+    /// va misurato su quella intera; altrimenti si calcola qui.
+    /// </param>
     internal HrImportResultDto ImportPunches(
         MySqlConnection c, IReadOnlyList<EcosPunch> timbrature, bool full = false,
-        FinestraImport? finestra = null)
+        FinestraImport? finestra = null, DateTime? orizzonteEcos = null)
     {
         Dictionary<string, int> mappa = MappaEcos(c);
+        DateTime? orizzonte = orizzonteEcos ?? OrizzonteEcos(timbrature);
 
         var perId = new Dictionary<string, EcosPunch>(StringComparer.OrdinalIgnoreCase);
         var nonAbbinati = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -443,9 +450,9 @@ public partial class HrAttendanceService
             }
 
             if (finestra != null)
-                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, giorniToccati, daRifare);
+                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, orizzonte, giorniToccati, daRifare);
             else if (full)
-                rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, giorniToccati, daRifare);
+                rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, orizzonte, giorniToccati, daRifare);
 
             tran.Commit();
         }
@@ -474,11 +481,23 @@ public partial class HrAttendanceService
         // contatore dell'avanzamento resterebbe a zero anche quando qualcosa è stato tolto.
         lock (_progressoLock) _progresso.Removed = rimosse;
 
+        // Chi legge deve sapere fin dove valeva la fotografia: «Reimporta tutto» non è mai
+        // stato «tutto», e prima di scoprirlo cancellava la storia (08/09/2026).
+        string notaOrizzonte = (full || finestra != null) switch
+        {
+            true when orizzonte is { } o =>
+                $"; Ecos restituisce solo gli ultimi {FinestraEcosGiorni} giorni: "
+                + $"le timbrature prima del {o:dd/MM/yyyy} sono rimaste com'erano",
+            true => "; Ecos non ha restituito niente per il periodo: nessuna cancellazione",
+            _ => "",
+        };
+
         string messaggio =
             $"{nuove} timbrature nuove, {aggiornate} aggiornate, {ricalcolate} giornate ricalcolate"
             + (rimosse > 0 ? $", {rimosse} cancellate su Ecos rimosse" : "")
             + (riparate > 0 ? $", {riparate} giornate rimesse in pari" : "")
-            + (nonAbbinati.Count > 0 ? $"; {nonAbbinati.Count} codici Ecos senza dipendente collegato" : "");
+            + (nonAbbinati.Count > 0 ? $"; {nonAbbinati.Count} codici Ecos senza dipendente collegato" : "")
+            + notaOrizzonte;
 
         return new HrImportResultDto
         {
@@ -495,12 +514,24 @@ public partial class HrAttendanceService
     /// Dentro la finestra chiesta si ha la fotografia completa di Ecos: quello che là non
     /// c'è più si toglie anche qui. Tocca <b>solo</b> le righe <c>ECOS</c>: le rettifiche
     /// (<c>source='ADJUSTMENT'</c>) sono nostre e non si cancellano mai da qui.
+    ///
+    /// <para>🪤 «Completa» solo <b>dall'orizzonte in su</b>: Ecos rimanda gli ultimi 60
+    /// giorni, e un giorno più vecchio torna vuoto anche se là le timbrature ci sono ancora.
+    /// Senza orizzonte (scarico vuoto) non si cancella niente, nemmeno per la singola persona.</para>
     /// </summary>
     private int RimuoviSpariteNellaFinestra(
         MySqlConnection c, MySqlTransaction tran,
-        IEnumerable<string> idVisti, FinestraImport finestra,
+        IEnumerable<string> idVisti, FinestraImport finestra, DateTime? orizzonte,
         HashSet<(int, DateTime)> giorniToccati, HashSet<(int, DateTime)> daRifare)
     {
+        if (orizzonte is not { } daQuando)
+        {
+            _logger.LogInformation(
+                "[HR] Risincronizzazione {Dal:dd/MM/yyyy}-{Al:dd/MM/yyyy}: Ecos non ha restituito niente, nessuna cancellazione.",
+                finestra.Dal, finestra.Al);
+            return 0;
+        }
+
         var visti = new HashSet<string>(idVisti, StringComparer.OrdinalIgnoreCase);
 
         string filtroDipendente = finestra.EmployeeId.HasValue ? " AND employee_id = @EmployeeId" : "";
@@ -508,8 +539,9 @@ public partial class HrAttendanceService
             @"SELECT id AS Id, external_id AS ExternalId, employee_id AS EmployeeId, work_date AS WorkDate,
                      punched_at AS PunchedAt, direction AS Direction, location AS Location
               FROM hr_punches
-              WHERE source = 'ECOS' AND work_date BETWEEN @Dal AND @Al" + filtroDipendente,
-            new { finestra.Dal, finestra.Al, finestra.EmployeeId }, tran).ToList();
+              WHERE source = 'ECOS' AND work_date BETWEEN @Dal AND @Al
+                AND punched_at >= @DaQuando" + filtroDipendente,
+            new { finestra.Dal, finestra.Al, finestra.EmployeeId, DaQuando = daQuando + MargineOrizzonte }, tran).ToList();
 
         List<RigaEsistente> sparite = nostre
             .Where(r => r.ExternalId != null && !visti.Contains(r.ExternalId))
@@ -528,11 +560,24 @@ public partial class HrAttendanceService
         return sparite.Count;
     }
 
+    /// <summary>
+    /// L'import completo toglie le righe <c>ECOS</c> che nello scarico non ci sono più —
+    /// ma <b>solo dall'orizzonte in su</b>. 🪤🪤 Prima dell'08/09/2026 confrontava tutta la
+    /// storia con uno scarico che Ecos limita da sé agli ultimi 60 giorni: un «Reimporta
+    /// tutto» avrebbe cancellato ogni timbratura più vecchia, scambiando «non restituita»
+    /// per «cancellata là».
+    /// </summary>
     private int RimuoviCancellateSuEcos(
         MySqlConnection c, MySqlTransaction tran,
-        IEnumerable<string> idVisti, IEnumerable<int> dipendentiMappati,
+        IEnumerable<string> idVisti, IEnumerable<int> dipendentiMappati, DateTime? orizzonte,
         HashSet<(int, DateTime)> giorniToccati, HashSet<(int, DateTime)> daRifare)
     {
+        if (orizzonte is not { } daQuando)
+        {
+            _logger.LogInformation("[HR] Import completo: scarico vuoto, nessuna cancellazione.");
+            return 0;
+        }
+
         var visti = new HashSet<string>(idVisti, StringComparer.OrdinalIgnoreCase);
         int[] dipendenti = dipendentiMappati.Distinct().ToArray();
         if (dipendenti.Length == 0) return 0;
@@ -541,8 +586,9 @@ public partial class HrAttendanceService
             @"SELECT id AS Id, external_id AS ExternalId, employee_id AS EmployeeId, work_date AS WorkDate,
                      punched_at AS PunchedAt, direction AS Direction, location AS Location
               FROM hr_punches
-              WHERE source = 'ECOS' AND employee_id IN @Dipendenti",
-            new { Dipendenti = dipendenti }, tran).ToList();
+              WHERE source = 'ECOS' AND employee_id IN @Dipendenti
+                AND punched_at >= @DaQuando",
+            new { Dipendenti = dipendenti, DaQuando = daQuando + MargineOrizzonte }, tran).ToList();
 
         List<RigaEsistente> sparite = nostre
             .Where(r => r.ExternalId != null && !visti.Contains(r.ExternalId))
@@ -556,7 +602,8 @@ public partial class HrAttendanceService
             SegnaConVicine(giorniToccati, daRifare, r.EmployeeId, r.WorkDate);
 
         _logger.LogInformation(
-            "[HR] {N} timbrature cancellate su Ecos rimosse anche qui (import full).", sparite.Count);
+            "[HR] {N} timbrature cancellate su Ecos rimosse anche qui (import full, dal {Da:dd/MM/yyyy HH:mm}).",
+            sparite.Count, daQuando);
         return sparite.Count;
     }
 

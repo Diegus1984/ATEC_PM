@@ -116,13 +116,16 @@ public class RisincronizzaGiornoTests
         int mario = Dipendente(c, "Mario", "Rossi", "42");
         int luigi = Dipendente(c, "Luigi", "Verdi", "43");
 
-        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s1", Giorno.AddHours(9), "IN");
         Rettifica(c, mario, Giorno.AddHours(17), "OUT", "Uscita dimenticata");
         Grezza(c, luigi, "L1", Giorno.AddHours(8), "IN");
         ScriviCursore(c);
 
-        // Ecos non ha più NIENTE per il 5 febbraio.
-        var handler = new EcosFinto(RispostaToken(), RispostaTimbrature());
+        // Per il 5 febbraio Ecos ha ancora la timbratura di Luigi, e più niente di Mario:
+        // il mese risponde (quindi c'è un orizzonte), e la sua entrata delle 9 non c'è più.
+        var handler = new EcosFinto(
+            RispostaToken(),
+            RispostaTimbrature(Riga("L1", "2026-02-05 08:00:00", "43", "IN")));
 
         await Servizio(handler).ImportWindowAsync(mario, Giorno, Giorno);
 
@@ -155,6 +158,58 @@ public class RisincronizzaGiornoTests
 
         Assert.Equal(0, Timbrature(c, mario, Giorno));
         Assert.Equal(1, Timbrature(c, mario, GiornoDopo));
+    }
+
+    /// <summary>
+    /// 🪤🪤 Ecos restituisce solo gli ultimi 60 giorni (filtro implicito di
+    /// <c>PeopleStampGetAll</c>, scoperto l'08/09/2026): per un giorno più vecchio il mese torna
+    /// vuoto anche se là le timbrature ci sono ancora. Prima di allora «Risincronizza questo
+    /// giorno» su una persona prendeva quel vuoto per «cancellato su Ecos» e le svuotava la
+    /// giornata. Senza orizzonte non si cancella niente, nemmeno per la singola persona.
+    /// </summary>
+    [FactRichiedeMySql]
+    public async Task Un_giorno_piu_vecchio_di_quello_che_Ecos_restituisce_non_si_svuota()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "Mario", "Rossi", "42");
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
+        ScriviCursore(c);
+
+        // Il mese intero torna vuoto: Ecos non arriva più fin lì.
+        var handler = new EcosFinto(RispostaToken(), RispostaTimbrature());
+        HrImportResultDto esito = await Servizio(handler).ImportWindowAsync(mario, Giorno, Giorno);
+
+        Assert.True(esito.Success);
+        Assert.Equal(2, Timbrature(c, mario, Giorno));
+        Assert.Contains("nessuna cancellazione", esito.Message);
+    }
+
+    /// <summary>
+    /// L'orizzonte vale anche dentro un mese che risponde: le righe più vecchie del primo
+    /// <c>UpdateDate</c> ricevuto non sono confrontabili e restano, quelle dopo sì.
+    /// </summary>
+    [FactRichiedeMySql]
+    public async Task Nella_finestra_si_cancella_solo_dall_orizzonte_in_su()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "Mario", "Rossi", "42");
+        var primo = new DateTime(2026, 2, 2);
+        Grezza(c, mario, "v1", primo.AddHours(8), "IN");      // prima dell'orizzonte: resta
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(12), "OUT");   // dopo l'orizzonte e sparita: via
+        ScriviCursore(c);
+
+        // Ecos risponde per il mese solo dal 5 febbraio alle 8 in poi.
+        var handler = new EcosFinto(
+            RispostaToken(),
+            RispostaTimbrature(Riga("s1", "2026-02-05 08:00:00", "42", "IN")));
+
+        await Servizio(handler).ImportWindowAsync(mario, primo, Giorno.AddDays(1));
+
+        Assert.NotNull(IdEsterno(c, mario, "v1"));
+        Assert.NotNull(IdEsterno(c, mario, "s1"));
+        Assert.Null(IdEsterno(c, mario, "s2"));
     }
 
     [FactRichiedeMySql]
@@ -243,13 +298,23 @@ public class RisincronizzaGiornoTests
                   "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [ {{string.Join(",", righe)}} ] } } }
               """;
 
-    private static string Riga(string id, string quando, string emplCode, string verso) =>
-        $$"""
+    /// <summary>
+    /// Una riga come la manda Ecos. 🪤 <c>UpdateDate</c> è un minuto dopo la timbratura, come
+    /// nella realtà (il terminale sincronizza subito): è da lì che l'import misura
+    /// l'orizzonte sotto cui non cancella. Con una data di aggiornamento «a caso» giorni
+    /// dopo, nessuna timbratura del giorno risulterebbe cancellabile.
+    /// </summary>
+    private static string Riga(string id, string quando, string emplCode, string verso)
+    {
+        string aggiornata = DateTime.ParseExact(quando, "yyyy-MM-dd HH:mm:ss", null)
+            .AddMinutes(1).ToString("yyyy-MM-dd HH:mm:ss");
+        return $$"""
         { "StampID": "{{id}}", "StampDateTime": "{{quando}}", "EmplCode": "{{emplCode}}",
           "NameComplete": "Rossi, Mario", "VersusCode": "{{verso}}",
           "StampLocationName": "Sede", "YearMonth": "202602",
-          "UpdateDate": "2026-02-07 09:00:00", "StatusCode": "" }
+          "UpdateDate": "{{aggiornata}}", "StatusCode": "" }
         """;
+    }
 
     private static int Dipendente(MySqlConnection c, string nome, string cognome, string? ecosCode)
     {

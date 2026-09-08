@@ -98,9 +98,9 @@ export function MappaturaEcosDialog({
    */
   async function chiediEReimporta() {
     const ok = await confirm({
-      title: "Reimportare tutto lo storico?",
+      title: "Rileggere da Ecos gli ultimi 60 giorni?",
       description:
-        "Le timbrature verranno riassegnate secondo i collegamenti attuali e quelle nel frattempo cancellate su Ecos verranno tolte anche qui. Controlla che i codici in elenco siano quelli giusti.",
+        "Ecos restituisce solo gli ultimi 60 giorni: quelle timbrature verranno riassegnate secondo i collegamenti attuali e quelle nel frattempo cancellate su Ecos verranno tolte anche qui. La storia più vecchia resta com'è. Controlla che i codici in elenco siano quelli giusti.",
       confirmLabel: "Reimporta",
       destructive: false,
     })

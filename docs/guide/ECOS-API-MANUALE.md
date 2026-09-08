@@ -359,8 +359,8 @@ server, `UpdateDate>=oggi-60` (catalogo, Criteria), che si somma in AND al nostr
 - la risincronizzazione di un giorno o di un mese **oltre i 60 giorni** riceve zero righe; per
   «tutti» la rete regge, per la **singola persona** cancellerebbe le sue timbrature del giorno;
 - la storia oltre i 60 giorni **esiste solo da noi**: l'import va tenuto acceso e non si
-  riparte mai da zero. **Finché non è corretto: non premere «Reimporta tutto» e non
-  risincronizzare giorni più vecchi di 60 giorni.**
+  riparte mai da zero. ✅ **Corretto l'08/09/2026** (§11.0): si cancella solo dall'orizzonte
+  dello scarico in su, «Reimporta tutto» rilegge gli ultimi 60 giorni e lascia il resto.
 Anche `PeopleAbsenceRequestGetAll` ha una finestra: `DateBegin>=oggi-90 OR DateEnd>=oggi-60`.
 
 Cosa loggare per ogni chiamata (📘 §16.7): `ApiName`, pagina, nomi dei campi filtrati (non i
@@ -603,19 +603,25 @@ Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano
 
 ## 11. Trovato durante lo studio (08/09/2026) — da sistemare, non ancora fatto
 
-### 11.0 🔴🔴 Import completo e finestra dei 60 giorni (scoperto il 08/09 dal catalogo)
+### 11.0 ✅ Import completo e finestra dei 60 giorni (scoperto e corretto il 08/09/2026)
 
-`PeopleStampGetAll` torna solo `UpdateDate>=oggi-60` (§5). `ImportAsync(full:true)` chiama
-`RimuoviCancellateSuEcos`, che toglie ogni riga `source='ECOS'` dei dipendenti mappati non
-presente nello scarico: **oggi cancellerebbe tutta la storia più vecchia di 60 giorni**
-(`hr_punches` parte dal 25/06). `ImportWindowAsync` con persona indicata cancella nella finestra
-anche se Ecos torna zero righe: su un giorno oltre i 60 giorni **cancella le timbrature di
-quella persona**. Da fare:
-1. limitare le cancellazioni dell'import completo alle righe con `work_date` dentro la finestra
-   che Ecos può restituire (60 giorni meno un margine, o il minimo `UpdateDate` ricevuto);
-2. in `ImportWindowAsync` non cancellare mai fuori dalla finestra dei 60 giorni, persona o no;
-3. dirlo a video: «Reimporta tutto» rilegge gli ultimi 60 giorni, non la storia.
-Nel frattempo: **non premere «Reimporta tutto»** e non risincronizzare giorni vecchi.
+`PeopleStampGetAll` torna solo `UpdateDate>=oggi-60` (§5). Fino all'08/09 `ImportAsync(full:true)`
+confrontava **tutta** la storia con quello scarico e avrebbe cancellato ogni timbratura più
+vecchia (`hr_punches` parte dal 25/06); la risincronizzazione di un giorno vecchio per una
+persona le svuotava la giornata. **Corretto** (`HrAttendanceService.OrizzonteEcos`):
+- l'**orizzonte** di uno scarico è il minimo `UpdateDate` ricevuto: da lì in su lo scarico è
+  una fotografia fedele (una timbratura esistente ha `UpdateDate ≥ StampDateTime`, quindi
+  sarebbe arrivata), sotto non dice niente;
+- l'import completo e la risincronizzazione cancellano **solo** le righe `ECOS` con
+  `punched_at ≥ orizzonte + 10 minuti` (margine per i terminali con l'orologio avanti);
+  scarico vuoto = nessun orizzonte = nessuna cancellazione, persona o no;
+- il messaggio di esito dice «le timbrature prima del gg/mm/aaaa sono rimaste com'erano», e
+  i dialoghi del client chiedono «Rileggere da Ecos gli ultimi 60 giorni?».
+Test: `Import_completo_non_tocca_la_storia_che_Ecos_non_restituisce_piu`,
+`Un_giorno_piu_vecchio_di_quello_che_Ecos_restituisce_non_si_svuota`,
+`Nella_finestra_si_cancella_solo_dall_orizzonte_in_su`, `L_orizzonte_e_il_primo_UpdateDate…`.
+🪤 Nei test finti l'`UpdateDate` va messo **vicino alla timbratura** (un minuto dopo), come nella
+realtà: con una data «a caso» giorni dopo nessuna riga risulta cancellabile.
 Alternativa da valutare: `PeopleStampPeriodDayGetAll` (catalogo) dà una riga per giorno/persona
 con gli orari `Stamp1`…`Stamp6`, filtrata per **`StampDate`** (ultimi 90 giorni): è la fotografia
 per giorno che serve alla risincronizzazione, anche se senza `StampID`.

@@ -585,13 +585,11 @@ già calcolati da `GET /api/auth-levels/features/my`.
 Dettagli e ricette in [guide/ECOS-API-MANUALE.md](guide/ECOS-API-MANUALE.md) §11. Sono
 modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativa.
 
-- [ ] 🔴🔴 **«Reimporta tutto» cancellerebbe la storia oltre i 60 giorni.** `PeopleStampGetAll`
-      ha un filtro implicito `UpdateDate>=oggi-60` (catalogo del tenant, letto il 08/09): l'import
-      completo non è una fotografia intera, e `RimuoviCancellateSuEcos` toglierebbe da noi tutte
-      le timbrature più vecchie. Stesso rischio in `ImportWindowAsync` con persona indicata su un
-      giorno oltre i 60 giorni (Ecos torna zero righe → cancellazione). Correzione: cancellare
-      solo dentro la finestra che Ecos può restituire; avviso a video. **Intanto non premere
-      «Reimporta tutto»** né risincronizzare giorni vecchi. Dettagli: manuale §11.0.
+- [x] 🔴🔴 **«Reimporta tutto» cancellerebbe la storia oltre i 60 giorni** — *corretto
+      l'08/09/2026*: `PeopleStampGetAll` ha un filtro implicito `UpdateDate>=oggi-60`, quindi
+      l'import completo e la risincronizzazione cancellano solo dall'**orizzonte** dello scarico
+      (minimo `UpdateDate` ricevuto + 10') in su; scarico vuoto = nessuna cancellazione. Messaggi
+      e dialoghi dicono «ultimi 60 giorni». Quattro test nuovi. Dettagli: manuale §11.0.
 - [ ] 🟠 **Stato `REJECT` delle richieste non riconosciuto.** La scheda di
       `PeopleAbsenceRequestGetAll` dice `StatusCode` = `ACCEPTED` / `REQUEST` / **`REJECT`**;
       `SyncAbsences` confronta con `REJECTED` e `CANCELLED`, quindi una richiesta respinta finisce

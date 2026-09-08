@@ -143,11 +143,12 @@ export function SincronizzaEcosDialog({
 
   async function reimportaTutto() {
     const ok = await confirm({
-      title: "Reimportare tutto lo storico da Ecos?",
+      title: "Rileggere da Ecos gli ultimi 60 giorni?",
       description:
-        "Si riscarica ogni timbratura dall'inizio e si rimette in pari il calcolo. " +
-        "Serve dopo aver collegato una persona nuova: le sue timbrature passate erano " +
-        "state scartate. Può richiedere qualche minuto.",
+        "Ecos restituisce solo le timbrature degli ultimi 60 giorni: si riscaricano tutte, " +
+        "si riassegnano secondo i collegamenti attuali e quelle cancellate su Ecos vengono " +
+        "tolte anche qui. La storia più vecchia resta com'è. Serve dopo aver collegato una " +
+        "persona nuova. Può richiedere qualche minuto.",
       confirmLabel: "Reimporta tutto",
       destructive: false,
     })

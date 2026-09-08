@@ -27,6 +27,40 @@ public partial class HrAttendanceService
     private static readonly TimeSpan MargineCursoreOrologioNostro = TimeSpan.FromHours(1);
     private const int MaxDaysToRepair = 5000;
 
+    /// <summary>
+    /// Quanto indietro arriva <c>PeopleStampGetAll</c>: Ecos applica da sé
+    /// <c>UpdateDate &gt;= oggi − 60 giorni</c> (filtro implicito letto nell'API Library il
+    /// 08/09/2026, vedi <c>docs/guide/ECOS-API-CATALOGO.md</c>), qualunque data chiediamo noi.
+    /// Serve ai messaggi: la regola vera delle cancellazioni non usa questo numero ma
+    /// l'<see cref="OrizzonteEcos"/> misurato sullo scarico.
+    /// </summary>
+    internal const int FinestraEcosGiorni = 60;
+
+    /// <summary>
+    /// Scarto fra l'orologio del terminale e quello di Ecos: una timbratura può avere
+    /// <c>UpdateDate</c> di qualche minuto <i>prima</i> del proprio orario se il terminale
+    /// è avanti. Sotto l'orizzonte più questo margine non si cancella.
+    /// </summary>
+    private static readonly TimeSpan MargineOrizzonte = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// L'istante più vecchio che Ecos ha potuto restituire in uno scarico: il minimo
+    /// <c>UpdateDate</c> fra le righe ricevute. Sopra questo istante lo scarico è una
+    /// fotografia fedele (una timbratura che esiste ha <c>UpdateDate ≥ StampDateTime</c>,
+    /// quindi sarebbe arrivata); sotto, l'assenza di una riga non dice niente, perché Ecos
+    /// non rimanda mai più indietro dei suoi <see cref="FinestraEcosGiorni"/> giorni.
+    /// Null = scarico vuoto o senza date: nessuna cancellazione è giustificata.
+    /// </summary>
+    internal static DateTime? OrizzonteEcos(IEnumerable<EcosPunch> scaricate)
+    {
+        DateTime? minimo = null;
+        foreach (EcosPunch t in scaricate)
+        {
+            if (t.UpdateDate is { } u && (minimo == null || u < minimo.Value)) minimo = u;
+        }
+        return minimo;
+    }
+
     private readonly DbService _db;
     private readonly EcosClient _ecos;
     private readonly NotificationService _notif;

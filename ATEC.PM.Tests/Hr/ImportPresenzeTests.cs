@@ -305,6 +305,59 @@ public class ImportPresenzeTests
     }
 
     /// <summary>
+    /// 🪤🪤 Ecos restituisce solo gli ultimi 60 giorni (filtro implicito di
+    /// <c>PeopleStampGetAll</c>, scoperto l'08/09/2026): lo scarico «completo» non contiene la
+    /// storia, e prima di allora l'import completo la cancellava tutta, scambiando «non
+    /// restituita» per «cancellata su Ecos». Si cancella solo dall'orizzonte dello scarico in su.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Import_completo_non_tocca_la_storia_che_Ecos_non_restituisce_piu()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        HrAttendanceService servizio = CreaServizio();
+
+        // Tre mesi fa: importata quando Ecos la restituiva ancora.
+        DateTime vecchio = Giorno.AddMonths(-3);
+        servizio.ImportPunches(c, GiornataRegolare("42", vecchio, "v"), full: true);
+        // Oggi lo scarico completo contiene solo la giornata recente: la storia resta.
+        servizio.ImportPunches(c, GiornataRegolare("42"), full: true);
+        Assert.Equal(8, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+
+        // Uno scarico completo senza la 12:32 recente: quella se ne va, la storia resta.
+        List<EcosPunch> senzaUna = GiornataRegolare("42").Where(t => t.ExternalId != "s2").ToList();
+        HrImportResultDto esito = servizio.ImportPunches(c, senzaUna, full: true);
+
+        Assert.Equal(7, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+        Assert.Equal(4, c.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM hr_punches WHERE work_date = @Giorno", new { Giorno = vecchio.Date }));
+        Assert.Contains("rimaste com'erano", esito.Message);
+
+        // Scarico vuoto: nessun orizzonte, quindi nessuna cancellazione.
+        HrImportResultDto vuoto = servizio.ImportPunches(c, new List<EcosPunch>(), full: true);
+        Assert.Equal(7, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+        Assert.Contains("nessuna cancellazione", vuoto.Message);
+    }
+
+    [Fact]
+    public void L_orizzonte_e_il_primo_UpdateDate_dello_scarico()
+    {
+        Assert.Null(HrAttendanceService.OrizzonteEcos(new List<EcosPunch>()));
+        Assert.Null(HrAttendanceService.OrizzonteEcos(new List<EcosPunch>
+        {
+            new("a", Giorno.AddHours(8), "42", "Rossi", "IN", null, null),
+        }));
+
+        var primo = new DateTime(2026, 2, 3, 7, 59, 0);
+        Assert.Equal(primo, HrAttendanceService.OrizzonteEcos(new List<EcosPunch>
+        {
+            new("a", Giorno.AddHours(8), "42", "Rossi", "IN", null, primo.AddDays(2)),
+            new("b", Giorno.AddHours(17), "42", "Rossi", "OUT", null, primo),
+            new("c", Giorno.AddHours(18), "42", "Rossi", "OUT", null, null),
+        }));
+    }
+
+    /// <summary>
     /// Se il ricalcolo si interrompe a metà (deploy, deadlock), le timbrature restano e il
     /// cartellino no: il giro dopo il diff le trova identiche e non ricalcolerebbe più
     /// nulla. La passata di riparazione è ciò che impedisce al buco di essere definitivo.
@@ -518,8 +571,22 @@ public class ImportPresenzeTests
         Timbratura("s4", Giorno.AddHours(17).AddMinutes(4), emplCode, "OUT"),
     };
 
+    /// <summary>La stessa giornata canonica su un altro giorno, con id esterni propri.</summary>
+    private static List<EcosPunch> GiornataRegolare(string emplCode, DateTime giorno, string prefisso) => new()
+    {
+        Timbratura(prefisso + "1", giorno.AddHours(7).AddMinutes(58), emplCode, "IN"),
+        Timbratura(prefisso + "2", giorno.AddHours(12).AddMinutes(32), emplCode, "OUT"),
+        Timbratura(prefisso + "3", giorno.AddHours(13).AddMinutes(28), emplCode, "IN"),
+        Timbratura(prefisso + "4", giorno.AddHours(17).AddMinutes(4), emplCode, "OUT"),
+    };
+
+    /// <summary>
+    /// 🪤 <c>UpdateDate</c> un minuto dopo la timbratura, come nella realtà (il terminale
+    /// sincronizza subito): è da lì che l'import completo misura l'orizzonte sotto cui non
+    /// cancella. Senza, nessuna cancellazione risulterebbe mai giustificata.
+    /// </summary>
     private static EcosPunch Timbratura(string id, DateTime orario, string emplCode, string verso) =>
-        new(id, orario, emplCode, "Rossi, Mario", verso, "Sede");
+        new(id, orario, emplCode, "Rossi, Mario", verso, "Sede", orario.AddMinutes(1));
 
     private HrAttendanceService CreaServizio()
     {
