@@ -72,7 +72,7 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 |---|---|---|
 | Host / istanza | `https://ha.ecosagile.com/dd/api.pm` → istanza **`dd`** | ✅ in uso; la guida elenca `ha.ecosagile.com` fra gli host legittimi (§2.2): la URL di login definisce host e istanza |
 | ClientID | **10305** | ✅ `res_settings` di produzione |
-| Utente API | **`api.it`** — utente dedicato, salvato dalla pagina il 08/09/2026 («Prova collegamento» ok) | ✅ `res_settings` di produzione. Prima c'era `maria.carretta`, account personale che la guida vieta (§21.1); i diritti di `api.it` sono ancora da misurare (§2.1) |
+| Utente API | **`api.it`** — utente dedicato, salvato dalla pagina il 08/09/2026 («Prova collegamento» ok) | ✅ `res_settings` di produzione. Prima c'era `maria.carretta`, account personale che la guida vieta (§21.1); diritti di `api.it` misurati lo stesso giorno (§2.1) |
 | Dove stanno le credenziali | `res_settings` chiavi `ecos.baseurl`, `ecos.userid`, `ecos.clientid`, `ecos.password` (cifrata con `ProtectedConfigHelper`/DPAPI a scope macchina, write-only); ripiego `appsettings.json` sezione `Ecos` (`BaseUrl`, `UserId`, `Password`, `ClientId`) | `EcosClient.ResolveCredenziali()` |
 | Come si cambiano | Pagina `/hr/timbrature` → dialogo **«Credenziali Ecos»** (+ «Prova collegamento» = una `TokenGet`); endpoint `GET/POST /api/hr/ecos/settings`, `POST /api/hr/ecos/settings/test` | `HrController.cs:260-297` |
 | Rilettura | a ogni uso: cambiare la password **non richiede riavvio** | |
@@ -82,23 +82,31 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 
 ### 2.1 Cosa il nostro utente può e non può chiamare (✅ provato)
 
-> Esiti misurati con l'utente precedente `maria.carretta` (27/08 e 29/08/2026). Dal 08/09 l'utente
-> è **`api.it`**, con profili API dedicati: le righe ❌ vanno **rimisurate**
-> (`python tools/sonda_ecos.py … --calibra`), le ✅ le conferma il primo «Aggiorna da Ecos».
+> Misurato con **`api.it`** il 08/09/2026 (calibrazione dal server con `tools/sonda_ecos_server.py`,
+> §12). Dove l'esito differisce dal vecchio utente `maria.carretta` (27-29/08) è scritto.
 
-| ApiName | Esito | Dettagli |
+| ApiName | Esito con `api.it` | Dettagli |
 |---|---|---|
 | `PeopleStampGetAll` | ✅ lettura | timbrature; filtri usati da noi: `UpdateDate>=`, `YearMonth='aaaamm'` |
 | `PeopleBadgeGetAll` | ✅ lettura | anagrafica badge; 🪤 `UpdateDate` dei badge è vecchio (2019): chiedere dal 1900, non dal 2020 |
 | `PeopleAbsenceRequestGetAll` | ✅ lettura | **34 campi**, ne leggiamo 14 (§6.2) |
 | `PeopleOvertimeRequestGetAll` | ✅ lettura | **0 record nel 2026**: in ATEC gli straordinari non passano da lì |
-| `Timesheet2GetAll`, `TimesheetGetAll` | ❌ `-2` | «doesn't have the Service/Right… ServiceID **TimesheetAnalysis**, Required RightID 1». Esistono, manca il diritto |
-| `PeopleStampPost`, `PeoplePost` | ✅ esistono **e l'utente ha il diritto** | provate a vuoto: solo errore di validazione |
-| `PeopleAbsenceRequestPost`, `PeopleOvertimeRequestPost` | ❌ esistono, diritto mancante | «ServiceID **request**» — da far abilitare a SoftAgile |
-| `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetESS` | ❌ `-99 Wrong API name` | non esistono |
+| `PeopleStampPost` | ✅ **scrivibile** | a vuoto risponde `-11` di validazione («Column: `StampDateTimeTZOffSet`, Not an integer»): esiste e siamo autorizzati, niente creato |
+| `Timesheet2GetAll`, `TimesheetGetAll` | ❌ `-2` | ServiceID **TimesheetAnalysis**, RightID 1 (uguale col vecchio utente) |
+| `PeopleExpressLightGetAll` | ❌ `-2` | **esiste**; ServiceID **PeopleExpressLight**, RightID 1 |
+| `PeopleAbsenceRequestPost` | ❌ `-2` | ServiceID **PeopleAbsenceRequestMSS**, RightID 4 (col vecchio utente il messaggio citava `request`) |
+| `PeopleOvertimeRequestPost` | ❌ `-2` | ServiceID **PeopleOvertimeApproveMSS**, RightID 4 |
+| `PeoplePost` | ❌ `-2` | ServiceID **JobData**, RightID 2 — col vecchio utente era permessa; a noi non serve |
+| `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetESS` | ❌ `-99 Wrong API name` | non esistono (27/08) |
 | suffissi `…Ins`, `…Upd`, `…Set`, `…Add`, `…Save`, `…Create`, `…Delete` | ❌ non esistono | la scrittura è **solo** `…Post` |
 
-Mai provate (❓): `PeopleExpressGetAll` (+`Light`/`Mid`), `AnagActivityProjectGet`,
+🪤 Il `-11` di `PeopleStampPost` dice «RecordID: 11882»: **non è una timbratura creata**. I nostri
+`StampID` stanno fra 10.272.222 e 10.344.175, `StampID==11882` non esiste per noi e dopo la prova
+non è comparsa nessuna timbratura nuova: è l'id interno della definizione di colonna.
+🪤 `PeopleStampPost&Edit=true` **a corpo vuoto** non risponde `-17` ma una **risposta vuota**
+(nessun JSON): la modalità modifica si calibra solo con una chiave vera nel body.
+
+Mai provate (❓): `PeopleExpressGetAll` / `PeopleExpressMidGetAll`, `AnagActivityProjectGet`,
 `AnagJobCodeGetAll`, `PeopleExpenseGetFullESS`, `PeopleTimesheetGetESS`, `PeopleStampGetESS`,
 `PeopleStampPostESS`, `CVPost`.
 
@@ -283,8 +291,11 @@ provare sul nostro tenant prima di usarla.
 
 ### 4.6 I nostri diritti di scrittura oggi
 
-`PeopleStampPost` e `PeoplePost` ✅ (già scrivibili con `maria.carretta`);
-`PeopleAbsenceRequestPost` e `PeopleOvertimeRequestPost` ❌ (ServiceID `request` mancante).
+Con `api.it` (08/09/2026): `PeopleStampPost` ✅ scrivibile; `PeopleAbsenceRequestPost` ❌
+(ServiceID `PeopleAbsenceRequestMSS`, RightID 4), `PeopleOvertimeRequestPost` ❌
+(`PeopleOvertimeApproveMSS`, RightID 4), `PeoplePost` ❌ (`JobData`, RightID 2, non ci serve).
+La validazione a vuoto di `PeopleStampPost` cita **`StampDateTimeTZOffSet`** («Not an integer»):
+un campo intero di fuso orario che la guida non documenta, da scoprire con la prima scrittura vera.
 Il tracciato dei parametri di `PeopleAbsenceRequestPost` (obbligatori, codici categoria,
 mezza giornata, stato di nascita PENDING/ACCEPTED) è **da chiedere a SoftAgile** — non si
 scrive codice prima di averlo (PIANO-HR-PRESENZE §5 e §9).
@@ -351,7 +362,8 @@ HTTP. **Mai `Userid`, `Password`, `AuthToken`.**
 **`PeopleStampGetAll`** (leggiamo): `StampID`, `StampDateTime`, `EmplID`, `EmplCode`,
 `NameComplete`, `VersusCode`, `StampLocationName`, `YearMonth`, `UpdateDate`, `StatusCode`.
 Esistono anche (📘/esempio SoftAgile): `BadgeCode`, `PresenceDeviceID`, `GPSLat`, `GPSLong`,
-`TypeCode`, `InsertDate`. ❓ **`Delete`** (§11.1). ❓ valori di `StatusCode` (l'esempio della
+`TypeCode`, `InsertDate`, e (dalla validazione di `PeopleStampPost`) **`StampDateTimeTZOffSet`**
+intero. ❓ **`Delete`** (§11.1). ❓ valori di `StatusCode` (l'esempio della
 guida inserisce `A`; una timbratura annullata come si riconosce? domanda aperta a SoftAgile).
 
 **`PeopleBadgeGetAll`** (leggiamo): `EmplID`, `EmplCode`, `NameComplete`, `BadgeCode`,
@@ -502,8 +514,10 @@ originale non deve mai sparire — se Ecos non tiene la storia, l'originale rest
 - ✅ **fatto il 08/09/2026**: utente di servizio **`api.it`**. Da confermare che abbia livello
   **2 - Professional**, profilo **`1642-APIRead`** (libreria API + Test Panel) e **solo** i
   profili delle API elencate;
-- ServiceID **`request`** per `PeopleAbsenceRequestPost` / `PeopleOvertimeRequestPost`;
-- ServiceID **`TimesheetAnalysis`** (RightID 1) per `Timesheet2GetAll`;
+- i ServiceID che la calibrazione del 08/09 dà negati a `api.it`: **`PeopleAbsenceRequestMSS`**
+  (RightID 4) per `PeopleAbsenceRequestPost`, **`PeopleOvertimeApproveMSS`** (RightID 4) per
+  `PeopleOvertimeRequestPost`, **`TimesheetAnalysis`** (RightID 1) per `Timesheet2GetAll`,
+  **`PeopleExpressLight`** (RightID 1) per `PeopleExpressLightGetAll`;
 - il tracciato di `PeopleAbsenceRequestPost` e il significato di `StatusCode` sulle
   timbrature; se esiste un ordinamento stabile per la paginazione;
 - password da ruotare **ogni 3 mesi**, mai nei sorgenti (📘 §21.2).
@@ -584,17 +598,33 @@ nuovo `TokenAsync()` prima della chiamata (o rinnovo automatico su `-1` in `Post
 ### 11.4 Domande ancora aperte (da SoftAgile)
 
 Ordinamento stabile per la paginazione · valori di `StatusCode` sulle timbrature ·
-tracciato di `PeopleAbsenceRequestPost` · ServiceID `request` e `TimesheetAnalysis` (se la
-misura con `api.it` li dà ancora negati) · quali profili ha davvero `api.it`.
+tracciato di `PeopleAbsenceRequestPost` e significato di `StampDateTimeTZOffSet` · i quattro
+ServiceID negati a `api.it` (§9.4) · come si calibra `Edit=true` senza toccare un record.
 
 ---
 
-## 12. Attrezzo: `tools/sonda_ecos.py` (sola lettura)
+## 12. Attrezzi: `tools/sonda_ecos_server.py` e `tools/sonda_ecos.py` (sola lettura)
 
-Manuale d'uso in [../tools/TOOLS.md](../tools/TOOLS.md). In breve: credenziali da variabili
-d'ambiente (`ECOS_USERID`, `ECOS_PASSWORD`, `ECOS_CLIENTID`, opzionale `ECOS_BASEURL`), mai
-scritte su disco né a log; chiama solo `Get*` (le `Post*` solo in `--calibra`, cioè a corpo
-vuoto per leggere la forma dell'errore); nasconde i nominativi salvo `--mostra-nomi`.
+Manuale d'uso in [../tools/TOOLS.md](../tools/TOOLS.md).
+
+**`sonda_ecos_server.py` — quella da usare.** Gira **sul server di produzione** con le credenziali
+che il server ha già: carica via scp uno script PowerShell che decifra (DPAPI) la connection
+string di `appsettings.Secrets.json`, legge `res_settings`, decifra la password Ecos, prende il
+token e fa le chiamate chieste; poi lo script viene cancellato. Password e token non escono mai
+dal server e non stanno sulla riga di comando. Stesse regole della sonda locale: `--calibra` a
+corpo vuoto (unico modo ammesso per una `Post*`), letture con filtro e poche righe, nominativi
+mai stampati. È così che è stata misurata `api.it` il 08/09/2026.
+
+```powershell
+python tools/sonda_ecos_server.py PeopleStampGetAll --righe 1 --valori
+python tools/sonda_ecos_server.py Timesheet2GetAll PeopleAbsenceRequestPost --calibra
+```
+
+**`sonda_ecos.py` — la variante locale**, per quando si vuole provare un utente diverso da quello
+salvato: credenziali da variabili d'ambiente (`ECOS_USERID`, `ECOS_PASSWORD`, `ECOS_CLIENTID`,
+opzionale `ECOS_BASEURL`), mai scritte su disco né a log; le mette **Diego nel suo terminale**,
+non passano da una chat. Chiama solo `Get*` (le `Post*` solo in `--calibra`); nasconde i
+nominativi salvo `--mostra-nomi`.
 
 ```powershell
 $env:ECOS_USERID="…"; $env:ECOS_CLIENTID="10305"; $env:ECOS_PASSWORD="…"

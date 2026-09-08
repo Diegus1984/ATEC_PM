@@ -31,7 +31,7 @@
 
 | Documento | Cosa contiene |
 |-----------|---------------|
-| [tools/TOOLS.md](tools/TOOLS.md) | **Come si leggono le segnalazioni** (`segnalazioni.py`), deploy e collaudo, **sonda API Ecos** (`sonda_ecos.py`), script Gamma/robot, comandi di sviluppo |
+| [tools/TOOLS.md](tools/TOOLS.md) | **Come si leggono le segnalazioni** (`segnalazioni.py`), deploy e collaudo, **sonde API Ecos** (`sonda_ecos_server.py` dal server, `sonda_ecos.py` locale), script Gamma/robot, comandi di sviluppo |
 
 ## 📏 Regole (valgono sempre)
 

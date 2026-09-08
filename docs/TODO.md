@@ -600,9 +600,11 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       · log di `RECORDCOUNT`/`LASTPAGE` per pagina · `ResultFields` sulle API larghe (release
       Ecos ≥ 6.10, da verificare).
 - [~] Utente API **dedicato** al posto dell'account personale (la guida lo vieta): **fatto il
-      08/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok.** Restano da misurare i
-      diritti (`sonda_ecos.py … --calibra`, poi «Aggiorna da Ecos») e, se mancano, i ServiceID
-      `request` e `TimesheetAnalysis` da chiedere a SoftAgile: testo nel manuale §9.4.
+      08/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok, diritti misurati dal
+      server** (`tools/sonda_ecos_server.py --calibra`): legge tutto ciò che l'import usa e può
+      scrivere le timbrature (`PeopleStampPost`). **Negati**, da chiedere a SoftAgile (manuale
+      §9.4): `PeopleAbsenceRequestMSS` (4), `PeopleOvertimeApproveMSS` (4), `TimesheetAnalysis` (1),
+      `PeopleExpressLight` (1).
 
 ---
 

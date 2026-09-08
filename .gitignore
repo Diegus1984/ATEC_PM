@@ -90,3 +90,4 @@ deploy/out/
 tools/*.py
 !tools/segnalazioni.py
 !tools/sonda_ecos.py
+!tools/sonda_ecos_server.py

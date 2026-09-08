@@ -85,11 +85,25 @@ del catalogo in [../guide/CATALOGO-DESCRIZIONI.md](../guide/CATALOGO-DESCRIZIONI
 
 ---
 
-## 🕵️ Ecos («eTime») — sonda di sola lettura (`tools/sonda_ecos.py`)
+## 🕵️ Ecos («eTime») — sonde di sola lettura (`tools/sonda_ecos_server.py`, `tools/sonda_ecos.py`)
 
 Per capire come risponde davvero un'API EcosAgile sul nostro tenant **prima** di scriverci
 del codice: esiste? abbiamo il diritto? quali campi torna e in che forma? Il protocollo e le
 regole stanno in [../guide/ECOS-API-MANUALE.md](../guide/ECOS-API-MANUALE.md).
+
+**La sonda dal server (quella normale).** Usa le credenziali che il server di produzione ha
+già (cifrate DPAPI): nessuna password da chiedere o da digitare. Carica via scp uno script
+PowerShell in `C:\ATEC_PM\Updates\`, lo lancia via ssh e lo cancella; password e token non
+escono dal server. Serve la chiave `~/.ssh/atec_vps`.
+
+```powershell
+python tools/sonda_ecos_server.py PeopleStampGetAll --righe 1 --valori          # campi + prima riga senza nominativi
+python tools/sonda_ecos_server.py PeopleAbsenceRequestGetAll --filtro "UpdateDate=>='2026-09-01 00:00:00'"
+python tools/sonda_ecos_server.py Timesheet2GetAll PeopleAbsenceRequestPost --calibra   # esiste? negata (ServiceID)? autorizzata?
+```
+
+**La sonda locale**, per provare un utente Ecos diverso da quello salvato: le credenziali le
+mette **Diego nel suo terminale** (mai in chat, mai su disco).
 
 ```powershell
 # Credenziali SOLO da variabili d'ambiente (mai su disco, mai a log; il token non si stampa)
@@ -121,7 +135,8 @@ python tools/sonda_ecos.py PeopleBadgeGetAll --campi EmplID,EmplCode,InForce --r
 
 | Percorso | A cosa serve |
 |----------|--------------|
-| `tools/sonda_ecos.py` | Sonda di sola lettura sulle API EcosAgile (sezione sopra) |
+| `tools/sonda_ecos_server.py` | Sonda EcosAgile eseguita sul server con le credenziali salvate (sezione sopra) |
+| `tools/sonda_ecos.py` | Sonda EcosAgile locale, credenziali da variabili d'ambiente (sezione sopra) |
 | `tools/CleanupBase64/` | Progetto .NET: ripulisce dal DB le immagini base64 rimaste nei campi RTF |
 | `tools/DbFix/` | Progetto .NET di riparazioni una tantum sul database |
 | `atec-pm-web/scripts/genera-catalogo.mjs` | Rigenera `src/config/catalogo.gen.ts` dal catalogo permessi (fonte unica: `ATEC.PM.Shared/catalogo-permessi.json`) |
