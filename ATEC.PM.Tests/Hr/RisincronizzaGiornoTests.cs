@@ -212,6 +212,37 @@ public class RisincronizzaGiornoTests
         Assert.Null(IdEsterno(c, mario, "s2"));
     }
 
+    /// <summary>
+    /// 🪤 Il token Ecos muore dopo 60 secondi di inattività (guida §4.4). Nella sincronizzazione
+    /// di un mese con assenze, fra lo scarico delle timbrature e quello delle assenze c'è la
+    /// scrittura su DB col ricalcolo delle giornate, che può durare più di un minuto: la
+    /// chiamata alle assenze partiva col token vecchio e moriva con un -1 catturato a log
+    /// («Assenze non scaricate»), e le assenze del mese non si riallineavano. Prima di
+    /// chiederle si prende un token nuovo.
+    /// </summary>
+    [FactRichiedeMySql]
+    public async Task La_sincronizzazione_del_mese_chiede_un_token_nuovo_prima_delle_assenze()
+    {
+        using MySqlConnection c = _schema.Apri();
+        Dipendente(c, "Mario", "Rossi", "42");
+        ScriviCursore(c);
+
+        var handler = new EcosFinto(
+            RispostaToken("tok-1"),
+            RispostaTimbrature(Riga("s1", "2026-02-05 08:00:00", "42", "IN")),
+            RispostaToken("tok-2"),
+            RispostaTimbrature());   // le assenze: nessuna
+
+        HrImportResultDto esito = await Servizio(handler)
+            .ImportWindowAsync(null, new DateTime(2026, 2, 1), new DateTime(2026, 2, 28), conAssenze: true);
+
+        Assert.True(esito.Success);
+        Assert.Equal(4, handler.UrlChiamati.Count);
+        Assert.Contains("TokenGet", handler.UrlChiamati[2]);
+        Assert.Contains("PeopleAbsenceRequestGetAll", handler.UrlChiamati[3]);
+        Assert.Contains("AuthToken=tok-2", handler.UrlChiamati[3]);
+    }
+
     [FactRichiedeMySql]
     public async Task Sul_mese_di_tutti_una_risposta_vuota_non_cancella_niente()
     {
@@ -279,10 +310,10 @@ public class RisincronizzaGiornoTests
         return new HrAttendanceService(_schema.Servizio(), ecos, NullLogger<HrAttendanceService>.Instance);
     }
 
-    private static string RispostaToken() => """
+    private static string RispostaToken(string token = "tok-1") => $$"""
         { "ECOSAGILE_TABLE_DATA": {
             "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "MESSAGE": "" },
-            "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "AuthToken": "tok-1" } } } }
+            "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "AuthToken": "{{token}}" } } } }
         """;
 
     private static string RispostaTimbrature(params string[] righe) =>
@@ -363,9 +394,13 @@ public class RisincronizzaGiornoTests
 
         public List<string> CorpiInviati { get; } = new();
 
+        /// <summary>Gli URL chiamati, in ordine: l'API e il token stanno lì, non nel corpo.</summary>
+        public List<string> UrlChiamati { get; } = new();
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken ct)
         {
+            UrlChiamati.Add(request.RequestUri?.ToString() ?? "");
             if (request.Content != null)
                 CorpiInviati.Add(request.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
 

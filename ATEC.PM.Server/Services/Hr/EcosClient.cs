@@ -465,19 +465,27 @@ public class EcosClient
         // risposta senza LASTPAGE troncava lo scarico alla prima pagina, e l'import lo
         // dichiarava riuscito: esattamente la perdita silenziosa che questa classe
         // esiste per impedire.
-        string codice = "", messaggio = "";
+        string codice = "", messaggio = "", codiceErrore = "";
         bool? ultima = null;
         if (tabella.TryGetProperty("ECOSAGILE_ERROR_MESSAGE", out var errore)
             && errore.ValueKind == JsonValueKind.Object)
         {
             codice = Testo(errore, "CODE");
             messaggio = Testo(errore, "MESSAGE");
+            codiceErrore = Testo(errore, "ERROR_CODE");
             if (errore.TryGetProperty("LASTPAGE", out _))
                 ultima = string.Equals(Testo(errore, "LASTPAGE"), "TRUE", StringComparison.OrdinalIgnoreCase);
         }
 
         if (!string.Equals(codice, "OK", StringComparison.OrdinalIgnoreCase))
-            throw new EcosApiException($"{apiName}: errore API — {messaggio} (CODE={codice}).");
+        {
+            // ERROR_CODE -1 = token scaduto (60 s di inattività, guida §4.4): chi legge il log
+            // deve capire che serve un TokenGet nuovo, non cercare un guasto di rete o di diritti.
+            string spiegazione = codiceErrore == "-1"
+                ? " Token Ecos scaduto (ERROR_CODE -1): serve un TokenGet nuovo prima di questa chiamata."
+                : "";
+            throw new EcosApiException($"{apiName}: errore API — {messaggio} (CODE={codice}).{spiegazione}");
+        }
 
         var righe = new List<Dictionary<string, string>>();
 

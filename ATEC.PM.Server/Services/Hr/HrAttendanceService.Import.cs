@@ -220,9 +220,15 @@ public partial class HrAttendanceService
                 // Le assenze non hanno un filtro di periodo sull'API: si scarica e si tiene
                 // ciò che tocca la finestra. L'upsert è per ecos_absence_id, quindi rifarlo
                 // non duplica. Se Ecos non risponde, le timbrature restano importate.
+                //
+                // 🪤 Il token Ecos muore dopo 60 secondi di inattività (guida §4.4), e la
+                // scrittura su DB qui sopra può durare di più: si chiede un token nuovo invece
+                // di scoprirlo con un -1 che finiva a log come «Assenze non scaricate» e lasciava
+                // le assenze del mese senza riallineamento (08/09/2026).
                 try
                 {
-                    List<EcosAbsenceRequest> assenze = await _ecos.GetAbsenceRequestsAsync(token, null, ct);
+                    string tokenAssenze = await _ecos.TokenAsync(ct);
+                    List<EcosAbsenceRequest> assenze = await _ecos.GetAbsenceRequestsAsync(tokenAssenze, null, ct);
                     List<EcosAbsenceRequest> nellaFinestra = assenze
                         .Where(a => a.DateBegin.Date <= al && a.DateEnd.Date >= dal)
                         .ToList();

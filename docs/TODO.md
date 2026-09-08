@@ -596,11 +596,9 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       richieste; timbratura marcata → rimossa e giornata ricalcolata in ogni import (anche
       incrementale), richiesta marcata → `CANCELLED`; mai avute → non si inseriscono. Quattro
       test. Dettagli: manuale §11.1.
-- [ ] 🟠 **Token scaduto nella risincronizzazione di un mese con assenze**:
-      `ImportWindowAsync(conAssenze: true)` riusa il token dopo la scrittura su DB; oltre 60 s
-      di inattività Ecos lo invalida (`-1`) e le assenze del mese non si riallineano (errore
-      catturato, solo a log). Nuovo `TokenAsync()` prima della chiamata, o rinnovo automatico
-      su `-1` con un solo retry.
+- [x] 🟠 **Token scaduto nella risincronizzazione di un mese con assenze** — *corretto
+      l'08/09/2026*: token nuovo prima della chiamata alle assenze; l'errore `-1` ora si spiega
+      da solo a log. Test dedicato. Manuale §11.2.
 - [ ] 🟡 `AppCode=ATEC_PM` su tutte le chiamate (audit lato Ecos) · `RowsPerPage` 500 → 1000
       · log di `RECORDCOUNT`/`LASTPAGE` per pagina · `ResultFields` sulle API larghe (release
       Ecos ≥ 6.10, da verificare).

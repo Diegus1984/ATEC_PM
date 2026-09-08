@@ -653,13 +653,17 @@ Test: `Delete_di_Ecos_diventa_Deleted_in_qualunque_veste`, `I_booleani_di_Ecos_s
 `Una_timbratura_marcata_Delete_se_ne_va_anche_con_l_import_incrementale`,
 `Le_richieste_di_assenza_seguono_REJECT_e_Delete_di_Ecos`.
 
-### 11.2 🟠 Token scaduto nella risincronizzazione di un mese con assenze
+### 11.2 ✅ Token scaduto nella risincronizzazione di un mese con assenze (corretto l'08/09/2026)
 
-In `ImportWindowAsync(conAssenze: true)` la chiamata `GetAbsenceRequestsAsync` usa il token
-**dopo** `ImportPunches` (scrittura DB + ricalcolo giornate). Se quel lavoro dura più di
-60 s il token è morto: la chiamata fallisce con `-1`, viene catturata e loggata come
-«Assenze non scaricate» — nessun danno, ma le assenze del mese non si riallineano. Rimedio:
-nuovo `TokenAsync()` prima della chiamata (o rinnovo automatico su `-1` in `PostAsync`).
+In `ImportWindowAsync(conAssenze: true)` la chiamata `GetAbsenceRequestsAsync` usava il token
+**dopo** `ImportPunches` (scrittura DB + ricalcolo giornate): oltre i 60 s di inattività il
+token è morto, la chiamata falliva con `-1`, catturata e loggata come «Assenze non scaricate»,
+e le assenze del mese non si riallineavano. **Corretto**: prima delle assenze si chiede un
+token nuovo (`TokenAsync`), e l'errore `-1` di qualunque chiamata ora dice a chiare lettere
+«Token Ecos scaduto: serve un TokenGet nuovo». Test:
+`La_sincronizzazione_del_mese_chiede_un_token_nuovo_prima_delle_assenze`.
+Regola per il futuro: **mai lavoro lento fra due chiamate con lo stesso token**; se non si può
+evitare, token nuovo prima della chiamata successiva.
 
 ### 11.3 🟡 Migliorie a costo zero
 
