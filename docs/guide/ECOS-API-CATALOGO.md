@@ -376,7 +376,8 @@ dati retributivi». Criteria `inForce=1`. **Campi (21)**: `EmplID`, `NameComplet
 manuale §9.7). Una riga per giorno di assenza: `TSDate`, `HourBegin`/`HourEnd`
 (`16:15:00`–`17:00:00`), `CategoryCode` (`P`) e `CategoryDescShort` (`ROL`), `StatusCode`
 (`ACCEPTED`), `SourceCode` (`REQUEST`), `EmplID` **e** `EmplCode`, `AbsenceRequestID` +
-`AbsenceRequestRefineID` (progressivo del giorno dentro la richiesta), `UpdateDate`. Senza finestra
+`AbsenceRequestRefineID` (🪤 progressivo del tratto **dentro il giorno**, 1 = mattina 2 =
+pomeriggio, si ripete per ogni giorno: chiave = richiesta + giorno + tratto), `UpdateDate`. Senza finestra
 implicita (verificato: gennaio 2026 risponde): è la riconciliazione per giornata che ci manca e sostituisce il taglio a mano delle
 richieste multi-giorno;
 **`StampPresenceMonthCardGetAll`** ✅ **calibrata con `api.it` il 08/09/2026: risponde** (servizio

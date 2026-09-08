@@ -64,26 +64,39 @@ public partial class HrAttendanceService
 
         Dictionary<string, int> mappa = MappaEcos(c);
 
-        var esistenti = c.Query<RigaAssenzaGiorno>(
-                @"SELECT id AS Id, ecos_absence_id AS EcosAbsenceId, ecos_refine_id AS EcosRefineId,
-                         employee_id AS EmployeeId, work_date AS WorkDate, category_code AS CategoryCode,
-                         status AS Status, minutes AS Minutes, hour_begin AS HourBegin, hour_end AS HourEnd
-                  FROM hr_absence_days
-                  WHERE work_date BETWEEN @Dal AND @Al",
-                new { Dal = dal.Date, Al = al.Date })
-            .ToDictionary(r => Chiave(r.EcosAbsenceId, r.EcosRefineId), StringComparer.OrdinalIgnoreCase);
+        // 🪤 La chiave è (richiesta, GIORNO, tratto): il progressivo del tratto si ripete per
+        // ogni giorno di una richiesta a più giorni (1 = mattina, 2 = pomeriggio). Al primo
+        // import in produzione la chiave senza giorno è saltata su «Duplicate entry
+        // '133095-2'». Se lo stesso tratto arrivasse due volte, l'ultimo vince: si deduplica
+        // qui e l'import non si ferma.
+        var esistenti = new Dictionary<string, RigaAssenzaGiorno>(StringComparer.OrdinalIgnoreCase);
+        foreach (RigaAssenzaGiorno r in c.Query<RigaAssenzaGiorno>(
+                     @"SELECT id AS Id, ecos_absence_id AS EcosAbsenceId, ecos_refine_id AS EcosRefineId,
+                              employee_id AS EmployeeId, work_date AS WorkDate, category_code AS CategoryCode,
+                              status AS Status, minutes AS Minutes, hour_begin AS HourBegin, hour_end AS HourEnd
+                       FROM hr_absence_days
+                       WHERE work_date BETWEEN @Dal AND @Al
+                       ORDER BY id",
+                     new { Dal = dal.Date, Al = al.Date }))
+        {
+            esistenti[Chiave(r.EcosAbsenceId, r.WorkDate, r.EcosRefineId)] = r;
+        }
+
+        var ricevuti = new Dictionary<string, EcosAbsenceDay>(StringComparer.OrdinalIgnoreCase);
+        foreach (EcosAbsenceDay g in giorni)
+        {
+            if (g.Date.Date < dal.Date || g.Date.Date > al.Date) continue;
+            ricevuti[Chiave(g.AbsenceRequestId, g.Date, g.RefineId)] = g;
+        }
 
         int nuove = 0, aggiornate = 0;
         var visti = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         using (MySqlTransaction tran = c.BeginTransaction())
         {
-            foreach (EcosAbsenceDay g in giorni)
+            foreach ((string chiave, EcosAbsenceDay g) in ricevuti)
             {
                 if (!mappa.TryGetValue(g.EmplCode, out int employeeId)) continue;
-                if (g.Date.Date < dal.Date || g.Date.Date > al.Date) continue;
-
-                string chiave = Chiave(g.AbsenceRequestId, g.RefineId);
                 visti.Add(chiave);
 
                 var valori = new
@@ -140,9 +153,9 @@ public partial class HrAttendanceService
             }
 
             // Dentro la finestra lo scarico è la fotografia intera: quello che non c'è più si toglie.
-            long[] sparite = esistenti.Values
-                .Where(r => !visti.Contains(Chiave(r.EcosAbsenceId, r.EcosRefineId)))
-                .Select(r => r.Id)
+            long[] sparite = esistenti
+                .Where(kv => !visti.Contains(kv.Key))
+                .Select(kv => kv.Value.Id)
                 .ToArray();
             foreach (long[] blocco in ABlocchi(sparite, 500))
                 c.Execute("DELETE FROM hr_absence_days WHERE id IN @Ids", new { Ids = blocco }, tran);
@@ -216,7 +229,8 @@ public partial class HrAttendanceService
     internal static bool GiornataIntera(AssenzaEcosGiorno g, decimal oreGiornaliere) =>
         g.Minutes is not { } m || m >= (int)(oreGiornaliere * 60m) - TolleranzaGiornataInteraMinuti;
 
-    private static string Chiave(string absenceId, string refineId) => absenceId + "/" + refineId;
+    private static string Chiave(string absenceId, DateTime giorno, string refineId) =>
+        absenceId + "/" + giorno.ToString("yyyyMMdd") + "/" + refineId;
 
     /// <summary>«16:15:00» come lo manda Ecos, o «16:15»: un TIME per MySQL; null se manca o non si legge.</summary>
     private static TimeSpan? OraSql(string? ora) =>

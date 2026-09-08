@@ -29,7 +29,9 @@ public record EcosAbsenceRequest(
 /// Un <b>tratto</b> di un giorno di assenza come lo spezza Ecos
 /// (<c>PeopleAbsenceRequestRefineWorkAll</c>): una giornata intera sono due righe, mattina e
 /// pomeriggio, ciascuna con i suoi orari; un permesso di tre quarti d'ora è una riga sola.
-/// <paramref name="RefineId"/> è il progressivo del tratto dentro la richiesta.
+/// <paramref name="RefineId"/> è il progressivo del tratto <b>dentro il giorno</b> (1 =
+/// mattina, 2 = pomeriggio): 🪤 si ripete per ogni giorno di una richiesta a più giorni, la
+/// chiave è (richiesta, giorno, tratto).
 /// <paramref name="Minutes"/> = fine − inizio; null se Ecos non dà gli orari.
 /// </summary>
 public record EcosAbsenceDay(

@@ -90,24 +90,29 @@ public class AssenzeGiornoTests
         CreaDipendente(c, "Mario", "Rossi", "42");
         HrAttendanceService servizio = Servizio();
 
-        // Ferie intere il 5 (due tratti), tre quarti d'ora di ROL il 6, e una riga di una
-        // persona non collegata che va saltata.
+        // Ferie intere il 4 e il 5 (una richiesta, due tratti AL GIORNO: 🪤 il progressivo del
+        // tratto si ripete per ogni giorno, come in produzione), tre quarti d'ora di ROL il 6,
+        // una riga di una persona non collegata che va saltata, e lo stesso tratto mandato
+        // due volte, che non deve fermare niente.
         var giorni = new List<EcosAbsenceDay>
         {
+            Tratto("r1", "1", "42", G(4), "08:00:00", "12:30:00", "F", "ACCEPTED"),
+            Tratto("r1", "2", "42", G(4), "13:30:00", "17:00:00", "F", "ACCEPTED"),
             Tratto("r1", "1", "42", G(5), "08:00:00", "12:30:00", "F", "ACCEPTED"),
             Tratto("r1", "2", "42", G(5), "13:30:00", "17:00:00", "F", "ACCEPTED"),
             Tratto("r2", "1", "42", G(6), "16:15:00", "17:00:00", "P", "ACCEPTED"),
+            Tratto("r2", "1", "42", G(6), "16:15:00", "17:00:00", "P", "ACCEPTED"),
             Tratto("r3", "1", "99", G(6), "08:00:00", "12:30:00", "F", "ACCEPTED"),
         };
-        Assert.Equal((3, 0, 0), servizio.SyncAbsenceDays(c, giorni, Primo, Ultimo));
-        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_absence_days"));
+        Assert.Equal((5, 0, 0), servizio.SyncAbsenceDays(c, giorni, Primo, Ultimo));
+        Assert.Equal(5, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_absence_days"));
 
-        // Il giro dopo: le ferie del 5 sono state annullate su Ecos, il ROL è diventato un'ora.
+        // Il giro dopo: le ferie sono state annullate su Ecos, il ROL è diventato un'ora.
         var dopo = new List<EcosAbsenceDay>
         {
             Tratto("r2", "1", "42", G(6), "16:00:00", "17:00:00", "P", "ACCEPTED"),
         };
-        Assert.Equal((0, 1, 2), servizio.SyncAbsenceDays(c, dopo, Primo, Ultimo));
+        Assert.Equal((0, 1, 4), servizio.SyncAbsenceDays(c, dopo, Primo, Ultimo));
         Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_absence_days"));
         Assert.Equal(60, c.ExecuteScalar<int>("SELECT minutes FROM hr_absence_days WHERE ecos_absence_id = 'r2'"));
 

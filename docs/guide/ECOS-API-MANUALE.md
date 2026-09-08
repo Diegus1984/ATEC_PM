@@ -581,10 +581,14 @@ per i mesi vecchi (verificato gennaio 2026). Servizio `PeopleAbsenceRequest`, ch
 - `EcosClient.GetAbsenceDaysAsync(token, dal, al)` → filtro `TSDate` a intervallo (`>='dal'
   AND TSDate<='al'` nello stesso valore), `EcosAbsenceDay` con `Minutes` = fine − inizio
   (`EcosClient.MinutiFra`; null se gli orari mancano).
-- Tabella **`hr_absence_days`** (M124): specchio delle righe, chiave `(ecos_absence_id,
-  ecos_refine_id)`, con `employee_id`, `work_date`, `category_code`, `absence_type`, `status`,
-  `hour_begin`/`hour_end`, `minutes`. `hr_absences` resta la tabella delle **richieste** (una
-  riga per richiesta: approvatore, note, stato, workflow).
+- Tabella **`hr_absence_days`** (M124 + M125): specchio delle righe, chiave logica
+  **(richiesta, giorno, tratto)** — 🪤 `AbsenceRequestRefineID` è il progressivo del tratto
+  *dentro il giorno* (1 = mattina, 2 = pomeriggio) e si ripete per ogni giorno di una richiesta
+  a più giorni: la M124 lo credeva unico per richiesta e il primo import in produzione è saltato
+  su «Duplicate entry '133095-2'»; la M125 toglie l'UNIQUE e lo specchio deduplica in memoria
+  (l'ultimo vince). Colonne: `employee_id`, `work_date`, `category_code`, `absence_type`,
+  `status`, `hour_begin`/`hour_end`, `minutes`. `hr_absences` resta la tabella delle
+  **richieste** (una riga per richiesta: approvatore, note, stato, workflow).
 - `HrAttendanceService.SyncAbsenceDays(c, giorni, dal, al)`: **specchio a finestra** — dentro
   [dal, al] inserisce, aggiorna e **toglie** ciò che Ecos non manda più (richiesta annullata o
   accorciata non «arriva»: sparisce). 🪤 Scarico vuoto = nessuna cancellazione.
