@@ -431,6 +431,24 @@ public class ImportPresenzeTests
     }
 
     /// <summary>
+    /// 🪤 «Ore sulle commesse» rispondeva 500 in produzione (MySQL 8.4): con SELECT DISTINCT
+    /// l'ORDER BY può usare solo colonne della SELECT, e `d.name` non c'era (08/09/2026).
+    /// </summary>
+    [FactRichiedeMySql]
+    public void La_quadratura_del_mese_si_calcola_senza_errori_sql()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        c.Execute("UPDATE employees SET status = 'ACTIVE', emp_type = 'INTERNAL' WHERE id = @Id", new { Id = mario });
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
+
+        HrQuadraturaMonthDto mese = servizio.GetQuadratura(Giorno.Year, Giorno.Month, null);
+
+        Assert.Contains(mese.Rows, r => r.EmployeeId == mario);
+    }
+
+    /// <summary>
     /// 🪤 Ecos calcola la durata solo quando la richiesta è accettata: una richiesta in attesa
     /// arriva con Duration vuota e a video faceva «0h» (Castellano, 10/09/2026, 14:30–17:00).
     /// Le ore si ricavano dagli orari, e la nota riporta la fascia.

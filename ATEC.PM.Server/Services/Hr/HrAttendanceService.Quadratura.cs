@@ -45,7 +45,10 @@ public partial class HrAttendanceService
             p.Add("DeptId", departmentId.Value);
         }
 
-        empSql += " ORDER BY d.name, e.last_name, e.first_name";
+        // 🪤 Con DISTINCT l'ORDER BY può usare solo colonne della SELECT: `d.name` non c'è
+        // (c'è il suo COALESCE con alias) e MySQL 8.4 in produzione rispondeva errore 500
+        // («Ore sulle commesse», 08/09/2026). Si ordina per gli alias.
+        empSql += " ORDER BY DepartmentName, LastName, FirstName";
 
         var employees = c.Query<(int EmployeeId, string EmployeeName, int DepartmentId, string DepartmentName, bool MustPunch, decimal DailyHours)>(empSql, p).ToList();
 
@@ -98,14 +101,15 @@ public partial class HrAttendanceService
             assenzePerEmp[g.EmployeeId] = assenzePerEmp.GetValueOrDefault(g.EmployeeId) + OreAssenzaGiorno(g, 8.0m);
         }
 
-        // 3. Ore consuntivate su commesse da timesheet_entries
+        // 3. Ore consuntivate su commesse da timesheet_entries.
+        // 🪤 Il piano (Fase 3) dava per esistente `projects.is_internal`: la colonna non c'è mai
+        // stata, e la pagina rispondeva 500 (08/09/2026). Finché una commessa non ha un
+        // contrassegno «interna», tutte le ore stanno nelle dirette e le interne restano a zero.
         var timesheet = c.Query<(int EmployeeId, decimal DirectHours, decimal InternalHours)>(@"
             SELECT te.employee_id AS EmployeeId,
-                   SUM(CASE WHEN COALESCE(p.is_internal, 0) = 0 THEN te.hours ELSE 0 END) AS DirectHours,
-                   SUM(CASE WHEN COALESCE(p.is_internal, 0) = 1 THEN te.hours ELSE 0 END) AS InternalHours
+                   SUM(te.hours) AS DirectHours,
+                   0 AS InternalHours
             FROM timesheet_entries te
-            JOIN project_phases pp ON pp.id = te.project_phase_id
-            JOIN projects p ON p.id = pp.project_id
             WHERE te.work_date BETWEEN @Primo AND @Ultimo
             GROUP BY te.employee_id", p)
             .ToDictionary(x => x.EmployeeId);
