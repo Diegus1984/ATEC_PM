@@ -121,8 +121,10 @@ function isZero(valore: string): boolean {
 }
 
 /**
- * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero quando
- * è diversa. «??:??» del motore (uscita mai timbrata) diventa una parola.
+ * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero — sempre,
+ * anche quando coincide (Diego, 07/09/2026: il riferimento resta sotto, così si legge a colpo
+ * d'occhio che la riga è stata confrontata). «??:??» del motore (uscita mai timbrata)
+ * diventa una parola.
  */
 function CellaOra({
   valore,
@@ -150,7 +152,9 @@ function CellaOra({
       </TableCell>
     )
   }
-  const diversa = timbrato && timbrato !== valore
+  // Senza ora timbrata (orario stimato o rettificato a mano) la riga resta, invisibile,
+  // così tutte le celle hanno la stessa altezza.
+  const conTimbrata = Boolean(timbrato)
   return (
     <TableCell className="leading-tight">
       <span className={cn("tabular-nums font-semibold", spenta && "text-muted-foreground")}>
@@ -159,11 +163,11 @@ function CellaOra({
       <span
         className={cn(
           "block text-[11px] tabular-nums text-muted-foreground",
-          !diversa && "invisible"
+          !conTimbrata && "invisible"
         )}
-        aria-hidden={!diversa}
+        aria-hidden={!conTimbrata}
       >
-        timbrato {diversa ? timbrato : "—"}
+        timbrato {conTimbrata ? timbrato : "—"}
       </span>
     </TableCell>
   )

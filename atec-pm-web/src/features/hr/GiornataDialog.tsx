@@ -46,7 +46,7 @@ function giornoEsteso(iso: string): string {
   return testo.charAt(0).toUpperCase() + testo.slice(1)
 }
 
-/** Un orario del giorno: in grande quello che vale, sotto quello timbrato se diverso. */
+/** Un orario del giorno: in grande quello che vale, sotto quello timbrato (sempre, anche se uguale). */
 function RiquadroOra({
   etichetta,
   valore,
@@ -58,7 +58,7 @@ function RiquadroOra({
 }) {
   const mancante = valore === "??:??"
   const vuoto = !valore
-  const diversa = !vuoto && !mancante && timbrato && timbrato !== valore
+  const conTimbrata = !vuoto && !mancante && Boolean(timbrato)
   return (
     <div
       className={cn(
@@ -77,7 +77,7 @@ function RiquadroOra({
         {mancante ? "Non timbrata" : vuoto ? "—" : valore}
       </p>
       <p className="text-xs text-muted-foreground tabular-nums">
-        {diversa ? `timbrato ${timbrato}` : " "}
+        {conTimbrata ? `timbrato ${timbrato}` : " "}
       </p>
     </div>
   )
