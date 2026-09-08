@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T11:28:01",
+                     "hash":  "7f98e3b82d8c3afcc9feb0cb6822813d7ee98695",
+                     "modifiche":  [
+                                       "HR: la chiave delle assenze per giorno comprende il giorno (M125) — il primo import in produzione era saltato"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T11:14:55",
                      "hash":  "957002049bf1bd48761c10cc2eeda1442982b3f9",
                      "modifiche":  [
