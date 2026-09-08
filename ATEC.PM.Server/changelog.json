@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1651",
+                     "data":  "2026-09-08T16:51:34",
+                     "hash":  "052ac9a9465867c8c444d38f2f0e7403467d86a0",
+                     "modifiche":  [
+                                       "Gestore DDP: le viste come sottovoci del menu"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1643",
                      "data":  "2026-09-08T16:44:09",
                      "hash":  "723921482afab0b6e10ed61e520d75698181e235",
