@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T10:24:19",
+                     "hash":  "6723864e4d6acd6727b7a9dff0e8fb12ffa40c85",
+                     "modifiche":  [
+                                       "Import Ecos: il flag Delete viene letto, una timbratura tolta su Ecos se ne va anche qui al primo import"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T10:11:28",
                      "hash":  "63d00ee28c2762ab1516f3ca7fc1b74158b464fa",
                      "modifiche":  [
