@@ -288,6 +288,10 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   fotografia intera e avrebbe cancellato da noi la storia più vecchia. **Corretto lo stesso
 >   giorno**: si cancella solo dall'**orizzonte** dello scarico (il primo `UpdateDate`
 >   ricevuto) in su, `HrAttendanceService.OrizzonteEcos`; dettagli nel manuale Ecos §11.0.
+>   E dallo stesso giorno l'import legge il flag **`Delete`** di Ecos (cancellazione logica,
+>   la risposta alla domanda 0(c) del §5): una timbratura tolta là se ne va anche qui **al
+>   primo import incrementale**, non serve più quello completo; le richieste tolte diventano
+>   `CANCELLED`. Manuale Ecos §11.1.
 > - **Cursore dall'orologio DI ECOS** (massimo `UpdateDate` ricevuto): il nostro non è
 >   confrontabile col loro, e uno scarto apriva una finestra cieca da cui le correzioni non
 >   tornavano più. Ripiego sul nostro solo se manca, con un'ora di margine (cambio d'ora).

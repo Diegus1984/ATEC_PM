@@ -634,17 +634,24 @@ oltre i 60 giorni; per gli ultimi 60 resta `PeopleStampGetAll` con lo `StampID`.
 riga per giorno di assenza con ore, causale, stato, `EmplID` ed `EmplCode`, filtrabile per
 `TSDate`: toglie il problema della finestra dei 90 giorni e del taglio delle richieste multi-giorno.
 
-### 11.1 🔴 Non leggiamo il flag `Delete`
+### 11.1 ✅ Il flag `Delete` (corretto l'08/09/2026)
 
-La guida (§7.8, §16.5) dice che i record cancellati **restano visibili con `Delete=1`**. Il
-nostro import non chiede il campo né sulle timbrature né sulle assenze: se Ecos cancella
-logicamente, una timbratura tolta là **continua ad arrivare e a contare** nel cartellino, e
-nemmeno l'import completo la toglie (confronta gli ID, e l'ID c'è ancora). Sulle assenze il
-campo `Delete` **esiste** (sonda 29/08); sulle timbrature è da verificare. Da fare:
-1. `python tools/sonda_ecos.py PeopleStampGetAll --righe 1` → c'è `Delete`?
-2. Aggiungere `Delete` a `PunchFields` e `AbsenceFields`; riga con `Delete=1` → si tratta
-   come cancellata (rimossa se `source='ECOS'`, assenza a stato `CANCELLED`).
-3. Risponde anche alla domanda 0(c) del PIANO-HR-PRESENZE §5 (tombstone o sparizione).
+La guida (§7.8, §16.5) dice che i record cancellati **restano visibili con `Delete=1`**, e la
+scheda di `PeopleStampGetAll` conferma il campo (senza filtro `Delete=0`). Fino all'08/09 non
+lo leggevamo: una timbratura tolta su Ecos continuava ad arrivare e a contare, e nemmeno
+l'import completo la toglieva (l'id c'era ancora). **Corretto**: `Delete` sta in `PunchFields`
+e `AbsenceFields` (`EcosPunch.Deleted`, `EcosAbsenceRequest.Deleted`, letto con
+`EcosClient.Vero` in qualunque veste: `true`, `"TRUE"`, `"1"`, `"-1"`).
+- Timbratura marcata → rimossa da `hr_punches` (solo `source='ECOS'`), giornate ricalcolate,
+  contata fra le «cancellate su Ecos rimosse». Vale in **ogni** import, incrementale compreso:
+  la cancellazione alza `UpdateDate`, quindi arriva al giro successivo. Mai avuta → non si inserisce.
+- Richiesta di assenza marcata → stato `CANCELLED` (la storia resta); mai avuta → non si crea.
+- Nello stesso punto: gli stati veri delle richieste sono `ACCEPTED` / `REQUEST` / **`REJECT`**
+  (prima si confrontava `REJECTED` e una respinta finiva «in attesa»).
+Risponde anche alla domanda 0(c) del PIANO-HR-PRESENZE §5: è un tombstone, non una sparizione.
+Test: `Delete_di_Ecos_diventa_Deleted_in_qualunque_veste`, `I_booleani_di_Ecos_si_leggono_in_ogni_forma`,
+`Una_timbratura_marcata_Delete_se_ne_va_anche_con_l_import_incrementale`,
+`Le_richieste_di_assenza_seguono_REJECT_e_Delete_di_Ecos`.
 
 ### 11.2 🟠 Token scaduto nella risincronizzazione di un mese con assenze
 

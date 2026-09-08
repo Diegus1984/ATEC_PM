@@ -8,9 +8,12 @@ namespace ATEC.PM.Server.Services.Hr;
 /// <param name="UpdateDate">Istante di ultima modifica secondo l'orologio DI ECOS: è il
 /// campo su cui l'API filtra, quindi è l'unico cursore incrementale sensato (il nostro
 /// orologio non è confrontabile con il loro).</param>
+/// <param name="Deleted">Cancellazione <b>logica</b>: Ecos non toglie mai un record, lo
+/// marca <c>Delete=1</c> e continua a restituirlo (guida §7.8; <c>PeopleStampGetAll</c> non
+/// filtra <c>Delete=0</c>). Una riga così è una timbratura da togliere, non da importare.</param>
 public record EcosPunch(
     string ExternalId, DateTime PunchedAt, string EmplCode, string Name, string Direction, string? Location,
-    DateTime? UpdateDate = null);
+    DateTime? UpdateDate = null, bool Deleted = false);
 
 /// <summary>Un badge/anagrafica Ecos: serve alla mappatura <c>employees.ecos_empl_code</c>.</summary>
 public record EcosBadge(string EmplCode, string Name, bool IsActive);
@@ -20,7 +23,7 @@ public record EcosAbsenceRequest(
     string AbsenceRequestId, string EmplCode, string Name, string CategoryCode,
     string CategoryDesc, string StatusCode, DateTime DateBegin, DateTime DateEnd,
     bool FullDay, string? HourBegin, string? HourEnd, decimal? Duration,
-    DateTime? UpdateDate = null);
+    DateTime? UpdateDate = null, bool Deleted = false);
 
 /// <summary>L'API Ecos ha risposto ma con un errore suo (CODE ≠ OK) o in una forma inattesa.</summary>
 public sealed class EcosApiException : Exception
@@ -61,7 +64,7 @@ public class EcosClient
     private static readonly string[] PunchFields =
     {
         "StampID", "StampDateTime", "EmplID", "EmplCode", "NameComplete",
-        "VersusCode", "StampLocationName", "YearMonth", "UpdateDate", "StatusCode",
+        "VersusCode", "StampLocationName", "YearMonth", "UpdateDate", "StatusCode", "Delete",
     };
 
     private static readonly string[] CampiBadge =
@@ -73,7 +76,7 @@ public class EcosClient
     {
         "AbsenceRequestID", "EmplID", "EmplCode", "NameComplete",
         "CategoryCode", "CategoryDescShort", "StatusCode",
-        "DateBegin", "DateEnd", "FullDay", "HourBegin", "HourEnd", "Duration", "UpdateDate"
+        "DateBegin", "DateEnd", "FullDay", "HourBegin", "HourEnd", "Duration", "UpdateDate", "Delete",
     };
 
     private readonly HttpClient _http;
@@ -308,10 +311,19 @@ public class EcosClient
                 Location: ValoreOpzionale(r, "StampLocationName"),
                 UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg)
                     ? agg
-                    : null));
+                    : null,
+                Deleted: Vero(r.GetValueOrDefault("Delete"))));
         }
         return risultato;
     }
+
+    /// <summary>
+    /// Un booleano di Ecos, in qualunque veste arrivi: <c>true</c> JSON (che <see cref="Testo"/>
+    /// rende <c>"TRUE"</c>), <c>"TRUE"</c>, <c>"1"</c>, <c>"-1"</c>. Tutto il resto è falso.
+    /// </summary>
+    internal static bool Vero(string? valore) =>
+        valore is not null
+        && (valore.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || valore == "1" || valore == "-1");
 
     /// <summary>
     /// Anagrafica badge: alimenta i suggerimenti della pagina di mappatura.
@@ -380,7 +392,8 @@ public class EcosClient
                 HourBegin: ValoreOpzionale(r, "HourBegin"),
                 HourEnd: ValoreOpzionale(r, "HourEnd"),
                 Duration: duration,
-                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null));
+                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null,
+                Deleted: Vero(r.GetValueOrDefault("Delete"))));
         }
         return risultato;
     }

@@ -590,16 +590,12 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       l'import completo e la risincronizzazione cancellano solo dall'**orizzonte** dello scarico
       (minimo `UpdateDate` ricevuto + 10') in su; scarico vuoto = nessuna cancellazione. Messaggi
       e dialoghi dicono «ultimi 60 giorni». Quattro test nuovi. Dettagli: manuale §11.0.
-- [ ] 🟠 **Stato `REJECT` delle richieste non riconosciuto.** La scheda di
-      `PeopleAbsenceRequestGetAll` dice `StatusCode` = `ACCEPTED` / `REQUEST` / **`REJECT`**;
-      `SyncAbsences` confronta con `REJECTED` e `CANCELLED`, quindi una richiesta respinta finisce
-      come «in attesa». Allineare la mappa (`REJECT` → REJECTED, `REQUEST` → PENDING).
-- [ ] 🔴 **Flag `Delete` non letto.** La guida dice che i record cancellati in Ecos restano
-      visibili con `Delete=1`: una timbratura tolta là continua ad arrivare e a contare nel
-      cartellino, e nemmeno l'import completo la rimuove (confronta gli ID, e l'ID c'è ancora).
-      Prima verifica con `python tools/sonda_ecos.py PeopleStampGetAll --righe 1` se il campo
-      esiste sulle timbrature (sulle assenze c'è, sonda del 29/08); poi `Delete` in
-      `PunchFields`/`AbsenceFields` e riga con `Delete=1` trattata come cancellata.
+- [x] 🟠 **Stato `REJECT` delle richieste non riconosciuto** — *corretto l'08/09/2026* insieme al
+      flag `Delete`: `SyncAbsences` accetta `REJECT` e `REJECTED`.
+- [x] 🔴 **Flag `Delete` non letto** — *corretto l'08/09/2026*: `Delete` letto su timbrature e
+      richieste; timbratura marcata → rimossa e giornata ricalcolata in ogni import (anche
+      incrementale), richiesta marcata → `CANCELLED`; mai avute → non si inseriscono. Quattro
+      test. Dettagli: manuale §11.1.
 - [ ] 🟠 **Token scaduto nella risincronizzazione di un mese con assenze**:
       `ImportWindowAsync(conAssenze: true)` riusa il token dopo la scrittura su DB; oltre 60 s
       di inattività Ecos lo invalida (`-1`) e le assenze del mese non si riallineano (errore

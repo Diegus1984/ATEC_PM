@@ -309,13 +309,20 @@ public partial class HrAttendanceService
                 _ => "OTHER",
             };
 
-            string status = r.StatusCode switch
-            {
-                "ACCEPTED" => "APPROVED",
-                "REJECTED" => "REJECTED",
-                "CANCELLED" => "CANCELLED",
-                _ => "PENDING",
-            };
+            // Gli stati come li scrive Ecos (scheda di PeopleAbsenceRequestGetAll, 08/09/2026):
+            // ACCEPTED, REQUEST, REJECT. 🪤 Fino ad allora si confrontava «REJECTED», e una
+            // richiesta respinta finiva come «in attesa». Una richiesta marcata Delete=1 è
+            // stata tolta su Ecos: da noi diventa CANCELLED (la storia resta), e se non l'abbiamo
+            // mai avuta non si inserisce.
+            string status = r.Deleted
+                ? "CANCELLED"
+                : r.StatusCode switch
+                {
+                    "ACCEPTED" => "APPROVED",
+                    "REJECT" or "REJECTED" => "REJECTED",
+                    "CANCELLED" => "CANCELLED",
+                    _ => "PENDING",
+                };
 
             decimal? hours = r.FullDay ? null : r.Duration;
 
@@ -325,6 +332,8 @@ public partial class HrAttendanceService
 
             if (existing == default)
             {
+                if (r.Deleted) continue;
+
                 c.Execute(@"
                     INSERT INTO hr_absences
                         (employee_id, date_from, date_to, hours, is_full_day, absence_type, status, source, ecos_absence_id, notes)
@@ -382,13 +391,25 @@ public partial class HrAttendanceService
         Dictionary<string, int> mappa = MappaEcos(c);
         DateTime? orizzonte = orizzonteEcos ?? OrizzonteEcos(timbrature);
 
+        // 🪤 Ecos non toglie mai una timbratura: la marca Delete=1 e continua a restituirla
+        // (e la cancellazione alza UpdateDate, quindi arriva anche all'incrementale). Fino
+        // all'08/09/2026 il campo non veniva letto: una timbratura tolta là restava qui a
+        // contare nel cartellino, e nemmeno l'import completo la vedeva sparire — l'id c'era
+        // ancora. Le righe marcate sono cancellazioni da eseguire, non righe da importare.
         var perId = new Dictionary<string, EcosPunch>(StringComparer.OrdinalIgnoreCase);
+        var cancellateSuEcos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var nonAbbinati = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (EcosPunch t in timbrature)
         {
+            if (t.Deleted)
+            {
+                cancellateSuEcos.Add(t.ExternalId);
+                continue;
+            }
             if (!mappa.ContainsKey(t.EmplCode)) nonAbbinati.Add($"{t.EmplCode} — {t.Name}");
             perId[t.ExternalId] = t;
         }
+        cancellateSuEcos.ExceptWith(perId.Keys);
 
         var esistenti = new Dictionary<string, RigaEsistente>(StringComparer.OrdinalIgnoreCase);
         foreach (string[] blocco in ABlocchi(perId.Keys, 500))
@@ -449,10 +470,12 @@ public partial class HrAttendanceService
                 }
             }
 
+            rimosse = RimuoviMarcateDelete(c, tran, cancellateSuEcos, giorniToccati, daRifare);
+
             if (finestra != null)
-                rimosse = RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, orizzonte, giorniToccati, daRifare);
+                rimosse += RimuoviSpariteNellaFinestra(c, tran, perId.Keys, finestra, orizzonte, giorniToccati, daRifare);
             else if (full)
-                rimosse = RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, orizzonte, giorniToccati, daRifare);
+                rimosse += RimuoviCancellateSuEcos(c, tran, perId.Keys, mappa.Values, orizzonte, giorniToccati, daRifare);
 
             tran.Commit();
         }
@@ -508,6 +531,42 @@ public partial class HrAttendanceService
             DaysRecalculated = ricalcolate + riparate,
             Unmatched = nonAbbinati.ToList(),
         };
+    }
+
+    /// <summary>
+    /// Le timbrature che Ecos ha restituito marcate <c>Delete=1</c>: se le abbiamo, si
+    /// tolgono (solo le righe <c>ECOS</c>, mai le rettifiche) e le giornate si rifanno.
+    /// Vale in ogni import, incrementale compreso: è la via normale con cui una cancellazione
+    /// fatta su Ecos arriva qui entro il giro successivo. Chi non le ha mai avute non le
+    /// inserisce e basta.
+    /// </summary>
+    private int RimuoviMarcateDelete(
+        MySqlConnection c, MySqlTransaction tran, IReadOnlyCollection<string> idCancellati,
+        HashSet<(int, DateTime)> giorniToccati, HashSet<(int, DateTime)> daRifare)
+    {
+        if (idCancellati.Count == 0) return 0;
+
+        var nostre = new List<RigaEsistente>();
+        foreach (string[] blocco in ABlocchi(idCancellati, 500))
+        {
+            nostre.AddRange(c.Query<RigaEsistente>(
+                @"SELECT id AS Id, external_id AS ExternalId, employee_id AS EmployeeId, work_date AS WorkDate,
+                         punched_at AS PunchedAt, direction AS Direction, location AS Location
+                  FROM hr_punches
+                  WHERE source = 'ECOS' AND external_id IN @Ids",
+                new { Ids = blocco }, tran));
+        }
+        if (nostre.Count == 0) return 0;
+
+        foreach (long[] blocco in ABlocchi(nostre.Select(r => r.Id), 500))
+            c.Execute("DELETE FROM hr_punches WHERE id IN @Ids", new { Ids = blocco }, tran);
+
+        foreach (RigaEsistente r in nostre)
+            SegnaConVicine(giorniToccati, daRifare, r.EmployeeId, r.WorkDate);
+
+        _logger.LogInformation(
+            "[HR] {N} timbrature marcate Delete su Ecos rimosse anche qui.", nostre.Count);
+        return nostre.Count;
     }
 
     /// <summary>

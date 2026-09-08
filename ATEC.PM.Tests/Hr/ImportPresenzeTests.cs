@@ -339,6 +339,66 @@ public class ImportPresenzeTests
         Assert.Contains("nessuna cancellazione", vuoto.Message);
     }
 
+    /// <summary>
+    /// Ecos non toglie mai una timbratura: la marca <c>Delete=1</c> e continua a restituirla,
+    /// con <c>UpdateDate</c> alzato — quindi arriva anche all'import incrementale. Prima
+    /// dell'08/09/2026 il flag non veniva letto: la timbratura tolta là restava qui a contare,
+    /// e nemmeno l'import completo la vedeva sparire perché l'id c'era ancora.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Una_timbratura_marcata_Delete_se_ne_va_anche_con_l_import_incrementale()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        HrAttendanceService servizio = CreaServizio();
+        servizio.ImportPunches(c, GiornataRegolare("42"));
+        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+
+        // L'incrementale riceve la doppia strisciata delle 12:32 marcata cancellata, e una
+        // timbratura cancellata che non abbiamo mai avuta.
+        HrImportResultDto esito = servizio.ImportPunches(c, new List<EcosPunch>
+        {
+            Timbratura("s2", Giorno.AddHours(12).AddMinutes(32), "42", "OUT") with { Deleted = true },
+            Timbratura("s9", Giorno.AddHours(18), "42", "OUT") with { Deleted = true },
+        }, full: false);
+
+        Assert.Equal(3, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
+        Assert.Null(c.ExecuteScalar<long?>("SELECT id FROM hr_punches WHERE external_id = 's2'"));
+        Assert.Null(c.ExecuteScalar<long?>("SELECT id FROM hr_punches WHERE external_id = 's9'"));
+        Assert.Equal(0, esito.PunchesAdded);
+        Assert.Contains("1 cancellate su Ecos rimosse", esito.Message);
+        Assert.True(esito.DaysRecalculated >= 1);
+    }
+
+    /// <summary>
+    /// Le richieste di assenza seguono gli stati come li scrive Ecos (scheda di
+    /// <c>PeopleAbsenceRequestGetAll</c>: ACCEPTED, REQUEST, REJECT) e la cancellazione
+    /// logica: una richiesta marcata Delete diventa CANCELLED, una mai vista non si crea.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Le_richieste_di_assenza_seguono_REJECT_e_Delete_di_Ecos()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        HrAttendanceService servizio = CreaServizio();
+
+        EcosAbsenceRequest Richiesta(string id, string stato, bool cancellata = false) => new(
+            id, "42", "Rossi, Mario", "P", "ROL", stato, Giorno, Giorno,
+            FullDay: false, HourBegin: "16:00", HourEnd: "17:00", Duration: 1m, Deleted: cancellata);
+
+        servizio.SyncAbsences(c, new[] { Richiesta("r1", "ACCEPTED"), Richiesta("r2", "REJECT") });
+        Assert.Equal("APPROVED", Stato(c, "r1"));
+        Assert.Equal("REJECTED", Stato(c, "r2"));
+
+        // r1 viene tolta su Ecos; r3 arriva già cancellata e non l'abbiamo mai avuta.
+        servizio.SyncAbsences(c, new[] { Richiesta("r1", "ACCEPTED", cancellata: true), Richiesta("r3", "ACCEPTED", cancellata: true) });
+        Assert.Equal("CANCELLED", Stato(c, "r1"));
+        Assert.Null(Stato(c, "r3"));
+
+        static string? Stato(MySqlConnection c, string idEcos) => c.ExecuteScalar<string?>(
+            "SELECT status FROM hr_absences WHERE ecos_absence_id = @Id", new { Id = idEcos });
+    }
+
     [Fact]
     public void L_orizzonte_e_il_primo_UpdateDate_dello_scarico()
     {

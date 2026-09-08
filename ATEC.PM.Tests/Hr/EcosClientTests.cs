@@ -210,6 +210,48 @@ public class EcosClientTests
         Assert.Contains("AuthToken=tok", handler.UrlChiamati[0]);
     }
 
+    /// <summary>
+    /// Ecos non toglie mai una timbratura: la marca <c>Delete=1</c> e continua a mandarla
+    /// (guida §7.8; <c>PeopleStampGetAll</c> non filtra <c>Delete=0</c>). Il flag arriva ora
+    /// come booleano JSON, ora come stringa: in ogni veste deve diventare <c>Deleted</c>.
+    /// </summary>
+    [Fact]
+    public async Task Delete_di_Ecos_diventa_Deleted_in_qualunque_veste()
+    {
+        const string pagina = """
+            { "ECOSAGILE_TABLE_DATA": {
+                "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+                "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [
+                    { "StampID": 1, "StampDateTime": "2026-02-05 07:58:12", "EmplCode": "42",
+                      "NameComplete": "Rossi, Mario", "VersusCode": "IN", "Delete": true },
+                    { "StampID": 2, "StampDateTime": "2026-02-05 12:32:00", "EmplCode": "42",
+                      "NameComplete": "Rossi, Mario", "VersusCode": "OUT", "Delete": "1" },
+                    { "StampID": 3, "StampDateTime": "2026-02-05 13:28:00", "EmplCode": "42",
+                      "NameComplete": "Rossi, Mario", "VersusCode": "IN", "Delete": "FALSE" },
+                    { "StampID": 4, "StampDateTime": "2026-02-05 17:04:00", "EmplCode": "42",
+                      "NameComplete": "Rossi, Mario", "VersusCode": "OUT" } ] } } }
+            """;
+        EcosClient client = CreaClient(new RisposteInSequenza(pagina));
+
+        List<EcosPunch> timbrature = await client.GetPunchesAsync("tok", updateDa: null);
+
+        Assert.Equal(new[] { true, true, false, false }, timbrature.Select(t => t.Deleted).ToArray());
+    }
+
+    [Theory]
+    [InlineData("TRUE", true)]
+    [InlineData("true", true)]
+    [InlineData("1", true)]
+    [InlineData("-1", true)]
+    [InlineData("FALSE", false)]
+    [InlineData("0", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void I_booleani_di_Ecos_si_leggono_in_ogni_forma(string? valore, bool atteso)
+    {
+        Assert.Equal(atteso, EcosClient.Vero(valore));
+    }
+
     [Fact]
     public async Task Badge_InForce_diventa_booleano()
     {
