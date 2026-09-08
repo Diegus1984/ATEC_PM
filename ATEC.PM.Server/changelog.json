@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T11:14:55",
+                     "hash":  "957002049bf1bd48761c10cc2eeda1442982b3f9",
+                     "modifiche":  [
+                                       "HR: le assenze di Ecos giorno per giorno (PeopleAbsenceRequestRefineWorkAll → hr_absence_days, M124)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T10:30:23",
                      "hash":  "d427ff12c7d0b01b61b33feea8109fcb03aae03a",
                      "modifiche":  [
