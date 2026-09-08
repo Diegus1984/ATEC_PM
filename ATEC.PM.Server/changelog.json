@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1453",
+                     "data":  "2026-09-08T14:54:07",
+                     "hash":  "99658e708c0a4f80c6cd4152d4f1a90fc81e81ad",
+                     "modifiche":  [
+                                       "Richieste: ore dalla fascia oraria quando Ecos non manda la durata, dettaglio al clic"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1445",
                      "data":  "2026-09-08T14:45:16",
                      "hash":  "dd7fccfcfa0419e183241fcd5ac26e123db9fc0a",
