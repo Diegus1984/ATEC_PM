@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1635",
+                     "data":  "2026-09-08T16:38:53",
+                     "hash":  "8ebbcd555991422332d3454144db8121458b3abc",
+                     "modifiche":  [
+                                       "Quadratura: ore interne = commesse del cliente «ATEC — Sistema»"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1612",
                      "data":  "2026-09-08T16:16:01",
                      "hash":  "54d052f8124200da21fe0d529bcf0af2272ec87c",
