@@ -560,7 +560,8 @@ quella timbrata; ogni invio registrato con data e autore; stati «Allineato / Da
 Inviato il». ✅ La chiamata è **provata** (08/09/2026, §4.2): `StampID` + `StampDateTime` +
 `UserTZ=-120`, risposta «Correct Record Update».
 
-✅ **COSTRUITO l'08/09/2026** (ordine di Diego, pronto per il deploy): pulsante **«Invia a Ecos»**
+✅ **IN PRODUZIONE dall'08/09/2026 14:12** (ordine di Diego; prima prova sulla sua giornata del
+04/09: 08:00:52→08:00:00, 17:12:22→17:00:00, registro a 2 righe): pulsante **«Invia a Ecos»**
 nel dialogo della giornata (Timbrature), endpoint `POST /api/hr/ecos/send-day`, servizio
 `HrAttendanceService.SendDayToEcosAsync` (`HrAttendanceService.InvioEcos.cs`), migrazione
 **M127**: `hr_punches.ecos_punched_at` / `ecos_sent_at` + registro **`hr_ecos_sends`**. Regole:
@@ -569,6 +570,7 @@ nel dialogo della giornata (Timbrature), endpoint `POST /api/hr/ecos/send-day`, 
    autore, StampID). Ecos non tiene la storia: la teniamo noi.
 2. Parte solo ciò che differisce (`TimbraturaEcos.DaInviare`): arrotondamento = quello del
    motore (`TimesheetRules.RoundTime`, entrata su / uscita giù, scatto 30', tolleranza 10').
+   Confronto **al minuto** (08:00:52 è già sullo scatto: i secondi non contano).
    Non inviabile se l'arrotondamento cambia giorno (entrata 23:55). Le rettifiche non esistono
    su Ecos: non partono (servirebbe un INSERT, non idempotente — non fatto).
 3. Al primo errore ci si ferma (registro `ERROR`, il pulsante si ripreme: sono update).
