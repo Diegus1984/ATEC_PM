@@ -84,6 +84,9 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 
 > Misurato con **`api.it`** il 08/09/2026 (calibrazione dal server con `tools/sonda_ecos_server.py`,
 > §12). Dove l'esito differisce dal vecchio utente `maria.carretta` (27-29/08) è scritto.
+> L'**import vero** con `api.it` è riuscito lo stesso giorno (log del server: sincronizzazione
+> del mese alle 08:33, import automatici alle 08:48 e 09:11 — ogni riavvio del servizio ne fa
+> partire uno).
 
 | ApiName | Esito con `api.it` | Dettagli |
 |---|---|---|
