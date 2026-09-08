@@ -1,6 +1,21 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1011",
+                     "data":  "2026-09-08T10:11:28",
+                     "hash":  "63d00ee28c2762ab1516f3ca7fc1b74158b464fa",
+                     "modifiche":  [
+                                       "Import Ecos: «Reimporta tutto» non cancella più la storia oltre i 60 giorni che Ecos restituisce",
+                                       "Ecos: calibrate con api.it PeopleAbsenceRequestRefineWorkAll e StampPresenceMonthCardGetAll (rispondono, con la storia)",
+                                       "Ecos: le 230 API GET della tendina del Test Panel e sei schede in piu\u0027 (cartellino di Ecos, assenze per giorno)",
+                                       "Ecos: schede complete delle API che ci riguardano (campi, filtri ammessi, livello, utenti abilitati)",
+                                       "Ecos: catalogo delle 84 API del tenant (ServiceID, filtri impliciti) e la trappola dei 60 giorni",
+                                       "Manuale Ecos: cosa torna davvero TokenGet e come si usa l\u0027API Test Panel del tenant",
+                                       "Manuale Ecos: import in produzione riuscito con api.it (log del server 08/09)",
+                                       "Ecos: sonda dal server (tools/sonda_ecos_server.py) e diritti di api.it misurati"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-0909",
                      "data":  "2026-09-08T09:09:16",
                      "hash":  "a2b0d2c60e99fe33c6c27672106390537059f96c",
