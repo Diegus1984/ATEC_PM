@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1411",
+                     "data":  "2026-09-08T14:12:11",
+                     "hash":  "547534f77a567e040859323e0e59d2500cc4e0af",
+                     "modifiche":  [
+                                       "Giornata: la finestra di conferma non chiude piu il dialogo",
+                                       "Invia a Ecos: il confronto e al minuto, i secondi non contano"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1359",
                      "data":  "2026-09-08T14:00:12",
                      "hash":  "49ff8814c382f9d41d6e42e20af998666d15877e",
