@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T10:30:23",
+                     "hash":  "d427ff12c7d0b01b61b33feea8109fcb03aae03a",
+                     "modifiche":  [
+                                       "Import Ecos: token nuovo prima delle assenze nella sincronizzazione del mese (il vecchio moriva dopo 60 s)"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T10:24:19",
                      "hash":  "6723864e4d6acd6727b7a9dff0e8fb12ffa40c85",
                      "modifiche":  [
