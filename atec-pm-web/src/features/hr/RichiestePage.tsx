@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Clock, Plus, Trash2, X } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
+import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -134,9 +135,23 @@ export function RichiestePage() {
   const canManage = canWriteFeature("nav.hr_richieste")
 
   const [activeTab, setActiveTab] = React.useState<"mie" | "da_approvare" | "tutte">("mie")
+  const confirm = useConfirm()
   const [dialogNuovaAperta, setDialogNuovaAperta] = React.useState(false)
   // Dettaglio di una richiesta: la riga dice il minimo, il clic dice tutto (Diego, 08/09).
   const [dettaglio, setDettaglio] = React.useState<HrAbsence | null>(null)
+
+  async function annullaConConferma(r: HrAbsence) {
+    const ok = await confirm({
+      title: "Annullare la richiesta?",
+      description: `${tipoLabel(r.absenceType)} di ${r.employeeName} del ${formatDateShort(r.dateFrom)}. La richiesta viene annullata e non conta più.`,
+      confirmLabel: "Annulla richiesta",
+      destructive: true,
+    })
+    if (ok) {
+      setDettaglio(null)
+      annullaMutation.mutate(r.id)
+    }
+  }
   const [rifiutoDialog, setRifiutoDialog] = React.useState<{
     open: boolean
     absenceId: number | null
@@ -380,7 +395,7 @@ export function RichiestePage() {
                             size="sm"
                             variant="ghost"
                             className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                            onClick={() => annullaMutation.mutate(r.id)}
+                            onClick={() => void annullaConConferma(r)}
                             disabled={annullaMutation.isPending}
                             title="Annulla richiesta"
                           >
@@ -459,6 +474,51 @@ export function RichiestePage() {
                   Richiesta in attesa su Ecos: le ore vengono dalla fascia oraria indicata, la durata
                   ufficiale arriva quando Ecos la accetta.
                 </p>
+              )}
+              {dettaglio.status === "PENDING" && (
+                <DialogFooter className="gap-2 sm:justify-between">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => void annullaConConferma(dettaglio)}
+                    disabled={annullaMutation.isPending}
+                  >
+                    <Trash2 className="mr-1 size-3.5" />
+                    Annulla richiesta
+                  </Button>
+                  {canManage && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950"
+                        onClick={() => {
+                          const id = dettaglio.id
+                          setDettaglio(null)
+                          setRifiutoDialog({ open: true, absenceId: id, reason: "" })
+                        }}
+                        disabled={approvaMutation.isPending}
+                      >
+                        <X className="mr-1 size-3" />
+                        Rifiuta
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => {
+                          const id = dettaglio.id
+                          setDettaglio(null)
+                          approvaMutation.mutate({ id, approved: true })
+                        }}
+                        disabled={approvaMutation.isPending}
+                      >
+                        <Check className="mr-1 size-3" />
+                        Approva
+                      </Button>
+                    </div>
+                  )}
+                </DialogFooter>
               )}
             </>
           )}
