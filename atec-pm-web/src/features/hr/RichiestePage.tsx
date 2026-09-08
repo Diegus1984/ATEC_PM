@@ -135,6 +135,8 @@ export function RichiestePage() {
 
   const [activeTab, setActiveTab] = React.useState<"mie" | "da_approvare" | "tutte">("mie")
   const [dialogNuovaAperta, setDialogNuovaAperta] = React.useState(false)
+  // Dettaglio di una richiesta: la riga dice il minimo, il clic dice tutto (Diego, 08/09).
+  const [dettaglio, setDettaglio] = React.useState<HrAbsence | null>(null)
   const [rifiutoDialog, setRifiutoDialog] = React.useState<{
     open: boolean
     absenceId: number | null
@@ -297,7 +299,11 @@ export function RichiestePage() {
                   : `${r.hours ?? 0}h`
 
                 return (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-muted/60"
+                    onClick={() => setDettaglio(r)}
+                  >
                     {show("employee") && (
                       <TableCell className="font-medium">{r.employeeName}</TableCell>
                     )}
@@ -339,7 +345,10 @@ export function RichiestePage() {
                       </TableCell>
                     )}
                     {show("actions") && (
-                      <TableCell className="text-right space-x-1 whitespace-nowrap">
+                      <TableCell
+                        className="text-right space-x-1 whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {canManage && r.status === "PENDING" && (
                           <>
                             <Button
@@ -387,6 +396,74 @@ export function RichiestePage() {
           </TableBody>
         </Table>
       </GridScroller>
+
+      {/* Dettaglio richiesta */}
+      <Dialog open={dettaglio != null} onOpenChange={(open) => { if (!open) setDettaglio(null) }}>
+        <DialogContent className="sm:max-w-md">
+          {dettaglio && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{dettaglio.employeeName}</DialogTitle>
+                <DialogDescription className="flex flex-wrap items-center gap-2">
+                  <span>{tipoLabel(dettaglio.absenceType)}</span>
+                  {statoBadge(dettaglio.status)}
+                </DialogDescription>
+              </DialogHeader>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="text-muted-foreground">Reparto</dt>
+                <dd>{dettaglio.departmentName || "—"}</dd>
+                <dt className="text-muted-foreground">Periodo</dt>
+                <dd className="tabular-nums">
+                  {dettaglio.dateFrom.slice(0, 10) === dettaglio.dateTo.slice(0, 10)
+                    ? formatDateShort(dettaglio.dateFrom)
+                    : `${formatDateShort(dettaglio.dateFrom)} → ${formatDateShort(dettaglio.dateTo)}`}
+                </dd>
+                <dt className="text-muted-foreground">Durata</dt>
+                <dd className="tabular-nums">
+                  {dettaglio.isFullDay
+                    ? "Giornata intera"
+                    : dettaglio.hours != null
+                      ? `${dettaglio.hours}h`
+                      : "Ore non indicate"}
+                </dd>
+                <dt className="text-muted-foreground">Origine</dt>
+                <dd>
+                  {dettaglio.source === "ECOS"
+                    ? `Ecos${dettaglio.ecosAbsenceId ? ` (richiesta ${dettaglio.ecosAbsenceId})` : ""}`
+                    : "ATEC PM"}
+                </dd>
+                <dt className="text-muted-foreground">Note</dt>
+                <dd>{dettaglio.notes || "—"}</dd>
+                {dettaglio.approvedByName && (
+                  <>
+                    <dt className="text-muted-foreground">Approvata da</dt>
+                    <dd>
+                      {dettaglio.approvedByName} ({formatDateShort(dettaglio.approvedAt)})
+                    </dd>
+                  </>
+                )}
+                {dettaglio.rejectionReason && (
+                  <>
+                    <dt className="text-muted-foreground">Motivo del rifiuto</dt>
+                    <dd>{dettaglio.rejectionReason}</dd>
+                  </>
+                )}
+                <dt className="text-muted-foreground">Inserita il</dt>
+                <dd>
+                  {formatDateShort(dettaglio.createdAt)}
+                  {dettaglio.createdByName ? ` da ${dettaglio.createdByName}` : ""}
+                </dd>
+              </dl>
+              {dettaglio.source === "ECOS" && dettaglio.status === "PENDING" && (
+                <p className="text-xs text-muted-foreground">
+                  Richiesta in attesa su Ecos: le ore vengono dalla fascia oraria indicata, la durata
+                  ufficiale arriva quando Ecos la accetta.
+                </p>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Nuova Richiesta */}
       <NuovaRichiestaDialog

@@ -390,10 +390,14 @@ public partial class HrAttendanceService
             // mai avuta non si inserisce.
             string status = StatoRichiesta(r.StatusCode, r.Deleted);
 
-            decimal? hours = r.FullDay ? null : r.Duration;
+            // 🪤 Ecos calcola `Duration` solo quando la richiesta è accettata: una richiesta in
+            // attesa arriva con la durata vuota, e a video faceva «0h» (Castellano, 08/09/2026).
+            // Gli orari però ci sono sempre: le ore si ricavano da lì, e la nota li riporta.
+            decimal? hours = r.FullDay ? null : r.Duration ?? OreDaOrari(r.HourBegin, r.HourEnd);
+            string? note = NotaRichiesta(r);
 
-            var existing = c.QueryFirstOrDefault<(int Id, string Status, decimal? Hours, DateTime DateFrom, DateTime DateTo)>(
-                "SELECT id, status, hours, date_from, date_to FROM hr_absences WHERE ecos_absence_id = @EcosId",
+            var existing = c.QueryFirstOrDefault<(int Id, string Status, decimal? Hours, DateTime DateFrom, DateTime DateTo, string? Notes)>(
+                "SELECT id, status, hours, date_from, date_to, notes FROM hr_absences WHERE ecos_absence_id = @EcosId",
                 new { EcosId = r.AbsenceRequestId });
 
             if (existing == default)
@@ -415,16 +419,17 @@ public partial class HrAttendanceService
                         AbsenceType = absenceType,
                         Status = status,
                         EcosId = r.AbsenceRequestId,
-                        Notes = string.IsNullOrWhiteSpace(r.CategoryDesc) ? null : $"ECOS: {r.CategoryDesc}"
+                        Notes = note
                     });
                 added++;
             }
-            else if (existing.Status != status || existing.Hours != hours || existing.DateFrom != r.DateBegin || existing.DateTo != r.DateEnd)
+            else if (existing.Status != status || existing.Hours != hours || existing.DateFrom != r.DateBegin
+                     || existing.DateTo != r.DateEnd || existing.Notes != note)
             {
                 c.Execute(@"
                     UPDATE hr_absences
                     SET date_from = @DateFrom, date_to = @DateTo, hours = @Hours, is_full_day = @IsFullDay,
-                        absence_type = @AbsenceType, status = @Status
+                        absence_type = @AbsenceType, status = @Status, notes = @Notes
                     WHERE id = @Id",
                     new
                     {
@@ -434,6 +439,7 @@ public partial class HrAttendanceService
                         IsFullDay = r.FullDay,
                         AbsenceType = absenceType,
                         Status = status,
+                        Notes = note,
                         Id = existing.Id
                     });
                 updated++;
@@ -452,6 +458,20 @@ public partial class HrAttendanceService
         }
 
         return (added, updated);
+    }
+
+    /// <summary>Le ore di una richiesta dai suoi orari («14:30:00»–«17:00:00» → 2,5), quando Ecos non manda la durata.</summary>
+    internal static decimal? OreDaOrari(string? inizio, string? fine) =>
+        EcosClient.MinutiFra(inizio, fine) is int minuti && minuti > 0 ? Math.Round(minuti / 60m, 1) : null;
+
+    /// <summary>«ECOS: ROL 14:30–17:00»: la causale di Ecos e, per le richieste a ore, la fascia.</summary>
+    internal static string? NotaRichiesta(EcosAbsenceRequest r)
+    {
+        if (string.IsNullOrWhiteSpace(r.CategoryDesc)) return null;
+        string nota = $"ECOS: {r.CategoryDesc.Trim()}";
+        if (!r.FullDay && r.HourBegin is { Length: >= 5 } b && r.HourEnd is { Length: >= 5 } e)
+            nota += $" {b[..5]}–{e[..5]}";
+        return nota;
     }
 
     /// <param name="orizzonteEcos">

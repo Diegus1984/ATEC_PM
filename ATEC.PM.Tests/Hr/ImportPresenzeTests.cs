@@ -431,6 +431,35 @@ public class ImportPresenzeTests
     }
 
     /// <summary>
+    /// 🪤 Ecos calcola la durata solo quando la richiesta è accettata: una richiesta in attesa
+    /// arriva con Duration vuota e a video faceva «0h» (Castellano, 10/09/2026, 14:30–17:00).
+    /// Le ore si ricavano dagli orari, e la nota riporta la fascia.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Una_richiesta_in_attesa_senza_durata_prende_le_ore_dagli_orari()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int paolo = CreaDipendente(c, "Paolo", "Castellano", ecosCode: "77");
+        HrAttendanceService servizio = CreaServizio();
+
+        var richiesta = new EcosAbsenceRequest(
+            "136478", EmplCode: "77", "Castellano, Paolo", "P", "ROL", "REQUEST", Giorno, Giorno,
+            FullDay: false, HourBegin: "14:30:00", HourEnd: "17:00:00", Duration: null);
+        Assert.Equal((1, 0), servizio.SyncAbsences(c, new[] { richiesta }));
+
+        var riga = c.QuerySingle<(decimal? Hours, string Status, string? Notes)>(
+            "SELECT hours, status, notes FROM hr_absences WHERE employee_id = @Id", new { Id = paolo });
+        Assert.Equal(2.5m, riga.Hours);
+        Assert.Equal("PENDING", riga.Status);
+        Assert.Equal("ECOS: ROL 14:30–17:00", riga.Notes);
+
+        // Accettata: arriva la durata di Ecos, che vince sul calcolo, e la nota resta.
+        var accettata = richiesta with { StatusCode = "ACCEPTED", Duration = 2.5m };
+        Assert.Equal((0, 1), servizio.SyncAbsences(c, new[] { accettata }));
+        Assert.Equal("APPROVED", c.ExecuteScalar<string>("SELECT status FROM hr_absences WHERE employee_id = @Id", new { Id = paolo }));
+    }
+
+    /// <summary>
     /// 🪤 <c>PeopleAbsenceRequestGetAll</c> non manda l'EmplCode, solo l'EmplID: in produzione,
     /// dal 27/08 all'08/09/2026, nessuna richiesta di Ecos era entrata in hr_absences perché la
     /// mappatura per codice non trovava nessuno. L'id si impara dagli scarichi che portano
