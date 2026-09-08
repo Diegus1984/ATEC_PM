@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 04/09/2026 16:22.
+> Fotografia del 08/09/2026 08:44.
 
 ## Chiavi con endpoint
 
@@ -985,6 +985,7 @@
 - DdpTreatmentsController: 2 endpoint
 - DepartmentsController: 1 endpoint
 - EmployeesController: 4 endpoint
+- ExportController: 1 endpoint
 - GammaRobotController: 5 endpoint
 - LookupController: 2 endpoint
 - NotificationsController: 7 endpoint

@@ -1,6 +1,19 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-0846",
+                     "data":  "2026-09-08T08:46:35",
+                     "hash":  "7200b3dd3c513153e75d057e095166f5c1215262",
+                     "modifiche":  [
+                                       "Prospetto SAL: «Esporta Excel» vero al posto del CSV coi numeri sbagliati, filtro su ogni colonna (#150)",
+                                       "Cartellino: l\u0027ora timbrata resta scritta sotto anche quando coincide con quella arrotondata",
+                                       "Documentazione: manuale API EcosAgile (docs/guide/ECOS-API-MANUALE.md) e sonda di sola lettura tools/sonda_ecos.py",
+                                       "Piano Registro Offerte: chiusura in blocco fino al 2025 e cosa dicono davvero le conversioni per anno",
+                                       "Piano Registro Offerte: come sono stati aperti i permessi in produzione (motore a persone, non a livelli)",
+                                       "Piano Registro Offerte: registrato l\u0027import dello storico in produzione (1.795 offerte)"
+                                   ]
+                 },
+                 {
                      "build":  "20260904-1637",
                      "data":  "2026-09-04T16:37:00",
                      "hash":  "234760d992ff9e6141841276eca1bba77b3850aa",
