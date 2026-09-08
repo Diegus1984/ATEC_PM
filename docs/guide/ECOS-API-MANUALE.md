@@ -286,6 +286,21 @@ POST …/api.pm?ApiName=PeopleStampPost&Edit=true&AuthToken=<t>
 body: StampID=9504&StampDateTime=2026-09-01 08:00:00
 ```
 
+✅ **Provato davvero l'08/09/2026 alle 12:38** (ordine di Diego, sulla sua uscita del 04/09,
+`StampID` 10341189, con `api.it`): corpo `StampID=…&StampDateTime=2026-09-04 17:13:22&UserTZ=-120`
+→ `CODE=OK, MESSAGE=Correct Record Update`; riletta: ora nuova, `UpdateDate` = momento della
+scrittura. Rimessa a 17:12:22 con la stessa chiamata: ok. Fatti da tenere:
+- **`UserTZ=-120` basta** a soddisfare `StampDateTimeTZOffSet` (il `-11` della calibrazione).
+- Con `ReturnAllPostedRecord=1` torna il record **intero**: ~150 campi, compresi i nominativi
+  (`InsertNameComplete`, `TeamLeaderNameComplete`, `NotificationPreview`) — da filtrare a log.
+  Senza, torna solo `{"StampID": …}`.
+- `UpdateEmplID` = **8809** (l'utenza `api.it`): nell'audit di Ecos la modifica è firmata
+  dall'utente API, non dalla persona. `InsertEmplID` resta quello originale. `TypeCode` resta
+  `APP`, `StatusCode` `A` «Inserita»: Ecos non tiene l'ora originale, la storia sta solo da noi.
+- Dopo la scrittura la timbratura rientra nel nostro import incrementale (cursore su
+  `UpdateDate`): il valore coincide e non succede niente, ma la giornata viene ricontrollata.
+- Attrezzo: `tools/sonda_ecos_server.py PeopleStampPost --scrivi --edit --corpo … ` (§12).
+
 ### 4.3 Idempotenza — la regola che decide il design
 
 📘 «**Non ritentare alla cieca una Post**»: un timeout dopo che il server ha già scritto,
@@ -542,7 +557,8 @@ Costanti da conoscere: `RowsPerPage=500`, `MaxPages=2000`, `DallInizio=1900-01-0
 `PeopleStampPost` + `Edit=true` + `StampID` (già in `hr_punches.external_id`) +
 `StampDateTime` arrotondato; solo per le giornate in cui l'ora arrotondata differisce da
 quella timbrata; ogni invio registrato con data e autore; stati «Allineato / Da inviare /
-Inviato il». ⚠️ Da fare **solo con l'utente API dedicato** (§9.4) e dopo il sì sul fatto che
+Inviato il». ✅ La chiamata è **provata** (08/09/2026, §4.2): `StampID` + `StampDateTime` +
+`UserTZ=-120`, risposta «Correct Record Update». Resta da costruire il pulsante e il registro. ⚠️ Da fare **solo con l'utente API dedicato** (§9.4) e dopo il sì sul fatto che
 sovrascrivere l'ora timbrata in Ecos sia accettabile: la regola di Diego è che l'ora
 originale non deve mai sparire — se Ecos non tiene la storia, l'originale resta solo da noi.
 

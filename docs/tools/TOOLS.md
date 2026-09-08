@@ -104,6 +104,15 @@ python tools/sonda_ecos_server.py PeopleStampPeriodDayGetAll --filtro "EmplID==5
 python tools/sonda_ecos_server.py PeopleEmploymentGetALL --filtro "EmplID==5397" --tutte --campi EmplID,EmplCode,PersonStatusCode,HireDate,TerminationDate
 ```
 
+**Scrittura vera** (solo su ordine di Diego, mai da soli): `--scrivi` con `--edit` (modifica: la
+chiave `…ID` deve stare nel corpo, altrimenti la sonda si ferma) oppure `--inserisci` (record
+nuovo, NON idempotente), campi con `--corpo Campo=valore`, `--ritorna` per riavere il record intero.
+Provata l'08/09/2026 su una timbratura di Diego, spostata di un minuto e rimessa:
+
+```powershell
+python tools/sonda_ecos_server.py PeopleStampPost --scrivi --edit --corpo "StampID=10341189" --corpo "StampDateTime=2026-09-04 17:13:22" --corpo "UserTZ=-120"
+```
+
 `--tutte` stampa tutte le righe della pagina (i campi con nominativi restano fuori sempre),
 `--campi A,B,C` limita la stampa a quei campi: obbligatorio sulle API con dati personali
 (`PeopleEmploymentGetALL` porta indirizzi e date di nascita). 🪤 Il filtro vuole l'operatore

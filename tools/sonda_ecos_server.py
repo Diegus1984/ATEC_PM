@@ -103,12 +103,36 @@ function Prova($api, $body, $righe, $valori, $campi) {
   for ($i = 0; $i -lt $quante; $i++) {
     $riga = [ordered]@{}
     foreach ($n in $nomi) {
-      if ($sensibili -contains $n) { continue }
+      if ($sensibili -contains $n -or $n -like '*NameComplete' -or $n -eq 'NotificationPreview') { continue }
       if ($campi -and ($campi -notcontains $n)) { continue }
       $riga[$n] = $rows[$i].$n
     }
     $tag = if ($valori -ge 2) { "  RIGA $($i + 1)" } else { "  ESEMPIO (senza nominativi)" }
     $tag + ": " + ($riga | ConvertTo-Json -Compress)
+  }
+}
+function Scrivi($api, $body, $edit, $ritorna) {
+  $uri = $base + $api + '&DF=1&AppCode=ATEC_PM_sonda&AuthToken=' + [Uri]::EscapeDataString($tok)
+  if ($edit) { $uri += '&Edit=true' }
+  if ($ritorna) { $uri += '&ReturnAllPostedRecord=1' }
+  "### $api " + $(if ($edit) { '(Edit=true: modifica del record con la chiave nel corpo)' } else { '(INSERT: record nuovo)' })
+  "  corpo: " + (($body.Keys | ForEach-Object { $_ + '=' + $body[$_] }) -join '&')
+  try { $c = Chiama $uri $body } catch { "  HTTP KO: " + $_.Exception.Message; return }
+  if ($c.Length -eq 0) { "  risposta VUOTA (nessun JSON)"; return }
+  try { $j = $c | ConvertFrom-Json } catch { "  NON JSON: " + $c.Substring(0, [Math]::Min(300, $c.Length)); return }
+  $e = $j.ECOSAGILE_TABLE_DATA.ECOSAGILE_ERROR_MESSAGE
+  $msg = ("" + $e.MESSAGE) -replace "[`r`n]+", ' '
+  if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) }
+  "  CODE=$($e.CODE) ERROR_CODE=$($e.ERROR_CODE) RECORDCOUNT=$($e.RECORDCOUNT) MESSAGE=$msg"
+  $d = $j.ECOSAGILE_TABLE_DATA.ECOSAGILE_DATA
+  if (-not ($d -is [PSCustomObject]) -or -not $d.ECOSAGILE_DATA_ROW) { return }
+  foreach ($row in @($d.ECOSAGILE_DATA_ROW)) {
+    $riga = [ordered]@{}
+    foreach ($n in $row.PSObject.Properties.Name) {
+      if ($sensibili -contains $n -or $n -like '*NameComplete' -or $n -eq 'NotificationPreview') { continue }
+      $riga[$n] = $row.$n
+    }
+    "  RISPOSTA: " + ($riga | ConvertTo-Json -Compress)
   }
 }
 '''
@@ -125,6 +149,13 @@ def corpo(args) -> str:
         if args.filtro else "@{}"
     valori = 2 if args.tutte else (1 if args.valori else 0)
     campi = "@(" + ", ".join(ps_stringa(c.strip()) for c in args.campi.split(",") if c.strip()) + ")"         if args.campi else "$null"
+    if args.scrivi:
+        body = "@{ " + "; ".join(
+            f"{ps_stringa(k)} = {ps_stringa(v)}" for k, v in filtri(args.corpo).items()) + " }"             if args.corpo else "@{}"
+        for api in args.api:
+            righe.append(f"Scrivi {ps_stringa(api)} {body} ${'true' if args.edit else 'false'} ${'true' if args.ritorna else 'false'}")
+        righe.append("$tok = $null")
+        return chr(10).join(righe) + chr(10)
     for api in args.api:
         if args.calibra:
             righe.append(f"Prova {ps_stringa(api)} '' 1 0 $null")
@@ -153,13 +184,26 @@ def main():
     p.add_argument("--valori", action="store_true", help="stampa la prima riga (senza nominativi)")
     p.add_argument("--tutte", action="store_true", help="stampa TUTTE le righe della pagina (senza nominativi)")
     p.add_argument("--campi", metavar="A,B,C", help="stampa solo questi campi (per le API con dati personali)")
+    p.add_argument("--scrivi", action="store_true",
+                   help="SCRITTURA VERA su Ecos (solo su ordine di Diego): corpo con --corpo, e --edit oppure --inserisci")
+    p.add_argument("--corpo", action="append", metavar="Campo=valore", help="campo del record da scrivere, ripetibile")
+    p.add_argument("--edit", action="store_true", help="con --scrivi: Edit=true, modifica il record con la chiave nel corpo")
+    p.add_argument("--inserisci", action="store_true", help="con --scrivi: record NUOVO (non idempotente: mai ritentare alla cieca)")
+    p.add_argument("--ritorna", action="store_true", help="con --scrivi: ReturnAllPostedRecord=1, riavere il record intero")
     a = p.parse_args()
 
+    if a.scrivi:
+        if a.edit == a.inserisci:
+            raise SystemExit("--scrivi vuole esattamente uno fra --edit (modifica) e --inserisci (record nuovo).")
+        if not a.corpo:
+            raise SystemExit("--scrivi senza --corpo: niente da scrivere.")
+        if a.edit and not any(k.strip().endswith("ID") for k in filtri(a.corpo)):
+            raise SystemExit("--edit senza una chiave (…ID) nel corpo: Ecos risponderebbe -17, o peggio inserirebbe.")
     for nome in a.api:
         # Le API di scrittura si riconoscono dal verbo nel nome (Post/Put/Set/Delete); le
         # letture non hanno sempre «Get» dentro (es. PeopleAbsenceRequestRefineWorkAll).
-        if not a.calibra and re.search(r"Post|Put|Set|Delete", nome):
-            raise SystemExit(f"{nome}: senza --calibra si chiamano solo API di lettura.")
+        if not a.calibra and not a.scrivi and re.search(r"Post|Put|Set|Delete", nome):
+            raise SystemExit(f"{nome}: senza --calibra (o --scrivi su ordine) si chiamano solo API di lettura.")
     if not a.calibra and not a.filtro:
         print("(nessun filtro: poche righe per non pesare sul limitatore di Ecos)")
 
