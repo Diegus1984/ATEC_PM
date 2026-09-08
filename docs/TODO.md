@@ -602,12 +602,41 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
 - [ ] 🟡 `AppCode=ATEC_PM` su tutte le chiamate (audit lato Ecos) · `RowsPerPage` 500 → 1000
       · log di `RECORDCOUNT`/`LASTPAGE` per pagina · `ResultFields` sulle API larghe (release
       Ecos ≥ 6.10, da verificare).
-- [~] Utente API **dedicato** al posto dell'account personale (la guida lo vieta): **fatto il
-      08/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok, diritti misurati dal
-      server** (`tools/sonda_ecos_server.py --calibra`): legge tutto ciò che l'import usa e può
-      scrivere le timbrature (`PeopleStampPost`). **Negati**, da chiedere a SoftAgile (manuale
-      §9.4): `PeopleAbsenceRequestMSS` (4), `PeopleOvertimeApproveMSS` (4), `TimesheetAnalysis` (1),
-      `PeopleExpressLight` (1).
+- [x] Utente API **dedicato** al posto dell'account personale: **fatto il 08/09/2026, `api.it`**.
+      Diritti misurati dal server: legge tutto ciò che l'import usa, scrive le timbrature
+      (`PeopleStampPost`) e — **dal pomeriggio dell'08/09, dopo la mail a Ecos** — anche le
+      richieste di assenza (`PeopleAbsenceRequestPost`) e gli straordinari
+      (`PeopleOvertimeRequestPost`). Restano negati `TimesheetAnalysis` e `PeopleExpressLight`.
+
+- [ ] 🔴 **DOMANI (09/09/2026) — richieste e causali da ATEC PM verso Ecos** (Diego, 08/09 sera:
+      «non abbiamo tempo ora, lo implementiamo domani»). Il diritto c'è, la prova è fatta su
+      Diego (richiesta 136492: inserita già ACCEPTED, passata a REJECT, cancellata). Cosa fare:
+      1. **Approva / Rifiuta / Annulla sulle richieste nate su Ecos**, da ATEC PM:
+         `PeopleAbsenceRequestPost` con `Edit=true` + `AbsenceRequestID` + `StatusCode`
+         (`ACCEPTED` / `REJECT`; annulla = `Delete=1`), poi lo stato locale. Togliere la guardia
+         `VaDecisaSuEcos` (`HrAttendanceService.Assenze.cs`) e rimettere i pulsanti in
+         `RichiestePage.tsx` (riga e dettaglio). Il motivo del rifiuto in `ApproveReply` (da
+         provare se Ecos lo tiene). 🪤 `DataApprove`/`ApproveID` restano vuoti quando lo stato lo
+         scrive l'API: l'approvatore risulta l'utenza `api.it` (8809), l'autore vero sta da noi.
+      2. **Nuova richiesta da ATEC PM** (`CreateAbsenceRequest`) → nasce anche su Ecos con
+         `StatusCode=REQUEST` (così il responsabile la vede in Ecos e la decisione può arrivare
+         da entrambe le parti); salvare `ecos_absence_id` sulla riga (source resta `ATEC`).
+      3. **Giustifica causale dal cartellino** (`SaveGiustifica`, dialogo «Inserisci causale»)
+         → su Ecos come `ACCEPTED` (la mette il responsabile), con `ecos_absence_id`.
+      4. Corpo minimo provato: `EmplID`, `DateBegin` (`yyyy-MM-dd 00:00:00`), `FullDay` (0/1),
+         `HourBegin`/`HourEnd` per le ore, `CategoryID`, `StatusCode`, `Note`; `DateEnd` per
+         gli intervalli. Qui **`EmplID` viene onorato** (a differenza delle timbrature, che
+         vogliono il `BadgeCode`). La risposta con `ReturnAllPostedRecord=1` porta
+         `AbsenceRequestID`: salvarlo subito, mai ritentare alla cieca (§4.3).
+      5. **`CategoryID` va letto da `AnagTSCategoryGetAll`** e mappato per `CategoryCode`, mai
+         cablato: al 08/09/2026 `F`=2313 Ferie, `P`=2314 ROL, `M`=2315 Malattia, `I1`=2318
+         Infortunio, `F_ND`=2299 Assenza (`S`=2310 inattiva). Nostri tipi: VACATION→F,
+         PERMIT→P, SICKNESS→M, INJURY→I1, OTHER→F_ND.
+      6. La richiesta inserita **compare subito** in `PeopleAbsenceRequestGetAll` (le timbrature
+         no): la verifica dopo la scrittura si può fare. L'import la ritrova per
+         `ecos_absence_id` (`SyncAbsences`) e non la duplica.
+      7. Chi scrive su Ecos deve avere l'EmplID (`employees.ecos_empl_id`, oggi 24/24).
+      Test: `InvioEcosTests` come modello (Ecos finto con `EcosFinto`).
 
 ---
 
