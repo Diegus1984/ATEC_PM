@@ -180,4 +180,182 @@
 | `PeoplePost` | ❌ | JobData (RightID 2) |
 | `PeopleAbsenceRequestPost` | ❌ | PeopleAbsenceRequestMSS (RightID 4) |
 | `PeopleOvertimeRequestPost` | ❌ | PeopleOvertimeApproveMSS (RightID 4) |
-| `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetESS` | `-99` | non esistono (i nomi giusti sono nella tabella sopra) |
+| `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetALL`, `Timesheet2GetESS` | `-99` | non esistono (i nomi giusti sono nella tabella sopra) |
+
+---
+
+# Dettaglio delle API che ci riguardano (scheda «API_READ» della Library, 08/09/2026)
+
+> Ogni API ha una scheda raggiungibile direttamente:
+> `https://ha.ecosagile.com/dd/extranet.pm?ClientID=10305#DetailPage.pm?ComponentID=API_READ&PageID=API_READ&Key0=<ApiName>&MenuVoiceID=1757&ClientID=10305`
+> con **Main Data** (servizio richiesto, **livello utente richiesto**, criteria), **Data mapping**
+> (tutti i campi, tipo, lunghezza, default) e **Parameters** (= l'ALLOWED LIST dei filtri: fuori da
+> qui è `-13`), più la scheda **Enabled users** (chi ha il diritto, con il valore del RightID).
+> Funziona anche per le API che la lista non mostra (`PeopleStampPost`, `PeopleAbsenceRequestPost`).
+
+## `PeopleStampGetAll` — timbrature (Service `PeopleStamp`, livello 2)
+
+**Filtri ammessi (15)**: `Abnormal`, `BadgeCode`, `Delete`, `EmplID`, `FraudAlert`, `PayrollCode`,
+`ReadLanguage`, `StampActivityID`, `StampDate`, `StampDateTime`, `StampID`, `StampLocationCode`,
+`StampLocationID`, `UpdateDate`, `YearMonth`. 🪤 `EmplCode` **non** è filtrabile; `Delete` sì
+(`Delete==0` per escludere le cancellate, o leggerlo per propagarle); `StampDate` è la data sola.
+
+**Campi (44)**: `StampID`, `StampDate`, `EmplID`, `EmplCode`, `Delete`, `NameComplete`,
+`StampActivityID`, `Regular`, `Single`, `VersusCode`, `Discard`, `BadgeCode`, `Abnormal`, `TypeCode`,
+`YearMonth`, `GPSAccuracy`, `CheckDate`, `CausalCode`, `FraudAlert` («campo sospetto: sync
+irregolare dell'APP»), `QRCode`, `Note`, `StampActivityDescShort`, `UserTZ`, `StampCausalID`,
+`StampCausalCode`, `StampCausalDescShort`, `CF`, `StampDateTime`, `GPSAddress`, `PayrollCode`,
+`StatusCode`, `PhoneDateTime`, `CompanyCode`, `PictureName`, `UpdateDate`, `GPSLat`, `GPSLong`,
+`LocationID`, `AppStampID`, `InsertDate`, `UniqueDeviceID`, `StampLocationCode`, `StampLocationID`,
+`StampLocationName`. Noi ne leggiamo 10.
+
+**Enabled users** (tutti ruolo «Temporaneo», livello 2, diritto **4**): `maria.carretta`,
+`api.eclock1`, `api.eclock2`, `api.eclock3` (i **terminali di timbratura** passano da qui),
+`api.it` (ultimo accesso 08/09 09:18 = la nostra calibrazione).
+
+## `PeopleStampPost` — scrittura timbrature (Service `PeopleStampPost`, livello 2, Post/Put)
+
+**Campi (40)**: `WriteLanguage`, **`StampID`** (chiave per `Edit=true`), `Delete`, `StampActivityID`,
+`StampAccountID`, `StampAction`, `VersusCode`, `BadgeCode`, `IPLat`, `IPLong`, `TypeCode` (default
+**`ECLOCK`**), `GPSAccuracy`, `QRCode`, `GreenPass`, `Note`, `PresenceDeviceID`, `UserTZ`,
+`StampActivityTaskID`, `StampCausalID` (calcolato dal `PresenceDeviceID`), `RowHash`, `Termoscanner`,
+`DayI`, `Fingerprint`, **`StampDateTime`**, `DeviceInfraRedReaderValue`, `GPSAddress`, `StatusCode`
+(default **`A`**), `Picture` (File FS), `PhoneDateTime`, `PictureName`, `GPSLat`, `GPSLong`,
+`AppStampID`, `UniqueDeviceID`, `AppCounter`, `AppCounterDateTime`, `StampLocationID`, `CommonName`,
+`AppUpdateDate`, `AppInsertDate`. Nessun campo marcato obbligatorio nella scheda; la validazione a
+vuoto si è fermata su `StampDateTimeTZOffSet` (colonna interna, non in elenco): probabilmente
+si soddisfa passando **`UserTZ`** (intero, come nei vecchi sample: `getTimezoneOffset()`).
+
+**Enabled users**: gli stessi cinque di `PeopleStampGetAll`, compresi i tre `api.eclock*`: è
+l'API con cui i terminali scrivono le timbrature. `api.it` ✅.
+
+## `PeopleAbsenceRequestGetAll` — richieste di assenza (Service `PeopleAbsenceRequest`, livello 2)
+
+**Filtri ammessi (13)**: `AbsenceRequestID`, `CompanyCode`, `DateBegin`, `DateEnd`, `Duration`,
+`EmplID`, `InsertDate`, `LocationID`, `ReadLanguage`, `SourceCode`, `StatusCode`, `UpdateDate`,
+`YearMonth`. 📌 **`DateBegin`/`DateEnd`/`YearMonth` sono filtrabili**: il periodo si può chiedere
+(dentro la finestra implicita dei ~90 giorni).
+
+**Campi (30)**: `AbsenceRequestID` (chiave interna), `AbsenceRequestCode` (id visibile all'utente),
+`DateBegin`, `DateEnd` (opzionale su un giorno), `FullDay` (0/1), `HourBegin`, `HourEnd`,
+`HourBeginExpect`, `HourEndExpect`, `YearMonth`, `Duration`, `CategoryID`, `CategoryCode`,
+`CategoryDescShort`, `DataApprove`, `ApproveNameComplete`, `EmplID`, `NameComplete`, `CompanyCode`,
+`SourceCode` (fonte dell'inserimento), `Note`, `ApproveReply`, **`StatusCode`** = `ACCEPTED`
+(accettata) / `REQUEST` (richiesta) / **`REJECT`** (respinta), `ResidualToDate`, `ResidualEndYear`,
+`DataSourceCode`, `InsertDate`, `UpdateDate`, `UserTZ`, **`Delete`** (0/1, eliminazione logica).
+🪤 Il nostro `SyncAbsences` confronta con `REJECTED` e `CANCELLED`: **`REJECT` non combacia** e una
+respinta finisce come «in attesa» (TODO §11).
+
+**Enabled users**: `maria.carretta`, `api.it` (diritto 4).
+
+## `PeopleAbsenceRequestPost` — scrivere una richiesta (Service `PeopleAbsenceRequestMSS`, **livello 3 - Manager**, Post/Put)
+
+**Campi (22)**: `AbsenceRequestID` (chiave), `DateBegin`, `DateEnd`, `FullDay`, `HourBegin`,
+`HourEnd`, `CategoryID`, `CategoryDescShort`, `ApproveID`, `DataApprove`, `EmplID`, `NameComplete`,
+`SourceCode` (default **`ETIMEM`**), `Note`, `ApproveReply`, `StatusCode` (default **`REQUEST`**),
+`AppAbsenceRequestID`, `WriteLanguage`, `AppUpdateDate`, `AppInsertDate`, `UserTZ`, `Delete`
+(default 0). Quindi: una richiesta nasce **`REQUEST`** (approvazione in Ecos) salvo scrivere
+`StatusCode`/`ApproveID`/`DataApprove` (❓ da provare se accettati in insert). La causale è
+**`CategoryID`** (id), non il codice: si prende da `AnagTSCategoryGetAll`.
+
+**Enabled users: nessuno** — nemmeno `maria.carretta`. Serve `PeopleAbsenceRequestMSS` con diritto 4
+**e** livello **3 - Manager** per `api.it` (oggi è livello 2).
+
+## `Timesheet2GetAll` — NON è quello che dice la guida (Service `TimesheetAnalysis`, livello 2)
+
+Descrizione della scheda: **ore del timesheet di progetto** per persona (`EmplID`), giorno
+(`TSDate`), progetto (`ActivityID`), ore effettive (`HourWork`). **Aggiornato di notte** (i dati
+valgono fino al giorno prima), riepilogo per progetto senza dettaglio task, tabella normalizzata
+rigenerata ogni notte **senza flag `Delete`**. Le assenze ci passano come `Type`/`CategoryCode`,
+ma è un estratto del timesheet, non delle richieste.
+**Campi (14)**: `EmplID`, `EmplCode`, `NameComplete`, `EmplExternalCode`, `TSDate`, `SourceCode`,
+`Type`, `CategoryCode`, `ActivityID`, `ActivityCode`, `CausalCategoryExternalCode`, `HourWork`,
+`PayrollCode`, `YearMonthS`. **Filtri (11)**: `ActivityCode`, `ActivityID`, `CategoryCode`,
+`EmplCode`, `EmplID`, `MonthI`, `TSDate`, `Type`, `UpdateDate`, `YearI`, `YearMonthS`.
+**Enabled users: nessuno.**
+
+## `PeopleTimePresenceExpectGetAll` — l'orario teorico e il conteggio di Ecos (Service `PersonWorkshift`, livello 2)
+
+«Utilizzata per estrarre l'orario teorico di lavoro», chiavi `EmplID`+`TSDate`. È il **cartellino
+calcolato da Ecos**, giorno per giorno: `WorkHourBegin`/`WorkHourEnd`, `WorkHourBeginPause`/
+`WorkHourEndPause`, `WeekDayCode`, `WorkshiftCode` (turno), **`WorkHourExpected`** (ore attese),
+**`WorkHourReal`** (ore da timbrature), **`WorkHourRegular`** (ore ordinarie),
+**`OverTimeHourTotal`** (straordinari), `AbsenceHour`, `VacationHour`, `IllnessHour`,
+`MaternityHour`, `AccidentHour`, `OtherAbsenceHour`, `SupplementHourExpect`, `CdCCode`,
+**`DepartmentID`/`DepartmentCode`/`DepartmentDescShort`** (il reparto della persona), `YearMonthS`,
+`WeekDayDescLong`, `UpdateDate` (27 campi). **Filtri (11)**: `CompanyCode`, `DepartmentCode`,
+`DepartmentID`, `EmplCode`, `EmplID`, `InsertDate`, `ReadLanguage`, `TSDate`, `UpdateDate`,
+`YearMonthS`, `YearWeekID`. Criteria `ExcludeWFCount=0`.
+📌 È il **confronto naturale col nostro motore** (ore attese, ordinarie, straordinario secondo Ecos)
+e la fonte del reparto. Diritto di `api.it` ❓ da calibrare.
+
+## `AnagTSCategoryGetAll` — le causali (Service `TimesheetCausal`, livello 2)
+
+«Elenco dei tipi di richiesta assenza/straordinario (attivi e non)». **Campi (12)**: `CategoryID`,
+`CategoryCode`, `DescShort`, `TSType`, `isAbsence`, `RowOrder`, `StatusCode`, `FullDayDefault`,
+`OverTime`, `UpdateDate`, `SmartWork`, `RequestNoteRequired`. **Filtri (2)**: `ReadLanguage`,
+`UpdateDate`. È da qui che si prende il **`CategoryID`** per `PeopleAbsenceRequestPost`.
+Diritto di `api.it` ❓ da calibrare.
+
+## `PeopleStampPeriodDayGetAll` — un giorno = una riga, per 90 giorni (Service `PersonStamp`, livello 2)
+
+«Per ogni giorno/persona le ore da timbratura e le ore teoriche di lavoro», chiavi `EmplID`+`StampDate`,
+criteria **`StampDate>=oggi-90 AND StampDate<oggi`** (per data del giorno, non per `UpdateDate`).
+**Campi (18)**: `EmplID`, `StampDate`, `YearMonthS`, `EmplCode`, `DepartmentID`, `WorkHourExpected`
+(ore teoriche da contratto), `DayHoursI` (ore timbrate, decimali), `DepartmentCode`, **`Stamp1`…`Stamp6`**
+(gli orari timbrati del giorno, fino a sei), `CdCCode`, `Abnormal`, `TotOvertime`, `TotSupplement`.
+**Filtri (11)**: `Abnormal`, `CompanyCode`, `DepartmentCode`, `DepartmentID`, `EmplID`, `MonthI`,
+`PayrollCode`, `StampDate`, `UpdateDate`, `YearI`, `YearMonthS`.
+📌 È la **fotografia per giorno** che manca a `PeopleStampGetAll`: 90 giorni per data vera, senza
+`StampID` però (solo gli orari). Candidata per la risincronizzazione di un mese e per il confronto
+col nostro cartellino. Diritto di `api.it` ❓.
+
+## `PeopleOvertimeRequestPost` — richiesta di straordinario (Service `PeopleOvertimeApproveMSS`, Post/Put)
+
+**Campi (21)**: `PeopleOvertimeRequestID` (chiave), `EmplID`, `OvertimeDate`, `ActivityID`,
+`OvertimeHourNumber`, `ActivityTaskID`, `CategoryID`, `HourBegin`, `DescLong`, `OvertimeSiteCode`
+(default `COMPANY`), `ApproveReply`, `StatusCode` (default `REQUEST`), `Delete` (default 0),
+`WriteLanguage`, `UserTZ`, `SourceCode` (default `ETIME`), `AppRequestID`, `AppUpdateDate`,
+`AppInsertDate`, `ApproveID`, `DataApprove`. Livello richiesto non indicato nella scheda.
+
+## `PeopleBadgeGetAll` — badge (Service `Badge`, modulo «Servizi generali / Beni&Benefit», livello 2)
+
+Fuori dalla lista della Library ma con la sua scheda. **Campi (15)**: `EmplID`, `StartDate`,
+`PeopleBadgeID`, `EmplCode`, `BadgeTypeID`, `BadgeCode`, `NameComplete`, `BirthDate`, `BadgeTypeCode`,
+`BadgeTypeDescShort`, `UpdateDate`, `StatusCode`, `EnableGuest`, `CompanyCode`, `InForce`.
+**Filtri (5)**: `BadgeCode`, `BadgeTypeCode`, `CompanyCode`, `EmplID`, `UpdateDate`. Nessun criterio
+implicito: si chiede tutto (come facciamo, dal 1900).
+
+## `PeopleEmploymentGetALL` — le persone in forza (Service `PersonalData`, livello 2)
+
+Criteria: in forza, o cessate da meno di 3 mesi. **90 campi**, fra cui: `EmplID`, `EmplCode`,
+`NameFirst`, `NameLast`, `NameComplete`, `CF`, `Gender`, `BirthDate`, `CompanyCode`,
+`DepartmentDescShort`, `CdCCode`/`CdCDescShort`, `DefaultEMailAddress`, `CompanyMobile`,
+`PartTimeTypeDescShort`, `ParttimePercent`, `PersonStatusCode`, `HireDate`, `TerminationDate`,
+`ContractEndDateD`, `JobCodeCode`/`JobCodeDescShort`, `LevelID`/`LevelDescShort`,
+`CategoryCode`/`CategoryDescShort`, `ContractCode`/`ContractDescShort`, `PositionCode`,
+`TeamLeaderID`/`TeamLeaderCode`/`TeamLeaderNameFirst`/`TeamLeaderNameLast`, `BranchCode`,
+`PayrollCode`, `TSType`, indirizzi (legale, postale, di casa), dati di nascita e cittadinanza,
+`UpdateDate`. **Filtri (8)**: `CompanyID`, `EmplID`, `LocationID`, `PersonTypeCode`, `ReadLanguage`,
+**`SyncUpdateDate`**, `TerminationDate`, `UpdateDate`. ⚠️ Contiene dati personali ben oltre il
+necessario (indirizzi, nascita): se si usa, `ResultFields` con i soli campi che servono.
+
+## `PeopleExpressLightGetAll` — anagrafica leggera per integrazioni (Service `PeopleExpressLight`, livello 2)
+
+«Nome, cognome, ruolo, data di assunzione, unità organizzativa; senza documenti, abilitazioni,
+dati retributivi». Criteria `inForce=1`. **Campi (21)**: `EmplID`, `NameComplete`, `CF`,
+`CompanyCode`, `CompanyDescShort`, `DepartmentDescShort`, `DepartmentCode`, `PhoneOffice`,
+`PhoneCompany`, `LegalAddressComplete`, `LocationName`, `LocationCode`, `LocationAddressComplete`,
+`DefaultEMailAddress`, `HireDate`, `JobCodeCode`, `JobCodeDescShort`, `BranchDescShort`, `BranchCode`,
+`TeamLeaderNameComplete`, `WorkSiteAddressComplete`. 🪤 **Non ha `EmplCode`**: per il ponte
+`EmplID`↔`EmplCode` serve `PeopleEmploymentGetALL` o `PeopleBadgeGetAll` (che li ha entrambi).
+**Filtri (6)**: `EmplID`, `HireDate`, `ReadLanguage`, `SourceUpdateDate`, `SyncUpdateDate`,
+`UpdateDate`. ❌ negata a `api.it`.
+
+## `AnagDepartmentGetAll` — reparti (Service `Department`, livello 2)
+
+**Campi (21)**: `DepartmentID`, `DepartmentCode`, `EffDate`, `BranchID`, `BranchDescShort`,
+`BranchCode`, `DescShort`, `DescLong`, `ManagerID`, `ManagerCode`, `ManagerNameComplete`
+(il responsabile del reparto), `FatherID`/`FatherCode`/`FatherDescShort` (gerarchia), `TypeDescShort`,
+`StatusCode`, `StatusDescShort`, `InsertDate`, `UpdateDate`, `RowOrder`, `RootLevel`.
+**Filtri (6)**: `BranchCode`, `BranchID`, `InsertDate`, `ReadLanguage`, `StatusCode`, + 1 non letto.

@@ -592,6 +592,10 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       giorno oltre i 60 giorni (Ecos torna zero righe → cancellazione). Correzione: cancellare
       solo dentro la finestra che Ecos può restituire; avviso a video. **Intanto non premere
       «Reimporta tutto»** né risincronizzare giorni vecchi. Dettagli: manuale §11.0.
+- [ ] 🟠 **Stato `REJECT` delle richieste non riconosciuto.** La scheda di
+      `PeopleAbsenceRequestGetAll` dice `StatusCode` = `ACCEPTED` / `REQUEST` / **`REJECT`**;
+      `SyncAbsences` confronta con `REJECTED` e `CANCELLED`, quindi una richiesta respinta finisce
+      come «in attesa». Allineare la mappa (`REJECT` → REJECTED, `REQUEST` → PENDING).
 - [ ] 🔴 **Flag `Delete` non letto.** La guida dice che i record cancellati in Ecos restano
       visibili con `Delete=1`: una timbratura tolta là continua ad arrivare e a contare nel
       cartellino, e nemmeno l'import completo la rimuove (confronta gli ID, e l'ID c'è ancora).

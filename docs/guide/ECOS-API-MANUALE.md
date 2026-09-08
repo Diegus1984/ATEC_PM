@@ -616,7 +616,11 @@ quella persona**. Da fare:
 2. in `ImportWindowAsync` non cancellare mai fuori dalla finestra dei 60 giorni, persona o no;
 3. dirlo a video: «Reimporta tutto» rilegge gli ultimi 60 giorni, non la storia.
 Nel frattempo: **non premere «Reimporta tutto»** e non risincronizzare giorni vecchi.
-Alternativa da valutare: `PeopleStampPeriodDayGetAll` filtra per `StampDate` (90 giorni).
+Alternativa da valutare: `PeopleStampPeriodDayGetAll` (catalogo) dà una riga per giorno/persona
+con gli orari `Stamp1`…`Stamp6`, filtrata per **`StampDate`** (ultimi 90 giorni): è la fotografia
+per giorno che serve alla risincronizzazione, anche se senza `StampID`.
+Inoltre `PeopleStampGetAll` accetta il filtro **`Delete`**: si può chiedere `Delete==1` per
+sapere cosa è stato cancellato negli ultimi 60 giorni invece di dedurlo per differenza.
 
 ### 11.1 🔴 Non leggiamo il flag `Delete`
 
