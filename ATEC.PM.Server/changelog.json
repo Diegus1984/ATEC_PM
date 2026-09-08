@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1445",
+                     "data":  "2026-09-08T14:45:16",
+                     "hash":  "dd7fccfcfa0419e183241fcd5ac26e123db9fc0a",
+                     "modifiche":  [
+                                       "Invia a Ecos: le rettifiche si inseriscono su Ecos come timbrature nuove",
+                                       "Docs: «Invia a Ecos» in produzione, confronto al minuto"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1411",
                      "data":  "2026-09-08T14:12:11",
                      "hash":  "547534f77a567e040859323e0e59d2500cc4e0af",
