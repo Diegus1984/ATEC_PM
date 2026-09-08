@@ -20,6 +20,10 @@ export interface HrPunch {
   canSendToEcos: boolean
   /** Inviabile e con un orario su Ecos diverso da quello arrotondato. */
   toSendToEcos: boolean
+  /** Rettifica che su Ecos non esiste: l'invio la INSERISCE (poi diventa una timbratura di Ecos). */
+  ecosInsert: boolean
+  /** Inserimento tentato senza risposta certa: non si rimanda da sola, da verificare su Ecos. */
+  ecosUncertain: boolean
 }
 
 /** Una riga del registro degli invii a Ecos di una giornata. */
@@ -45,7 +49,10 @@ export interface HrEcosSendResult {
   success: boolean
   message: string
   total: number
+  /** Orari modificati su Ecos. */
   sent: number
+  /** Rettifiche inserite su Ecos come timbrature nuove. */
+  inserted: number
   failed: number
   skipped: number
   errors: string[]

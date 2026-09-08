@@ -90,6 +90,10 @@ public class HrPunchDto
     public bool CanSendToEcos { get; set; }
     /// <summary>Inviabile e con un orario su Ecos diverso da quello arrotondato.</summary>
     public bool ToSendToEcos { get; set; }
+    /// <summary>Rettifica che su Ecos non esiste: l'invio la INSERISCE (poi diventa una timbratura di Ecos).</summary>
+    public bool EcosInsert { get; set; }
+    /// <summary>Inserimento tentato senza risposta certa: non si rimanda da sola, da verificare su Ecos.</summary>
+    public bool EcosUncertain { get; set; }
 }
 
 public class HrImportResultDto
@@ -206,7 +210,10 @@ public class HrEcosSendResultDto
     public string Message { get; set; } = "";
     /// <summary>Timbrature di Ecos della giornata.</summary>
     public int Total { get; set; }
+    /// <summary>Orari modificati su Ecos.</summary>
     public int Sent { get; set; }
+    /// <summary>Rettifiche inserite su Ecos come timbrature nuove.</summary>
+    public int Inserted { get; set; }
     public int Failed { get; set; }
     /// <summary>Non inviabili: l'arrotondamento cambierebbe giorno.</summary>
     public int Skipped { get; set; }

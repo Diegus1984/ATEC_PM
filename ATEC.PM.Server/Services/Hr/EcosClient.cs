@@ -45,7 +45,16 @@ public record EcosAbsenceDay(
 public sealed class EcosApiException : Exception
 {
     public EcosApiException(string message) : base(message) { }
+
+    /// <summary>
+    /// true = errore di trasporto (timeout, rete): la richiesta PUÒ essere stata eseguita.
+    /// Per un inserimento vuol dire «non ritentare alla cieca» (guida §4.3).
+    /// </summary>
+    public bool EsitoIncerto { get; init; }
 }
+
+/// <summary>Il record che Ecos restituisce dopo un inserimento di timbratura (ReturnAllPostedRecord=1).</summary>
+public record EcosStampInserted(string StampId, string EmplId, string EmplCode, DateTime? StampDateTime);
 
 /// <summary>
 /// Client dell'API EcosAgile («eTime»). Port fedele di <c>Api/EcosApiManager.vb</c> del
@@ -459,6 +468,88 @@ public class EcosClient
         throw new EcosApiException($"{apiName}: {messaggio} (CODE={codice}).{spiegazione}");
     }
 
+    /// <summary>
+    /// Il badge ATTIVO di una persona: è così che <c>PeopleStampPost</c> in inserimento
+    /// identifica il dipendente (provato l'08/09/2026: <c>EmplID</c> nel corpo viene ignorato e
+    /// nasce un record senza persona, invisibile). Null se la persona non ha un badge attivo.
+    /// </summary>
+    public async Task<string?> ActiveBadgeCodeAsync(string token, int emplId, CancellationToken ct = default)
+    {
+        List<Dictionary<string, string>> righe = await FetchTutteLePagineAsync(
+            "PeopleBadgeGetAll", token, CampiBadge, DallInizio, ct, ("EmplID", $"={emplId}"));
+        return righe
+            .Where(r => string.Equals(r.GetValueOrDefault("StatusCode"), "A", StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.GetValueOrDefault("BadgeCode", "").Trim())
+            .FirstOrDefault(b => b.Length > 0);
+    }
+
+    /// <summary>
+    /// Inserisce una timbratura NUOVA su Ecos (<c>PeopleStampPost</c> senza <c>Edit</c>).
+    /// 🪤 Non idempotente: un timeout dopo la scrittura ha già creato il record
+    /// (<see cref="EcosApiException.EsitoIncerto"/>): mai ritentare alla cieca. La risposta
+    /// porta il record intero: la chiave e la persona a cui Ecos l'ha attaccata, da verificare.
+    /// </summary>
+    public async Task<EcosStampInserted> InsertStampAsync(
+        string token, string badgeCode, DateTime quando, string direction, string? note, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(badgeCode))
+            throw new EcosApiException("PeopleStampPost: senza BadgeCode la timbratura nascerebbe senza persona.");
+
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleStampPost&ReturnAllPostedRecord=1&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        var campi = new Dictionary<string, string>
+        {
+            ["BadgeCode"] = badgeCode.Trim(),
+            ["StampDateTime"] = quando.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ["VersusCode"] = NightShift.IsEntry(direction) ? "IN" : "OUT",
+            ["StatusCode"] = "A",
+            ["UserTZ"] = UserTz(quando).ToString(CultureInfo.InvariantCulture),
+        };
+        if (!string.IsNullOrWhiteSpace(note)) campi["Note"] = note.Length > 200 ? note[..200] : note;
+        using var form = new FormUrlEncodedContent(campi);
+        string body = await PostAsync(url, form, ct);
+        Dictionary<string, string> riga = RigaScrittura(body, "PeopleStampPost");
+        string stampId = riga.GetValueOrDefault("StampID", "").Trim();
+        if (stampId.Length == 0)
+            throw new EcosApiException("PeopleStampPost: inserimento riuscito ma senza StampID nella risposta.") { EsitoIncerto = true };
+        return new EcosStampInserted(
+            stampId, riga.GetValueOrDefault("EmplID", "").Trim(), riga.GetValueOrDefault("EmplCode", "").Trim(),
+            ProvaData(riga.GetValueOrDefault("StampDateTime", ""), out DateTime d) ? d : null);
+    }
+
+    /// <summary>Cancellazione logica (<c>Edit=true</c> + <c>Delete=1</c>): il record resta, marcato.</summary>
+    public async Task DeleteStampAsync(string token, string stampId, CancellationToken ct = default)
+    {
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleStampPost&Edit=true&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["StampID"] = stampId.Trim(),
+            ["Delete"] = "1",
+        });
+        EsitoScrittura(await PostAsync(url, form, ct), "PeopleStampPost");
+    }
+
+    /// <summary>La prima riga di dati di una Post riuscita (con <c>ReturnAllPostedRecord=1</c>).</summary>
+    internal static Dictionary<string, string> RigaScrittura(string json, string apiName)
+    {
+        EsitoScrittura(json, apiName);
+        using JsonDocument doc = ParseDocumento(json, apiName);
+        var vuota = new Dictionary<string, string>();
+        if (!doc.RootElement.TryGetProperty("ECOSAGILE_TABLE_DATA", out JsonElement tabella)
+            || !tabella.TryGetProperty("ECOSAGILE_DATA", out JsonElement data)
+            || data.ValueKind != JsonValueKind.Object
+            || !data.TryGetProperty("ECOSAGILE_DATA_ROW", out JsonElement rows))
+            return vuota;
+        JsonElement row = rows.ValueKind == JsonValueKind.Array
+            ? (rows.GetArrayLength() > 0 ? rows[0] : default)
+            : rows;
+        if (row.ValueKind != JsonValueKind.Object) return vuota;
+        var esito = new Dictionary<string, string>();
+        foreach (JsonProperty p in row.EnumerateObject()) esito[p.Name] = Testo(row, p.Name);
+        return esito;
+    }
+
     /// <summary>Richieste di assenza / ferie / permessi da Ecos.</summary>
     public async Task<List<EcosAbsenceRequest>> GetAbsenceRequestsAsync(
         string token, DateTime? updateDa, CancellationToken ct = default)
@@ -741,7 +832,7 @@ public class EcosClient
         catch (Exception ex) when (ex is HttpRequestException
                                    || (ex is TaskCanceledException && !ct.IsCancellationRequested))
         {
-            throw new EcosApiException($"Ecos non raggiungibile: {ex.Message}");
+            throw new EcosApiException($"Ecos non raggiungibile: {ex.Message}") { EsitoIncerto = true };
         }
     }
 

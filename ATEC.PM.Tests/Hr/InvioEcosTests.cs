@@ -142,22 +142,24 @@ public class InvioEcosTests
     }
 
     [FactRichiedeMySql]
-    public async Task Una_timbratura_gia_sullo_scatto_e_una_rettifica_non_partono()
+    public async Task Una_timbratura_gia_sullo_scatto_non_parte_e_senza_EmplID_la_rettifica_aspetta()
     {
         using MySqlConnection c = _schema.Apri();
-        int mario = Dipendente(c, "42");
+        int mario = Dipendente(c, "42");   // collegato per codice, EmplID ancora da imparare
         Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
-        c.Execute(@"INSERT INTO hr_punches (employee_id, work_date, punched_at, direction, source, reason)
-                    VALUES (@Id, @Giorno, @Ora, 'OUT', 'ADJUSTMENT', 'uscita dimenticata')",
-            new { Id = mario, Giorno, Ora = Giorno.AddHours(17).AddMinutes(4) });
+        Rettifica(c, mario, Giorno.AddHours(17).AddMinutes(4), "OUT", "uscita dimenticata", mario);
 
         var ecos = new EcosFinto(RispostaToken());
         HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, mario);
 
-        Assert.True(esito.Success);
-        Assert.Equal(1, esito.Total);   // solo la timbratura di Ecos conta
+        // L'entrata è già sullo scatto: nessuna modifica. La rettifica vorrebbe partire, ma senza
+        // EmplID non si può cercare il badge: errore chiaro, nessuna chiamata oltre il token.
+        Assert.False(esito.Success);
+        Assert.Equal(2, esito.Total);
         Assert.Equal(0, esito.Sent);
-        Assert.Empty(ecos.UrlChiamati);
+        Assert.Equal(0, esito.Inserted);
+        Assert.Contains("EmplID", esito.Message);
+        Assert.Single(ecos.UrlChiamati);
         Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_ecos_sends"));
     }
 
@@ -223,6 +225,117 @@ public class InvioEcosTests
         Assert.Null(c.ExecuteScalar<DateTime?>("SELECT ecos_sent_at FROM hr_punches WHERE id = @Id", new { Id = entrata }));
     }
 
+    [FactRichiedeMySql]
+    public async Task Una_rettifica_si_inserisce_su_Ecos_e_diventa_una_timbratura_di_Ecos()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        long entrata = Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        long rettifica = Rettifica(c, mario, Giorno.AddHours(17).AddMinutes(12), "OUT", "uscita dimenticata", autore);
+
+        var ecos = new EcosFinto(RispostaToken(), RispostaBadge("246b3548"), RispostaInsert("s9", "5374", "42"));
+        HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, autore);
+
+        Assert.True(esito.Success, esito.Message);
+        Assert.Equal(0, esito.Sent);
+        Assert.Equal(1, esito.Inserted);
+
+        // Token, badge, inserimento: senza Edit, con ReturnAllPostedRecord, persona dal badge.
+        Assert.Equal(3, ecos.UrlChiamati.Count);
+        Assert.Contains("ApiName=PeopleBadgeGetAll", ecos.UrlChiamati[1]);
+        Assert.Contains("ApiName=PeopleStampPost&ReturnAllPostedRecord=1", ecos.UrlChiamati[2]);
+        Assert.DoesNotContain("Edit=true", ecos.UrlChiamati[2]);
+        Assert.Contains("BadgeCode=246b3548", ecos.CorpiInviati[2]);
+        Assert.Contains("VersusCode=OUT", ecos.CorpiInviati[2]);
+        Assert.Contains("StampDateTime=2026-02-05+17%3A00%3A00", ecos.CorpiInviati[2]);
+        Assert.Contains("Note=ATEC+PM%3A+uscita+dimenticata", ecos.CorpiInviati[2]);
+
+        // La riga è diventata una timbratura di Ecos: motivo e ora originale restano.
+        var riga = c.QuerySingle<(string Source, string? ExternalId, DateTime PunchedAt, DateTime? SuEcos, string? Reason)>(
+            "SELECT source, external_id, punched_at, ecos_punched_at, reason FROM hr_punches WHERE id = @Id", new { Id = rettifica });
+        Assert.Equal(("ECOS", "s9", Giorno.AddHours(17).AddMinutes(12), Giorno.AddHours(17), "uscita dimenticata"), riga);
+        Assert.Equal(2, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+
+        // Registro: inserimento = senza orario precedente.
+        var registro = c.QuerySingle<(long PunchId, string StampId, DateTime? Previous, string Outcome)>(
+            "SELECT punch_id, ecos_stamp_id, previous_time, outcome FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario });
+        Assert.Equal((rettifica, "s9", (DateTime?)null, "OK"), registro);
+        _ = entrata;
+    }
+
+    [FactRichiedeMySql]
+    public async Task Se_Ecos_attacca_la_timbratura_a_un_altra_persona_si_cancella_subito()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        long rettifica = Rettifica(c, mario, Giorno.AddHours(17).AddMinutes(12), "OUT", "uscita dimenticata", mario);
+
+        var ecos = new EcosFinto(RispostaToken(), RispostaBadge("246b3548"), RispostaInsert("s9", "9999", "77"), RispostaUpdate());
+        HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, mario);
+
+        Assert.False(esito.Success);
+        Assert.Equal(0, esito.Inserted);
+        Assert.Contains("altra persona", esito.Message);
+        // La quarta chiamata è la cancellazione logica di s9.
+        Assert.Equal(4, ecos.UrlChiamati.Count);
+        Assert.Contains("Edit=true", ecos.UrlChiamati[3]);
+        Assert.Contains("StampID=s9", ecos.CorpiInviati[3]);
+        Assert.Contains("Delete=1", ecos.CorpiInviati[3]);
+        // La rettifica resta una rettifica, senza StampID.
+        Assert.Equal("ADJUSTMENT", c.ExecuteScalar<string>("SELECT source FROM hr_punches WHERE id = @Id", new { Id = rettifica }));
+        Assert.Null(c.ExecuteScalar<string?>("SELECT external_id FROM hr_punches WHERE id = @Id", new { Id = rettifica }));
+        Assert.Equal("ERROR", c.ExecuteScalar<string>("SELECT outcome FROM hr_ecos_sends WHERE punch_id = @Id", new { Id = rettifica }));
+    }
+
+    [FactRichiedeMySql]
+    public async Task Un_timeout_sull_inserimento_marca_l_esito_incerto_e_l_import_poi_adotta_la_timbratura()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        long rettifica = Rettifica(c, mario, Giorno.AddHours(17).AddMinutes(12), "OUT", "uscita dimenticata", mario);
+        HrAttendanceService servizio = Servizio(new EcosFinto(RispostaToken(), RispostaBadge("246b3548"), EcosFinto.Timeout));
+
+        HrEcosSendResultDto esito = await servizio.SendDayToEcosAsync(mario, Giorno, mario);
+        Assert.False(esito.Success);
+        Assert.Contains("incerto", esito.Message);
+        var riga = c.QuerySingle<(string Source, string? ExternalId, DateTime? SuEcos, DateTime? Quando)>(
+            "SELECT source, external_id, ecos_punched_at, ecos_sent_at FROM hr_punches WHERE id = @Id", new { Id = rettifica });
+        Assert.Equal("ADJUSTMENT", riga.Source);
+        Assert.Null(riga.ExternalId);
+        Assert.Equal(Giorno.AddHours(17), riga.SuEcos);
+        Assert.NotNull(riga.Quando);
+
+        // Non si rimanda alla cieca: la seconda pressione non chiama Ecos.
+        var fermo = new EcosFinto(RispostaToken());
+        HrEcosSendResultDto secondo = await Servizio(fermo).SendDayToEcosAsync(mario, Giorno, mario);
+        Assert.True(secondo.Success);
+        Assert.Contains("incerto", secondo.Message);
+        Assert.Empty(fermo.UrlChiamati);
+
+        // Ecos la restituisce: l'import adotta la rettifica invece di crearne un doppione.
+        HrImportResultDto import = servizio.ImportPunches(c, new List<EcosPunch>
+        {
+            Timbratura("s9", Giorno.AddHours(17), "OUT"),
+        });
+        Assert.Equal(1, import.PunchesAdded);
+        Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+        Assert.Equal(("ECOS", "s9"), c.QuerySingle<(string, string?)>(
+            "SELECT source, external_id FROM hr_punches WHERE id = @Id", new { Id = rettifica }));
+    }
+
+    [Fact]
+    public void La_nota_su_Ecos_dice_che_viene_da_qui_con_motivo_e_autore()
+    {
+        var r = new HrAttendanceService.RettificaEcos(1, "OUT", Giorno.AddHours(17).AddMinutes(12), "uscita dimenticata", "Anna Verdi", null, null);
+        Assert.Equal("ATEC PM: uscita dimenticata (Anna Verdi)", r.Nota);
+        Assert.True(r.DaInviare);
+        Assert.False(r.Incerta);
+        var incerta = r with { EcosSentAt = DateTime.Now, EcosPunchedAt = Giorno.AddHours(17) };
+        Assert.True(incerta.Incerta);
+        Assert.False(incerta.DaInviare);
+    }
+
     // ── attrezzi ──────────────────────────────────────────────────────────────
 
     private HrAttendanceService Servizio(HttpMessageHandler handler)
@@ -239,13 +352,37 @@ public class InvioEcosTests
         return new HrAttendanceService(_schema.Servizio(), ecos, NullLogger<HrAttendanceService>.Instance);
     }
 
-    private static int Dipendente(MySqlConnection c, string? ecosCode)
+    private static int Dipendente(MySqlConnection c, string? ecosCode, int? emplId = null)
     {
         c.Execute(
-            "INSERT INTO employees (first_name, last_name, ecos_empl_code) VALUES ('Mario', 'Rossi', @Codice)",
-            new { Codice = ecosCode });
+            "INSERT INTO employees (first_name, last_name, ecos_empl_code, ecos_empl_id) VALUES ('Mario', 'Rossi', @Codice, @EmplId)",
+            new { Codice = ecosCode, EmplId = emplId });
         return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
     }
+
+    private static long Rettifica(MySqlConnection c, int employeeId, DateTime orario, string verso, string motivo, int autore)
+    {
+        c.Execute(@"INSERT INTO hr_punches (employee_id, work_date, punched_at, direction, source, reason, created_by)
+                    VALUES (@Id, @Giorno, @Ora, @Verso, 'ADJUSTMENT', @Motivo, @Autore)",
+            new { Id = employeeId, Giorno = orario.Date, Ora = orario, Verso = verso, Motivo = motivo, Autore = autore });
+        return c.ExecuteScalar<long>("SELECT LAST_INSERT_ID()");
+    }
+
+    private static string RispostaBadge(string badge) => $$"""
+        { "ECOSAGILE_TABLE_DATA": {
+            "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+            "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [
+                { "EmplID": "5374", "EmplCode": "42", "BadgeCode": "vecchio", "StatusCode": "I", "InForce": "TRUE" },
+                { "EmplID": "5374", "EmplCode": "42", "BadgeCode": "{{badge}}", "StatusCode": "A", "InForce": "TRUE" } ] } } }
+        """;
+
+    /// <summary>Come risponde Ecos a un inserimento riuscito con ReturnAllPostedRecord=1 (08/09/2026).</summary>
+    private static string RispostaInsert(string stampId, string emplId, string emplCode) => $$"""
+        { "ECOSAGILE_TABLE_DATA": {
+            "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "ERROR_CODE": "0", "RECORDCOUNT": "1", "MESSAGE": "Correct Record Insert" },
+            "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "StampID": "{{stampId}}", "EmplID": "{{emplId}}", "EmplCode": "{{emplCode}}",
+                "StampDateTime": "2026-02-05 17:00:00", "VersusCode": "OUT", "TypeCode": "ECLOCK" } } } }
+        """;
 
     private static long Grezza(MySqlConnection c, int employeeId, string stampId, DateTime orario, string verso)
     {
@@ -284,6 +421,9 @@ public class InvioEcosTests
 
         public EcosFinto(params string[] corpi) => _corpi = new Queue<string>(corpi);
 
+        /// <summary>Corpo sentinella: la chiamata muore di timeout (esito incerto).</summary>
+        public const string Timeout = "__TIMEOUT__";
+
         public List<string> CorpiInviati { get; } = new();
         public List<string> UrlChiamati { get; } = new();
 
@@ -292,6 +432,7 @@ public class InvioEcosTests
             UrlChiamati.Add(request.RequestUri?.ToString() ?? "");
             CorpiInviati.Add(request.Content == null ? "" : request.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
             string corpo = _corpi.Count > 0 ? _corpi.Dequeue() : RispostaErrore("-99", "Nessuna risposta preparata");
+            if (corpo == Timeout) throw new HttpRequestException("timeout finto");
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(corpo) });
         }
     }

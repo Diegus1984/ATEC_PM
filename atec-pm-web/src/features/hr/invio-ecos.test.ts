@@ -13,20 +13,44 @@ function timbratura(over: Partial<HrPunch>): HrPunch {
     roundedAt: "2026-02-05T08:00:00",
     canSendToEcos: true,
     toSendToEcos: true,
+    ecosInsert: false,
+    ecosUncertain: false,
     ...over,
   }
 }
 
 describe("riassuntoInvioEcos", () => {
-  it("conta solo le timbrature di Ecos: le rettifiche su Ecos non esistono", () => {
+  it("una rettifica da inserire conta fra le cose da inviare, come inserimento", () => {
     const r = riassuntoInvioEcos({
       punches: [
         timbratura({ id: 1 }),
-        timbratura({ id: 2, source: "ADJUSTMENT", ecosStampId: null, canSendToEcos: false, toSendToEcos: false }),
+        timbratura({ id: 2, source: "ADJUSTMENT", ecosStampId: null, ecosInsert: true }),
       ],
     })
-    expect(r.diEcos).toBe(1)
-    expect(r.daInviare.map((t) => t.id)).toEqual([1])
+    expect(r.diEcos).toBe(2)
+    expect(r.daInviare.map((t) => t.id)).toEqual([1, 2])
+    expect(r.daInserire.map((t) => t.id)).toEqual([2])
+    expect(r.allineato).toBe(false)
+  })
+
+  it("una rettifica con esito incerto non riparte e toglie l'allineamento", () => {
+    const r = riassuntoInvioEcos({
+      punches: [
+        timbratura({ id: 1, toSendToEcos: false }),
+        timbratura({
+          id: 2,
+          source: "ADJUSTMENT",
+          ecosStampId: null,
+          ecosInsert: true,
+          ecosUncertain: true,
+          canSendToEcos: false,
+          toSendToEcos: false,
+        }),
+      ],
+    })
+    expect(r.daInviare).toHaveLength(0)
+    expect(r.incerte).toBe(1)
+    expect(r.nonInviabili).toBe(0)
     expect(r.allineato).toBe(false)
   })
 

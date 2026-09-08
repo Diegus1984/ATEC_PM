@@ -196,7 +196,12 @@ export function GiornataDialog({
     if (!giornata || ecos.daInviare.length === 0) return
     const ok = await confirm({
       title: "Inviare a Ecos gli orari arrotondati?",
-      description: `${ecos.daInviare.length} timbrature di ${employeeName || "questa persona"} del ${giornoEsteso(giornata.workDate)} verranno sovrascritte su Ecos con l'orario arrotondato. L'ora timbrata resta qui e nel registro degli invii.`,
+      description:
+        `${ecos.daInviare.length} timbrature di ${employeeName || "questa persona"} del ${giornoEsteso(giornata.workDate)}` +
+        (ecos.daInserire.length > 0
+          ? `: ${ecos.daInviare.length - ecos.daInserire.length} con l'orario arrotondato al posto di quello timbrato, ${ecos.daInserire.length} rettifiche inserite su Ecos come timbrature nuove.`
+          : " verranno sovrascritte su Ecos con l'orario arrotondato.") +
+        " L'ora timbrata resta qui e nel registro degli invii.",
       confirmLabel: "Invia a Ecos",
     })
     if (ok) invioEcos.mutate({ employeeId, workDate: giorno })
@@ -322,8 +327,9 @@ export function GiornataDialog({
                   <li key={t.id} className="flex items-center gap-2 tabular-nums">
                     <span className="w-14">{versoTimbratura(t.direction)}</span>
                     <span className="text-muted-foreground">{oraDa(t.ecosPunchedAt ?? t.punchedAt)}</span>
-                    <span className="text-muted-foreground">diventa</span>
+                    <span className="text-muted-foreground">{t.ecosInsert ? "nuova su Ecos alle" : "diventa"}</span>
                     <span className="font-medium">{t.roundedAt ? oraDa(t.roundedAt) : "—"}</span>
+                    {t.ecosInsert && <Badge variant="default">RETTIFICA</Badge>}
                   </li>
                 ))}
               </ul>
@@ -335,9 +341,16 @@ export function GiornataDialog({
                   : `${ecos.nonInviabili} timbrature non sono inviabili: l'arrotondamento cambierebbe giorno.`}
               </p>
             )}
+            {ecos.incerte > 0 && (
+              <p className="text-xs text-destructive">
+                {ecos.incerte === 1
+                  ? "Una rettifica è stata mandata a Ecos senza risposta certa: verificare su Ecos. Non riparte da sola; se là non c'è, togliere la rettifica e rifarla."
+                  : `${ecos.incerte} rettifiche sono state mandate a Ecos senza risposta certa: verificare su Ecos. Non ripartono da sole; se là non ci sono, togliere le rettifiche e rifarle.`}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              Su Ecos l'orario timbrato viene sovrascritto con quello arrotondato. L'ora timbrata resta
-              qui e nel registro degli invii.
+              Su Ecos l'orario timbrato viene sovrascritto con quello arrotondato e le rettifiche
+              nascono come timbrature nuove. L'ora timbrata resta qui e nel registro degli invii.
             </p>
             {canWrite && ecos.daInviare.length > 0 && (
               <div className="flex justify-end">
@@ -361,10 +374,12 @@ export function GiornataDialog({
                     >
                       <span>{formatDateTimeShort(invio.sentAt)}</span>
                       <span>
-                        {versoTimbratura(invio.direction)} {oraDa(invio.punchedAt)} diventa{" "}
-                        {oraDa(invio.sentTime)}
+                        {versoTimbratura(invio.direction)} {oraDa(invio.punchedAt)}{" "}
+                        {invio.previousTime ? "diventa" : "nuova su Ecos alle"} {oraDa(invio.sentTime)}
                       </span>
-                      <span>{invio.outcome === "OK" ? "inviata" : "errore"}</span>
+                      <span>
+                        {invio.outcome === "OK" ? (invio.previousTime ? "inviata" : "inserita") : "errore"}
+                      </span>
                       {invio.sentBy && <span className="text-muted-foreground">{invio.sentBy}</span>}
                       {invio.outcome !== "OK" && invio.message && (
                         <span className="basis-full truncate" title={invio.message}>

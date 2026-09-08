@@ -506,6 +506,18 @@ public partial class HrAttendanceService
             }
         }
 
+        // Le rettifiche mandate a Ecos senza risposta certa (InvioEcos): se Ecos ora restituisce
+        // una timbratura di quella persona con quell'orario e quel verso, è la nostra — si adotta
+        // la riga invece di inserirne una seconda.
+        var adozioni = new Dictionary<(int EmployeeId, DateTime PunchedAt, bool Entrata), long>();
+        foreach (var a in c.Query<(long Id, int EmployeeId, string Direction, DateTime EcosPunchedAt)>(@"
+            SELECT id AS Id, employee_id AS EmployeeId, direction AS Direction, ecos_punched_at AS EcosPunchedAt
+            FROM hr_punches
+            WHERE source = 'ADJUSTMENT' AND external_id IS NULL AND ecos_punched_at IS NOT NULL"))
+        {
+            adozioni[(a.EmployeeId, a.EcosPunchedAt, NightShift.IsEntry(a.Direction))] = a.Id;
+        }
+
         int nuove = 0, aggiornate = 0, rimosse = 0;
         var giorniToccati = new HashSet<(int EmployeeId, DateTime WorkDate)>();
         var daRifare = new HashSet<(int EmployeeId, DateTime WorkDate)>();
@@ -520,6 +532,20 @@ public partial class HrAttendanceService
                 if (!esistenti.TryGetValue(t.ExternalId, out RigaEsistente? vecchia))
                 {
                     if (!mappato) continue;
+
+                    var chiaveAdozione = (employeeIdMappato, t.PunchedAt, NightShift.IsEntry(t.Direction));
+                    if (adozioni.TryGetValue(chiaveAdozione, out long rettificaId))
+                    {
+                        c.Execute(@"
+                            UPDATE hr_punches
+                            SET source = 'ECOS', external_id = @ExternalId, location = @Location
+                            WHERE id = @Id AND external_id IS NULL",
+                            new { t.ExternalId, t.Location, Id = rettificaId }, tran);
+                        adozioni.Remove(chiaveAdozione);
+                        nuove++;
+                        SegnaConVicine(giorniToccati, daRifare, employeeIdMappato, work_date);
+                        continue;
+                    }
 
                     c.Execute(@"
                         INSERT INTO hr_punches (employee_id, work_date, punched_at, direction, source, external_id, location)

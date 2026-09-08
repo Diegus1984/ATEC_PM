@@ -276,6 +276,23 @@ StampDateTime=2025-05-25 09:53:59&BadgeCode=123&VersusCode=IN&PresenceDeviceID=1
 `VersusCode` `IN`/`OUT`, `PresenceDeviceID`, `GPSLat`/`GPSLong`, `StatusCode`, `TypeCode`
 es. `AUTOMATIC`, `InsertDate`, `UpdateDate`, `YearMonth`, `StampLocationName`).
 
+✅ **Inserimento provato davvero l'08/09/2026** (su Diego, sabato 05/09 10:00, poi cancellato):
+- 🪤🪤 **La persona si identifica SOLO col `BadgeCode`** (il badge attivo da `PeopleBadgeGetAll`,
+  `StatusCode=A`). Con `EmplID=5374` nel corpo Ecos risponde «Correct Record Insert» ma crea un
+  record **senza persona, invisibile** a ogni GET (orfano creato alle 14:23 dell'08/09, StampID
+  ignoto: non si può cancellare). Mai mandare inserimenti senza badge.
+- Corpo minimo: `BadgeCode`, `StampDateTime`, `VersusCode`, `StatusCode=A`, `UserTZ`; `Note` viene
+  salvata (noi scriviamo «ATEC PM: motivo (autore)»). `TypeCode` di default `ECLOCK`.
+- Con `ReturnAllPostedRecord=1` torna il record intero: `StampID`, `EmplID`, `EmplCode` → si
+  VERIFICA che la persona sia quella giusta, altrimenti cancellazione immediata.
+- 🪤 **Una timbratura appena inserita NON compare in `PeopleStampGetAll`** (né per StampID, né
+  per persona/giorno, né in `GetESS`): probabilmente serve il controllo notturno (`CheckDate`).
+  Quindi una verifica «a posteriori» via GET non dice niente subito: un timeout dopo l'insert è un
+  esito INCERTO da marcare, non da ritentare.
+- Cancellazione logica: `Edit=true` + `StampID` + `Delete=1` → `Delete=True`, `DeleteTextDescShort`
+  «ReqAlreadyDeleted».
+
+
 ### 4.2 Update (`Edit=true`)
 
 `Edit=true` **in query string** + **chiave del record nel body** + i soli campi da cambiare.
@@ -571,8 +588,15 @@ nel dialogo della giornata (Timbrature), endpoint `POST /api/hr/ecos/send-day`, 
 2. Parte solo ciò che differisce (`TimbraturaEcos.DaInviare`): arrotondamento = quello del
    motore (`TimesheetRules.RoundTime`, entrata su / uscita giù, scatto 30', tolleranza 10').
    Confronto **al minuto** (08:00:52 è già sullo scatto: i secondi non contano).
-   Non inviabile se l'arrotondamento cambia giorno (entrata 23:55). Le rettifiche non esistono
-   su Ecos: non partono (servirebbe un INSERT, non idempotente — non fatto).
+   Non inviabile se l'arrotondamento cambia giorno (entrata 23:55).
+   **Le rettifiche si INSERISCONO** (dall'08/09 pomeriggio): badge attivo della persona
+   (`ActiveBadgeCodeAsync`), `InsertStampAsync` con l'orario arrotondato e la nota «ATEC PM:
+   motivo (autore)», verifica della persona nella risposta (sbagliata → `DeleteStampAsync`
+   subito), poi la riga diventa `source=ECOS` + `external_id=StampID` (motivo e autore restano,
+   il pulsante «elimina rettifica» sparisce: ora vive su Ecos). Timeout = **esito incerto**:
+   `ecos_sent_at` senza StampID, non riparte da sola; l'import la **adotta** se Ecos restituisce
+   una timbratura di quella persona con quell'orario e verso (`ImportPunches`), altrimenti si
+   toglie la rettifica e la si rifà. Nel registro `previous_time` NULL = inserimento.
 3. Al primo errore ci si ferma (registro `ERROR`, il pulsante si ripreme: sono update).
 4. **L'import riconosce l'eco**: se Ecos rimanda l'orario uguale a `ecos_punched_at` non è una
    modifica; se rimanda un orario diverso da entrambi, **vince Ecos**: `punched_at` si aggiorna
