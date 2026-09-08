@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1222",
+                     "data":  "2026-09-08T12:29:30",
+                     "hash":  "4b6fbcfb9224f2eb230d3fefaeab56f9c094cb4a",
+                     "modifiche":  [
+                                       "Docs: opzioni --tutte e --campi della sonda Ecos",
+                                       "HR: gli EmplID si imparano anche dai badge (chi non timbra restava «non riconosciuto»)"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1211",
                      "data":  "2026-09-08T12:11:44",
                      "hash":  "c99b221bfd371a93f940c952895f15b8f3a238e0",
