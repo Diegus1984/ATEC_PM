@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1511",
+                     "data":  "2026-09-08T15:11:49",
+                     "hash":  "e9668408f1053cc9f5a268080c4c6d30d40fa950",
+                     "modifiche":  [
+                                       "Richieste: Approva, Rifiuta e Annulla anche nel dettaglio, annulla con conferma"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1453",
                      "data":  "2026-09-08T14:54:07",
                      "hash":  "99658e708c0a4f80c6cd4152d4f1a90fc81e81ad",
