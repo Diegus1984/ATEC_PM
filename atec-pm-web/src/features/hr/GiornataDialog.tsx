@@ -225,7 +225,16 @@ export function GiornataDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent
+        className="sm:max-w-xl"
+        // La finestra di conferma (useConfirm) è un portale fuori da questo dialogo: per
+        // Radix un clic lì dentro è «fuori», e chiudeva anche la giornata. Con «Invia a
+        // Ecos» il dialogo deve restare aperto per mostrare l'esito e il registro (08/09).
+        onInteractOutside={(e) => {
+          const target = e.detail.originalEvent.target as Element | null
+          if (target?.closest?.('[role="alertdialog"]')) e.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{giornoEsteso(giornata.workDate)}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-2">
