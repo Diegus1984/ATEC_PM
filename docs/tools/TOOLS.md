@@ -100,7 +100,15 @@ escono dal server. Serve la chiave `~/.ssh/atec_vps`.
 python tools/sonda_ecos_server.py PeopleStampGetAll --righe 1 --valori          # campi + prima riga senza nominativi
 python tools/sonda_ecos_server.py PeopleAbsenceRequestGetAll --filtro "UpdateDate=>='2026-09-01 00:00:00'"
 python tools/sonda_ecos_server.py Timesheet2GetAll PeopleAbsenceRequestPost --calibra   # esiste? negata (ServiceID)? autorizzata?
+python tools/sonda_ecos_server.py PeopleStampPeriodDayGetAll --filtro "EmplID==5397" --filtro "StampDate=>='2026-08-20'" --righe 40 --tutte
+python tools/sonda_ecos_server.py PeopleEmploymentGetALL --filtro "EmplID==5397" --tutte --campi EmplID,EmplCode,PersonStatusCode,HireDate,TerminationDate
 ```
+
+`--tutte` stampa tutte le righe della pagina (i campi con nominativi restano fuori sempre),
+`--campi A,B,C` limita la stampa a quei campi: obbligatorio sulle API con dati personali
+(`PeopleEmploymentGetALL` porta indirizzi e date di nascita). 🪤 Il filtro vuole l'operatore
+dentro il valore: `EmplID==5397`, non `EmplID=5397` (senza operatore Ecos risponde `-99`
+«Index was out of range»).
 
 **La sonda locale**, per provare un utente Ecos diverso da quello salvato: le credenziali le
 mette **Diego nel suo terminale** (mai in chat, mai su disco).
