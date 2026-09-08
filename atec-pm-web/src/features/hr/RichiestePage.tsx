@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { Check, Clock, Plus, Trash2, X } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -130,11 +131,22 @@ function statoBadge(status: string) {
   }
 }
 
-export function RichiestePage() {
+type Scheda = "mie" | "da_approvare" | "tutte"
+
+/** Ogni scheda è una rotta: sottovoci del menu e schede in pagina dicono la stessa cosa (08/09). */
+const PERCORSO_SCHEDA: Record<Scheda, string> = {
+  mie: "/hr/richieste",
+  da_approvare: "/hr/richieste/da-approvare",
+  tutte: "/hr/richieste/tutte",
+}
+
+export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canManage = canWriteFeature("nav.hr_richieste")
 
-  const [activeTab, setActiveTab] = React.useState<"mie" | "da_approvare" | "tutte">("mie")
+  // Chi non approva vede solo le sue: le altre schede non esistono per lui, qualunque rotta.
+  const activeTab: Scheda = canManage ? vista : "mie"
   const confirm = useConfirm()
   const [dialogNuovaAperta, setDialogNuovaAperta] = React.useState(false)
   // Dettaglio di una richiesta: la riga dice il minimo, il clic dice tutto (Diego, 08/09).
@@ -253,7 +265,7 @@ export function RichiestePage() {
       {/* Tabs */}
       <Tabs
         value={activeTab}
-        onValueChange={(v) => setActiveTab(v as "mie" | "da_approvare" | "tutte")}
+        onValueChange={(v) => navigate(PERCORSO_SCHEDA[v as Scheda])}
       >
         <TabsList>
           <TabsTrigger value="mie">Le mie richieste</TabsTrigger>

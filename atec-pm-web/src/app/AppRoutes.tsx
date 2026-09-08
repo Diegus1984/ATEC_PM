@@ -79,6 +79,8 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   "hr-timbrature-quadratura": <TimbraturePage vista="quadratura" />,
   "hr-timbrature-cronologia": <TimbraturePage vista="cronologia" />,
   "hr-richieste": <RichiestePage />,
+  "hr-richieste-da-approvare": <RichiestePage vista="da_approvare" />,
+  "hr-richieste-tutte": <RichiestePage vista="tutte" />,
   sal: <SalPage />,
   trasferta: <TrasfertaPage />,
   "ore-commessa": <OreCommessaPage />,

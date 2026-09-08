@@ -32,6 +32,8 @@ import {
   FileText,
   Fingerprint,
   IdCard,
+  UserRound,
+  ClipboardCheck,
   CalendarDays,
   Briefcase,
   MailCheck,
@@ -77,6 +79,8 @@ export interface NavItemConfig {
   /** Tooltip per il novizio: scioglie le sigle (DDP, RDO, ODA…) al primo contatto. */
   hint?: string
   children?: NavItemConfig[]
+  /** Sottovoce solo per chi ha la SCRITTURA sulla chiave (es. «Da approvare» delle richieste). */
+  requiresWrite?: boolean
 }
 
 export interface NavGroupConfig {
@@ -393,14 +397,46 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         ],
       },
       {
-        id: "hr-richieste",
+        // Le schede della pagina sono anche sottovoci del menu (Diego, 08/09/2026): «Da
+        // approvare» e «Tutte» solo per chi approva, come in pagina.
+        id: "hr-richieste-group",
         label: "Ferie e permessi",
         path: "/hr/richieste",
         featureKey: "nav.hr_richieste",
         icon: CalendarCheck,
         status: "live",
-        description:
-          "Richieste di ferie e permessi con approvazione del responsabile di reparto.",
+        children: [
+          {
+            id: "hr-richieste",
+            label: "Le mie richieste",
+            path: "/hr/richieste",
+            featureKey: "nav.hr_richieste",
+            icon: UserRound,
+            status: "live",
+            description:
+              "Richieste di ferie e permessi con approvazione del responsabile di reparto.",
+          },
+          {
+            id: "hr-richieste-da-approvare",
+            label: "Da approvare",
+            path: "/hr/richieste/da-approvare",
+            featureKey: "nav.hr_richieste",
+            icon: ClipboardCheck,
+            status: "live",
+            requiresWrite: true,
+            description: "Le richieste in attesa di una decisione.",
+          },
+          {
+            id: "hr-richieste-tutte",
+            label: "Tutte le richieste",
+            path: "/hr/richieste/tutte",
+            featureKey: "nav.hr_richieste",
+            icon: ListChecks,
+            status: "live",
+            requiresWrite: true,
+            description: "Tutte le richieste dell'anno, di tutti.",
+          },
+        ],
       },
     ],
   },

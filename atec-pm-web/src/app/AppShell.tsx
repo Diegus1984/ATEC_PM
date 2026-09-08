@@ -55,6 +55,7 @@ import { ChatInboxBell } from "@/features/commesse/chat/ChatInboxBell"
 import { useChatInboxBadge } from "@/features/commesse/chat/useChatInboxBadge"
 import { useOreCommessaBadge } from "@/features/ore-commessa/useOreCommessaBadge"
 import { useTravelBadge } from "@/features/trasferta/useTravelBadge"
+import { useHrRichiesteBadge } from "@/features/hr/useHrRichiesteBadge"
 import { useDeadlinesCount } from "@/features/scadenze/useDeadlinesCount"
 import { useSalWarnings } from "@/features/sal/useSalWarnings"
 import { useDdpUpdatedList } from "@/features/gestore-ddp/useDdpUpdatedList"
@@ -90,8 +91,10 @@ function filterNavGroups(): NavGroupConfig[] {
     items: group.items
       .map((item) => {
         if (item.children) {
-          const visibleChildren = item.children.filter((child) =>
-            canAccessFeature(child.featureKey)
+          const visibleChildren = item.children.filter(
+            (child) =>
+              canAccessFeature(child.featureKey) &&
+              (!child.requiresWrite || canWriteFeature(child.featureKey))
           )
           return {
             ...item,
@@ -124,6 +127,9 @@ function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.path === "/config-sezioni") {
     return pathname === "/config-sezioni"
   }
+  if (item.id === "hr-richieste") {
+    return pathname === "/hr/richieste"
+  }
   if (item.id === "hr-timbrature") {
     // La prima sottovoce ha il percorso del gruppo: senza il confronto esatto resterebbe
     // accesa anche sulle altre viste (/hr/timbrature/calendario…).
@@ -152,12 +158,15 @@ function NavSubmenuItem({
   open,
   onToggle,
   onNavigate,
+  badgeById,
 }: {
   item: NavItemConfig
   pathname: string
   open: boolean
   onToggle: () => void
   onNavigate: (path: string) => void
+  /** Contatori delle sottovoci (es. «Da approvare»); chiuso, la somma sale sul padre. */
+  badgeById?: Record<string, number>
 }) {
   const { state, isMobile, setOpen } = useSidebar()
   const barCollapsed = !isMobile && state === "collapsed"
@@ -165,6 +174,7 @@ function NavSubmenuItem({
   const children = item.children ?? []
   const isParentActive = children.some((child) => isNavActive(child, pathname))
   const isSubmenuOpen = open && !barCollapsed
+  const badgeFigli = children.reduce((sum, child) => sum + (badgeById?.[child.id] ?? 0), 0)
 
   // Aprire il contenitore porta anche sulla prima pagina figlia: un clic solo e
   // sei dove serve. Se sei già dentro al gruppo NON ti sposta: staresti
@@ -200,6 +210,11 @@ function NavSubmenuItem({
       >
         <Icon />
         <span className="truncate">{item.label}</span>
+        {!isSubmenuOpen && badgeFigli > 0 && (
+          <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-medium text-white">
+            {badgeFigli}
+          </span>
+        )}
         <ChevronDown
           className={cn(
             "ml-auto size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
@@ -228,6 +243,11 @@ function NavSubmenuItem({
                   >
                     <SubIcon />
                     <span className="truncate">{subItem.label}</span>
+                    {(badgeById?.[subItem.id] ?? 0) > 0 && (
+                      <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-medium text-white">
+                        {badgeById?.[subItem.id]}
+                      </span>
+                    )}
                   </button>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
@@ -388,6 +408,7 @@ export function AppShell() {
   // Scarico ore da verificare (#102/#109): persone che hanno imputato ore che il PM non
   // ha ancora dichiarato di aver guardato. Accendono la voce di menu, non solo il pallino.
   const travelPending = useTravelBadge()
+  const hrDaApprovare = useHrRichiesteBadge()
   const oreCommessaPending = useOreCommessaBadge()
   // Warning SAL (#117): stessa sorgente delle viste «Warning Fatturazione» e «Warning
   // incasso fattura» della pagina /sal, cioè gli alert del prospetto. Prima il pallino
@@ -468,6 +489,8 @@ export function AppShell() {
               "ore-commessa": oreCommessaPending,
               sal: salWarningsCount,
               "gestore-ddp": ddpDaVerificare,
+              "hr-richieste-group": hrDaApprovare,
+              "hr-richieste-da-approvare": hrDaApprovare,
             }
             const groupBadgeCount = group.items.reduce(
               (sum, item) => sum + (badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0),
@@ -531,6 +554,7 @@ export function AppShell() {
                               open={openSubmenuIds.has(item.id)}
                               onToggle={() => toggleSubmenu(item.id)}
                               onNavigate={(path) => navigate(path)}
+                              badgeById={badgeById}
                             />
                           )
                         }
