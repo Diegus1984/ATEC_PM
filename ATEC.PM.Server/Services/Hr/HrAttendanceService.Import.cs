@@ -69,14 +69,8 @@ public partial class HrAttendanceService
             ProgressoFase("[4/4] Confronto e scrittura…", 60);
             HrImportResultDto esito = ImportPunches(c, timbrature, full);
 
-            if (assenze.Count > 0)
-            {
-                var (absNuove, absAggiornate) = SyncAbsences(c, assenze);
-                if (absNuove > 0 || absAggiornate > 0)
-                {
-                    esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
-                }
-            }
+            // Prima i giorni (portano codice E id delle persone e li insegnano), poi le
+            // richieste, che hanno solo l'id.
             if (giorniAssenza.Count > 0)
             {
                 var (ggNuovi, ggAggiornati, ggRimossi) = SyncAbsenceDays(c, giorniAssenza, giorniDal, giorniAl);
@@ -92,6 +86,14 @@ public partial class HrAttendanceService
                 {
                     esito.Message += $"; ferie nel planner: {barreCreate} create, {barreAllineate} allineate a Ecos"
                                      + (barreTolte > 0 ? $", {barreTolte} tolte" : "");
+                }
+            }
+            if (assenze.Count > 0)
+            {
+                var (absNuove, absAggiornate) = SyncAbsences(c, assenze);
+                if (absNuove > 0 || absAggiornate > 0)
+                {
+                    esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
                 }
             }
 
@@ -262,15 +264,8 @@ public partial class HrAttendanceService
                         .Where(a => a.DateBegin.Date <= al && a.DateEnd.Date >= dal)
                         .ToList();
 
-                    if (nellaFinestra.Count > 0)
-                    {
-                        var (absNuove, absAggiornate) = SyncAbsences(c, nellaFinestra);
-                        ProgressoLog($"✅ assenze del periodo: {absNuove} nuove, {absAggiornate} aggiornate");
-                        if (absNuove > 0 || absAggiornate > 0)
-                            esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
-                    }
-
-                    // E i giorni di assenza come li spezza Ecos, per la stessa finestra.
+                    // Prima i giorni di assenza come li spezza Ecos (portano codice E id delle
+                    // persone e li insegnano), poi le richieste, che hanno solo l'id.
                     List<EcosAbsenceDay> giorni = await _ecos.GetAbsenceDaysAsync(tokenAssenze, dal, al, ct);
                     var (ggNuovi, ggAggiornati, ggRimossi) = SyncAbsenceDays(c, giorni, dal, al);
                     ProgressoLog($"✅ assenze per giorno: {giorni.Count} ricevute, {ggNuovi} nuove, {ggAggiornati} aggiornate, {ggRimossi} tolte");
@@ -285,6 +280,14 @@ public partial class HrAttendanceService
                         if (barreCreate + barreAllineate + barreTolte > 0)
                             esito.Message += $"; ferie nel planner: {barreCreate} create, {barreAllineate} allineate a Ecos"
                                              + (barreTolte > 0 ? $", {barreTolte} tolte" : "");
+                    }
+
+                    if (nellaFinestra.Count > 0)
+                    {
+                        var (absNuove, absAggiornate) = SyncAbsences(c, nellaFinestra);
+                        ProgressoLog($"✅ assenze del periodo: {absNuove} nuove, {absAggiornate} aggiornate");
+                        if (absNuove > 0 || absAggiornate > 0)
+                            esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
                     }
                 }
                 catch (Exception ex)
@@ -344,13 +347,21 @@ public partial class HrAttendanceService
     internal (int Added, int Updated) SyncAbsences(
         MySqlConnection c, IReadOnlyList<EcosAbsenceRequest> requests)
     {
-        Dictionary<string, int> mappa = MappaEcos(c);
+        // 🪤 PeopleAbsenceRequestGetAll NON manda l'EmplCode, solo l'EmplID: dal 27/08 all'08/09/2026
+        // la mappatura per codice non trovava nessuno e hr_absences non ha mai avuto una richiesta
+        // di Ecos. L'EmplID lo si impara dagli altri scarichi (timbrature, badge, giorni di assenza).
+        Dictionary<string, int> perCodice = MappaEcos(c);
+        Dictionary<string, int> perId = MappaEcosPerId(c);
         int added = 0, updated = 0;
+        var sconosciuti = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (EcosAbsenceRequest r in requests)
         {
-            if (!mappa.TryGetValue(r.EmplCode, out int employeeId))
+            if (!TrovaDipendente(perId, perCodice, r.EmplId, r.EmplCode, out int employeeId))
+            {
+                sconosciuti.Add(string.IsNullOrWhiteSpace(r.EmplId) ? r.EmplCode : r.EmplId);
                 continue;
+            }
 
             string absenceType = TipoAssenza(r.CategoryCode);
 
@@ -415,6 +426,13 @@ public partial class HrAttendanceService
             // una ferie di tre ore sarebbe diventata una barra di un giorno intero.
         }
 
+        if (sconosciuti.Count > 0)
+        {
+            _logger.LogWarning(
+                "[HR] {N} richieste di assenza di persone non riconosciute (EmplID senza dipendente collegato): {Ids}",
+                sconosciuti.Count, string.Join(", ", sconosciuti.Take(10)));
+        }
+
         return (added, updated);
     }
 
@@ -429,6 +447,10 @@ public partial class HrAttendanceService
     {
         Dictionary<string, int> mappa = MappaEcos(c);
         DateTime? orizzonte = orizzonteEcos ?? OrizzonteEcos(timbrature);
+
+        // Le timbrature portano codice E id della persona: si impara la coppia, così le API
+        // che mandano solo l'EmplID (le richieste di assenza) sanno di chi parlano.
+        ImparaEmplId(c, timbrature.Select(t => (t.EmplCode, t.EmplId)));
 
         // 🪤 Ecos non toglie mai una timbratura: la marca Delete=1 e continua a restituirla
         // (e la cancellazione alza UpdateDate, quindi arriva anche all'incrementale). Fino

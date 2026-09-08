@@ -13,17 +13,19 @@ namespace ATEC.PM.Server.Services.Hr;
 /// filtra <c>Delete=0</c>). Una riga così è una timbratura da togliere, non da importare.</param>
 public record EcosPunch(
     string ExternalId, DateTime PunchedAt, string EmplCode, string Name, string Direction, string? Location,
-    DateTime? UpdateDate = null, bool Deleted = false);
+    DateTime? UpdateDate = null, bool Deleted = false, string EmplId = "");
 
 /// <summary>Un badge/anagrafica Ecos: serve alla mappatura <c>employees.ecos_empl_code</c>.</summary>
 public record EcosBadge(string EmplCode, string Name, bool IsActive);
 
 /// <summary>Una richiesta di assenza come arriva dall'API Ecos.</summary>
+/// <param name="EmplId">🪤 <c>PeopleAbsenceRequestGetAll</c> NON manda l'<c>EmplCode</c>: la
+/// persona si riconosce solo da qui (l'id interno stabile di Ecos, guida §11).</param>
 public record EcosAbsenceRequest(
     string AbsenceRequestId, string EmplCode, string Name, string CategoryCode,
     string CategoryDesc, string StatusCode, DateTime DateBegin, DateTime DateEnd,
     bool FullDay, string? HourBegin, string? HourEnd, decimal? Duration,
-    DateTime? UpdateDate = null, bool Deleted = false);
+    DateTime? UpdateDate = null, bool Deleted = false, string EmplId = "");
 
 /// <summary>
 /// Un <b>tratto</b> di un giorno di assenza come lo spezza Ecos
@@ -37,7 +39,7 @@ public record EcosAbsenceRequest(
 public record EcosAbsenceDay(
     string AbsenceRequestId, string RefineId, string EmplCode, string Name, DateTime Date,
     string? HourBegin, string? HourEnd, int? Minutes, string CategoryCode, string CategoryDesc,
-    string StatusCode, string SourceCode, DateTime? UpdateDate = null);
+    string StatusCode, string SourceCode, DateTime? UpdateDate = null, string EmplId = "");
 
 /// <summary>L'API Ecos ha risposto ma con un errore suo (CODE ≠ OK) o in una forma inattesa.</summary>
 public sealed class EcosApiException : Exception
@@ -333,7 +335,8 @@ public class EcosClient
                 UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg)
                     ? agg
                     : null,
-                Deleted: Vero(r.GetValueOrDefault("Delete"))));
+                Deleted: Vero(r.GetValueOrDefault("Delete")),
+                EmplId: r.GetValueOrDefault("EmplID", "").Trim()));
         }
         return risultato;
     }
@@ -414,7 +417,8 @@ public class EcosClient
                 HourEnd: ValoreOpzionale(r, "HourEnd"),
                 Duration: duration,
                 UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null,
-                Deleted: Vero(r.GetValueOrDefault("Delete"))));
+                Deleted: Vero(r.GetValueOrDefault("Delete")),
+                EmplId: r.GetValueOrDefault("EmplID", "").Trim()));
         }
         return risultato;
     }
@@ -460,7 +464,8 @@ public class EcosClient
                 CategoryDesc: r.GetValueOrDefault("CategoryDescShort", "").Trim(),
                 StatusCode: r.GetValueOrDefault("StatusCode", "").Trim().ToUpperInvariant(),
                 SourceCode: r.GetValueOrDefault("SourceCode", "").Trim(),
-                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null));
+                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null,
+                EmplId: r.GetValueOrDefault("EmplID", "").Trim()));
         }
         return risultato;
     }

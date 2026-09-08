@@ -399,6 +399,34 @@ public class ImportPresenzeTests
             "SELECT status FROM hr_absences WHERE ecos_absence_id = @Id", new { Id = idEcos });
     }
 
+    /// <summary>
+    /// 🪤 <c>PeopleAbsenceRequestGetAll</c> non manda l'EmplCode, solo l'EmplID: in produzione,
+    /// dal 27/08 all'08/09/2026, nessuna richiesta di Ecos era entrata in hr_absences perché la
+    /// mappatura per codice non trovava nessuno. L'id si impara dagli scarichi che portano
+    /// tutti e due i campi (qui le timbrature) e da lì le richieste sanno di chi sono.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Le_richieste_con_il_solo_EmplID_trovano_la_persona_imparata_dalle_timbrature()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
+        HrAttendanceService servizio = CreaServizio();
+
+        // Prima delle timbrature nessuno sa che 42 = EmplID 6032: la richiesta resta orfana.
+        var richiesta = new EcosAbsenceRequest(
+            "r9", EmplCode: "", "Rossi, Mario", "F", "Ferie", "ACCEPTED", Giorno, Giorno,
+            FullDay: true, HourBegin: null, HourEnd: null, Duration: null, EmplId: "6032");
+        Assert.Equal((0, 0), servizio.SyncAbsences(c, new[] { richiesta }));
+
+        // Le timbrature portano codice e id insieme: da qui in poi la persona si riconosce.
+        servizio.ImportPunches(c, GiornataRegolare("42").Select(t => t with { EmplId = "6032" }).ToList());
+        Assert.Equal(6032, c.ExecuteScalar<int?>("SELECT ecos_empl_id FROM employees WHERE id = @Id", new { Id = mario }));
+
+        Assert.Equal((1, 0), servizio.SyncAbsences(c, new[] { richiesta }));
+        Assert.Equal(mario, c.ExecuteScalar<int>(
+            "SELECT employee_id FROM hr_absences WHERE ecos_absence_id = 'r9'"));
+    }
+
     [Fact]
     public void L_orizzonte_e_il_primo_UpdateDate_dello_scarico()
     {

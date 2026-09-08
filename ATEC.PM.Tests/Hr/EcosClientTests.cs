@@ -273,6 +273,9 @@ public class EcosClientTests
         Assert.Equal("P", giorni[0].CategoryCode);
         Assert.Equal("ACCEPTED", giorni[0].StatusCode);
         Assert.Equal(new DateTime(2026, 9, 8, 8, 33, 33), giorni[0].UpdateDate);
+        // Codice E id della persona: la coppia insegna l'EmplID alle API che mandano solo quello.
+        Assert.Equal("1045", giorni[0].EmplCode);
+        Assert.Equal("6032", giorni[0].EmplId);
         Assert.Equal(210, giorni[1].Minutes);
         Assert.Equal("2", giorni[1].RefineId);
         Assert.Contains("PeopleAbsenceRequestRefineWorkAll", handler.UrlChiamati[0]);

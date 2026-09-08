@@ -62,6 +62,8 @@ public partial class HrAttendanceService
     {
         if (giorni.Count == 0) return (0, 0, 0);
 
+        // Anche i giorni portano codice e id: si impara la coppia (vedi SyncAbsences).
+        ImparaEmplId(c, giorni.Select(g => (g.EmplCode, g.EmplId)));
         Dictionary<string, int> mappa = MappaEcos(c);
 
         // 🪤 La chiave è (richiesta, GIORNO, tratto): il progressivo del tratto si ripete per

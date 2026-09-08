@@ -627,9 +627,18 @@ Il ponte vecchio dalla richiesta (`SyncToResourcePlanner` in `SyncAbsences`) è 
 dalla richiesta una ferie di tre ore diventava una barra intera. Resta per le richieste
 approvate dentro ATEC PM (`Assenze.cs`).
 E le **richieste** (`PeopleAbsenceRequestGetAll`) si leggono a ogni import **senza cursore**:
-col cursore delle timbrature una richiesta approvata settimane fa non rientrava mai, e in
-produzione `hr_absences` non aveva una sola richiesta di Ecos. Test: `FeriePlannerDaEcosTests`,
-`IntervalliFerieTests`.
+col cursore delle timbrature una richiesta approvata settimane fa non rientrava mai. Test:
+`FeriePlannerDaEcosTests`, `IntervalliFerieTests`.
+
+🪤🪤 **Il motivo vero per cui `hr_absences` non aveva mai avuto una richiesta di Ecos** (scoperto
+dopo il deploy, 08/09): `PeopleAbsenceRequestGetAll` **non manda l'`EmplCode`**, solo l'`EmplID`
+(34 campi: `EmplID` c'è, `EmplCode` no). La mappatura per codice badge non trovava nessuno e le
+saltava tutte in silenzio. Da qui **`employees.ecos_empl_id`** (M126), imparato da soli dagli
+scarichi che portano tutti e due i campi (timbrature, badge, giorni di assenza:
+`HrAttendanceService.ImparaEmplId`); `SyncAbsences` riconosce la persona per `EmplID` e ripiega
+sul codice. L'ordine dell'import è: timbrature → giorni di assenza (insegnano gli id) → richieste.
+Regola: **ogni lettura nuova va provata guardando quali campi identificano la persona** — non
+tutte le API hanno l'`EmplCode` (guida §11: l'`EmplID` è la chiave stabile).
 
 ### 9.6 Anagrafica persone (`PeopleExpressGetAll`)
 
