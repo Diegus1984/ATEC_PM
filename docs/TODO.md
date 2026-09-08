@@ -580,4 +580,30 @@ già calcolati da `GET /api/auth-levels/features/my`.
 
 ---
 
+## 11 · HR / Ecos — trovato studiando la guida ufficiale (07/09/2026)
+
+Dettagli e ricette in [guide/ECOS-API-MANUALE.md](guide/ECOS-API-MANUALE.md) §11. Sono
+modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativa.
+
+- [ ] 🔴 **Flag `Delete` non letto.** La guida dice che i record cancellati in Ecos restano
+      visibili con `Delete=1`: una timbratura tolta là continua ad arrivare e a contare nel
+      cartellino, e nemmeno l'import completo la rimuove (confronta gli ID, e l'ID c'è ancora).
+      Prima verifica con `python tools/sonda_ecos.py PeopleStampGetAll --righe 1` se il campo
+      esiste sulle timbrature (sulle assenze c'è, sonda del 29/08); poi `Delete` in
+      `PunchFields`/`AbsenceFields` e riga con `Delete=1` trattata come cancellata.
+- [ ] 🟠 **Token scaduto nella risincronizzazione di un mese con assenze**:
+      `ImportWindowAsync(conAssenze: true)` riusa il token dopo la scrittura su DB; oltre 60 s
+      di inattività Ecos lo invalida (`-1`) e le assenze del mese non si riallineano (errore
+      catturato, solo a log). Nuovo `TokenAsync()` prima della chiamata, o rinnovo automatico
+      su `-1` con un solo retry.
+- [ ] 🟡 `AppCode=ATEC_PM` su tutte le chiamate (audit lato Ecos) · `RowsPerPage` 500 → 1000
+      · log di `RECORDCOUNT`/`LASTPAGE` per pagina · `ResultFields` sulle API larghe (release
+      Ecos ≥ 6.10, da verificare).
+- [~] Utente API **dedicato** al posto dell'account personale (la guida lo vieta): **fatto il
+      07/09/2026, `api.it` salvato dalla pagina, «Prova collegamento» ok.** Restano da misurare i
+      diritti (`sonda_ecos.py … --calibra`, poi «Aggiorna da Ecos») e, se mancano, i ServiceID
+      `request` e `TimesheetAnalysis` da chiedere a SoftAgile: testo nel manuale §9.4.
+
+---
+
 *Ultimo aggiornamento: 2026-06-10 — sez. 9 PORTATA (tranne export/import JSON, da valutare): conflitti ferie+ferie, fix colonne Gantt, selettore risorse+persistenza, riattivazione cessati, blocco login completo. Build 0 err/0 warn; endpoint testati runtime read-only (login/mustChangePassword, session, includeTerminated, change-password-login). DA VERIFICARE A VISTA: Gantt allineato, selettore risorse, flusso cambio password forzato, reset password, riattiva cessato.*

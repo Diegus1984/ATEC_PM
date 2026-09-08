@@ -85,6 +85,8 @@ seq_tmp.txt
 deploy/out/
 
 # One-off import/audit del catalogo robot Gamma: password MySQL locale cablata,
-# già eseguiti, restano solo su questo PC. L'unico tool vivo è segnalazioni.py.
+# già eseguiti, restano solo su questo PC. I tool vivi sono segnalazioni.py e
+# sonda_ecos.py (nessuna credenziale dentro: le prende dalle variabili d'ambiente).
 tools/*.py
 !tools/segnalazioni.py
+!tools/sonda_ecos.py

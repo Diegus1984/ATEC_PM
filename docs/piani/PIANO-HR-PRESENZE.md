@@ -79,6 +79,10 @@ tarate sul campo e non vanno reinventate:
 
 ### Come dialoga con Ecos
 
+> **Manuale completo dell'API Ecos** (protocollo, filtri, paginazione, errori, scrittura,
+> catalogo, ricette per le chiamate nuove, sonda): **[../guide/ECOS-API-MANUALE.md](../guide/ECOS-API-MANUALE.md)**
+> — scritto il 07/09/2026 dalla guida ufficiale v4.1.1 e dai sample di SoftAgile (cartella `ECOS/`).
+
 - Base URL: `https://ha.ecosagile.com/dd/api.pm?ApiName=` — **un solo dispatcher**,
   l'operazione è scelta dal parametro `ApiName`.
 - Autenticazione: `TokenGet` (POST con `Userid`, `Password`, `ClientID`) → `AuthToken`.

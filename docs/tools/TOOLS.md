@@ -85,10 +85,43 @@ del catalogo in [../guide/CATALOGO-DESCRIZIONI.md](../guide/CATALOGO-DESCRIZIONI
 
 ---
 
+## 🕵️ Ecos («eTime») — sonda di sola lettura (`tools/sonda_ecos.py`)
+
+Per capire come risponde davvero un'API EcosAgile sul nostro tenant **prima** di scriverci
+del codice: esiste? abbiamo il diritto? quali campi torna e in che forma? Il protocollo e le
+regole stanno in [../guide/ECOS-API-MANUALE.md](../guide/ECOS-API-MANUALE.md).
+
+```powershell
+# Credenziali SOLO da variabili d'ambiente (mai su disco, mai a log; il token non si stampa)
+$env:ECOS_USERID = "..."; $env:ECOS_PASSWORD = "..."; $env:ECOS_CLIENTID = "10305"
+# (opzionale) $env:ECOS_BASEURL = "https://ha.ecosagile.com/dd/api.pm?ApiName="
+
+python tools/sonda_ecos.py PeopleStampGetAll --righe 1                       # campi + una riga d'esempio (senza nominativi)
+python tools/sonda_ecos.py PeopleAbsenceRequestGetAll --filtro "UpdateDate=>='2026-08-01 00:00:00'" --righe 3
+python tools/sonda_ecos.py Timesheet2GetAll PeopleAbsenceRequestPost --calibra   # corpo vuoto: esiste? negata? autorizzata?
+python tools/sonda_ecos.py PeopleStampGetAll --filtro "YearMonth=='202608'" --conta   # conta le righe su tutte le pagine
+python tools/sonda_ecos.py PeopleBadgeGetAll --campi EmplID,EmplCode,InForce --righe 5  # ResultFields (release Ecos >= 6.10)
+```
+
+| Opzione | Cosa fa |
+|---------|---------|
+| `--filtro "Campo=<op><valore>"` | filtro nel body, ripetibile; stringhe e date **fra apici**, numeri senza (`EmplID==18`) |
+| `--righe N` / `--pagina N` | righe per pagina (default 3) e pagina |
+| `--calibra` | chiamata **a corpo vuoto**: legge solo la forma dell'errore. È l'unico modo ammesso di nominare una `Post*` |
+| `--conta` | scorre tutte le pagine e stampa il totale, senza dati a video |
+| `--mostra-nomi` / `--grezzo` | mostra i nominativi / tutte le righe della pagina |
+
+> ⚠️ Le chiamate all'API di produzione di Ecos si fanno **su richiesta di Diego**, non di
+> iniziativa: sempre un filtro, poche righe. Il limitatore di Ecos **blocca l'account** a chi
+> scarica senza filtri o troppo spesso. La sonda rifiuta le `Post*` fuori da `--calibra`.
+
+---
+
 ## 🧰 Altri attrezzi
 
 | Percorso | A cosa serve |
 |----------|--------------|
+| `tools/sonda_ecos.py` | Sonda di sola lettura sulle API EcosAgile (sezione sopra) |
 | `tools/CleanupBase64/` | Progetto .NET: ripulisce dal DB le immagini base64 rimaste nei campi RTF |
 | `tools/DbFix/` | Progetto .NET di riparazioni una tantum sul database |
 | `atec-pm-web/scripts/genera-catalogo.mjs` | Rigenera `src/config/catalogo.gen.ts` dal catalogo permessi (fonte unica: `ATEC.PM.Shared/catalogo-permessi.json`) |
