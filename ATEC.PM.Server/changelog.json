@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1359",
+                     "data":  "2026-09-08T14:00:12",
+                     "hash":  "49ff8814c382f9d41d6e42e20af998666d15877e",
+                     "modifiche":  [
+                                       "HR: pulsante «Invia a Ecos» con registro (M127)",
+                                       "Sonda Ecos: modalità --scrivi (provata su PeopleStampPost) e nominativi filtrati nelle risposte"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1222",
                      "data":  "2026-09-08T12:29:30",
                      "hash":  "4b6fbcfb9224f2eb230d3fefaeab56f9c094cb4a",
