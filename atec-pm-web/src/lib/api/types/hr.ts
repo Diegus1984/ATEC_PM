@@ -2,11 +2,53 @@
 
 export interface HrPunch {
   id: number
+  /** L'ora timbrata: non cambia mai, nemmeno dopo un «Invia a Ecos». */
   punchedAt: string
   direction: string
   source: string
   reason?: string | null
   createdBy?: string | null
+  // ── «Invia a Ecos» (08/09/2026): decide tutto il server, qui si mostra ──
+  /** StampID di Ecos; solo per le timbrature di Ecos. */
+  ecosStampId?: string | null
+  /** L'orario che Ecos ha dopo un nostro invio; null = mai inviato (Ecos ha il timbrato). */
+  ecosPunchedAt?: string | null
+  ecosSentAt?: string | null
+  /** L'orario arrotondato dal motore: quello che il pulsante manda. */
+  roundedAt?: string | null
+  /** Di Ecos e con l'arrotondamento nello stesso giorno. */
+  canSendToEcos: boolean
+  /** Inviabile e con un orario su Ecos diverso da quello arrotondato. */
+  toSendToEcos: boolean
+}
+
+/** Una riga del registro degli invii a Ecos di una giornata. */
+export interface HrEcosSend {
+  id: number
+  punchId?: number | null
+  ecosStampId: string
+  direction: string
+  /** L'ora timbrata originale: quella che Ecos perde. */
+  punchedAt: string
+  /** L'ora inviata (arrotondata). */
+  sentTime: string
+  previousTime?: string | null
+  /** OK oppure ERROR. */
+  outcome: string
+  message?: string | null
+  sentBy?: string | null
+  sentAt: string
+}
+
+/** Esito del pulsante «Invia a Ecos»: viaggia sempre come dato, anche se fallito. */
+export interface HrEcosSendResult {
+  success: boolean
+  message: string
+  total: number
+  sent: number
+  failed: number
+  skipped: number
+  errors: string[]
 }
 
 export interface HrDay {
@@ -26,6 +68,8 @@ export interface HrDay {
   note: string
   hasAnomaly: boolean
   punches: HrPunch[]
+  /** Il registro degli invii a Ecos di questa giornata, dal più recente. */
+  ecosSends: HrEcosSend[]
   /** 🔸 Le timbrature come sono arrivate dal rilevatore. */
   raw: HrDayStage
   /** 🔷 Le stesse dopo l'arrotondamento (scatto 30', tolleranza 10'). */

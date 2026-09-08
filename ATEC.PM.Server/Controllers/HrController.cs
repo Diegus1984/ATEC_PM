@@ -633,6 +633,27 @@ public class HrController : ControllerBase
             : ApiResponse<bool>.Fail(error));
     }
 
+    // ── INVIA A ECOS ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Manda a Ecos gli orari arrotondati di una giornata (<c>PeopleStampPost</c>, <c>Edit=true</c>).
+    /// Stessa soglia delle rettifiche: la scrittura su Timbrature. L'esito viaggia SEMPRE come
+    /// dato, anche quando è un fallimento: i contatori e il registro servono a video.
+    /// </summary>
+    [HttpPost("ecos/send-day")]
+    public async Task<IActionResult> SendDayToEcos([FromBody] HrEcosSendRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("L'invio a Ecos richiede la scrittura su Timbrature."));
+
+        HrEcosSendResultDto esito = await _attendance.SendDayToEcosAsync(
+            req.EmployeeId, req.WorkDate.Date, MeId, HttpContext.RequestAborted);
+        if (esito.Sent > 0 || esito.Failed > 0)
+            _realtime.Notify("ecos-send", req.EmployeeId, req.WorkDate.Date);
+        return Ok(ApiResponse<HrEcosSendResultDto>.Ok(esito, esito.Message));
+    }
+
     // ── RICHIESTE FERIE ED ASSENZE (FASE 2) ───────────────────────────────────
 
     [HttpGet("absences")]

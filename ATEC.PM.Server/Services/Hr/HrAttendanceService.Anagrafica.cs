@@ -277,6 +277,8 @@ public partial class HrAttendanceService
         public DateTime PunchedAt { get; set; }
         public string Direction { get; set; } = "";
         public string? Location { get; set; }
+        /// <summary>L'orario che Ecos ha per un nostro «Invia a Ecos»: il suo eco non è una modifica.</summary>
+        public DateTime? EcosPunchedAt { get; set; }
     }
 
     private sealed class DayRow
@@ -314,5 +316,8 @@ public partial class HrAttendanceService
         public string Source { get; set; } = "";
         public string? Reason { get; set; }
         public string? CreatedBy { get; set; }
+        public string? ExternalId { get; set; }
+        public DateTime? EcosPunchedAt { get; set; }
+        public DateTime? EcosSentAt { get; set; }
     }
 }

@@ -379,6 +379,86 @@ public class EcosClient
             .ToList();
     }
 
+    // ── SCRITTURA: PeopleStampPost ──────────────────────────────────────────────
+    //
+    // Provata sul tenant l'08/09/2026 (manuale §4.2): Edit=true in query string, nel corpo la
+    // chiave StampID, il nuovo StampDateTime e UserTZ (i minuti di scarto dall'UTC col segno
+    // di JavaScript: -120 d'estate). Senza UserTZ Ecos risponde -11 «StampDateTimeTZOffSet».
+    // È un update parziale: gli altri campi restano; Ecos NON tiene l'ora precedente.
+
+    /// <summary>Il fuso dell'azienda: le timbrature sono in ora italiana.</summary>
+    private static readonly TimeZoneInfo FusoItalia = TrovaFuso();
+
+    private static TimeZoneInfo TrovaFuso()
+    {
+        foreach (string id in new[] { "Europe/Rome", "W. Europe Standard Time" })
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (TimeZoneNotFoundException) { }
+            catch (InvalidTimeZoneException) { }
+        }
+        return TimeZoneInfo.Local;
+    }
+
+    /// <summary>
+    /// <c>UserTZ</c> come lo manda l'app di Ecos: il <c>getTimezoneOffset()</c> di JavaScript,
+    /// cioè UTC meno ora locale in minuti (-120 con l'ora legale, -60 con quella solare).
+    /// </summary>
+    internal static int UserTz(DateTime oraLocale) =>
+        -(int)FusoItalia.GetUtcOffset(DateTime.SpecifyKind(oraLocale, DateTimeKind.Unspecified)).TotalMinutes;
+
+    /// <summary>
+    /// Sposta l'orario di una timbratura che su Ecos esiste già (<c>Edit=true</c> + <c>StampID</c>).
+    /// Idempotente: rimandare lo stesso orario non cambia niente. Torna il <c>MESSAGE</c> di
+    /// Ecos («Correct Record Update»); ogni errore è una <see cref="EcosApiException"/>.
+    /// </summary>
+    public async Task<string> UpdateStampTimeAsync(
+        string token, string stampId, DateTime nuovoOrario, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(stampId))
+            throw new EcosApiException("PeopleStampPost: senza StampID sarebbe un inserimento, non una modifica.");
+
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleStampPost&Edit=true&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["StampID"] = stampId.Trim(),
+            ["StampDateTime"] = nuovoOrario.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ["UserTZ"] = UserTz(nuovoOrario).ToString(CultureInfo.InvariantCulture),
+        });
+        string body = await PostAsync(url, form, ct);
+        return EsitoScrittura(body, "PeopleStampPost");
+    }
+
+    /// <summary>
+    /// La busta di una Post: <c>CODE</c> OK, oppure errore con <c>ERROR_CODE</c>. Torna il
+    /// <c>MESSAGE</c>. Trappola: <c>Edit=true</c> a corpo vuoto risponde VUOTO, non -17: anche
+    /// quello è un errore (lo intercetta <see cref="ParseDocumento"/>). Statico per i test.
+    /// </summary>
+    internal static string EsitoScrittura(string json, string apiName)
+    {
+        using JsonDocument doc = ParseDocumento(json, apiName);
+        if (!doc.RootElement.TryGetProperty("ECOSAGILE_TABLE_DATA", out JsonElement tabella)
+            || !tabella.TryGetProperty("ECOSAGILE_ERROR_MESSAGE", out JsonElement errore)
+            || errore.ValueKind != JsonValueKind.Object)
+            throw new EcosApiException($"{apiName}: risposta senza esito ({Accorcia(json)}).");
+
+        string codice = Testo(errore, "CODE");
+        string messaggio = Testo(errore, "MESSAGE");
+        string codiceErrore = Testo(errore, "ERROR_CODE");
+        if (string.Equals(codice, "OK", StringComparison.OrdinalIgnoreCase)) return messaggio;
+
+        string spiegazione = codiceErrore switch
+        {
+            "-1" => " Token Ecos scaduto (ERROR_CODE -1): serve un TokenGet nuovo.",
+            "-2" => " Diritto mancante sul servizio (ERROR_CODE -2).",
+            "-17" => " Chiave mancante nel corpo (ERROR_CODE -17).",
+            "" => "",
+            _ => $" (ERROR_CODE {codiceErrore})",
+        };
+        throw new EcosApiException($"{apiName}: {messaggio} (CODE={codice}).{spiegazione}");
+    }
+
     /// <summary>Richieste di assenza / ferie / permessi da Ecos.</summary>
     public async Task<List<EcosAbsenceRequest>> GetAbsenceRequestsAsync(
         string token, DateTime? updateDa, CancellationToken ct = default)

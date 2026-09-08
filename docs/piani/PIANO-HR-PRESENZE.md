@@ -504,8 +504,14 @@ notturno oltre le 22: 35%». Per il «fino alle 22» fa fede l'art. 7 del CCNL: 
 - Niente self-exclusion né concurrency token: le scritture HR sono append-only (grezzo,
   rettifiche, solleciti) o a stato (richieste): niente da sovrascrivere in silenzio.
 
-**🔜 Fase 2 — ritorno verso Ecos delle ore arrotondate** (chiesto da Diego il 02/09, da fare
-quando le API in scrittura saranno attive, vedi §5 e [[ecos_api_guida_ufficiale]]):
+**✅ Fase 2 — ritorno verso Ecos delle ore arrotondate: COSTRUITA l'08/09/2026** (ordine di
+Diego; pronta per il deploy). Com'è fatta: pulsante «Invia a Ecos» nel dialogo della giornata,
+con i tre stati in parole («Da inviare: N», «Allineato con Ecos», «Inviato il gg/mm/aa hh:mm»)
+e il registro degli invii sotto; `POST /api/hr/ecos/send-day`; `HrAttendanceService.InvioEcos.cs`;
+migrazione M127 (`hr_punches.ecos_punched_at`/`ecos_sent_at`, tabella `hr_ecos_sends`). L'import
+riconosce l'eco del nostro invio (l'ora timbrata resta) e se su Ecos cambiano l'orario vince
+Ecos. Le rettifiche non partono: su Ecos non esistono. Manuale Ecos §9.3, test `InvioEcosTests`.
+Il testo che segue è il progetto originale del 02/09, lasciato per storia:
 colonna «Ecos» con tre stati in parole («Allineato», «Da inviare», «Inviato il gg/mm») e
 un pulsante che manda a Ecos **solo le giornate in cui l'ora arrotondata è diversa da
 quella timbrata**, con `PeopleStampPost` in modifica (`Edit=true` + chiave `StampID`

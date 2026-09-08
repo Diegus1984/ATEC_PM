@@ -6,6 +6,7 @@ import type {
   HrAbsence,
   HrBadges,
   HrCreateAbsenceRequest,
+  HrEcosSendResult,
   HrGiustificaInfo,
   HrGiustificaRequest,
   HrImportResult,
@@ -107,6 +108,20 @@ export async function sendHrAdjustment(payload: {
 }): Promise<void> {
   const r = await apiPost<ApiResponse<boolean>>("/api/hr/adjustment", payload)
   unwrapApi(r)
+}
+
+/**
+ * «Invia a Ecos»: gli orari arrotondati della giornata vanno su Ecos (PeopleStampPost,
+ * Edit=true). L'esito arriva sempre come dato, anche quando è un fallimento: il dialogo
+ * mostra contatori e registro.
+ */
+export async function sendHrDayToEcos(payload: {
+  employeeId: number
+  /** «yyyy-MM-dd». */
+  workDate: string
+}): Promise<HrEcosSendResult> {
+  const r = await apiPost<ApiResponse<HrEcosSendResult>>("/api/hr/ecos/send-day", payload)
+  return unwrapApi(r)
 }
 
 export async function deleteHrAdjustment(id: number): Promise<void> {

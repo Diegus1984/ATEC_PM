@@ -20,6 +20,7 @@ function giornata(over: Partial<HrDay>): HrDay {
     note: "OK",
     hasAnomaly: false,
     punches: [],
+    ecosSends: [],
     raw: {} as HrDay["raw"],
     normalized: {} as HrDay["normalized"],
     canRemind: false,

@@ -28,6 +28,9 @@ public class HrDayDto
     public bool HasAnomaly { get; set; }
     public List<HrPunchDto> Punches { get; set; } = new();
 
+    /// <summary>Il registro degli invii a Ecos di questa giornata, dal più recente.</summary>
+    public List<HrEcosSendDto> EcosSends { get; set; } = new();
+
     // ── I due stadi che precedono il cartellino ───────────────────────────────
     //
     // Il ReportPage del programma «Timbrature» mostra tre blocchi di colonne per la stessa
@@ -68,11 +71,25 @@ public class HrDayStageDto
 public class HrPunchDto
 {
     public long Id { get; set; }
+    /// <summary>L'ora timbrata: non cambia mai, nemmeno dopo un «Invia a Ecos».</summary>
     public DateTime PunchedAt { get; set; }
     public string Direction { get; set; } = "";
     public string Source { get; set; } = "";
     public string? Reason { get; set; }
     public string? CreatedBy { get; set; }
+
+    // ── «Invia a Ecos» (08/09/2026) ───────────────────────────────────────────
+    /// <summary>StampID di Ecos; solo per le timbrature di Ecos.</summary>
+    public string? EcosStampId { get; set; }
+    /// <summary>L'orario che Ecos ha dopo un nostro invio; null = mai inviato (Ecos ha il timbrato).</summary>
+    public DateTime? EcosPunchedAt { get; set; }
+    public DateTime? EcosSentAt { get; set; }
+    /// <summary>L'orario arrotondato dal motore: quello che il pulsante manda.</summary>
+    public DateTime? RoundedAt { get; set; }
+    /// <summary>Di Ecos e con l'arrotondamento nello stesso giorno.</summary>
+    public bool CanSendToEcos { get; set; }
+    /// <summary>Inviabile e con un orario su Ecos diverso da quello arrotondato.</summary>
+    public bool ToSendToEcos { get; set; }
 }
 
 public class HrImportResultDto
@@ -172,6 +189,48 @@ public class HrAdjustmentRequest
     public DateTime PunchedAt { get; set; }
     public string Direction { get; set; } = "";
     public string Reason { get; set; } = "";
+}
+
+// ── INVIA A ECOS (08/09/2026) ─────────────────────────────────────────────
+
+public class HrEcosSendRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime WorkDate { get; set; }
+}
+
+/// <summary>Esito del pulsante «Invia a Ecos» di una giornata. Viaggia sempre come dato, anche se fallito.</summary>
+public class HrEcosSendResultDto
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = "";
+    /// <summary>Timbrature di Ecos della giornata.</summary>
+    public int Total { get; set; }
+    public int Sent { get; set; }
+    public int Failed { get; set; }
+    /// <summary>Non inviabili: l'arrotondamento cambierebbe giorno.</summary>
+    public int Skipped { get; set; }
+    public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>Una riga del registro degli invii a Ecos (<c>hr_ecos_sends</c>).</summary>
+public class HrEcosSendDto
+{
+    public long Id { get; set; }
+    public long? PunchId { get; set; }
+    public string EcosStampId { get; set; } = "";
+    public string Direction { get; set; } = "";
+    /// <summary>L'ora timbrata originale: quella che Ecos perde.</summary>
+    public DateTime PunchedAt { get; set; }
+    /// <summary>L'ora inviata (arrotondata).</summary>
+    public DateTime SentTime { get; set; }
+    /// <summary>L'ora che Ecos aveva prima di questo invio.</summary>
+    public DateTime? PreviousTime { get; set; }
+    /// <summary>OK oppure ERROR.</summary>
+    public string Outcome { get; set; } = "";
+    public string? Message { get; set; }
+    public string? SentBy { get; set; }
+    public DateTime SentAt { get; set; }
 }
 
 // ── ABSENCES & REQUESTS (FASE 2) ──────────────────────────────────────────

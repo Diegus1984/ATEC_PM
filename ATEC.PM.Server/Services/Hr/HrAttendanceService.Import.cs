@@ -495,7 +495,8 @@ public partial class HrAttendanceService
         {
             foreach (RigaEsistente riga in c.Query<RigaEsistente>(
                 @"SELECT external_id AS ExternalId, id AS Id, employee_id AS EmployeeId,
-                         work_date AS WorkDate, punched_at AS PunchedAt, direction AS Direction, location AS Location
+                         work_date AS WorkDate, punched_at AS PunchedAt, direction AS Direction, location AS Location,
+                         ecos_punched_at AS EcosPunchedAt
                   FROM hr_punches
                   WHERE source = 'ECOS' AND external_id IN @Ids",
                 new { Ids = blocco }))
@@ -531,17 +532,30 @@ public partial class HrAttendanceService
                 }
 
                 int employeeId = mappato ? employeeIdMappato : vecchia.EmployeeId;
-                if (vecchia.PunchedAt != t.PunchedAt
+                // L'eco di «Invia a Ecos»: Ecos rimanda l'orario ARROTONDATO che gli abbiamo
+                // scritto noi (InvioEcos). Non è una modifica: l'ora timbrata resta. Un orario
+                // diverso sia dal timbrato sia dall'inviato, invece, l'ha cambiato qualcuno là:
+                // vince Ecos, punched_at si aggiorna e l'invio decade.
+                bool orarioCambiato = vecchia.PunchedAt != t.PunchedAt
+                    && !(vecchia.EcosPunchedAt is { } inviato && inviato == t.PunchedAt);
+                if (orarioCambiato
                     || !string.Equals(vecchia.Direction, t.Direction, StringComparison.OrdinalIgnoreCase)
                     || vecchia.EmployeeId != employeeId
                     || !string.Equals(vecchia.Location ?? "", t.Location ?? "", StringComparison.Ordinal))
                 {
                     c.Execute(@"
                         UPDATE hr_punches
-                        SET employee_id = @EmployeeId, work_date = @WorkDate, punched_at = @PunchedAt,
+                        SET employee_id = @EmployeeId, work_date = @WorkDate,
+                            punched_at = IF(@OrarioCambiato, @PunchedAt, punched_at),
+                            ecos_punched_at = IF(@OrarioCambiato, NULL, ecos_punched_at),
+                            ecos_sent_at = IF(@OrarioCambiato, NULL, ecos_sent_at),
                             direction = @Direction, location = @Location
                         WHERE id = @Id",
-                        new { EmployeeId = employeeId, WorkDate = work_date, t.PunchedAt, t.Direction, t.Location, vecchia.Id },
+                        new
+                        {
+                            EmployeeId = employeeId, WorkDate = work_date, t.PunchedAt, OrarioCambiato = orarioCambiato,
+                            t.Direction, t.Location, vecchia.Id,
+                        },
                         tran);
                     aggiornate++;
                     SegnaConVicine(giorniToccati, daRifare, vecchia.EmployeeId, vecchia.WorkDate);

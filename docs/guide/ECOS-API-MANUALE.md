@@ -558,7 +558,26 @@ Costanti da conoscere: `RowsPerPage=500`, `MaxPages=2000`, `DallInizio=1900-01-0
 `StampDateTime` arrotondato; solo per le giornate in cui l'ora arrotondata differisce da
 quella timbrata; ogni invio registrato con data e autore; stati «Allineato / Da inviare /
 Inviato il». ✅ La chiamata è **provata** (08/09/2026, §4.2): `StampID` + `StampDateTime` +
-`UserTZ=-120`, risposta «Correct Record Update». Resta da costruire il pulsante e il registro. ⚠️ Da fare **solo con l'utente API dedicato** (§9.4) e dopo il sì sul fatto che
+`UserTZ=-120`, risposta «Correct Record Update».
+
+✅ **COSTRUITO l'08/09/2026** (ordine di Diego, pronto per il deploy): pulsante **«Invia a Ecos»**
+nel dialogo della giornata (Timbrature), endpoint `POST /api/hr/ecos/send-day`, servizio
+`HrAttendanceService.SendDayToEcosAsync` (`HrAttendanceService.InvioEcos.cs`), migrazione
+**M127**: `hr_punches.ecos_punched_at` / `ecos_sent_at` + registro **`hr_ecos_sends`**. Regole:
+1. `punched_at` è l'ora timbrata e **non cambia mai**; `ecos_punched_at` è quello che Ecos ha
+   per colpa nostra; ogni invio è una riga del registro (ora originale, ora inviata, esito,
+   autore, StampID). Ecos non tiene la storia: la teniamo noi.
+2. Parte solo ciò che differisce (`TimbraturaEcos.DaInviare`): arrotondamento = quello del
+   motore (`TimesheetRules.RoundTime`, entrata su / uscita giù, scatto 30', tolleranza 10').
+   Non inviabile se l'arrotondamento cambia giorno (entrata 23:55). Le rettifiche non esistono
+   su Ecos: non partono (servirebbe un INSERT, non idempotente — non fatto).
+3. Al primo errore ci si ferma (registro `ERROR`, il pulsante si ripreme: sono update).
+4. **L'import riconosce l'eco**: se Ecos rimanda l'orario uguale a `ecos_punched_at` non è una
+   modifica; se rimanda un orario diverso da entrambi, **vince Ecos**: `punched_at` si aggiorna
+   e l'invio decade (`ecos_*` a NULL). `ImportPunches`, test `InvioEcosTests`.
+5. Soglia: scrittura su Timbrature (come le rettifiche). Real-time `HrChanged` «ecos-send».
+Test: `TimbraturaEcosTests` (regole pure, `UserTz`, `EsitoScrittura`), `InvioEcosTests` (DB +
+Ecos finto), `invio-ecos.test.ts` (riassunto del dialogo). ⚠️ Da fare **solo con l'utente API dedicato** (§9.4) e dopo il sì sul fatto che
 sovrascrivere l'ora timbrata in Ecos sia accettabile: la regola di Diego è che l'ora
 originale non deve mai sparire — se Ecos non tiene la storia, l'originale resta solo da noi.
 

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
-import { Trash2 } from "lucide-react"
+import { Send, Trash2 } from "lucide-react"
 
 import { useConfirm } from "@/components/shared/confirm"
 import { Badge } from "@/components/ui/badge"
@@ -23,11 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteHrAdjustment, sendHrAdjustment } from "@/lib/api/hr"
+import { deleteHrAdjustment, sendHrAdjustment, sendHrDayToEcos } from "@/lib/api/hr"
 import type { HrDay } from "@/lib/api/types"
+import { formatDateTimeShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
+import { riassuntoInvioEcos, versoTimbratura } from "./invio-ecos"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 function oraDa(iso: string): string {
@@ -172,10 +174,33 @@ export function GiornataDialog({
     onError: (e) => notifyError((e as Error).message),
   })
 
+  // «Invia a Ecos»: gli orari arrotondati sovrascrivono su Ecos quelli timbrati. L'esito
+  // arriva sempre come dato: un fallimento parziale si legge nel registro, non in un errore.
+  const invioEcos = useMutation({
+    mutationFn: sendHrDayToEcos,
+    onSuccess: (esito) => {
+      if (esito.success) notifySuccess(esito.message)
+      else notifyError(esito.message)
+      onChanged()
+    },
+    onError: (e) => notifyError((e as Error).message),
+  })
+
   if (!giornata) return null
   const giorno = giornata.workDate.slice(0, 10)
   const stato = statoGiornata(giornata)
   const frase = spiegazione(giornata, employeeName, canWrite)
+  const ecos = riassuntoInvioEcos(giornata)
+
+  async function inviaAEcos() {
+    if (!giornata || ecos.daInviare.length === 0) return
+    const ok = await confirm({
+      title: "Inviare a Ecos gli orari arrotondati?",
+      description: `${ecos.daInviare.length} timbrature di ${employeeName || "questa persona"} del ${giornoEsteso(giornata.workDate)} verranno sovrascritte su Ecos con l'orario arrotondato. L'ora timbrata resta qui e nel registro degli invii.`,
+      confirmLabel: "Invia a Ecos",
+    })
+    if (ok) invioEcos.mutate({ employeeId, workDate: giorno })
+  }
 
   function inviaRettifica() {
     if (!ora || !motivo.trim() || !giornata) return
@@ -266,6 +291,84 @@ export function GiornataDialog({
             </ul>
           )}
         </div>
+
+        {ecos.diEcos > 0 && (
+          <div className="space-y-2 rounded-md border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium">Orari arrotondati su Ecos</p>
+              {ecos.daInviare.length > 0 ? (
+                <Badge variant="secondary">Da inviare: {ecos.daInviare.length}</Badge>
+              ) : ecos.allineato ? (
+                <Badge variant="outline">Allineato con Ecos</Badge>
+              ) : null}
+              {ecos.ultimoInvio && (
+                <span className="text-xs text-muted-foreground">
+                  Inviato il {formatDateTimeShort(ecos.ultimoInvio)}
+                </span>
+              )}
+            </div>
+            {ecos.daInviare.length > 0 && (
+              <ul className="space-y-0.5 text-sm">
+                {ecos.daInviare.map((t) => (
+                  <li key={t.id} className="flex items-center gap-2 tabular-nums">
+                    <span className="w-14">{versoTimbratura(t.direction)}</span>
+                    <span className="text-muted-foreground">{oraDa(t.ecosPunchedAt ?? t.punchedAt)}</span>
+                    <span className="text-muted-foreground">diventa</span>
+                    <span className="font-medium">{t.roundedAt ? oraDa(t.roundedAt) : "—"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {ecos.nonInviabili > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {ecos.nonInviabili === 1
+                  ? "Una timbratura non è inviabile: l'arrotondamento cambierebbe giorno."
+                  : `${ecos.nonInviabili} timbrature non sono inviabili: l'arrotondamento cambierebbe giorno.`}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Su Ecos l'orario timbrato viene sovrascritto con quello arrotondato. L'ora timbrata resta
+              qui e nel registro degli invii.
+            </p>
+            {canWrite && ecos.daInviare.length > 0 && (
+              <div className="flex justify-end">
+                <Button size="sm" disabled={invioEcos.isPending} onClick={() => void inviaAEcos()}>
+                  <Send className="size-4" />
+                  Invia a Ecos
+                </Button>
+              </div>
+            )}
+            {giornata.ecosSends.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium">Registro invii</p>
+                <ul className="space-y-0.5 text-xs">
+                  {giornata.ecosSends.map((invio) => (
+                    <li
+                      key={invio.id}
+                      className={cn(
+                        "flex flex-wrap items-center gap-x-2 tabular-nums",
+                        invio.outcome !== "OK" && "text-destructive"
+                      )}
+                    >
+                      <span>{formatDateTimeShort(invio.sentAt)}</span>
+                      <span>
+                        {versoTimbratura(invio.direction)} {oraDa(invio.punchedAt)} diventa{" "}
+                        {oraDa(invio.sentTime)}
+                      </span>
+                      <span>{invio.outcome === "OK" ? "inviata" : "errore"}</span>
+                      {invio.sentBy && <span className="text-muted-foreground">{invio.sentBy}</span>}
+                      {invio.outcome !== "OK" && invio.message && (
+                        <span className="basis-full truncate" title={invio.message}>
+                          {invio.message}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {canWrite && (
           <div className="space-y-2 rounded-md border p-3">

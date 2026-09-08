@@ -44,6 +44,7 @@ public partial class HrAttendanceService
         var timbrature = c.Query<PunchRow>(
                 @"SELECT t.id AS Id, t.work_date AS WorkDate, t.punched_at AS PunchedAt,
                          t.direction AS Direction, t.source AS Source, t.reason AS Reason,
+                         t.external_id AS ExternalId, t.ecos_punched_at AS EcosPunchedAt, t.ecos_sent_at AS EcosSentAt,
                          CONCAT_WS(' ', e.first_name, e.last_name) AS CreatedBy
                   FROM hr_punches t
                   LEFT JOIN employees e ON e.id = t.created_by
@@ -55,6 +56,9 @@ public partial class HrAttendanceService
                 new { Id = employeeId, Da = primo.AddDays(-1), A = ultimo.AddDays(1) })
             .GroupBy(t => t.WorkDate.Date)
             .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Il registro degli invii a Ecos del mese (poche righe): sta nella giornata.
+        Dictionary<DateTime, List<HrEcosSendDto>> inviiEcos = InviiEcosPerGiorno(c, employeeId, primo, ultimo);
 
         // Assenze approvate del mese
         var assenze = c.Query<HrAbsenceDto>(
@@ -154,17 +158,12 @@ public partial class HrAttendanceService
                 riga.Note = "FORFAIT";
             }
 
+            if (inviiEcos.TryGetValue(work_date, out List<HrEcosSendDto>? invii))
+                riga.EcosSends = invii;
+
             if (timbrature.TryGetValue(work_date, out List<PunchRow>? grezze))
             {
-                riga.Punches = grezze.Select(t => new HrPunchDto
-                {
-                    Id = t.Id,
-                    PunchedAt = t.PunchedAt,
-                    Direction = t.Direction,
-                    Source = t.Source,
-                    Reason = t.Reason,
-                    CreatedBy = t.CreatedBy,
-                }).ToList();
+                riga.Punches = grezze.Select(PunchDto).ToList();
 
                 // Grezzo e normalizzato non stanno su hr_days — là c'è il risultato — ma
                 // si ottengono ripassando le timbrature nel motore, che è puro: nessuna
