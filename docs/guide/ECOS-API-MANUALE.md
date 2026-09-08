@@ -621,10 +621,12 @@ con gli orari `Stamp1`…`Stamp6`, filtrata per **`StampDate`** (ultimi 90 giorn
 per giorno che serve alla risincronizzazione, anche se senza `StampID`.
 Inoltre `PeopleStampGetAll` accetta il filtro **`Delete`**: si può chiedere `Delete==1` per
 sapere cosa è stato cancellato negli ultimi 60 giorni invece di dedurlo per differenza.
-Da calibrare anche **`StampPresenceMonthCardGetAll`** (catalogo): cartellino giornaliero di Ecos
-con `StampCode1…8`, **senza criterio implicito** — se risponde per `YearMonthS` vecchi è la via
-per la storia oltre i 60 giorni. E per le assenze **`PeopleAbsenceRequestRefineWorkAll`** (per
-giorno, `TSDate`, servizio già di `api.it`) toglie il problema della finestra dei 90 giorni.
+✅ **`StampPresenceMonthCardGetAll` risponde ad `api.it` e restituisce la storia** (provato il
+08/09 con `YearMonthS` di giugno 2026, gennaio 2026 e settembre 2025): cartellino giornaliero di
+Ecos con gli orari in `StampCode1…8` (HTML da ripulire, senza `StampID`). È la via per i mesi
+oltre i 60 giorni; per gli ultimi 60 resta `PeopleStampGetAll` con lo `StampID`. E per le assenze ✅ **`PeopleAbsenceRequestRefineWorkAll` risponde ad `api.it`** (08/09): una
+riga per giorno di assenza con ore, causale, stato, `EmplID` ed `EmplCode`, filtrabile per
+`TSDate`: toglie il problema della finestra dei 90 giorni e del taglio delle richieste multi-giorno.
 
 ### 11.1 🔴 Non leggiamo il flag `Delete`
 

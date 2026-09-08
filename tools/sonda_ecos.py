@@ -23,6 +23,7 @@ Esempi:
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -191,9 +192,11 @@ def main():
     a = p.parse_args()
 
     for nome in a.api:
-        if not a.calibra and "Get" not in nome:
+        # Le API di scrittura si riconoscono dal verbo nel nome (Post/Put/Set/Delete); le
+        # letture non hanno sempre «Get» dentro (es. PeopleAbsenceRequestRefineWorkAll).
+        if not a.calibra and re.search(r"Post|Put|Set|Delete", nome):
             raise SystemExit(
-                f"{nome}: la sonda chiama solo API di lettura (Get*). Per le Post usa --calibra "
+                f"{nome}: la sonda chiama solo API di lettura. Per le Post usa --calibra "
                 "(corpo vuoto, niente scritto).")
 
     base, userid, password, clientid = credenziali()

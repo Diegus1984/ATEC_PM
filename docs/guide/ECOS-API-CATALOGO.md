@@ -371,12 +371,21 @@ dati retributivi». Criteria `inForce=1`. **Campi (21)**: `EmplID`, `NameComplet
 | `PeopleWorkShiftPlanGetAll` (turni pianificati) | PersonWorkScheduleMSS · 2 | ultima `EffDate` per persona/data/giorno non cancellata | `EmplID`, `UniqueID`, `EffDate`, `EndDate`, `StartDate`, `DayCode`, `HourBegin`, `HourEnd`, `HourBeginPause`, `HourEndPause`, `BreakTime`, `DepartmentID`/`Code`/`DescShort`, `StatusCode`, `Delete`, `Note`, `UpdateDate`, `UpdateEmplID`, `UpdateNameComplete`, `UserTZ`, `YearMonthS`, `StartYearWeekID` | `CompanyID`, `DepartmentID`, `EmplID`, `EmploymentDepartmentID`, `StartDate` |
 | `PeopleBadgeStampGetAll` (solo badge di timbratura di persone non cessate) | Badge · 2 | `(BadgeTypeCode='TIMBR' OR IsStampCard=1) AND (TerminationDate is NULL or > oggi−1 mese)` | `EmplID`, `StartDate`, `PeopleBadgeID`, `EmplCode`, `BadgeCode`, `NameComplete`, `BirthDate`, `StatusCode`, `EnableGuest`, `LocationID`, `CompanyCode`, `InForce` | `LocationID`, `PeopleBadgeID`, `UpdateDate` |
 
-📌 Due piste che cambiano le carte: **`PeopleAbsenceRequestRefineWorkAll`** dà le assenze
-**per giorno** (`TSDate`, ore inizio/fine, causale, stato) senza finestra implicita e con un
-servizio che `api.it` ha già — è la riconciliazione per giornata che ci manca;
-**`StampPresenceMonthCardGetAll`** è il cartellino giornaliero di Ecos con fino a otto orari e
-nessun criterio implicito: da calibrare con `api.it` (servizio `PersonStamp`, non `PeopleStamp`)
-per capire se restituisce anche la storia oltre i 60 giorni. `ServerTimeGet` (servizio
+📌 Due piste che cambiano le carte: **`PeopleAbsenceRequestRefineWorkAll`** ✅ **calibrata con
+`api.it` il 08/09/2026: risponde.** Una riga per giorno di assenza: `TSDate`, `HourBegin`/`HourEnd`
+(`16:15:00`–`17:00:00`), `CategoryCode` (`P`) e `CategoryDescShort` (`ROL`), `StatusCode`
+(`ACCEPTED`), `SourceCode` (`REQUEST`), `EmplID` **e** `EmplCode`, `AbsenceRequestID` +
+`AbsenceRequestRefineID` (progressivo del giorno dentro la richiesta), `UpdateDate`. Senza finestra
+implicita (verificato: gennaio 2026 risponde): è la riconciliazione per giornata che ci manca e sostituisce il taglio a mano delle
+richieste multi-giorno;
+**`StampPresenceMonthCardGetAll`** ✅ **calibrata con `api.it` il 08/09/2026: risponde** (servizio
+`PersonStamp` concesso) e **restituisce la storia**: giugno 2026, gennaio 2026 e settembre 2025
+tornano righe con `YearMonthS=='aaaamm'`. Una riga per persona e giorno: `StampDate`,
+`PresenceHour` («9:00»), `WorkHourExpectTotalTime`/`WorkHourExpectedRealTime` («8:00»),
+`ToApprove`, `Abnormal`, e gli orari in **`StampCode1…8` avvolti in HTML** (uno `<span>` con
+l'icona `fa-arrow-down` = entrata, `fa-arrow-up` = uscita, e l'ora nel testo: si estrae con una
+regex `\d{1,2}:\d{2}`). Niente `StampID`, niente nominativi. È la fonte per ricostruire i
+cartellini oltre i 60 giorni. `ServerTimeGet` (servizio
 `ServerTime`, livello 6 External User, campi `ServerDateTime` e `ServerTZ`) dà l'orologio di
 Ecos: utile per il cursore. `StampCausalGetALL` (PersonStamp): `StampCausalID`, `StampCausalCode`,
 `DescShort`, `StatusCode`, `RowOrder`, `DefaultValue`, `Delete`, `UpdateDate`.

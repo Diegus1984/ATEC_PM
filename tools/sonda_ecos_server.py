@@ -27,6 +27,7 @@ produzione di Ecos si fanno su richiesta di Diego: sempre un filtro, poche righe
 import argparse
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -144,8 +145,10 @@ def main():
     a = p.parse_args()
 
     for nome in a.api:
-        if not a.calibra and "Get" not in nome:
-            raise SystemExit(f"{nome}: senza --calibra si chiamano solo API di lettura (Get*).")
+        # Le API di scrittura si riconoscono dal verbo nel nome (Post/Put/Set/Delete); le
+        # letture non hanno sempre «Get» dentro (es. PeopleAbsenceRequestRefineWorkAll).
+        if not a.calibra and re.search(r"Post|Put|Set|Delete", nome):
+            raise SystemExit(f"{nome}: senza --calibra si chiamano solo API di lettura.")
     if not a.calibra and not a.filtro:
         print("(nessun filtro: poche righe per non pesare sul limitatore di Ecos)")
 
