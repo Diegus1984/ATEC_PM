@@ -297,6 +297,10 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   manuale Ecos §9.7); calendario, cartellino, quadratura e giustificazione usano quelle ore
 >   invece di spezzare l'intervallo da soli. Chiude il buco «una richiesta a più giorni non si
 >   spezza». `hr_absences` resta la tabella delle richieste.
+>   **Ferie nel planner Risorse (08/09/2026, «vince Ecos»)**: dai giorni approvati nascono le
+>   barre FERIE di `res_assignments` (`SyncFeriePlanner`, manuale Ecos §9.8); una barra manuale
+>   che non coincide prende le date di Ecos, una senza ferie Ecos resta. E le richieste si
+>   leggono senza cursore: in produzione `hr_absences` era rimasta senza richieste di Ecos.
 > - **Cursore dall'orologio DI ECOS** (massimo `UpdateDate` ricevuto): il nostro non è
 >   confrontabile col loro, e uno scarto apriva una finestra cieca da cui le correzioni non
 >   tornavano più. Ripiego sul nostro solo se manca, con un'ora di margine (cambio d'ora).

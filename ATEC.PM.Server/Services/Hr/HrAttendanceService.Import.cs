@@ -50,7 +50,12 @@ public partial class HrAttendanceService
             (DateTime giorniDal, DateTime giorniAl) = FinestraAssenzeGiorno(DateTime.Today);
             try
             {
-                assenze = await _ecos.GetAbsenceRequestsAsync(token, cursore, ct);
+                // 🪤 Le richieste NON si leggono col cursore delle timbrature: una richiesta
+                // approvata settimane fa non «si aggiorna» più, e col cursore non rientrava mai
+                // (in produzione hr_absences era rimasta senza una sola richiesta di Ecos). Si
+                // chiede tutto quello che Ecos restituisce — da sé si limita alle richieste degli
+                // ultimi ~90 giorni e a quelle future — e l'upsert per ecos_absence_id fa il resto.
+                assenze = await _ecos.GetAbsenceRequestsAsync(token, null, ct);
                 ProgressoLog($"✅ {assenze.Count} richieste assenza scaricate");
                 giorniAssenza = await _ecos.GetAbsenceDaysAsync(token, giorniDal, giorniAl, ct);
                 ProgressoLog($"✅ {giorniAssenza.Count} giorni di assenza scaricati ({giorniDal:dd/MM/yyyy}–{giorniAl:dd/MM/yyyy})");
@@ -79,6 +84,14 @@ public partial class HrAttendanceService
                 {
                     esito.Message += $"; assenze per giorno: {ggNuovi} nuove, {ggAggiornati} aggiornate"
                                      + (ggRimossi > 0 ? $", {ggRimossi} tolte" : "");
+                }
+
+                // E le ferie approvate vanno nel planner Risorse: vince Ecos.
+                var (barreCreate, barreAllineate, barreTolte) = SyncFeriePlanner(c, giorniDal, giorniAl);
+                if (barreCreate + barreAllineate + barreTolte > 0)
+                {
+                    esito.Message += $"; ferie nel planner: {barreCreate} create, {barreAllineate} allineate a Ecos"
+                                     + (barreTolte > 0 ? $", {barreTolte} tolte" : "");
                 }
             }
 
@@ -264,6 +277,15 @@ public partial class HrAttendanceService
                     if (ggNuovi + ggAggiornati + ggRimossi > 0)
                         esito.Message += $"; assenze per giorno: {ggNuovi} nuove, {ggAggiornati} aggiornate"
                                          + (ggRimossi > 0 ? $", {ggRimossi} tolte" : "");
+
+                    if (giorni.Count > 0)
+                    {
+                        var (barreCreate, barreAllineate, barreTolte) = SyncFeriePlanner(c, dal, al);
+                        ProgressoLog($"✅ ferie nel planner: {barreCreate} create, {barreAllineate} allineate a Ecos, {barreTolte} tolte");
+                        if (barreCreate + barreAllineate + barreTolte > 0)
+                            esito.Message += $"; ferie nel planner: {barreCreate} create, {barreAllineate} allineate a Ecos"
+                                             + (barreTolte > 0 ? $", {barreTolte} tolte" : "");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -388,7 +410,9 @@ public partial class HrAttendanceService
                 updated++;
             }
 
-            SyncToResourcePlanner(c, employeeId, r.DateBegin, r.DateEnd, absenceType, isApproved: status == "APPROVED");
+            // Il planner Risorse NON si alimenta più da qui: le ferie di Ecos ci arrivano dai
+            // giorni (SyncFeriePlanner), che sanno quali giornate sono intere. Dalla richiesta
+            // una ferie di tre ore sarebbe diventata una barra di un giorno intero.
         }
 
         return (added, updated);

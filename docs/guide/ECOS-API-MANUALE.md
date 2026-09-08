@@ -609,6 +609,28 @@ flag `Delete`. E la scheda non lo dice: ❓ se le righe di una richiesta cancell
 (lo specchio a finestra le toglie comunque) e quanto in fretta si aggiorna dopo
 un'approvazione (visto un `UpdateDate` di pochi minuti dopo, e un rigenero notturno alle 03:31).
 
+### 9.8 ✅ Ferie di Ecos nel planner Risorse — «vince Ecos» (08/09/2026)
+
+Dai giorni di §9.7, `HrAttendanceService.SyncFeriePlanner(c, dal, al)` (dopo ogni specchio dei
+giorni, stessa finestra) allinea le barre FERIE di `res_assignments`:
+1. le **giornate intere** di ferie approvate diventano intervalli (`IntervalliFerie`: giorni
+   consecutivi scavalcando sabati, domeniche e festivi); un intervallo senza barra sovrapposta
+   → barra nuova «Ferie approvate (HR)»;
+2. con una barra sovrapposta (manuale o dal VPS) **vince Ecos**: la barra prende le date
+   dell'intervallo (stesso id: la sincronizzazione col VPS la vede come modifica), le altre
+   sovrapposte si tolgono;
+3. una barra «Ferie approvate (HR)» rimasta senza intervallo → via;
+4. una barra **manuale** senza ferie Ecos resta (pianificazione prima della richiesta);
+5. le ferie parziali (3 ore) non vanno nel planner; le barre che escono dalla finestra non si
+   toccano.
+Il ponte vecchio dalla richiesta (`SyncToResourcePlanner` in `SyncAbsences`) è stato tolto:
+dalla richiesta una ferie di tre ore diventava una barra intera. Resta per le richieste
+approvate dentro ATEC PM (`Assenze.cs`).
+E le **richieste** (`PeopleAbsenceRequestGetAll`) si leggono a ogni import **senza cursore**:
+col cursore delle timbrature una richiesta approvata settimane fa non rientrava mai, e in
+produzione `hr_absences` non aveva una sola richiesta di Ecos. Test: `FeriePlannerDaEcosTests`,
+`IntervalliFerieTests`.
+
 ### 9.6 Anagrafica persone (`PeopleExpressGetAll`)
 
 Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano
