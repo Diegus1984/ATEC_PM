@@ -453,6 +453,12 @@ public class ImportPresenzeTests
         Assert.Equal("PENDING", riga.Status);
         Assert.Equal("ECOS: ROL 14:30–17:00", riga.Notes);
 
+        // Nata su Ecos: qui non si approva, non si rifiuta e non si annulla (l'import vincerebbe).
+        int absenceId = c.ExecuteScalar<int>("SELECT id FROM hr_absences WHERE employee_id = @Id", new { Id = paolo });
+        Assert.Equal(HrAttendanceService.VaDecisaSuEcos, servizio.ApproveAbsenceRequest(absenceId, true, null, paolo, isManagerOrAdmin: true));
+        Assert.Equal(HrAttendanceService.VaDecisaSuEcos, servizio.CancelAbsenceRequest(absenceId, paolo, isAdmin: true));
+        Assert.Equal("PENDING", c.ExecuteScalar<string>("SELECT status FROM hr_absences WHERE id = @Id", new { Id = absenceId }));
+
         // Accettata: arriva la durata di Ecos, che vince sul calcolo, e la nota resta.
         var accettata = richiesta with { StatusCode = "ACCEPTED", Duration = 2.5m };
         Assert.Equal((0, 1), servizio.SyncAbsences(c, new[] { accettata }));

@@ -172,16 +172,20 @@ public partial class HrAttendanceService
         return (id, null);
     }
 
+    internal const string VaDecisaSuEcos =
+        "Questa richiesta vive su Ecos: si approva, si rifiuta o si annulla là. L'esito arriva qui con l'import.";
+
     public string? ApproveAbsenceRequest(
         int absenceId, bool approved, string? rejectionReason, int approverId, bool isManagerOrAdmin)
     {
         using MySqlConnection c = _db.Open();
 
-        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, string EmployeeName, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, decimal? Hours, bool IsFullDay)>(
+        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, string EmployeeName, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, decimal? Hours, bool IsFullDay, string Source)>(
             @"SELECT a.id AS Id, a.employee_id AS EmployeeId,
                      CONCAT_WS(' ', e.first_name, e.last_name) AS EmployeeName,
                      a.status AS Status, a.absence_type AS AbsenceType,
-                     a.date_from AS DateFrom, a.date_to AS DateTo, a.hours AS Hours, a.is_full_day AS IsFullDay
+                     a.date_from AS DateFrom, a.date_to AS DateTo, a.hours AS Hours, a.is_full_day AS IsFullDay,
+                     a.source AS Source
               FROM hr_absences a
               JOIN employees e ON e.id = a.employee_id
               WHERE a.id = @Id",
@@ -192,6 +196,12 @@ public partial class HrAttendanceService
 
         if (absence.Status != "PENDING")
             return $"La richiesta è già in stato {absence.Status}.";
+
+        // 🪤 Una richiesta nata su Ecos si decide su Ecos: qui non abbiamo il diritto di
+        // scriverla (PeopleAbsenceRequestPost, livello 3) e al prossimo import vince Ecos, che
+        // la rimetterebbe «in attesa» cancellando la decisione (Diego, 08/09/2026).
+        if (string.Equals(absence.Source, "ECOS", StringComparison.OrdinalIgnoreCase))
+            return VaDecisaSuEcos;
 
         if (!isManagerOrAdmin)
         {
@@ -260,8 +270,8 @@ public partial class HrAttendanceService
     {
         using MySqlConnection c = _db.Open();
 
-        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, int? CreatedBy, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo)>(
-            "SELECT id, employee_id AS EmployeeId, created_by AS CreatedBy, status AS Status, absence_type AS AbsenceType, date_from AS DateFrom, date_to AS DateTo FROM hr_absences WHERE id = @Id",
+        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, int? CreatedBy, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, string Source)>(
+            "SELECT id, employee_id AS EmployeeId, created_by AS CreatedBy, status AS Status, absence_type AS AbsenceType, date_from AS DateFrom, date_to AS DateTo, source AS Source FROM hr_absences WHERE id = @Id",
             new { Id = absenceId });
 
         if (absence == default)
@@ -269,6 +279,10 @@ public partial class HrAttendanceService
 
         if (absence.Status == "CANCELLED")
             return "La richiesta è già annullata.";
+
+        // Nata su Ecos: si annulla là (qui l'import la rimetterebbe com'era).
+        if (string.Equals(absence.Source, "ECOS", StringComparison.OrdinalIgnoreCase))
+            return VaDecisaSuEcos;
 
         if (!isAdmin && absence.EmployeeId != currentUserId && absence.CreatedBy != currentUserId)
             return "Puoi annullare solo le tue richieste.";

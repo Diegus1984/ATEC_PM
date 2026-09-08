@@ -364,7 +364,12 @@ export function RichiestePage() {
                         className="text-right space-x-1 whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {canManage && r.status === "PENDING" && (
+                        {r.source === "ECOS" && r.status === "PENDING" && (
+                          <span className="text-xs text-muted-foreground" title="Si approva, si rifiuta o si annulla su Ecos: l'esito arriva qui con l'import.">
+                            Si decide su Ecos
+                          </span>
+                        )}
+                        {canManage && r.status === "PENDING" && r.source !== "ECOS" && (
                           <>
                             <Button
                               size="sm"
@@ -390,7 +395,7 @@ export function RichiestePage() {
                             </Button>
                           </>
                         )}
-                        {r.status === "PENDING" && (
+                        {r.status === "PENDING" && r.source !== "ECOS" && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -470,12 +475,13 @@ export function RichiestePage() {
                 </dd>
               </dl>
               {dettaglio.source === "ECOS" && dettaglio.status === "PENDING" && (
-                <p className="text-xs text-muted-foreground">
-                  Richiesta in attesa su Ecos: le ore vengono dalla fascia oraria indicata, la durata
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  Richiesta in attesa su Ecos: si approva, si rifiuta o si annulla su Ecos e l'esito
+                  arriva qui con l'import. Le ore vengono dalla fascia oraria indicata, la durata
                   ufficiale arriva quando Ecos la accetta.
                 </p>
               )}
-              {dettaglio.status === "PENDING" && (
+              {dettaglio.status === "PENDING" && dettaglio.source !== "ECOS" && (
                 <DialogFooter className="gap-2 sm:justify-between">
                   <Button
                     size="sm"
