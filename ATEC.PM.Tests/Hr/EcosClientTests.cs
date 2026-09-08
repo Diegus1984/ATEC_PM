@@ -238,6 +238,46 @@ public class EcosClientTests
         Assert.Equal(new[] { true, true, false, false }, timbrature.Select(t => t.Deleted).ToArray());
     }
 
+    /// <summary>
+    /// I giorni di assenza come li spezza Ecos (<c>PeopleAbsenceRequestRefineWorkAll</c>): una
+    /// riga per tratto, con i suoi orari; i minuti si calcolano qui. La riga senza data si
+    /// scarta, il tratto senza progressivo vale «1».
+    /// </summary>
+    [Fact]
+    public async Task I_giorni_di_assenza_arrivano_con_i_minuti_del_tratto()
+    {
+        const string pagina = """
+            { "ECOSAGILE_TABLE_DATA": {
+                "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+                "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [
+                    { "AbsenceRequestID": "136252", "AbsenceRequestRefineID": "1", "EmplID": "6032", "EmplCode": "1045",
+                      "NameComplete": "Rossi, Mario", "TSDate": "2026-09-04 00:00:00", "HourBegin": "16:15:00",
+                      "HourEnd": "17:00:00", "CategoryCode": "P", "CategoryDescShort": "ROL", "StatusCode": "ACCEPTED",
+                      "SourceCode": "REQUEST", "UpdateDate": "2026-09-08 08:33:33" },
+                    { "AbsenceRequestID": "133095", "AbsenceRequestRefineID": "2", "EmplCode": "1114",
+                      "NameComplete": "Verdi, Anna", "TSDate": "2026-08-14 00:00:00", "HourBegin": "13:30:00",
+                      "HourEnd": "17:00:00", "CategoryCode": "F", "CategoryDescShort": "Ferie", "StatusCode": "ACCEPTED" },
+                    { "AbsenceRequestID": "1", "EmplCode": "1045", "TSDate": "", "CategoryCode": "F" } ] } } }
+            """;
+        var handler = new RisposteInSequenza(pagina);
+        EcosClient client = CreaClient(handler);
+
+        List<EcosAbsenceDay> giorni = await client.GetAbsenceDaysAsync(
+            "tok", new DateTime(2026, 8, 1), new DateTime(2026, 9, 30));
+
+        Assert.Equal(2, giorni.Count);
+        Assert.Equal("136252", giorni[0].AbsenceRequestId);
+        Assert.Equal("1", giorni[0].RefineId);
+        Assert.Equal(new DateTime(2026, 9, 4), giorni[0].Date);
+        Assert.Equal(45, giorni[0].Minutes);
+        Assert.Equal("P", giorni[0].CategoryCode);
+        Assert.Equal("ACCEPTED", giorni[0].StatusCode);
+        Assert.Equal(new DateTime(2026, 9, 8, 8, 33, 33), giorni[0].UpdateDate);
+        Assert.Equal(210, giorni[1].Minutes);
+        Assert.Equal("2", giorni[1].RefineId);
+        Assert.Contains("PeopleAbsenceRequestRefineWorkAll", handler.UrlChiamati[0]);
+    }
+
     [Theory]
     [InlineData("TRUE", true)]
     [InlineData("true", true)]

@@ -566,6 +566,45 @@ consolidati, filtro `UpdateDate` + stato. Sostituirebbe la lettura separata di
 `PeopleAbsenceRequestGetAll` + `PeopleOvertimeRequestGetAll`. Prima cosa: sonda con
 `--righe 1` per i campi veri, poi §9.1.
 
+### 9.7 ✅ Assenze giorno per giorno (`PeopleAbsenceRequestRefineWorkAll`) — in uso dall'08/09/2026
+
+**Perché.** `PeopleAbsenceRequestGetAll` dà una riga per richiesta (dal 3 al 6, ora inizio,
+ora fine): spezzarla nei giorni toccava a noi, e la regola di Ecos non è banale (in una
+richiesta a più giorni l'ora di inizio vale per il primo giorno, quella di fine per l'ultimo).
+La «Refine» è la stessa richiesta già spezzata da Ecos col suo calendario: **una riga per
+giorno e per tratto** (una giornata intera sono due righe, 08:00–12:30 e 13:30–17:00), con
+`TSDate`, ora inizio/fine, causale, stato, `EmplID`+`EmplCode`, `AbsenceRequestID` +
+`AbsenceRequestRefineID` (progressivo del tratto). Nessun criterio implicito: risponde anche
+per i mesi vecchi (verificato gennaio 2026). Servizio `PeopleAbsenceRequest`, che `api.it` ha.
+
+**Com'è fatto.**
+- `EcosClient.GetAbsenceDaysAsync(token, dal, al)` → filtro `TSDate` a intervallo (`>='dal'
+  AND TSDate<='al'` nello stesso valore), `EcosAbsenceDay` con `Minutes` = fine − inizio
+  (`EcosClient.MinutiFra`; null se gli orari mancano).
+- Tabella **`hr_absence_days`** (M124): specchio delle righe, chiave `(ecos_absence_id,
+  ecos_refine_id)`, con `employee_id`, `work_date`, `category_code`, `absence_type`, `status`,
+  `hour_begin`/`hour_end`, `minutes`. `hr_absences` resta la tabella delle **richieste** (una
+  riga per richiesta: approvatore, note, stato, workflow).
+- `HrAttendanceService.SyncAbsenceDays(c, giorni, dal, al)`: **specchio a finestra** — dentro
+  [dal, al] inserisce, aggiorna e **toglie** ciò che Ecos non manda più (richiesta annullata o
+  accorciata non «arriva»: sparisce). 🪤 Scarico vuoto = nessuna cancellazione.
+- L'import automatico rilegge la finestra `FinestraAssenzeGiorno(oggi)` = **−60 / +180 giorni**
+  a ogni giro; la sincronizzazione di un mese con assenze rilegge quel mese (col token nuovo).
+- Lettura: `AssenzeEcosPerGiorno(c, dal, al, anchePending, employeeId?)` aggrega i tratti per
+  (dipendente, giorno): minuti sommati (null se un tratto non ha orari = giornata intera),
+  causale prevalente, stato migliore. `OreAssenzaGiorno` / `GiornataIntera` (tolleranza 15').
+- **Chi la usa**: il Calendario mensile (anche PENDING) e il Cartellino (solo APPROVED) la
+  preferiscono all'espansione dell'intervallo della richiesta per quel (persona, giorno); la
+  Quadratura conta le ore dai giorni e salta la richiesta madre per non contarla due volte;
+  «Giustifica ore mancanti» si blocca su una giornata coperta da Ecos.
+- Test: `AssenzeGiornoTests` (specchio, calendario, cartellino, giustifica) e
+  `RegoleAssenzeGiornoTests` (causali, stati, finestra, minuti).
+
+**Cosa NON dà** (resta alla lettura per richiesta): approvatore e data, note, residui ferie,
+flag `Delete`. E la scheda non lo dice: ❓ se le righe di una richiesta cancellata spariscono
+(lo specchio a finestra le toglie comunque) e quanto in fretta si aggiorna dopo
+un'approvazione (visto un `UpdateDate` di pochi minuti dopo, e un rigenero notturno alle 03:31).
+
 ### 9.6 Anagrafica persone (`PeopleExpressGetAll`)
 
 Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano

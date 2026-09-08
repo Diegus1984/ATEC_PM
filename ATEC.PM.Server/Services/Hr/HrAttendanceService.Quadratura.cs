@@ -62,14 +62,25 @@ public partial class HrAttendanceService
         // 2. Ore assenze approvate da hr_absences nel mese
         var assenze = c.Query<HrAbsenceDto>(@"
             SELECT a.id, a.employee_id AS EmployeeId, a.date_from AS DateFrom, a.date_to AS DateTo,
-                   a.hours AS Hours, a.is_full_day AS IsFullDay, a.absence_type AS AbsenceType
+                   a.hours AS Hours, a.is_full_day AS IsFullDay, a.absence_type AS AbsenceType,
+                   a.ecos_absence_id AS EcosAbsenceId
             FROM hr_absences a
             WHERE a.status = 'APPROVED'
               AND a.date_from <= @Ultimo AND a.date_to >= @Primo", p).ToList();
 
+        // Le richieste che Ecos ha spezzato giorno per giorno si contano dai giorni (le ore
+        // vere), non dall'intervallo: la richiesta madre si salta per non contarla due volte.
+        var perGiorno = AssenzeEcosPerGiorno(c, primo, ultimo, anchePending: false);
+        var spezzate = new HashSet<string>(
+            c.Query<string>(
+                "SELECT DISTINCT ecos_absence_id FROM hr_absence_days WHERE work_date BETWEEN @Primo AND @Ultimo", p),
+            StringComparer.OrdinalIgnoreCase);
+
         var assenzePerEmp = new Dictionary<int, decimal>();
         foreach (var a in assenze)
         {
+            if (a.EcosAbsenceId != null && spezzate.Contains(a.EcosAbsenceId)) continue;
+
             DateTime start = a.DateFrom < primo ? primo : a.DateFrom;
             DateTime end = a.DateTo > ultimo ? ultimo : a.DateTo;
             decimal h = 0;
@@ -81,6 +92,10 @@ public partial class HrAttendanceService
                 }
             }
             assenzePerEmp[a.EmployeeId] = assenzePerEmp.GetValueOrDefault(a.EmployeeId) + h;
+        }
+        foreach (AssenzaEcosGiorno g in perGiorno.Values)
+        {
+            assenzePerEmp[g.EmployeeId] = assenzePerEmp.GetValueOrDefault(g.EmployeeId) + OreAssenzaGiorno(g, 8.0m);
         }
 
         // 3. Ore consuntivate su commesse da timesheet_entries

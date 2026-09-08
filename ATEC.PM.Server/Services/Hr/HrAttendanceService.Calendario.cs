@@ -113,6 +113,26 @@ public partial class HrAttendanceService
                 absencesMap[(a.EmployeeId, dt.Date)] = a;
         }
 
+        // Dove Ecos ha spezzato la richiesta giorno per giorno (hr_absence_days), quel conteggio
+        // vince sulla nostra espansione dell'intervallo: sono le ore vere di quel giorno, con la
+        // regola di Ecos (primo e ultimo giorno parziali, quelli in mezzo interi).
+        Dictionary<int, decimal> oreGiornaliere = employees.ToDictionary(e => e.EmployeeId, e => e.DailyHours);
+        foreach (var (chiave, g) in AssenzeEcosPerGiorno(c, primo, ultimo, anchePending: true))
+        {
+            if (!oreGiornaliere.TryGetValue(chiave.EmployeeId, out decimal oreContratto)) continue;
+            absencesMap[chiave] = new CalendarAbsence
+            {
+                EmployeeId = chiave.EmployeeId,
+                DateFrom = chiave.WorkDate,
+                DateTo = chiave.WorkDate,
+                Hours = OreAssenzaGiorno(g, oreContratto),
+                IsFullDay = GiornataIntera(g, oreContratto),
+                AbsenceType = g.AbsenceType,
+                Status = g.Status,
+                Source = "ECOS",
+            };
+        }
+
         var result = new HrMonthlyCalendarDto
         {
             Year = year,
@@ -535,6 +555,17 @@ public partial class HrAttendanceService
         if (giorno.DayOfWeek == DayOfWeek.Saturday || TimesheetRules.IsHoliday(giorno))
         {
             info.Blocco = "Giornata non lavorativa: non c'è niente da giustificare.";
+            return info;
+        }
+
+        // Se Ecos ha già un'assenza su questa giornata (spezzata giorno per giorno), quella è
+        // la verità e da qui si guarda e basta.
+        if (AssenzeEcosPerGiorno(c, giorno, giorno, anchePending: true, employeeId)
+            .TryGetValue((employeeId, giorno), out AssenzaEcosGiorno? daEcos))
+        {
+            info.CausaleCorrente = HrCausali.Codice(daEcos.AbsenceType);
+            info.OreCorrenti = OreAssenzaGiorno(daEcos, emp.DailyHours);
+            info.Blocco = "L'assenza arriva da Ecos: si corregge là, non da qui.";
             return info;
         }
 

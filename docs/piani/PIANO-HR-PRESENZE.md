@@ -292,6 +292,11 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   la risposta alla domanda 0(c) del §5): una timbratura tolta là se ne va anche qui **al
 >   primo import incrementale**, non serve più quello completo; le richieste tolte diventano
 >   `CANCELLED`. Manuale Ecos §11.1.
+>   **Assenze giorno per giorno (08/09/2026, M124 `hr_absence_days`)**: le richieste arrivano
+>   anche già spezzate da Ecos nei singoli giorni e tratti (`PeopleAbsenceRequestRefineWorkAll`,
+>   manuale Ecos §9.7); calendario, cartellino, quadratura e giustificazione usano quelle ore
+>   invece di spezzare l'intervallo da soli. Chiude il buco «una richiesta a più giorni non si
+>   spezza». `hr_absences` resta la tabella delle richieste.
 > - **Cursore dall'orologio DI ECOS** (massimo `UpdateDate` ricevuto): il nostro non è
 >   confrontabile col loro, e uno scarto apriva una finestra cieca da cui le correzioni non
 >   tornavano più. Ripiego sul nostro solo se manca, con un'ora di margine (cambio d'ora).

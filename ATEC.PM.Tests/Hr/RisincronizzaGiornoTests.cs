@@ -237,10 +237,13 @@ public class RisincronizzaGiornoTests
             .ImportWindowAsync(null, new DateTime(2026, 2, 1), new DateTime(2026, 2, 28), conAssenze: true);
 
         Assert.True(esito.Success);
-        Assert.Equal(4, handler.UrlChiamati.Count);
+        // token, timbrature del mese, token nuovo, richieste, giorni di assenza.
+        Assert.Equal(5, handler.UrlChiamati.Count);
         Assert.Contains("TokenGet", handler.UrlChiamati[2]);
         Assert.Contains("PeopleAbsenceRequestGetAll", handler.UrlChiamati[3]);
         Assert.Contains("AuthToken=tok-2", handler.UrlChiamati[3]);
+        Assert.Contains("PeopleAbsenceRequestRefineWorkAll", handler.UrlChiamati[4]);
+        Assert.Contains("AuthToken=tok-2", handler.UrlChiamati[4]);
     }
 
     [FactRichiedeMySql]

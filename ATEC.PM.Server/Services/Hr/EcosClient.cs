@@ -25,6 +25,18 @@ public record EcosAbsenceRequest(
     bool FullDay, string? HourBegin, string? HourEnd, decimal? Duration,
     DateTime? UpdateDate = null, bool Deleted = false);
 
+/// <summary>
+/// Un <b>tratto</b> di un giorno di assenza come lo spezza Ecos
+/// (<c>PeopleAbsenceRequestRefineWorkAll</c>): una giornata intera sono due righe, mattina e
+/// pomeriggio, ciascuna con i suoi orari; un permesso di tre quarti d'ora è una riga sola.
+/// <paramref name="RefineId"/> è il progressivo del tratto dentro la richiesta.
+/// <paramref name="Minutes"/> = fine − inizio; null se Ecos non dà gli orari.
+/// </summary>
+public record EcosAbsenceDay(
+    string AbsenceRequestId, string RefineId, string EmplCode, string Name, DateTime Date,
+    string? HourBegin, string? HourEnd, int? Minutes, string CategoryCode, string CategoryDesc,
+    string StatusCode, string SourceCode, DateTime? UpdateDate = null);
+
 /// <summary>L'API Ecos ha risposto ma con un errore suo (CODE ≠ OK) o in una forma inattesa.</summary>
 public sealed class EcosApiException : Exception
 {
@@ -77,6 +89,13 @@ public class EcosClient
         "AbsenceRequestID", "EmplID", "EmplCode", "NameComplete",
         "CategoryCode", "CategoryDescShort", "StatusCode",
         "DateBegin", "DateEnd", "FullDay", "HourBegin", "HourEnd", "Duration", "UpdateDate", "Delete",
+    };
+
+    private static readonly string[] AbsenceDayFields =
+    {
+        "AbsenceRequestID", "AbsenceRequestRefineID", "EmplID", "EmplCode", "NameComplete",
+        "TSDate", "HourBegin", "HourEnd", "CategoryCode", "CategoryDescShort", "StatusCode",
+        "SourceCode", "UpdateDate",
     };
 
     private readonly HttpClient _http;
@@ -397,6 +416,67 @@ public class EcosClient
         }
         return risultato;
     }
+
+    /// <summary>
+    /// I giorni di assenza fra <paramref name="dal"/> e <paramref name="al"/> come li spezza
+    /// Ecos (<c>PeopleAbsenceRequestRefineWorkAll</c>, catalogo). Filtro su <c>TSDate</c> con
+    /// l'intervallo nello stesso valore («&gt;='…' AND TSDate&lt;='…'», guida §6.5); nessun
+    /// criterio implicito lato server, quindi risponde anche per i mesi vecchi. Le righe senza
+    /// data o senza chiave si scartano e si loggano.
+    /// </summary>
+    public async Task<List<EcosAbsenceDay>> GetAbsenceDaysAsync(
+        string token, DateTime dal, DateTime al, CancellationToken ct = default)
+    {
+        string intervallo = $">='{dal:yyyy-MM-dd}' AND TSDate<='{al:yyyy-MM-dd}'";
+        List<Dictionary<string, string>> righe = await FetchTutteLePagineAsync(
+            "PeopleAbsenceRequestRefineWorkAll", token, AbsenceDayFields, DallInizio, ct,
+            filtro: ("TSDate", intervallo));
+
+        var risultato = new List<EcosAbsenceDay>(righe.Count);
+        foreach (Dictionary<string, string> r in righe)
+        {
+            if (string.IsNullOrWhiteSpace(r.GetValueOrDefault("AbsenceRequestID"))
+                || !ProvaData(r.GetValueOrDefault("TSDate", ""), out DateTime giorno))
+            {
+                _logger.LogWarning("[Ecos] Giorno di assenza scartato (AbsenceRequestID='{Id}', TSDate='{Dt}')",
+                    r.GetValueOrDefault("AbsenceRequestID"), r.GetValueOrDefault("TSDate"));
+                continue;
+            }
+
+            string? inizio = ValoreOpzionale(r, "HourBegin");
+            string? fine = ValoreOpzionale(r, "HourEnd");
+            risultato.Add(new EcosAbsenceDay(
+                AbsenceRequestId: r["AbsenceRequestID"].Trim(),
+                RefineId: r.GetValueOrDefault("AbsenceRequestRefineID", "").Trim() is { Length: > 0 } rid ? rid : "1",
+                EmplCode: r.GetValueOrDefault("EmplCode", "").Trim(),
+                Name: r.GetValueOrDefault("NameComplete", "").Trim(),
+                Date: giorno.Date,
+                HourBegin: inizio,
+                HourEnd: fine,
+                Minutes: MinutiFra(inizio, fine),
+                CategoryCode: r.GetValueOrDefault("CategoryCode", "").Trim(),
+                CategoryDesc: r.GetValueOrDefault("CategoryDescShort", "").Trim(),
+                StatusCode: r.GetValueOrDefault("StatusCode", "").Trim().ToUpperInvariant(),
+                SourceCode: r.GetValueOrDefault("SourceCode", "").Trim(),
+                UpdateDate: ProvaData(r.GetValueOrDefault("UpdateDate", ""), out DateTime agg) ? agg : null));
+        }
+        return risultato;
+    }
+
+    /// <summary>
+    /// I minuti fra due orari «HH:mm:ss» (o «HH:mm») di Ecos; null se uno manca, non si legge,
+    /// o la fine viene prima dell'inizio (un tratto a cavallo di mezzanotte non esiste qui).
+    /// </summary>
+    internal static int? MinutiFra(string? inizio, string? fine)
+    {
+        if (!ProvaOra(inizio, out TimeSpan a) || !ProvaOra(fine, out TimeSpan b)) return null;
+        if (b < a) return null;
+        return (int)Math.Round((b - a).TotalMinutes);
+    }
+
+    private static bool ProvaOra(string? valore, out TimeSpan ora) =>
+        TimeSpan.TryParseExact(valore?.Trim() ?? "", new[] { "hh\\:mm\\:ss", "hh\\:mm", "h\\:mm\\:ss", "h\\:mm" },
+            CultureInfo.InvariantCulture, out ora);
 
     // ── PAGINAZIONE ───────────────────────────────────────────────────────────
 

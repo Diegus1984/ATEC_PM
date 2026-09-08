@@ -372,7 +372,8 @@ dati retributivi». Criteria `inForce=1`. **Campi (21)**: `EmplID`, `NameComplet
 | `PeopleBadgeStampGetAll` (solo badge di timbratura di persone non cessate) | Badge · 2 | `(BadgeTypeCode='TIMBR' OR IsStampCard=1) AND (TerminationDate is NULL or > oggi−1 mese)` | `EmplID`, `StartDate`, `PeopleBadgeID`, `EmplCode`, `BadgeCode`, `NameComplete`, `BirthDate`, `StatusCode`, `EnableGuest`, `LocationID`, `CompanyCode`, `InForce` | `LocationID`, `PeopleBadgeID`, `UpdateDate` |
 
 📌 Due piste che cambiano le carte: **`PeopleAbsenceRequestRefineWorkAll`** ✅ **calibrata con
-`api.it` il 08/09/2026: risponde.** Una riga per giorno di assenza: `TSDate`, `HourBegin`/`HourEnd`
+`api.it` il 08/09/2026: risponde — e dallo stesso giorno è IN USO** (`hr_absence_days`, M124,
+manuale §9.7). Una riga per giorno di assenza: `TSDate`, `HourBegin`/`HourEnd`
 (`16:15:00`–`17:00:00`), `CategoryCode` (`P`) e `CategoryDescShort` (`ROL`), `StatusCode`
 (`ACCEPTED`), `SourceCode` (`REQUEST`), `EmplID` **e** `EmplCode`, `AbsenceRequestID` +
 `AbsenceRequestRefineID` (progressivo del giorno dentro la richiesta), `UpdateDate`. Senza finestra

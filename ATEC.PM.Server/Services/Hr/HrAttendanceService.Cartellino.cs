@@ -74,6 +74,23 @@ public partial class HrAttendanceService
                 assenzeGiorno[dt.Date] = a;
         }
 
+        // Dove Ecos ha spezzato la richiesta giorno per giorno (hr_absence_days) vincono le sue
+        // ore: «PERMIT (0.75h)» è il tratto vero del giorno, non la durata dell'intera richiesta.
+        foreach (var (chiave, g) in AssenzeEcosPerGiorno(c, primo, ultimo, anchePending: false, employeeId))
+        {
+            assenzeGiorno[chiave.WorkDate] = new HrAbsenceDto
+            {
+                EmployeeId = employeeId,
+                DateFrom = chiave.WorkDate,
+                DateTo = chiave.WorkDate,
+                Hours = OreAssenzaGiorno(g, dipendente.DailyHours),
+                IsFullDay = GiornataIntera(g, dipendente.DailyHours),
+                AbsenceType = g.AbsenceType,
+                Status = g.Status,
+                Source = "ECOS",
+            };
+        }
+
         // Solleciti già chiesti nel mese: il tooltip del pulsante 📧 dice QUANDO (come
         // GetLastMailSent nell'originale), non solo che è già stato mandato.
         var solleciti = c.Query<(DateTime WorkDate, DateTime SentAt)>(

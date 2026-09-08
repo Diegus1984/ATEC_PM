@@ -43,10 +43,17 @@ public partial class HrAttendanceService
             // Import assenze approvate da Ecos
             ProgressoFase("[3/4] Scaricamento assenze approvate…", 45);
             List<EcosAbsenceRequest> assenze = new();
+            List<EcosAbsenceDay> giorniAssenza = new();
+            // Le assenze giorno per giorno si rileggono a finestra fissa intorno a oggi: è
+            // uno specchio (dentro la finestra si toglie ciò che Ecos non manda più), non un
+            // incrementale, perché una richiesta annullata non «arriva» — sparisce.
+            (DateTime giorniDal, DateTime giorniAl) = FinestraAssenzeGiorno(DateTime.Today);
             try
             {
                 assenze = await _ecos.GetAbsenceRequestsAsync(token, cursore, ct);
                 ProgressoLog($"✅ {assenze.Count} richieste assenza scaricate");
+                giorniAssenza = await _ecos.GetAbsenceDaysAsync(token, giorniDal, giorniAl, ct);
+                ProgressoLog($"✅ {giorniAssenza.Count} giorni di assenza scaricati ({giorniDal:dd/MM/yyyy}–{giorniAl:dd/MM/yyyy})");
             }
             catch (Exception ex)
             {
@@ -63,6 +70,15 @@ public partial class HrAttendanceService
                 if (absNuove > 0 || absAggiornate > 0)
                 {
                     esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
+                }
+            }
+            if (giorniAssenza.Count > 0)
+            {
+                var (ggNuovi, ggAggiornati, ggRimossi) = SyncAbsenceDays(c, giorniAssenza, giorniDal, giorniAl);
+                if (ggNuovi + ggAggiornati + ggRimossi > 0)
+                {
+                    esito.Message += $"; assenze per giorno: {ggNuovi} nuove, {ggAggiornati} aggiornate"
+                                     + (ggRimossi > 0 ? $", {ggRimossi} tolte" : "");
                 }
             }
 
@@ -240,6 +256,14 @@ public partial class HrAttendanceService
                         if (absNuove > 0 || absAggiornate > 0)
                             esito.Message += $"; assenze Ecos: {absNuove} nuove, {absAggiornate} aggiornate";
                     }
+
+                    // E i giorni di assenza come li spezza Ecos, per la stessa finestra.
+                    List<EcosAbsenceDay> giorni = await _ecos.GetAbsenceDaysAsync(tokenAssenze, dal, al, ct);
+                    var (ggNuovi, ggAggiornati, ggRimossi) = SyncAbsenceDays(c, giorni, dal, al);
+                    ProgressoLog($"✅ assenze per giorno: {giorni.Count} ricevute, {ggNuovi} nuove, {ggAggiornati} aggiornate, {ggRimossi} tolte");
+                    if (ggNuovi + ggAggiornati + ggRimossi > 0)
+                        esito.Message += $"; assenze per giorno: {ggNuovi} nuove, {ggAggiornati} aggiornate"
+                                         + (ggRimossi > 0 ? $", {ggRimossi} tolte" : "");
                 }
                 catch (Exception ex)
                 {
@@ -306,29 +330,14 @@ public partial class HrAttendanceService
             if (!mappa.TryGetValue(r.EmplCode, out int employeeId))
                 continue;
 
-            string absenceType = r.CategoryCode switch
-            {
-                "F" => "VACATION",
-                "P" => "PERMIT",
-                "M" or "MA" => "SICKNESS",
-                "I" or "IN" => "INJURY",
-                _ => "OTHER",
-            };
+            string absenceType = TipoAssenza(r.CategoryCode);
 
             // Gli stati come li scrive Ecos (scheda di PeopleAbsenceRequestGetAll, 08/09/2026):
             // ACCEPTED, REQUEST, REJECT. 🪤 Fino ad allora si confrontava «REJECTED», e una
             // richiesta respinta finiva come «in attesa». Una richiesta marcata Delete=1 è
             // stata tolta su Ecos: da noi diventa CANCELLED (la storia resta), e se non l'abbiamo
             // mai avuta non si inserisce.
-            string status = r.Deleted
-                ? "CANCELLED"
-                : r.StatusCode switch
-                {
-                    "ACCEPTED" => "APPROVED",
-                    "REJECT" or "REJECTED" => "REJECTED",
-                    "CANCELLED" => "CANCELLED",
-                    _ => "PENDING",
-                };
+            string status = StatoRichiesta(r.StatusCode, r.Deleted);
 
             decimal? hours = r.FullDay ? null : r.Duration;
 
