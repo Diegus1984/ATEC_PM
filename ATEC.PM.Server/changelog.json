@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1211",
+                     "data":  "2026-09-08T12:11:44",
+                     "hash":  "c99b221bfd371a93f940c952895f15b8f3a238e0",
+                     "modifiche":  [
+                                       "Sidebar: la riga «Srv» rilegge la versione del server ogni minuto"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1011",
                      "data":  "2026-09-08T12:02:06",
                      "hash":  "cbac0aa94ce83f0c37e170ee0b0e2e24dc9376d1",
