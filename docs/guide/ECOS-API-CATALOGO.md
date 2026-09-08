@@ -258,8 +258,21 @@ respinta finisce come «in attesa» (TODO §11).
 `StatusCode`/`ApproveID`/`DataApprove` (❓ da provare se accettati in insert). La causale è
 **`CategoryID`** (id), non il codice: si prende da `AnagTSCategoryGetAll`.
 
-**Enabled users: nessuno** — nemmeno `maria.carretta`. Serve `PeopleAbsenceRequestMSS` con diritto 4
-**e** livello **3 - Manager** per `api.it` (oggi è livello 2).
+~~**Enabled users: nessuno**~~ → ✅ **abilitata ad `api.it` l'08/09/2026 pomeriggio** (risposta di Ecos
+alla nostra mail: «l'utenza ha già i diritti sul modulo Time»). **Provata** su Diego (richiesta
+136492, sabato 12/09 10:00–11:00, poi cancellata):
+- insert con `EmplID=5374&DateBegin=2026-09-12 00:00:00&FullDay=0&HourBegin=10:00:00&HourEnd=11:00:00&CategoryID=2314&StatusCode=ACCEPTED&Note=…`
+  → «Correct Record Insert», `AbsenceRequestID` 136492, persona giusta (qui **`EmplID` è onorato**),
+  stato ACCEPTED accettato in insert, `Duration` vuota, `DataApprove`/`ApproveID` vuoti,
+  `InsertEmplID`/`UpdateEmplID` = 8809 (api.it). A vuoto: «Missing fields: DateBegin EmplID FullDay».
+- la richiesta **compare subito** in `PeopleAbsenceRequestGetAll` (a differenza delle timbrature).
+- `Edit=true` + `AbsenceRequestID` + `StatusCode=REJECT` → «Correct Record Update», `Respinta`.
+- `Edit=true` + `Delete=1` → `Delete=True`, resta visibile marcata.
+- `CategoryID` da `AnagTSCategoryGetAll` (6 righe l'08/09/2026): `F_ND`=2299 Assenza, `F`=2313
+  Ferie, `P`=2314 ROL, `M`=2315 Malattia, `I1`=2318 Infortunio, `S`=2310 «Ore a chiusura» inattiva.
+  Mappare per `CategoryCode`, mai cablare gli id.
+Implementazione in ATEC PM: **TODO §11 (domani 09/09/2026)**.
+Anche `PeopleOvertimeRequestPost` risponde ora con la validazione («Missing fields: EmplID»).
 
 ## `Timesheet2GetAll` — NON è quello che dice la guida (Service `TimesheetAnalysis`, livello 2)
 
