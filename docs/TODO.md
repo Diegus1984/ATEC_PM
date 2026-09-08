@@ -608,7 +608,8 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
       richieste di assenza (`PeopleAbsenceRequestPost`) e gli straordinari
       (`PeopleOvertimeRequestPost`). Restano negati `TimesheetAnalysis` e `PeopleExpressLight`.
 
-- [ ] 🔴 **DOMANI (09/09/2026) — richieste e causali da ATEC PM verso Ecos** (Diego, 08/09 sera:
+- [ ] 🔴 **DOMANI (09/09/2026) — richieste e causali da ATEC PM verso Ecos** — **segnalazione #151**
+      (aperta l'08/09, IMPROVEMENT, HR / ECOS) (Diego, 08/09 sera:
       «non abbiamo tempo ora, lo implementiamo domani»). Il diritto c'è, la prova è fatta su
       Diego (richiesta 136492: inserita già ACCEPTED, passata a REJECT, cancellata). Cosa fare:
       1. **Approva / Rifiuta / Annulla sulle richieste nate su Ecos**, da ATEC PM:
