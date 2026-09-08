@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260908-1612",
+                     "data":  "2026-09-08T16:16:01",
+                     "hash":  "54d052f8124200da21fe0d529bcf0af2272ec87c",
+                     "modifiche":  [
+                                       "Piano HR: projects.is_internal non esiste, quadratura senza colonna interne",
+                                       "Ore sulle commesse: due errori SQL che davano 500 in produzione"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1605",
                      "data":  "2026-09-08T16:06:06",
                      "hash":  "2f39ffb1be2daed5ee4ee40690468c423d75f4c2",
