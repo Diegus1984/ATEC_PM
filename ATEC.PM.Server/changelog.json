@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260908-1011",
+                     "data":  "2026-09-08T11:49:55",
+                     "hash":  "3ea68b3934134bc53d4f0fc8dc9c4953978162d2",
+                     "modifiche":  [
+                                       "HR: le ferie approvate su Ecos entrano nel planner Risorse («vince Ecos») e le richieste si leggono senza cursore"
+                                   ]
+                 },
+                 {
+                     "build":  "20260908-1011",
                      "data":  "2026-09-08T11:28:01",
                      "hash":  "7f98e3b82d8c3afcc9feb0cb6822813d7ee98695",
                      "modifiche":  [
