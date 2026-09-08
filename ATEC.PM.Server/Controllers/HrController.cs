@@ -570,6 +570,8 @@ public class HrController : ControllerBase
             // Voce 11 del port: la data dell'ultima lettura riuscita si scrive QUI, nell'unico
             // punto in cui i badge si leggono davvero.
             _attendance.MarkBadgeRead();
+            // E già che ci sono, i badge insegnano gli EmplID a chi è collegato solo per codice.
+            _attendance.ImparaEmplIdDaiBadge(badges);
 
             return Ok(ApiResponse<HrBadgesDto>.Ok(new HrBadgesDto
             {

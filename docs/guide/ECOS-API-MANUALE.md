@@ -637,6 +637,12 @@ saltava tutte in silenzio. Da qui **`employees.ecos_empl_id`** (M126), imparato 
 scarichi che portano tutti e due i campi (timbrature, badge, giorni di assenza:
 `HrAttendanceService.ImparaEmplId`); `SyncAbsences` riconosce la persona per `EmplID` e ripiega
 sul codice. L'ordine dell'import è: timbrature → giorni di assenza (insegnano gli id) → richieste.
+🪤 **Chi non timbra e non ha assenze nella finestra non impara mai l'id** dalle timbrature
+(Carretta, 08/09: EmplID 5399 «non riconosciuto» a ogni import, lei collegata per codice 1026 ma
+senza timbrature nei 60 giorni). Da qui i **badge**: `PeopleBadgeGetAll` porta `EmplCode` ed
+`EmplID` insieme e non ha criteri impliciti, quindi l'import li legge (una pagina, ~40 righe)
+**finché c'è qualcuno collegato senza id** (`MancanoEmplId`), e la pagina di mappatura li insegna
+a ogni «Leggi badge» (`ImparaEmplIdDaiBadge`). Test: `I_badge_insegnano_l_EmplID_a_chi_non_timbra`.
 Regola: **ogni lettura nuova va provata guardando quali campi identificano la persona** — non
 tutte le API hanno l'`EmplCode` (guida §11: l'`EmplID` è la chiave stabile).
 

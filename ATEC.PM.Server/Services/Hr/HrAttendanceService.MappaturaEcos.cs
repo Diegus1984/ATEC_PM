@@ -33,6 +33,24 @@ public partial class HrAttendanceService
         return aggiornati;
     }
 
+    /// <summary>C'è qualcuno collegato per codice ma ancora senza EmplID?</summary>
+    internal static bool MancanoEmplId(MySqlConnection c) =>
+        c.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM employees
+            WHERE ecos_empl_code IS NOT NULL AND ecos_empl_code <> '' AND ecos_empl_id IS NULL") > 0;
+
+    /// <summary>
+    /// Impara gli EmplID dai badge: <c>PeopleBadgeGetAll</c> porta EmplCode ed EmplID insieme e
+    /// non ha criteri impliciti, quindi copre anche chi non timbra e non ha giorni di assenza
+    /// nella finestra — altrimenti le richieste di quella persona resterebbero «non
+    /// riconosciute» per sempre (Carretta, 08/09/2026: EmplID 5399 a log per due import).
+    /// </summary>
+    public int ImparaEmplIdDaiBadge(IEnumerable<EcosBadge> badges)
+    {
+        using MySqlConnection c = _db.Open();
+        return ImparaEmplId(c, badges.Select(b => (b.EmplCode, b.EmplId)));
+    }
+
     /// <summary>EmplID di Ecos → <c>employees.id</c>, per le API che non mandano l'EmplCode.</summary>
     private static Dictionary<string, int> MappaEcosPerId(MySqlConnection c)
     {

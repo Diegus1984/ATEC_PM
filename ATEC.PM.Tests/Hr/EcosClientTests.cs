@@ -314,6 +314,9 @@ public class EcosClientTests
         Assert.Equal(2, badges.Count);
         Assert.True(badges[0].IsActive);
         Assert.False(badges[1].IsActive);
+        // L'EmplID viaggia col badge: è da qui che lo impara chi non timbra.
+        Assert.Equal("5", badges[0].EmplId);
+        Assert.Equal("6", badges[1].EmplId);
     }
 
     [Fact]

@@ -400,6 +400,37 @@ public class ImportPresenzeTests
     }
 
     /// <summary>
+    /// Chi non timbra e non ha giorni di assenza nella finestra non imparerebbe mai l'EmplID:
+    /// i badge (<c>PeopleBadgeGetAll</c>) portano codice e id insieme, e l'import li legge
+    /// finché manca qualcuno (Carretta, 08/09/2026: richiesta con EmplID 5399 «non
+    /// riconosciuta» a ogni giro, perché lei non aveva timbrature nella finestra).
+    /// </summary>
+    [FactRichiedeMySql]
+    public void I_badge_insegnano_l_EmplID_a_chi_non_timbra()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int maria = CreaDipendente(c, "Maria", "Carretta", ecosCode: "1026");
+        Assert.True(HrAttendanceService.MancanoEmplId(c));
+
+        var badges = new[]
+        {
+            new EcosBadge("1026", "Carretta, Maria", IsActive: true, EmplId: "5399"),
+            new EcosBadge("9999", "Nessuno", IsActive: false, EmplId: "1"),      // codice non collegato: ignorato
+            new EcosBadge("1026", "Carretta, Maria", IsActive: true, EmplId: ""), // senza id: ignorato
+        };
+        Assert.Equal(1, HrAttendanceService.ImparaEmplId(c, badges.Select(b => (b.EmplCode, b.EmplId))));
+        Assert.Equal(5399, c.ExecuteScalar<int?>("SELECT ecos_empl_id FROM employees WHERE id = @Id", new { Id = maria }));
+
+        // Da qui in poi una richiesta che porta solo l'EmplID sa di chi è.
+        var richiesta = new EcosAbsenceRequest(
+            "r10", EmplCode: "", "Carretta, Maria", "F", "Ferie", "ACCEPTED", Giorno, Giorno,
+            FullDay: true, HourBegin: null, HourEnd: null, Duration: null, EmplId: "5399");
+        Assert.Equal((1, 0), CreaServizio().SyncAbsences(c, new[] { richiesta }));
+        Assert.Equal(maria, c.ExecuteScalar<int>(
+            "SELECT employee_id FROM hr_absences WHERE ecos_absence_id = 'r10'"));
+    }
+
+    /// <summary>
     /// 🪤 <c>PeopleAbsenceRequestGetAll</c> non manda l'EmplCode, solo l'EmplID: in produzione,
     /// dal 27/08 all'08/09/2026, nessuna richiesta di Ecos era entrata in hr_absences perché la
     /// mappatura per codice non trovava nessuno. L'id si impara dagli scarichi che portano

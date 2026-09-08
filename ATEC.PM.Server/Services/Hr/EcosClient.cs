@@ -16,7 +16,7 @@ public record EcosPunch(
     DateTime? UpdateDate = null, bool Deleted = false, string EmplId = "");
 
 /// <summary>Un badge/anagrafica Ecos: serve alla mappatura <c>employees.ecos_empl_code</c>.</summary>
-public record EcosBadge(string EmplCode, string Name, bool IsActive);
+public record EcosBadge(string EmplCode, string Name, bool IsActive, string EmplId = "");
 
 /// <summary>Una richiesta di assenza come arriva dall'API Ecos.</summary>
 /// <param name="EmplId">🪤 <c>PeopleAbsenceRequestGetAll</c> NON manda l'<c>EmplCode</c>: la
@@ -370,7 +370,10 @@ public class EcosClient
                 EmplCode: r["EmplCode"].Trim(),
                 Name: r.GetValueOrDefault("NameComplete", "").Trim(),
                 IsActive: string.Equals(r.GetValueOrDefault("InForce"), "TRUE",
-                    StringComparison.OrdinalIgnoreCase)))
+                    StringComparison.OrdinalIgnoreCase),
+                // I badge portano EmplCode ed EmplID insieme: è da qui che si impara l'id di chi
+                // non timbra (PeopleAbsenceRequestGetAll manda solo l'EmplID).
+                EmplId: r.GetValueOrDefault("EmplID", "").Trim()))
             .GroupBy(b => b.EmplCode, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.OrderByDescending(b => b.IsActive).ThenByDescending(b => b.Name).First())
             .ToList();

@@ -36,6 +36,24 @@ public partial class HrAttendanceService
             string token = await _ecos.TokenAsync(ct);
             ProgressoLog("✅ Token ottenuto");
 
+            // Chi è collegato per codice ma senza EmplID non verrebbe riconosciuto nelle
+            // richieste (PeopleAbsenceRequestGetAll manda solo l'EmplID) finché non timbra: i
+            // badge portano tutti e due i campi, si leggono solo finché manca qualcuno.
+            if (MancanoEmplId(c))
+            {
+                try
+                {
+                    List<EcosBadge> badges = await _ecos.BadgesAsync(token, ct);
+                    int imparati = ImparaEmplId(c, badges.Select(b => (b.EmplCode, b.EmplId)));
+                    ProgressoLog($"✅ EmplID imparati dai badge: {imparati}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[HR] Lettura badge per gli EmplID non riuscita: {Msg}", ex.Message);
+                    ProgressoLog($"⚠ Badge non letti: {ex.Message} — l'import prosegue");
+                }
+            }
+
             ProgressoFase("[2/4] Scaricamento timbrature…", 25);
             List<EcosPunch> timbrature = await _ecos.GetPunchesAsync(token, cursore, ct, ProgressoLog);
             ProgressoScaricate(timbrature.Count);

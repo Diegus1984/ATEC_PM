@@ -82,7 +82,7 @@ if ($te.CODE -ne 'OK') { "TokenGet: CODE=$($te.CODE) ERROR_CODE=$($te.ERROR_CODE
 $tok = $t.ECOSAGILE_TABLE_DATA.ECOSAGILE_DATA.ECOSAGILE_DATA_ROW.AuthToken
 "token ottenuto (non stampato)"
 $sensibili = @(SENSIBILI)
-function Prova($api, $body, $righe, $valori) {
+function Prova($api, $body, $righe, $valori, $campi) {
   $uri = $base + $api + '&DF=1&PageNumber=1&RowsPerPage=' + $righe + '&AppCode=ATEC_PM_sonda&AuthToken=' + [Uri]::EscapeDataString($tok)
   "### $api"
   try { $c = Chiama $uri $body } catch { "  HTTP KO: " + $_.Exception.Message; return }
@@ -98,10 +98,17 @@ function Prova($api, $body, $righe, $valori) {
   $nomi = $rows[0].PSObject.Properties.Name
   "  righe in pagina: $($rows.Count)"
   "  CAMPI ($($nomi.Count)): " + ($nomi -join ', ')
-  if ($valori) {
-    $riga = @{}
-    foreach ($n in $nomi) { if ($sensibili -notcontains $n) { $riga[$n] = $rows[0].$n } }
-    "  ESEMPIO (senza nominativi): " + ($riga | ConvertTo-Json -Compress)
+  if ($valori -eq 0) { return }
+  $quante = if ($valori -ge 2) { $rows.Count } else { 1 }
+  for ($i = 0; $i -lt $quante; $i++) {
+    $riga = [ordered]@{}
+    foreach ($n in $nomi) {
+      if ($sensibili -contains $n) { continue }
+      if ($campi -and ($campi -notcontains $n)) { continue }
+      $riga[$n] = $rows[$i].$n
+    }
+    $tag = if ($valori -ge 2) { "  RIGA $($i + 1)" } else { "  ESEMPIO (senza nominativi)" }
+    $tag + ": " + ($riga | ConvertTo-Json -Compress)
   }
 }
 '''
@@ -116,11 +123,13 @@ def corpo(args) -> str:
     filtro = "@{ " + "; ".join(
         f"{ps_stringa(k)} = {ps_stringa(v)}" for k, v in filtri(args.filtro).items()) + " }" \
         if args.filtro else "@{}"
+    valori = 2 if args.tutte else (1 if args.valori else 0)
+    campi = "@(" + ", ".join(ps_stringa(c.strip()) for c in args.campi.split(",") if c.strip()) + ")"         if args.campi else "$null"
     for api in args.api:
         if args.calibra:
-            righe.append(f"Prova {ps_stringa(api)} '' 1 $false")
+            righe.append(f"Prova {ps_stringa(api)} '' 1 0 $null")
         else:
-            righe.append(f"Prova {ps_stringa(api)} {filtro} {int(args.righe)} ${'true' if args.valori else 'false'}")
+            righe.append(f"Prova {ps_stringa(api)} {filtro} {int(args.righe)} {valori} {campi}")
     righe.append("$tok = $null")
     return "\n".join(righe) + "\n"
 
@@ -142,6 +151,8 @@ def main():
     p.add_argument("--filtro", action="append", metavar="Campo=<op><valore>", help="filtro nel body, ripetibile")
     p.add_argument("--righe", type=int, default=3, help="righe per pagina (default 3)")
     p.add_argument("--valori", action="store_true", help="stampa la prima riga (senza nominativi)")
+    p.add_argument("--tutte", action="store_true", help="stampa TUTTE le righe della pagina (senza nominativi)")
+    p.add_argument("--campi", metavar="A,B,C", help="stampa solo questi campi (per le API con dati personali)")
     a = p.parse_args()
 
     for nome in a.api:
