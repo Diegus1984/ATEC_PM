@@ -241,14 +241,19 @@ export function AppShell() {
   const [reportDialogOpen, setReportDialogOpen] = React.useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
 
-  // Versione del server: cambia solo quando si pubblica, quindi non la si ricontrolla di
-  // continuo. Se non arriva (server piu' vecchio, o momento del riavvio) resta null e la
-  // riga qui sotto mostra solo la parte «Web», come faceva prima.
+  // Versione del server: cambia solo quando si pubblica. Ma un deploy di solo C# riusa
+  // il bundle del client, quindi la barra «Aggiorna adesso» non compare e nessuno
+  // ricarica la pagina: letta una volta sola, la riga «Srv» resterebbe ferma al momento
+  // dell'apertura della scheda (visto l'08/09: server a 1202, riga ancora a 1024). Si
+  // rilegge quindi ogni minuto e al ritorno sulla scheda, lo stesso passo del banner
+  // (/api/health è anonima e non tocca il database). Se non arriva (server piu' vecchio,
+  // o momento del riavvio) resta null e la riga qui sotto mostra solo la parte «Web».
   const versioneServerQuery = useQuery({
     queryKey: ["server-version"],
     queryFn: fetchServerVersion,
-    staleTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
   })
   const versioneServer = versioneServerQuery.data ?? null
 
