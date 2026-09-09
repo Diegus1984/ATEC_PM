@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1416",
+                     "data":  "2026-09-09T14:16:45",
+                     "hash":  "9cf346c43ee47db657a4f90431ea99093cbcdf23",
+                     "modifiche":  [
+                                       "HR: sollecito sulla riga del Controllo di ieri e invio in blocco ai selezionati"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1407",
                      "data":  "2026-09-09T14:07:48",
                      "hash":  "dc1c25902d1b55da4923dc68c086a2f2ee22b287",
