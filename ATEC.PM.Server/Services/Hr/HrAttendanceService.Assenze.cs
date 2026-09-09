@@ -27,6 +27,7 @@ public partial class HrAttendanceService
                    d.name AS DepartmentName,
                    a.date_from AS DateFrom, a.date_to AS DateTo,
                    a.hours AS Hours, a.is_full_day AS IsFullDay,
+                   TIME_FORMAT(a.hour_from, '%H:%i') AS HourFrom, TIME_FORMAT(a.hour_to, '%H:%i') AS HourTo,
                    a.absence_type AS AbsenceType, a.status AS Status,
                    a.source AS Source, a.ecos_absence_id AS EcosAbsenceId,
                    a.approved_by AS ApprovedBy,
@@ -96,6 +97,19 @@ public partial class HrAttendanceService
         if (req.DateFrom.Date > req.DateTo.Date)
             return (null, "La data di inizio non può essere successiva alla data di fine.");
 
+        // Fascia oraria («HH:mm»): se c'è, le ore vengono da lì (ed è quella che va su Ecos, #151).
+        TimeSpan? oraDa = null, oraA = null;
+        if (!req.IsFullDay && (!string.IsNullOrWhiteSpace(req.HourFrom) || !string.IsNullOrWhiteSpace(req.HourTo)))
+        {
+            if (!ProvaOra(req.HourFrom, out TimeSpan da) || !ProvaOra(req.HourTo, out TimeSpan a))
+                return (null, "La fascia oraria non è valida: servono ora di inizio e di fine (es. 14:30 e 17:00).");
+            if (a <= da)
+                return (null, "La fine della fascia oraria deve venire dopo l'inizio.");
+            oraDa = da;
+            oraA = a;
+            req.Hours = Math.Round((decimal)(a - da).TotalMinutes / 60m, 1);
+        }
+
         if (!req.IsFullDay && (!req.Hours.HasValue || req.Hours.Value <= 0 || req.Hours.Value > 24))
             return (null, "Le ore di permesso devono essere maggiori di 0.");
 
@@ -117,9 +131,9 @@ public partial class HrAttendanceService
 
         int id = c.ExecuteScalar<int>(@"
             INSERT INTO hr_absences
-                (employee_id, date_from, date_to, hours, is_full_day, absence_type, status, source, notes, created_by)
+                (employee_id, date_from, date_to, hours, is_full_day, hour_from, hour_to, absence_type, status, source, notes, created_by)
             VALUES
-                (@EmployeeId, @DateFrom, @DateTo, @Hours, @IsFullDay, @AbsenceType, 'PENDING', 'ATEC', @Notes, @CreatedBy);
+                (@EmployeeId, @DateFrom, @DateTo, @Hours, @IsFullDay, @OraDa, @OraA, @AbsenceType, 'PENDING', 'ATEC', @Notes, @CreatedBy);
             SELECT LAST_INSERT_ID();",
             new
             {
@@ -128,6 +142,8 @@ public partial class HrAttendanceService
                 DateTo = req.DateTo.Date,
                 req.Hours,
                 req.IsFullDay,
+                OraDa = oraDa,
+                OraA = oraA,
                 AbsenceType = type,
                 Notes = req.Notes?.Trim(),
                 CreatedBy = currentUserId
@@ -172,36 +188,25 @@ public partial class HrAttendanceService
         return (id, null);
     }
 
+    /// <summary>
+    /// Una richiesta che vive su Ecos si decide passando da Ecos (<c>ApproveAbsenceRequestAsync</c>,
+    /// <c>CancelAbsenceRequestAsync</c>): il ramo sincrono da solo lascerebbe Ecos indietro, e al
+    /// prossimo import vincerebbe Ecos rimettendo tutto com'era.
+    /// </summary>
     internal const string VaDecisaSuEcos =
-        "Questa richiesta vive su Ecos: si approva, si rifiuta o si annulla là. L'esito arriva qui con l'import.";
+        "Questa richiesta vive anche su Ecos: la decisione passa da lì. Riprova dalla pagina Richieste.";
 
-    public string? ApproveAbsenceRequest(
-        int absenceId, bool approved, string? rejectionReason, int approverId, bool isManagerOrAdmin)
+    /// <summary>«14:30» o «14:30:00» → TimeSpan; false se non è un'ora.</summary>
+    private static bool ProvaOra(string? valore, out TimeSpan ora) =>
+        TimeSpan.TryParseExact((valore ?? "").Trim(), new[] { @"hh\:mm", @"h\:mm", @"hh\:mm\:ss" },
+            System.Globalization.CultureInfo.InvariantCulture, out ora);
+
+    /// <summary>I controlli di un'approvazione: stato e permessi. Null = si può.</summary>
+    private static string? ControlloApprovazione(
+        MySqlConnection c, string status, int employeeId, int approverId, bool isManagerOrAdmin)
     {
-        using MySqlConnection c = _db.Open();
-
-        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, string EmployeeName, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, decimal? Hours, bool IsFullDay, string Source)>(
-            @"SELECT a.id AS Id, a.employee_id AS EmployeeId,
-                     CONCAT_WS(' ', e.first_name, e.last_name) AS EmployeeName,
-                     a.status AS Status, a.absence_type AS AbsenceType,
-                     a.date_from AS DateFrom, a.date_to AS DateTo, a.hours AS Hours, a.is_full_day AS IsFullDay,
-                     a.source AS Source
-              FROM hr_absences a
-              JOIN employees e ON e.id = a.employee_id
-              WHERE a.id = @Id",
-            new { Id = absenceId });
-
-        if (absence == default)
-            return "Richiesta non trovata.";
-
-        if (absence.Status != "PENDING")
-            return $"La richiesta è già in stato {absence.Status}.";
-
-        // 🪤 Una richiesta nata su Ecos si decide su Ecos: qui non abbiamo il diritto di
-        // scriverla (PeopleAbsenceRequestPost, livello 3) e al prossimo import vince Ecos, che
-        // la rimetterebbe «in attesa» cancellando la decisione (Diego, 08/09/2026).
-        if (string.Equals(absence.Source, "ECOS", StringComparison.OrdinalIgnoreCase))
-            return VaDecisaSuEcos;
+        if (status != "PENDING")
+            return $"La richiesta è già in stato {status}.";
 
         if (!isManagerOrAdmin)
         {
@@ -210,11 +215,55 @@ public partial class HrAttendanceService
                 JOIN employee_departments ed_emp ON ed_emp.department_id = ed_resp.department_id
                 WHERE ed_resp.employee_id = @ApproverId AND ed_resp.is_responsible = 1
                   AND ed_emp.employee_id = @TargetEmpId",
-                new { ApproverId = approverId, TargetEmpId = absence.EmployeeId }) > 0;
+                new { ApproverId = approverId, TargetEmpId = employeeId }) > 0;
 
             if (!isResponsible)
                 return "Non hai i permessi per approvare richieste per questo dipendente (non sei responsabile del suo reparto).";
         }
+        return null;
+    }
+
+    /// <summary>I controlli di un annullamento: stato, chi è, richieste già approvate. Null = si può.</summary>
+    private static string? ControlloAnnullamento(string status, int employeeId, int currentUserId, bool isAdmin, int? createdBy)
+    {
+        if (status == "CANCELLED")
+            return "La richiesta è già annullata.";
+        if (!isAdmin && employeeId != currentUserId && createdBy != currentUserId)
+            return "Puoi annullare solo le tue richieste.";
+        if (status == "APPROVED" && !isAdmin)
+            return "Le richieste già approvate possono essere annullate solo da un amministratore.";
+        return null;
+    }
+
+    /// <param name="ecosAllineato">
+    /// true = Ecos ha già ricevuto la decisione (<c>ApproveAbsenceRequestAsync</c>); false = ramo
+    /// locale, che rifiuta le richieste con un id di Ecos.
+    /// </param>
+    public string? ApproveAbsenceRequest(
+        int absenceId, bool approved, string? rejectionReason, int approverId, bool isManagerOrAdmin,
+        bool ecosAllineato = false)
+    {
+        using MySqlConnection c = _db.Open();
+
+        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, string EmployeeName, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, decimal? Hours, bool IsFullDay, string? EcosId)>(
+            @"SELECT a.id AS Id, a.employee_id AS EmployeeId,
+                     CONCAT_WS(' ', e.first_name, e.last_name) AS EmployeeName,
+                     a.status AS Status, a.absence_type AS AbsenceType,
+                     a.date_from AS DateFrom, a.date_to AS DateTo, a.hours AS Hours, a.is_full_day AS IsFullDay,
+                     a.ecos_absence_id AS EcosId
+              FROM hr_absences a
+              JOIN employees e ON e.id = a.employee_id
+              WHERE a.id = @Id",
+            new { Id = absenceId });
+
+        if (absence == default)
+            return "Richiesta non trovata.";
+
+        string? controllo = ControlloApprovazione(c, absence.Status, absence.EmployeeId, approverId, isManagerOrAdmin);
+        if (controllo != null) return controllo;
+
+        if (!ecosAllineato && !string.IsNullOrEmpty(absence.EcosId))
+            return VaDecisaSuEcos;
 
         string newStatus = approved ? "APPROVED" : "REJECTED";
 
@@ -266,29 +315,23 @@ public partial class HrAttendanceService
         return null;
     }
 
-    public string? CancelAbsenceRequest(int absenceId, int currentUserId, bool isAdmin)
+    public string? CancelAbsenceRequest(int absenceId, int currentUserId, bool isAdmin, bool ecosAllineato = false)
     {
         using MySqlConnection c = _db.Open();
 
-        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, int? CreatedBy, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, string Source)>(
-            "SELECT id, employee_id AS EmployeeId, created_by AS CreatedBy, status AS Status, absence_type AS AbsenceType, date_from AS DateFrom, date_to AS DateTo, source AS Source FROM hr_absences WHERE id = @Id",
+        var absence = c.QueryFirstOrDefault<(int Id, int EmployeeId, int? CreatedBy, string Status, string AbsenceType, DateTime DateFrom, DateTime DateTo, string? EcosId)>(
+            "SELECT id, employee_id AS EmployeeId, created_by AS CreatedBy, status AS Status, absence_type AS AbsenceType, date_from AS DateFrom, date_to AS DateTo, ecos_absence_id AS EcosId FROM hr_absences WHERE id = @Id",
             new { Id = absenceId });
 
         if (absence == default)
             return "Richiesta non trovata.";
 
-        if (absence.Status == "CANCELLED")
-            return "La richiesta è già annullata.";
+        string? controllo = ControlloAnnullamento(absence.Status, absence.EmployeeId, currentUserId, isAdmin, absence.CreatedBy);
+        if (controllo != null) return controllo;
 
-        // Nata su Ecos: si annulla là (qui l'import la rimetterebbe com'era).
-        if (string.Equals(absence.Source, "ECOS", StringComparison.OrdinalIgnoreCase))
+        // Vive anche su Ecos: si passa da CancelAbsenceRequestAsync, che prima la cancella là.
+        if (!ecosAllineato && !string.IsNullOrEmpty(absence.EcosId))
             return VaDecisaSuEcos;
-
-        if (!isAdmin && absence.EmployeeId != currentUserId && absence.CreatedBy != currentUserId)
-            return "Puoi annullare solo le tue richieste.";
-
-        if (absence.Status == "APPROVED" && !isAdmin)
-            return "Le richieste già approvate possono essere annullate solo da un amministratore.";
 
         c.Execute("UPDATE hr_absences SET status = 'CANCELLED' WHERE id = @Id", new { Id = absenceId });
 

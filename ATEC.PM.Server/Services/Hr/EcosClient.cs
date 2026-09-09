@@ -56,6 +56,9 @@ public sealed class EcosApiException : Exception
 /// <summary>Il record che Ecos restituisce dopo un inserimento di timbratura (ReturnAllPostedRecord=1).</summary>
 public record EcosStampInserted(string StampId, string EmplId, string EmplCode, DateTime? StampDateTime);
 
+/// <summary>La richiesta creata su Ecos: la chiave, la persona a cui è finita e lo stato con cui è nata.</summary>
+public record EcosAbsenceRequestInserted(string AbsenceRequestId, string EmplId, string StatusCode);
+
 /// <summary>
 /// Client dell'API EcosAgile («eTime»). Port fedele di <c>Api/EcosApiManager.vb</c> del
 /// progetto Timbrature (PIANO-HR-PRESENZE.md §4-§5), con una differenza voluta: gli errori
@@ -550,6 +553,103 @@ public class EcosClient
         return esito;
     }
 
+    // ── SCRITTURA: PeopleAbsenceRequestPost (abilitata ad api.it l'08/09/2026, #151) ────
+    //
+    // Provata su Diego (richiesta 136492): qui EmplID È onorato; StatusCode accettato anche in
+    // insert (ACCEPTED/REQUEST/REJECT); la richiesta compare subito in GetAll; Edit=true cambia
+    // lo stato; Delete=1 la cancella logicamente. CategoryID va SEMPRE letto da
+    // AnagTSCategoryGetAll e mappato per CategoryCode: gli id non si cablano (manuale §9.9).
+
+    private static readonly string[] CampiCategoria = { "CategoryID", "CategoryCode", "DescShort", "StatusCode", "isAbsence" };
+
+    /// <summary>Le causali attive di Ecos: <c>CategoryCode</c> → <c>CategoryID</c>.</summary>
+    public async Task<Dictionary<string, int>> AbsenceCategoriesAsync(string token, CancellationToken ct = default)
+    {
+        List<Dictionary<string, string>> righe =
+            await FetchTutteLePagineAsync("AnagTSCategoryGetAll", token, CampiCategoria, DallInizio, ct);
+        var mappa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (Dictionary<string, string> r in righe)
+        {
+            if (!string.Equals(r.GetValueOrDefault("StatusCode"), "A", StringComparison.OrdinalIgnoreCase)) continue;
+            string codice = r.GetValueOrDefault("CategoryCode", "").Trim();
+            if (codice.Length > 0 && int.TryParse(r.GetValueOrDefault("CategoryID"), out int id)) mappa[codice] = id;
+        }
+        return mappa;
+    }
+
+    /// <summary>
+    /// Crea una richiesta di assenza su Ecos. Non idempotente: la chiave restituita si salva
+    /// subito (<c>hr_absences.ecos_absence_id</c>) e non si ritenta alla cieca.
+    /// </summary>
+    public async Task<EcosAbsenceRequestInserted> InsertAbsenceRequestAsync(
+        string token, int emplId, DateTime dateBegin, DateTime? dateEnd, bool fullDay,
+        TimeSpan? hourBegin, TimeSpan? hourEnd, int categoryId, string statusCode, string? note,
+        CancellationToken ct = default)
+    {
+        if (!fullDay && (hourBegin == null || hourEnd == null))
+            throw new EcosApiException("PeopleAbsenceRequestPost: una richiesta a ore vuole la fascia oraria (HourBegin/HourEnd).");
+
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleAbsenceRequestPost&ReturnAllPostedRecord=1&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        var campi = new Dictionary<string, string>
+        {
+            ["EmplID"] = emplId.ToString(CultureInfo.InvariantCulture),
+            ["DateBegin"] = dateBegin.ToString("yyyy-MM-dd 00:00:00", CultureInfo.InvariantCulture),
+            ["FullDay"] = fullDay ? "1" : "0",
+            ["CategoryID"] = categoryId.ToString(CultureInfo.InvariantCulture),
+            ["StatusCode"] = statusCode,
+        };
+        if (dateEnd is { } fine && fine.Date != dateBegin.Date)
+            campi["DateEnd"] = fine.ToString("yyyy-MM-dd 00:00:00", CultureInfo.InvariantCulture);
+        if (!fullDay)
+        {
+            campi["HourBegin"] = hourBegin!.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+            campi["HourEnd"] = hourEnd!.Value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+        }
+        if (!string.IsNullOrWhiteSpace(note)) campi["Note"] = note.Length > 200 ? note[..200] : note;
+
+        using var form = new FormUrlEncodedContent(campi);
+        string body = await PostAsync(url, form, ct);
+        Dictionary<string, string> riga = RigaScrittura(body, "PeopleAbsenceRequestPost");
+        string id = riga.GetValueOrDefault("AbsenceRequestID", "").Trim();
+        if (id.Length == 0)
+            throw new EcosApiException("PeopleAbsenceRequestPost: inserimento riuscito ma senza AbsenceRequestID nella risposta.") { EsitoIncerto = true };
+        return new EcosAbsenceRequestInserted(id, riga.GetValueOrDefault("EmplID", "").Trim(),
+            riga.GetValueOrDefault("StatusCode", "").Trim().ToUpperInvariant());
+    }
+
+    /// <summary>Cambia lo stato di una richiesta (<c>ACCEPTED</c> / <c>REJECT</c>); il motivo del rifiuto in <c>ApproveReply</c>.</summary>
+    public async Task<string> SetAbsenceRequestStatusAsync(
+        string token, string absenceRequestId, string statusCode, string? approveReply, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(absenceRequestId))
+            throw new EcosApiException("PeopleAbsenceRequestPost: senza AbsenceRequestID sarebbe un inserimento.");
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleAbsenceRequestPost&Edit=true&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        var campi = new Dictionary<string, string>
+        {
+            ["AbsenceRequestID"] = absenceRequestId.Trim(),
+            ["StatusCode"] = statusCode,
+        };
+        if (!string.IsNullOrWhiteSpace(approveReply))
+            campi["ApproveReply"] = approveReply.Length > 200 ? approveReply[..200] : approveReply;
+        using var form = new FormUrlEncodedContent(campi);
+        return EsitoScrittura(await PostAsync(url, form, ct), "PeopleAbsenceRequestPost");
+    }
+
+    /// <summary>Cancellazione logica di una richiesta (<c>Edit=true</c> + <c>Delete=1</c>).</summary>
+    public async Task DeleteAbsenceRequestAsync(string token, string absenceRequestId, CancellationToken ct = default)
+    {
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleAbsenceRequestPost&Edit=true&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["AbsenceRequestID"] = absenceRequestId.Trim(),
+            ["Delete"] = "1",
+        });
+        EsitoScrittura(await PostAsync(url, form, ct), "PeopleAbsenceRequestPost");
+    }
+
     /// <summary>Richieste di assenza / ferie / permessi da Ecos.</summary>
     public async Task<List<EcosAbsenceRequest>> GetAbsenceRequestsAsync(
         string token, DateTime? updateDa, CancellationToken ct = default)
@@ -655,7 +755,7 @@ public class EcosClient
         return (int)Math.Round((b - a).TotalMinutes);
     }
 
-    private static bool ProvaOra(string? valore, out TimeSpan ora) =>
+    internal static bool ProvaOra(string? valore, out TimeSpan ora) =>
         TimeSpan.TryParseExact(valore?.Trim() ?? "", new[] { "hh\\:mm\\:ss", "hh\\:mm", "h\\:mm\\:ss", "h\\:mm" },
             CultureInfo.InvariantCulture, out ora);
 

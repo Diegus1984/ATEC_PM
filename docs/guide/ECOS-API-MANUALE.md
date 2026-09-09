@@ -707,6 +707,34 @@ a ogni «Leggi badge» (`ImparaEmplIdDaiBadge`). Test: `I_badge_insegnano_l_Empl
 Regola: **ogni lettura nuova va provata guardando quali campi identificano la persona** — non
 tutte le API hanno l'`EmplCode` (guida §11: l'`EmplID` è la chiave stabile).
 
+### 9.9 ✅ Richieste e causali da ATEC PM verso Ecos (#151, 09/09/2026)
+
+`PeopleAbsenceRequestPost` è abilitata ad `api.it` dall'08/09 pomeriggio (catalogo, scheda con la
+prova). In ATEC PM (`HrAttendanceService.RichiesteEcos.cs`, migrazione **M128**
+`hr_absences.hour_from/hour_to`):
+- **Decisioni** (Approva / Rifiuta / Annulla, pagina Richieste): se la richiesta ha un
+  `ecos_absence_id` — nata su Ecos, o nata qui e già mandata — la decisione va **prima su Ecos**
+  (`Edit=true` + `AbsenceRequestID` + `StatusCode` `ACCEPTED`/`REJECT`, motivo in `ApproveReply`;
+  annulla = `Delete=1`) e poi qui. I controlli locali (stato, permessi) si fanno prima di
+  scrivere; se Ecos dice di no, qui non cambia niente. Il ramo sincrono da solo rifiuta le
+  richieste con id di Ecos (`VaDecisaSuEcos`): è una rete di sicurezza, il controller passa
+  dagli `…Async`.
+- **Nuova richiesta** (dialogo Ferie e permessi): nasce qui e poi su Ecos come `REQUEST`, con
+  l'id salvato subito (`source` resta `ATEC`). Le richieste a ore vogliono la **fascia oraria**
+  (dalle/alle): le ore vengono da lì ed è quella che va su Ecos (`HourBegin`/`HourEnd`). Se Ecos
+  non risponde la richiesta resta valida qui: avviso a video e nota «Ecos: non inviata (…)».
+- **Giustifica dal cartellino** (dialogo «Inserisci causale»): nasce su Ecos già `ACCEPTED`;
+  giornata intera = `FullDay=1`, a ore = fascia ricavata dalle timbrature (mattina libera →
+  prima della prima timbratura, altrimenti dopo l'ultima, senza timbrature dalle 08:00). Togliere
+  o cambiare la causale cancella prima la richiesta nostra su Ecos.
+- **Causali**: `CategoryID` letto da `AnagTSCategoryGetAll` a ogni invio e mappato per
+  `CategoryCode` (VACATION→F, PERMIT→P, SICKNESS→M, INJURY→I1, OTHER→F_ND). Serve l'EmplID
+  della persona (`employees.ecos_empl_id`).
+- **Import**: le richieste nate qui con id di Ecos si riallineano per stato (vince Ecos) ma
+  tengono la nota di chi le ha scritte; la fascia oraria di Ecos si copia in `hour_from/hour_to`.
+- 🪤 `DataApprove`/`ApproveID` restano vuoti quando lo stato lo scrive l'API: su Ecos
+  l'approvatore risulta l'utenza `api.it`; l'autore vero sta in `hr_absences.approved_by`.
+
 ### 9.6 Anagrafica persone (`PeopleExpressGetAll`)
 
 Cursore su **`SyncUpdateDate`**, non `UpdateDate`. Versione `Light` se bastano

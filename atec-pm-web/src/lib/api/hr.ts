@@ -175,9 +175,15 @@ export async function fetchHrAbsences(params?: {
   return unwrapApi(r)
 }
 
-export async function createHrAbsence(payload: HrCreateAbsenceRequest): Promise<number> {
+/**
+ * Nuova richiesta: torna anche il messaggio del server, perché dice se è nata anche su Ecos
+ * oppure è rimasta solo qui e perché (#151).
+ */
+export async function createHrAbsence(
+  payload: HrCreateAbsenceRequest
+): Promise<{ id: number; message: string }> {
   const r = await apiPost<ApiResponse<number>>("/api/hr/absences", payload)
-  return unwrapApi(r)
+  return { id: unwrapApi(r), message: r.message || "Richiesta inserita" }
 }
 
 export async function approveHrAbsence(
@@ -317,9 +323,11 @@ export async function fetchHrGiustificaInfo(
 }
 
 /** Scrive la causale scelta (causale vuota = toglie quella che c'è). */
-export async function saveHrGiustifica(request: HrGiustificaRequest): Promise<boolean> {
+/** Il messaggio del server dice se la causale è andata anche su Ecos (#151). */
+export async function saveHrGiustifica(request: HrGiustificaRequest): Promise<string> {
   const r = await apiPost<ApiResponse<boolean>>("/api/hr/calendar/giustifica", request)
-  return unwrapApi(r)
+  unwrapApi(r)
+  return r.message || "Causale registrata"
 }
 
 // ── EXPORT DEL CARTELLINO INDIVIDUALE (voce 7 del port) ───────────────────

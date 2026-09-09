@@ -234,7 +234,7 @@ public class HrController : ControllerBase
     }
 
     [HttpPost("calendar/giustifica")]
-    public IActionResult Giustifica([FromBody] HrGiustificaRequest req)
+    public async Task<IActionResult> Giustifica([FromBody] HrGiustificaRequest req)
     {
         if (!CanManageTimbrature)
             return StatusCode(StatusCodes.Status403Forbidden,
@@ -242,12 +242,13 @@ public class HrController : ControllerBase
 
         if (req.EmployeeId <= 0) return Ok(ApiResponse<bool>.Fail("Dipendente non indicato."));
 
-        string? errore = _attendance.SaveGiustifica(req, MeId);
+        // #151: la causale va anche su Ecos (già accettata). L'esito di Ecos è un avviso nel
+        // messaggio, non un errore: la causale qui è registrata comunque.
+        (string? errore, string? avviso) = await _attendance.SaveGiustificaAsync(req, MeId, HttpContext.RequestAborted);
         if (errore == null) _realtime.Notify("giustifica", req.EmployeeId, req.Date);
+        string esito = string.IsNullOrWhiteSpace(req.Causale) ? "Causale rimossa" : "Causale registrata";
         return Ok(errore == null
-            ? ApiResponse<bool>.Ok(true, string.IsNullOrWhiteSpace(req.Causale)
-                ? "Causale rimossa"
-                : "Causale registrata")
+            ? ApiResponse<bool>.Ok(true, avviso == null ? esito + " (anche su Ecos)" : $"{esito}. {avviso}")
             : ApiResponse<bool>.Fail(errore));
     }
 
@@ -668,21 +669,24 @@ public class HrController : ControllerBase
     }
 
     [HttpPost("absences")]
-    public IActionResult CreateAbsence([FromBody] HrCreateAbsenceRequest req)
+    public async Task<IActionResult> CreateAbsence([FromBody] HrCreateAbsenceRequest req)
     {
         bool isManagerOrAdmin = CanManageRichieste || IsAdmin;
-        var (id, error) = _attendance.CreateAbsenceRequest(req, MeId, isManagerOrAdmin);
+        // #151: nasce anche su Ecos (in attesa). Se Ecos non risponde, la richiesta vale qui e il
+        // messaggio lo dice.
+        var (id, error, avviso) = await _attendance.CreateAbsenceRequestAsync(req, MeId, isManagerOrAdmin, HttpContext.RequestAborted);
         if (error == null) _realtime.Notify("absence", req.EmployeeId);
         return Ok(error == null
-            ? ApiResponse<int>.Ok(id ?? 0, "Richiesta inserita con successo")
+            ? ApiResponse<int>.Ok(id ?? 0, avviso == null ? "Richiesta inserita, anche su Ecos" : $"Richiesta inserita. {avviso}")
             : ApiResponse<int>.Fail(error));
     }
 
     [HttpPost("absences/{id:int}/approve")]
-    public IActionResult ApproveAbsence(int id, [FromBody] HrApproveAbsenceRequest req)
+    public async Task<IActionResult> ApproveAbsence(int id, [FromBody] HrApproveAbsenceRequest req)
     {
         bool isManagerOrAdmin = CanManageRichieste || IsAdmin;
-        string? error = _attendance.ApproveAbsenceRequest(id, req.Approved, req.RejectionReason, MeId, isManagerOrAdmin);
+        // #151: se la richiesta vive su Ecos, la decisione va prima là.
+        string? error = await _attendance.ApproveAbsenceRequestAsync(id, req.Approved, req.RejectionReason, MeId, isManagerOrAdmin, HttpContext.RequestAborted);
         if (error == null) _realtime.Notify("absence");
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, req.Approved ? "Richiesta approvata" : "Richiesta rifiutata")
@@ -690,9 +694,9 @@ public class HrController : ControllerBase
     }
 
     [HttpDelete("absences/{id:int}")]
-    public IActionResult CancelAbsence(int id)
+    public async Task<IActionResult> CancelAbsence(int id)
     {
-        string? error = _attendance.CancelAbsenceRequest(id, MeId, IsAdmin);
+        string? error = await _attendance.CancelAbsenceRequestAsync(id, MeId, IsAdmin, HttpContext.RequestAborted);
         if (error == null) _realtime.Notify("absence");
         return Ok(error == null
             ? ApiResponse<bool>.Ok(true, "Richiesta annullata")

@@ -396,7 +396,7 @@ public class InvioEcosTests
         // Senza luogo, come le righe inserite da Grezza: qui si guarda solo l'orario.
         new(id, orario, "42", "Rossi, Mario", verso, null, orario.AddMinutes(1));
 
-    private static string RispostaToken() => """
+    internal static string RispostaToken() => """
         { "ECOSAGILE_TABLE_DATA": {
             "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "MESSAGE": "" },
             "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "AuthToken": "tok-1" } } } }
@@ -415,7 +415,7 @@ public class InvioEcosTests
             "ECOSAGILE_DATA": "" } }
         """;
 
-    private sealed class EcosFinto : HttpMessageHandler
+    internal sealed class EcosFinto : HttpMessageHandler
     {
         private readonly Queue<string> _corpi;
 

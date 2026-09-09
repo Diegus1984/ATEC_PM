@@ -323,7 +323,7 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
                   ? isSingleDay
                     ? "1 giorno"
                     : "Più giorni"
-                  : `${r.hours ?? 0}h`
+                  : `${r.hours ?? 0}h${r.hourFrom && r.hourTo ? ` (${r.hourFrom}–${r.hourTo})` : ""}`
 
                 return (
                   <TableRow
@@ -376,12 +376,7 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
                         className="text-right space-x-1 whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.source === "ECOS" && r.status === "PENDING" && (
-                          <span className="text-xs text-muted-foreground" title="Si approva, si rifiuta o si annulla su Ecos: l'esito arriva qui con l'import.">
-                            Si decide su Ecos
-                          </span>
-                        )}
-                        {canManage && r.status === "PENDING" && r.source !== "ECOS" && (
+                        {canManage && r.status === "PENDING" && (
                           <>
                             <Button
                               size="sm"
@@ -407,7 +402,7 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
                             </Button>
                           </>
                         )}
-                        {r.status === "PENDING" && r.source !== "ECOS" && (
+                        {r.status === "PENDING" && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -455,7 +450,7 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
                   {dettaglio.isFullDay
                     ? "Giornata intera"
                     : dettaglio.hours != null
-                      ? `${dettaglio.hours}h`
+                      ? `${dettaglio.hours}h${dettaglio.hourFrom && dettaglio.hourTo ? ` (${dettaglio.hourFrom}–${dettaglio.hourTo})` : ""}`
                       : "Ore non indicate"}
                 </dd>
                 <dt className="text-muted-foreground">Origine</dt>
@@ -486,14 +481,13 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
                   {dettaglio.createdByName ? ` da ${dettaglio.createdByName}` : ""}
                 </dd>
               </dl>
-              {dettaglio.source === "ECOS" && dettaglio.status === "PENDING" && (
+              {dettaglio.ecosAbsenceId && dettaglio.status === "PENDING" && (
                 <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  Richiesta in attesa su Ecos: si approva, si rifiuta o si annulla su Ecos e l'esito
-                  arriva qui con l'import. Le ore vengono dalla fascia oraria indicata, la durata
-                  ufficiale arriva quando Ecos la accetta.
+                  Questa richiesta vive anche su Ecos: approvarla, rifiutarla o annullarla da qui la
+                  aggiorna prima là e poi qui. La durata ufficiale arriva da Ecos quando la accetta.
                 </p>
               )}
-              {dettaglio.status === "PENDING" && dettaglio.source !== "ECOS" && (
+              {dettaglio.status === "PENDING" && (
                 <DialogFooter className="gap-2 sm:justify-between">
                   <Button
                     size="sm"

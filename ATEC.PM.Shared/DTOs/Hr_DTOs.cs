@@ -252,6 +252,9 @@ public class HrAbsenceDto
     public DateTime DateTo { get; set; }
     public decimal? Hours { get; set; }
     public bool IsFullDay { get; set; } = true;
+    /// <summary>Fascia oraria («HH:mm») delle richieste a ore; null a giornata intera (#151).</summary>
+    public string? HourFrom { get; set; }
+    public string? HourTo { get; set; }
     public string AbsenceType { get; set; } = "VACATION"; // VACATION, PERMIT, SICKNESS, INJURY, OTHER
     public string Status { get; set; } = "PENDING"; // PENDING, APPROVED, REJECTED, CANCELLED
     public string Source { get; set; } = "ATEC"; // ATEC, ECOS, MANUAL
@@ -275,6 +278,9 @@ public class HrCreateAbsenceRequest
     public bool IsFullDay { get; set; } = true;
     public string AbsenceType { get; set; } = "VACATION";
     public string? Notes { get; set; }
+    /// <summary>Fascia oraria («HH:mm») delle richieste a ore: è quella che va su Ecos (#151).</summary>
+    public string? HourFrom { get; set; }
+    public string? HourTo { get; set; }
 }
 
 public class HrApproveAbsenceRequest

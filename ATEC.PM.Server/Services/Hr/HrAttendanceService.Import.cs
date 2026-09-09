@@ -395,9 +395,12 @@ public partial class HrAttendanceService
             // Gli orari però ci sono sempre: le ore si ricavano da lì, e la nota li riporta.
             decimal? hours = r.FullDay ? null : r.Duration ?? OreDaOrari(r.HourBegin, r.HourEnd);
             string? note = NotaRichiesta(r);
+            // La fascia oraria (M128): quella di Ecos, per le richieste a ore.
+            TimeSpan? oraDa = !r.FullDay && EcosClient.ProvaOra(r.HourBegin, out TimeSpan da) ? da : null;
+            TimeSpan? oraA = !r.FullDay && EcosClient.ProvaOra(r.HourEnd, out TimeSpan a) ? a : null;
 
-            var existing = c.QueryFirstOrDefault<(int Id, string Status, decimal? Hours, DateTime DateFrom, DateTime DateTo, string? Notes)>(
-                "SELECT id, status, hours, date_from, date_to, notes FROM hr_absences WHERE ecos_absence_id = @EcosId",
+            var existing = c.QueryFirstOrDefault<(int Id, string Status, decimal? Hours, DateTime DateFrom, DateTime DateTo, string? Notes, string Source, TimeSpan? HourFrom, TimeSpan? HourTo)>(
+                "SELECT id, status, hours, date_from, date_to, notes, source, hour_from, hour_to FROM hr_absences WHERE ecos_absence_id = @EcosId",
                 new { EcosId = r.AbsenceRequestId });
 
             if (existing == default)
@@ -406,9 +409,9 @@ public partial class HrAttendanceService
 
                 c.Execute(@"
                     INSERT INTO hr_absences
-                        (employee_id, date_from, date_to, hours, is_full_day, absence_type, status, source, ecos_absence_id, notes)
+                        (employee_id, date_from, date_to, hours, is_full_day, hour_from, hour_to, absence_type, status, source, ecos_absence_id, notes)
                     VALUES
-                        (@EmployeeId, @DateFrom, @DateTo, @Hours, @IsFullDay, @AbsenceType, @Status, 'ECOS', @EcosId, @Notes)",
+                        (@EmployeeId, @DateFrom, @DateTo, @Hours, @IsFullDay, @OraDa, @OraA, @AbsenceType, @Status, 'ECOS', @EcosId, @Notes)",
                     new
                     {
                         EmployeeId = employeeId,
@@ -416,6 +419,8 @@ public partial class HrAttendanceService
                         DateTo = r.DateEnd,
                         Hours = hours,
                         IsFullDay = r.FullDay,
+                        OraDa = oraDa,
+                        OraA = oraA,
                         AbsenceType = absenceType,
                         Status = status,
                         EcosId = r.AbsenceRequestId,
@@ -423,13 +428,22 @@ public partial class HrAttendanceService
                     });
                 added++;
             }
-            else if (existing.Status != status || existing.Hours != hours || existing.DateFrom != r.DateBegin
-                     || existing.DateTo != r.DateEnd || existing.Notes != note)
+            else
             {
+                // Le note si riscrivono solo sulle richieste nate su Ecos: quelle nate qui (ATEC,
+                // MANUAL) e poi mandate su Ecos (#151) tengono la nota di chi le ha scritte.
+                bool nataSuEcos = string.Equals(existing.Source, "ECOS", StringComparison.OrdinalIgnoreCase);
+                bool cambiata = existing.Status != status || existing.Hours != hours || existing.DateFrom != r.DateBegin
+                                || existing.DateTo != r.DateEnd || existing.HourFrom != oraDa || existing.HourTo != oraA
+                                || (nataSuEcos && existing.Notes != note);
+                if (!cambiata) continue;
+
                 c.Execute(@"
                     UPDATE hr_absences
                     SET date_from = @DateFrom, date_to = @DateTo, hours = @Hours, is_full_day = @IsFullDay,
-                        absence_type = @AbsenceType, status = @Status, notes = @Notes
+                        hour_from = @OraDa, hour_to = @OraA,
+                        absence_type = @AbsenceType, status = @Status,
+                        notes = IF(source = 'ECOS', @Notes, notes)
                     WHERE id = @Id",
                     new
                     {
@@ -437,6 +451,8 @@ public partial class HrAttendanceService
                         DateTo = r.DateEnd,
                         Hours = hours,
                         IsFullDay = r.FullDay,
+                        OraDa = oraDa,
+                        OraA = oraA,
                         AbsenceType = absenceType,
                         Status = status,
                         Notes = note,

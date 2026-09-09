@@ -53,7 +53,16 @@ export function NuovaRichiestaDialog({
     const d = new Date()
     return d.toISOString().slice(0, 10)
   })
-  const [hours, setHours] = React.useState<string>("4")
+  // Le richieste a ore hanno una fascia oraria: le ore vengono da lì, ed è la fascia che va
+  // su Ecos (#151). Il numero di ore da solo non basta più.
+  const [hourFrom, setHourFrom] = React.useState<string>("14:00")
+  const [hourTo, setHourTo] = React.useState<string>("18:00")
+  const oreDallaFascia = React.useMemo(() => {
+    const [h1, m1] = hourFrom.split(":").map(Number)
+    const [h2, m2] = hourTo.split(":").map(Number)
+    if ([h1, m1, h2, m2].some((n) => Number.isNaN(n))) return 0
+    return Math.round(((h2 * 60 + m2 - (h1 * 60 + m1)) / 60) * 10) / 10
+  }, [hourFrom, hourTo])
   const [notes, setNotes] = React.useState("")
 
   const dipendentiQuery = useQuery({
@@ -75,11 +84,14 @@ export function NuovaRichiestaDialog({
         isFullDay,
         dateFrom,
         dateTo: isFullDay ? dateTo : dateFrom,
-        hours: isFullDay ? null : Number(hours.replace(",", ".")),
+        hours: isFullDay ? null : oreDallaFascia,
+        hourFrom: isFullDay ? null : hourFrom,
+        hourTo: isFullDay ? null : hourTo,
         notes: notes.trim() || null,
       }),
-    onSuccess: () => {
-      notifySuccess("Richiesta inserita con successo")
+    onSuccess: (esito) => {
+      // Il messaggio del server dice se è nata anche su Ecos o è rimasta solo qui.
+      notifySuccess(esito.message)
       void queryClient.invalidateQueries({ queryKey: ["hr-absences"] })
       void queryClient.invalidateQueries({ queryKey: ["hr-timesheet"] })
       void queryClient.invalidateQueries({ queryKey: ["hr-calendar"] })
@@ -105,9 +117,12 @@ export function NuovaRichiestaDialog({
       return
     }
     if (!isFullDay) {
-      const numHours = Number(hours.replace(",", "."))
-      if (isNaN(numHours) || numHours <= 0 || numHours > 24) {
-        notifyError("Inserisci un numero di ore valido (> 0)")
+      if (!hourFrom || !hourTo) {
+        notifyError("Inserisci la fascia oraria (dalle / alle)")
+        return
+      }
+      if (oreDallaFascia <= 0) {
+        notifyError("L'ora di fine deve venire dopo quella di inizio")
         return
       }
     }
@@ -207,18 +222,29 @@ export function NuovaRichiestaDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Numero di ore</Label>
+                <Label>Dalle</Label>
                 <Input
-                  type="number"
-                  step="0.5"
-                  min="0.5"
-                  max="24"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                  placeholder="Es. 4"
+                  type="time"
+                  value={hourFrom}
+                  onChange={(e) => setHourFrom(e.target.value)}
                   required
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label>Alle</Label>
+                <Input
+                  type="time"
+                  value={hourTo}
+                  onChange={(e) => setHourTo(e.target.value)}
+                  min={hourFrom}
+                  required
+                />
+              </div>
+              <p className="col-span-2 text-xs text-muted-foreground">
+                {oreDallaFascia > 0
+                  ? `${oreDallaFascia}h di permesso: è la fascia che va su Ecos.`
+                  : "Indica da che ora a che ora: le ore si calcolano da sole."}
+              </p>
             </div>
           )}
 

@@ -79,8 +79,9 @@ export function GiustificaCausaleDialog({
         date: target!.date,
         causale: scelta === RIMUOVI ? "" : scelta,
       }),
-    onSuccess: async () => {
-      notifySuccess(scelta === RIMUOVI ? "Causale rimossa" : "Causale registrata")
+    onSuccess: async (messaggio) => {
+      // Il server dice se la causale è andata anche su Ecos (#151).
+      notifySuccess(messaggio)
       await queryClient.invalidateQueries({ queryKey: ["hr-giustifica"] })
       onSaved()
       onOpenChange(false)

@@ -183,6 +183,9 @@ export interface HrAbsence {
   dateTo: string
   hours?: number | null
   isFullDay: boolean
+  /** Fascia oraria «HH:mm» delle richieste a ore; assente a giornata intera. */
+  hourFrom?: string | null
+  hourTo?: string | null
   absenceType: "VACATION" | "PERMIT" | "SICKNESS" | "INJURY" | "OTHER"
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   source: "ATEC" | "ECOS" | "MANUAL"
@@ -205,6 +208,9 @@ export interface HrCreateAbsenceRequest {
   isFullDay: boolean
   absenceType: string
   notes?: string | null
+  /** Fascia oraria «HH:mm» delle richieste a ore: da qui vengono le ore, ed è quella che va su Ecos. */
+  hourFrom?: string | null
+  hourTo?: string | null
 }
 
 export interface HrApproveAbsenceRequest {
