@@ -64,3 +64,25 @@ export function riassuntoInvioEcos(
 export function versoTimbratura(direction: string): string {
   return direction === "IN" ? "Entrata" : "Uscita"
 }
+
+/**
+ * L'ora che Ecos ha ADESSO per la timbratura di una cella, quando è diversa da quella
+ * timbrata: dopo «Scrivi su Ecos» la riga mostra ancora «timbrato 07:48» (l'ora originale
+ * non sparisce mai, regola di Diego) e senza questa riga sembrava che niente fosse partito
+ * (09/09/2026). La cella conosce solo l'orario grezzo «07:48» e il verso: si cerca la
+ * timbratura della giornata con quell'ora e quel verso e si legge `ecosPunchedAt`.
+ * Null = mai inviata, o inviata uguale al timbrato (niente da dire).
+ */
+export function oraSuEcos(
+  giornata: Pick<HrDay, "punches">,
+  timbrato: string | null | undefined,
+  verso: "IN" | "OUT"
+): string | null {
+  if (!timbrato || timbrato === "--:--") return null
+  const entrata = verso === "IN"
+  const t = giornata.punches.find(
+    (p) => (p.direction === "IN") === entrata && p.punchedAt.slice(11, 16) === timbrato
+  )
+  const suEcos = t?.ecosPunchedAt?.slice(11, 16)
+  return suEcos && suEcos !== timbrato ? suEcos : null
+}

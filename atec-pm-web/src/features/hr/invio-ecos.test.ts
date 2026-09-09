@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { riassuntoInvioEcos, versoTimbratura } from "@/features/hr/invio-ecos"
+import { oraSuEcos, riassuntoInvioEcos, versoTimbratura } from "@/features/hr/invio-ecos"
 import type { HrPunch } from "@/lib/api/types"
 
 function timbratura(over: Partial<HrPunch>): HrPunch {
@@ -18,6 +18,31 @@ function timbratura(over: Partial<HrPunch>): HrPunch {
     ...over,
   }
 }
+
+describe("oraSuEcos — l'ora che Ecos ha adesso, sotto quella timbrata", () => {
+  const giornata = {
+    punches: [
+      timbratura({ id: 1, punchedAt: "2026-09-08T07:48:09", direction: "IN", ecosPunchedAt: "2026-09-08T08:00:00" }),
+      timbratura({ id: 2, punchedAt: "2026-09-08T12:30:56", direction: "OUT", ecosPunchedAt: null }),
+      timbratura({ id: 3, punchedAt: "2026-09-08T13:30:00", direction: "IN", ecosPunchedAt: "2026-09-08T13:30:00" }),
+    ],
+  }
+
+  it("dopo la scrittura dice l'ora che Ecos ha, se diversa da quella timbrata", () => {
+    expect(oraSuEcos(giornata, "07:48", "IN")).toBe("08:00")
+  })
+
+  it("tace quando non è mai partita, quando è uguale, o quando la cella è vuota", () => {
+    expect(oraSuEcos(giornata, "12:30", "OUT")).toBeNull()
+    expect(oraSuEcos(giornata, "13:30", "IN")).toBeNull()
+    expect(oraSuEcos(giornata, "--:--", "OUT")).toBeNull()
+    expect(oraSuEcos(giornata, "", "IN")).toBeNull()
+  })
+
+  it("non confonde un'entrata con un'uscita allo stesso minuto", () => {
+    expect(oraSuEcos(giornata, "07:48", "OUT")).toBeNull()
+  })
+})
 
 describe("riassuntoInvioEcos", () => {
   it("la pausa dedotta è una cosa da scrivere e toglie l'allineamento (09/09/2026)", () => {

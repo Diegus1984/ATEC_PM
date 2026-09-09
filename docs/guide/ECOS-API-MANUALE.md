@@ -285,6 +285,12 @@ es. `AUTOMATIC`, `InsertDate`, `UpdateDate`, `YearMonth`, `StampLocationName`).
   salvata (noi scriviamo «ATEC PM: motivo (autore)»). `TypeCode` di default `ECLOCK`.
 - Con `ReturnAllPostedRecord=1` torna il record intero: `StampID`, `EmplID`, `EmplCode` → si
   VERIFICA che la persona sia quella giusta, altrimenti cancellazione immediata.
+- 🪤 **Verificato dal vivo il 09/09/2026 (prime scritture in produzione)**: una MODIFICA
+  (`Edit=true`) compare subito in `PeopleStampGetAll` con il nuovo `StampDateTime` e `UpdateDate`
+  (Buda 08/09: 08:00/13:30/17:00 alle 15:12); un INSERIMENTO no (Frattini 08/09: le due strisciate
+  della pausa 10346552/10346553 non tornano in `GetAll` un'ora dopo). E **`PeopleStampPeriodDayGetAll`
+  (Stamp1..6, la vista «per giorno») resta agli orari VECCHI anche per le modifiche** finché Ecos non
+  rifà il suo ricalcolo notturno: chi guarda il cartellino di Ecos nel pomeriggio non vede ancora niente.
 - 🪤 **Una timbratura appena inserita NON compare in `PeopleStampGetAll`** (né per StampID, né
   per persona/giorno, né in `GetESS`): probabilmente serve il controllo notturno (`CheckDate`).
   Quindi una verifica «a posteriori» via GET non dice niente subito: un timeout dopo l'insert è un

@@ -19,16 +19,20 @@ import type { ToneStato } from "./stato-giornata"
  * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero — sempre,
  * anche quando coincide (Diego, 08/09/2026: il riferimento resta sotto, così si legge a colpo
  * d'occhio che la riga è stata confrontata). «??:??» del motore (uscita mai timbrata)
- * diventa una parola.
+ * diventa una parola. Dopo «Scrivi su Ecos» la riga piccola dice anche l'ora che Ecos ha
+ * adesso («timbrato 07:48 · Ecos 08:00», 09/09/2026): senza, sembrava che niente fosse partito.
  */
 export function CellaOra({
   valore,
   timbrato,
   spenta,
+  suEcos,
 }: {
   valore: string
   timbrato: string
   spenta: boolean
+  /** L'ora che Ecos ha adesso, se diversa da quella timbrata (`oraSuEcos`). */
+  suEcos?: string | null
 }) {
   if (valore === "??:??") {
     return (
@@ -65,6 +69,11 @@ export function CellaOra({
         aria-hidden={!conTimbrata}
       >
         timbrato {conTimbrata ? timbrato : "—"}
+        {conTimbrata && suEcos && (
+          <span className="text-sky-700 dark:text-sky-400" title={`Su Ecos ora è ${suEcos}: l'orario arrotondato è stato scritto`}>
+            {" "}· Ecos {suEcos}
+          </span>
+        )}
       </span>
     </TableCell>
   )

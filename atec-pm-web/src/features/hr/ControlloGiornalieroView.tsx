@@ -34,7 +34,7 @@ import {
   type RigaControllo,
 } from "./controllo-giornaliero"
 import { GiornataDialog } from "./GiornataDialog"
-import { riassuntoInvioEcos } from "./invio-ecos"
+import { oraSuEcos, riassuntoInvioEcos } from "./invio-ecos"
 import { isZero, oreLeggibili } from "./ore"
 import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
 import { StatoGiornata } from "./stato-giornata"
@@ -308,7 +308,7 @@ export function ControlloGiornalieroView({
           Oggi
         </span>
         <span>
-          In grande l'ora che vale, in piccolo l'ora timbrata. Clic sulla riga per il dettaglio
+          In grande l'ora che vale, in piccolo l'ora timbrata e, dopo la scrittura, quella che Ecos ha adesso. Clic sulla riga per il dettaglio
           {canWrite
             ? ", la nuvola per scrivere su Ecos la giornata calcolata, 📧 per il sollecito, la casella per sollecitarne più d'uno."
             : "."}
@@ -467,7 +467,14 @@ function statoEcos(riga: RigaControllo): { tipo: "scrivi" | "allineato" | "blocc
     ].filter(Boolean)
     return { tipo: "scrivi", titolo: `Scrivi su Ecos la giornata calcolata: ${cose.join(" e ")} (prima il resoconto)` }
   }
-  if (ecos.allineato) return { tipo: "allineato", titolo: "Ecos ha già gli orari calcolati" }
+  if (ecos.allineato) {
+    return {
+      tipo: "allineato",
+      titolo: ecos.ultimoInvio
+        ? `Allineato con Ecos: scritto il ${formatDateTimeShort(ecos.ultimoInvio)}. La vista per giorno di Ecos si aggiorna col suo ricalcolo notturno.`
+        : "Ecos ha già gli orari calcolati",
+    }
+  }
   if (ecos.incerte > 0) return { tipo: "bloccato", titolo: "Un invio è rimasto senza risposta certa: verificare su Ecos" }
   return { tipo: "niente", titolo: "" }
 }
@@ -537,10 +544,18 @@ function RigaDipendente({
           {dipendente.departmentName || "—"}
         </span>
       </TableCell>
-      {show("entrata1") && <CellaOra valore={g.clockIn1} timbrato={g.raw.clockIn1} spenta={spenta} />}
-      {show("uscita1") && <CellaOra valore={g.clockOut1} timbrato={g.raw.clockOut1} spenta={spenta} />}
-      {show("entrata2") && <CellaOra valore={g.clockIn2} timbrato={g.raw.clockIn2} spenta={spenta} />}
-      {show("uscita2") && <CellaOra valore={g.clockOut2} timbrato={g.raw.clockOut2} spenta={spenta} />}
+      {show("entrata1") && (
+        <CellaOra valore={g.clockIn1} timbrato={g.raw.clockIn1} spenta={spenta} suEcos={oraSuEcos(g, g.raw.clockIn1, "IN")} />
+      )}
+      {show("uscita1") && (
+        <CellaOra valore={g.clockOut1} timbrato={g.raw.clockOut1} spenta={spenta} suEcos={oraSuEcos(g, g.raw.clockOut1, "OUT")} />
+      )}
+      {show("entrata2") && (
+        <CellaOra valore={g.clockIn2} timbrato={g.raw.clockIn2} spenta={spenta} suEcos={oraSuEcos(g, g.raw.clockIn2, "IN")} />
+      )}
+      {show("uscita2") && (
+        <CellaOra valore={g.clockOut2} timbrato={g.raw.clockOut2} spenta={spenta} suEcos={oraSuEcos(g, g.raw.clockOut2, "OUT")} />
+      )}
       {show("ore") && <CellaOre g={g} />}
       {show("straordinario") && <CellaStraordinario g={g} />}
       {show("stato") && (

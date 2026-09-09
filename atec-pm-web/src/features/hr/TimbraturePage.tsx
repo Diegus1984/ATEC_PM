@@ -51,6 +51,7 @@ import { SincronizzaEcosDialog } from "./SincronizzaEcosDialog"
 import { SollecitoGiornataDialog } from "./SollecitoGiornataDialog"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import { FASCE_LABELS, durata, isZero, minutiDa, oreLeggibili } from "./ore"
+import { oraSuEcos } from "./invio-ecos"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 // Il cartellino letto da chi non usa il computer tutti i giorni (02/09/2026): una riga per
@@ -620,7 +621,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                     <span className="size-3.5 rounded border border-amber-400 bg-amber-500/10" />
                     Oggi
                   </span>
-                  <span>In grande l'ora che vale, in piccolo l'ora timbrata.</span>
+                  <span>In grande l'ora che vale, in piccolo l'ora timbrata e, dopo la scrittura, quella che Ecos ha adesso.</span>
                 </div>
               </div>
 
@@ -676,16 +677,16 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                         >
                           <EtichettaGiorno g={g} />
                           {show("entrata1") && (
-                            <CellaOra valore={g.clockIn1} timbrato={g.raw.clockIn1} spenta={riposo} />
+                            <CellaOra valore={g.clockIn1} timbrato={g.raw.clockIn1} spenta={riposo} suEcos={oraSuEcos(g, g.raw.clockIn1, "IN")} />
                           )}
                           {show("uscita1") && (
-                            <CellaOra valore={g.clockOut1} timbrato={g.raw.clockOut1} spenta={riposo} />
+                            <CellaOra valore={g.clockOut1} timbrato={g.raw.clockOut1} spenta={riposo} suEcos={oraSuEcos(g, g.raw.clockOut1, "OUT")} />
                           )}
                           {show("entrata2") && (
-                            <CellaOra valore={g.clockIn2} timbrato={g.raw.clockIn2} spenta={riposo} />
+                            <CellaOra valore={g.clockIn2} timbrato={g.raw.clockIn2} spenta={riposo} suEcos={oraSuEcos(g, g.raw.clockIn2, "IN")} />
                           )}
                           {show("uscita2") && (
-                            <CellaOra valore={g.clockOut2} timbrato={g.raw.clockOut2} spenta={riposo} />
+                            <CellaOra valore={g.clockOut2} timbrato={g.raw.clockOut2} spenta={riposo} suEcos={oraSuEcos(g, g.raw.clockOut2, "OUT")} />
                           )}
                           {show("ore") && <CellaOre g={g} />}
                           {show("straordinario") && <CellaStraordinario g={g} />}
