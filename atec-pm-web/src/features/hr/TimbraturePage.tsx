@@ -103,17 +103,22 @@ type Vista = "cartellino" | "ieri" | "calendario" | "quadratura" | "cronologia"
 
 /** Ogni vista è una rotta: così le sottovoci del menu e le schede in pagina dicono la stessa cosa. */
 const PERCORSO_VISTA: Record<Vista, string> = {
-  cartellino: "/hr/timbrature",
-  ieri: "/hr/timbrature/ieri",
+  // Il «Controllo di ieri» è la prima pagina di Timbrature (Diego, 09/09/2026): sta sul
+  // percorso del gruppo, il cartellino di una persona ha il suo.
+  ieri: "/hr/timbrature",
+  cartellino: "/hr/timbrature/cartellino",
   calendario: "/hr/timbrature/calendario",
   quadratura: "/hr/timbrature/quadratura",
   cronologia: "/hr/timbrature/cronologia",
 }
 
-export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
+export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vista }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canWrite = canWriteFeature("nav.hr_timbrature")
+  // Con la sola lettura esiste solo il proprio cartellino: le viste di tutti (controllo,
+  // calendario, quadratura, email) chiedono la scrittura e il server le rifiuterebbe.
+  const vista: Vista = canWrite ? vistaRichiesta : "cartellino"
 
   const [periodo, setPeriodo] = React.useState(() => {
     const oggi = new Date()
@@ -382,8 +387,8 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
       {canWrite && (
         <Tabs value={vista} onValueChange={(v) => navigate(PERCORSO_VISTA[v as Vista])}>
           <TabsList>
-            <TabsTrigger value="cartellino">Cartellino di una persona</TabsTrigger>
             <TabsTrigger value="ieri">Controllo di ieri</TabsTrigger>
+            <TabsTrigger value="cartellino">Cartellino di una persona</TabsTrigger>
             <TabsTrigger value="calendario">Tutti, mese per mese</TabsTrigger>
             <TabsTrigger value="quadratura">Ore sulle commesse</TabsTrigger>
             <TabsTrigger value="cronologia">Email inviate</TabsTrigger>

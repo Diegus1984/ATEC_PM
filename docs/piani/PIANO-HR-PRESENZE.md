@@ -537,9 +537,11 @@ giornaliere (8 / 4 / 6).
 
 **✅ «Controllo di ieri» (09/09/2026).** Richiesta di Diego: «una pagina che mi faccia vedere le
 timbrature di ieri di tutti i dipendenti, così HR ci mette poco a controllarle; se è lunedì facciamo
-apparire anche venerdì, sabato e domenica». Quinta vista di `/hr/timbrature` (rotta
-`/hr/timbrature/ieri`, sottovoce «Controllo di ieri», stessa chiave `nav.hr_timbrature`, solo con la
-scrittura): una riga per dipendente che timbra (gli stessi dell'elenco laterale del cartellino), le
+apparire anche venerdì, sabato e domenica». **Prima pagina di Timbrature** (dal pomeriggio del 09/09:
+rotta `/hr/timbrature`, prima sottovoce e prima scheda; il cartellino di una persona è passato a
+`/hr/timbrature/cartellino`, la vecchia `/hr/timbrature/ieri` rimbalza; chi ha la sola lettura sul
+percorso del gruppo trova il proprio cartellino, le sottovoci «di tutti» hanno `requiresWrite`;
+stessa chiave `nav.hr_timbrature`): una riga per dipendente che timbra (gli stessi dell'elenco laterale del cartellino), le
 stesse celle e la stessa pillola «Com'è la giornata» del cartellino, quattro riquadri (dipendenti,
 regolari, da sistemare, assenti), filtro «Solo da sistemare», clic sulla riga → lo stesso dialogo
 della giornata con rettifica, «Invia a Ecos», email al dipendente e rilettura da Ecos.

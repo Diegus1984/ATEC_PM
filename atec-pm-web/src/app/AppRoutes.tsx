@@ -74,8 +74,8 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   checklist: <ChecklistPage />,
   "bug-reports": <BugReportsPage />,
   "milestones-summary": <MilestonesPage />,
-  "hr-timbrature": <TimbraturePage />,
-  "hr-timbrature-ieri": <TimbraturePage vista="ieri" />,
+  "hr-timbrature": <TimbraturePage vista="ieri" />,
+  "hr-timbrature-cartellino": <TimbraturePage vista="cartellino" />,
   "hr-timbrature-calendario": <TimbraturePage vista="calendario" />,
   "hr-timbrature-quadratura": <TimbraturePage vista="quadratura" />,
   "hr-timbrature-cronologia": <TimbraturePage vista="cronologia" />,
@@ -200,6 +200,9 @@ export function AppRoutes() {
           la pagina è una sola con i filtri. I preferiti restano validi. */}
       <Route path="hr/richieste/da-approvare" element={<Navigate to="/hr/richieste" replace />} />
       <Route path="hr/richieste/tutte" element={<Navigate to="/hr/richieste" replace />} />
+      {/* Il «Controllo di ieri» è nato su /hr/timbrature/ieri ed è durato un'ora lì (09/09/2026):
+          ora è la prima pagina di Timbrature. I preferiti restano validi. */}
+      <Route path="hr/timbrature/ieri" element={<Navigate to="/hr/timbrature" replace />} />
       <Route
         path="gestore-ddp/:projectId"
         element={guarded("gestore-ddp/:projectId", <DdpSintesiPage />)}

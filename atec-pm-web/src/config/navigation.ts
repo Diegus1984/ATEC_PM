@@ -388,8 +388,11 @@ export const NAV_GROUPS: NavGroupConfig[] = [
     label: "HR",
     items: [
       {
-        // Le quattro viste della pagina sono anche sottovoci del menu (Diego, 08/09/2026),
+        // Le cinque viste della pagina sono anche sottovoci del menu (Diego, 08/09/2026),
         // come «Costi e tariffe»: la pagina è una sola, cambia la vista dalla rotta.
+        // La PRIMA è il «Controllo di ieri» (Diego, 09/09/2026): è la pagina del mattino di
+        // HR, quindi sta sul percorso del gruppo. Chi ha la sola lettura non la vede e sul
+        // percorso del gruppo trova comunque il proprio cartellino (lo decide la pagina).
         id: "hr-timbrature-group",
         label: "Timbrature",
         path: "/hr/timbrature",
@@ -398,26 +401,27 @@ export const NAV_GROUPS: NavGroupConfig[] = [
         status: "live",
         children: [
           {
+            // Il controllo del mattino dell'ufficio HR: le timbrature di ieri di tutti; di
+            // lunedì venerdì, sabato e domenica.
             id: "hr-timbrature",
-            label: "Cartellino di una persona",
+            label: "Controllo di ieri",
             path: "/hr/timbrature",
+            featureKey: "nav.hr_timbrature",
+            icon: ClipboardCheck,
+            status: "live",
+            requiresWrite: true,
+            description:
+              "Le timbrature di ieri di tutti i dipendenti, una riga a testa: chi manca e chi ha un orario da sistemare. Di lunedì anche sabato e domenica.",
+          },
+          {
+            id: "hr-timbrature-cartellino",
+            label: "Cartellino di una persona",
+            path: "/hr/timbrature/cartellino",
             featureKey: "nav.hr_timbrature",
             icon: IdCard,
             status: "live",
             description:
               "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
-          },
-          {
-            // Il controllo del mattino dell'ufficio HR (Diego, 09/09/2026): le timbrature di
-            // ieri di tutti; di lunedì venerdì, sabato e domenica.
-            id: "hr-timbrature-ieri",
-            label: "Controllo di ieri",
-            path: "/hr/timbrature/ieri",
-            featureKey: "nav.hr_timbrature",
-            icon: ClipboardCheck,
-            status: "live",
-            description:
-              "Le timbrature di ieri di tutti i dipendenti, una riga a testa: chi manca e chi ha un orario da sistemare. Di lunedì anche sabato e domenica.",
           },
           {
             id: "hr-timbrature-calendario",
@@ -426,6 +430,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             featureKey: "nav.hr_timbrature",
             icon: CalendarDays,
             status: "live",
+            requiresWrite: true,
             description: "Il calendario presenze di tutti, un mese alla volta.",
           },
           {
@@ -435,6 +440,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             featureKey: "nav.hr_timbrature",
             icon: Briefcase,
             status: "live",
+            requiresWrite: true,
             description: "Quadratura fra le ore timbrate e le ore caricate sulle commesse.",
           },
           {
@@ -444,6 +450,7 @@ export const NAV_GROUPS: NavGroupConfig[] = [
             featureKey: "nav.hr_timbrature",
             icon: MailCheck,
             status: "live",
+            requiresWrite: true,
             description: "La cronologia dei solleciti e delle email mandate ai dipendenti.",
           },
         ],
