@@ -686,3 +686,49 @@ public class HrChange
     public int? EmployeeId { get; set; }
     public DateTime? Date { get; set; }
 }
+
+// ── CONTROLLO DI IERI (09/09/2026) ─────────────────────────────────────────
+//
+// La pagina che l'ufficio HR apre al mattino: le giornate di tutti i dipendenti che timbrano,
+// in un blocco di giorni deciso dal server (HrControlloGiornaliero) — il giorno scelto, di
+// norma ieri, e se è di riposo anche i riposi prima di lui fino all'ultimo giorno lavorativo
+// (di lunedì: venerdì, sabato e domenica). Le giornate sono le stesse HrDayDto del cartellino,
+// composte dalla stessa funzione: stessa regola, stesse parole.
+
+public class HrDailyCheckDto
+{
+    /// <summary>Il giorno scelto: è la fine del blocco.</summary>
+    public DateTime Date { get; set; }
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+
+    /// <summary>Il giorno da chiedere per vedere il blocco prima.</summary>
+    public DateTime PreviousDate { get; set; }
+
+    /// <summary>Il giorno da chiedere per il blocco dopo; null quando il blocco arriva a oggi.</summary>
+    public DateTime? NextDate { get; set; }
+
+    public List<HrDailyCheckDayDto> Days { get; set; } = new();
+    public List<HrDailyCheckEmployeeDto> Employees { get; set; } = new();
+}
+
+public class HrDailyCheckDayDto
+{
+    public DateTime Date { get; set; }
+
+    /// <summary>false = sabato, domenica o festivo: la pagina mostra solo chi ha timbrato lo stesso.</summary>
+    public bool IsWorkingDay { get; set; }
+}
+
+public class HrDailyCheckEmployeeDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public string? DepartmentName { get; set; }
+
+    /// <summary>false = senza codice Ecos: nessuna timbratura può arrivare, non è un'anomalia sua.</summary>
+    public bool EcosLinked { get; set; }
+
+    /// <summary>Una giornata per ogni giorno del blocco, nello stesso ordine di <see cref="HrDailyCheckDto.Days"/>.</summary>
+    public List<HrDayDto> Days { get; set; } = new();
+}

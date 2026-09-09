@@ -149,6 +149,8 @@ con `MapFallbackToFile` → tutto su `http://localhost:5150`.
 
 ✅ **WPF retired** (20/07/2026) — `ATEC.PM.Client` rimosso dalla solution e spostato in `backups/ATEC.PM.Client_retired_20260720/`. Client ufficiale = solo web.
 
+✅ **HR → Timbrature, ferie e permessi** (dal 27/08/2026; punto d'ingresso `docs/piani/PIANO-HR-PRESENZE.md`, §7 per lo stato) — `/hr/timbrature` è una pagina con cinque viste-rotte (`features/hr/TimbraturePage.tsx`: cartellino di una persona, **Controllo di ieri** `/hr/timbrature/ieri` del 09/09/2026 con le timbrature di ieri di tutti — di lunedì venerdì, sabato e domenica —, tutti mese per mese, ore sulle commesse, email inviate) più `/hr/richieste` (`RichiestePage.tsx`). Le celle della griglia stanno in `celle-cartellino.tsx` + `ore.ts`, i comandi della giornata in `AzioniGiornata.tsx`, le parole di «Com'è la giornata» in `stato-giornata.tsx`; la regola dei giorni del controllo è del server (`Services/Hr/HrControlloGiornaliero.cs`). API in `lib/api/hr.ts`, tipi in `lib/api/types/hr.ts`, real-time con `useHrHub`.
+
 ## Regole NON negoziabili per ogni nuova pagina
 
 1. **Fedeltà ai blocchi shadcn** — parti sempre da un blocco e dalle recipe in

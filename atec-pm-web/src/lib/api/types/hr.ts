@@ -444,3 +444,39 @@ export interface HrChange {
   employeeId: number | null
   date: string | null
 }
+
+// ── CONTROLLO DI IERI (09/09/2026) — specchio di HrDailyCheckDto ────────────
+
+/** Un giorno del blocco; `isWorkingDay` false = sabato, domenica o festivo. */
+export interface HrDailyCheckDay {
+  date: string
+  isWorkingDay: boolean
+}
+
+export interface HrDailyCheckEmployee {
+  employeeId: number
+  employeeName: string
+  departmentName?: string | null
+  /** false = senza codice Ecos: nessuna timbratura può arrivare, non è un'anomalia sua. */
+  ecosLinked: boolean
+  /** Una giornata per ogni giorno del blocco, nello stesso ordine di `days`. */
+  days: HrDay[]
+}
+
+/**
+ * Le giornate di tutti i dipendenti che timbrano in un blocco di giorni deciso dal server:
+ * il giorno scelto (di norma ieri) e, se è di riposo, i riposi prima di lui fino all'ultimo
+ * giorno lavorativo — di lunedì: venerdì, sabato e domenica.
+ */
+export interface HrDailyCheck {
+  /** Il giorno scelto: è la fine del blocco. */
+  date: string
+  from: string
+  to: string
+  /** Il giorno da chiedere per il blocco prima. */
+  previousDate: string
+  /** Il giorno da chiedere per il blocco dopo; null quando il blocco arriva a oggi. */
+  nextDate?: string | null
+  days: HrDailyCheckDay[]
+  employees: HrDailyCheckEmployee[]
+}

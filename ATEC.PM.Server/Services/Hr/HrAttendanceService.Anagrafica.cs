@@ -310,6 +310,8 @@ public partial class HrAttendanceService
     private sealed class PunchRow
     {
         public long Id { get; set; }
+        /// <summary>Letto solo dalla query di tutti (Controllo di ieri); in quella di una persona resta 0.</summary>
+        public int EmployeeId { get; set; }
         public DateTime WorkDate { get; set; }
         public DateTime PunchedAt { get; set; }
         public string Direction { get; set; } = "";

@@ -408,6 +408,18 @@ export const NAV_GROUPS: NavGroupConfig[] = [
               "Cartellino presenze: timbrature importate da EcosAgile, calcolo ore, pausa e straordinari per fascia CCNL.",
           },
           {
+            // Il controllo del mattino dell'ufficio HR (Diego, 09/09/2026): le timbrature di
+            // ieri di tutti; di lunedì venerdì, sabato e domenica.
+            id: "hr-timbrature-ieri",
+            label: "Controllo di ieri",
+            path: "/hr/timbrature/ieri",
+            featureKey: "nav.hr_timbrature",
+            icon: ClipboardCheck,
+            status: "live",
+            description:
+              "Le timbrature di ieri di tutti i dipendenti, una riga a testa: chi manca e chi ha un orario da sistemare. Di lunedì anche sabato e domenica.",
+          },
+          {
             id: "hr-timbrature-calendario",
             label: "Tutti, mese per mese",
             path: "/hr/timbrature/calendario",

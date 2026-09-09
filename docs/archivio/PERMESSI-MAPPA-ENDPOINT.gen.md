@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 09/09/2026 12:13.
+> Fotografia del 09/09/2026 12:54.
 
 ## Chiavi con endpoint
 
@@ -474,6 +474,7 @@
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/daily-check` (HrController.DailyCheck)
 - `GET /api/hr/day-reminder` (HrController.DayReminder)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)
@@ -506,6 +507,7 @@
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
+- `GET /api/hr/daily-check` (HrController.DailyCheck)
 - `GET /api/hr/day-reminder` (HrController.DayReminder)
 - `GET /api/hr/ecos/settings` (HrController.EcosSettings)
 - `GET /api/hr/mapping` (HrController.Mapping)

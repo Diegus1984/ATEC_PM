@@ -535,6 +535,34 @@ codice Ecos non è mai mostrato lì. Il foglio del consulente ha anche la riga d
 («full-time» / «part-time a 20 ore a sett.»): non è stata portata, si ricaverebbe dalle ore
 giornaliere (8 / 4 / 6).
 
+**✅ «Controllo di ieri» (09/09/2026).** Richiesta di Diego: «una pagina che mi faccia vedere le
+timbrature di ieri di tutti i dipendenti, così HR ci mette poco a controllarle; se è lunedì facciamo
+apparire anche venerdì, sabato e domenica». Quinta vista di `/hr/timbrature` (rotta
+`/hr/timbrature/ieri`, sottovoce «Controllo di ieri», stessa chiave `nav.hr_timbrature`, solo con la
+scrittura): una riga per dipendente che timbra (gli stessi dell'elenco laterale del cartellino), le
+stesse celle e la stessa pillola «Com'è la giornata» del cartellino, quattro riquadri (dipendenti,
+regolari, da sistemare, assenti), filtro «Solo da sistemare», clic sulla riga → lo stesso dialogo
+della giornata con rettifica, «Invia a Ecos», email al dipendente e rilettura da Ecos.
+- **La regola dei giorni** sta in una copia sola, `Services/Hr/HrControlloGiornaliero.cs`: il blocco
+  finisce nel giorno scelto (di norma ieri) e torna indietro sui riposi — sabato, domenica, i festivi
+  di `TimesheetRules.IsHoliday` — fino a comprendere l'ultimo giorno lavorativo. Martedì → lunedì;
+  lunedì → venerdì, sabato e domenica; il giorno dopo una festa infrasettimanale → la festa e il
+  giorno lavorativo prima. Nei giorni di riposo compaiono solo le persone che hanno timbrato (o hanno
+  un'anomalia): trentasette «Riposo» nasconderebbero l'unico che era in officina. Le frecce vanno al
+  blocco prima/dopo (`PreviousDate`/`NextDate` decisi dal server, mai oltre oggi), un calendario salta
+  a un giorno qualsiasi, «Torna a ieri» rimette il default.
+- **Server**: `GET /api/hr/daily-check?date=` → `HrDailyCheckDto`
+  (`HrAttendanceService.ControlloGiornaliero.cs`): cinque letture su tutto il blocco e per tutti, poi
+  ogni giornata è composta da `CostruisciGiornata`, la stessa funzione del cartellino mensile
+  (estratta apposta da `GetMonthlyTimesheet`): le due pagine non possono dire due cose diverse dello
+  stesso giorno.
+- **Client**: `ControlloGiornalieroView.tsx`; logica pura in `controllo-giornaliero.ts` (righe,
+  riassunto, nome del blocco) col suo test; celle condivise in `celle-cartellino.tsx` + `ore.ts`; i
+  due comandi del dettaglio in `AzioniGiornata.tsx` (li usa anche il cartellino). Chi non ha il codice
+  Ecos si legge «Non collegato a Ecos» (grigio), non «Nessuna timbratura».
+- **Test**: `ControlloGiornalieroTests` (la regola giorno per giorno sul calendario 2026 + la lettura
+  dal database, con la giornata confrontata con quella del cartellino), `controllo-giornaliero.test.ts`.
+
 ## 8. Punti delicati — da non sbagliare
 
 **Art. 4 dello Statuto dei lavoratori.** Registrare entrata e uscita per finalità

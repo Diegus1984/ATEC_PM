@@ -115,98 +115,124 @@ public partial class HrAttendanceService
             EcosLinked = !string.IsNullOrWhiteSpace(dipendente.EcosCode),
         };
 
+        var profilo = new ProfiloCartellino(dipendente.MustPunch, dipendente.DailyHours);
         for (DateTime work_date = primo; work_date <= ultimo; work_date = work_date.AddDays(1))
         {
-            bool isHoliday = TimesheetRules.IsHoliday(work_date);
-            var riga = new HrDayDto
-            {
-                WorkDate = work_date,
-                IsHoliday = isHoliday,
-            };
-
-            if (giornate.TryGetValue(work_date, out DayRow? g))
-            {
-                bool nonCalcolabile = g.Note.StartsWith("⚠ ERR");
-                riga.HasData = true;
-                riga.ClockIn1 = g.ClockIn1 ?? "";
-                riga.ClockOut1 = g.ClockOut1 ?? "";
-                riga.ClockIn2 = g.ClockIn2 ?? "";
-                riga.ClockOut2 = g.ClockOut2 ?? "";
-                riga.RegularHours = nonCalcolabile ? "---" : TimesheetRules.FormatDuration(g.RegularMinutes);
-                riga.Overtime = nonCalcolabile ? "---" : TimesheetRules.FormatDuration(g.OvertimeMinutes);
-                riga.BreakTime = TimesheetRules.FormatDuration(g.BreakMinutes);
-                riga.Bands = LeggiFasce(g.BandsJson);
-                riga.Note = g.Note;
-                riga.HasAnomaly = g.HasAnomaly;
-            }
-            else if (assenzeGiorno.TryGetValue(work_date, out HrAbsenceDto? abs))
-            {
-                riga.HasData = true;
-                riga.RegularHours = "0h 0m";
-                riga.Overtime = "0h 0m";
-                riga.BreakTime = "0h 0m";
-                riga.Note = abs.IsFullDay ? abs.AbsenceType : $"{abs.AbsenceType} ({abs.Hours}h)";
-            }
-            else if (!dipendente.MustPunch && !isHoliday && work_date < DateTime.Today)
-            {
-                // Forfait su giorno passato
-                riga.HasData = true;
-                int minutiForfait = (int)(dipendente.DailyHours * 60m);
-                riga.RegularHours = TimesheetRules.FormatDuration(minutiForfait);
-                riga.Overtime = "0h 0m";
-                riga.BreakTime = "0h 0m";
-                riga.Note = "FORFAIT";
-            }
-
-            if (inviiEcos.TryGetValue(work_date, out List<HrEcosSendDto>? invii))
-                riga.EcosSends = invii;
-
-            if (timbrature.TryGetValue(work_date, out List<PunchRow>? grezze))
-            {
-                riga.Punches = grezze.Select(PunchDto).ToList();
-
-                // Grezzo e normalizzato non stanno su hr_days — là c'è il risultato — ma
-                // si ottengono ripassando le timbrature nel motore, che è puro: nessuna
-                // scrittura, e per un mese sono trentun giornate.
-                // La configurazione della persona qui non serve: incide sullo straordinario,
-                // e i due stadi sono solo orari e somme.
-                TimesheetDay stadi = TimesheetEngine.Calcola(
-                    work_date,
-                    grezze.Select(t => new RawPunch(t.PunchedAt, t.Direction, null)),
-                    DateTime.Today,
-                    null,
-                    ContestoNotte(timbrature, work_date));
-
-                riga.Raw = new HrDayStageDto
-                {
-                    ClockIn1 = stadi.RawEntrata1,
-                    ClockOut1 = stadi.RawUscita1,
-                    ClockIn2 = stadi.RawEntrata2,
-                    ClockOut2 = stadi.RawUscita2,
-                    BreakTime = stadi.RawBreak,
-                    TotalHours = stadi.RawTotal,
-                };
-                riga.Normalized = new HrDayStageDto
-                {
-                    ClockIn1 = stadi.NormEntrata1,
-                    ClockOut1 = stadi.NormUscita1,
-                    ClockIn2 = stadi.NormEntrata2,
-                    ClockOut2 = stadi.NormUscita2,
-                    BreakTime = stadi.NormBreak,
-                    TotalHours = stadi.NormTotal,
-                };
-            }
-
-            // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
-            // riga e il filtro «📧 Da segnalare», che così non possono divergere.
-            riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);
-            if (solleciti.TryGetValue(work_date.Date, out DateTime quando))
-                riga.LastReminderAt = quando;
-
-            dto.Days.Add(riga);
+            dto.Days.Add(CostruisciGiornata(
+                work_date, oggi, profilo, giornate, timbrature, assenzeGiorno, inviiEcos, solleciti));
         }
 
         return dto;
+    }
+
+    /// <summary>Quanto della persona serve a comporre una giornata: chi non timbra ha il forfait sui giorni passati.</summary>
+    internal sealed record ProfiloCartellino(bool MustPunch, decimal DailyHours);
+
+    /// <summary>
+    /// Una giornata come la legge la pagina: il risultato del motore (<c>hr_days</c>), oppure
+    /// l'assenza approvata, oppure il forfait di chi non timbra; sotto, le timbrature grezze coi
+    /// due stadi ricalcolati al volo, il registro degli invii a Ecos e il sollecito già mandato.
+    /// La usano il cartellino mensile di una persona e il «Controllo di ieri» di tutti: la regola
+    /// è una sola, e le due pagine non possono dire due cose diverse dello stesso giorno.
+    /// I dizionari sono quelli della persona, per giorno.
+    /// </summary>
+    private static HrDayDto CostruisciGiornata(
+        DateTime work_date,
+        DateTime oggi,
+        ProfiloCartellino dipendente,
+        IReadOnlyDictionary<DateTime, DayRow> giornate,
+        IReadOnlyDictionary<DateTime, List<PunchRow>> timbrature,
+        IReadOnlyDictionary<DateTime, HrAbsenceDto> assenzeGiorno,
+        IReadOnlyDictionary<DateTime, List<HrEcosSendDto>> inviiEcos,
+        IReadOnlyDictionary<DateTime, DateTime> solleciti)
+    {
+        bool isHoliday = TimesheetRules.IsHoliday(work_date);
+        var riga = new HrDayDto
+        {
+            WorkDate = work_date,
+            IsHoliday = isHoliday,
+        };
+
+        if (giornate.TryGetValue(work_date, out DayRow? g))
+        {
+            bool nonCalcolabile = g.Note.StartsWith("⚠ ERR");
+            riga.HasData = true;
+            riga.ClockIn1 = g.ClockIn1 ?? "";
+            riga.ClockOut1 = g.ClockOut1 ?? "";
+            riga.ClockIn2 = g.ClockIn2 ?? "";
+            riga.ClockOut2 = g.ClockOut2 ?? "";
+            riga.RegularHours = nonCalcolabile ? "---" : TimesheetRules.FormatDuration(g.RegularMinutes);
+            riga.Overtime = nonCalcolabile ? "---" : TimesheetRules.FormatDuration(g.OvertimeMinutes);
+            riga.BreakTime = TimesheetRules.FormatDuration(g.BreakMinutes);
+            riga.Bands = LeggiFasce(g.BandsJson);
+            riga.Note = g.Note;
+            riga.HasAnomaly = g.HasAnomaly;
+        }
+        else if (assenzeGiorno.TryGetValue(work_date, out HrAbsenceDto? abs))
+        {
+            riga.HasData = true;
+            riga.RegularHours = "0h 0m";
+            riga.Overtime = "0h 0m";
+            riga.BreakTime = "0h 0m";
+            riga.Note = abs.IsFullDay ? abs.AbsenceType : $"{abs.AbsenceType} ({abs.Hours}h)";
+        }
+        else if (!dipendente.MustPunch && !isHoliday && work_date < oggi)
+        {
+            // Forfait su giorno passato
+            riga.HasData = true;
+            int minutiForfait = (int)(dipendente.DailyHours * 60m);
+            riga.RegularHours = TimesheetRules.FormatDuration(minutiForfait);
+            riga.Overtime = "0h 0m";
+            riga.BreakTime = "0h 0m";
+            riga.Note = "FORFAIT";
+        }
+
+        if (inviiEcos.TryGetValue(work_date, out List<HrEcosSendDto>? invii))
+            riga.EcosSends = invii;
+
+        if (timbrature.TryGetValue(work_date, out List<PunchRow>? grezze))
+        {
+            riga.Punches = grezze.Select(PunchDto).ToList();
+
+            // Grezzo e normalizzato non stanno su hr_days — là c'è il risultato — ma
+            // si ottengono ripassando le timbrature nel motore, che è puro: nessuna
+            // scrittura, e per un mese sono trentun giornate.
+            // La configurazione della persona qui non serve: incide sullo straordinario,
+            // e i due stadi sono solo orari e somme.
+            TimesheetDay stadi = TimesheetEngine.Calcola(
+                work_date,
+                grezze.Select(t => new RawPunch(t.PunchedAt, t.Direction, null)),
+                oggi,
+                null,
+                ContestoNotte(timbrature, work_date));
+
+            riga.Raw = new HrDayStageDto
+            {
+                ClockIn1 = stadi.RawEntrata1,
+                ClockOut1 = stadi.RawUscita1,
+                ClockIn2 = stadi.RawEntrata2,
+                ClockOut2 = stadi.RawUscita2,
+                BreakTime = stadi.RawBreak,
+                TotalHours = stadi.RawTotal,
+            };
+            riga.Normalized = new HrDayStageDto
+            {
+                ClockIn1 = stadi.NormEntrata1,
+                ClockOut1 = stadi.NormUscita1,
+                ClockIn2 = stadi.NormEntrata2,
+                ClockOut2 = stadi.NormUscita2,
+                BreakTime = stadi.NormBreak,
+                TotalHours = stadi.NormTotal,
+            };
+        }
+
+        // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
+        // riga e il filtro «📧 Da segnalare», che così non possono divergere.
+        riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);
+        if (solleciti.TryGetValue(work_date.Date, out DateTime quando))
+            riga.LastReminderAt = quando;
+
+        return riga;
     }
 
     // ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────

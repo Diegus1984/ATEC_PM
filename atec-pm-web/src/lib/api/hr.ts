@@ -6,6 +6,7 @@ import type {
   HrAbsence,
   HrBadges,
   HrCreateAbsenceRequest,
+  HrDailyCheck,
   HrEcosSendResult,
   HrGiustificaInfo,
   HrGiustificaRequest,
@@ -398,5 +399,18 @@ export async function fetchHrReminderLog(
   if (employeeId != null) q.set("employeeId", String(employeeId))
 
   const r = await apiGet<ApiResponse<HrReminderLog>>(`/api/hr/reminders/log?${q.toString()}`)
+  return unwrapApi(r)
+}
+
+// ── CONTROLLO DI IERI ─────────────────────────────────────────────────────
+
+/**
+ * Le giornate di tutti i dipendenti che timbrano nel blocco che finisce nel giorno chiesto
+ * (`date` = «YYYY-MM-DD»; senza: ieri — e di lunedì il blocco è venerdì, sabato e domenica,
+ * lo decide il server). Richiede la scrittura su `nav.hr_timbrature`.
+ */
+export async function fetchHrDailyCheck(date?: string | null): Promise<HrDailyCheck> {
+  const extra = date ? `?date=${encodeURIComponent(date)}` : ""
+  const r = await apiGet<ApiResponse<HrDailyCheck>>(`/api/hr/daily-check${extra}`)
   return unwrapApi(r)
 }

@@ -106,6 +106,26 @@ public class HrController : ControllerBase
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nomeFile);
     }
 
+    // ── CONTROLLO DI IERI (09/09/2026) ────────────────────────────────────────
+
+    /// <summary>
+    /// Le giornate di tutti i dipendenti che timbrano nel blocco che finisce nel giorno chiesto
+    /// (senza data: ieri; di lunedì il blocco è venerdì-sabato-domenica — la regola è
+    /// <see cref="HrControlloGiornaliero"/>). Come il calendario di tutti, richiede la scrittura.
+    /// </summary>
+    [HttpGet("daily-check")]
+    public IActionResult DailyCheck([FromQuery] DateTime? date)
+    {
+        if (date is { } giorno && (giorno.Year < 2020 || giorno.Year > 2100))
+            return Ok(ApiResponse<string>.Fail("Data non valida."));
+
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Il controllo di tutti richiede la scrittura su Timbrature."));
+
+        return Ok(ApiResponse<HrDailyCheckDto>.Ok(_attendance.GetDailyCheck(date)));
+    }
+
     // ── SOLLECITO DELLA SINGOLA GIORNATA (PIANO-HR-PORT-ORIGINALE.md, voce 1) ─
     //
     // Il pulsante 📧 sulla riga del cartellino, port di btnMailDipendente_Click. Si tocca il

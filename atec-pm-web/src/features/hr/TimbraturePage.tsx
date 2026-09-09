@@ -9,13 +9,10 @@ import {
   KeyRound,
   Link2,
   Mail,
-  MailCheck,
-  RotateCw,
   Search,
 } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
-import { useConfirm } from "@/components/shared/confirm"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,35 +26,32 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { fetchPunchingEmployees } from "@/lib/api/employees"
 import type { HrDay } from "@/lib/api/types"
 import {
   downloadHrTimesheetExcel,
   fetchHrTimesheet,
   fetchHrStatus,
-  resyncHrDay,
 } from "@/lib/api/hr"
 import { canWriteFeature } from "@/lib/auth/permissions"
-import { formatDateShort, formatDateTimeShort } from "@/lib/date-iso"
 import { useHrHub } from "@/lib/signalr/use-hr-hub"
-import { notifyError, notifySuccess } from "@/lib/toast"
+import { notifyError } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
+import { AzioniGiornata } from "./AzioniGiornata"
 import { GiornataDialog } from "./GiornataDialog"
 import { MappaturaEcosDialog } from "./MappaturaEcosDialog"
 import { CalendarioPresenzeView } from "./CalendarioPresenzeView"
+import { ControlloGiornalieroView } from "./ControlloGiornalieroView"
 import { CredenzialiEcosDialog } from "./CredenzialiEcosDialog"
 import { CronologiaMailView } from "./CronologiaMailView"
 import { QuadraturaPresenzeView } from "./QuadraturaPresenzeView"
 import { SincronizzaEcosDialog } from "./SincronizzaEcosDialog"
 import { SollecitoGiornataDialog } from "./SollecitoGiornataDialog"
-import { StatoGiornata, statoGiornata, type ToneStato } from "./stato-giornata"
+import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
+import { FASCE_LABELS, durata, isZero, minutiDa, oreLeggibili } from "./ore"
+import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 // Il cartellino letto da chi non usa il computer tutti i giorni (02/09/2026): una riga per
 // giorno, l'ora che vale in grande e quella timbrata in piccolo sotto, una colonna che dice
@@ -87,94 +81,8 @@ const COLUMNS_DEFAULT: Record<string, boolean> = {
 // v4: griglia leggibile — via i blocchi, arriva «Com'è la giornata»; azioni nel dettaglio.
 const COLUMNS_STORAGE_KEY = "hr-timbrature-columns-v4"
 
-/** Le fasce della Circolare n. 12 del 23.12.2024 (colonna «Non a turni»). */
-const FASCE_LABELS: Record<string, string> = {
-  A: "Straordinario diurno (20%)",
-  B1: "Lavoro notturno fino alle 22 (25%)",
-  B2: "Lavoro notturno oltre le 22 (35%)",
-  C: "Festivo (55%)",
-  D: "Festivo con riposo comp. (10%)",
-  E: "Straord. festivo (55%)",
-  F: "Straord. festivo con riposo comp. (35%)",
-  G: "Straordinario notturno (50/60%)",
-  H: "Notturno festivo (35%)",
-  L: "Straord. notturno festivo (75%)",
-  M: "Straord. nott. festivo con riposo comp. (55%)",
-}
-
-function minutiDa(durata: string): number {
-  const m = /^(\d+)h (\d+)m$/.exec(durata)
-  return m ? Number(m[1]) * 60 + Number(m[2]) : 0
-}
-
-function durata(minuti: number): string {
-  return `${Math.floor(minuti / 60)}h ${String(minuti % 60).padStart(2, "0")}m`
-}
-
-/** «8h 0m» → «8h 00m»; «---» e vuoto restano com'erano. */
-function oreLeggibili(valore: string): string {
-  const m = /^(\d+)h (\d+)m$/.exec(valore)
-  return m ? `${m[1]}h ${m[2].padStart(2, "0")}m` : valore
-}
-
-function isZero(valore: string): boolean {
-  return !valore || valore === "---" || minutiDa(valore) === 0
-}
-
-/**
- * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero — sempre,
- * anche quando coincide (Diego, 08/09/2026: il riferimento resta sotto, così si legge a colpo
- * d'occhio che la riga è stata confrontata). «??:??» del motore (uscita mai timbrata)
- * diventa una parola.
- */
-function CellaOra({
-  valore,
-  timbrato,
-  spenta,
-}: {
-  valore: string
-  timbrato: string
-  spenta: boolean
-}) {
-  if (valore === "??:??") {
-    return (
-      <TableCell className="leading-tight">
-        <span className="text-destructive font-semibold">Non timbrata</span>
-      </TableCell>
-    )
-  }
-  if (!valore) {
-    return (
-      <TableCell className="leading-tight">
-        <span className="text-muted-foreground">—</span>
-        {/* «--:--» è il segnaposto del grezzo per la timbratura che non c'è: sotto un
-            trattino non dice niente. */}
-        {timbrato && timbrato !== "--:--" && (
-          <span className="block text-[11px] text-muted-foreground">timbrato {timbrato}</span>
-        )}
-      </TableCell>
-    )
-  }
-  // Senza ora timbrata (orario stimato o rettificato a mano) la riga resta, invisibile,
-  // così tutte le celle hanno la stessa altezza.
-  const conTimbrata = Boolean(timbrato)
-  return (
-    <TableCell className="leading-tight">
-      <span className={cn("tabular-nums font-semibold", spenta && "text-muted-foreground")}>
-        {valore}
-      </span>
-      <span
-        className={cn(
-          "block text-[11px] tabular-nums text-muted-foreground",
-          !conTimbrata && "invisible"
-        )}
-        aria-hidden={!conTimbrata}
-      >
-        timbrato {conTimbrata ? timbrato : "—"}
-      </span>
-    </TableCell>
-  )
-}
+// Le celle (orario, ore, straordinario), le fasce e il riquadro stanno in celle-cartellino.tsx:
+// le condivide col «Controllo di ieri», che legge le stesse giornate di tutti.
 
 /** Etichetta del giorno nella griglia: «12 agosto» sopra, «mercoledì» sotto. */
 function EtichettaGiorno({ g }: { g: HrDay }) {
@@ -191,44 +99,12 @@ function EtichettaGiorno({ g }: { g: HrDay }) {
   )
 }
 
-function Riquadro({
-  etichetta,
-  valore,
-  dettaglio,
-  tone,
-}: {
-  etichetta: string
-  valore: string
-  dettaglio: string
-  tone?: ToneStato
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border bg-card px-4 py-3 shadow-xs",
-        tone === "bad" && "border-destructive/40"
-      )}
-    >
-      <p className="text-sm text-muted-foreground">{etichetta}</p>
-      <p
-        className={cn(
-          "text-2xl font-bold leading-tight tabular-nums",
-          tone === "bad" && "text-destructive",
-          tone === "warn" && "text-amber-600 dark:text-amber-500"
-        )}
-      >
-        {valore}
-      </p>
-      <p className="text-sm text-muted-foreground">{dettaglio}</p>
-    </div>
-  )
-}
-
-type Vista = "cartellino" | "calendario" | "quadratura" | "cronologia"
+type Vista = "cartellino" | "ieri" | "calendario" | "quadratura" | "cronologia"
 
 /** Ogni vista è una rotta: così le sottovoci del menu e le schede in pagina dicono la stessa cosa. */
 const PERCORSO_VISTA: Record<Vista, string> = {
   cartellino: "/hr/timbrature",
+  ieri: "/hr/timbrature/ieri",
   calendario: "/hr/timbrature/calendario",
   quadratura: "/hr/timbrature/quadratura",
   cronologia: "/hr/timbrature/cronologia",
@@ -237,7 +113,6 @@ const PERCORSO_VISTA: Record<Vista, string> = {
 export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const confirm = useConfirm()
   const canWrite = canWriteFeature("nav.hr_timbrature")
 
   const [periodo, setPeriodo] = React.useState(() => {
@@ -258,7 +133,6 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
   } | null>(null)
   const [nonAbbinati, setNonAbbinati] = React.useState<string[]>([])
   const [esportando, setEsportando] = React.useState(false)
-  const [risincronizzando, setRisincronizzando] = React.useState<string | null>(null)
 
   const [visible, setVisible] = usePersistedColumnVisibility(
     COLUMNS_STORAGE_KEY,
@@ -290,6 +164,7 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["hr-timesheet"] })
+    void queryClient.invalidateQueries({ queryKey: ["hr-daily-check"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-calendar"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-quadratura"] })
     void queryClient.invalidateQueries({ queryKey: ["hr-status"] })
@@ -444,71 +319,6 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
     }
   }
 
-  async function risincronizzaGiorno(dataIso: string) {
-    if (!cartellino) return
-    const ok = await confirm({
-      title: `Rileggere da Ecos il ${formatDateShort(dataIso)}?`,
-      description:
-        `Si riscaricano da Ecos le timbrature di ${cartellino.employeeName} per quel ` +
-        "giorno e si ricalcola la giornata. Le timbrature cancellate su Ecos spariscono " +
-        "anche qui; le rettifiche inserite a mano restano.",
-      confirmLabel: "Rileggi",
-      destructive: false,
-    })
-    if (!ok) return
-
-    setRisincronizzando(dataIso)
-    try {
-      const esito = await resyncHrDay(cartellino.employeeId, dataIso)
-      notifySuccess(esito.message)
-      invalidate()
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : "Risincronizzazione non riuscita.")
-    } finally {
-      setRisincronizzando(null)
-    }
-  }
-
-  const azioniGiornata = (g: HrDay) => {
-    if (!canWrite || !cartellino) return null
-    const dataIso = g.workDate.slice(0, 10)
-    return (
-      <>
-        {g.canRemind && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSollecito({ employeeId: cartellino.employeeId, date: dataIso })}
-            title={
-              g.lastReminderAt
-                ? `Sollecito già inviato il ${formatDateTimeShort(g.lastReminderAt)}`
-                : "Manda al dipendente un'email con la giornata da verificare"
-            }
-          >
-            {g.lastReminderAt ? (
-              <MailCheck className="mr-1 size-3.5" />
-            ) : (
-              <Mail className="mr-1 size-3.5 text-amber-600 dark:text-amber-500" />
-            )}
-            {g.lastReminderAt ? "Manda di nuovo l'email" : "Manda un'email al dipendente"}
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={risincronizzando != null}
-          onClick={() => void risincronizzaGiorno(dataIso)}
-          title="Riscarica da Ecos le timbrature di questo giorno e ricalcola"
-        >
-          <RotateCw
-            className={cn("mr-1 size-3.5", risincronizzando === dataIso && "animate-spin")}
-          />
-          Rileggi da Ecos
-        </Button>
-      </>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -568,11 +378,12 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
         </div>
       </div>
 
-      {/* Schede: le quattro letture delle presenze, coi nomi di chi le legge. */}
+      {/* Schede: le cinque letture delle presenze, coi nomi di chi le legge. */}
       {canWrite && (
         <Tabs value={vista} onValueChange={(v) => navigate(PERCORSO_VISTA[v as Vista])}>
           <TabsList>
             <TabsTrigger value="cartellino">Cartellino di una persona</TabsTrigger>
+            <TabsTrigger value="ieri">Controllo di ieri</TabsTrigger>
             <TabsTrigger value="calendario">Tutti, mese per mese</TabsTrigger>
             <TabsTrigger value="quadratura">Ore sulle commesse</TabsTrigger>
             <TabsTrigger value="cronologia">Email inviate</TabsTrigger>
@@ -580,42 +391,49 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
         </Tabs>
       )}
 
-      {/* Il mese: l'altra scelta, la persona, sta nell'elenco a sinistra. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex items-center gap-1 rounded-lg border p-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => cambiaMese(-1)}
-            aria-label="Mese precedente"
-            title="Mese precedente"
-          >
-            <ChevronLeft className="size-5" />
-          </Button>
-          <span className="min-w-40 text-center text-base font-semibold capitalize">
-            {meseLabel}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => cambiaMese(1)}
-            aria-label="Mese successivo"
-            title="Mese successivo"
-          >
-            <ChevronRight className="size-5" />
-          </Button>
+      {/* Il mese: l'altra scelta, la persona, sta nell'elenco a sinistra. Il «Controllo di
+          ieri» va a giorni, non a mesi: la sua scelta sta dentro la vista. */}
+      {(vista !== "ieri" || (canWrite && stato && !stato.configured)) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {vista !== "ieri" && (
+            <>
+              <div className="inline-flex items-center gap-1 rounded-lg border p-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => cambiaMese(-1)}
+                  aria-label="Mese precedente"
+                  title="Mese precedente"
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+                <span className="min-w-40 text-center text-base font-semibold capitalize">
+                  {meseLabel}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => cambiaMese(1)}
+                  aria-label="Mese successivo"
+                  title="Mese successivo"
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+              </div>
+              {!meseCorrente && (
+                <Button variant="outline" size="sm" onClick={vaiAOggi}>
+                  Torna a oggi
+                </Button>
+              )}
+            </>
+          )}
+          {canWrite && stato && !stato.configured && (
+            <span className="text-sm text-amber-600 dark:text-amber-500">
+              Credenziali Ecos non configurate sul server: l'aggiornamento è fermo.
+            </span>
+          )}
         </div>
-        {!meseCorrente && (
-          <Button variant="outline" size="sm" onClick={vaiAOggi}>
-            Torna a oggi
-          </Button>
-        )}
-        {canWrite && stato && !stato.configured && (
-          <span className="text-sm text-amber-600 dark:text-amber-500">
-            Credenziali Ecos non configurate sul server: l'aggiornamento è fermo.
-          </span>
-        )}
-      </div>
+      )}
 
       {canWrite && nonAbbinati.length > 0 && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
@@ -636,7 +454,9 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
         </div>
       )}
 
-      {vista === "calendario" ? (
+      {vista === "ieri" ? (
+        <ControlloGiornalieroView canWrite={canWrite} onChanged={invalidate} />
+      ) : vista === "calendario" ? (
         <CalendarioPresenzeView anno={periodo.anno} mese={periodo.mese} />
       ) : vista === "quadratura" ? (
         <QuadraturaPresenzeView anno={periodo.anno} mese={periodo.mese} />
@@ -831,7 +651,6 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
                     {giornate.map((g) => {
                       const dataIso = g.workDate.slice(0, 10)
                       const cliccabile = g.hasData || g.punches.length > 0 || canWrite
-                      const fasceEntries = Object.entries(g.bands)
                       const st = statoGiornata(g)
                       const riposo = st.riposo
                       const oggi = dataIso === oggiIso
@@ -863,58 +682,8 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
                           {show("uscita2") && (
                             <CellaOra valore={g.clockOut2} timbrato={g.raw.clockOut2} spenta={riposo} />
                           )}
-                          {show("ore") && (
-                            <TableCell className="text-right tabular-nums font-medium">
-                              {isZero(g.regularHours) && g.regularHours !== "---" ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : (
-                                oreLeggibili(g.regularHours)
-                              )}
-                            </TableCell>
-                          )}
-                          {show("straordinario") && (
-                            <TableCell className="text-right tabular-nums">
-                              {isZero(g.overtime) && fasceEntries.length > 0 ? (
-                                // Fascia b (#145): niente straordinario ma ore notturne
-                                // maggiorate — si vede «notte» col dettaglio nel tooltip.
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-help text-xs text-muted-foreground underline decoration-dotted">
-                                      notte
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-xs">
-                                    <p className="mb-1 font-semibold">Maggiorazioni CCNL:</p>
-                                    {fasceEntries.map(([k, v]) => (
-                                      <div key={k}>
-                                        <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
-                                      </div>
-                                    ))}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : isZero(g.overtime) ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : fasceEntries.length > 0 ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-help underline decoration-dotted">
-                                      {oreLeggibili(g.overtime)}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-xs">
-                                    <p className="mb-1 font-semibold">Dettaglio fasce CCNL:</p>
-                                    {fasceEntries.map(([k, v]) => (
-                                      <div key={k}>
-                                        <b>{FASCE_LABELS[k] ?? `Fascia ${k}`}:</b> {v}
-                                      </div>
-                                    ))}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : (
-                                oreLeggibili(g.overtime)
-                              )}
-                            </TableCell>
-                          )}
+                          {show("ore") && <CellaOre g={g} />}
+                          {show("straordinario") && <CellaStraordinario g={g} />}
                           {show("stato") && (
                             <TableCell className="whitespace-nowrap">
                               <StatoGiornata stato={st} />
@@ -1006,7 +775,22 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
             employeeName={cartellino?.employeeName ?? ""}
             canWrite={canWrite}
             onChanged={invalidate}
-            azioni={giornataAperta ? azioniGiornata(giornataAperta) : null}
+            azioni={
+              giornataAperta && canWrite && cartellino ? (
+                <AzioniGiornata
+                  employeeId={cartellino.employeeId}
+                  employeeName={cartellino.employeeName}
+                  giornata={giornataAperta}
+                  onSollecito={() =>
+                    setSollecito({
+                      employeeId: cartellino.employeeId,
+                      date: giornataAperta.workDate.slice(0, 10),
+                    })
+                  }
+                  onChanged={invalidate}
+                />
+              ) : null
+            }
           />
           </div>
         </div>

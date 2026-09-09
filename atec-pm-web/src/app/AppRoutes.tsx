@@ -75,6 +75,7 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   "bug-reports": <BugReportsPage />,
   "milestones-summary": <MilestonesPage />,
   "hr-timbrature": <TimbraturePage />,
+  "hr-timbrature-ieri": <TimbraturePage vista="ieri" />,
   "hr-timbrature-calendario": <TimbraturePage vista="calendario" />,
   "hr-timbrature-quadratura": <TimbraturePage vista="quadratura" />,
   "hr-timbrature-cronologia": <TimbraturePage vista="cronologia" />,

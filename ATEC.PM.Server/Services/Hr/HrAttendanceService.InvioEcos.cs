@@ -360,6 +360,8 @@ public partial class HrAttendanceService
     private sealed class InvioRow
     {
         public long Id { get; set; }
+        /// <summary>Letto solo dalla query di tutti (Controllo di ieri); in quella di una persona resta 0.</summary>
+        public int EmployeeId { get; set; }
         public DateTime WorkDate { get; set; }
         public long? PunchId { get; set; }
         public string EcosStampId { get; set; } = "";
@@ -391,23 +393,54 @@ public partial class HrAttendanceService
         {
             if (!perGiorno.TryGetValue(r.WorkDate.Date, out List<HrEcosSendDto>? lista))
                 perGiorno[r.WorkDate.Date] = lista = new List<HrEcosSendDto>();
-            lista.Add(new HrEcosSendDto
-            {
-                Id = r.Id,
-                PunchId = r.PunchId,
-                EcosStampId = r.EcosStampId,
-                Direction = r.Direction,
-                PunchedAt = r.PunchedAt,
-                SentTime = r.SentTime,
-                PreviousTime = r.PreviousTime,
-                Outcome = r.Outcome,
-                Message = r.Message,
-                SentBy = string.IsNullOrWhiteSpace(r.SentBy) ? null : r.SentBy,
-                SentAt = r.SentAt,
-            });
+            lista.Add(InvioDto(r));
         }
         return perGiorno;
     }
+
+    /// <summary>
+    /// Lo stesso registro per <b>tutti</b> i dipendenti, per persona e per giornata: lo usa il
+    /// «Controllo di ieri», che compone le giornate di tutti con le stesse letture del cartellino.
+    /// </summary>
+    internal static Dictionary<int, Dictionary<DateTime, List<HrEcosSendDto>>> InviiEcosPerDipendenteEGiorno(
+        MySqlConnection c, DateTime da, DateTime a)
+    {
+        var perDipendente = new Dictionary<int, Dictionary<DateTime, List<HrEcosSendDto>>>();
+        foreach (InvioRow r in c.Query<InvioRow>(@"
+            SELECT s.id AS Id, s.employee_id AS EmployeeId, s.work_date AS WorkDate, s.punch_id AS PunchId,
+                   s.ecos_stamp_id AS EcosStampId, s.direction AS Direction, s.punched_at AS PunchedAt,
+                   s.sent_time AS SentTime, s.previous_time AS PreviousTime, s.outcome AS Outcome,
+                   s.message AS Message, s.sent_at AS SentAt,
+                   CONCAT_WS(' ', e.first_name, e.last_name) AS SentBy
+            FROM hr_ecos_sends s
+            LEFT JOIN employees e ON e.id = s.sent_by
+            WHERE s.work_date BETWEEN @Da AND @A
+            ORDER BY s.sent_at DESC, s.id DESC",
+            new { Da = da, A = a }))
+        {
+            if (!perDipendente.TryGetValue(r.EmployeeId, out Dictionary<DateTime, List<HrEcosSendDto>>? perGiorno))
+                perDipendente[r.EmployeeId] = perGiorno = new Dictionary<DateTime, List<HrEcosSendDto>>();
+            if (!perGiorno.TryGetValue(r.WorkDate.Date, out List<HrEcosSendDto>? lista))
+                perGiorno[r.WorkDate.Date] = lista = new List<HrEcosSendDto>();
+            lista.Add(InvioDto(r));
+        }
+        return perDipendente;
+    }
+
+    private static HrEcosSendDto InvioDto(InvioRow r) => new()
+    {
+        Id = r.Id,
+        PunchId = r.PunchId,
+        EcosStampId = r.EcosStampId,
+        Direction = r.Direction,
+        PunchedAt = r.PunchedAt,
+        SentTime = r.SentTime,
+        PreviousTime = r.PreviousTime,
+        Outcome = r.Outcome,
+        Message = r.Message,
+        SentBy = string.IsNullOrWhiteSpace(r.SentBy) ? null : r.SentBy,
+        SentAt = r.SentAt,
+    };
 
     /// <summary>Il DTO di una timbratura, con quello che serve al pulsante «Invia a Ecos».</summary>
     private static HrPunchDto PunchDto(PunchRow t)
