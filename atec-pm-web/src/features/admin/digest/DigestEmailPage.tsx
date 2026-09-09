@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { RefreshCw, Send } from "lucide-react"
+import { KeyRound, RefreshCw, Send } from "lucide-react"
 
 import { ApiError } from "@/lib/api/client"
 import {
@@ -10,6 +10,7 @@ import {
   saveDigestSettings,
 } from "@/lib/api/digest"
 import { fetchEmailSettings, saveEmailSettings, sendTestEmail } from "@/lib/api/settings"
+import { PasswordField } from "@/features/auth/PasswordField"
 import type { EmailSettingsDto, PlanDigestSettingsDto } from "@/lib/api/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ import {
 import { canAccessFeature } from "@/lib/auth/permissions"
 import { formatDateTimeOrDash } from "@/lib/date-iso"
 
+import { CambiaPasswordSmtpDialog } from "./CambiaPasswordSmtpDialog"
 import { RisorseSyncCard } from "./RisorseSyncCard"
 
 const EMPTY_EMAIL: EmailSettingsDto = {
@@ -83,6 +85,8 @@ export function DigestEmailPage() {
   // (mai restituito dal server) così si vede a colpo d'occhio se una password è già salvata.
   const [passwordTouched, setPasswordTouched] = React.useState(false)
   const PASSWORD_PLACEHOLDER_DOTS = "••••••••••"
+  // «Cambia password»: la password scritta due volte, salvata subito (Diego, 09/09/2026 sera).
+  const [cambiaPasswordAperto, setCambiaPasswordAperto] = React.useState(false)
 
   React.useEffect(() => {
     if (emailQuery.data) {
@@ -235,24 +239,48 @@ export function DigestEmailPage() {
                   <span className="text-xs text-muted-foreground">(già salvata)</span>
                 )}
               </Label>
-              <Input
-                type="password"
-                value={
-                  !passwordTouched && emailForm.hasPassword
-                    ? PASSWORD_PLACEHOLDER_DOTS
-                    : (emailForm.password ?? "")
-                }
-                onFocus={() => {
-                  if (!passwordTouched) {
-                    setPasswordTouched(true)
-                    setEmailForm((p) => ({ ...p, password: "" }))
-                  }
+              {/* L'occhiolino mostra quello che si sta scrivendo (Diego, 09/09/2026 sera):
+                  la password salvata non torna mai dal server, i pallini sono un segnaposto. */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <PasswordField
+                    id="smtp-password"
+                    value={
+                      !passwordTouched && emailForm.hasPassword
+                        ? PASSWORD_PLACEHOLDER_DOTS
+                        : (emailForm.password ?? "")
+                    }
+                    onFocus={() => {
+                      if (!passwordTouched) {
+                        setPasswordTouched(true)
+                        setEmailForm((p) => ({ ...p, password: "" }))
+                      }
+                    }}
+                    onChange={(e) => {
+                      setPasswordTouched(true)
+                      setEmailForm((p) => ({ ...p, password: e.target.value }))
+                    }}
+                    placeholder="nuova password"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCambiaPasswordAperto(true)}
+                  title="Scrivi la nuova password due volte: si salva subito"
+                >
+                  <KeyRound /> Cambia password
+                </Button>
+              </div>
+              <CambiaPasswordSmtpDialog
+                open={cambiaPasswordAperto}
+                onOpenChange={setCambiaPasswordAperto}
+                impostazioni={emailForm}
+                onSalvata={() => {
+                  setPasswordTouched(false)
+                  setEmailForm((p) => ({ ...p, password: null, hasPassword: true }))
                 }}
-                onChange={(e) => {
-                  setPasswordTouched(true)
-                  setEmailForm((p) => ({ ...p, password: e.target.value }))
-                }}
-                placeholder="nuova password"
               />
             </div>
           </div>
