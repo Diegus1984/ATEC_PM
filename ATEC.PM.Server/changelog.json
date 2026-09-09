@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1617",
+                     "data":  "2026-09-09T16:17:47",
+                     "hash":  "253ae7c99e618250df5d6a9b7d1c6441deb7dbf4",
+                     "modifiche":  [
+                                       "Solleciti: la mail parte subito e «inviato» vuol dire accettata dal server di posta",
+                                       "HR: data dell\u0027ultima sincronizzazione in grigio sotto «Aggiorna da Ecos»"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1601",
                      "data":  "2026-09-09T16:01:47",
                      "hash":  "50469f7561244cc13ed426b52e94f20ad3c58942",
