@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1522",
+                     "data":  "2026-09-09T15:23:06",
+                     "hash":  "a58f5516406bb346db86441f42cc80705b4867c6",
+                     "modifiche":  [
+                                       "HR: sotto l\u0027ora calcolata una riga sola, l\u0027orario che Ecos ha adesso (variante A dell\u0027anteprima)"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1517",
                      "data":  "2026-09-09T15:17:13",
                      "hash":  "019afee5c222cd737802496d540983ec4ae337b1",
