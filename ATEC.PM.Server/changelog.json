@@ -1,6 +1,16 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1216",
+                     "data":  "2026-09-09T12:16:27",
+                     "hash":  "fcd84cc4be7cda98be4ce197418bf7d53a6bfc37",
+                     "modifiche":  [
+                                       "HR: matricola del libro paga accanto al codice Ecos (M129)",
+                                       "Guida server: §5.2 import da Ecos ogni ora (dove sta la chiave, cosa fa un giro, log); riparato un percorso con carattere spurio",
+                                       "HR: import automatico da Ecos ogni ora (era ogni 12 ore)"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1036",
                      "data":  "2026-09-09T10:36:25",
                      "hash":  "a85668eb7024f51d15a4d48a13c1ff3102e67f5e",
