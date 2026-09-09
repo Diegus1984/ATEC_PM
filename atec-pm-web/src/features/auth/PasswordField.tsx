@@ -9,13 +9,27 @@ interface PasswordFieldProps extends Omit<
   "type"
 > {
   id: string
+  /**
+   * Chiamata quando l'occhiolino sta per MOSTRARE il valore: chi ha un segnaposto al posto
+   * della password vera (la Configurazione email) qui la va a prendere. Restituire `false`
+   * lascia il campo nascosto (per esempio se il server non l'ha data).
+   */
+  onReveal?: () => Promise<boolean | void> | boolean | void
 }
 
 export const PasswordField = React.forwardRef<
   HTMLInputElement,
   PasswordFieldProps
->(function PasswordField({ id, className, ...props }, ref) {
+>(function PasswordField({ id, className, onReveal, ...props }, ref) {
   const [visible, setVisible] = React.useState(false)
+
+  async function alterna() {
+    if (!visible && onReveal) {
+      const esito = await onReveal()
+      if (esito === false) return
+    }
+    setVisible((value) => !value)
+  }
 
   return (
     <div className="relative">
@@ -33,7 +47,7 @@ export const PasswordField = React.forwardRef<
         className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
         tabIndex={-1}
         aria-label={visible ? "Nascondi password" : "Mostra password"}
-        onClick={() => setVisible((value) => !value)}
+        onClick={() => void alterna()}
       >
         {visible ? (
           <EyeOff className="size-4 text-muted-foreground" />

@@ -8,6 +8,12 @@ export async function fetchEmailSettings(): Promise<EmailSettingsDto> {
   return unwrapApi(response)
 }
 
+/** La password SMTP salvata, in chiaro: solo per l'occhiolino della Configurazione email (il server lo scrive nel log). */
+export async function fetchEmailPassword(): Promise<string> {
+  const response = await apiGet<ApiResponse<string>>("/api/settings/email/password")
+  return unwrapApi(response)
+}
+
 export async function saveEmailSettings(settings: EmailSettingsDto): Promise<string> {
   const response = await apiPost<ApiResponse<string>>("/api/settings/email", settings)
   return unwrapApi(response)

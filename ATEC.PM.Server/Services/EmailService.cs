@@ -109,6 +109,22 @@ public class EmailService : BackgroundService
         return null;
     }
 
+    /// <summary>
+    /// La password SMTP salvata, in chiaro: per l'occhiolino della Configurazione email (Diego,
+    /// 09/09/2026 sera: «l'occhiolino non mi fa vedere la psw»). Solo chi arriva da
+    /// SettingsController (funzione «Digest Email»), e resta scritto nel log chi l'ha vista.
+    /// Salvata ma illeggibile → lo dice, invece di mostrare una password vuota.
+    /// </summary>
+    public (bool Ok, string? Password, string Message) PasswordInChiaro()
+    {
+        (EmailSettingsDto cfg, bool illegibile) = ResolveConfigConEsito();
+        if (illegibile)
+            return (false, null, "La password salvata non è più leggibile da questo server: reinseriscila con «Cambia password».");
+        if (string.IsNullOrEmpty(cfg.Password))
+            return (false, null, "Nessuna password salvata.");
+        return (true, cfg.Password, "");
+    }
+
     /// <summary>Il perché una mail non partirebbe adesso (null = tutto a posto), per chi lo chiede prima di provarci.</summary>
     public string? ProblemaInvio()
     {

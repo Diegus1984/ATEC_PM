@@ -666,7 +666,10 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   password salvata ma illeggibile («reinserirla in Configurazione email»), utente senza password; la
   usano anche «Invia prova» e il ciclo in background (che ora scrive nel log il perché). La coda resta
   per digest e RDO. Da fare a mano sul server: reinserire la password SMTP in Configurazione email e
-  premere «Invia prova».
+  premere «Invia prova». La Configurazione email ha l'occhiolino sulla password (al primo clic chiede
+  la password salvata a `GET /api/settings/email/password`, che la dà a chi ha la funzione «Digest
+  Email» e scrive nel log chi l'ha vista) e «Cambia password» con doppia conferma
+  (`CambiaPasswordSmtpDialog`, regola `password-smtp.ts` col test).
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

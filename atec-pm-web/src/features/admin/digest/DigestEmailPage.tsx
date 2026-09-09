@@ -9,7 +9,13 @@ import {
   runDigestNow,
   saveDigestSettings,
 } from "@/lib/api/digest"
-import { fetchEmailSettings, saveEmailSettings, sendTestEmail } from "@/lib/api/settings"
+import {
+  fetchEmailPassword,
+  fetchEmailSettings,
+  saveEmailSettings,
+  sendTestEmail,
+} from "@/lib/api/settings"
+import { notifyError } from "@/lib/toast"
 import { PasswordField } from "@/features/auth/PasswordField"
 import type { EmailSettingsDto, PlanDigestSettingsDto } from "@/lib/api/types"
 import { Badge } from "@/components/ui/badge"
@@ -239,8 +245,9 @@ export function DigestEmailPage() {
                   <span className="text-xs text-muted-foreground">(già salvata)</span>
                 )}
               </Label>
-              {/* L'occhiolino mostra quello che si sta scrivendo (Diego, 09/09/2026 sera):
-                  la password salvata non torna mai dal server, i pallini sono un segnaposto. */}
+              {/* L'occhiolino mostra la password: quella che si sta scrivendo, oppure quella
+                  salvata, che i pallini rappresentano soltanto e che si va a chiedere al server
+                  al primo clic (Diego, 09/09/2026 sera: «l'occhiolino non mi fa vedere la psw»). */}
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <PasswordField
@@ -262,6 +269,18 @@ export function DigestEmailPage() {
                     }}
                     placeholder="nuova password"
                     autoComplete="new-password"
+                    onReveal={async () => {
+                      if (passwordTouched || !emailForm.hasPassword) return true
+                      try {
+                        const salvata = await fetchEmailPassword()
+                        setPasswordTouched(true)
+                        setEmailForm((p) => ({ ...p, password: salvata }))
+                        return true
+                      } catch (e) {
+                        notifyError(e instanceof Error ? e.message : "Password non leggibile.")
+                        return false
+                      }
+                    }}
                   />
                 </div>
                 <Button
