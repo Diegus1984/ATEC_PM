@@ -82,7 +82,9 @@ public partial class HrAttendanceService
             p.Add("Ultimo", ultimo);
         }
 
-        sql += " ORDER BY a.date_from DESC, a.created_at DESC";
+        // Dalla più recente INSERITA (Diego, 09/09/2026): ordinando per data della richiesta le
+        // ferie di novembre stavano sopra il permesso appena messo, che sembrava sparito.
+        sql += " ORDER BY a.created_at DESC, a.id DESC";
 
         return c.Query<HrAbsenceDto>(sql, p).ToList();
     }

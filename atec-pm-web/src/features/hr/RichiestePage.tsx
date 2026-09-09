@@ -17,6 +17,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  LookupCombobox,
+  type LookupComboboxOption,
+} from "@/components/shared/lookup-combobox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import {
   Table,
@@ -194,12 +205,37 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
     [richieste]
   )
 
+  // Filtri sulla lista (Diego, 09/09/2026): dipendente, reparto, tipo, stato. Lavorano sulla
+  // lista dell'anno già scaricata: niente giri al server per un filtro.
+  const [filtroDipendente, setFiltroDipendente] = React.useState<number | null>(null)
+  const [filtroReparto, setFiltroReparto] = React.useState<string>("tutti")
+  const [filtroTipo, setFiltroTipo] = React.useState<string>("tutti")
+  const [filtroStato, setFiltroStato] = React.useState<string>("tutti")
+  const filtriAttivi =
+    filtroDipendente != null || filtroReparto !== "tutti" || filtroTipo !== "tutti" || filtroStato !== "tutti"
+
+  const opzioniDipendenti: LookupComboboxOption<number>[] = React.useMemo(() => {
+    const visti = new Map<number, string>()
+    for (const r of richieste) visti.set(r.employeeId, r.employeeName)
+    return [...visti.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "it"))
+  }, [richieste])
+  const reparti = React.useMemo(
+    () => [...new Set(richieste.map((r) => r.departmentName).filter((x): x is string => Boolean(x)))].sort(),
+    [richieste]
+  )
+
   const displayedRichieste = React.useMemo(() => {
-    if (activeTab === "da_approvare") {
-      return richieste.filter((r) => r.status === "PENDING")
-    }
-    return richieste
-  }, [richieste, activeTab])
+    let lista = activeTab === "da_approvare" ? richieste.filter((r) => r.status === "PENDING") : richieste
+    if (filtroDipendente != null) lista = lista.filter((r) => r.employeeId === filtroDipendente)
+    if (filtroReparto !== "tutti") lista = lista.filter((r) => (r.departmentName ?? "") === filtroReparto)
+    if (filtroTipo !== "tutti") lista = lista.filter((r) => r.absenceType === filtroTipo)
+    if (filtroStato !== "tutti") lista = lista.filter((r) => r.status === filtroStato)
+    // Dalla più recente inserita: il server ordina già così, qui si tiene l'ordine anche se un
+    // giorno la lista arrivasse da altrove.
+    return [...lista].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
+  }, [richieste, activeTab, filtroDipendente, filtroReparto, filtroTipo, filtroStato])
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["hr-absences"] })
@@ -260,6 +296,76 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
           </Button>
           <ColumnsMenu columns={columnToggles} />
         </div>
+      </div>
+
+      {/* Filtri */}
+      <div className="flex flex-wrap items-center gap-2">
+        <LookupCombobox<number>
+          options={opzioniDipendenti}
+          value={filtroDipendente}
+          onValueChange={setFiltroDipendente}
+          placeholder="Tutti i dipendenti"
+          noneLabel="— tutti i dipendenti —"
+          className="w-56"
+        />
+        {reparti.length > 0 && (
+          <Select value={filtroReparto} onValueChange={setFiltroReparto}>
+            <SelectTrigger className="h-8 w-52 text-sm">
+              <SelectValue placeholder="Reparto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tutti">Tutti i reparti</SelectItem>
+              {reparti.map((rep) => (
+                <SelectItem key={rep} value={rep}>
+                  {rep}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+          <SelectTrigger className="h-8 w-44 text-sm">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tutti">Tutti i tipi</SelectItem>
+            {(["VACATION", "PERMIT", "SICKNESS", "INJURY", "OTHER"] as const).map((t) => (
+              <SelectItem key={t} value={t}>
+                {tipoLabel(t)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filtroStato} onValueChange={setFiltroStato}>
+          <SelectTrigger className="h-8 w-40 text-sm">
+            <SelectValue placeholder="Stato" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="tutti">Tutti gli stati</SelectItem>
+            <SelectItem value="PENDING">In attesa</SelectItem>
+            <SelectItem value="APPROVED">Approvate</SelectItem>
+            <SelectItem value="REJECTED">Rifiutate</SelectItem>
+            <SelectItem value="CANCELLED">Annullate</SelectItem>
+          </SelectContent>
+        </Select>
+        {filtriAttivi && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={() => {
+              setFiltroDipendente(null)
+              setFiltroReparto("tutti")
+              setFiltroTipo("tutti")
+              setFiltroStato("tutti")
+            }}
+          >
+            Azzera filtri
+          </Button>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {displayedRichieste.length} richieste
+        </span>
       </div>
 
       {/* Tabs */}
