@@ -25,6 +25,7 @@ function giornata(over: Partial<HrDay>): HrDay {
     normalized: {} as HrDay["normalized"],
     canRemind: false,
     lastReminderAt: null,
+    ecosBreakToInsert: false,
     ...over,
   }
 }

@@ -670,9 +670,25 @@ public class HrController : ControllerBase
 
         HrEcosSendResultDto esito = await _attendance.SendDayToEcosAsync(
             req.EmployeeId, req.WorkDate.Date, MeId, HttpContext.RequestAborted);
-        if (esito.Sent > 0 || esito.Failed > 0)
+        if (esito.Sent > 0 || esito.Inserted > 0 || esito.BreakInserted > 0 || esito.Failed > 0)
             _realtime.Notify("ecos-send", req.EmployeeId, req.WorkDate.Date);
         return Ok(ApiResponse<HrEcosSendResultDto>.Ok(esito, esito.Message));
+    }
+
+    /// <summary>
+    /// Il resoconto di «Allinea Ecos» prima di scrivere (09/09/2026): la giornata calcolata e
+    /// riga per riga cosa si modifica, cosa si inserisce (rettifiche e pausa dedotta), cosa
+    /// resta fuori. Sola lettura: non tocca Ecos.
+    /// </summary>
+    [HttpGet("ecos/send-day/plan")]
+    public IActionResult EcosSendPlan([FromQuery] int employeeId, [FromQuery] DateTime date)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("L'invio a Ecos richiede la scrittura su Timbrature."));
+        if (employeeId <= 0) return Ok(ApiResponse<string>.Fail("Dipendente non indicato."));
+
+        return Ok(ApiResponse<HrEcosPlanDto>.Ok(_attendance.GetEcosPlan(employeeId, date.Date)));
     }
 
     // ── RICHIESTE FERIE ED ASSENZE (FASE 2) ───────────────────────────────────

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, Mail, MailCheck, TriangleAlert } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, CloudUpload, Mail, MailCheck, TriangleAlert } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { DateField } from "@/components/shared/date-field"
@@ -21,6 +21,7 @@ import { dateToIso, formatDateTimeShort } from "@/lib/date-iso"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
+import { AllineaEcosDialog, type AllineaEcosTarget } from "./AllineaEcosDialog"
 import { AzioniGiornata } from "./AzioniGiornata"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import {
@@ -33,6 +34,7 @@ import {
   type RigaControllo,
 } from "./controllo-giornaliero"
 import { GiornataDialog } from "./GiornataDialog"
+import { riassuntoInvioEcos } from "./invio-ecos"
 import { isZero, oreLeggibili } from "./ore"
 import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
 import { StatoGiornata } from "./stato-giornata"
@@ -43,7 +45,9 @@ import { StatoGiornata } from "./stato-giornata"
 // di lunedì arrivano venerdì, sabato e domenica (nei riposi compare solo chi ha timbrato).
 // Le celle sono quelle del cartellino di una persona: stessa regola, stesse parole.
 // Il sollecito sta SULLA RIGA (📧) e si manda anche a più giornate insieme: casella di
-// selezione e «Sollecita i selezionati» (Diego, 09/09/2026 pomeriggio).
+// selezione e «Sollecita i selezionati» (Diego, 09/09/2026 pomeriggio). Prima del sollecito
+// c'è «Allinea Ecos»: se le ore calcolate sono giuste, Ecos riceve gli orari arrotondati e
+// la pausa dedotta come timbrature vere — sempre dopo un resoconto di cosa si scrive.
 
 const COLUMNS: { id: string; label: string }[] = [
   { id: "entrata1", label: "Entrata (mattina)" },
@@ -81,6 +85,7 @@ export function ControlloGiornalieroView({
   const [soloDaSistemare, setSoloDaSistemare] = React.useState(false)
   const [aperta, setAperta] = React.useState<{ employeeId: number; dataIso: string } | null>(null)
   const [sollecito, setSollecito] = React.useState<SollecitoTarget[] | null>(null)
+  const [allinea, setAllinea] = React.useState<AllineaEcosTarget | null>(null)
   // Le righe scelte per il sollecito in blocco (chiave = persona|giorno).
   const [selezionate, setSelezionate] = React.useState<Set<string>>(() => new Set())
 
@@ -162,8 +167,8 @@ export function ControlloGiornalieroView({
   )
 
   const oggiIso = dateToIso(new Date())
-  // Colonne fisse: la casella di selezione (solo con la scrittura), il nome, il pulsante 📧.
-  const visibleCount = (canWrite ? 2 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
+  // Colonne fisse: la casella di selezione (solo con la scrittura), il nome, «Ecos» e il 📧.
+  const visibleCount = (canWrite ? 3 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
   const quantiDaSistemare = riassunto?.daSistemare ?? 0
 
   if (query.isLoading) {
@@ -303,8 +308,10 @@ export function ControlloGiornalieroView({
           Oggi
         </span>
         <span>
-          In grande l'ora che vale, in piccolo l'ora timbrata. Clic sulla riga per il dettaglio,
-          {canWrite ? " 📧 per il sollecito, la casella per sollecitarne più d'uno." : ""}
+          In grande l'ora che vale, in piccolo l'ora timbrata. Clic sulla riga per il dettaglio
+          {canWrite
+            ? ", la nuvola per scrivere su Ecos la giornata calcolata, 📧 per il sollecito, la casella per sollecitarne più d'uno."
+            : "."}
         </span>
       </div>
 
@@ -333,6 +340,7 @@ export function ControlloGiornalieroView({
               {show("stato") && <TableHead>Com'è la giornata</TableHead>}
               {show("pausa") && <TableHead className="text-right">Pausa</TableHead>}
               {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+              {canWrite && <TableHead className="w-12 text-center">Ecos</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
             </TableRow>
           </TableHeader>
@@ -366,6 +374,7 @@ export function ControlloGiornalieroView({
                     onSollecito={() =>
                       setSollecito([{ employeeId: r.dipendente.employeeId, date: r.dataIso }])
                     }
+                    onAllinea={() => setAllinea({ employeeId: r.dipendente.employeeId, date: r.dataIso })}
                   />
                 ))}
                 {giorno.righe.length === 0 && (
@@ -418,6 +427,14 @@ export function ControlloGiornalieroView({
         }
       />
 
+      <AllineaEcosDialog
+        target={allinea}
+        onOpenChange={(open) => {
+          if (!open) setAllinea(null)
+        }}
+        onChanged={onChanged}
+      />
+
       <SollecitoGiornataDialog
         targets={sollecito}
         onOpenChange={(open) => {
@@ -433,9 +450,32 @@ export function ControlloGiornalieroView({
   )
 }
 
+/** Cosa dice il pulsante «Ecos» della riga: cosa c'è da scrivere, o perché non si può ancora. */
+function statoEcos(riga: RigaControllo): { tipo: "scrivi" | "allineato" | "bloccato" | "niente"; titolo: string } {
+  const { giorno: g, stato: st } = riga
+  const ecos = riassuntoInvioEcos(g)
+  if (ecos.daScrivere) {
+    if (st.tone === "bad") {
+      return { tipo: "bloccato", titolo: "La giornata ha un'anomalia: prima si sistema, poi si allinea Ecos" }
+    }
+    if (st.label === "Giornata in corso") {
+      return { tipo: "bloccato", titolo: "Giornata ancora in corso: si allinea quando è finita" }
+    }
+    const cose = [
+      ecos.daInviare.length > 0 ? `${ecos.daInviare.length} orari` : "",
+      ecos.pausaDaInserire ? "la pausa dedotta" : "",
+    ].filter(Boolean)
+    return { tipo: "scrivi", titolo: `Scrivi su Ecos la giornata calcolata: ${cose.join(" e ")} (prima il resoconto)` }
+  }
+  if (ecos.allineato) return { tipo: "allineato", titolo: "Ecos ha già gli orari calcolati" }
+  if (ecos.incerte > 0) return { tipo: "bloccato", titolo: "Un invio è rimasto senza risposta certa: verificare su Ecos" }
+  return { tipo: "niente", titolo: "" }
+}
+
 /**
  * Una persona in un giorno: la casella per il sollecito in blocco, nome e reparto, le stesse
- * celle del cartellino, il 📧 in fondo (solo sulle giornate che il server dice da segnalare).
+ * celle del cartellino, la nuvola «Ecos» e il 📧 in fondo (solo sulle giornate che il server
+ * dice da segnalare).
  */
 function RigaDipendente({
   riga,
@@ -446,6 +486,7 @@ function RigaDipendente({
   onToggle,
   onOpen,
   onSollecito,
+  onAllinea,
 }: {
   riga: RigaControllo
   show: (id: string) => boolean
@@ -455,10 +496,12 @@ function RigaDipendente({
   onToggle: (on: boolean) => void
   onOpen: () => void
   onSollecito: () => void
+  onAllinea: () => void
 }) {
   const { giorno: g, stato: st, dipendente } = riga
   const spenta = st.tone === "dim"
   const daSollecitare = canWrite && sollecitabile(riga)
+  const ecos = canWrite ? statoEcos(riga) : null
   return (
     <TableRow
       className={cn(
@@ -513,6 +556,30 @@ function RigaDipendente({
       {show("nota") && (
         <TableCell className="max-w-60 truncate text-xs text-muted-foreground" title={g.note}>
           {g.note || "—"}
+        </TableCell>
+      )}
+      {canWrite && ecos && (
+        <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+          {ecos.tipo === "scrivi" ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={onAllinea}
+              aria-label={`Allinea Ecos per ${dipendente.employeeName}`}
+              title={ecos.titolo}
+            >
+              <CloudUpload className="size-4 text-sky-600 dark:text-sky-400" />
+            </Button>
+          ) : ecos.tipo === "allineato" ? (
+            <span className="inline-flex size-8 items-center justify-center" title={ecos.titolo}>
+              <Check className="size-4 text-muted-foreground" />
+            </span>
+          ) : ecos.tipo === "bloccato" ? (
+            <span className="inline-flex size-8 items-center justify-center" title={ecos.titolo}>
+              <CloudUpload className="size-4 text-muted-foreground/40" />
+            </span>
+          ) : null}
         </TableCell>
       )}
       {canWrite && (

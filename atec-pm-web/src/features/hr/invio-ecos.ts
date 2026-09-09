@@ -20,14 +20,24 @@ export interface RiassuntoInvioEcos {
   incerte: number
   /** L'ultimo invio riuscito fra le timbrature della giornata (ISO), o null. */
   ultimoInvio: string | null
+  /**
+   * La pausa pranzo dedotta dal motore che su Ecos non c'è: «Allinea Ecos» la inserisce come
+   * timbrature vere (09/09/2026). Lo decide il server (`HrDayDto.EcosBreakToInsert`).
+   */
+  pausaDaInserire: boolean
+  /** true = c'è qualcosa da scrivere su Ecos: orari, rettifiche o la pausa dedotta. */
+  daScrivere: boolean
   /** true = c'è qualcosa che riguarda Ecos e niente è da inviare, escluso o incerto. */
   allineato: boolean
 }
 
-export function riassuntoInvioEcos(giornata: Pick<HrDay, "punches">): RiassuntoInvioEcos {
+export function riassuntoInvioEcos(
+  giornata: Pick<HrDay, "punches"> & { ecosBreakToInsert?: boolean }
+): RiassuntoInvioEcos {
   const diEcos = giornata.punches.filter(
     (t) => (t.source === "ECOS" && Boolean(t.ecosStampId)) || t.ecosInsert
   )
+  const pausaDaInserire = giornata.ecosBreakToInsert === true
   const daInviare = diEcos.filter((t) => t.toSendToEcos)
   const daInserire = daInviare.filter((t) => t.ecosInsert)
   const incerte = diEcos.filter((t) => t.ecosUncertain).length
@@ -43,7 +53,10 @@ export function riassuntoInvioEcos(giornata: Pick<HrDay, "punches">): RiassuntoI
     nonInviabili,
     incerte,
     ultimoInvio: invii.length > 0 ? invii[invii.length - 1] : null,
-    allineato: diEcos.length > 0 && daInviare.length === 0 && nonInviabili === 0 && incerte === 0,
+    pausaDaInserire,
+    daScrivere: daInviare.length > 0 || pausaDaInserire,
+    allineato:
+      diEcos.length > 0 && daInviare.length === 0 && nonInviabili === 0 && incerte === 0 && !pausaDaInserire,
   }
 }
 

@@ -55,6 +55,13 @@ public class HrDayDto
 
     /// <summary>Quando è stato mandato l'ultimo sollecito per questa giornata; null = mai.</summary>
     public DateTime? LastReminderAt { get; set; }
+
+    /// <summary>
+    /// La pausa pranzo che il motore ha DEDOTTO (12:30*/13:30*, o il rientro un'ora dopo
+    /// l'uscita) e che su Ecos non esiste: «Allinea Ecos» la inserisce come timbrature vere
+    /// (09/09/2026). false anche quando è già stata inserita o non c'è niente da dedurre.
+    /// </summary>
+    public bool EcosBreakToInsert { get; set; }
 }
 
 /// <summary>Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio.</summary>
@@ -214,10 +221,59 @@ public class HrEcosSendResultDto
     public int Sent { get; set; }
     /// <summary>Rettifiche inserite su Ecos come timbrature nuove.</summary>
     public int Inserted { get; set; }
+    /// <summary>Timbrature della pausa dedotta inserite su Ecos (09/09/2026).</summary>
+    public int BreakInserted { get; set; }
     public int Failed { get; set; }
     /// <summary>Non inviabili: l'arrotondamento cambierebbe giorno.</summary>
     public int Skipped { get; set; }
     public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>
+/// Il resoconto di «Allinea Ecos» PRIMA di scrivere (09/09/2026, Diego: «deve esserci una
+/// conferma con il resoconto di cosa andremo a scrivere o aggiornare»): la giornata calcolata,
+/// poi riga per riga cosa si modifica su Ecos, cosa si inserisce, cosa resta fuori e perché.
+/// </summary>
+public class HrEcosPlanDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public DateTime WorkDate { get; set; }
+    /// <summary>false = credenziali Ecos non configurate: non si scrive.</summary>
+    public bool Configured { get; set; }
+    /// <summary>La giornata calcolata dal motore, così si conferma che le ore sono giuste.</summary>
+    public string Note { get; set; } = "";
+    public bool HasAnomaly { get; set; }
+    public string ClockIn1 { get; set; } = "";
+    public string ClockOut1 { get; set; } = "";
+    public string ClockIn2 { get; set; } = "";
+    public string ClockOut2 { get; set; } = "";
+    public string RegularHours { get; set; } = "";
+    public string Overtime { get; set; } = "";
+    public string BreakTime { get; set; } = "";
+    public List<HrEcosPlannedOpDto> Operations { get; set; } = new();
+    /// <summary>Quante righe scrivono davvero su Ecos (modifiche e inserimenti).</summary>
+    public int ToWrite { get; set; }
+    /// <summary>true = si può premere «Scrivi su Ecos».</summary>
+    public bool CanSend { get; set; }
+    /// <summary>Perché non si può, o cosa c'è da sapere; vuoto quando tutto è pronto.</summary>
+    public string Message { get; set; } = "";
+}
+
+/// <summary>Una riga del resoconto di «Allinea Ecos».</summary>
+public class HrEcosPlannedOpDto
+{
+    /// <summary>UPDATE · INSERT (rettifica) · INSERT_BREAK (pausa dedotta) · SKIP · UNCERTAIN</summary>
+    public string Kind { get; set; } = "";
+    public string Direction { get; set; } = "";
+    /// <summary>Per le modifiche: l'ora che Ecos ha adesso.</summary>
+    public DateTime? From { get; set; }
+    /// <summary>L'ora che andrà (o sarebbe andata) su Ecos.</summary>
+    public DateTime? To { get; set; }
+    /// <summary>La frase pronta: «Uscita 17:12 → 17:00».</summary>
+    public string Label { get; set; } = "";
+    /// <summary>Il perché: «rettifica di Mario Rossi: uscita dimenticata», «pausa pranzo dedotta dal motore»…</summary>
+    public string? Detail { get; set; }
 }
 
 /// <summary>Una riga del registro degli invii a Ecos (<c>hr_ecos_sends</c>).</summary>

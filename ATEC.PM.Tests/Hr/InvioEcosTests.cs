@@ -368,7 +368,7 @@ public class InvioEcosTests
         return c.ExecuteScalar<long>("SELECT LAST_INSERT_ID()");
     }
 
-    private static string RispostaBadge(string badge) => $$"""
+    internal static string RispostaBadge(string badge) => $$"""
         { "ECOSAGILE_TABLE_DATA": {
             "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
             "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [
@@ -377,7 +377,7 @@ public class InvioEcosTests
         """;
 
     /// <summary>Come risponde Ecos a un inserimento riuscito con ReturnAllPostedRecord=1 (08/09/2026).</summary>
-    private static string RispostaInsert(string stampId, string emplId, string emplCode) => $$"""
+    internal static string RispostaInsert(string stampId, string emplId, string emplCode) => $$"""
         { "ECOSAGILE_TABLE_DATA": {
             "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "ERROR_CODE": "0", "RECORDCOUNT": "1", "MESSAGE": "Correct Record Insert" },
             "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "StampID": "{{stampId}}", "EmplID": "{{emplId}}", "EmplCode": "{{emplCode}}",

@@ -20,6 +20,20 @@ function timbratura(over: Partial<HrPunch>): HrPunch {
 }
 
 describe("riassuntoInvioEcos", () => {
+  it("la pausa dedotta è una cosa da scrivere e toglie l'allineamento (09/09/2026)", () => {
+    const allineate = [timbratura({ id: 1, toSendToEcos: false }), timbratura({ id: 2, toSendToEcos: false })]
+    const senza = riassuntoInvioEcos({ punches: allineate })
+    expect(senza.pausaDaInserire).toBe(false)
+    expect(senza.daScrivere).toBe(false)
+    expect(senza.allineato).toBe(true)
+
+    const con = riassuntoInvioEcos({ punches: allineate, ecosBreakToInsert: true })
+    expect(con.pausaDaInserire).toBe(true)
+    expect(con.daScrivere).toBe(true)
+    expect(con.allineato).toBe(false)
+    expect(con.daInviare).toHaveLength(0)
+  })
+
   it("una rettifica da inserire conta fra le cose da inviare, come inserimento", () => {
     const r = riassuntoInvioEcos({
       punches: [

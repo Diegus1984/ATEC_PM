@@ -83,6 +83,56 @@ public partial class HrAttendanceService
         }
     }
 
+    /// <summary>
+    /// Una timbratura della pausa pranzo che il motore ha DEDOTTO e che su Ecos non esiste
+    /// (09/09/2026, Diego: «se l'ora di pausa non esiste, la devo inserire»): con «Allinea Ecos»
+    /// si inserisce come timbratura vera, così Ecos ha la stessa giornata che abbiamo calcolato
+    /// noi e al prossimo import la pausa è timbrata, non più dedotta.
+    /// </summary>
+    internal sealed record TimbraturaDedotta(string Direction, DateTime Quando)
+    {
+        public const string Motivo = "Pausa pranzo dedotta dal motore, inserita su Ecos";
+        public string Nota => "ATEC PM: pausa pranzo dedotta dal motore";
+    }
+
+    /// <summary>
+    /// Le sole note del motore in cui la pausa è dedotta E NON timbrata. 🪤 «Pausa 1h forzata»
+    /// resta fuori: lì le quattro timbrature ci sono (pausa troppo corta) e inserirne altre due
+    /// farebbe sei strisciate e una giornata «da verificare».
+    /// </summary>
+    internal static bool PausaDedotta(string? nota) =>
+        nota != null
+        && (nota.StartsWith("AUTO_P: Pausa 1h detratta", StringComparison.Ordinal)
+            || nota.StartsWith("AUTO_P: Pausa implicita (1 IN / 2 OUT)", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Le timbrature della pausa da inserire su Ecos: gli orari con l'asterisco della giornata
+    /// calcolata (uscita per la pausa, rientro) che nessuna timbratura esistente — di Ecos o
+    /// rettifica — copre già allo stesso minuto e nello stesso verso. Nel caso «1 IN / 2 OUT»
+    /// l'uscita con l'asterisco è una timbratura vera e resta coperta: parte solo il rientro.
+    /// </summary>
+    internal static List<TimbraturaDedotta> TimbratureDedotte(
+        DateTime workDate, string? nota, string? clockOut1, string? clockIn2,
+        IEnumerable<(string Direction, DateTime Arrotondata)> esistenti)
+    {
+        var esito = new List<TimbraturaDedotta>();
+        if (!PausaDedotta(nota)) return esito;
+        List<(string Direction, DateTime Arrotondata)> coperte = esistenti.ToList();
+
+        foreach ((string verso, string? orario) in new[] { ("OUT", clockOut1), ("IN", clockIn2) })
+        {
+            if (orario is null || !orario.EndsWith('*')) continue;
+            // «24:00» non è un'ora di pausa e non si legge: resta fuori da sé.
+            if (!TimeSpan.TryParseExact(orario.TrimEnd('*'), "hh\\:mm", System.Globalization.CultureInfo.InvariantCulture, out TimeSpan ora))
+                continue;
+            DateTime quando = workDate.Date + ora;
+            bool entrata = verso == "IN";
+            bool coperta = coperte.Any(e => NightShift.IsEntry(e.Direction) == entrata && AlMinuto(e.Arrotondata) == quando);
+            if (!coperta) esito.Add(new TimbraturaDedotta(verso, quando));
+        }
+        return esito;
+    }
+
     private static DateTime AlMinuto(DateTime d) => new(d.Year, d.Month, d.Day, d.Hour, d.Minute, 0);
 
     /// <summary>Lo stesso arrotondamento del motore (<c>TimesheetEngine.Norm</c>): una regola sola.</summary>
@@ -125,12 +175,175 @@ public partial class HrAttendanceService
             .Select(r => new RettificaEcos(r.Id, r.Direction, r.PunchedAt, r.Reason, r.CreatedBy, r.EcosPunchedAt, r.EcosSentAt))
             .ToList();
 
+    /// <summary>La giornata calcolata (hr_days) di una persona, o null se non c'è.</summary>
+    private static DayRow? GiornataCalcolata(MySqlConnection c, int employeeId, DateTime workDate) =>
+        c.QuerySingleOrDefault<DayRow>(@"
+            SELECT employee_id AS EmployeeId, work_date AS WorkDate,
+                   clock_in_1 AS ClockIn1, clock_out_1 AS ClockOut1, clock_in_2 AS ClockIn2, clock_out_2 AS ClockOut2,
+                   regular_minutes AS RegularMinutes, overtime_minutes AS OvertimeMinutes, break_minutes AS BreakMinutes,
+                   bands_json AS BandsJson, note AS Note, has_anomaly AS HasAnomaly
+            FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
+            new { Id = employeeId, Giorno = workDate.Date });
+
     /// <summary>
-    /// Il pulsante «Invia a Ecos» di una giornata: prima le modifiche (timbrature di Ecos con
-    /// l'orario arrotondato diverso da quello che Ecos ha), poi gli inserimenti (le rettifiche).
-    /// Al primo errore ci si ferma: il registro dice fin dove si è arrivati e il pulsante si
-    /// può ripremere (le modifiche sono innocue da ripetere; gli inserimenti incerti non
-    /// ripartono). L'esito è sempre un dato, anche quando è un fallimento.
+    /// Le timbrature della pausa dedotta già tentate senza risposta certa (timeout dopo la
+    /// scrittura): nel registro stanno senza timbratura (punch_id NULL) con l'esito incerto.
+    /// Non si rimandano alla cieca: se Ecos le ha create, l'import le porta qui da sé.
+    /// </summary>
+    private static HashSet<(string Direction, DateTime Quando)> PauseIncerte(MySqlConnection c, int employeeId, DateTime workDate) =>
+        c.Query<(string Direction, DateTime SentTime)>(@"
+                SELECT direction AS Direction, sent_time AS SentTime
+                FROM hr_ecos_sends
+                WHERE employee_id = @Id AND work_date = @Giorno AND punch_id IS NULL
+                  AND outcome = 'ERROR' AND message LIKE 'Esito incerto%'",
+                new { Id = employeeId, Giorno = workDate.Date })
+            .Select(r => (r.Direction, AlMinuto(r.SentTime)))
+            .ToHashSet();
+
+    /// <summary>Le timbrature della pausa dedotta della giornata (non ancora tentate con esito incerto).</summary>
+    private static (List<TimbraturaDedotta> DaInserire, int Incerte) PausaDaInserire(
+        MySqlConnection c, int employeeId, DateTime workDate, DayRow? giornata,
+        IEnumerable<TimbraturaEcos> tutte, IEnumerable<RettificaEcos> rettifiche)
+    {
+        if (giornata == null) return (new List<TimbraturaDedotta>(), 0);
+        List<TimbraturaDedotta> dedotte = TimbratureDedotte(
+            workDate, giornata.Note, giornata.ClockOut1, giornata.ClockIn2,
+            tutte.Select(t => (t.Direction, t.Arrotondata)).Concat(rettifiche.Select(r => (r.Direction, r.Arrotondata))));
+        if (dedotte.Count == 0) return (dedotte, 0);
+        HashSet<(string, DateTime)> incerte = PauseIncerte(c, employeeId, workDate);
+        int quanteIncerte = dedotte.Count(d => incerte.Contains((d.Direction, d.Quando)));
+        // 🪤 Una pausa a metà non si completa alla cieca: se l'uscita delle 12:30 è incerta e si
+        // inserisse solo il rientro, Ecos potrebbe restare con tre strisciate e la giornata
+        // diventerebbe «uscita mancante». Prima si verifica su Ecos (o si aspetta l'import).
+        return quanteIncerte > 0 ? (new List<TimbraturaDedotta>(), quanteIncerte) : (dedotte, 0);
+    }
+
+    /// <summary>
+    /// Il resoconto di «Allinea Ecos» PRIMA di scrivere: la giornata calcolata e, riga per
+    /// riga, le modifiche (orario arrotondato al posto di quello che Ecos ha), gli inserimenti
+    /// (rettifiche e pausa dedotta) e ciò che resta fuori con il perché. È la stessa lettura
+    /// di <see cref="SendDayToEcosAsync"/>: quello che si conferma è quello che parte.
+    /// </summary>
+    public HrEcosPlanDto GetEcosPlan(int employeeId, DateTime workDate)
+    {
+        using MySqlConnection c = _db.Open();
+        var dip = c.QuerySingleOrDefault<(string Name, string? EcosCode)>(
+            "SELECT CONCAT_WS(' ', first_name, last_name) AS Name, ecos_empl_code AS EcosCode FROM employees WHERE id = @Id",
+            new { Id = employeeId });
+        DayRow? giornata = GiornataCalcolata(c, employeeId, workDate);
+        List<TimbraturaEcos> tutte = TimbratureEcosDelGiorno(c, employeeId, workDate);
+        List<RettificaEcos> rettifiche = RettificheDelGiorno(c, employeeId, workDate);
+        (List<TimbraturaDedotta> pausa, int pauseIncerte) = PausaDaInserire(c, employeeId, workDate, giornata, tutte, rettifiche);
+
+        var piano = new HrEcosPlanDto
+        {
+            EmployeeId = employeeId,
+            EmployeeName = dip.Name ?? "",
+            WorkDate = workDate.Date,
+            Configured = _ecos.Configured,
+            Note = giornata?.Note ?? "",
+            HasAnomaly = giornata?.HasAnomaly ?? false,
+            ClockIn1 = giornata?.ClockIn1 ?? "",
+            ClockOut1 = giornata?.ClockOut1 ?? "",
+            ClockIn2 = giornata?.ClockIn2 ?? "",
+            ClockOut2 = giornata?.ClockOut2 ?? "",
+            RegularHours = giornata == null ? "" : TimesheetRules.FormatDuration(giornata.RegularMinutes),
+            Overtime = giornata == null ? "" : TimesheetRules.FormatDuration(giornata.OvertimeMinutes),
+            BreakTime = giornata == null ? "" : TimesheetRules.FormatDuration(giornata.BreakMinutes),
+        };
+
+        foreach (TimbraturaEcos t in tutte)
+        {
+            if (t.DaInviare)
+            {
+                piano.Operations.Add(new HrEcosPlannedOpDto
+                {
+                    Kind = "UPDATE", Direction = t.Direction, From = t.OraSuEcos, To = t.Arrotondata,
+                    Label = $"{Verso(t.Direction)} {t.OraSuEcos:HH:mm} → {t.Arrotondata:HH:mm}",
+                    Detail = "orario arrotondato al posto di quello timbrato",
+                });
+            }
+            else if (!t.Inviabile)
+            {
+                piano.Operations.Add(new HrEcosPlannedOpDto
+                {
+                    Kind = "SKIP", Direction = t.Direction, From = t.OraSuEcos, To = t.Arrotondata,
+                    Label = $"{Verso(t.Direction)} {t.PunchedAt:HH:mm}",
+                    Detail = "non inviabile: l'arrotondamento cambierebbe giorno",
+                });
+            }
+        }
+        foreach (RettificaEcos r in rettifiche)
+        {
+            if (r.Incerta)
+            {
+                piano.Operations.Add(new HrEcosPlannedOpDto
+                {
+                    Kind = "UNCERTAIN", Direction = r.Direction, To = r.Arrotondata,
+                    Label = $"{Verso(r.Direction)} {r.Arrotondata:HH:mm} (rettifica)",
+                    Detail = "già mandata senza risposta certa: verificare su Ecos, non riparte da sola",
+                });
+            }
+            else if (r.DaInviare)
+            {
+                piano.Operations.Add(new HrEcosPlannedOpDto
+                {
+                    Kind = "INSERT", Direction = r.Direction, To = r.Arrotondata,
+                    Label = $"{Verso(r.Direction)} {r.Arrotondata:HH:mm} (rettifica)",
+                    Detail = $"nuova timbratura su Ecos — {r.Nota}",
+                });
+            }
+            else
+            {
+                piano.Operations.Add(new HrEcosPlannedOpDto
+                {
+                    Kind = "SKIP", Direction = r.Direction, To = r.Arrotondata,
+                    Label = $"{Verso(r.Direction)} {r.PunchedAt:HH:mm} (rettifica)",
+                    Detail = "non inviabile: l'arrotondamento cambierebbe giorno",
+                });
+            }
+        }
+        foreach (TimbraturaDedotta d in pausa)
+        {
+            piano.Operations.Add(new HrEcosPlannedOpDto
+            {
+                Kind = "INSERT_BREAK", Direction = d.Direction, To = d.Quando,
+                Label = $"{Verso(d.Direction)} {d.Quando:HH:mm} (pausa)",
+                Detail = "nuova timbratura su Ecos — pausa pranzo dedotta dal motore, su Ecos non c'è",
+            });
+        }
+        if (pauseIncerte > 0)
+        {
+            piano.Operations.Add(new HrEcosPlannedOpDto
+            {
+                Kind = "UNCERTAIN", Direction = "",
+                Label = pauseIncerte == 1 ? "Una timbratura di pausa" : $"{pauseIncerte} timbrature di pausa",
+                Detail = "già mandate senza risposta certa: verificare su Ecos, l'import le porta qui se ci sono",
+            });
+        }
+
+        piano.ToWrite = piano.Operations.Count(o => o.Kind is "UPDATE" or "INSERT" or "INSERT_BREAK");
+        if (!piano.Configured)
+            piano.Message = "Credenziali Ecos non configurate sul server: impossibile scrivere.";
+        else if (giornata == null)
+            piano.Message = "Nessuna giornata calcolata: niente da allineare.";
+        else if (piano.HasAnomaly)
+            piano.Message = "La giornata ha un'anomalia: prima si sistema (rettifica o rilettura da Ecos), poi si allinea Ecos.";
+        else if (piano.ToWrite == 0)
+            piano.Message = pauseIncerte > 0
+                ? "Niente da scrivere: la pausa è già stata mandata senza risposta certa, da verificare su Ecos."
+                : "Ecos ha già gli orari di questa giornata: niente da scrivere.";
+        piano.CanSend = piano.Configured && giornata != null && !piano.HasAnomaly && piano.ToWrite > 0;
+        return piano;
+    }
+
+    /// <summary>
+    /// Il pulsante «Invia a Ecos» / «Allinea Ecos» di una giornata: prima le modifiche
+    /// (timbrature di Ecos con l'orario arrotondato diverso da quello che Ecos ha), poi gli
+    /// inserimenti (le rettifiche, e dal 09/09/2026 la pausa dedotta). Al primo errore ci si
+    /// ferma: il registro dice fin dove si è arrivati e il pulsante si può ripremere (le
+    /// modifiche sono innocue da ripetere; gli inserimenti incerti non ripartono). L'esito è
+    /// sempre un dato, anche quando è un fallimento.
     /// </summary>
     public async Task<HrEcosSendResultDto> SendDayToEcosAsync(
         int employeeId, DateTime workDate, int autoreId, CancellationToken ct = default)
@@ -147,17 +360,19 @@ public partial class HrAttendanceService
         List<RettificaEcos> rettifiche = RettificheDelGiorno(c, employeeId, workDate);
         List<TimbraturaEcos> daInviare = tutte.Where(t => t.DaInviare).ToList();
         List<RettificaEcos> daInserire = rettifiche.Where(r => r.DaInviare).ToList();
+        (List<TimbraturaDedotta> pausaDaInserire, int pauseIncerte) = PausaDaInserire(
+            c, employeeId, workDate, GiornataCalcolata(c, employeeId, workDate), tutte, rettifiche);
         esito.Total = tutte.Count + rettifiche.Count;
         esito.Skipped = tutte.Count(t => !t.Inviabile) + rettifiche.Count(r => !r.Inviabile);
-        int incerte = rettifiche.Count(r => r.Incerta);
+        int incerte = rettifiche.Count(r => r.Incerta) + pauseIncerte;
 
-        if (daInviare.Count == 0 && daInserire.Count == 0)
+        if (daInviare.Count == 0 && daInserire.Count == 0 && pausaDaInserire.Count == 0)
         {
             esito.Success = true;
             esito.Message = esito.Total == 0
                 ? "Nessuna timbratura in questa giornata: niente da inviare."
                 : incerte > 0
-                    ? $"Niente da inviare: {incerte} rettifiche con esito incerto, da verificare su Ecos."
+                    ? $"Niente da inviare: {incerte} timbrature con esito incerto, da verificare su Ecos."
                     : "Ecos ha già gli orari arrotondati di questa giornata: niente da inviare.";
             return esito;
         }
@@ -209,12 +424,18 @@ public partial class HrAttendanceService
         if (!fermato && daInserire.Count > 0)
             await InserisciRettificheAsync(c, token, employeeId, workDate, daInserire, autoreId, esito, ct);
 
+        // La pausa dedotta parte per ultima e solo se fin qui è andato tutto bene: al primo
+        // errore ci si ferma, come per il resto.
+        if (!fermato && esito.Failed == 0 && pausaDaInserire.Count > 0)
+            await InserisciPausaDedottaAsync(c, token, employeeId, workDate, pausaDaInserire, autoreId, esito, ct);
+
         esito.Success = esito.Failed == 0;
-        int tentate = esito.Sent + esito.Inserted + esito.Failed;
-        int nonTentate = daInviare.Count + daInserire.Count - tentate;
+        int tentate = esito.Sent + esito.Inserted + esito.BreakInserted + esito.Failed;
+        int nonTentate = daInviare.Count + daInserire.Count + pausaDaInserire.Count - tentate;
         var pezzi = new List<string>();
         if (esito.Sent > 0) pezzi.Add($"{esito.Sent} orari modificati");
         if (esito.Inserted > 0) pezzi.Add($"{esito.Inserted} timbrature inserite");
+        if (esito.BreakInserted > 0) pezzi.Add($"{esito.BreakInserted} timbrature di pausa inserite");
         string fatto = pezzi.Count > 0 ? string.Join(", ", pezzi) : "niente inviato";
         esito.Message = esito.Success
             ? $"Inviato a Ecos: {fatto}"
@@ -233,9 +454,13 @@ public partial class HrAttendanceService
     /// verifica che Ecos l'abbia attaccata alla persona giusta (altrimenti la si cancella
     /// subito), conversione della riga in timbratura di Ecos. Al primo errore ci si ferma.
     /// </summary>
-    private async Task InserisciRettificheAsync(
-        MySqlConnection c, string token, int employeeId, DateTime workDate, List<RettificaEcos> daInserire,
-        int autoreId, HrEcosSendResultDto esito, CancellationToken ct)
+    /// <summary>
+    /// Chi è la persona su Ecos e con quale badge attivo si inserisce: la stessa ricerca per le
+    /// rettifiche e per la pausa dedotta. Null (con l'errore già nell'esito) quando manca
+    /// l'EmplID o il badge, o quando Ecos non risponde.
+    /// </summary>
+    private async Task<(int EmplId, string? EmplCode, string Badge)?> PersonaEBadgeAsync(
+        MySqlConnection c, string token, int employeeId, HrEcosSendResultDto esito, CancellationToken ct)
     {
         var persona = c.QuerySingleOrDefault<(int? EmplId, string? EmplCode)>(
             "SELECT ecos_empl_id, ecos_empl_code FROM employees WHERE id = @Id", new { Id = employeeId });
@@ -243,7 +468,7 @@ public partial class HrAttendanceService
         {
             esito.Failed++;
             esito.Errors.Add("La persona non ha ancora l'EmplID di Ecos: l'import lo impara dai badge, riprovare dopo.");
-            return;
+            return null;
         }
 
         string? badge;
@@ -255,14 +480,112 @@ public partial class HrAttendanceService
         {
             esito.Failed++;
             esito.Errors.Add($"Lettura del badge non riuscita: {ex.Message}");
-            return;
+            return null;
         }
         if (string.IsNullOrEmpty(badge))
         {
             esito.Failed++;
             esito.Errors.Add("La persona non ha un badge attivo su Ecos: senza badge la timbratura non si può inserire.");
-            return;
+            return null;
         }
+        return (emplId, persona.EmplCode, badge);
+    }
+
+    /// <summary>
+    /// La pausa dedotta dal motore diventa timbrature vere su Ecos: una <c>PeopleStampPost</c>
+    /// per strisciata (uscita, rientro), verifica della persona, e la stessa timbratura nasce
+    /// anche qui come timbratura di Ecos (StampID), così la giornata si ricalcola subito con la
+    /// pausa timbrata e l'import di poi riconosce l'eco. Esito incerto = riga nel registro senza
+    /// timbratura, e non si riprova da soli. Al primo errore ci si ferma.
+    /// </summary>
+    private async Task InserisciPausaDedottaAsync(
+        MySqlConnection c, string token, int employeeId, DateTime workDate, List<TimbraturaDedotta> pausa,
+        int autoreId, HrEcosSendResultDto esito, CancellationToken ct)
+    {
+        (int EmplId, string? EmplCode, string Badge)? chi = await PersonaEBadgeAsync(c, token, employeeId, esito, ct);
+        if (chi is not { } persona) return;
+
+        bool inserita = false;
+        foreach (TimbraturaDedotta d in pausa)
+        {
+            string outcome = "ERROR";
+            string? messaggio = null;
+            string stampId = "";
+            long? punchId = null;
+            try
+            {
+                EcosStampInserted ins = await _ecos.InsertStampAsync(token, persona.Badge, d.Quando, d.Direction, d.Nota, ct);
+                stampId = ins.StampId;
+                bool personaGiusta = ins.EmplId == persona.EmplId.ToString()
+                    || (!string.IsNullOrEmpty(persona.EmplCode) && ins.EmplCode == persona.EmplCode);
+                if (!personaGiusta)
+                {
+                    try { await _ecos.DeleteStampAsync(token, ins.StampId, ct); }
+                    catch (EcosApiException exDel)
+                    {
+                        _logger.LogWarning("[HR] Timbratura di pausa {Stamp} attaccata alla persona sbagliata e NON cancellabile: {Msg}", ins.StampId, exDel.Message);
+                    }
+                    messaggio = $"Ecos ha attaccato la timbratura a un'altra persona (EmplID {ins.EmplId}): cancellata subito.";
+                    esito.Failed++;
+                }
+                else
+                {
+                    c.Execute(@"
+                        INSERT INTO hr_punches
+                            (employee_id, work_date, punched_at, direction, source, external_id, reason, created_by,
+                             ecos_punched_at, ecos_sent_at)
+                        VALUES (@Id, @Giorno, @Quando, @Verso, 'ECOS', @Stamp, @Motivo, @Autore, @Quando, NOW())",
+                        new
+                        {
+                            Id = employeeId, Giorno = workDate.Date, Quando = d.Quando, Verso = d.Direction,
+                            Stamp = ins.StampId, Motivo = TimbraturaDedotta.Motivo, Autore = autoreId,
+                        });
+                    punchId = c.ExecuteScalar<long>("SELECT LAST_INSERT_ID()");
+                    outcome = "OK";
+                    messaggio = "Correct Record Insert (pausa dedotta)";
+                    esito.BreakInserted++;
+                    inserita = true;
+                }
+            }
+            catch (EcosApiException ex) when (ex.EsitoIncerto)
+            {
+                // Può essere passata: resta nel registro (senza timbratura) e non si riprova.
+                // Se Ecos l'ha creata, l'import la porta qui come timbratura nuova.
+                messaggio = $"Esito incerto (nessuna risposta): {ex.Message}. Verificare su Ecos; non si rimanda da sola.";
+                esito.Failed++;
+            }
+            catch (EcosApiException ex)
+            {
+                messaggio = ex.Message;
+                esito.Failed++;
+            }
+
+            if (outcome == "ERROR")
+            {
+                esito.Errors.Add($"{Verso(d.Direction)} {d.Quando:HH:mm} (pausa dedotta): {messaggio}");
+                _logger.LogWarning(
+                    "[HR] Inserimento della pausa su Ecos fallito: dipendente {Dip}, {Giorno:yyyy-MM-dd}, {Verso} {Ora:HH:mm}: {Msg}",
+                    employeeId, workDate, d.Direction, d.Quando, messaggio);
+            }
+
+            RegistraInvio(c, employeeId, workDate, punchId, stampId, d.Direction, d.Quando, d.Quando,
+                null, outcome, messaggio, autoreId);
+            if (outcome == "ERROR") break;
+        }
+
+        // Con la pausa timbrata la giornata cambia (da dedotta a vera): si ricalcola subito,
+        // vicine comprese, senza aspettare l'import.
+        if (inserita) RicalcolaConVicine(c, employeeId, workDate);
+    }
+
+    private async Task InserisciRettificheAsync(
+        MySqlConnection c, string token, int employeeId, DateTime workDate, List<RettificaEcos> daInserire,
+        int autoreId, HrEcosSendResultDto esito, CancellationToken ct)
+    {
+        (int EmplId, string? EmplCode, string Badge)? chi = await PersonaEBadgeAsync(c, token, employeeId, esito, ct);
+        if (chi is not { } persona) return;
+        int emplId = persona.EmplId;
+        string badge = persona.Badge;
 
         foreach (RettificaEcos r in daInserire)
         {
@@ -328,9 +651,12 @@ public partial class HrAttendanceService
         }
     }
 
-    /// <summary>Una riga del registro: <c>previous_time</c> NULL = inserimento, altrimenti modifica.</summary>
+    /// <summary>
+    /// Una riga del registro: <c>previous_time</c> NULL = inserimento, altrimenti modifica;
+    /// <c>punch_id</c> NULL = pausa dedotta che non è (ancora) una timbratura qui.
+    /// </summary>
     private static void RegistraInvio(
-        MySqlConnection c, int employeeId, DateTime workDate, long punchId, string stampId, string direction,
+        MySqlConnection c, int employeeId, DateTime workDate, long? punchId, string stampId, string direction,
         DateTime punchedAt, DateTime sentTime, DateTime? previousTime, string outcome, string? messaggio, int autoreId)
     {
         c.Execute(@"

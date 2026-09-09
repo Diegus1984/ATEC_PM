@@ -53,6 +53,8 @@ export interface HrEcosSendResult {
   sent: number
   /** Rettifiche inserite su Ecos come timbrature nuove. */
   inserted: number
+  /** Timbrature della pausa dedotta inserite su Ecos. */
+  breakInserted: number
   failed: number
   skipped: number
   errors: string[]
@@ -89,6 +91,12 @@ export interface HrDay {
   canRemind: boolean
   /** Quando e stato mandato l'ultimo sollecito per questa giornata; null = mai. */
   lastReminderAt?: string | null
+  /**
+   * La pausa pranzo DEDOTTA dal motore (le 12:30 e 13:30 con l'asterisco, o il rientro
+   * un'ora dopo l'uscita) che su Ecos non esiste: «Allinea Ecos» la inserisce come
+   * timbrature vere (09/09/2026).
+   */
+  ecosBreakToInsert: boolean
 }
 
 /** Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio. */
@@ -479,4 +487,43 @@ export interface HrDailyCheck {
   nextDate?: string | null
   days: HrDailyCheckDay[]
   employees: HrDailyCheckEmployee[]
+}
+
+// ── ALLINEA ECOS: il resoconto prima di scrivere (09/09/2026) — specchio di HrEcosPlanDto ──
+
+/** Una riga del resoconto: cosa si modifica, cosa si inserisce, cosa resta fuori. */
+export interface HrEcosPlannedOp {
+  /** UPDATE · INSERT (rettifica) · INSERT_BREAK (pausa dedotta) · SKIP · UNCERTAIN */
+  kind: "UPDATE" | "INSERT" | "INSERT_BREAK" | "SKIP" | "UNCERTAIN"
+  direction: string
+  /** Per le modifiche: l'ora che Ecos ha adesso. */
+  from?: string | null
+  /** L'ora che andrà (o sarebbe andata) su Ecos. */
+  to?: string | null
+  /** La frase pronta: «Uscita 17:12 → 17:00». */
+  label: string
+  detail?: string | null
+}
+
+/** La giornata calcolata e, riga per riga, cosa «Allinea Ecos» scriverà. Sola lettura. */
+export interface HrEcosPlan {
+  employeeId: number
+  employeeName: string
+  workDate: string
+  configured: boolean
+  note: string
+  hasAnomaly: boolean
+  clockIn1: string
+  clockOut1: string
+  clockIn2: string
+  clockOut2: string
+  regularHours: string
+  overtime: string
+  breakTime: string
+  operations: HrEcosPlannedOp[]
+  /** Quante righe scrivono davvero su Ecos. */
+  toWrite: number
+  canSend: boolean
+  /** Perché non si può, o cosa c'è da sapere; vuoto quando tutto è pronto. */
+  message: string
 }

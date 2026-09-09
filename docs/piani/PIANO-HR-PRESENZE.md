@@ -580,6 +580,39 @@ finché non sono sparite). Eccezione: **oggi** con entrata-uscita-rientro resta 
 (chi è rientrato dalla pausa è al lavoro, non ha dimenticato niente; l'import di domani la chiude).
 Il banco di prova VB (379 giornate) non ha casi di stima: invariato. Test `UscitaMancanteTests`.
 
+**✅ «Allinea Ecos» dal Controllo di ieri, con la pausa dedotta (09/09/2026 pomeriggio).** Diego:
+«una colonna prima di Sollecito che mi permetta di sincronizzare le ore calcolate con quelle reali:
+se le ore calcolate sono corrette vorrei poterle sincronizzare con Ecos, se l'ora di pausa non
+esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa andremo a scrivere».
+- **Colonna «Ecos»** nella griglia (prima di «Sollecito»): nuvola azzurra = c'è da scrivere (orari
+  arrotondati e/o pausa dedotta), spunta grigia = allineato, nuvola spenta = bloccato (anomalia da
+  sistemare prima, giornata in corso, invio incerto da verificare). Il clic apre
+  `AllineaEcosDialog`: la giornata calcolata (quattro orari, ore, pausa, nota) e riga per riga cosa
+  si scrive — MODIFICA «Uscita 17:12 → 17:00», NUOVA · RETTIFICA, NUOVA · PAUSA — e cosa resta fuori
+  (non inviabile, da verificare). Niente parte senza «Scrivi su Ecos (N)».
+- **Resoconto = server**: `GET /api/hr/ecos/send-day/plan?employeeId&date` → `HrEcosPlanDto`
+  (`GetEcosPlan`, sola lettura), la stessa lettura di `SendDayToEcosAsync`: quello che si conferma è
+  quello che parte. `CanSend` è falso con anomalia, senza giornata calcolata, senza credenziali o
+  senza niente da scrivere.
+- **Pausa dedotta → timbrature vere** (`TimbraturaDedotta`, `TimbratureDedotte`): solo con le note
+  «AUTO_P: Pausa 1h detratta» (due strisciate: uscita 12:30 e rientro 13:30) e «AUTO_P: Pausa
+  implicita (1 IN / 2 OUT)» (solo il rientro); un orario con l'asterisco già coperto da una timbratura
+  o rettifica allo stesso minuto non si reinserisce. 🪤 «Pausa 1h forzata» resta FUORI: le quattro
+  strisciate ci sono (pausa corta) e aggiungerne due farebbe una giornata «da verificare».
+  L'inserimento è come per le rettifiche (`PeopleStampPost` col badge attivo, verifica della persona,
+  nota «ATEC PM: pausa pranzo dedotta dal motore»); la timbratura nasce anche qui come timbratura di
+  Ecos (source ECOS + StampID, motivo e autore) e la giornata si ricalcola subito, vicine comprese:
+  da «Pausa 1h detratta» a «OK» con la pausa timbrata. Registro `hr_ecos_sends` con `punch_id` della
+  riga nuova e `previous_time` NULL. `HrDayDto.EcosBreakToInsert` porta il flag alla riga.
+- **Esito incerto** (timeout dopo la scrittura): riga di registro SENZA timbratura (`punch_id` NULL,
+  messaggio «Esito incerto…»), e da lì la pausa di quella giornata **non si riprova**, nemmeno la metà
+  mancante: una pausa a metà (solo l'uscita) farebbe una giornata «uscita mancante» al prossimo
+  import. Il resoconto la mostra DA VERIFICARE; se Ecos l'ha creata, l'import la porta qui da sé.
+- Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
+  si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche e pausa.
+- Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,
+  timeout) in `AllineaEcosTests.cs`; client `invio-ecos.test.ts`.
+
 ## 8. Punti delicati — da non sbagliare
 
 **Art. 4 dello Statuto dei lavoratori.** Registrare entrata e uscita per finalità

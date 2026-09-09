@@ -193,16 +193,24 @@ export function GiornataDialog({
   const ecos = riassuntoInvioEcos(giornata)
 
   async function inviaAEcos() {
-    if (!giornata || ecos.daInviare.length === 0) return
+    if (!giornata || !ecos.daScrivere) return
+    const modifiche = ecos.daInviare.length - ecos.daInserire.length
+    const pezzi = [
+      modifiche > 0 ? `${modifiche} con l'orario arrotondato al posto di quello timbrato` : "",
+      ecos.daInserire.length > 0
+        ? `${ecos.daInserire.length} rettifiche inserite su Ecos come timbrature nuove`
+        : "",
+      // La pausa dedotta (09/09/2026): su Ecos nasce come due strisciate vere.
+      ecos.pausaDaInserire
+        ? `la pausa pranzo dedotta dal motore (${giornata.clockOut1.replace("*", "")} e ${giornata.clockIn2.replace("*", "")}) inserita su Ecos come timbrature nuove`
+        : "",
+    ].filter(Boolean)
     const ok = await confirm({
-      title: "Inviare a Ecos gli orari arrotondati?",
+      title: "Scrivere su Ecos la giornata calcolata?",
       description:
-        `${ecos.daInviare.length} timbrature di ${employeeName || "questa persona"} del ${giornoEsteso(giornata.workDate)}` +
-        (ecos.daInserire.length > 0
-          ? `: ${ecos.daInviare.length - ecos.daInserire.length} con l'orario arrotondato al posto di quello timbrato, ${ecos.daInserire.length} rettifiche inserite su Ecos come timbrature nuove.`
-          : " verranno sovrascritte su Ecos con l'orario arrotondato.") +
+        `${employeeName || "Questa persona"}, ${giornoEsteso(giornata.workDate)}: ${pezzi.join("; ")}.` +
         " L'ora timbrata resta qui e nel registro degli invii.",
-      confirmLabel: "Invia a Ecos",
+      confirmLabel: "Scrivi su Ecos",
     })
     if (ok) invioEcos.mutate({ employeeId, workDate: giorno })
   }
@@ -306,12 +314,14 @@ export function GiornataDialog({
           )}
         </div>
 
-        {ecos.diEcos > 0 && (
+        {(ecos.diEcos > 0 || ecos.pausaDaInserire) && (
           <div className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium">Orari arrotondati su Ecos</p>
-              {ecos.daInviare.length > 0 ? (
-                <Badge variant="secondary">Da inviare: {ecos.daInviare.length}</Badge>
+              {ecos.daScrivere ? (
+                <Badge variant="secondary">
+                  Da inviare: {ecos.daInviare.length + (ecos.pausaDaInserire ? 2 : 0)}
+                </Badge>
               ) : ecos.allineato ? (
                 <Badge variant="outline">Allineato con Ecos</Badge>
               ) : null}
@@ -334,6 +344,15 @@ export function GiornataDialog({
                 ))}
               </ul>
             )}
+            {ecos.pausaDaInserire && (
+              <p className="text-sm tabular-nums">
+                Pausa pranzo dedotta dal motore: su Ecos nascono{" "}
+                <span className="font-medium">
+                  uscita {giornata.clockOut1.replace("*", "")} e rientro {giornata.clockIn2.replace("*", "")}
+                </span>{" "}
+                <Badge variant="default">PAUSA</Badge>
+              </p>
+            )}
             {ecos.nonInviabili > 0 && (
               <p className="text-xs text-muted-foreground">
                 {ecos.nonInviabili === 1
@@ -352,11 +371,11 @@ export function GiornataDialog({
               Su Ecos l'orario timbrato viene sovrascritto con quello arrotondato e le rettifiche
               nascono come timbrature nuove. L'ora timbrata resta qui e nel registro degli invii.
             </p>
-            {canWrite && ecos.daInviare.length > 0 && (
+            {canWrite && ecos.daScrivere && (
               <div className="flex justify-end">
                 <Button size="sm" disabled={invioEcos.isPending} onClick={() => void inviaAEcos()}>
                   <Send className="size-4" />
-                  Invia a Ecos
+                  Scrivi su Ecos
                 </Button>
               </div>
             )}

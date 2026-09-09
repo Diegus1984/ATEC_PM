@@ -7,6 +7,7 @@ import type {
   HrBadges,
   HrCreateAbsenceRequest,
   HrDailyCheck,
+  HrEcosPlan,
   HrEcosSendResult,
   HrGiustificaInfo,
   HrGiustificaRequest,
@@ -412,5 +413,18 @@ export async function fetchHrReminderLog(
 export async function fetchHrDailyCheck(date?: string | null): Promise<HrDailyCheck> {
   const extra = date ? `?date=${encodeURIComponent(date)}` : ""
   const r = await apiGet<ApiResponse<HrDailyCheck>>(`/api/hr/daily-check${extra}`)
+  return unwrapApi(r)
+}
+
+// ── ALLINEA ECOS: il resoconto prima di scrivere (09/09/2026) ──────────────
+
+/**
+ * Cosa scriverebbe «Allinea Ecos» su questa giornata: modifiche degli orari arrotondati,
+ * rettifiche e pausa dedotta da inserire, ciò che resta fuori. Sola lettura: non tocca Ecos.
+ */
+export async function fetchHrEcosPlan(employeeId: number, date: string): Promise<HrEcosPlan> {
+  const r = await apiGet<ApiResponse<HrEcosPlan>>(
+    `/api/hr/ecos/send-day/plan?employeeId=${employeeId}&date=${encodeURIComponent(date)}`
+  )
   return unwrapApi(r)
 }

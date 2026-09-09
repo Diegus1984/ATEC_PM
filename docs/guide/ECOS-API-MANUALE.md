@@ -612,6 +612,20 @@ Ecos finto), `invio-ecos.test.ts` (riassunto del dialogo). ⚠️ Da fare **solo
 sovrascrivere l'ora timbrata in Ecos sia accettabile: la regola di Diego è che l'ora
 originale non deve mai sparire — se Ecos non tiene la storia, l'originale resta solo da noi.
 
+**Aggiunta del 09/09/2026 — la pausa dedotta diventa timbrature vere.** Dal «Controllo di ieri»
+(colonna «Ecos») la giornata calcolata si scrive su Ecos con un resoconto prima della conferma
+(`GET /api/hr/ecos/send-day/plan`, poi `POST /api/hr/ecos/send-day`). Oltre alle modifiche e alle
+rettifiche, si inseriscono le strisciate della **pausa pranzo dedotta dal motore** quando su Ecos non
+esistono: note «AUTO_P: Pausa 1h detratta» (uscita 12:30 + rientro 13:30) e «AUTO_P: Pausa implicita
+(1 IN / 2 OUT)» (solo il rientro), mai «Pausa 1h forzata» (le quattro strisciate ci sono già).
+Stesso inserimento delle rettifiche (`PeopleStampPost` col `BadgeCode` attivo, `ReturnAllPostedRecord=1`,
+verifica di `EmplID`/`EmplCode`, nota «ATEC PM: pausa pranzo dedotta dal motore»); la timbratura nasce
+anche in `hr_punches` come timbratura di Ecos (StampID) e la giornata si ricalcola subito. 🪤 Con un
+timeout dopo la scrittura la pausa di quella giornata non si riprova più — nemmeno la metà mancante:
+resta nel registro senza `punch_id` con «Esito incerto» e si verifica su Ecos (o la porta l'import).
+Codice: `HrAttendanceService.InvioEcos.cs` (`TimbratureDedotte`, `GetEcosPlan`,
+`InserisciPausaDedottaAsync`), test `AllineaEcosTests.cs`.
+
 ### 9.4 Utente API dedicato — cosa chiedere a SoftAgile (info@ecosagile.com, 02 89054136)
 
 - ✅ **fatto il 08/09/2026**: utente di servizio **`api.it`**. Da confermare che abbia livello

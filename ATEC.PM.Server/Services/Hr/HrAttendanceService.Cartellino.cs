@@ -226,6 +226,17 @@ public partial class HrAttendanceService
             };
         }
 
+        // La pausa dedotta dal motore che su Ecos non c'è: la stessa regola di «Allinea Ecos»
+        // (TimbratureDedotte), così il pulsante sulla riga e il resoconto dicono la stessa cosa.
+        if (giornate.TryGetValue(work_date, out DayRow? calcolata) && PausaDedotta(calcolata.Note))
+        {
+            IEnumerable<(string Direction, DateTime Arrotondata)> esistenti = timbrature.TryGetValue(work_date, out List<PunchRow>? del)
+                ? del.Select(t => (t.Direction, OraArrotondata(t.PunchedAt, t.Direction)))
+                : Enumerable.Empty<(string, DateTime)>();
+            riga.EcosBreakToInsert = TimbratureDedotte(
+                work_date, calcolata.Note, calcolata.ClockOut1, calcolata.ClockIn2, esistenti).Count > 0;
+        }
+
         // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
         // riga e il filtro «📧 Da segnalare», che così non possono divergere.
         riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);
