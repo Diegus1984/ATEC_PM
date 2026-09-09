@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1036",
+                     "data":  "2026-09-09T10:36:25",
+                     "hash":  "a85668eb7024f51d15a4d48a13c1ff3102e67f5e",
+                     "modifiche":  [
+                                       "Richieste: una pagina sola con i filtri etichettati, via le schede e il filtro reparto"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-0905",
                      "data":  "2026-09-09T09:05:11",
                      "hash":  "cd408f5b39e1ac4bef358772e24905172c43adf6",
