@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1517",
+                     "data":  "2026-09-09T15:17:13",
+                     "hash":  "019afee5c222cd737802496d540983ec4ae337b1",
+                     "modifiche":  [
+                                       "HR: sotto l\u0027ora timbrata si legge anche quella che Ecos ha adesso («timbrato 07:48 · Ecos 08:00»)"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1510",
                      "data":  "2026-09-09T15:10:55",
                      "hash":  "413a98d998b9e7f2c70aefdf3125d0ca1e9816eb",
