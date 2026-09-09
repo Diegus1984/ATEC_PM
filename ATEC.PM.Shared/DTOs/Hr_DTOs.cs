@@ -521,6 +521,8 @@ public class HrRemindersResultDto
     public int Sent { get; set; }
     public int Failed { get; set; }
     public List<string> WithoutEmail { get; set; } = new();
+    /// <summary>Chi non ha ricevuto la mail e perché (l'esito del server di posta, uno per persona).</summary>
+    public List<string> Errors { get; set; } = new();
     public string Message { get; set; } = "";
 }
 

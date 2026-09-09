@@ -651,6 +651,25 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   `AllineaEcosTests` («l'uscita che manca scritta a mano…», «…dopo l'ultima timbratura…»).
 - Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
   si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche, pausa e timbratura mancante.
+- **I solleciti dicono la verità (09/09 sera).** Diego: «come faccio a sapere se la mail di sollecito è
+  effettivamente stata inviata?». Non poteva: `QueueSimpleMail` accodava e il server rispondeva
+  «Sollecito inviato» a scatola chiusa; l'esito vero finiva solo nel log del server
+  (`[EmailService] Invio fallito per …`). In produzione il sollecito a Cesi del 09/09 16:00 è morto in
+  coda: Aruba ha risposto «501 5.7.0 invalid LOGIN encoding», che (sonda con password finta) è la
+  risposta a una password VUOTA — cioè la password SMTP salvata (blob DPAPI) non è più decifrabile dal
+  server e `DecryptPassword` restituiva null in silenzio. Ora: `EmailService.SendNowAsync` manda la
+  mail SUBITO e restituisce l'esito del server di posta; `POST /api/hr/day-reminder` e
+  `POST /api/hr/calendar/reminders` la usano, segnano la giornata (`hr_reminders`) SOLO se la mail è
+  stata accettata e in caso contrario rispondono «Sollecito NON inviato a …: motivo». Quindi: **una riga
+  in «Email inviate» = il server di posta ha accettato la mail**. `EmailService.MotivoBlocco` (regola
+  pura, test `EsitoInvioMailTests`) ferma prima di toccare il server: invio spento, SMTP incompleto,
+  password salvata ma illeggibile («reinserirla in Configurazione email»), utente senza password; la
+  usano anche «Invia prova» e il ciclo in background (che ora scrive nel log il perché). La coda resta
+  per digest e RDO. Da fare a mano sul server: reinserire la password SMTP in Configurazione email e
+  premere «Invia prova».
+- **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
+  pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
+  (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
 - Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,
   timeout) in `AllineaEcosTests.cs`; client `invio-ecos.test.ts`.
 

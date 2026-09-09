@@ -293,6 +293,8 @@ export interface HrRemindersResult {
   sent: number
   failed: number
   withoutEmail: string[]
+  /** Chi non ha ricevuto la mail e perché (l'esito del server di posta). */
+  errors?: string[]
   message: string
 }
 

@@ -50,7 +50,15 @@ public class EmailService : BackgroundService
 
     // ── Configurazione ──────────────────────────────────────────
 
-    public EmailSettingsDto ResolveConfig()
+    public EmailSettingsDto ResolveConfig() => ResolveConfigConEsito().Cfg;
+
+    /// <summary>
+    /// La configurazione e se la password salvata NON si è potuta decifrare (blob DPAPI di un
+    /// altro ambito o di un'altra macchina). In quel caso il server manderebbe una password
+    /// VUOTA e Aruba risponde «501 5.7.0 invalid LOGIN encoding»: successo in produzione il
+    /// 09/09/2026 col sollecito a Cesi, che a video risultava «inviato».
+    /// </summary>
+    private (EmailSettingsDto Cfg, bool PasswordIllegibile) ResolveConfigConEsito()
     {
         using var c = _rdb.Open();
         var rows = c.Query<(string SettingKey, string SettingValue)>(
@@ -63,8 +71,10 @@ public class EmailService : BackgroundService
         string? encryptedPassword = rows.TryGetValue("email.password", out string? p) && !string.IsNullOrEmpty(p)
             ? p
             : null;
+        string? password = encryptedPassword != null ? DecryptPassword(encryptedPassword) : _config["Email:Password"];
+        bool illegibile = encryptedPassword != null && password == null;
 
-        return new EmailSettingsDto
+        var cfg = new EmailSettingsDto
         {
             Enabled = Get("email.enabled", _config["Email:Enabled"] ?? "false") == "1"
                       || Get("email.enabled", "") == "true",
@@ -74,10 +84,91 @@ public class EmailService : BackgroundService
             From = Get("email.from", _config["Email:From"] ?? ""),
             FromName = Get("email.fromname", _config["Email:FromName"] ?? "ATEC PM"),
             Username = Get("email.username", _config["Email:Username"] ?? ""),
-            Password = encryptedPassword != null ? DecryptPassword(encryptedPassword) : _config["Email:Password"],
+            Password = password,
             HasPassword = encryptedPassword != null || !string.IsNullOrEmpty(_config["Email:Password"]),
             WebUrl = Get("email.weburl", _config["Email:WebUrl"] ?? ""),
         };
+        return (cfg, illegibile);
+    }
+
+    /// <summary>
+    /// Perché con questa configurazione una mail NON può partire, o null se può. Una regola
+    /// sola per i solleciti, il pulsante «Invia prova» e il ciclo in background, così nessuno
+    /// dei tre dice «inviato» a scatola chiusa. <paramref name="richiedeAttivo"/> = false per
+    /// la prova, che si fa anche prima di accendere l'invio.
+    /// </summary>
+    internal static string? MotivoBlocco(EmailSettingsDto cfg, bool passwordIllegibile, bool richiedeAttivo = true)
+    {
+        if (richiedeAttivo && !cfg.Enabled) return "Invio email spento in Configurazione email.";
+        if (string.IsNullOrWhiteSpace(cfg.SmtpHost) || string.IsNullOrWhiteSpace(cfg.From))
+            return "Configurazione SMTP incompleta (server o mittente mancanti).";
+        if (passwordIllegibile)
+            return "La password SMTP salvata non è più leggibile da questo server: reinserirla in Configurazione email e rifare «Invia prova».";
+        if (!string.IsNullOrEmpty(cfg.Username) && string.IsNullOrEmpty(cfg.Password))
+            return "Password SMTP mancante: inserirla in Configurazione email.";
+        return null;
+    }
+
+    /// <summary>Il perché una mail non partirebbe adesso (null = tutto a posto), per chi lo chiede prima di provarci.</summary>
+    public string? ProblemaInvio()
+    {
+        (EmailSettingsDto cfg, bool illegibile) = ResolveConfigConEsito();
+        return MotivoBlocco(cfg, illegibile);
+    }
+
+    /// <summary>L'errore di MailKit in parole per chi legge il toast: cosa è andato storto e dove guardare.</summary>
+    internal static string TestoErroreSmtp(Exception ex) => ex switch
+    {
+        AuthenticationException => $"il server di posta ha rifiutato utente o password ({ex.Message.Trim()}): controllare Configurazione email",
+        System.Net.Sockets.SocketException or IOException => $"server di posta non raggiungibile ({ex.Message.Trim()})",
+        _ => ex.Message.Trim(),
+    };
+
+    /// <summary>
+    /// Manda UNA mail adesso e dice com'è andata: la usano i solleciti, dove «inviato» deve
+    /// voler dire che il server di posta l'ha accettata (Diego, 09/09/2026 sera: «come faccio
+    /// a sapere se la mail di sollecito è effettivamente stata inviata?»). La coda in
+    /// background resta per le mail di cui nessuno aspetta l'esito a video (digest, RDO).
+    /// </summary>
+    public async Task<(bool Ok, string Message)> SendNowAsync(
+        string toEmail, string toName, string subject, string textBody, string? htmlBody = null)
+    {
+        (EmailSettingsDto cfg, bool illegibile) = ResolveConfigConEsito();
+        string? blocco = MotivoBlocco(cfg, illegibile);
+        if (blocco != null) return (false, blocco);
+        if (string.IsNullOrWhiteSpace(toEmail)) return (false, "Indirizzo destinatario mancante.");
+
+        var msg = new MimeMessage();
+        try
+        {
+            msg.From.Add(new MailboxAddress(cfg.FromName, cfg.From));
+            msg.To.Add(new MailboxAddress(string.IsNullOrWhiteSpace(toName) ? toEmail : toName, toEmail));
+        }
+        catch (MimeKit.ParseException)
+        {
+            return (false, $"indirizzo non valido in anagrafica: «{toEmail}»");
+        }
+        msg.Subject = subject;
+        msg.Body = new BodyBuilder
+        {
+            TextBody = textBody ?? "",
+            HtmlBody = htmlBody ?? textBody ?? "",
+        }.ToMessageBody();
+
+        try
+        {
+            using var client = new SmtpClient();
+            await ConnectAndAuthenticateAsync(client, cfg);
+            await client.SendAsync(msg);
+            await client.DisconnectAsync(true);
+            _logger.LogInformation("[EmailService] Mail accettata dal server di posta per {To}: {Subject}", toEmail, subject);
+            return (true, "");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[EmailService] Invio fallito per {To}", toEmail);
+            return (false, TestoErroreSmtp(ex));
+        }
     }
 
     public bool Enabled
@@ -221,9 +312,9 @@ public class EmailService : BackgroundService
 
     public async Task<(bool Ok, string Message)> SendTestAsync(string toEmail)
     {
-        EmailSettingsDto cfg = ResolveConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SmtpHost) || string.IsNullOrWhiteSpace(cfg.From))
-            return (false, "Configurazione SMTP incompleta (server o mittente mancanti).");
+        (EmailSettingsDto cfg, bool illegibile) = ResolveConfigConEsito();
+        string? blocco = MotivoBlocco(cfg, illegibile, richiedeAttivo: false);
+        if (blocco != null) return (false, blocco);
         if (string.IsNullOrWhiteSpace(toEmail))
             return (false, "Indirizzo destinatario mancante.");
 
@@ -248,7 +339,7 @@ public class EmailService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[EmailService] Test invio fallito");
-            return (false, $"Invio fallito: {ex.Message}");
+            return (false, $"Invio fallito: {TestoErroreSmtp(ex)}");
         }
     }
 
@@ -272,9 +363,14 @@ public class EmailService : BackgroundService
     {
         await foreach (MimeMessage msg in _queue.Reader.ReadAllAsync(ct))
         {
-            if (!Enabled) continue; // disabilitato nel frattempo: scarta silenziosamente
-
-            EmailSettingsDto cfg = ResolveConfig();
+            (EmailSettingsDto cfg, bool illegibile) = ResolveConfigConEsito();
+            string? blocco = MotivoBlocco(cfg, illegibile);
+            if (blocco != null)
+            {
+                // Spento nel frattempo, o password illeggibile: non si tenta nemmeno, ma resta scritto.
+                _logger.LogWarning("[EmailService] Mail per {To} non mandata: {Motivo}", msg.To, blocco);
+                continue;
+            }
             try
             {
                 using var client = new SmtpClient();

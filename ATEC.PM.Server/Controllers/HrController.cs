@@ -152,7 +152,7 @@ public class HrController : ControllerBase
     /// coppia di strade del sollecito mensile, e serve quando l'SMTP non è configurato.
     /// </summary>
     [HttpPost("day-reminder")]
-    public IActionResult SendDayReminder([FromBody] HrDayReminderRequest req)
+    public async Task<IActionResult> SendDayReminder([FromBody] HrDayReminderRequest req)
     {
         if (!CanManageTimbrature)
             return StatusCode(StatusCodes.Status403Forbidden,
@@ -175,13 +175,15 @@ public class HrController : ControllerBase
                     "SMTP non configurato: il sollecito si può solo aprire nel client di posta."));
 
             string htmlBody = System.Net.WebUtility.HtmlEncode(sollecito.Body).Replace("\n", "<br>\n");
-            if (!_email.QueueSimpleMail(
-                    sollecito.Email, sollecito.EmployeeName, sollecito.Subject, sollecito.Body, htmlBody))
-            {
-                // 🪤 Nell'originale l'esito dell'invio non veniva controllato: si scriveva nel
-                // MailLog e si diceva «Email inviata» anche a SMTP rotto.
-                return Ok(ApiResponse<bool>.Fail("Invio non riuscito: la mail non è stata accodata."));
-            }
+            // La mail parte ADESSO e l'esito è quello del server di posta: «inviato» vuol dire
+            // che l'ha accettata, e la giornata si segna sollecitata solo allora. Prima si
+            // accodava e si diceva «inviato» a scatola chiusa (come il MailLog dell'originale):
+            // il 09/09/2026 il sollecito a Cesi è morto in coda, password SMTP illeggibile, e a
+            // video risultava partito. Ora la Cronologia Email contiene solo mail accettate.
+            (bool ok, string errore) = await _email.SendNowAsync(
+                sollecito.Email, sollecito.EmployeeName, sollecito.Subject, sollecito.Body, htmlBody);
+            if (!ok)
+                return Ok(ApiResponse<bool>.Fail($"Sollecito NON inviato a {sollecito.Email}: {errore}"));
         }
 
         _attendance.MarkDayReminder(
@@ -362,7 +364,7 @@ public class HrController : ControllerBase
 
     /// <summary>Invia i solleciti via SMTP e segna le giornate come già chieste.</summary>
     [HttpPost("calendar/reminders")]
-    public IActionResult SendReminders(
+    public async Task<IActionResult> SendReminders(
         [FromQuery] int year, [FromQuery] int month,
         [FromQuery] int? departmentId, [FromQuery] int? employeeId)
     {
@@ -392,7 +394,9 @@ public class HrController : ControllerBase
             }
 
             string htmlBody = System.Net.WebUtility.HtmlEncode(t.Body).Replace("\n", "<br>\n");
-            if (_email.QueueSimpleMail(t.Email, t.EmployeeName, t.Subject, t.Body, htmlBody))
+            // Una alla volta, con l'esito vero del server di posta (vedi SendDayReminder).
+            (bool ok, string errore) = await _email.SendNowAsync(t.Email, t.EmployeeName, t.Subject, t.Body, htmlBody);
+            if (ok)
             {
                 esito.Sent++;
                 inviati.Add((t.EmployeeId, t.MissingDays, t.Email, t.Subject, t.Body));
@@ -400,6 +404,7 @@ public class HrController : ControllerBase
             else
             {
                 esito.Failed++;
+                esito.Errors.Add($"{t.EmployeeName}: {errore}");
             }
         }
 
@@ -412,7 +417,7 @@ public class HrController : ControllerBase
         esito.Message = esito.Sent == 0 && esito.WithoutEmail.Count == 0 && esito.Failed == 0
             ? "Nessun sollecito da inviare."
             : $"Solleciti inviati: {esito.Sent}"
-              + (esito.Failed > 0 ? $", non riusciti: {esito.Failed}" : "")
+              + (esito.Failed > 0 ? $", NON inviati: {esito.Failed} ({string.Join(" · ", esito.Errors)})" : "")
               + (esito.WithoutEmail.Count > 0 ? $", senza email: {esito.WithoutEmail.Count}" : "");
 
         return Ok(ApiResponse<HrRemindersResultDto>.Ok(esito, esito.Message));
