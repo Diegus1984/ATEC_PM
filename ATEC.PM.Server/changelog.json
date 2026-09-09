@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1645",
+                     "data":  "2026-09-09T16:45:28",
+                     "hash":  "b80c98688499c6628729d2b35538af9956a67239",
+                     "modifiche":  [
+                                       "Configurazione email: la prova dice cosa sta facendo e mostra la ricevuta del server di posta"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1633",
                      "data":  "2026-09-09T16:33:22",
                      "hash":  "104d2899c63b311c1d5744bba83d04f80a14d275",
