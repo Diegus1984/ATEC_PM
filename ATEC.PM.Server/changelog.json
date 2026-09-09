@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1448",
+                     "data":  "2026-09-09T14:48:59",
+                     "hash":  "1fb28fed53dbcb40b0655619d1384377a93e9774",
+                     "modifiche":  [
+                                       "HR: «Allinea Ecos» dal Controllo di ieri con resoconto, e la pausa dedotta inserita su Ecos"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1419",
                      "data":  "2026-09-09T14:20:05",
                      "hash":  "6d639c81a5b37c4a67150808f9e1d193ac35e9ee",
