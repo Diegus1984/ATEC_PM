@@ -178,8 +178,8 @@
 | `PeopleBadgeGetAll` | ✅ lettura | — |
 | `PeopleStampPost` | ✅ scrivibile | — |
 | `PeoplePost` | ❌ | JobData (RightID 2) |
-| `PeopleAbsenceRequestPost` | ❌ | PeopleAbsenceRequestMSS (RightID 4) |
-| `PeopleOvertimeRequestPost` | ❌ | PeopleOvertimeApproveMSS (RightID 4) |
+| `PeopleAbsenceRequestPost` | ✅ scrivibile dall'08/09 pomeriggio (scheda e prova più sotto), in uso dal 09/09 | PeopleAbsenceRequestMSS (RightID 4) |
+| `PeopleOvertimeRequestPost` | ✅ abilitata dall'08/09 pomeriggio (a vuoto «Missing fields: EmplID»), non usata | PeopleOvertimeApproveMSS (RightID 4) |
 | `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetALL`, `Timesheet2GetESS` | `-99` | non esistono (i nomi giusti sono nella tabella sopra) |
 
 ---
@@ -243,8 +243,8 @@ l'API con cui i terminali scrivono le timbrature. `api.it` ✅.
 `SourceCode` (fonte dell'inserimento), `Note`, `ApproveReply`, **`StatusCode`** = `ACCEPTED`
 (accettata) / `REQUEST` (richiesta) / **`REJECT`** (respinta), `ResidualToDate`, `ResidualEndYear`,
 `DataSourceCode`, `InsertDate`, `UpdateDate`, `UserTZ`, **`Delete`** (0/1, eliminazione logica).
-🪤 Il nostro `SyncAbsences` confronta con `REJECTED` e `CANCELLED`: **`REJECT` non combacia** e una
-respinta finisce come «in attesa» (TODO §11).
+🪤 Il nostro `SyncAbsences` confrontava con `REJECTED`: **`REJECT` non combaciava** e una respinta
+finiva come «in attesa» — ✅ corretto l'08/09/2026 (`REJECT` riconosciuto, `HrAttendanceService.AssenzeGiorno.cs`).
 
 **Enabled users**: `maria.carretta`, `api.it` (diritto 4).
 
@@ -271,7 +271,7 @@ alla nostra mail: «l'utenza ha già i diritti sul modulo Time»). **Provata** s
 - `CategoryID` da `AnagTSCategoryGetAll` (6 righe l'08/09/2026): `F_ND`=2299 Assenza, `F`=2313
   Ferie, `P`=2314 ROL, `M`=2315 Malattia, `I1`=2318 Infortunio, `S`=2310 «Ore a chiusura» inattiva.
   Mappare per `CategoryCode`, mai cablare gli id.
-Implementazione in ATEC PM: **TODO §11 (domani 09/09/2026)**.
+Implementazione in ATEC PM: ✅ **fatta il 09/09/2026 (#151)** — `HrAttendanceService.RichiesteEcos.cs`, manuale §9.9.
 Anche `PeopleOvertimeRequestPost` risponde ora con la validazione («Missing fields: EmplID»).
 
 ## `Timesheet2GetAll` — NON è quello che dice la guida (Service `TimesheetAnalysis`, livello 2)

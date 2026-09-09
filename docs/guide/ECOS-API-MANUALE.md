@@ -97,8 +97,8 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 | `PeopleStampPost` | ✅ **scrivibile** | a vuoto risponde `-11` di validazione («Column: `StampDateTimeTZOffSet`, Not an integer»): esiste e siamo autorizzati, niente creato |
 | `Timesheet2GetAll`, `TimesheetGetAll` | ❌ `-2` | ServiceID **TimesheetAnalysis**, RightID 1 (uguale col vecchio utente) |
 | `PeopleExpressLightGetAll` | ❌ `-2` | **esiste**; ServiceID **PeopleExpressLight**, RightID 1 |
-| `PeopleAbsenceRequestPost` | ❌ `-2` | ServiceID **PeopleAbsenceRequestMSS**, RightID 4 (col vecchio utente il messaggio citava `request`) |
-| `PeopleOvertimeRequestPost` | ❌ `-2` | ServiceID **PeopleOvertimeApproveMSS**, RightID 4 |
+| `PeopleAbsenceRequestPost` | ✅ **scrivibile** dall'08/09 pomeriggio | ServiceID **PeopleAbsenceRequestMSS**, RightID 4: la mattina dell'08/09 rispondeva `-2` (col vecchio utente il messaggio citava `request`), poi Ecos ha concesso il diritto; in uso dal 09/09 (§9.9, tracciato nel catalogo) |
+| `PeopleOvertimeRequestPost` | ✅ abilitata dall'08/09 pomeriggio | ServiceID **PeopleOvertimeApproveMSS**, RightID 4; a vuoto risponde con la validazione («Missing fields: EmplID»); non la usiamo |
 | `PeoplePost` | ❌ `-2` | ServiceID **JobData**, RightID 2 — col vecchio utente era permessa; a noi non serve |
 | `PeopleGetAll`, `PeopleAbsenceTypeGetAll`, `PeopleDepartmentGetAll`, `Timesheet2GetESS` | ❌ `-99 Wrong API name` | non esistono (27/08) |
 | suffissi `…Ins`, `…Upd`, `…Set`, `…Add`, `…Save`, `…Create`, `…Delete` | ❌ non esistono | la scrittura è **solo** `…Post` |
@@ -342,14 +342,19 @@ provare sul nostro tenant prima di usarla.
 
 ### 4.6 I nostri diritti di scrittura oggi
 
-Con `api.it` (08/09/2026): `PeopleStampPost` ✅ scrivibile; `PeopleAbsenceRequestPost` ❌
-(ServiceID `PeopleAbsenceRequestMSS`, RightID 4), `PeopleOvertimeRequestPost` ❌
-(`PeopleOvertimeApproveMSS`, RightID 4), `PeoplePost` ❌ (`JobData`, RightID 2, non ci serve).
+Con `api.it` (08/09/2026): `PeopleStampPost` ✅ scrivibile; `PeopleAbsenceRequestPost` e
+`PeopleOvertimeRequestPost` ✅ **abilitate dal pomeriggio dell'08/09** (la mattina rispondevano
+`-2` sui ServiceID `PeopleAbsenceRequestMSS` e `PeopleOvertimeApproveMSS`, RightID 4; Ecos ha
+concesso il diritto dopo la nostra mail); `PeoplePost` ❌ (`JobData`, RightID 2, non ci serve).
 La validazione a vuoto di `PeopleStampPost` cita **`StampDateTimeTZOffSet`** («Not an integer»):
-un campo intero di fuso orario che la guida non documenta, da scoprire con la prima scrittura vera.
-Il tracciato dei parametri di `PeopleAbsenceRequestPost` (obbligatori, codici categoria,
-mezza giornata, stato di nascita PENDING/ACCEPTED) è **da chiedere a SoftAgile** — non si
-scrive codice prima di averlo (PIANO-HR-PRESENZE §5 e §9).
+un campo intero di fuso orario che la guida non documenta (basta `UserTZ`, prova dell'08/09 più sopra).
+Il tracciato di `PeopleAbsenceRequestPost` (22 campi; obbligatori `DateBegin`+`EmplID`+`FullDay`;
+`CategoryID` da `AnagTSCategoryGetAll`; nasce `REQUEST` salvo `StatusCode` esplicito) sta nel
+catalogo e viene dalla scheda API_READ del tenant più la prova dell'08/09: la **guida ufficiale
+v4.1.1 non lo documenta** — di quella famiglia non nomina nemmeno `PeopleAbsenceRequestGetAll`
+(le sole API che cita: `PeopleStampGetAll`/`GetESS`, `PeopleStampPost`, `PeopleExpress*GetAll`,
+`PeopleOvertimeRequestGetAll`, `Timesheet2GetAll`, `AnagJobCodeGetAll`, `AnagActivityProjectGet`,
+`PeopleExpenseGetFullESS`; verificato il 09/09/2026 sul testo estratto dal PDF). Uso in ATEC PM: §9.9.
 
 ---
 
@@ -612,12 +617,11 @@ originale non deve mai sparire — se Ecos non tiene la storia, l'originale rest
 - ✅ **fatto il 08/09/2026**: utente di servizio **`api.it`**. Da confermare che abbia livello
   **2 - Professional**, profilo **`1642-APIRead`** (libreria API + Test Panel) e **solo** i
   profili delle API elencate;
-- i ServiceID che la calibrazione del 08/09 dà negati a `api.it`: **`PeopleAbsenceRequestMSS`**
-  (RightID 4) per `PeopleAbsenceRequestPost`, **`PeopleOvertimeApproveMSS`** (RightID 4) per
-  `PeopleOvertimeRequestPost`, **`TimesheetAnalysis`** (RightID 1) per `Timesheet2GetAll`,
-  **`PeopleExpressLight`** (RightID 1) per `PeopleExpressLightGetAll`;
-- il tracciato di `PeopleAbsenceRequestPost` e il significato di `StatusCode` sulle
-  timbrature; se esiste un ordinamento stabile per la paginazione;
+- i ServiceID ancora negati a `api.it`: **`TimesheetAnalysis`** (RightID 1) per
+  `Timesheet2GetAll`, **`PeopleExpressLight`** (RightID 1) per `PeopleExpressLightGetAll`
+  (`PeopleAbsenceRequestMSS` e `PeopleOvertimeApproveMSS`, RightID 4, concessi l'08/09 pomeriggio);
+- il significato di `StatusCode` sulle timbrature; se esiste un ordinamento stabile per la
+  paginazione (il tracciato di `PeopleAbsenceRequestPost` non serve più: catalogo e §9.9);
 - password da ruotare **ogni 3 mesi**, mai nei sorgenti (📘 §21.2).
 
 ### 9.5 `Timesheet2GetAll` quando arriverà il diritto
@@ -846,8 +850,9 @@ evitare, token nuovo prima della chiamata successiva.
 ### 11.4 Domande ancora aperte (da SoftAgile)
 
 Ordinamento stabile per la paginazione · valori di `StatusCode` sulle timbrature ·
-tracciato di `PeopleAbsenceRequestPost` e significato di `StampDateTimeTZOffSet` · i quattro
-ServiceID negati a `api.it` (§9.4) · come si calibra `Edit=true` senza toccare un record.
+significato di `StampDateTimeTZOffSet` · i due ServiceID ancora negati a `api.it` (§9.4) ·
+come si calibra `Edit=true` senza toccare un record (il tracciato di `PeopleAbsenceRequestPost`
+è risolto: catalogo e §9.9).
 
 ---
 
