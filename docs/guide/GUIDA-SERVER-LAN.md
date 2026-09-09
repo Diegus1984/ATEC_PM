@@ -280,7 +280,7 @@ Il motore (`RisorseSyncService`) gira **dentro il servizio ATEC PM** e parla col
 
 | Cosa | Dove |
 |---|---|
-| Indirizzo del VPS, utente di servizio, interruttore | `C:\ATEC_PM\Serverppsettings.json`, sezione `RisorseSync` (`Enabled`, `BaseUrl`, `Username`) + `Services:RisorseSync` |
+| Indirizzo del VPS, utente di servizio, interruttore | `C:\ATEC_PM\Server\appsettings.json`, sezione `RisorseSync` (`Enabled`, `BaseUrl`, `Username`) + `Services:RisorseSync` |
 | Password dell'utente di servizio `sync.pm` | `appsettings.Secrets.json`, chiave `RisorseSync:Password` (cifrata DPAPI, ambito macchina). **Non sta in chiaro da nessuna parte.** Sul VPS la stessa password vive in `/opt/atec-risorse/appsettings.json`, sezione `Sync` |
 | Stato, ultimo giro, registro, «Sincronizza adesso», «Prova collegamento» | nel gestionale: **Gestione avanzata → Digest Email → scheda «Sincronizzazione ATEC Risorse (VPS)»** (solo Admin) |
 | Registro dei giri | tabella `res_sync_log` (solo i giri con scritture o errori; i giri a vuoto non scrivono); mappa id PM ↔ VPS in `res_sync_map` |
@@ -305,6 +305,24 @@ massa): si guarda cos'è successo e si riparte con «Sincronizza adesso».
 **Copie fatte al go-live (02/09/2026)**: `appsettings.json.prima-sync-20260902` e
 `appsettings.Secrets.json.prima-sync-20260902` accanto agli originali; sul VPS
 `/var/lib/atec-risorse/backup/risorse-pre-sync-20260902.db`.
+
+### 5.2 Import da Ecos (timbrature, richieste, assenze) — ogni ora dal 09/09/2026
+
+Il servizio ATEC PM legge Ecos da solo (`HrSyncBackgroundService`): il primo giro **2 minuti
+dopo l'avvio**, poi **ogni ora**. Il conto riparte a ogni riavvio del servizio, quindi anche a
+ogni aggiornamento. Fino al 09/09/2026 era ogni 12 ore.
+
+| Cosa | Dove |
+|---|---|
+| Cadenza | `C:\ATEC_PM\Server\appsettings.json`, sezione `Hr`, chiave `ImportIntervalHours` (ore; `1` = ogni ora, `0` = spento, massimo 720). Senza la sezione vale l'1 del codice. Interruttore generale `Services:HrSync` |
+| Credenziali Ecos | dalla pagina **Timbrature → Sincronizza Ecos** (cifrate sul server), **non** in `appsettings.json` |
+| Cosa fa un giro | incrementale: chiede a Ecos solo le timbrature cambiate dal cursore (`app_config.hr_sync_punches_from`, ultimo `UpdateDate` ricevuto meno 10 minuti); rilegge richieste e assenze degli ultimi 60 giorni; ricalcola le giornate toccate |
+| A mano | pagina Timbrature → **Sincronizza Ecos** (incrementale o completo sui 60 giorni); da lì anche il reimport di una giornata o di un mese |
+| Log | righe con prefisso `[HR]` in `C:\ATEC_PM\Logs\server-AAAAMMGG.log` («Import Ecos completato: …») |
+
+Cambiata la chiave, vale dal riavvio successivo: `Restart-Service AtecPmServer` oppure il
+prossimo aggiornamento. Copia del file prima della modifica del 09/09/2026:
+`C:\ATEC_PM\Config\appsettings.prima-hr-ogni-ora-20260909.json`.
 
 ## 6. Comandi utili (sul server)
 
