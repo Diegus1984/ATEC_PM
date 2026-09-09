@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1705",
+                     "data":  "2026-09-09T17:05:14",
+                     "hash":  "baa0019a4ab2c4440f5f57cd52f944ecf6459c80",
+                     "modifiche":  [
+                                       "HR: cancellare le timbrature dal dettaglio, anche quelle di Ecos (prima là, poi qui) — #152"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1645",
                      "data":  "2026-09-09T16:45:28",
                      "hash":  "b80c98688499c6628729d2b35538af9956a67239",
