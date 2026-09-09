@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1419",
+                     "data":  "2026-09-09T14:20:05",
+                     "hash":  "6d639c81a5b37c4a67150808f9e1d193ac35e9ee",
+                     "modifiche":  [
+                                       "HR: «Controllo di ieri» è la prima pagina di Timbrature"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1416",
                      "data":  "2026-09-09T14:16:45",
                      "hash":  "9cf346c43ee47db657a4f90431ea99093cbcdf23",
