@@ -17,7 +17,11 @@ import { Textarea } from "@/components/ui/textarea"
 
 /** Una mail pronta da spedire. */
 export interface MessaggioMail {
-  /** Chiave del destinatario (l'id dipendente): serve al selettore quando sono più d'uno. */
+  /**
+   * Il destinatario (l'id dipendente). Non è la chiave del selettore: dal «Controllo di
+   * ieri» la stessa persona può ricevere due mail (due giornate), e il selettore va per
+   * posizione nell'elenco.
+   */
   id: number
   nome: string
   email?: string | null
@@ -58,28 +62,27 @@ export function AnteprimaMailDialog({
   onConferma,
   onOpenChange,
 }: AnteprimaMailDialogProps) {
-  const [scelto, setScelto] = React.useState<number | null>(null)
+  // La scelta è la POSIZIONE nell'elenco, non l'id del dipendente: due mail alla stessa
+  // persona (due giornate del Controllo di ieri) devono restare due voci distinte.
+  const [scelto, setScelto] = React.useState<number>(0)
 
-  // Ogni volta che si riapre si riparte dal primo destinatario.
-  const primo = messaggi?.[0]?.id ?? null
+  // Ogni volta che si riapre si riparte dalla prima mail.
+  const quanti = messaggi?.length ?? 0
   React.useEffect(() => {
-    setScelto(primo)
-  }, [primo, messaggi?.length])
+    setScelto(0)
+  }, [messaggi])
 
-  const corrente =
-    messaggi?.find((m) => m.id === scelto) ?? messaggi?.[0] ?? null
+  const corrente = messaggi?.[scelto] ?? messaggi?.[0] ?? null
 
   const opzioni: LookupComboboxOption<number>[] = React.useMemo(
     () =>
-      (messaggi ?? []).map((m) => ({
-        id: m.id,
+      (messaggi ?? []).map((m, indice) => ({
+        id: indice,
         name: m.nome,
         hint: m.email ?? "senza email",
       })),
     [messaggi]
   )
-
-  const quanti = messaggi?.length ?? 0
 
   return (
     <Dialog open={messaggi != null} onOpenChange={onOpenChange}>
@@ -98,14 +101,14 @@ export function AnteprimaMailDialog({
             {quanti > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {quanti} destinatari — anteprima di:
+                  {quanti} mail — anteprima di:
                 </span>
                 <LookupCombobox<number>
                   options={opzioni}
                   value={scelto}
-                  onValueChange={setScelto}
-                  placeholder="Scegli il destinatario"
-                  className="w-64"
+                  onValueChange={(v) => setScelto(v ?? 0)}
+                  placeholder="Scegli la mail"
+                  className="w-72"
                 />
               </div>
             )}

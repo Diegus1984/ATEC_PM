@@ -1,11 +1,12 @@
 import * as React from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, TriangleAlert } from "lucide-react"
+import { ChevronLeft, ChevronRight, Mail, MailCheck, TriangleAlert } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { DateField } from "@/components/shared/date-field"
 import { GridScroller } from "@/components/shared/grid-scroller"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import {
   Table,
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { fetchHrDailyCheck } from "@/lib/api/hr"
-import { dateToIso } from "@/lib/date-iso"
+import { dateToIso, formatDateTimeShort } from "@/lib/date-iso"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +34,7 @@ import {
 } from "./controllo-giornaliero"
 import { GiornataDialog } from "./GiornataDialog"
 import { isZero, oreLeggibili } from "./ore"
-import { SollecitoGiornataDialog } from "./SollecitoGiornataDialog"
+import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
 import { StatoGiornata } from "./stato-giornata"
 
 // «Controllo di ieri» (09/09/2026, richiesta di Diego): la pagina che l'ufficio HR apre al
@@ -41,6 +42,8 @@ import { StatoGiornata } from "./stato-giornata"
 // colpo chi manca e chi ha un orario da sistemare. Il blocco di giorni lo decide il server:
 // di lunedì arrivano venerdì, sabato e domenica (nei riposi compare solo chi ha timbrato).
 // Le celle sono quelle del cartellino di una persona: stessa regola, stesse parole.
+// Il sollecito sta SULLA RIGA (📧) e si manda anche a più giornate insieme: casella di
+// selezione e «Sollecita i selezionati» (Diego, 09/09/2026 pomeriggio).
 
 const COLUMNS: { id: string; label: string }[] = [
   { id: "entrata1", label: "Entrata (mattina)" },
@@ -60,6 +63,11 @@ const COLUMNS_DEFAULT: Record<string, boolean> = {
 }
 const COLUMNS_STORAGE_KEY = "hr-controllo-ieri-columns-v1"
 
+/** Si sollecita quello che il server dice sollecitabile (`canRemind`): la regola è una sola. */
+function sollecitabile(r: RigaControllo): boolean {
+  return r.giorno.canRemind
+}
+
 export function ControlloGiornalieroView({
   canWrite,
   onChanged,
@@ -72,10 +80,9 @@ export function ControlloGiornalieroView({
   const [scelto, setScelto] = React.useState<string | null>(null)
   const [soloDaSistemare, setSoloDaSistemare] = React.useState(false)
   const [aperta, setAperta] = React.useState<{ employeeId: number; dataIso: string } | null>(null)
-  const [sollecito, setSollecito] = React.useState<{
-    employeeId: number
-    date: string
-  } | null>(null)
+  const [sollecito, setSollecito] = React.useState<SollecitoTarget[] | null>(null)
+  // Le righe scelte per il sollecito in blocco (chiave = persona|giorno).
+  const [selezionate, setSelezionate] = React.useState<Set<string>>(() => new Set())
 
   const [visible, setVisible] = usePersistedColumnVisibility(
     COLUMNS_STORAGE_KEY,
@@ -121,6 +128,28 @@ export function ControlloGiornalieroView({
     })
   }, [controllo, visibili])
 
+  // La selezione vale solo sulle righe che ci sono ancora e si possono ancora sollecitare:
+  // dopo un ricalcolo o un cambio di giorno le chiavi sparite cadono da sole.
+  const sollecitabili = React.useMemo(() => visibili.filter(sollecitabile), [visibili])
+  const selezione = React.useMemo(
+    () => sollecitabili.filter((r) => selezionate.has(r.chiave)),
+    [sollecitabili, selezionate]
+  )
+  const tutteSelezionate = sollecitabili.length > 0 && selezione.length === sollecitabili.length
+
+  function toggleRiga(chiave: string, on: boolean) {
+    setSelezionate((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(chiave)
+      else next.delete(chiave)
+      return next
+    })
+  }
+
+  function toggleTutte(on: boolean) {
+    setSelezionate(on ? new Set(sollecitabili.map((r) => r.chiave)) : new Set())
+  }
+
   const dipendenteAperto = React.useMemo(
     () => controllo?.employees.find((e) => e.employeeId === aperta?.employeeId) ?? null,
     [controllo, aperta]
@@ -133,7 +162,8 @@ export function ControlloGiornalieroView({
   )
 
   const oggiIso = dateToIso(new Date())
-  const visibleCount = 1 + COLUMNS.filter((c) => show(c.id)).length
+  // Colonne fisse: la casella di selezione (solo con la scrittura), il nome, il pulsante 📧.
+  const visibleCount = (canWrite ? 2 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
   const quantiDaSistemare = riassunto?.daSistemare ?? 0
 
   if (query.isLoading) {
@@ -197,6 +227,23 @@ export function ControlloGiornalieroView({
         </div>
         {query.isFetching && <span className="text-xs text-muted-foreground">Aggiorno…</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {canWrite && (
+            <Button
+              size="sm"
+              disabled={selezione.length === 0}
+              onClick={() =>
+                setSollecito(selezione.map((r) => ({ employeeId: r.dipendente.employeeId, date: r.dataIso })))
+              }
+              title={
+                sollecitabili.length === 0
+                  ? "Nessuna giornata da sollecitare in questo blocco"
+                  : "Manda un'email a ognuna delle persone selezionate, per la sua giornata"
+              }
+            >
+              <Mail className="mr-1 size-3.5" />
+              Sollecita i selezionati{selezione.length > 0 ? ` (${selezione.length})` : ""}
+            </Button>
+          )}
           <Button
             variant={soloDaSistemare ? "default" : "outline"}
             size="sm"
@@ -255,13 +302,27 @@ export function ControlloGiornalieroView({
           <span className="size-3.5 rounded border border-amber-400 bg-amber-500/10" />
           Oggi
         </span>
-        <span>In grande l'ora che vale, in piccolo l'ora timbrata. Clic sulla riga per il dettaglio.</span>
+        <span>
+          In grande l'ora che vale, in piccolo l'ora timbrata. Clic sulla riga per il dettaglio,
+          {canWrite ? " 📧 per il sollecito, la casella per sollecitarne più d'uno." : ""}
+        </span>
       </div>
 
       <GridScroller className="rounded-lg border">
         <Table className="text-sm">
           <TableHeader>
             <TableRow>
+              {canWrite && (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={tutteSelezionate ? true : selezione.length > 0 ? "indeterminate" : false}
+                    onCheckedChange={(on) => toggleTutte(on === true)}
+                    disabled={sollecitabili.length === 0}
+                    aria-label="Seleziona tutte le giornate da sollecitare"
+                    title="Seleziona tutte le giornate da sollecitare"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-56">Dipendente</TableHead>
               {show("entrata1") && <TableHead>Entrata</TableHead>}
               {show("uscita1") && <TableHead>Uscita</TableHead>}
@@ -272,6 +333,7 @@ export function ControlloGiornalieroView({
               {show("stato") && <TableHead>Com'è la giornata</TableHead>}
               {show("pausa") && <TableHead className="text-right">Pausa</TableHead>}
               {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+              {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -295,8 +357,14 @@ export function ControlloGiornalieroView({
                     riga={r}
                     show={show}
                     oggi={r.dataIso === oggiIso}
+                    canWrite={canWrite}
+                    selezionata={selezionate.has(r.chiave)}
+                    onToggle={(on) => toggleRiga(r.chiave, on)}
                     onOpen={() =>
                       setAperta({ employeeId: r.dipendente.employeeId, dataIso: r.dataIso })
+                    }
+                    onSollecito={() =>
+                      setSollecito([{ employeeId: r.dipendente.employeeId, date: r.dataIso }])
                     }
                   />
                 ))}
@@ -337,10 +405,12 @@ export function ControlloGiornalieroView({
               employeeName={dipendenteAperto.employeeName}
               giornata={giornataAperta}
               onSollecito={() =>
-                setSollecito({
-                  employeeId: dipendenteAperto.employeeId,
-                  date: giornataAperta.workDate.slice(0, 10),
-                })
+                setSollecito([
+                  {
+                    employeeId: dipendenteAperto.employeeId,
+                    date: giornataAperta.workDate.slice(0, 10),
+                  },
+                ])
               }
               onChanged={onChanged}
             />
@@ -349,40 +419,69 @@ export function ControlloGiornalieroView({
       />
 
       <SollecitoGiornataDialog
-        target={sollecito}
+        targets={sollecito}
         onOpenChange={(open) => {
           if (!open) setSollecito(null)
         }}
-        onSent={onChanged}
+        onSent={() => {
+          // Spedite: le caselle si svuotano, così un secondo clic non le rimanda.
+          setSelezionate(new Set())
+          onChanged()
+        }}
       />
     </div>
   )
 }
 
-/** Una persona in un giorno: nome e reparto a sinistra, poi le stesse celle del cartellino. */
+/**
+ * Una persona in un giorno: la casella per il sollecito in blocco, nome e reparto, le stesse
+ * celle del cartellino, il 📧 in fondo (solo sulle giornate che il server dice da segnalare).
+ */
 function RigaDipendente({
   riga,
   show,
   oggi,
+  canWrite,
+  selezionata,
+  onToggle,
   onOpen,
+  onSollecito,
 }: {
   riga: RigaControllo
   show: (id: string) => boolean
   oggi: boolean
+  canWrite: boolean
+  selezionata: boolean
+  onToggle: (on: boolean) => void
   onOpen: () => void
+  onSollecito: () => void
 }) {
   const { giorno: g, stato: st, dipendente } = riga
   const spenta = st.tone === "dim"
+  const daSollecitare = canWrite && sollecitabile(riga)
   return (
     <TableRow
       className={cn(
         "h-11 cursor-pointer hover:bg-muted/60",
         spenta && "bg-muted/40 text-muted-foreground",
         st.tone === "bad" && "bg-destructive/10",
-        oggi && "bg-amber-500/10 shadow-[inset_3px_0_0_0_theme(colors.amber.400)]"
+        oggi && "bg-amber-500/10 shadow-[inset_3px_0_0_0_theme(colors.amber.400)]",
+        selezionata && "bg-primary/10"
       )}
       onClick={onOpen}
     >
+      {canWrite && (
+        // La casella non apre il dettaglio: il clic si ferma qui.
+        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+          {daSollecitare && (
+            <Checkbox
+              checked={selezionata}
+              onCheckedChange={(on) => onToggle(on === true)}
+              aria-label={`Seleziona ${dipendente.employeeName} per il sollecito`}
+            />
+          )}
+        </TableCell>
+      )}
       <TableCell className="whitespace-nowrap leading-tight">
         <span className="font-semibold">{dipendente.employeeName}</span>
         <span
@@ -414,6 +513,30 @@ function RigaDipendente({
       {show("nota") && (
         <TableCell className="max-w-60 truncate text-xs text-muted-foreground" title={g.note}>
           {g.note || "—"}
+        </TableCell>
+      )}
+      {canWrite && (
+        <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+          {daSollecitare && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={onSollecito}
+              aria-label={`Sollecita ${dipendente.employeeName}`}
+              title={
+                g.lastReminderAt
+                  ? `Sollecito già inviato il ${formatDateTimeShort(g.lastReminderAt)}: manda di nuovo l'email`
+                  : "Manda al dipendente un'email con la giornata da verificare"
+              }
+            >
+              {g.lastReminderAt ? (
+                <MailCheck className="size-4 text-muted-foreground" />
+              ) : (
+                <Mail className="size-4 text-amber-600 dark:text-amber-500" />
+              )}
+            </Button>
+          )}
         </TableCell>
       )}
     </TableRow>

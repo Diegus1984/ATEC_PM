@@ -820,7 +820,7 @@ export function TimbraturePage({ vista = "cartellino" }: { vista?: Vista }) {
       />
 
       <SollecitoGiornataDialog
-        target={sollecito}
+        targets={sollecito ? [sollecito] : null}
         onOpenChange={(open) => {
           if (!open) setSollecito(null)
         }}
