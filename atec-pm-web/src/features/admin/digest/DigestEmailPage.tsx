@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { KeyRound, RefreshCw, Send } from "lucide-react"
+import { CheckCircle2, KeyRound, RefreshCw, Send, XCircle } from "lucide-react"
 
 import { ApiError } from "@/lib/api/client"
 import {
@@ -15,7 +15,7 @@ import {
   saveEmailSettings,
   sendTestEmail,
 } from "@/lib/api/settings"
-import { notifyError } from "@/lib/toast"
+import { notifyError, notifySuccess } from "@/lib/toast"
 import { PasswordField } from "@/features/auth/PasswordField"
 import type { EmailSettingsDto, PlanDigestSettingsDto } from "@/lib/api/types"
 import { Badge } from "@/components/ui/badge"
@@ -113,8 +113,12 @@ export function DigestEmailPage() {
     },
   })
 
+  // L'esito della prova si vede due volte: nel toast e nella riga sotto il pulsante, verde o
+  // rossa. Diego, 09/09/2026 sera: «premo invia prova e non so se sta funzionando… nulla».
   const testEmailMutation = useMutation({
     mutationFn: () => sendTestEmail({ toEmail: testTo }),
+    onSuccess: (messaggio) => notifySuccess(messaggio || "Email di prova inviata."),
+    onError: (e) => notifyError(e instanceof Error ? e.message : "Invio della prova non riuscito."),
   })
 
   const saveDigestMutation = useMutation({
@@ -335,7 +339,15 @@ export function DigestEmailPage() {
                 disabled={testEmailMutation.isPending || !testTo}
                 onClick={() => testEmailMutation.mutate()}
               >
-                <Send /> Invia prova
+                {testEmailMutation.isPending ? (
+                  <>
+                    <RefreshCw className="animate-spin" /> Invio in corso…
+                  </>
+                ) : (
+                  <>
+                    <Send /> Invia prova
+                  </>
+                )}
               </Button>
             </div>
             <Button
@@ -345,11 +357,21 @@ export function DigestEmailPage() {
               {saveEmailMutation.isPending ? "Salvataggio…" : "Salva configurazione"}
             </Button>
           </div>
-          {testEmailMutation.data && (
-            <p className="text-sm text-muted-foreground">{testEmailMutation.data}</p>
+          {testEmailMutation.isPending && (
+            <p className="text-sm text-muted-foreground">
+              Sto parlando con {emailForm.smtpHost || "il server di posta"}…
+            </p>
+          )}
+          {testEmailMutation.isSuccess && (
+            <p className="flex items-center gap-1.5 text-sm font-medium text-green-700 dark:text-green-400">
+              <CheckCircle2 className="size-4" />
+              {testEmailMutation.data || "Email di prova inviata."} Il server di posta l'ha accettata:
+              controlla la casella.
+            </p>
           )}
           {testEmailMutation.error && (
-            <p className="text-sm text-destructive">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+              <XCircle className="size-4" />
               {(testEmailMutation.error as ApiError).message}
             </p>
           )}

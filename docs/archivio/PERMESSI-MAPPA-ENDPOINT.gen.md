@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 09/09/2026 16:14.
+> Fotografia del 09/09/2026 16:30.
 
 ## Chiavi con endpoint
 
@@ -419,6 +419,7 @@
 - `GET /api/resource-planner/sync/settings` (ResourcesController.GetSyncSettings)
 - `GET /api/resource-planner/sync/status` (ResourcesController.GetSyncStatus)
 - `GET /api/settings/email` (SettingsController.GetEmail)
+- `GET /api/settings/email/password` (SettingsController.GetEmailPassword)
 - `POST /api/resource-planner/sync/run-now` (ResourcesController.RunSyncNow)
 - `POST /api/resource-planner/sync/test` (ResourcesController.TestSync)
 - `POST /api/settings/email` (SettingsController.SaveEmail)

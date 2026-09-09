@@ -175,10 +175,12 @@ public class EmailService : BackgroundService
         {
             using var client = new SmtpClient();
             await ConnectAndAuthenticateAsync(client, cfg);
-            await client.SendAsync(msg);
+            // La risposta al DATA («250 2.0.0 Ok: queued as …») è la ricevuta del server di posta.
+            string ricevuta = await client.SendAsync(msg);
             await client.DisconnectAsync(true);
-            _logger.LogInformation("[EmailService] Mail accettata dal server di posta per {To}: {Subject}", toEmail, subject);
-            return (true, "");
+            _logger.LogInformation("[EmailService] Mail accettata dal server di posta per {To}: {Subject} — {Ricevuta}",
+                toEmail, subject, ricevuta);
+            return (true, ricevuta);
         }
         catch (Exception ex)
         {
@@ -348,9 +350,12 @@ public class EmailService : BackgroundService
         {
             using var client = new SmtpClient();
             await ConnectAndAuthenticateAsync(client, cfg);
-            await client.SendAsync(msg);
+            // La risposta al DATA («250 2.0.0 Ok: queued as …») è la ricevuta del server di posta:
+            // resta nel log e va a video, così «inviata» ha un numero dietro.
+            string ricevuta = await client.SendAsync(msg);
             await client.DisconnectAsync(true);
-            return (true, $"Email di prova inviata a {toEmail}.");
+            _logger.LogInformation("[EmailService] Email di prova accettata dal server di posta per {To} — {Ricevuta}", toEmail, ricevuta);
+            return (true, $"Email di prova inviata a {toEmail}. Ricevuta del server di posta: {ricevuta}");
         }
         catch (Exception ex)
         {
