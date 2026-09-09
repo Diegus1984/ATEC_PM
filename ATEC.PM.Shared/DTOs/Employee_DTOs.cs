@@ -23,6 +23,12 @@ public class EmployeeSaveRequest
     /// <summary>Codice badge EcosAgile (<c>EmplCode</c>). NULL = non collegato.</summary>
     public string? EcosEmplCode { get; set; }
 
+    /// <summary>
+    /// Matricola del libro paga (M129): quella che compare sotto il nome nel calendario
+    /// presenze e nel file Excel. NON è il codice Ecos, che serve solo a collegare le timbrature.
+    /// </summary>
+    public string? PayrollCode { get; set; }
+
     /// <summary>false = forfait: employee does not punch in (VB <c>IsForfait</c>).</summary>
     public bool HrMustPunch { get; set; } = true;
 

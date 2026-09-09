@@ -63,6 +63,7 @@ public partial class HrAttendanceService
                    CONCAT_WS(' ', e.first_name, e.last_name) AS EmployeeName,
                    d.name AS DepartmentName,
                    e.ecos_empl_code AS EmplCode,
+                   e.payroll_code AS PayrollCode,
                    e.hr_must_punch AS MustPunch,
                    e.hr_daily_hours AS DailyHours,
                    -- 🪤 `SELECT DISTINCT` + `ORDER BY` su colonne che non sono nella SELECT:
@@ -153,9 +154,11 @@ public partial class HrAttendanceService
         foreach (CalendarEmployee emp in employees)
         {
             // Il nome (con la matricola) sta SOLO sulla prima riga: sotto è la stessa persona.
-            string etichetta = string.IsNullOrEmpty(emp.EmplCode)
+            // La matricola è quella del libro paga (M129, come sul foglio del consulente), NON
+            // il codice Ecos: quello serve a noi per collegare le timbrature e qui non compare.
+            string etichetta = string.IsNullOrEmpty(emp.PayrollCode)
                 ? emp.EmployeeName
-                : $"{emp.EmployeeName}\nMatr. {emp.EmplCode}";
+                : $"{emp.EmployeeName}\nMatr. {emp.PayrollCode}";
 
             HrCalendarRowDto NuovaRiga(string voce, string voceType, string nome = "") => new()
             {
@@ -483,6 +486,8 @@ public partial class HrAttendanceService
         public string EmployeeName { get; set; } = "";
         public string? DepartmentName { get; set; }
         public string? EmplCode { get; set; }
+        /// <summary>Matricola del libro paga (M129): è lei che va sotto il nome.</summary>
+        public string? PayrollCode { get; set; }
         public bool MustPunch { get; set; } = true;
         public decimal DailyHours { get; set; } = 8.0m;
     }

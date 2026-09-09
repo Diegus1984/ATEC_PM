@@ -48,6 +48,8 @@ export interface EmployeeSaveRequest {
   status: string
   /** Codice badge EcosAgile (EmplCode). Vuoto = non collegato. */
   ecosEmplCode?: string | null
+  /** Matricola del libro paga (M129): sotto il nome nel calendario e nell'Excel. Non è il codice Ecos. */
+  payrollCode?: string | null
   /** false = forfait, no punch required. Default true. */
   hrMustPunch?: boolean
   /** Contract daily hours: 4, 6 or 8. Default 8. */

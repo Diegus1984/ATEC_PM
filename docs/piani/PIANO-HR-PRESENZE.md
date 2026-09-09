@@ -524,6 +524,17 @@ altro), ogni invio registrato con data e autore. Prima serve l'utente API dedica
 diritti di scrittura (§11). Punto di aggancio nel client: la pillola di `stato-giornata.tsx`
 e il riquadro «Giornate da sistemare».
 
+**✅ Due matricole per persona (09/09/2026, M129).** Il codice badge Ecos
+(`employees.ecos_empl_code`, es. 1027) serve a noi per riconoscere timbrature e richieste; la
+**matricola del libro paga** (`employees.payroll_code`, es. 001, unica) è quella che compare sotto
+il nome nel calendario «Tutti, mese per mese» e nell'export Excel, come nel foglio «PRESENZE MM
+MESE AA.xlsx» del consulente. Si mette dall'anagrafica dipendente (sezione Presenze, campo
+«Matricola (libro paga)»); le 26 del foglio di agosto 2026 sono state precaricate dalla
+migrazione, abbinate per cognome e nome. Senza matricola sotto il nome non compare niente: il
+codice Ecos non è mai mostrato lì. Il foglio del consulente ha anche la riga del contratto
+(«full-time» / «part-time a 20 ore a sett.»): non è stata portata, si ricaverebbe dalle ore
+giornaliere (8 / 4 / 6).
+
 ## 8. Punti delicati — da non sbagliare
 
 **Art. 4 dello Statuto dei lavoratori.** Registrare entrata e uscita per finalità

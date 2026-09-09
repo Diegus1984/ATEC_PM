@@ -36,7 +36,7 @@ public class CalendarioPresenzeTests
     public void Una_riga_per_voce_nell_ordine_dell_originale()
     {
         using MySqlConnection c = _schema.Apri();
-        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        int mario = CreaDipendente(c, "Mario", "Rossi", "1042", matricola: "042");
         GiornataLavorata(c, mario, giorno: 5, ordinari: 480);
 
         HrMonthlyCalendarDto cal = Servizio().GetMonthlyCalendar(Anno, Mese, null);
@@ -46,7 +46,8 @@ public class CalendarioPresenzeTests
             cal.Rows.Select(r => r.Voce).ToArray());
 
         // Il nome (con la matricola) sta solo sulla prima riga: sotto è la stessa persona.
-        Assert.Equal("Mario Rossi\nMatr. 42", cal.Rows[0].Employee);
+        // La matricola è quella del libro paga (M129), non il codice badge Ecos (1042).
+        Assert.Equal("Mario Rossi\nMatr. 042", cal.Rows[0].Employee);
         Assert.All(cal.Rows.Skip(1), r => Assert.Equal("", r.Employee));
         Assert.All(cal.Rows, r => Assert.Equal("Mario Rossi", r.EmployeeKey));
         Assert.Equal(mario, cal.Rows[0].EmployeeId);
@@ -147,14 +148,33 @@ public class CalendarioPresenzeTests
         return new HrAttendanceService(_schema.Servizio(), ecos, NullLogger<HrAttendanceService>.Instance);
     }
 
+    /// <summary>
+    /// Due numeri per persona (09/09/2026): il codice Ecos serve a noi per le timbrature,
+    /// sotto il nome va SOLO la matricola del libro paga. Senza matricola resta il nome nudo:
+    /// il codice Ecos sul foglio del consulente non vuol dire niente e non deve comparire.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Senza_matricola_paghe_il_codice_Ecos_non_compare_sotto_il_nome()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "1042", matricola: null);
+        GiornataLavorata(c, mario, giorno: 5, ordinari: 480);
+
+        HrMonthlyCalendarDto cal = Servizio().GetMonthlyCalendar(Anno, Mese, null);
+
+        Assert.Equal("Mario Rossi", cal.Rows[0].Employee);
+        Assert.DoesNotContain(cal.Rows, r => r.Employee.Contains("1042"));
+    }
+
     private static HrCalendarRowDto Riga(HrMonthlyCalendarDto cal, string voceType) =>
         cal.Rows.Single(r => r.VoceType == voceType);
 
-    private static int CreaDipendente(MySqlConnection c, string nome, string cognome, string? ecosCode)
+    private static int CreaDipendente(
+        MySqlConnection c, string nome, string cognome, string? ecosCode, string? matricola = null)
     {
         c.Execute(
-            "INSERT INTO employees (first_name, last_name, ecos_empl_code) VALUES (@Nome, @Cognome, @Codice)",
-            new { Nome = nome, Cognome = cognome, Codice = ecosCode });
+            "INSERT INTO employees (first_name, last_name, ecos_empl_code, payroll_code) VALUES (@Nome, @Cognome, @Codice, @Matricola)",
+            new { Nome = nome, Cognome = cognome, Codice = ecosCode, Matricola = matricola });
         return c.ExecuteScalar<int>("SELECT LAST_INSERT_ID()");
     }
 

@@ -33,6 +33,7 @@ public class EmployeesController : ControllerBase
                supplier_id AS SupplierId,
                status,
                ecos_empl_code AS EcosEmplCode,
+               payroll_code AS PayrollCode,
                hr_must_punch AS HrMustPunch,
                hr_daily_hours AS HrDailyHours,
                hr_counts_overtime AS HrCountsOvertime
@@ -206,23 +207,23 @@ public class EmployeesController : ControllerBase
             return Ok(ApiResponse<int>.Fail(hrError));
 
         req.EcosEmplCode = EmployeeHrConfig.NormalizeEcosCode(req.EcosEmplCode);
+        req.PayrollCode = EmployeeHrConfig.NormalizePayrollCode(req.PayrollCode);
 
         try
         {
             var newId = c.ExecuteScalar<int>(@"
                 INSERT INTO employees
                     (first_name, last_name, email, emp_type, supplier_id, status,
-                     ecos_empl_code, hr_must_punch, hr_daily_hours, hr_counts_overtime)
+                     ecos_empl_code, payroll_code, hr_must_punch, hr_daily_hours, hr_counts_overtime)
                 VALUES
                     (@FirstName, @LastName, @Email, @EmpType, @SupplierId, @Status,
-                     @EcosEmplCode, @HrMustPunch, @HrDailyHours, @HrCountsOvertime);
+                     @EcosEmplCode, @PayrollCode, @HrMustPunch, @HrDailyHours, @HrCountsOvertime);
                 SELECT LAST_INSERT_ID()", req);
             return Ok(ApiResponse<int>.Ok(newId, "Creato"));
         }
         catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
         {
-            return Ok(ApiResponse<int>.Fail(
-                $"Il codice Ecos {req.EcosEmplCode} è appena stato collegato a un altro dipendente."));
+            return Ok(ApiResponse<int>.Fail(MessaggioDoppione(ex, req)));
         }
     }
 
@@ -274,6 +275,7 @@ public class EmployeesController : ControllerBase
             return Ok(ApiResponse<int>.Fail(hrError));
 
         req.EcosEmplCode = EmployeeHrConfig.NormalizeEcosCode(req.EcosEmplCode);
+        req.PayrollCode = EmployeeHrConfig.NormalizePayrollCode(req.PayrollCode);
 
         try
         {
@@ -286,6 +288,7 @@ public class EmployeesController : ControllerBase
                     supplier_id = @SupplierId,
                     status = @Status,
                     ecos_empl_code = @EcosEmplCode,
+                    payroll_code = @PayrollCode,
                     hr_must_punch = @HrMustPunch,
                     hr_daily_hours = @HrDailyHours,
                     hr_counts_overtime = @HrCountsOvertime
@@ -295,8 +298,7 @@ public class EmployeesController : ControllerBase
         }
         catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
         {
-            return Ok(ApiResponse<int>.Fail(
-                $"Il codice Ecos {req.EcosEmplCode} è appena stato collegato a un altro dipendente."));
+            return Ok(ApiResponse<int>.Fail(MessaggioDoppione(ex, req)));
         }
 
         // Qui si scrive anche `status`, che è la cosa guardata a ogni richiesta autenticata:
@@ -318,8 +320,18 @@ public class EmployeesController : ControllerBase
         if (hoursError != null)
             return hoursError;
 
-        return EmployeeHrConfig.ValidateEcosCode((MySqlConnection)c, employeeId, req.EcosEmplCode);
+        return EmployeeHrConfig.ValidateEcosCode((MySqlConnection)c, employeeId, req.EcosEmplCode)
+            ?? EmployeeHrConfig.ValidatePayrollCode((MySqlConnection)c, employeeId, req.PayrollCode);
     }
+
+    /// <summary>
+    /// Due indici unici sulla stessa tabella (codice Ecos M108, matricola paghe M129): il
+    /// messaggio dice quale dei due è saltato, guardando il nome dell'indice nell'errore.
+    /// </summary>
+    private static string MessaggioDoppione(MySqlException ex, EmployeeSaveRequest req) =>
+        ex.Message.Contains("uq_employees_payroll", StringComparison.OrdinalIgnoreCase)
+            ? $"La matricola {req.PayrollCode} è appena stata data a un altro dipendente."
+            : $"Il codice Ecos {req.EcosEmplCode} è appena stato collegato a un altro dipendente.";
 
     [HttpDelete("{id}")]
     [Authorize]

@@ -40,4 +40,28 @@ public static class EmployeeHrConfig
             ? null
             : $"Il codice Ecos {code} è già collegato a {takenBy}.";
     }
+
+    /// <summary>Matricola del libro paga (M129): vuota → NULL, spazi via. Non è il codice Ecos.</summary>
+    public static string? NormalizePayrollCode(string? payrollCode) =>
+        string.IsNullOrWhiteSpace(payrollCode) ? null : payrollCode.Trim();
+
+    /// <summary>
+    /// La matricola paghe è di una persona sola: l'indice unico (M129) è la guardia vera,
+    /// questo dà il messaggio leggibile prima di sbatterci contro.
+    /// </summary>
+    public static string? ValidatePayrollCode(MySqlConnection c, int employeeId, string? payrollCode)
+    {
+        string? code = NormalizePayrollCode(payrollCode);
+        if (code == null)
+            return null;
+
+        string? takenBy = c.ExecuteScalar<string?>(
+            @"SELECT CONCAT_WS(' ', first_name, last_name) FROM employees
+              WHERE payroll_code = @Code AND id <> @Id LIMIT 1",
+            new { Code = code, Id = employeeId });
+
+        return takenBy == null
+            ? null
+            : $"La matricola {code} è già di {takenBy}.";
+    }
 }

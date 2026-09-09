@@ -108,6 +108,7 @@ export function EmployeeDialog({
     {}
   )
   const [ecosEmplCode, setEcosEmplCode] = React.useState("")
+  const [payrollCode, setPayrollCode] = React.useState("")
   const [mustPunch, setMustPunch] = React.useState(true)
   const [dailyHours, setDailyHours] = React.useState("8")
   const [countsOvertime, setCountsOvertime] = React.useState(true)
@@ -195,6 +196,7 @@ export function EmployeeDialog({
         setUserRoleState(detail.userRole || "TECH")
         setUsername(detail.username || "")
         setEcosEmplCode(emp.ecosEmplCode ?? "")
+        setPayrollCode(emp.payrollCode ?? "")
         setMustPunch(emp.hrMustPunch ?? true)
         setDailyHours(String(emp.hrDailyHours ?? 8))
         setCountsOvertime(emp.hrCountsOvertime ?? true)
@@ -272,6 +274,7 @@ export function EmployeeDialog({
         supplierId: null,
         status,
         ecosEmplCode: ecosEmplCode.trim() || null,
+        payrollCode: payrollCode.trim() || null,
         hrMustPunch: mustPunch,
         hrDailyHours: Number(dailyHours),
         hrCountsOvertime: countsOvertime,
@@ -381,15 +384,26 @@ export function EmployeeDialog({
             <p className="text-xs text-muted-foreground">
               Impostazioni per il cartellino HR. Il codice badge Ecos collega le timbrature
               del rilevatore a questa persona (si può anche mappare in blocco da Timbrature).
+              La matricola è quella del libro paga: compare sotto il nome nel calendario
+              presenze e nel file Excel.
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="ecos-empl-code">Codice badge Ecos</Label>
                 <Input
                   id="ecos-empl-code"
                   value={ecosEmplCode}
-                  placeholder="Es. 42"
+                  placeholder="Es. 1042"
                   onChange={(event) => setEcosEmplCode(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="payroll-code">Matricola (libro paga)</Label>
+                <Input
+                  id="payroll-code"
+                  value={payrollCode}
+                  placeholder="Es. 042"
+                  onChange={(event) => setPayrollCode(event.target.value)}
                 />
               </div>
               <div className="grid gap-2">
