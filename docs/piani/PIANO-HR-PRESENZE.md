@@ -563,6 +563,21 @@ della giornata con rettifica, «Invia a Ecos», email al dipendente e rilettura 
 - **Test**: `ControlloGiornalieroTests` (la regola giorno per giorno sul calendario 2026 + la lettura
   dal database, con la giornata confrontata con quella del cartellino), `controllo-giornaliero.test.ts`.
 
+**✅ Uscita finale mancante = anomalia, non più stima (09/09/2026, regole v5).** Ordine di Diego
+dal «Controllo di ieri»: «questo non deve essere stimato: se il dipendente ha dimenticato la
+timbratura, il sistema deve segnalarlo come anomalia, e dobbiamo poter inviare il sollecito». Il
+motore VB, con due entrate e una uscita, inventava l'uscita alle 17:00 (`AUTO_P: Uscita mancante -
+Stimata 17:00`) e contava otto ore: una giornata a posto che a posto non era. **Divergenza voluta
+dall'originale.** Ora `TimesheetEngine.TurnoUscitaMancante` scrive `⚠ INCOMPLETO: Uscita mancante`,
+`Uscita2 = ??:??` («Non timbrata» in rosso) e zero ore, come la giornata con la sola entrata:
+pillola rossa «Manca l'uscita», sollecito (INCOMPLETO è già fra le sei parole chiave), rettifica
+del dialogo già su «Uscita», email che chiede l'orario vero (`HrDayReminder.Dettaglio`, ramo nuovo).
+`TimesheetRules.Version` 4 → **5**: `RepairDays` ricalcola lo storico al primo import dopo il
+deploy, le vecchie «Stimata» diventano incomplete da sole (il ramo client per la nota vecchia resta
+finché non sono sparite). Eccezione: **oggi** con entrata-uscita-rientro resta «Giornata in corso»
+(chi è rientrato dalla pausa è al lavoro, non ha dimenticato niente; l'import di domani la chiude).
+Il banco di prova VB (379 giornate) non ha casi di stima: invariato. Test `UscitaMancanteTests`.
+
 ## 8. Punti delicati — da non sbagliare
 
 **Art. 4 dello Statuto dei lavoratori.** Registrare entrata e uscita per finalità

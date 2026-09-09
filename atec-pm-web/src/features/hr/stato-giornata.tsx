@@ -98,6 +98,9 @@ export function statoGiornata(g: HrDay): StatoLetto {
   if (nota.startsWith("Giornata in corso")) {
     return { label: "Giornata in corso", tone: "info", riposo: false, assenza: false, assenzaParziale: false }
   }
+  // Nota del motore VECCHIO (fino alla versione 4 delle regole): dal 09/09/2026 l'uscita
+  // mancante non si stima più ed è un'anomalia rossa («⚠ INCOMPLETO: Uscita mancante»,
+  // ramo hasAnomaly qui sopra). Questo ramo serve solo finché lo storico non è ricalcolato.
   if (nota.startsWith("AUTO_P: Uscita mancante")) {
     const ora = /Stimata (\d{1,2}:\d{2})/.exec(nota)?.[1]
     return {
@@ -145,7 +148,9 @@ export function statoGiornata(g: HrDay): StatoLetto {
 
 function fraseAnomalia(nota: string): string {
   const testo = nota.split(" · ")[0]
-  if (testo.includes("Solo entrata")) return "Manca l'uscita"
+  // Sola entrata, oppure entrata-uscita-rientro senza l'ultima uscita: in entrambi i casi la
+  // stessa frase, e il dialogo della giornata parte già con la rettifica su «Uscita».
+  if (testo.includes("Solo entrata") || testo.includes("Uscita mancante")) return "Manca l'uscita"
   if (testo.includes("manca una timbratura della notte")) return "Manca una timbratura della notte"
   if (testo.includes("due turni nella stessa giornata")) return "Due turni nello stesso giorno"
   if (testo.includes("Verificare timbrature")) return "Timbrature da verificare"

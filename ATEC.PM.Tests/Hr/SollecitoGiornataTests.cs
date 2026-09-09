@@ -30,6 +30,9 @@ public class SollecitoGiornataRegolaTests
     // Le sei parole chiave dell'originale (ReportPage.xaml.vb:208-214).
     [InlineData("⚠ INCOMPLETO: Solo entrata", true)]
     [InlineData("⚠ ERR: Verificare timbrature", true)]
+    // Dal 09/09/2026 l'uscita finale mancante non si stima più: è INCOMPLETO come la sola
+    // entrata. La nota vecchia resta riconosciuta finché lo storico non è ricalcolato.
+    [InlineData("⚠ INCOMPLETO: Uscita mancante", true)]
     [InlineData("AUTO_P: Uscita mancante - Stimata 17:00", true)]
     [InlineData("⚠ Permesso parziale 4h (ECOS) ma nessuna timbratura — verificare", true)]
     [InlineData("Permesso rettificato: ECOS 4h → 2h", true)]
@@ -71,8 +74,8 @@ public class SollecitoGiornataRegolaTests
         {
             WorkDate = Ieri,
             HasData = true,
-            Note = "AUTO_P: Uscita mancante - Stimata 17:00",
-            RegularHours = "8h 0m",
+            Note = "⚠ INCOMPLETO: Uscita mancante",
+            RegularHours = "0h 0m",
             Overtime = "0h 0m",
             Raw = new HrDayStageDto
             {
@@ -92,9 +95,12 @@ public class SollecitoGiornataRegolaTests
         Assert.Contains("  Entrata 1:  07:58", corpo);
         Assert.Contains("  Uscita 2:   --:--", corpo);
         Assert.Contains("PROBLEMA RILEVATO:", corpo);
-        Assert.Contains("Il sistema ha stimato l'uscita alle 17:00.", corpo);
+        // Niente stima (09/09/2026): si chiede l'orario vero dell'ultima uscita.
+        Assert.Contains("manca l'uscita di fine giornata", corpo);
+        Assert.Contains("Comunica l'orario di uscita", corpo);
+        Assert.DoesNotContain("stimato", corpo);
         Assert.Contains("RISULTATO ELABORAZIONE:", corpo);
-        Assert.Contains("  Ore ordinarie:    8h 0m", corpo);
+        Assert.Contains("  Ore ordinarie:    0h 0m", corpo);
         Assert.Contains("Ufficio Personale", corpo);
         Assert.EndsWith("Ufficio Risorse Umane — ATEC S.r.l.", corpo);
     }
@@ -163,20 +169,25 @@ public class SollecitoGiornataTests
         using MySqlConnection c = _schema.Apri();
         int mario = Dipendente(c);
 
-        // Giovedì 5: uscita stimata → si sollecita. Venerdì 6: giornata regolare → no.
-        Giornata(c, mario, 5, "AUTO_P: Uscita mancante - Stimata 17:00", anomalia: false);
+        // Giovedì 5: uscita finale mancante (incompleta, dal 09/09/2026 non più stimata) → si
+        // sollecita. Venerdì 6: regolare → no. Lunedì 9: sola entrata → sì. Martedì 10: permesso
+        // rettificato dal calendario → sì, pur non essendo un'anomalia del motore.
+        Giornata(c, mario, 5, "⚠ INCOMPLETO: Uscita mancante", anomalia: true);
         Giornata(c, mario, 6, "OK", anomalia: false);
         Giornata(c, mario, 9, "⚠ INCOMPLETO: Solo entrata", anomalia: true);
+        Giornata(c, mario, 10, "Permesso rettificato: ECOS 4h → 2h", anomalia: false);
 
         HrMonthlyTimesheetDto cartellino = Servizio().GetMonthlyTimesheet(mario, Anno, Mese);
 
         Assert.True(Giorno(cartellino, 5).CanRemind);
         Assert.False(Giorno(cartellino, 6).CanRemind);
         Assert.True(Giorno(cartellino, 9).CanRemind);
+        Assert.True(Giorno(cartellino, 10).CanRemind);
 
-        // 🪤 Il 5 NON è un'anomalia per il motore, ma il sollecito ce l'ha: la regola non è
+        // 🪤 Il 10 NON è un'anomalia per il motore, ma il sollecito ce l'ha: la regola non è
         // HasAnomaly.
-        Assert.False(Giorno(cartellino, 5).HasAnomaly);
+        Assert.False(Giorno(cartellino, 10).HasAnomaly);
+        Assert.True(Giorno(cartellino, 5).HasAnomaly);
     }
 
     [FactRichiedeMySql]

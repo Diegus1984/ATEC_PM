@@ -164,8 +164,13 @@ public static class TimesheetEngine
         RiempiStadio(cartellino, dati.RawEntrata1, dati.RawUscita1, dati.RawEntrata2, dati.RawUscita2,
             dati.NumIngressi, dati.NumUscite, grezzo: true);
 
-        // Giornata ancora aperta: si mostra quel che c'è, senza calcolare nulla.
-        if (work_date.Date == oggi.Date && dati.NumIngressi <= 1 && dati.NumUscite <= 1)
+        // Giornata ancora aperta: si mostra quel che c'è, senza calcolare nulla. Vale anche
+        // per chi oggi è rientrato dalla pausa e non è ancora uscito (due entrate, una
+        // uscita): la giornata non è finita, e segnalarla come incompleta sarebbe un falso
+        // allarme per tutto il pomeriggio (09/09/2026, con la fine della stima delle 17:00).
+        bool turnoAperto = (dati.NumIngressi <= 1 && dati.NumUscite <= 1)
+                           || (dati.NumIngressi == 2 && dati.NumUscite == 1);
+        if (work_date.Date == oggi.Date && turnoAperto)
         {
             cartellino.Note = "Giornata in corso";
             return AnnotaNotte(cartellino, notte, dati);
@@ -732,20 +737,26 @@ public static class TimesheetEngine
         return (int)(u1 - e1).TotalMinutes + (int)(u2 - ripresa).TotalMinutes;
     }
 
-    /// <summary>Due entrate e una uscita: manca l'uscita finale, si stima alle 17:00.</summary>
+    /// <summary>
+    /// Due entrate e una uscita: manca l'uscita finale. Il motore VB la <b>stimava</b> alle
+    /// 17:00 («AUTO_P: Uscita mancante - Stimata 17:00») e contava le ore fino a lì; dal
+    /// 09/09/2026 (ordine di Diego: «se il dipendente ha dimenticato la timbratura, il sistema
+    /// deve segnalarlo come anomalia») non si inventa niente: la giornata è INCOMPLETA come
+    /// quella con la sola entrata, si sollecita, e le ore arrivano quando la persona (o HR con
+    /// una rettifica) mette l'uscita vera. Zero minuti, quindi i totali finiscono azzerati.
+    /// </summary>
     private static int TurnoUscitaMancante(TimesheetDay c, Assignment d)
     {
         DateTime e1 = d.Entrata1!.Value, u1 = d.Uscita1!.Value, e2 = d.Entrata2!.Value;
         int pausa = (int)Math.Max(0, (e2 - u1).TotalMinutes);
         c.BreakTime = TimesheetRules.FormatDuration(pausa);
 
-        var uscitaStimata = new DateTime(e2.Year, e2.Month, e2.Day, 17, 0, 0);
+        c.Note = "⚠ INCOMPLETO: Uscita mancante";
         c.Entrata1 = ClockIn(e1, c.WorkDate);
         c.Uscita1 = ClockOut(u1, c.WorkDate);
         c.Entrata2 = ClockIn(e2, c.WorkDate);
-        c.Uscita2 = ClockOut(uscitaStimata, c.WorkDate) + "*";
-        c.Note = "AUTO_P: Uscita mancante - Stimata 17:00";
-        return (int)(u1 - e1).TotalMinutes + (int)(uscitaStimata - e2).TotalMinutes;
+        c.Uscita2 = "??:??";
+        return 0;
     }
 
     // ── STRAORDINARIO ─────────────────────────────────────────────────────────

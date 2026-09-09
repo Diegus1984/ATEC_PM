@@ -89,7 +89,21 @@ describe("statoGiornata — le altre frasi non cambiano", () => {
     expect(st.tone).toBe("bad")
   })
 
-  it("uscita stimata alle 17 resta un avviso ambra", () => {
+  it("l'uscita finale dimenticata è un'anomalia rossa, non una stima (Diego, 09/09/2026)", () => {
+    const st = statoGiornata(
+      giornata({
+        note: "⚠ INCOMPLETO: Uscita mancante",
+        hasAnomaly: true,
+        clockIn2: "13:30",
+        clockOut2: "??:??",
+        regularHours: "0h 0m",
+      })
+    )
+    expect(st.label).toBe("Manca l'uscita")
+    expect(st.tone).toBe("bad")
+  })
+
+  it("la nota vecchia «Stimata 17:00» resta leggibile finché lo storico non è ricalcolato", () => {
     const st = statoGiornata(giornata({ note: "AUTO_P: Uscita mancante - Stimata 17:00" }))
     expect(st.label).toBe("Uscita non timbrata, stimata alle 17:00")
     expect(st.tone).toBe("warn")

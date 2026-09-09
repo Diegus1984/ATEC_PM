@@ -23,9 +23,12 @@ public static class TimesheetRules
     /// · <b>3</b> turno a cavallo della mezzanotte tagliato in due (<see cref="NightShift"/>)
     /// e notte riconosciuta anche fra mezzanotte e le 6 del mattino · <b>4</b> fascia b
     /// (segnalazione #145): il lavoro notturno ORDINARIO prende la maggiorazione, 25% dalle
-    /// 20 alle 22 (B1) e 35% dalle 22 alle 6 (B2).</para>
+    /// 20 alle 22 (B1) e 35% dalle 22 alle 6 (B2) · <b>5</b> (09/09/2026) l'uscita finale
+    /// mancante non si stima più alle 17:00: giornata INCOMPLETA da sollecitare, zero ore
+    /// finché non c'è l'uscita vera; oggi con due entrate e una uscita resta «Giornata in
+    /// corso».</para>
     /// </summary>
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int StandardDayMinutes = 480;

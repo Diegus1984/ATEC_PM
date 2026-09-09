@@ -154,7 +154,7 @@ describe("riassuntoControllo e daSistemare", () => {
       dipendente(1, "Mario Rossi", [giornata(VEN), vuota(SAB), vuota(DOM, true)]),
       dipendente(2, "Anna Bianchi", [vuota(VEN), vuota(SAB), vuota(DOM, true)]),
       dipendente(3, "Luca Neri", [
-        giornata(VEN, { note: "AUTO_P: Uscita mancante - Stimata 17:00" }),
+        giornata(VEN, { note: "⚠ INCOMPLETO: Uscita mancante", hasAnomaly: true, clockOut2: "??:??", regularHours: "0h 0m" }),
         vuota(SAB),
         vuota(DOM, true),
       ]),

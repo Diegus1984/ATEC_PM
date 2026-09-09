@@ -141,6 +141,15 @@ public static class HrDayReminder
             sb.AppendLine("  ⚠ Nella stessa giornata risultano due turni distinti.");
             sb.AppendLine("  Verifica che le timbrature siano tutte corrette.");
         }
+        else if (nota.Contains("INCOMPLETO", StringComparison.Ordinal)
+                 && nota.Contains("Uscita mancante", StringComparison.Ordinal))
+        {
+            // Dal 09/09/2026 l'uscita finale non si stima più: la giornata resta incompleta
+            // finché la persona non dice a che ora è uscita.
+            sb.AppendLine("  ⚠ Timbrature incomplete — manca l'uscita di fine giornata.");
+            sb.AppendLine("  Risultano l'entrata, l'uscita per la pausa e il rientro, ma non l'ultima uscita.");
+            sb.AppendLine("  Comunica l'orario di uscita all'ufficio HR per inserire la timbratura mancante.");
+        }
         else if (nota.Contains("INCOMPLETO", StringComparison.Ordinal))
         {
             sb.AppendLine("  ⚠ Timbrature incomplete — manca l'uscita.");
