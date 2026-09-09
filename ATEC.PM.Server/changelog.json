@@ -1,6 +1,17 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-0851",
+                     "data":  "2026-09-09T08:51:29",
+                     "hash":  "0f99bbb929a0395d5ddc92eea3ca7deedb7d34c5",
+                     "modifiche":  [
+                                       "HR: richieste e causali da ATEC PM verso Ecos (#151, M128)",
+                                       "TODO: rimando alla segnalazione #151 (richieste verso Ecos)",
+                                       "Catalogo Ecos: PeopleAbsenceRequestPost abilitata e provata",
+                                       "TODO: richieste e causali verso Ecos, diritto attivo e prova fatta, da implementare il 09/09"
+                                   ]
+                 },
+                 {
                      "build":  "20260908-1651",
                      "data":  "2026-09-08T16:51:34",
                      "hash":  "052ac9a9465867c8c444d38f2f0e7403467d86a0",
