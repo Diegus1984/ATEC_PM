@@ -223,6 +223,8 @@ public class HrEcosSendResultDto
     public int Inserted { get; set; }
     /// <summary>Timbrature della pausa dedotta inserite su Ecos (09/09/2026).</summary>
     public int BreakInserted { get; set; }
+    /// <summary>true = dopo la scrittura la giornata è stata riletta da Ecos con successo.</summary>
+    public bool Resynced { get; set; }
     public int Failed { get; set; }
     /// <summary>Non inviabili: l'arrotondamento cambierebbe giorno.</summary>
     public int Skipped { get; set; }

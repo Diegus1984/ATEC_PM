@@ -446,6 +446,21 @@ public partial class HrAttendanceService
         _logger.LogInformation(
             "[HR] Invio a Ecos: dipendente {Dip}, {Giorno:yyyy-MM-dd}, autore {Autore}: {Msg}",
             employeeId, workDate, autoreId, esito.Message);
+
+        // Scritto qualcosa? La giornata si rilegge subito da Ecos (Diego, 09/09/2026: «una volta
+        // che ho scritto devi risincronizzare le righe interessate»): così la riga mostra quello
+        // che Ecos ha davvero — gli orari modificati tornano come eco. Le timbrature appena
+        // INSERITE Ecos non le restituisce ancora: la rilettura non le tocca
+        // (ProtezioneInviiRecenti). Un fallimento della rilettura non cancella la scrittura
+        // riuscita: si dice e basta.
+        if (esito.Sent + esito.Inserted + esito.BreakInserted > 0)
+        {
+            HrImportResultDto rilettura = await ImportWindowAsync(employeeId, workDate, workDate, ct);
+            esito.Resynced = rilettura.Success;
+            esito.Message += rilettura.Success
+                ? $" Riletta da Ecos: {rilettura.Message}"
+                : $" Rilettura da Ecos non riuscita ({rilettura.Message}): riprovare con «Rileggi da Ecos».";
+        }
         return esito;
     }
 

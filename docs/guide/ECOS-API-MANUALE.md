@@ -624,7 +624,10 @@ anche in `hr_punches` come timbratura di Ecos (StampID) e la giornata si ricalco
 timeout dopo la scrittura la pausa di quella giornata non si riprova più — nemmeno la metà mancante:
 resta nel registro senza `punch_id` con «Esito incerto» e si verifica su Ecos (o la porta l'import).
 Codice: `HrAttendanceService.InvioEcos.cs` (`TimbratureDedotte`, `GetEcosPlan`,
-`InserisciPausaDedottaAsync`), test `AllineaEcosTests.cs`.
+`InserisciPausaDedottaAsync`), test `AllineaEcosTests.cs`. **Dopo ogni scrittura riuscita la giornata
+si rilegge da Ecos** (`ImportWindowAsync` sul giorno della persona) e la rilettura NON cancella le righe
+scritte da noi negli ultimi 3 giorni (`ProtezioneInviiRecenti`): è la difesa contro il §7 «appena
+inserita non compare in GET».
 
 ### 9.4 Utente API dedicato — cosa chiedere a SoftAgile (info@ecosagile.com, 02 89054136)
 

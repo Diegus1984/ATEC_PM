@@ -608,6 +608,15 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   messaggio «Esito incerto…»), e da lì la pausa di quella giornata **non si riprova**, nemmeno la metà
   mancante: una pausa a metà (solo l'uscita) farebbe una giornata «uscita mancante» al prossimo
   import. Il resoconto la mostra DA VERIFICARE; se Ecos l'ha creata, l'import la porta qui da sé.
+- **Dopo la scrittura la giornata si rilegge da Ecos** (Diego: «una volta che ho scritto devi
+  risincronizzare le righe interessate»): `SendDayToEcosAsync` chiama `ImportWindowAsync` sul giorno
+  e persona (`HrEcosSendResultDto.Resynced`, messaggio «Riletta da Ecos: …»); gli orari modificati
+  tornano come eco. 🪤 Le timbrature appena INSERITE Ecos non le restituisce ancora (manuale §7):
+  senza protezione la rilettura le avrebbe scambiate per cancellate, tolte qui e riproposte da
+  scrivere → doppioni su Ecos. Quindi `RimuoviSpariteNellaFinestra` e `RimuoviCancellateSuEcos`
+  non toccano le righe con `ecos_sent_at` negli ultimi 3 giorni (`ProtezioneInviiRecenti`); dopo,
+  se Ecos ancora non le ha, vince Ecos e si tolgono. Le cancellazioni vere arrivano comunque col
+  flag `Delete` dell'import incrementale. Test in `InvioEcosTests` e `AllineaEcosTests`.
 - Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
   si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche e pausa.
 - Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,

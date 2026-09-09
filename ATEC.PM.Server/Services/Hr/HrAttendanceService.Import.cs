@@ -725,9 +725,21 @@ public partial class HrAttendanceService
     }
 
     /// <summary>
+    /// Le righe che abbiamo scritto noi su Ecos di recente (<c>ecos_sent_at</c>: rettifiche
+    /// inserite, pausa dedotta, orari modificati) non si cancellano se lo scarico non le
+    /// restituisce: 🪤 una timbratura appena INSERITA su Ecos non compare in
+    /// <c>PeopleStampGetAll</c> finché non passa il controllo notturno (manuale §7), e la
+    /// rilettura che segue ogni «Scrivi su Ecos» (09/09/2026) la scambierebbe per cancellata,
+    /// togliendola qui e riproponendola da scrivere — con un doppione su Ecos al secondo clic.
+    /// Una cancellazione vera arriva comunque col flag <c>Delete</c> dell'import incrementale.
+    /// </summary>
+    internal static readonly TimeSpan ProtezioneInviiRecenti = TimeSpan.FromDays(3);
+
+    /// <summary>
     /// Dentro la finestra chiesta si ha la fotografia completa di Ecos: quello che là non
     /// c'è più si toglie anche qui. Tocca <b>solo</b> le righe <c>ECOS</c>: le rettifiche
-    /// (<c>source='ADJUSTMENT'</c>) sono nostre e non si cancellano mai da qui.
+    /// (<c>source='ADJUSTMENT'</c>) sono nostre e non si cancellano mai da qui, e nemmeno
+    /// ciò che abbiamo scritto su Ecos negli ultimi giorni (<see cref="ProtezioneInviiRecenti"/>).
     ///
     /// <para>🪤 «Completa» solo <b>dall'orizzonte in su</b>: Ecos rimanda gli ultimi 60
     /// giorni, e un giorno più vecchio torna vuoto anche se là le timbrature ci sono ancora.
@@ -754,8 +766,13 @@ public partial class HrAttendanceService
                      punched_at AS PunchedAt, direction AS Direction, location AS Location
               FROM hr_punches
               WHERE source = 'ECOS' AND work_date BETWEEN @Dal AND @Al
-                AND punched_at >= @DaQuando" + filtroDipendente,
-            new { finestra.Dal, finestra.Al, finestra.EmployeeId, DaQuando = daQuando + MargineOrizzonte }, tran).ToList();
+                AND punched_at >= @DaQuando
+                AND (ecos_sent_at IS NULL OR ecos_sent_at < @Protette)" + filtroDipendente,
+            new
+            {
+                finestra.Dal, finestra.Al, finestra.EmployeeId, DaQuando = daQuando + MargineOrizzonte,
+                Protette = DateTime.Now - ProtezioneInviiRecenti,
+            }, tran).ToList();
 
         List<RigaEsistente> sparite = nostre
             .Where(r => r.ExternalId != null && !visti.Contains(r.ExternalId))
@@ -801,8 +818,13 @@ public partial class HrAttendanceService
                      punched_at AS PunchedAt, direction AS Direction, location AS Location
               FROM hr_punches
               WHERE source = 'ECOS' AND employee_id IN @Dipendenti
-                AND punched_at >= @DaQuando",
-            new { Dipendenti = dipendenti, DaQuando = daQuando + MargineOrizzonte }, tran).ToList();
+                AND punched_at >= @DaQuando
+                AND (ecos_sent_at IS NULL OR ecos_sent_at < @Protette)",
+            new
+            {
+                Dipendenti = dipendenti, DaQuando = daQuando + MargineOrizzonte,
+                Protette = DateTime.Now - ProtezioneInviiRecenti,
+            }, tran).ToList();
 
         List<RigaEsistente> sparite = nostre
             .Where(r => r.ExternalId != null && !visti.Contains(r.ExternalId))

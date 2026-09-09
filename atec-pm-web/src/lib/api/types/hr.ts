@@ -55,6 +55,8 @@ export interface HrEcosSendResult {
   inserted: number
   /** Timbrature della pausa dedotta inserite su Ecos. */
   breakInserted: number
+  /** true = dopo la scrittura la giornata e stata riletta da Ecos con successo. */
+  resynced: boolean
   failed: number
   skipped: number
   errors: string[]

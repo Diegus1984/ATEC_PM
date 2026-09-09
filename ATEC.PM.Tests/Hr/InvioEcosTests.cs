@@ -101,16 +101,26 @@ public class InvioEcosTests
         long entrata = Grezza(c, mario, "s1", Giorno.AddHours(7).AddMinutes(58), "IN");
         long uscita = Grezza(c, mario, "s2", Giorno.AddHours(17).AddMinutes(12), "OUT");
 
-        var ecos = new EcosFinto(RispostaToken(), RispostaUpdate(), RispostaUpdate());
+        // Dopo le scritture la giornata si rilegge da Ecos (09/09/2026): Ecos rimanda gli
+        // orari arrotondati che gli abbiamo appena scritto, e l'import li riconosce come eco.
+        var ecos = new EcosFinto(
+            RispostaToken(), RispostaUpdate(), RispostaUpdate(),
+            RispostaToken(), RispostaTimbrature(
+                Riga("s1", "2026-02-05 08:00:00", "42", "IN"), Riga("s2", "2026-02-05 17:00:00", "42", "OUT")));
         HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, autore);
 
         Assert.True(esito.Success, esito.Message);
         Assert.Equal(2, esito.Sent);
         Assert.Equal(0, esito.Failed);
+        Assert.True(esito.Resynced);
+        Assert.Contains("Riletta da Ecos", esito.Message);
 
-        // Le chiamate: token, poi una modifica per timbratura, con Edit=true e la chiave nel corpo.
-        Assert.Equal(3, ecos.UrlChiamati.Count);
-        Assert.All(ecos.UrlChiamati.Skip(1), u => Assert.Contains("ApiName=PeopleStampPost&Edit=true", u));
+        // Le chiamate: token, una modifica per timbratura (Edit=true e la chiave nel corpo), poi
+        // la rilettura: token nuovo e le timbrature del mese.
+        Assert.Equal(5, ecos.UrlChiamati.Count);
+        Assert.All(ecos.UrlChiamati.Skip(1).Take(2), u => Assert.Contains("ApiName=PeopleStampPost&Edit=true", u));
+        Assert.Contains("TokenGet", ecos.UrlChiamati[3]);
+        Assert.Contains("PeopleStampGetAll", ecos.UrlChiamati[4]);
         Assert.Contains("StampID=s1", ecos.CorpiInviati[1]);
         Assert.Contains("StampDateTime=2026-02-05+08%3A00%3A00", ecos.CorpiInviati[1]);
         Assert.Contains("UserTZ=-60", ecos.CorpiInviati[1]);
@@ -132,10 +142,15 @@ public class InvioEcosTests
         Assert.Equal((entrata, Giorno.AddHours(7).AddMinutes(58), Giorno.AddHours(8), "OK", autore), registro[0]);
         Assert.Equal((uscita, Giorno.AddHours(17).AddMinutes(12), Giorno.AddHours(17), "OK", autore), registro[1]);
 
-        // La seconda volta non c'è niente da mandare: nessuna chiamata oltre... nessuna.
+        // La seconda volta non c'è niente da mandare — con la pausa TIMBRATA (le strisciate
+        // delle 12:30 e 13:30 già su Ecos): dal 09/09/2026, con due sole timbrature, partirebbe
+        // la pausa dedotta. Nessuna chiamata oltre... nessuna.
+        Grezza(c, mario, "s3", Giorno.AddHours(12).AddMinutes(30), "OUT");
+        Grezza(c, mario, "s4", Giorno.AddHours(13).AddMinutes(30), "IN");
+        Servizio(new EcosFinto()).RecalculateDay(c, mario, Giorno);
         var ecosDopo = new EcosFinto(RispostaToken());
         HrEcosSendResultDto secondo = await Servizio(ecosDopo).SendDayToEcosAsync(mario, Giorno, autore);
-        Assert.True(secondo.Success);
+        Assert.True(secondo.Success, secondo.Message);
         Assert.Equal(0, secondo.Sent);
         Assert.Empty(ecosDopo.UrlChiamati);
         Assert.Contains("già", secondo.Message);
@@ -234,15 +249,20 @@ public class InvioEcosTests
         long entrata = Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
         long rettifica = Rettifica(c, mario, Giorno.AddHours(17).AddMinutes(12), "OUT", "uscita dimenticata", autore);
 
-        var ecos = new EcosFinto(RispostaToken(), RispostaBadge("246b3548"), RispostaInsert("s9", "5374", "42"));
+        // 🪤 Nella rilettura che segue, Ecos NON restituisce ancora la timbratura appena inserita
+        // (manuale §7): la riga convertita deve restare, non essere scambiata per cancellata.
+        var ecos = new EcosFinto(
+            RispostaToken(), RispostaBadge("246b3548"), RispostaInsert("s9", "5374", "42"),
+            RispostaToken(), RispostaTimbrature(Riga("s1", "2026-02-05 08:00:00", "42", "IN")));
         HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, autore);
 
         Assert.True(esito.Success, esito.Message);
         Assert.Equal(0, esito.Sent);
         Assert.Equal(1, esito.Inserted);
+        Assert.True(esito.Resynced);
 
-        // Token, badge, inserimento: senza Edit, con ReturnAllPostedRecord, persona dal badge.
-        Assert.Equal(3, ecos.UrlChiamati.Count);
+        // Token, badge, inserimento (senza Edit, con ReturnAllPostedRecord, persona dal badge), poi la rilettura.
+        Assert.Equal(5, ecos.UrlChiamati.Count);
         Assert.Contains("ApiName=PeopleBadgeGetAll", ecos.UrlChiamati[1]);
         Assert.Contains("ApiName=PeopleStampPost&ReturnAllPostedRecord=1", ecos.UrlChiamati[2]);
         Assert.DoesNotContain("Edit=true", ecos.UrlChiamati[2]);
@@ -401,6 +421,31 @@ public class InvioEcosTests
             "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "MESSAGE": "" },
             "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": { "AuthToken": "tok-1" } } } }
         """;
+
+    /// <summary>Le timbrature del mese come le manda Ecos (la rilettura dopo la scrittura le chiede).</summary>
+    internal static string RispostaTimbrature(params string[] righe) =>
+        righe.Length == 0
+            ? """
+              { "ECOSAGILE_TABLE_DATA": {
+                  "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+                  "ECOSAGILE_DATA": "" } }
+              """
+            : $$"""
+              { "ECOSAGILE_TABLE_DATA": {
+                  "ECOSAGILE_ERROR_MESSAGE": { "CODE": "OK", "LASTPAGE": "TRUE" },
+                  "ECOSAGILE_DATA": { "ECOSAGILE_DATA_ROW": [ {{string.Join(",", righe)}} ] } } }
+              """;
+
+    /// <summary>Una riga come la manda Ecos; UpdateDate un minuto dopo, come nella realtà.</summary>
+    internal static string Riga(string id, string quando, string emplCode, string verso)
+    {
+        string aggiornata = DateTime.ParseExact(quando, "yyyy-MM-dd HH:mm:ss", null)
+            .AddMinutes(1).ToString("yyyy-MM-dd HH:mm:ss");
+        return $$"""
+        { "StampID": "{{id}}", "StampDateTime": "{{quando}}", "EmplCode": "{{emplCode}}",
+          "NameComplete": "Rossi, Mario", "VersusCode": "{{verso}}", "UpdateDate": "{{aggiornata}}", "Delete": "False" }
+        """;
+    }
 
     /// <summary>Come risponde Ecos a una modifica riuscita (visto l'08/09/2026).</summary>
     internal static string RispostaUpdate() => """

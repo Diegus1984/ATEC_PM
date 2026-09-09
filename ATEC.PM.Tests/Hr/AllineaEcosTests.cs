@@ -163,9 +163,14 @@ public class AllineaEcosTests
         long entrata = Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
         long uscita = Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
 
+        // Dopo la scrittura la giornata si rilegge da Ecos, che le due strisciate appena
+        // inserite NON le restituisce ancora (manuale §7): devono restare lo stesso.
         var ecos = new InvioEcosTests.EcosFinto(
             InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaBadge("246b3548"),
-            InvioEcosTests.RispostaInsert("s9", "5374", "42"), InvioEcosTests.RispostaInsert("s10", "5374", "42"));
+            InvioEcosTests.RispostaInsert("s9", "5374", "42"), InvioEcosTests.RispostaInsert("s10", "5374", "42"),
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 08:00:00", "42", "IN"),
+                InvioEcosTests.Riga("s2", "2026-02-05 17:00:00", "42", "OUT")));
         HrAttendanceService servizio = Servizio(ecos);
         servizio.RecalculateDay(c, mario, Giorno);
 
@@ -176,9 +181,12 @@ public class AllineaEcosTests
         Assert.Equal(0, esito.Inserted);
         Assert.Equal(2, esito.BreakInserted);
         Assert.Contains("2 timbrature di pausa inserite", esito.Message);
+        Assert.True(esito.Resynced);
+        Assert.Contains("Riletta da Ecos", esito.Message);
 
-        // Token, badge, due inserimenti col badge: uscita alle 12:30 e rientro alle 13:30.
-        Assert.Equal(4, ecos.UrlChiamati.Count);
+        // Token, badge, due inserimenti col badge (uscita 12:30, rientro 13:30), poi la rilettura.
+        Assert.Equal(6, ecos.UrlChiamati.Count);
+        Assert.Contains("PeopleStampGetAll", ecos.UrlChiamati[5]);
         Assert.Contains("ApiName=PeopleBadgeGetAll", ecos.UrlChiamati[1]);
         Assert.Contains("ApiName=PeopleStampPost&ReturnAllPostedRecord=1", ecos.UrlChiamati[2]);
         Assert.Contains("BadgeCode=246b3548", ecos.CorpiInviati[2]);
@@ -224,6 +232,45 @@ public class AllineaEcosTests
         Assert.Equal(0, dopo.ToWrite);
         Assert.False(dopo.CanSend);
         Assert.False(servizio.GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno).EcosBreakToInsert);
+    }
+
+    [FactRichiedeMySql]
+    public async Task La_protezione_delle_timbrature_appena_scritte_dura_qualche_giorno_poi_vince_Ecos()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
+        HrAttendanceService servizio = Servizio(new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaBadge("246b3548"),
+            InvioEcosTests.RispostaInsert("s9", "5374", "42"), InvioEcosTests.RispostaInsert("s10", "5374", "42"),
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 08:00:00", "42", "IN"),
+                InvioEcosTests.Riga("s2", "2026-02-05 17:00:00", "42", "OUT"))));
+        servizio.RecalculateDay(c, mario, Giorno);
+        HrEcosSendResultDto esito = await servizio.SendDayToEcosAsync(mario, Giorno, autore);
+        Assert.Equal(2, esito.BreakInserted);
+        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+
+        // Una seconda rilettura a mano, sempre senza le due strisciate: restano (sono nostre, di oggi).
+        string[] soloLeVecchie =
+        {
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 08:00:00", "42", "IN"),
+                InvioEcosTests.Riga("s2", "2026-02-05 17:00:00", "42", "OUT")),
+        };
+        await Servizio(new InvioEcosTests.EcosFinto(soloLeVecchie)).ImportWindowAsync(mario, Giorno, Giorno);
+        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+
+        // Passati i giorni di protezione, se Ecos ancora non le ha, vince Ecos: si tolgono e
+        // la giornata torna con la pausa dedotta (e da scrivere).
+        c.Execute("UPDATE hr_punches SET ecos_sent_at = DATE_SUB(NOW(), INTERVAL 4 DAY) WHERE employee_id = @Id AND external_id IN ('s9', 's10')",
+            new { Id = mario });
+        await Servizio(new InvioEcosTests.EcosFinto(soloLeVecchie)).ImportWindowAsync(mario, Giorno, Giorno);
+        Assert.Equal(2, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+        Assert.Equal("AUTO_P: Pausa 1h detratta", c.ExecuteScalar<string>(
+            "SELECT note FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno", new { Id = mario, Giorno }));
     }
 
     [FactRichiedeMySql]
