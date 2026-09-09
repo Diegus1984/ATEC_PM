@@ -617,6 +617,14 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   non toccano le righe con `ecos_sent_at` negli ultimi 3 giorni (`ProtezioneInviiRecenti`); dopo,
   se Ecos ancora non le ha, vince Ecos e si tolgono. Le cancellazioni vere arrivano comunque col
   flag `Delete` dell'import incrementale. Test in `InvioEcosTests` e `AllineaEcosTests`.
+- **Specchio di Ecos (09/09 sera, M130).** Diego: «Ecos è la bibbia: se qualcuno ha modificato le ore,
+  Ecos viene aggiornato e qui devono essere lo specchio dell'allineamento, chissene frega di come sono
+  arrivate». Dopo una scrittura riuscita `hr_punches.punched_at` prende l'orario scritto (modifiche e
+  rettifiche inserite), la giornata si ricalcola (grezzo compreso) e poi si rilegge da Ecos; l'orario
+  originale resta SOLO nel registro `hr_ecos_sends`. Nella griglia la riga piccola «timbrato hh:mm» è
+  l'orario che Ecos ha adesso (ambra se diverso dall'ora calcolata), nel dettaglio la lista si chiama
+  «Timbrature su Ecos». La regola dell'08/09 «`punched_at` non cambia mai» è superata; M130 allinea le
+  righe scritte prima del cambio e segna le loro giornate da ricalcolare (`rules_version = 0`).
 - Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
   si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche e pausa.
 - Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,

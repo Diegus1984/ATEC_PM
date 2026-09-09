@@ -127,14 +127,18 @@ public class InvioEcosTests
         Assert.Contains("StampID=s2", ecos.CorpiInviati[2]);
         Assert.Contains("StampDateTime=2026-02-05+17%3A00%3A00", ecos.CorpiInviati[2]);
 
-        // L'ora timbrata non si tocca; accanto c'è quella che Ecos ha adesso.
+        // Specchio di Ecos (Diego, 09/09/2026 sera): la timbratura qui ha l'orario scritto su
+        // Ecos, e la giornata ricalcolata lo mostra anche come grezzo.
         var riga = c.QuerySingle<(DateTime PunchedAt, DateTime? SuEcos, DateTime? Quando)>(
             "SELECT punched_at, ecos_punched_at, ecos_sent_at FROM hr_punches WHERE id = @Id", new { Id = entrata });
-        Assert.Equal(Giorno.AddHours(7).AddMinutes(58), riga.PunchedAt);
+        Assert.Equal(Giorno.AddHours(8), riga.PunchedAt);
         Assert.Equal(Giorno.AddHours(8), riga.SuEcos);
         Assert.NotNull(riga.Quando);
+        HrDayDto giornata = Servizio(new EcosFinto()).GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno);
+        Assert.Equal("08:00", giornata.Raw.ClockIn1);
+        Assert.Equal("17:00", giornata.Raw.ClockOut1);
 
-        // Il registro: ora originale, ora inviata, esito e autore.
+        // Il registro tiene la storia: ora originale, ora inviata, esito e autore.
         var registro = c.Query<(long PunchId, DateTime PunchedAt, DateTime SentTime, string Outcome, int SentBy)>(
             "SELECT punch_id, punched_at, sent_time, outcome, sent_by FROM hr_ecos_sends WHERE employee_id = @Id ORDER BY id",
             new { Id = mario }).ToList();
@@ -207,7 +211,7 @@ public class InvioEcosTests
     }
 
     [FactRichiedeMySql]
-    public async Task L_import_riconosce_l_eco_del_nostro_invio_e_l_ora_timbrata_resta()
+    public async Task L_import_riconosce_l_eco_del_nostro_invio_e_la_timbratura_resta_lo_specchio_di_Ecos()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = Dipendente(c, "42");
@@ -223,7 +227,7 @@ public class InvioEcosTests
             Timbratura("s2", Giorno.AddHours(17), "OUT"),
         });
         Assert.Equal(0, eco.PunchesUpdated);
-        Assert.Equal(Giorno.AddHours(7).AddMinutes(58),
+        Assert.Equal(Giorno.AddHours(8),
             c.ExecuteScalar<DateTime>("SELECT punched_at FROM hr_punches WHERE id = @Id", new { Id = entrata }));
         Assert.Equal(Giorno.AddHours(8),
             c.ExecuteScalar<DateTime?>("SELECT ecos_punched_at FROM hr_punches WHERE id = @Id", new { Id = entrata }));
@@ -271,10 +275,11 @@ public class InvioEcosTests
         Assert.Contains("StampDateTime=2026-02-05+17%3A00%3A00", ecos.CorpiInviati[2]);
         Assert.Contains("Note=ATEC+PM%3A+uscita+dimenticata", ecos.CorpiInviati[2]);
 
-        // La riga è diventata una timbratura di Ecos: motivo e ora originale restano.
+        // La riga è diventata una timbratura di Ecos con l'orario che Ecos ha; il motivo resta,
+        // l'orario battuto a mano (17:12) sta nel registro.
         var riga = c.QuerySingle<(string Source, string? ExternalId, DateTime PunchedAt, DateTime? SuEcos, string? Reason)>(
             "SELECT source, external_id, punched_at, ecos_punched_at, reason FROM hr_punches WHERE id = @Id", new { Id = rettifica });
-        Assert.Equal(("ECOS", "s9", Giorno.AddHours(17).AddMinutes(12), Giorno.AddHours(17), "uscita dimenticata"), riga);
+        Assert.Equal(("ECOS", "s9", Giorno.AddHours(17), Giorno.AddHours(17), "uscita dimenticata"), riga);
         Assert.Equal(2, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
 
         // Registro: inserimento = senza orario precedente.

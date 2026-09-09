@@ -110,7 +110,7 @@ function spiegazione(g: HrDay, nome: string, canWrite: boolean): string | null {
 
 /**
  * Dettaglio di una giornata: i quattro orari in grande con sotto l'ora timbrata, una frase
- * che dice cosa fare, le timbrature grezze come sono arrivate (Ecos + rettifiche) e, per chi
+ * che dice cosa fare, le timbrature come stanno su Ecos (Ecos + rettifiche) e, per chi
  * ha la scrittura, la rettifica. La timbratura originale resta SEMPRE — la rettifica è una
  * riga in più con autore e motivo, e solo le rettifiche si possono togliere.
  */
@@ -272,7 +272,7 @@ export function GiornataDialog({
         )}
 
         <div className="space-y-1">
-          <p className="text-sm font-medium">Timbrature come sono arrivate</p>
+          <p className="text-sm font-medium">Timbrature su Ecos</p>
           {giornata.punches.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nessuna timbratura.</p>
           ) : (

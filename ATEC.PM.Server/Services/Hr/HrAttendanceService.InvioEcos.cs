@@ -14,9 +14,12 @@ namespace ATEC.PM.Server.Services.Hr;
 //    mostra subito. Quindi: esito incerto = si marca e non si ritenta alla cieca.
 //
 // Le tre regole che reggono tutto:
-//  1. L'ora timbrata non sparisce mai: hr_punches.punched_at resta quella; quello che Ecos ha
-//     per colpa nostra sta in ecos_punched_at, e ogni invio finisce in hr_ecos_sends con ora
-//     originale, ora inviata, esito e autore. Ecos non tiene la storia: la teniamo noi.
+//  1. Ecos è la bibbia (Diego, 09/09/2026 sera): dopo una scrittura riuscita hr_punches è lo
+//     SPECCHIO di Ecos — punched_at prende l'orario scritto, e la giornata si ricalcola. L'ora
+//     timbrata in origine non sparisce ma sta nel registro hr_ecos_sends (ora originale, ora
+//     inviata, esito e autore): Ecos non tiene la storia, la teniamo noi lì, non nella griglia.
+//     (Fino al 09/09 pomeriggio punched_at restava quello timbrato e il dettaglio mostrava
+//     07:48 anche a Ecos allineato: «chissene frega di come sono arrivate».)
 //  2. Si manda solo ciò che differisce: una timbratura già allineata non parte.
 //  3. L'import riconosce l'eco: quando Ecos rimanda l'orario che gli abbiamo scritto noi,
 //     non è una modifica (ImportPunches). Se invece su Ecos l'orario è cambiato per mano
@@ -397,8 +400,9 @@ public partial class HrAttendanceService
             {
                 messaggio = await _ecos.UpdateStampTimeAsync(token, t.StampId, t.Arrotondata, ct);
                 outcome = "OK";
+                // Specchio di Ecos: anche punched_at prende l'orario scritto (l'originale è nel registro).
                 c.Execute(
-                    "UPDATE hr_punches SET ecos_punched_at = @Ora, ecos_sent_at = NOW() WHERE id = @Id",
+                    "UPDATE hr_punches SET punched_at = @Ora, ecos_punched_at = @Ora, ecos_sent_at = NOW() WHERE id = @Id",
                     new { Ora = t.Arrotondata, Id = t.PunchId });
                 esito.Sent++;
             }
@@ -447,14 +451,15 @@ public partial class HrAttendanceService
             "[HR] Invio a Ecos: dipendente {Dip}, {Giorno:yyyy-MM-dd}, autore {Autore}: {Msg}",
             employeeId, workDate, autoreId, esito.Message);
 
-        // Scritto qualcosa? La giornata si rilegge subito da Ecos (Diego, 09/09/2026: «una volta
-        // che ho scritto devi risincronizzare le righe interessate»): così la riga mostra quello
-        // che Ecos ha davvero — gli orari modificati tornano come eco. Le timbrature appena
-        // INSERITE Ecos non le restituisce ancora: la rilettura non le tocca
-        // (ProtezioneInviiRecenti). Un fallimento della rilettura non cancella la scrittura
-        // riuscita: si dice e basta.
+        // Scritto qualcosa? Le timbrature qui sono già lo specchio di Ecos: si ricalcola la
+        // giornata (vicine comprese, per le notti) e poi la si rilegge da Ecos (Diego,
+        // 09/09/2026: «una volta che ho scritto devi risincronizzare le righe interessate») —
+        // gli orari modificati tornano come eco. Le timbrature appena INSERITE Ecos non le
+        // restituisce ancora: la rilettura non le tocca (ProtezioneInviiRecenti). Un fallimento
+        // della rilettura non cancella la scrittura riuscita: si dice e basta.
         if (esito.Sent + esito.Inserted + esito.BreakInserted > 0)
         {
+            RicalcolaConVicine(c, employeeId, workDate);
             HrImportResultDto rilettura = await ImportWindowAsync(employeeId, workDate, workDate, ct);
             esito.Resynced = rilettura.Success;
             esito.Message += rilettura.Success
@@ -520,7 +525,6 @@ public partial class HrAttendanceService
         (int EmplId, string? EmplCode, string Badge)? chi = await PersonaEBadgeAsync(c, token, employeeId, esito, ct);
         if (chi is not { } persona) return;
 
-        bool inserita = false;
         foreach (TimbraturaDedotta d in pausa)
         {
             string outcome = "ERROR";
@@ -559,7 +563,6 @@ public partial class HrAttendanceService
                     outcome = "OK";
                     messaggio = "Correct Record Insert (pausa dedotta)";
                     esito.BreakInserted++;
-                    inserita = true;
                 }
             }
             catch (EcosApiException ex) when (ex.EsitoIncerto)
@@ -588,9 +591,6 @@ public partial class HrAttendanceService
             if (outcome == "ERROR") break;
         }
 
-        // Con la pausa timbrata la giornata cambia (da dedotta a vera): si ricalcola subito,
-        // vicine comprese, senza aspettare l'import.
-        if (inserita) RicalcolaConVicine(c, employeeId, workDate);
     }
 
     private async Task InserisciRettificheAsync(
@@ -626,9 +626,11 @@ public partial class HrAttendanceService
                 }
                 else
                 {
+                    // Specchio di Ecos: la rettifica diventa la timbratura di Ecos con l'orario
+                    // che Ecos ha (quello arrotondato); l'orario battuto a mano resta nel registro.
                     c.Execute(@"
                         UPDATE hr_punches
-                        SET source = 'ECOS', external_id = @Stamp, ecos_punched_at = @Ora, ecos_sent_at = NOW()
+                        SET source = 'ECOS', external_id = @Stamp, punched_at = @Ora, ecos_punched_at = @Ora, ecos_sent_at = NOW()
                         WHERE id = @Id",
                         new { Stamp = ins.StampId, Ora = r.Arrotondata, Id = r.PunchId });
                     outcome = "OK";

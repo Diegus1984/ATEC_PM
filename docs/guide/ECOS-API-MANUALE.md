@@ -630,7 +630,11 @@ anche in `hr_punches` come timbratura di Ecos (StampID) e la giornata si ricalco
 timeout dopo la scrittura la pausa di quella giornata non si riprova più — nemmeno la metà mancante:
 resta nel registro senza `punch_id` con «Esito incerto» e si verifica su Ecos (o la porta l'import).
 Codice: `HrAttendanceService.InvioEcos.cs` (`TimbratureDedotte`, `GetEcosPlan`,
-`InserisciPausaDedottaAsync`), test `AllineaEcosTests.cs`. **Dopo ogni scrittura riuscita la giornata
+`InserisciPausaDedottaAsync`), test `AllineaEcosTests.cs`. **Dal 09/09 sera le timbrature qui sono lo
+SPECCHIO di Ecos** (Diego: «Ecos è la bibbia, chissene frega di come sono arrivate»): dopo una scrittura
+riuscita `punched_at` prende l'orario scritto (M130 allinea quelle scritte prima) e la giornata si
+ricalcola; l'orario originale vive solo nel registro `hr_ecos_sends`. La regola 1 qui sopra
+(«`punched_at` resta quella») è superata. **Dopo ogni scrittura riuscita la giornata
 si rilegge da Ecos** (`ImportWindowAsync` sul giorno della persona) e la rilettura NON cancella le righe
 scritte da noi negli ultimi 3 giorni (`ProtezioneInviiRecenti`): è la difesa contro il §7 «appena
 inserita non compare in GET».
