@@ -343,8 +343,12 @@ corrotto/troppo grande/formato non ammesso, `-15` manca il campo `*FS`. Esempio 
 ### 4.5 Cancellare
 
 Non esiste una `…Delete`. La cancellazione è un **update** con la chiave, `Delete=1` e
-`UpdateDate=<adesso>` (Source Samples §5: «add always UpdateDate to the deletes»). ❓ da
-provare sul nostro tenant prima di usarla.
+`UpdateDate=<adesso>` (Source Samples §5: «add always UpdateDate to the deletes»). Da noi la fa
+`EcosClient.DeleteStampAsync` (`PeopleStampPost&Edit=true` con `StampID` e `Delete=1`, senza
+`UpdateDate`): usata l'08/09 per togliere subito un inserimento attaccato alla persona sbagliata,
+e dal 09/09 sera (segnalazione #152) dal cestino del dettaglio giornata, per cancellare una
+timbratura di Ecos prima là e poi da noi. Il record resta su Ecos con `Delete=True` e l'import lo
+tratta come cancellato (§7.8).
 
 ### 4.6 I nostri diritti di scrittura oggi
 

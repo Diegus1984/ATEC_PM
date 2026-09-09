@@ -129,7 +129,12 @@ export async function sendHrDayToEcos(payload: {
   return unwrapApi(r)
 }
 
-export async function deleteHrAdjustment(id: number): Promise<void> {
+/**
+ * Cancella una timbratura: una rettifica nostra, o una di Ecos, che il server cancella PRIMA
+ * su Ecos (cancellazione logica) e poi qui (segnalazione #152, 09/09/2026). Se Ecos rifiuta,
+ * arriva l'errore e qui non cambia niente.
+ */
+export async function deleteHrPunch(id: number): Promise<void> {
   const r = await apiDelete<ApiResponse<boolean>>(`/api/hr/adjustment/${id}`)
   unwrapApi(r)
 }

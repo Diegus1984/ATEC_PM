@@ -45,26 +45,63 @@ public partial class HrAttendanceService
         return null;
     }
 
-    public string? DeleteAdjustment(long id, int autoreId)
+    /// <summary>
+    /// Cancella una timbratura dal dettaglio della giornata (segnalazione #152, Diego 09/09/2026:
+    /// «devo poter cancellare le timbrature»). Una rettifica nostra sparisce e basta. Una
+    /// timbratura di Ecos si cancella PRIMA su Ecos (cancellazione logica, <c>Delete=1</c>,
+    /// manuale §4.5: Ecos è la bibbia, e altrimenti il prossimo import la riporterebbe qui) e
+    /// poi qui, con la riga nel registro degli invii e il ricalcolo della giornata. Se Ecos
+    /// rifiuta o non risponde, qui non si tocca niente. Restituisce il motivo del rifiuto, o null.
+    /// </summary>
+    public async Task<string?> DeletePunchAsync(long id, int autoreId, CancellationToken ct = default)
     {
         using MySqlConnection c = _db.Open();
         var riga = c.QueryFirstOrDefault<RowToDelete>(
             @"SELECT employee_id AS EmployeeId, work_date AS WorkDate, source AS Source,
-                     punched_at AS PunchedAt, direction AS Direction, reason AS Reason
+                     punched_at AS PunchedAt, direction AS Direction, reason AS Reason,
+                     external_id AS ExternalId
               FROM hr_punches WHERE id = @Id",
             new { Id = id });
 
         if (riga == null) return "Timbratura non trovata.";
-        if (!string.Equals(riga.Source, "ADJUSTMENT", StringComparison.OrdinalIgnoreCase))
-            return "Si possono eliminare solo le rettifiche: il grezzo del rilevatore resta.";
         if (riga.EmployeeId == autoreId)
-            return "Non puoi eliminare una rettifica sul tuo cartellino.";
+            return "Non puoi cancellare timbrature sul tuo cartellino.";
+
+        bool rettifica = string.Equals(riga.Source, "ADJUSTMENT", StringComparison.OrdinalIgnoreCase);
+        bool diEcos = string.Equals(riga.Source, "ECOS", StringComparison.OrdinalIgnoreCase)
+                      && !string.IsNullOrWhiteSpace(riga.ExternalId);
+        if (!rettifica && !diEcos)
+            return "Questa timbratura non ha un identificativo su Ecos: non si può cancellare da qui.";
+
+        if (diEcos)
+        {
+            string stampId = riga.ExternalId!.Trim();
+            try
+            {
+                string token = await _ecos.TokenAsync(ct);
+                await _ecos.DeleteStampAsync(token, stampId, ct);
+            }
+            catch (EcosApiException ex)
+            {
+                RegistraInvio(c, riga.EmployeeId, riga.WorkDate, id, stampId, riga.Direction, riga.PunchedAt,
+                    riga.PunchedAt, riga.PunchedAt, "ERROR",
+                    (ex.EsitoIncerto ? "Delete (esito incerto): " : "Delete rifiutata: ") + ex.Message, autoreId);
+                _logger.LogWarning("[HR] Cancellazione su Ecos fallita: dipendente {Dip}, StampID {Stamp}: {Msg}",
+                    riga.EmployeeId, stampId, ex.Message);
+                return ex.EsitoIncerto
+                    ? $"Ecos non ha risposto: la cancellazione può essere passata o no. Verificare su Ecos e rileggere la giornata ({ex.Message})."
+                    : $"Ecos ha rifiutato la cancellazione: {ex.Message}";
+            }
+            // La timbratura sparisce da hr_punches, la riga del registro resta (punch_id senza vincolo).
+            RegistraInvio(c, riga.EmployeeId, riga.WorkDate, id, stampId, riga.Direction, riga.PunchedAt,
+                riga.PunchedAt, riga.PunchedAt, "OK", "Delete (cancellazione logica su Ecos)", autoreId);
+        }
 
         c.Execute("DELETE FROM hr_punches WHERE id = @Id", new { Id = id });
         _logger.LogInformation(
-            "[HR] Rettifica eliminata da dipendente {Autore}: era {Verso} del {Orario:yyyy-MM-dd HH:mm} " +
-            "sul cartellino di {Dipendente}, motivo «{Reason}».",
-            autoreId, riga.Direction, riga.PunchedAt, riga.EmployeeId, riga.Reason);
+            "[HR] Timbratura cancellata da dipendente {Autore}: era {Verso} del {Orario:yyyy-MM-dd HH:mm} " +
+            "sul cartellino di {Dipendente} ({Sorgente} {Stamp}), motivo «{Reason}».",
+            autoreId, riga.Direction, riga.PunchedAt, riga.EmployeeId, riga.Source, riga.ExternalId ?? "-", riga.Reason);
 
         RicalcolaConVicine(c, riga.EmployeeId, riga.WorkDate);
         return null;
@@ -316,6 +353,7 @@ public partial class HrAttendanceService
         public DateTime PunchedAt { get; set; }
         public string Direction { get; set; } = "";
         public string? Reason { get; set; }
+        public string? ExternalId { get; set; }
     }
 
     private sealed class PunchRow

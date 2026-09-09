@@ -670,6 +670,15 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   la password salvata a `GET /api/settings/email/password`, che la dà a chi ha la funzione «Digest
   Email» e scrive nel log chi l'ha vista) e «Cambia password» con doppia conferma
   (`CambiaPasswordSmtpDialog`, regola `password-smtp.ts` col test).
+- **Cancellare le timbrature, anche quelle di Ecos (09/09 sera, segnalazione #152).** Diego: «devo poter
+  cancellare le timbrature» (Buda 03/09: uscita 12:30 doppia). Nel dettaglio della giornata il cestino c'è
+  su ogni rettifica e su ogni timbratura di Ecos con StampID; `DELETE /api/hr/adjustment/{id}` →
+  `HrAttendanceService.DeletePunchAsync`: la rettifica sparisce e basta; la timbratura di Ecos si cancella
+  PRIMA su Ecos (`EcosClient.DeleteStampAsync`, `Edit=true` + `StampID` + `Delete=1`, manuale §4.5) e poi
+  qui, con riga «Delete» in `hr_ecos_sends` e ricalcolo. Se Ecos rifiuta o non risponde, qui non si tocca
+  niente (riga ERROR nel registro, messaggio a video). Mai sul proprio cartellino. Test in `AllineaEcosTests`
+  («Una timbratura di Ecos si cancella prima su Ecos e poi qui», «Se Ecos rifiuta…»); i vecchi test della
+  rettifica in `ImportPresenzeTests` sono passati alla nuova firma.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

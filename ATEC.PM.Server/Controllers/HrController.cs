@@ -645,17 +645,21 @@ public class HrController : ControllerBase
             : ApiResponse<bool>.Fail(error));
     }
 
+    /// <summary>
+    /// Cancella una timbratura: una rettifica nostra, o una di Ecos (prima là, poi qui).
+    /// Segnalazione #152 (09/09/2026). La rotta resta quella delle rettifiche.
+    /// </summary>
     [HttpDelete("adjustment/{id:long}")]
-    public IActionResult DeleteAdjustment(long id)
+    public async Task<IActionResult> DeletePunch(long id, CancellationToken ct)
     {
         if (!CanManageTimbrature)
             return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponse<string>.Fail("L'eliminazione di rettifiche richiede la scrittura su Timbrature."));
+                ApiResponse<string>.Fail("La cancellazione di timbrature richiede la scrittura su Timbrature."));
 
-        string? error = _attendance.DeleteAdjustment(id, MeId);
+        string? error = await _attendance.DeletePunchAsync(id, MeId, ct);
         if (error == null) _realtime.Notify("adjustment");
         return Ok(error == null
-            ? ApiResponse<bool>.Ok(true, "Rettifica eliminata")
+            ? ApiResponse<bool>.Ok(true, "Timbratura cancellata")
             : ApiResponse<bool>.Fail(error));
     }
 

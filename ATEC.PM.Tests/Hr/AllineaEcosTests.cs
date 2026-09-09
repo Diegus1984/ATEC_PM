@@ -457,6 +457,65 @@ public class AllineaEcosTests
     }
 
     [FactRichiedeMySql]
+    public async Task Una_timbratura_di_Ecos_si_cancella_prima_su_Ecos_e_poi_qui()
+    {
+        // Segnalazione #152 (Diego, 09/09/2026): Buda 03/09 aveva l'uscita delle 12:30 due volte
+        // e da qui non si poteva togliere. Ecos è la bibbia: prima la cancellazione logica là.
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(12).AddMinutes(30), "OUT");
+        long doppia = Grezza(c, mario, "s3", Giorno.AddHours(12).AddMinutes(30), "OUT");
+        Grezza(c, mario, "s4", Giorno.AddHours(13).AddMinutes(30), "IN");
+        Grezza(c, mario, "s5", Giorno.AddHours(17), "OUT");
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaUpdate());
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        Assert.Null(await servizio.DeletePunchAsync(doppia, autore));
+
+        // Token + una PeopleStampPost con Edit=true, StampID e Delete=1.
+        Assert.Equal(2, ecos.UrlChiamati.Count);
+        Assert.Contains("Edit=true", ecos.UrlChiamati[1]);
+        Assert.Contains("StampID=s3", ecos.CorpiInviati[1]);
+        Assert.Contains("Delete=1", ecos.CorpiInviati[1]);
+        Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE id = @Id", new { Id = doppia }));
+        Assert.Equal(4, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id", new { Id = mario }));
+        var registro = c.QuerySingle<(string StampId, string Outcome, string Message)>(
+            "SELECT ecos_stamp_id, outcome, message FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario });
+        Assert.Equal("s3", registro.StampId);
+        Assert.Equal("OK", registro.Outcome);
+        Assert.Contains("Delete", registro.Message);
+        var giornata = c.QuerySingle<(string Out1, string Note, bool Anomalia)>(
+            "SELECT clock_out_1, note, has_anomaly FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
+            new { Id = mario, Giorno });
+        Assert.Equal(("12:30", "OK", false), giornata);
+    }
+
+    [FactRichiedeMySql]
+    public async Task Se_Ecos_rifiuta_la_cancellazione_la_timbratura_resta_anche_qui()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        long s1 = Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaErrore("-2", "Record not found"));
+        HrAttendanceService servizio = Servizio(ecos);
+
+        string? errore = await servizio.DeletePunchAsync(s1, autore);
+        Assert.NotNull(errore);
+        Assert.Contains("rifiutato", errore);
+        Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches WHERE id = @Id", new { Id = s1 }));
+        Assert.Equal("ERROR", c.ExecuteScalar<string>("SELECT outcome FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario }));
+
+        // Sul proprio cartellino non si cancella niente, e Ecos non si chiama nemmeno.
+        Assert.Contains("tuo cartellino", await servizio.DeletePunchAsync(s1, mario));
+        Assert.Equal(2, ecos.UrlChiamati.Count);
+    }
+
+    [FactRichiedeMySql]
     public async Task Un_orario_scritto_male_ferma_tutto_prima_di_toccare_Ecos()
     {
         using MySqlConnection c = _schema.Apri();

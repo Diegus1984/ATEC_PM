@@ -23,8 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteHrAdjustment, sendHrAdjustment, sendHrDayToEcos } from "@/lib/api/hr"
-import type { HrDay, HrEcosTime } from "@/lib/api/types"
+import { deleteHrPunch, sendHrAdjustment, sendHrDayToEcos } from "@/lib/api/hr"
+import type { HrDay, HrEcosTime, HrPunch } from "@/lib/api/types"
 import { formatDateTimeShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
@@ -188,9 +188,9 @@ export function GiornataDialog({
   })
 
   const elimina = useMutation({
-    mutationFn: deleteHrAdjustment,
+    mutationFn: deleteHrPunch,
     onSuccess: () => {
-      notifySuccess("Rettifica eliminata")
+      notifySuccess("Timbratura cancellata")
       onChanged()
       onOpenChange(false)
     },
@@ -266,15 +266,19 @@ export function GiornataDialog({
     })
   }
 
-  async function eliminaRiga(id: number) {
+  // Anche le timbrature di Ecos si cancellano (segnalazione #152, 09/09/2026): il server le
+  // cancella PRIMA su Ecos (che le tiene come cancellate) e poi qui, e ricalcola la giornata.
+  async function eliminaRiga(t: HrPunch) {
+    const diEcos = t.source === "ECOS"
     const ok = await confirm({
-      title: "Eliminare la rettifica?",
-      description:
-        "La giornata verrà ricalcolata senza questa timbratura. Il grezzo del rilevatore non si tocca.",
-      confirmLabel: "Elimina",
+      title: diEcos ? "Cancellare la timbratura anche su Ecos?" : "Eliminare la rettifica?",
+      description: diEcos
+        ? `${versoTimbratura(t.direction)} delle ${oraDa(t.punchedAt)}: viene cancellata su Ecos (che la tiene come cancellata) e poi qui, e la giornata si ricalcola. Se Ecos rifiuta, non cambia niente.`
+        : "La giornata verrà ricalcolata senza questa timbratura. Il grezzo del rilevatore non si tocca.",
+      confirmLabel: diEcos ? "Cancella su Ecos e qui" : "Elimina",
       destructive: true,
     })
-    if (ok) elimina.mutate(id)
+    if (ok) elimina.mutate(t.id)
   }
 
   return (
@@ -337,14 +341,14 @@ export function GiornataDialog({
                       {t.createdBy ? ` — ${t.createdBy}` : ""}
                     </span>
                   )}
-                  {canWrite && t.source === "ADJUSTMENT" && (
+                  {canWrite && (t.source === "ADJUSTMENT" || (t.source === "ECOS" && Boolean(t.ecosStampId))) && (
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       className="ml-auto"
                       disabled={elimina.isPending}
-                      onClick={() => void eliminaRiga(t.id)}
-                      title="Elimina la rettifica"
+                      onClick={() => void eliminaRiga(t)}
+                      title={t.source === "ECOS" ? "Cancella la timbratura (su Ecos e qui)" : "Elimina la rettifica"}
                     >
                       <Trash2 className="size-4" />
                     </Button>

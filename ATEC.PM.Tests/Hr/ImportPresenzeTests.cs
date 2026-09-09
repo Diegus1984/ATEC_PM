@@ -162,7 +162,7 @@ public class ImportPresenzeTests
     // ── RETTIFICHE ────────────────────────────────────────────────────────────
 
     [FactRichiedeMySql]
-    public void Rettifica_completa_la_giornata_e_la_sua_rimozione_la_riapre()
+    public async Task Rettifica_completa_la_giornata_e_la_sua_rimozione_la_riapre()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
@@ -191,12 +191,12 @@ public class ImportPresenzeTests
             "SELECT id FROM hr_punches WHERE source = 'ADJUSTMENT' AND employee_id = @Id",
             new { Id = mario });
 
-        Assert.Null(servizio.DeleteAdjustment(rettificaId, autoreId: admin));
+        Assert.Null(await servizio.DeletePunchAsync(rettificaId, autoreId: admin));
         Assert.True(Anomalia(c, mario, Giorno));
     }
 
     [FactRichiedeMySql]
-    public void Il_grezzo_del_rilevatore_non_si_elimina_e_la_rettifica_esige_il_motivo()
+    public async Task Il_grezzo_del_rilevatore_non_si_elimina_e_la_rettifica_esige_il_motivo()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
@@ -208,7 +208,9 @@ public class ImportPresenzeTests
         });
         long ecosId = c.ExecuteScalar<long>("SELECT id FROM hr_punches LIMIT 1");
 
-        Assert.NotNull(servizio.DeleteAdjustment(ecosId, autoreId: admin));
+        // Dal 09/09/2026 (#152) anche una timbratura di Ecos si cancella, ma PRIMA su Ecos: qui
+        // Ecos non è configurato, quindi la cancellazione si rifiuta e il grezzo resta.
+        Assert.NotNull(await servizio.DeletePunchAsync(ecosId, autoreId: admin));
         Assert.Equal(1, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_punches"));
 
         string? senzaReason = servizio.AddAdjustment(new HrAdjustmentRequest
@@ -236,7 +238,7 @@ public class ImportPresenzeTests
     /// che il responsabile gli ha messo.
     /// </summary>
     [FactRichiedeMySql]
-    public void Nessuno_rettifica_il_proprio_cartellino()
+    public async Task Nessuno_rettifica_il_proprio_cartellino()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = CreaDipendente(c, "Mario", "Rossi", ecosCode: "42");
@@ -270,8 +272,8 @@ public class ImportPresenzeTests
         // …ma Mario non può cancellarla dal proprio cartellino.
         long rettificaId = c.ExecuteScalar<long>(
             "SELECT id FROM hr_punches WHERE source = 'ADJUSTMENT'");
-        Assert.NotNull(servizio.DeleteAdjustment(rettificaId, autoreId: mario));
-        Assert.Null(servizio.DeleteAdjustment(rettificaId, autoreId: capo));
+        Assert.NotNull(await servizio.DeletePunchAsync(rettificaId, autoreId: mario));
+        Assert.Null(await servizio.DeletePunchAsync(rettificaId, autoreId: capo));
     }
 
     /// <summary>
