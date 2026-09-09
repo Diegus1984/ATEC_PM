@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1625",
+                     "data":  "2026-09-09T16:25:44",
+                     "hash":  "4dabde76c6d5e080288603a0a24b9b32367b6838",
+                     "modifiche":  [
+                                       "Configurazione email: occhiolino sulla password e «Cambia password» con doppia conferma"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1617",
                      "data":  "2026-09-09T16:17:47",
                      "hash":  "253ae7c99e618250df5d6a9b7d1c6441deb7dbf4",
