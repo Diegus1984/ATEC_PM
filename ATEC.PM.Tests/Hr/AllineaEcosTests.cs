@@ -71,6 +71,17 @@ public class PausaDedottaTests
             Giorno, "AUTO_P: Pausa 1h detratta", "24:00*", "00:00", Array.Empty<(string, DateTime)>()));
     }
 
+    [Theory]
+    [InlineData("⚠ INCOMPLETO: Uscita mancante", "OUT")]
+    [InlineData("⚠ INCOMPLETO: Solo entrata", "OUT")]
+    [InlineData("⚠ INCOMPLETO: Solo entrata · 🌙 Notte: il turno finisce domattina", "OUT")]
+    [InlineData("OK", null)]
+    [InlineData("AUTO_P: Pausa 1h detratta", null)]
+    [InlineData("⚠ ERR: Verificare timbrature", null)]
+    [InlineData(null, null)]
+    public void La_timbratura_che_manca_e_sempre_l_uscita(string? nota, string? atteso) =>
+        Assert.Equal(atteso, HrAttendanceService.VersoMancante(nota));
+
     [Fact]
     public void Una_pausa_gia_coperta_da_una_rettifica_non_si_reinserisce()
     {
@@ -204,7 +215,7 @@ public class AllineaEcosTests
         Assert.Equal(2, pausa.Count);
         Assert.Equal(("ECOS", "s9", Giorno.AddHours(12).AddMinutes(30), "OUT"), (pausa[0].Source, pausa[0].ExternalId, pausa[0].PunchedAt, pausa[0].Direction));
         Assert.Equal(("ECOS", "s10", Giorno.AddHours(13).AddMinutes(30), "IN"), (pausa[1].Source, pausa[1].ExternalId, pausa[1].PunchedAt, pausa[1].Direction));
-        Assert.Equal(HrAttendanceService.TimbraturaDedotta.Motivo, pausa[0].Reason);
+        Assert.Equal(HrAttendanceService.TimbraturaDedotta.MotivoPausa, pausa[0].Reason);
         Assert.Equal(autore, pausa[0].CreatedBy);
 
         // La giornata si è ricalcolata subito: pausa timbrata, non più dedotta, stesse ore.
@@ -364,6 +375,85 @@ public class AllineaEcosTests
         var registro = c.QuerySingle<(DateTime PunchedAt, DateTime SentTime)>(
             "SELECT punched_at, sent_time FROM hr_ecos_sends WHERE punch_id = @Id", new { Id = uscita });
         Assert.Equal((Giorno.AddHours(17).AddMinutes(21), Giorno.AddHours(17)), registro);
+    }
+
+    [FactRichiedeMySql]
+    public async Task L_uscita_che_manca_scritta_a_mano_si_inserisce_su_Ecos_e_la_giornata_torna_regolare()
+    {
+        // Diego, 09/09/2026 sera: «quando inserisco l'ora mancante deve inserirsi automaticamente
+        // dove manca, senza motivo, poi la scriviamo su Ecos». Entrata-uscita-rientro, l'uscita
+        // finale no: HR scrive 17:00 nella riga dell'uscita e preme «Scrivi su Ecos».
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(12).AddMinutes(30), "OUT");
+        Grezza(c, mario, "s3", Giorno.AddHours(13).AddMinutes(30), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaBadge("246b3548"),
+            InvioEcosTests.RispostaInsert("s9", "5374", "42"),
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 08:00:00", "42", "IN"),
+                InvioEcosTests.Riga("s2", "2026-02-05 12:30:00", "42", "OUT"),
+                InvioEcosTests.Riga("s3", "2026-02-05 13:30:00", "42", "IN")));
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        // Prima: la giornata è incompleta, il cartellino dice quale verso manca e il resoconto lo elenca.
+        HrDayDto prima = servizio.GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno);
+        Assert.True(prima.HasAnomaly);
+        Assert.Equal("OUT", prima.EcosMissingToInsert);
+        Assert.Contains(servizio.GetEcosPlan(mario, Giorno).Operations, o => o.Kind == "MISSING" && o.Direction == "OUT");
+
+        HrEcosSendResultDto esito = await servizio.SendDayToEcosAsync(mario, Giorno, autore,
+            new List<HrEcosTimeDto> { new() { PunchId = null, Direction = "OUT", Time = "17:00", Kind = "MISSING" } });
+
+        Assert.True(esito.Success, esito.Message);
+        Assert.Equal(1, esito.Inserted);
+        Assert.Equal(0, esito.BreakInserted);
+        Assert.Contains("VersusCode=OUT", ecos.CorpiInviati[2]);
+        Assert.Contains("StampDateTime=2026-02-05+17%3A00%3A00", ecos.CorpiInviati[2]);
+        Assert.Contains("mancante", ecos.CorpiInviati[2]);
+
+        // Qui è nata come timbratura di Ecos, con un motivo scritto da noi, e la giornata è regolare.
+        var nuova = c.QuerySingle<(string Source, string ExternalId, string? Reason)>(
+            "SELECT source, external_id, reason FROM hr_punches WHERE employee_id = @Id AND punched_at = @Quando",
+            new { Id = mario, Quando = Giorno.AddHours(17) });
+        Assert.Equal(("ECOS", "s9", HrAttendanceService.TimbraturaDedotta.MotivoMancante), nuova);
+        var giornata = c.QuerySingle<(string Out2, int Regular, string Note, bool Anomalia)>(
+            "SELECT clock_out_2, regular_minutes, note, has_anomaly FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
+            new { Id = mario, Giorno });
+        Assert.Equal(("17:00", 480, "OK", false), giornata);
+        Assert.Null(servizio.GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno).EcosMissingToInsert);
+    }
+
+    [FactRichiedeMySql]
+    public async Task L_uscita_mancante_deve_venire_dopo_l_ultima_timbratura_e_solo_dove_manca_davvero()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        Grezza(c, mario, "s1", Giorno.AddHours(8), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(12).AddMinutes(30), "OUT");
+        Grezza(c, mario, "s3", Giorno.AddHours(13).AddMinutes(30), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken());
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        // 12:00 sta prima del rientro delle 13:30: non è un'uscita di fine giornata.
+        HrEcosSendResultDto prima = await servizio.SendDayToEcosAsync(mario, Giorno, mario,
+            new List<HrEcosTimeDto> { new() { PunchId = null, Direction = "OUT", Time = "12:00", Kind = "MISSING" } });
+        Assert.False(prima.Success);
+        Assert.Contains("dopo l'ultima timbratura", prima.Message);
+        Assert.Empty(ecos.UrlChiamati);
+
+        // Una giornata regolare non ha niente che manca: si rifiuta senza toccare Ecos.
+        Grezza(c, mario, "s4", Giorno.AddHours(17), "OUT");
+        servizio.RecalculateDay(c, mario, Giorno);
+        HrEcosSendResultDto poi = await servizio.SendDayToEcosAsync(mario, Giorno, mario,
+            new List<HrEcosTimeDto> { new() { PunchId = null, Direction = "OUT", Time = "18:00", Kind = "MISSING" } });
+        Assert.False(poi.Success);
+        Assert.Contains("non ha una timbratura mancante", poi.Message);
+        Assert.Empty(ecos.UrlChiamati);
     }
 
     [FactRichiedeMySql]

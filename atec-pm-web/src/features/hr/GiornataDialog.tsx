@@ -102,8 +102,8 @@ function spiegazione(g: HrDay, nome: string, canWrite: boolean): string | null {
         : "Giorno lavorativo senza timbrature e senza assenza registrata. Segnalalo a chi gestisce le presenze."
     if (st.label.startsWith("Manca l'uscita"))
       return canWrite
-        ? `Senza l'uscita non si possono contare le ore del pomeriggio. Chiedi a ${chi} a che ora è uscito e inserisci l'orario qui sotto: la timbratura originale resta, la correzione si aggiunge con il tuo nome.`
-        : "Senza l'uscita non si possono contare le ore del pomeriggio. Segnalalo a chi gestisce le presenze."
+        ? `Senza l'uscita non si possono contare le ore. Chiedi a ${chi} a che ora è uscito, scrivilo nella riga «Uscita» di «Orari su Ecos» e premi «Scrivi su Ecos»: la timbratura nasce su Ecos e qui.`
+        : "Senza l'uscita non si possono contare le ore. Segnalalo a chi gestisce le presenze."
     return canWrite
       ? "Le timbrature di questo giorno non tornano: guardale qui sotto e, se serve, aggiungi quella che manca con il motivo."
       : "Le timbrature di questo giorno non tornano. Segnalalo a chi gestisce le presenze."
@@ -148,14 +148,18 @@ export function GiornataDialog({
   // pausa dedotta. Proposti con l'arrotondato del motore ogni volta che la giornata cambia.
   const [orari, setOrari] = React.useState<Record<number, string>>({})
   const [pausaOre, setPausaOre] = React.useState({ uscita: "", rientro: "" })
+  // L'orario della timbratura che manca (l'uscita), scritto da HR senza motivo: vuoto finché
+  // non lo scrive (Diego, 09/09/2026 sera).
+  const [mancanteOra, setMancanteOra] = React.useState("")
   const proposta = React.useMemo(
-    () => (giornata ? orariDaScrivere(giornata) : { righe: [], pausa: null }),
+    () => (giornata ? orariDaScrivere(giornata) : { righe: [], pausa: null, mancante: null }),
     [giornata]
   )
   React.useEffect(() => {
     if (!open) return
     setOrari(Object.fromEntries(proposta.righe.map((r) => [r.punchId, r.proposto])))
     setPausaOre(proposta.pausa ?? { uscita: "", rientro: "" })
+    setMancanteOra("")
   }, [open, proposta])
 
   // Se manca l'uscita, la rettifica parte già impostata su «Uscita».
@@ -211,7 +215,7 @@ export function GiornataDialog({
   const frase = spiegazione(giornata, employeeName, canWrite)
   const ecos = riassuntoInvioEcos(giornata)
 
-  const scelte = scelteDaScrivere(proposta.righe, orari, proposta.pausa)
+  const scelte = scelteDaScrivere(proposta.righe, orari, proposta.pausa, proposta.mancante, mancanteOra)
 
   async function inviaAEcos() {
     if (!giornata || scelte.totale === 0) return
@@ -221,8 +225,11 @@ export function GiornataDialog({
       time: orari[r.punchId] ?? r.proposto,
     }))
     if (scelte.conPausa) {
-      times.push({ punchId: null, direction: "OUT", time: pausaOre.uscita })
-      times.push({ punchId: null, direction: "IN", time: pausaOre.rientro })
+      times.push({ punchId: null, direction: "OUT", time: pausaOre.uscita, kind: "BREAK" })
+      times.push({ punchId: null, direction: "IN", time: pausaOre.rientro, kind: "BREAK" })
+    }
+    if (scelte.conMancante && proposta.mancante) {
+      times.push({ punchId: null, direction: proposta.mancante.direction, time: mancanteOra, kind: "MISSING" })
     }
     if (times.some((x) => !orarioValido(x.time))) {
       notifyError("C'è un orario non valido: scriverlo come 08:00.")
@@ -236,6 +243,8 @@ export function GiornataDialog({
         : `${versoTimbratura(r.direction)} ${scelto} (rettifica, nuova su Ecos)`
     })
     if (scelte.conPausa) righeTesto.push(`pausa ${pausaOre.uscita} → ${pausaOre.rientro} (nuove su Ecos)`)
+    if (scelte.conMancante && proposta.mancante)
+      righeTesto.push(`${versoTimbratura(proposta.mancante.direction)} mancante ${mancanteOra} (nuova su Ecos)`)
     const ok = await confirm({
       title: "Scrivere su Ecos questi orari?",
       description:
@@ -247,12 +256,13 @@ export function GiornataDialog({
   }
 
   function inviaRettifica() {
-    if (!ora || !motivo.trim() || !giornata) return
+    if (!ora || !giornata) return
     rettifica.mutate({
       employeeId,
       punchedAt: `${giorno}T${ora}:00`,
       direction: verso,
-      reason: motivo.trim(),
+      // Il motivo non è più obbligatorio (Diego, 09/09/2026 sera): senza, resta scritto chi l'ha messa.
+      reason: motivo.trim() || "Inserita da HR dal dettaglio della giornata",
     })
   }
 
@@ -345,7 +355,7 @@ export function GiornataDialog({
           )}
         </div>
 
-        {(proposta.righe.length > 0 || proposta.pausa) && (
+        {(proposta.righe.length > 0 || proposta.pausa || proposta.mancante) && (
           <div className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium">Orari su Ecos</p>
@@ -420,6 +430,27 @@ export function GiornataDialog({
                   <span className="text-xs text-amber-700 dark:text-amber-400">da scrivere</span>
                 </li>
               )}
+              {proposta.mancante && (
+                // La timbratura che manca: si scrive qui, nella sua riga, senza motivo.
+                <li className="flex flex-wrap items-center gap-2 tabular-nums">
+                  <span className="w-14">{versoTimbratura(proposta.mancante.direction)}</span>
+                  <span className="w-28 text-destructive">manca su Ecos</span>
+                  <Input
+                    type="time"
+                    value={mancanteOra}
+                    onChange={(e) => setMancanteOra(e.target.value)}
+                    disabled={!canWrite}
+                    aria-label={`Orario della ${versoTimbratura(proposta.mancante.direction).toLowerCase()} mancante`}
+                    className="h-8 w-28"
+                  />
+                  <Badge variant="destructive">MANCANTE</Badge>
+                  {scelte.conMancante ? (
+                    <span className="text-xs text-amber-700 dark:text-amber-400">da scrivere</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">scrivi l'orario, poi «Scrivi su Ecos»</span>
+                  )}
+                </li>
+              )}
             </ul>
             <p className="text-xs text-muted-foreground">
               Proposto l'orario arrotondato dal motore: cambialo se serve. Su Ecos, e qui, va quello
@@ -470,9 +501,7 @@ export function GiornataDialog({
 
         {canWrite && (
           <div className="space-y-2 rounded-md border p-3">
-            <p className="text-sm font-medium">
-              {mancaUscita ? "Inserisci l'uscita mancante" : "Aggiungi una timbratura"}
-            </p>
+            <p className="text-sm font-medium">Aggiungi una timbratura</p>
             <div className="flex items-end gap-2">
               <div className="space-y-1">
                 <Label htmlFor="rettifica-ora">Ora</Label>
@@ -498,7 +527,7 @@ export function GiornataDialog({
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="rettifica-motivo">Motivo (obbligatorio)</Label>
+              <Label htmlFor="rettifica-motivo">Motivo (facoltativo)</Label>
               <Textarea
                 id="rettifica-motivo"
                 value={motivo}
@@ -515,7 +544,7 @@ export function GiornataDialog({
             <div className="flex justify-end">
               <Button
                 size="sm"
-                disabled={!ora || !motivo.trim() || rettifica.isPending}
+                disabled={!ora || rettifica.isPending}
                 onClick={inviaRettifica}
               >
                 Registra la timbratura

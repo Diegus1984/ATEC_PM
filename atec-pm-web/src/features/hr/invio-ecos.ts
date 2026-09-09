@@ -25,6 +25,12 @@ export interface RiassuntoInvioEcos {
    * timbrature vere (09/09/2026). Lo decide il server (`HrDayDto.EcosBreakToInsert`).
    */
   pausaDaInserire: boolean
+  /**
+   * La timbratura che manca (l'uscita): HR ne scrive l'ora nel dettaglio della giornata, senza
+   * motivo, e «Scrivi su Ecos» la inserisce (09/09/2026 sera). Lo decide il server
+   * (`HrDayDto.EcosMissingToInsert`). Finché manca, la giornata non è allineata.
+   */
+  mancanteDaInserire: boolean
   /** true = c'è qualcosa da scrivere su Ecos: orari, rettifiche o la pausa dedotta. */
   daScrivere: boolean
   /** true = c'è qualcosa che riguarda Ecos e niente è da inviare, escluso o incerto. */
@@ -32,12 +38,13 @@ export interface RiassuntoInvioEcos {
 }
 
 export function riassuntoInvioEcos(
-  giornata: Pick<HrDay, "punches"> & { ecosBreakToInsert?: boolean }
+  giornata: Pick<HrDay, "punches"> & { ecosBreakToInsert?: boolean; ecosMissingToInsert?: string | null }
 ): RiassuntoInvioEcos {
   const diEcos = giornata.punches.filter(
     (t) => (t.source === "ECOS" && Boolean(t.ecosStampId)) || t.ecosInsert
   )
   const pausaDaInserire = giornata.ecosBreakToInsert === true
+  const mancanteDaInserire = Boolean(giornata.ecosMissingToInsert)
   const daInviare = diEcos.filter((t) => t.toSendToEcos)
   const daInserire = daInviare.filter((t) => t.ecosInsert)
   const incerte = diEcos.filter((t) => t.ecosUncertain).length
@@ -54,9 +61,15 @@ export function riassuntoInvioEcos(
     incerte,
     ultimoInvio: invii.length > 0 ? invii[invii.length - 1] : null,
     pausaDaInserire,
+    mancanteDaInserire,
     daScrivere: daInviare.length > 0 || pausaDaInserire,
     allineato:
-      diEcos.length > 0 && daInviare.length === 0 && nonInviabili === 0 && incerte === 0 && !pausaDaInserire,
+      diEcos.length > 0 &&
+      daInviare.length === 0 &&
+      nonInviabili === 0 &&
+      incerte === 0 &&
+      !pausaDaInserire &&
+      !mancanteDaInserire,
   }
 }
 
@@ -120,9 +133,17 @@ function hhmm(iso: string | null | undefined): string {
   return iso ? iso.slice(11, 16) : ""
 }
 
+/** La timbratura che manca alla giornata (l'uscita): HR ne scrive l'orario, senza motivo. */
+export interface MancanteDaScrivere {
+  direction: string
+}
+
 export function orariDaScrivere(
-  giornata: Pick<HrDay, "punches" | "clockOut1" | "clockIn2"> & { ecosBreakToInsert?: boolean }
-): { righe: OrarioDaScrivere[]; pausa: PausaDaScrivere | null } {
+  giornata: Pick<HrDay, "punches" | "clockOut1" | "clockIn2"> & {
+    ecosBreakToInsert?: boolean
+    ecosMissingToInsert?: string | null
+  }
+): { righe: OrarioDaScrivere[]; pausa: PausaDaScrivere | null; mancante: MancanteDaScrivere | null } {
   const righe: OrarioDaScrivere[] = []
   for (const t of giornata.punches) {
     const diEcos = t.source === "ECOS" && Boolean(t.ecosStampId)
@@ -141,7 +162,10 @@ export function orariDaScrivere(
     giornata.ecosBreakToInsert === true
       ? { uscita: giornata.clockOut1.replace("*", ""), rientro: giornata.clockIn2.replace("*", "") }
       : null
-  return { righe, pausa }
+  const mancante: MancanteDaScrivere | null = giornata.ecosMissingToInsert
+    ? { direction: giornata.ecosMissingToInsert }
+    : null
+  return { righe, pausa, mancante }
 }
 
 /**
@@ -152,15 +176,24 @@ export function orariDaScrivere(
 export function scelteDaScrivere(
   righe: OrarioDaScrivere[],
   valori: Record<number, string>,
-  pausa: PausaDaScrivere | null
-): { timbrature: OrarioDaScrivere[]; conPausa: boolean; totale: number } {
+  pausa: PausaDaScrivere | null,
+  mancante: MancanteDaScrivere | null = null,
+  mancanteOra = ""
+): { timbrature: OrarioDaScrivere[]; conPausa: boolean; conMancante: boolean; totale: number } {
   const timbrature = righe.filter((r) => {
     if (!r.inviabile || r.incerta) return false
     const scelto = valori[r.punchId] ?? r.proposto
     return r.suEcos == null || scelto !== r.suEcos
   })
   const conPausa = pausa != null
-  return { timbrature, conPausa, totale: timbrature.length + (conPausa ? 2 : 0) }
+  // La timbratura che manca parte solo quando HR ha scritto un orario.
+  const conMancante = mancante != null && orarioValido(mancanteOra)
+  return {
+    timbrature,
+    conPausa,
+    conMancante,
+    totale: timbrature.length + (conPausa ? 2 : 0) + (conMancante ? 1 : 0),
+  }
 }
 
 /** «08:00» sì, «8.00» o vuoto no: il server rifiuterebbe tutto prima di toccare Ecos. */

@@ -454,6 +454,12 @@ export function ControlloGiornalieroView({
 function statoEcos(riga: RigaControllo): { tipo: "scrivi" | "allineato" | "bloccato" | "niente"; titolo: string } {
   const { giorno: g, stato: st } = riga
   const ecos = riassuntoInvioEcos(g)
+  if (ecos.mancanteDaInserire) {
+    return {
+      tipo: "bloccato",
+      titolo: "Manca l'uscita: apri la giornata, scrivi l'ora nella riga «Uscita» di «Orari su Ecos» e premi «Scrivi su Ecos»",
+    }
+  }
   if (ecos.daScrivere) {
     if (st.tone === "bad") {
       return { tipo: "bloccato", titolo: "La giornata ha un'anomalia: prima si sistema, poi si allinea Ecos" }

@@ -52,6 +52,8 @@ export interface HrEcosTime {
   punchId?: number | null
   direction: string
   time: string
+  /** Senza `punchId`: «BREAK» (pausa dedotta, default) oppure «MISSING» (la timbratura che manca). */
+  kind?: "BREAK" | "MISSING"
 }
 
 /** Esito del pulsante «Invia a Ecos»: viaggia sempre come dato, anche se fallito. */
@@ -109,6 +111,11 @@ export interface HrDay {
    * timbrature vere (09/09/2026).
    */
   ecosBreakToInsert: boolean
+  /**
+   * Il verso della timbratura che MANCA («OUT» per la sola entrata o l'uscita mancante), o
+   * null: HR scrive l'orario nella sua riga del dettaglio e «Scrivi su Ecos» la inserisce là.
+   */
+  ecosMissingToInsert?: string | null
 }
 
 /** Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio. */
@@ -505,8 +512,8 @@ export interface HrDailyCheck {
 
 /** Una riga del resoconto: cosa si modifica, cosa si inserisce, cosa resta fuori. */
 export interface HrEcosPlannedOp {
-  /** UPDATE · INSERT (rettifica) · INSERT_BREAK (pausa dedotta) · SKIP · UNCERTAIN */
-  kind: "UPDATE" | "INSERT" | "INSERT_BREAK" | "SKIP" | "UNCERTAIN"
+  /** UPDATE · INSERT (rettifica) · INSERT_BREAK (pausa dedotta) · MISSING (l'uscita che manca, la scrive HR nel dettaglio) · SKIP · UNCERTAIN */
+  kind: "UPDATE" | "INSERT" | "INSERT_BREAK" | "MISSING" | "SKIP" | "UNCERTAIN"
   direction: string
   /** Per le modifiche: l'ora che Ecos ha adesso. */
   from?: string | null

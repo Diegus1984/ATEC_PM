@@ -62,6 +62,13 @@ public class HrDayDto
     /// (09/09/2026). false anche quando è già stata inserita o non c'è niente da dedurre.
     /// </summary>
     public bool EcosBreakToInsert { get; set; }
+
+    /// <summary>
+    /// Il verso della timbratura che MANCA («OUT» per «Solo entrata» e «Uscita mancante»), o
+    /// null: HR scrive l'orario nella sua riga del dettaglio e «Scrivi su Ecos» la inserisce
+    /// là (Diego, 09/09/2026 sera: «deve inserirsi automaticamente dove manca, senza motivo»).
+    /// </summary>
+    public string? EcosMissingToInsert { get; set; }
 }
 
 /// <summary>Uno stadio della giornata: i quattro orari, la pausa e il totale di quello stadio.</summary>
@@ -221,10 +228,12 @@ public class HrEcosSendRequest
 /// <summary>Un orario scelto da HR per una timbratura («HH:mm», nel giorno della giornata).</summary>
 public class HrEcosTimeDto
 {
-    /// <summary>La timbratura (di Ecos o rettifica); null = una strisciata della pausa dedotta.</summary>
+    /// <summary>La timbratura (di Ecos o rettifica); null = una strisciata nuova (pausa dedotta o mancante).</summary>
     public long? PunchId { get; set; }
     public string Direction { get; set; } = "";
     public string Time { get; set; } = "";
+    /// <summary>Con <c>PunchId</c> null: «BREAK» (pausa dedotta, default) oppure «MISSING» (la timbratura che manca).</summary>
+    public string? Kind { get; set; }
 }
 
 /// <summary>Esito del pulsante «Invia a Ecos» di una giornata. Viaggia sempre come dato, anche se fallito.</summary>

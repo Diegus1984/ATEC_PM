@@ -66,6 +66,14 @@ describe("riassuntoInvioEcos", () => {
     expect(con.daInviare).toHaveLength(0)
   })
 
+  it("con la timbratura mancante la giornata non è allineata, ma la nuvola non la scrive da sola", () => {
+    const allineate = [timbratura({ id: 1, toSendToEcos: false }), timbratura({ id: 2, toSendToEcos: false })]
+    const r = riassuntoInvioEcos({ punches: allineate, ecosMissingToInsert: "OUT" })
+    expect(r.mancanteDaInserire).toBe(true)
+    expect(r.daScrivere).toBe(false)
+    expect(r.allineato).toBe(false)
+  })
+
   it("una rettifica da inserire conta fra le cose da inviare, come inserimento", () => {
     const r = riassuntoInvioEcos({
       punches: [
@@ -183,6 +191,17 @@ describe("orari decisi a mano (09/09/2026 sera)", () => {
     })
     expect(righe.map((r) => [r.inviabile, r.incerta])).toEqual([[false, false], [true, true]])
     expect(scelteDaScrivere(righe, {}, null).totale).toBe(0)
+  })
+
+  it("la timbratura che manca parte solo quando HR ha scritto l'orario", () => {
+    const { righe, pausa, mancante } = orariDaScrivere({
+      clockOut1: "12:30", clockIn2: "13:30", ecosBreakToInsert: false, ecosMissingToInsert: "OUT",
+      punches: [timbratura({ id: 1, toSendToEcos: false, ecosPunchedAt: "2026-02-05T08:00:00" })],
+    })
+    expect(mancante).toEqual({ direction: "OUT" })
+    expect(scelteDaScrivere(righe, {}, pausa, mancante, "").totale).toBe(0)
+    expect(scelteDaScrivere(righe, {}, pausa, mancante, "17:00")).toMatchObject({ conMancante: true, totale: 1 })
+    expect(orariDaScrivere({ clockOut1: "", clockIn2: "", punches: [] }).mancante).toBeNull()
   })
 
   it("accetta solo «HH:mm»", () => {

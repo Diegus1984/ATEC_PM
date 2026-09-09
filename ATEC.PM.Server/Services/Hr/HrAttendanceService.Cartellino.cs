@@ -237,6 +237,9 @@ public partial class HrAttendanceService
                 work_date, calcolata.Note, calcolata.ClockOut1, calcolata.ClockIn2, esistenti).Count > 0;
         }
 
+        // La timbratura che manca (l'uscita): HR la scrive nel dettaglio, «Scrivi su Ecos» la inserisce.
+        riga.EcosMissingToInsert = VersoMancante(riga.Note);
+
         // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
         // riga e il filtro «📧 Da segnalare», che così non possono divergere.
         riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);

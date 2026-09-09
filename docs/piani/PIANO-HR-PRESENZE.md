@@ -634,8 +634,23 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   Ecos se un orario non è «HH:mm». Logica pura del dialogo in `invio-ecos.ts` (`orariDaScrivere`,
   `scelteDaScrivere`, `orarioValido`) col suo test; test C# in `AllineaEcosTests` («gli orari decisi a
   mano vincono»). La nuvola della riga (resoconto) resta con i valori proposti dal motore.
+- **La timbratura che manca si scrive nella sua riga (09/09 sera).** Diego: «quando inserisco l'ora
+  mancante deve inserirsi automaticamente dove manca, senza testo di giustificazione, poi la scriviamo
+  su Ecos». Con «⚠ INCOMPLETO: Uscita mancante» o «Solo entrata» il cartellino porta
+  `HrDayDto.EcosMissingToInsert = "OUT"` (`HrAttendanceService.VersoMancante`, una regola sola) e nel
+  riquadro «Orari su Ecos» compare la riga «Uscita — manca su Ecos — [__:__]»: HR scrive l'ora, preme
+  «Scrivi su Ecos» e la timbratura nasce su Ecos (stesso inserimento via BadgeCode della pausa,
+  `TimbraturaDedotta` con `Origine = "MANCANTE"`, motivo `MotivoMancante`, registro «Correct Record
+  Insert (timbratura mancante)») e qui come riga ECOS; poi il ricalcolo e la rilettura come sempre.
+  Nel `Times[]` viaggia con `PunchId` null e `Kind = "MISSING"` (la pausa `Kind = "BREAK"`). Il server
+  la rifiuta prima di toccare Ecos se la giornata non è incompleta di quel verso, se l'ora non viene
+  dopo l'ultima timbratura del giorno, o se la stessa ora è già partita senza risposta certa. Il
+  resoconto della nuvola la elenca come «MANCANTE» (`Kind = "MISSING"`, fuori dalle cose che scrive).
+  Il modulo «Aggiungi una timbratura» resta per gli altri casi, col motivo facoltativo (senza, il
+  client manda «Inserita da HR dal dettaglio della giornata»: il server lo vuole ancora). Test C# in
+  `AllineaEcosTests` («l'uscita che manca scritta a mano…», «…dopo l'ultima timbratura…»).
 - Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
-  si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche e pausa.
+  si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche, pausa e timbratura mancante.
 - Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,
   timeout) in `AllineaEcosTests.cs`; client `invio-ecos.test.ts`.
 

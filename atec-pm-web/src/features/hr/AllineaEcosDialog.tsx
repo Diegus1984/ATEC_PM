@@ -69,7 +69,7 @@ export function AllineaEcosDialog({
     [piano]
   )
   const fuori = React.useMemo(
-    () => (piano?.operations ?? []).filter((o) => o.kind === "SKIP" || o.kind === "UNCERTAIN"),
+    () => (piano?.operations ?? []).filter((o) => o.kind === "SKIP" || o.kind === "UNCERTAIN" || o.kind === "MISSING"),
     [piano]
   )
 
@@ -196,6 +196,7 @@ const ETICHETTA_KIND: Record<HrEcosPlannedOp["kind"], { testo: string; variant: 
   INSERT_BREAK: { testo: "NUOVA · PAUSA", variant: "default" },
   SKIP: { testo: "NON INVIABILE", variant: "outline" },
   UNCERTAIN: { testo: "DA VERIFICARE", variant: "destructive" },
+  MISSING: { testo: "MANCANTE", variant: "destructive" },
 }
 
 function RigaOperazione({ op }: { op: HrEcosPlannedOp }) {

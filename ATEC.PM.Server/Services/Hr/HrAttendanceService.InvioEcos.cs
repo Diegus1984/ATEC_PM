@@ -105,11 +105,29 @@ public partial class HrAttendanceService
     /// si inserisce come timbratura vera, così Ecos ha la stessa giornata che abbiamo calcolato
     /// noi e al prossimo import la pausa è timbrata, non più dedotta.
     /// </summary>
-    internal sealed record TimbraturaDedotta(string Direction, DateTime Quando)
+    internal sealed record TimbraturaDedotta(string Direction, DateTime Quando, string Origine = "PAUSA")
     {
-        public const string Motivo = "Pausa pranzo dedotta dal motore, inserita su Ecos";
-        public string Nota => "ATEC PM: pausa pranzo dedotta dal motore";
+        public const string MotivoPausa = "Pausa pranzo dedotta dal motore, inserita su Ecos";
+        public const string MotivoMancante = "Timbratura mancante inserita da HR, scritta su Ecos";
+
+        /// <summary>true = la timbratura che MANCAVA, scritta a mano da HR (non la pausa).</summary>
+        public bool Mancante => Origine == "MANCANTE";
+        public string Motivo => Mancante ? MotivoMancante : MotivoPausa;
+        public string Nota => Mancante ? "ATEC PM: timbratura mancante inserita da HR" : "ATEC PM: pausa pranzo dedotta dal motore";
+        public string Registro => Mancante ? "Correct Record Insert (timbratura mancante)" : "Correct Record Insert (pausa dedotta)";
     }
+
+    /// <summary>
+    /// Il verso della timbratura che manca in una giornata incompleta: l'uscita, sia con la sola
+    /// entrata sia con entrata-uscita-rientro. HR la scrive nella sua riga del dettaglio e
+    /// «Scrivi su Ecos» la inserisce là (Diego, 09/09/2026 sera). Null = niente manca.
+    /// </summary>
+    internal static string? VersoMancante(string? nota) =>
+        nota != null
+        && (nota.StartsWith("⚠ INCOMPLETO: Uscita mancante", StringComparison.Ordinal)
+            || nota.StartsWith("⚠ INCOMPLETO: Solo entrata", StringComparison.Ordinal))
+            ? "OUT"
+            : null;
 
     /// <summary>
     /// Le sole note del motore in cui la pausa è dedotta E NON timbrata. 🪤 «Pausa 1h forzata»
@@ -337,6 +355,15 @@ public partial class HrAttendanceService
                 Detail = "già mandate senza risposta certa: verificare su Ecos, l'import le porta qui se ci sono",
             });
         }
+        if (VersoMancante(giornata?.Note) is string versoMancante)
+        {
+            piano.Operations.Add(new HrEcosPlannedOpDto
+            {
+                Kind = "MISSING", Direction = versoMancante,
+                Label = $"{Verso(versoMancante)} mancante",
+                Detail = "l'orario lo scrive HR nel dettaglio della giornata, poi «Scrivi su Ecos» la inserisce",
+            });
+        }
 
         piano.ToWrite = piano.Operations.Count(o => o.Kind is "UPDATE" or "INSERT" or "INSERT_BREAK");
         if (!piano.Configured)
@@ -376,9 +403,11 @@ public partial class HrAttendanceService
             return esito;
         }
 
-        // Gli orari scelti a mano: «HH:mm» nel giorno della giornata, per timbratura o per verso della pausa.
+        // Gli orari scelti a mano: «HH:mm» nel giorno della giornata, per timbratura, per verso
+        // della pausa, o per la timbratura che manca.
         var forzatePerTimbratura = new Dictionary<long, DateTime>();
         var forzatePausa = new Dictionary<bool, DateTime>();
+        (string Direction, DateTime Quando)? mancante = null;
         foreach (HrEcosTimeDto scelta in times ?? Array.Empty<HrEcosTimeDto>())
         {
             if (!TimeSpan.TryParseExact((scelta.Time ?? "").Trim(), "hh\\:mm", System.Globalization.CultureInfo.InvariantCulture, out TimeSpan ora))
@@ -390,6 +419,8 @@ public partial class HrAttendanceService
             }
             DateTime quando = workDate.Date + ora;
             if (scelta.PunchId is long id) forzatePerTimbratura[id] = quando;
+            else if (string.Equals(scelta.Kind, "MISSING", StringComparison.OrdinalIgnoreCase))
+                mancante = (NightShift.IsEntry(scelta.Direction) ? "IN" : "OUT", quando);
             else forzatePausa[NightShift.IsEntry(scelta.Direction)] = quando;
         }
 
@@ -402,12 +433,44 @@ public partial class HrAttendanceService
             .ToList();
         List<TimbraturaEcos> daInviare = tutte.Where(t => t.DaInviare).ToList();
         List<RettificaEcos> daInserire = rettifiche.Where(r => r.DaInviare).ToList();
+        DayRow? giornata = GiornataCalcolata(c, employeeId, workDate);
         (List<TimbraturaDedotta> pausaDaInserire, int pauseIncerte) = PausaDaInserire(
-            c, employeeId, workDate, GiornataCalcolata(c, employeeId, workDate), tutte, rettifiche);
+            c, employeeId, workDate, giornata, tutte, rettifiche);
         // La pausa dedotta con gli orari scelti da HR (solo dove la pausa è davvero da inserire).
         pausaDaInserire = pausaDaInserire
             .Select(d => forzatePausa.TryGetValue(NightShift.IsEntry(d.Direction), out DateTime f) ? d with { Quando = f } : d)
             .ToList();
+
+        // La timbratura che manca, scritta a mano da HR: solo se la giornata è davvero incompleta
+        // di quel verso, dopo l'ultima timbratura del giorno, e non già mandata senza risposta.
+        if (mancante is { } m)
+        {
+            string? versoMancante = VersoMancante(giornata?.Note);
+            if (versoMancante == null || versoMancante != m.Direction)
+            {
+                esito.Failed = 1;
+                esito.Message = "Questa giornata non ha una timbratura mancante da inserire.";
+                esito.Errors.Add(esito.Message);
+                return esito;
+            }
+            DateTime? ultima = tutte.Select(x => x.Target).Concat(rettifiche.Select(x => x.Target))
+                .Concat(pausaDaInserire.Select(x => x.Quando)).DefaultIfEmpty().Max();
+            if (ultima is { } u && u != default && m.Quando <= u)
+            {
+                esito.Failed = 1;
+                esito.Message = $"L'uscita mancante deve venire dopo l'ultima timbratura del giorno ({u:HH:mm}).";
+                esito.Errors.Add(esito.Message);
+                return esito;
+            }
+            if (PauseIncerte(c, employeeId, workDate).Contains((m.Direction, AlMinuto(m.Quando))))
+            {
+                esito.Failed = 1;
+                esito.Message = $"{Verso(m.Direction)} {m.Quando:HH:mm} già mandata a Ecos senza risposta certa: verificare su Ecos prima di rimandarla.";
+                esito.Errors.Add(esito.Message);
+                return esito;
+            }
+            pausaDaInserire.Add(new TimbraturaDedotta(m.Direction, m.Quando, "MANCANTE"));
+        }
         esito.Total = tutte.Count + rettifiche.Count;
         esito.Skipped = tutte.Count(t => !t.Inviabile) + rettifiche.Count(r => !r.Inviabile);
         int incerte = rettifiche.Count(r => r.Incerta) + pauseIncerte;
@@ -600,12 +663,13 @@ public partial class HrAttendanceService
                         new
                         {
                             Id = employeeId, Giorno = workDate.Date, Quando = d.Quando, Verso = d.Direction,
-                            Stamp = ins.StampId, Motivo = TimbraturaDedotta.Motivo, Autore = autoreId,
+                            Stamp = ins.StampId, Motivo = d.Motivo, Autore = autoreId,
                         });
                     punchId = c.ExecuteScalar<long>("SELECT LAST_INSERT_ID()");
                     outcome = "OK";
-                    messaggio = "Correct Record Insert (pausa dedotta)";
-                    esito.BreakInserted++;
+                    messaggio = d.Registro;
+                    if (d.Mancante) esito.Inserted++;
+                    else esito.BreakInserted++;
                 }
             }
             catch (EcosApiException ex) when (ex.EsitoIncerto)
@@ -623,7 +687,7 @@ public partial class HrAttendanceService
 
             if (outcome == "ERROR")
             {
-                esito.Errors.Add($"{Verso(d.Direction)} {d.Quando:HH:mm} (pausa dedotta): {messaggio}");
+                esito.Errors.Add($"{Verso(d.Direction)} {d.Quando:HH:mm} ({(d.Mancante ? "mancante" : "pausa dedotta")}): {messaggio}");
                 _logger.LogWarning(
                     "[HR] Inserimento della pausa su Ecos fallito: dipendente {Dip}, {Giorno:yyyy-MM-dd}, {Verso} {Ora:HH:mm}: {Msg}",
                     employeeId, workDate, d.Direction, d.Quando, messaggio);
