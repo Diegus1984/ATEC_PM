@@ -1,6 +1,9 @@
 namespace ATEC.PM.Server.Services.Hr;
 
-/// <summary>Periodic Ecos punch import (default every 12 hours).</summary>
+/// <summary>
+/// Import periodico da Ecos: ogni <c>Hr:ImportIntervalHours</c> ore (1 dal 09/09/2026, era 12),
+/// il primo 2 minuti dopo l'avvio. Il conto riparte a ogni riavvio del servizio.
+/// </summary>
 public class HrSyncBackgroundService : BackgroundService
 {
     private readonly HrAttendanceService _attendance;
@@ -20,7 +23,7 @@ public class HrSyncBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        int hours = int.TryParse(_config["Hr:ImportIntervalHours"], out int h) ? h : 12;
+        int hours = int.TryParse(_config["Hr:ImportIntervalHours"], out int h) ? h : 1;
         if (hours <= 0)
         {
             _logger.LogInformation("[HR] Automatic import disabled (Hr:ImportIntervalHours <= 0).");

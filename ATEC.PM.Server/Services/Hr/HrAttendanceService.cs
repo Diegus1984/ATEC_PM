@@ -171,7 +171,7 @@ public partial class HrAttendanceService
             }
             AggiungiRiga(riga);
         }
-        // Fine import (riuscito o no, anche quello automatico delle 12 ore): le pagine
+        // Fine import (riuscito o no, anche quello automatico di ogni ora): le pagine
         // presenze aperte rileggono cartellino, calendario, quadratura e stato.
         _realtime?.Notify("import");
     }

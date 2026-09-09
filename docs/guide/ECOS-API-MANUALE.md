@@ -76,7 +76,7 @@ chiave vince, quindi la configurazione effettiva è quella del server **interno 
 | Dove stanno le credenziali | `res_settings` chiavi `ecos.baseurl`, `ecos.userid`, `ecos.clientid`, `ecos.password` (cifrata con `ProtectedConfigHelper`/DPAPI a scope macchina, write-only); ripiego `appsettings.json` sezione `Ecos` (`BaseUrl`, `UserId`, `Password`, `ClientId`) | `EcosClient.ResolveCredenziali()` |
 | Come si cambiano | Pagina `/hr/timbrature` → dialogo **«Credenziali Ecos»** (+ «Prova collegamento» = una `TokenGet`); endpoint `GET/POST /api/hr/ecos/settings`, `POST /api/hr/ecos/settings/test` | `HrController.cs:260-297` |
 | Rilettura | a ogni uso: cambiare la password **non richiede riavvio** | |
-| Import automatico | `HrSyncBackgroundService` ogni `Hr:ImportIntervalHours` (12), gate `Services:HrSync` | |
+| Import automatico | `HrSyncBackgroundService` ogni `Hr:ImportIntervalHours` (1 dal 09/09/2026, era 12; il primo 2 minuti dopo l'avvio), gate `Services:HrSync` | |
 | Cursore incrementale | `app_config.hr_sync_punches_from` = massimo `UpdateDate` **secondo l'orologio di Ecos** (ripiego sul nostro con 1 h di margine) | `HrAttendanceService.cs:16` |
 | Password in chiaro sparse | `TextFile1.txt` del vecchio programma «Timbrature» sul Desktop (password Ecos + SMTP). Non ruotate, scelta consapevole di Diego | [[modulo_hr_presenze]] §11 |
 
@@ -375,7 +375,7 @@ il limitatore e il **blocco dell'account**.
 specchia i dati deve propagare il flag (📘 §7.8, §16.5). Vedi §11.1: noi non lo leggiamo.
 
 **Il nostro import** (`HrAttendanceService.Import.cs`):
-- **incrementale** ogni 12 h: `UpdateDate>=<cursore>` (con `>=`, non `>`: la riga di confine
+- **incrementale** ogni ora (era ogni 12 h fino al 09/09/2026): `UpdateDate>=<cursore>` (con `>=`, non `>`: la riga di confine
   si rilegge ed è innocua perché l'upsert è per `StampID`); cursore = max `UpdateDate` di
   Ecos, scritto **dopo** la scrittura su DB;
 - **completo** («Reimporta tutto»): dal 2020, e in più **rimuove** le righe `source='ECOS'`

@@ -22,7 +22,7 @@ richiesta → approvazione agganciato ai reparti e alle commesse.
 | Chiavi permesso `nav.hr_timbrature`, `nav.hr_richieste` | ✅ a catalogo, spente (livello 3 = solo Admin) |
 | Motore di calcolo del cartellino | ✅ **portato in C# e verificato**: 330/330 giornate identiche all'originale (§6 Fase 1) |
 | Vista mensile, export Excel, solleciti, tre colonne | ✅ **fedeli al programma originale** (28/08, §Fase 1) |
-| Import timbrature da Ecos (client API) | ✅ **portato in C#** (`EcosClient` + `HrPresenzeService` + import automatico ogni 12h), pagina Timbrature **live**; credenziali Ecos da mettere in produzione, ora dalla pagina (§6 Fase 1) |
+| Import timbrature da Ecos (client API) | ✅ **portato in C#** (`EcosClient` + `HrPresenzeService` + import automatico ogni ora, era 12h), pagina Timbrature **live**; credenziali Ecos da mettere in produzione, ora dalla pagina (§6 Fase 1) |
 | Flusso richiesta → approvazione ferie/permessi | ❌ non esiste da nessuna parte — **è la parte nuova** |
 | Quadratura presenze ↔ ore su commessa | ❌ non esiste |
 | Tabella `absences` in produzione | ⚠️ esiste, **vuota**, da rifare (§6, Fase 2) |
@@ -183,7 +183,7 @@ per l'utente API. Lo concede l'amministratore Ecos o SoftAgile.
 >   10 min, idempotente. Le giornate rimaste «Giornata in corso» si chiudono d'ufficio al
 >   primo import del giorno dopo. Rettifiche = righe `origine='RETTIFICA'` con autore e
 >   motivo obbligatorio; si possono eliminare SOLO le rettifiche, mai il grezzo.
-> - **`HrSyncBackgroundService`** — import automatico ogni 12h (`Hr:ImportIntervalHours`,
+> - **`HrSyncBackgroundService`** — import automatico ogni ora (`Hr:ImportIntervalHours` = 1 dal 09/09/2026, era 12;
 >   gate `Services:HrSync`); senza credenziali resta a riposo e lo dice una volta sola.
 > - **`HrController`** (`api/hr/*`) dietro `nav.hr_timbrature` (tolto `soloClient` dal
 >   catalogo): con la LETTURA si vede solo il PROPRIO cartellino; la SCRITTURA apre
@@ -499,7 +499,7 @@ notturno oltre le 22: 35%». Per il «fino alle 22» fa fede l'art. 7 del CCNL: 
   causale, credenziali, mappatura, rettifica e sua eliminazione, richiesta di assenza
   creata/approvata/annullata). `HrAttendanceService` lo riceve come dipendenza opzionale
   (null nei test) e notifica **da sé**: `import-progress` a ogni fase e `import` a fine
-  import — così anche l'**import automatico delle 12 ore** aggiorna le pagine aperte.
+  import — così anche l'**import automatico di ogni ora** aggiorna le pagine aperte.
 - **Client**: hook `lib/signalr/use-hr-hub.ts` (JoinHr, debounce 400 ms tranne
   `import-progress` che passa subito). Montato in `TimbraturePage` (tutte e quattro le
   schede: cartellino, calendario, quadratura, cronologia — invalida tutte le chiavi `hr-*`;

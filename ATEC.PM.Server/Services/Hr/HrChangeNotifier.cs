@@ -7,7 +7,7 @@ namespace ATEC.PM.Server.Services.Hr;
 /// <summary>
 /// Manda «HrChanged» a chi ha davanti una pagina del modulo presenze (gruppo
 /// <see cref="ProjectHub.HrGroup"/> su /hubs/project). Un solo punto per controller e servizio
-/// di import: così anche l'import automatico delle 12 ore, che non passa da un controller,
+/// di import: così anche l'import automatico di ogni ora, che non passa da un controller,
 /// fa aggiornare le pagine aperte. Niente self-exclusion: chi ha fatto la modifica rilegge già
 /// da sé, e un doppio refetch di react-query non disturba nessuno.
 /// </summary>
