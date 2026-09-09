@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1545",
+                     "data":  "2026-09-09T15:45:57",
+                     "hash":  "2078aa384612d2de9fef3951a321518ff7ba11d1",
+                     "modifiche":  [
+                                       "HR: nel dettaglio della giornata gli orari da scrivere su Ecos si decidono a mano"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1532",
                      "data":  "2026-09-09T15:32:51",
                      "hash":  "00693b0bc1b273bf0096411876b9c3c02b5ca40c",
