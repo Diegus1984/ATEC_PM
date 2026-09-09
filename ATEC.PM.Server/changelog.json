@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1601",
+                     "data":  "2026-09-09T16:01:47",
+                     "hash":  "50469f7561244cc13ed426b52e94f20ad3c58942",
+                     "modifiche":  [
+                                       "HR: la timbratura che manca si scrive nella sua riga e va su Ecos con «Scrivi su Ecos»"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1545",
                      "data":  "2026-09-09T15:45:57",
                      "hash":  "2078aa384612d2de9fef3951a321518ff7ba11d1",
