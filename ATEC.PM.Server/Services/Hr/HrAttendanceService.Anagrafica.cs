@@ -138,7 +138,8 @@ public partial class HrAttendanceService
         {
             Configured = _ecos.Configured,
             ImportInProgress = ImportInProgress,
-            LastImport = LastImport,
+            // Dopo un riavvio lo stato in memoria è vuoto: la data resta quella scritta in app_config.
+            LastImport = LastImport ?? LeggiConfigData(c, ImportKey),
             LastResult = LastResult,
             TotalPunches = conteggi.Punches,
             TotalDays = conteggi.Days,
@@ -162,6 +163,16 @@ public partial class HrAttendanceService
             VALUES (@K, @V, 'HR: ultima lettura riuscita dell''anagrafica badge da Ecos')
             ON DUPLICATE KEY UPDATE config_value = @V",
             new { K = BadgeKey, V = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) });
+    }
+
+    /// <summary>Segna l'ultimo import da Ecos riuscito (la data sotto «Aggiorna da Ecos»).</summary>
+    private static void ScriviUltimoImport(MySqlConnection c, DateTime quando)
+    {
+        c.Execute(@"
+            INSERT INTO app_config (config_key, config_value, description)
+            VALUES (@K, @V, 'HR: ultimo import da Ecos andato a buon fine')
+            ON DUPLICATE KEY UPDATE config_value = @V",
+            new { K = ImportKey, V = quando.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) });
     }
 
     private static DateTime? LeggiConfigData(MySqlConnection c, string chiave)

@@ -117,6 +117,7 @@ public partial class HrAttendanceService
 
             ScriviCursore(c, NuovoCursore(timbrature, inizio));
             LastImport = inizio;
+            ScriviUltimoImport(c, inizio);
             LastResult = esito.Message;
             _logger.LogInformation("[HR] Import Ecos completato: {Msg}", esito.Message);
             ProgressoFine($"=== COMPLETATO === {esito.Message}", esito);
@@ -316,6 +317,7 @@ public partial class HrAttendanceService
             }
 
             LastImport = DateTime.Now;
+            ScriviUltimoImport(c, LastImport.Value);
             LastResult = esito.Message;
             _logger.LogInformation(
                 "[HR] {Titolo}: {Msg} (il cursore non è stato toccato).", titolo, esito.Message);

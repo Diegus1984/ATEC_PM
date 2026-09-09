@@ -22,6 +22,9 @@ public partial class HrAttendanceService
     /// non se ne accorgeva: qui si scrive nell'unico punto in cui i badge si leggono.
     /// </summary>
     private const string BadgeKey = "hr_last_badge_read";
+    // L'ultimo import da Ecos andato a buon fine: la data sotto «Aggiorna da Ecos» (Diego,
+    // 09/09/2026 sera). In app_config perché lo stato in memoria si azzera a ogni riavvio.
+    private const string ImportKey = "hr_last_import_at";
 
     private static readonly TimeSpan MargineCursore = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MargineCursoreOrologioNostro = TimeSpan.FromHours(1);

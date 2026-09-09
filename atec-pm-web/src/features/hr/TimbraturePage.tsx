@@ -1,5 +1,7 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+
+import { formatDateTimeShort } from "@/lib/date-iso"
 import { useNavigate } from "react-router-dom"
 import {
   ChevronLeft,
@@ -359,14 +361,25 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
               </Button>
               {/* Mentre l'import gira il pulsante NON si spegne: è da lì che si guarda
                   l'avanzamento — spegnerlo lascerebbe l'utente fuori dalla porta. */}
-              <Button
-                size="sm"
-                onClick={() => setSincronizzaAperto(true)}
-                title="Import da Ecos, sincronizzazione di un mese e avanzamento a video"
-              >
-                <DownloadCloud className="mr-1 size-3.5" />
-                {stato?.importInProgress ? "Aggiornamento in corso…" : "Aggiorna da Ecos"}
-              </Button>
+              {/* Sotto il pulsante, in grigio, l'ultima sincronizzazione riuscita (Diego,
+                  09/09/2026 sera): assoluta, così il pulsante resta allineato agli altri. */}
+              <div className="relative">
+                <Button
+                  size="sm"
+                  onClick={() => setSincronizzaAperto(true)}
+                  title="Import da Ecos, sincronizzazione di un mese e avanzamento a video"
+                >
+                  <DownloadCloud className="mr-1 size-3.5" />
+                  {stato?.importInProgress ? "Aggiornamento in corso…" : "Aggiorna da Ecos"}
+                </Button>
+                {stato && (
+                  <span className="absolute right-0 top-full mt-0.5 whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
+                    {stato.lastImport
+                      ? `Ultima sincronizzazione ${formatDateTimeShort(stato.lastImport)}`
+                      : "Mai sincronizzato"}
+                  </span>
+                )}
+              </div>
             </>
           )}
           {vista === "cartellino" && cartellino && (
