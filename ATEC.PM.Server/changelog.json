@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-0905",
+                     "data":  "2026-09-09T09:05:11",
+                     "hash":  "cd408f5b39e1ac4bef358772e24905172c43adf6",
+                     "modifiche":  [
+                                       "Richieste: dalla piu recente inserita, con filtri per dipendente, reparto, tipo e stato",
+                                       "Manuale Ecos: PeopleAbsenceRequestPost non e nella guida ufficiale, righe del diritto negato aggiornate"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-0851",
                      "data":  "2026-09-09T08:51:29",
                      "hash":  "0f99bbb929a0395d5ddc92eea3ca7deedb7d34c5",
