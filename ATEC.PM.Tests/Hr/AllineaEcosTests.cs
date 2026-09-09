@@ -316,6 +316,72 @@ public class AllineaEcosTests
         Assert.Empty(ecosDopo.UrlChiamati);
     }
 
+    [FactRichiedeMySql]
+    public async Task Gli_orari_decisi_a_mano_da_HR_vincono_sull_arrotondamento_anche_per_la_pausa()
+    {
+        // Diego, 09/09/2026 sera: «devo poter modificare a mano gli orari». Entrata 08:10 e
+        // uscita 17:21: il motore direbbe 08:00 e 17:30 con la pausa 12:30-13:30. HR decide
+        // 08:00, 17:00 e la pausa 12:00-13:00: su Ecos e qui va quello.
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        long entrata = Grezza(c, mario, "s1", Giorno.AddHours(8).AddMinutes(10), "IN");
+        long uscita = Grezza(c, mario, "s2", Giorno.AddHours(17).AddMinutes(21), "OUT");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaUpdate(), InvioEcosTests.RispostaUpdate(),
+            InvioEcosTests.RispostaBadge("246b3548"),
+            InvioEcosTests.RispostaInsert("s9", "5374", "42"), InvioEcosTests.RispostaInsert("s10", "5374", "42"),
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 08:00:00", "42", "IN"),
+                InvioEcosTests.Riga("s2", "2026-02-05 17:00:00", "42", "OUT")));
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        var scelte = new List<HrEcosTimeDto>
+        {
+            new() { PunchId = entrata, Direction = "IN", Time = "08:00" },
+            new() { PunchId = uscita, Direction = "OUT", Time = "17:00" },
+            new() { PunchId = null, Direction = "OUT", Time = "12:00" },
+            new() { PunchId = null, Direction = "IN", Time = "13:00" },
+        };
+        HrEcosSendResultDto esito = await servizio.SendDayToEcosAsync(mario, Giorno, autore, scelte);
+
+        Assert.True(esito.Success, esito.Message);
+        Assert.Equal(2, esito.Sent);
+        Assert.Equal(2, esito.BreakInserted);
+        // Su Ecos vanno gli orari di HR, non quelli del motore.
+        Assert.Contains("StampDateTime=2026-02-05+08%3A00%3A00", ecos.CorpiInviati[1]);
+        Assert.Contains("StampDateTime=2026-02-05+17%3A00%3A00", ecos.CorpiInviati[2]);
+        Assert.Contains("StampDateTime=2026-02-05+12%3A00%3A00", ecos.CorpiInviati[4]);
+        Assert.Contains("StampDateTime=2026-02-05+13%3A00%3A00", ecos.CorpiInviati[5]);
+        // E qui sono lo specchio: la giornata ricalcolata è 08:00-12:00 / 13:00-17:00, otto ore.
+        var giornata = c.QuerySingle<(string In1, string Out1, string In2, string Out2, int Regular, string Note)>(
+            "SELECT clock_in_1, clock_out_1, clock_in_2, clock_out_2, regular_minutes, note FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
+            new { Id = mario, Giorno });
+        Assert.Equal(("08:00", "12:00", "13:00", "17:00", 480, "OK"), giornata);
+        Assert.Equal(Giorno.AddHours(17), c.ExecuteScalar<DateTime>("SELECT punched_at FROM hr_punches WHERE id = @Id", new { Id = uscita }));
+        // Il registro tiene l'orario originale (17:21) e quello scritto (17:00).
+        var registro = c.QuerySingle<(DateTime PunchedAt, DateTime SentTime)>(
+            "SELECT punched_at, sent_time FROM hr_ecos_sends WHERE punch_id = @Id", new { Id = uscita });
+        Assert.Equal((Giorno.AddHours(17).AddMinutes(21), Giorno.AddHours(17)), registro);
+    }
+
+    [FactRichiedeMySql]
+    public async Task Un_orario_scritto_male_ferma_tutto_prima_di_toccare_Ecos()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        long entrata = Grezza(c, mario, "s1", Giorno.AddHours(8).AddMinutes(10), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken());
+
+        HrEcosSendResultDto esito = await Servizio(ecos).SendDayToEcosAsync(mario, Giorno, mario,
+            new List<HrEcosTimeDto> { new() { PunchId = entrata, Direction = "IN", Time = "8.00" } });
+
+        Assert.False(esito.Success);
+        Assert.Contains("Orario non valido", esito.Message);
+        Assert.Empty(ecos.UrlChiamati);
+    }
+
     // ── Attrezzi ──────────────────────────────────────────────────────────────
 
     private HrAttendanceService Servizio(HttpMessageHandler handler)

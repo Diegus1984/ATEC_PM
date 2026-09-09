@@ -44,6 +44,16 @@ export interface HrEcosSend {
   sentAt: string
 }
 
+/**
+ * Un orario deciso a mano da HR per «Scrivi su Ecos» (09/09/2026 sera): per timbratura
+ * (`punchId`) o, per la pausa dedotta, per verso senza `punchId`. «HH:mm».
+ */
+export interface HrEcosTime {
+  punchId?: number | null
+  direction: string
+  time: string
+}
+
 /** Esito del pulsante «Invia a Ecos»: viaggia sempre come dato, anche se fallito. */
 export interface HrEcosSendResult {
   success: boolean

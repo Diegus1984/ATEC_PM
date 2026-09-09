@@ -24,12 +24,18 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { deleteHrAdjustment, sendHrAdjustment, sendHrDayToEcos } from "@/lib/api/hr"
-import type { HrDay } from "@/lib/api/types"
+import type { HrDay, HrEcosTime } from "@/lib/api/types"
 import { formatDateTimeShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
-import { riassuntoInvioEcos, versoTimbratura } from "./invio-ecos"
+import {
+  orariDaScrivere,
+  orarioValido,
+  riassuntoInvioEcos,
+  scelteDaScrivere,
+  versoTimbratura,
+} from "./invio-ecos"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 function oraDa(iso: string): string {
@@ -138,6 +144,19 @@ export function GiornataDialog({
   const [ora, setOra] = React.useState("")
   const [verso, setVerso] = React.useState<"IN" | "OUT">("IN")
   const [motivo, setMotivo] = React.useState("")
+  // Gli orari da scrivere su Ecos, decisi a mano (09/09/2026 sera): per timbratura e per la
+  // pausa dedotta. Proposti con l'arrotondato del motore ogni volta che la giornata cambia.
+  const [orari, setOrari] = React.useState<Record<number, string>>({})
+  const [pausaOre, setPausaOre] = React.useState({ uscita: "", rientro: "" })
+  const proposta = React.useMemo(
+    () => (giornata ? orariDaScrivere(giornata) : { righe: [], pausa: null }),
+    [giornata]
+  )
+  React.useEffect(() => {
+    if (!open) return
+    setOrari(Object.fromEntries(proposta.righe.map((r) => [r.punchId, r.proposto])))
+    setPausaOre(proposta.pausa ?? { uscita: "", rientro: "" })
+  }, [open, proposta])
 
   // Se manca l'uscita, la rettifica parte già impostata su «Uscita».
   const mancaUscita = giornata
@@ -192,27 +211,39 @@ export function GiornataDialog({
   const frase = spiegazione(giornata, employeeName, canWrite)
   const ecos = riassuntoInvioEcos(giornata)
 
+  const scelte = scelteDaScrivere(proposta.righe, orari, proposta.pausa)
+
   async function inviaAEcos() {
-    if (!giornata || !ecos.daScrivere) return
-    const modifiche = ecos.daInviare.length - ecos.daInserire.length
-    const pezzi = [
-      modifiche > 0 ? `${modifiche} con l'orario arrotondato al posto di quello timbrato` : "",
-      ecos.daInserire.length > 0
-        ? `${ecos.daInserire.length} rettifiche inserite su Ecos come timbrature nuove`
-        : "",
-      // La pausa dedotta (09/09/2026): su Ecos nasce come due strisciate vere.
-      ecos.pausaDaInserire
-        ? `la pausa pranzo dedotta dal motore (${giornata.clockOut1.replace("*", "")} e ${giornata.clockIn2.replace("*", "")}) inserita su Ecos come timbrature nuove`
-        : "",
-    ].filter(Boolean)
-    const ok = await confirm({
-      title: "Scrivere su Ecos la giornata calcolata?",
-      description:
-        `${employeeName || "Questa persona"}, ${giornoEsteso(giornata.workDate)}: ${pezzi.join("; ")}.` +
-        " L'ora timbrata resta qui e nel registro degli invii.",
-      confirmLabel: "Scrivi su Ecos",
+    if (!giornata || scelte.totale === 0) return
+    const times: HrEcosTime[] = scelte.timbrature.map((r) => ({
+      punchId: r.punchId,
+      direction: r.direction,
+      time: orari[r.punchId] ?? r.proposto,
+    }))
+    if (scelte.conPausa) {
+      times.push({ punchId: null, direction: "OUT", time: pausaOre.uscita })
+      times.push({ punchId: null, direction: "IN", time: pausaOre.rientro })
+    }
+    if (times.some((x) => !orarioValido(x.time))) {
+      notifyError("C'è un orario non valido: scriverlo come 08:00.")
+      return
+    }
+    // Il resoconto: cosa parte, riga per riga, con gli orari decisi qui.
+    const righeTesto = scelte.timbrature.map((r) => {
+      const scelto = orari[r.punchId] ?? r.proposto
+      return r.suEcos
+        ? `${versoTimbratura(r.direction)} ${r.suEcos} → ${scelto}`
+        : `${versoTimbratura(r.direction)} ${scelto} (rettifica, nuova su Ecos)`
     })
-    if (ok) invioEcos.mutate({ employeeId, workDate: giorno })
+    if (scelte.conPausa) righeTesto.push(`pausa ${pausaOre.uscita} → ${pausaOre.rientro} (nuove su Ecos)`)
+    const ok = await confirm({
+      title: "Scrivere su Ecos questi orari?",
+      description:
+        `${employeeName || "Questa persona"}, ${giornoEsteso(giornata.workDate)}: ${righeTesto.join("; ")}.` +
+        " Dopo la scrittura le timbrature qui sono uguali a Ecos; l'orario originale resta nel registro degli invii.",
+      confirmLabel: `Scrivi su Ecos (${scelte.totale})`,
+    })
+    if (ok) invioEcos.mutate({ employeeId, workDate: giorno, times })
   }
 
   function inviaRettifica() {
@@ -314,68 +345,92 @@ export function GiornataDialog({
           )}
         </div>
 
-        {(ecos.diEcos > 0 || ecos.pausaDaInserire) && (
+        {(proposta.righe.length > 0 || proposta.pausa) && (
           <div className="space-y-2 rounded-md border p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium">Orari arrotondati su Ecos</p>
-              {ecos.daScrivere ? (
-                <Badge variant="secondary">
-                  Da inviare: {ecos.daInviare.length + (ecos.pausaDaInserire ? 2 : 0)}
-                </Badge>
+              <p className="text-sm font-medium">Orari su Ecos</p>
+              {scelte.totale > 0 ? (
+                <Badge variant="secondary">Da scrivere: {scelte.totale}</Badge>
               ) : ecos.allineato ? (
                 <Badge variant="outline">Allineato con Ecos</Badge>
               ) : null}
               {ecos.ultimoInvio && (
                 <span className="text-xs text-muted-foreground">
-                  Inviato il {formatDateTimeShort(ecos.ultimoInvio)}
+                  Scritto il {formatDateTimeShort(ecos.ultimoInvio)}
                 </span>
               )}
             </div>
-            {ecos.daInviare.length > 0 && (
-              <ul className="space-y-0.5 text-sm">
-                {ecos.daInviare.map((t) => (
-                  <li key={t.id} className="flex items-center gap-2 tabular-nums">
-                    <span className="w-14">{versoTimbratura(t.direction)}</span>
-                    <span className="text-muted-foreground">{oraDa(t.ecosPunchedAt ?? t.punchedAt)}</span>
-                    <span className="text-muted-foreground">{t.ecosInsert ? "nuova su Ecos alle" : "diventa"}</span>
-                    <span className="font-medium">{t.roundedAt ? oraDa(t.roundedAt) : "—"}</span>
-                    {t.ecosInsert && <Badge variant="default">RETTIFICA</Badge>}
+            {/* Ogni riga: com'è su Ecos adesso e l'orario che ci andrà — proposto con
+                l'arrotondato del motore, ma è HR a decidere (Diego, 09/09/2026 sera). */}
+            <ul className="space-y-1 text-sm">
+              {proposta.righe.map((r) => {
+                const scelto = orari[r.punchId] ?? r.proposto
+                const cambia = r.inviabile && !r.incerta && (r.suEcos == null || scelto !== r.suEcos)
+                return (
+                  <li key={r.punchId} className="flex flex-wrap items-center gap-2 tabular-nums">
+                    <span className="w-14">{versoTimbratura(r.direction)}</span>
+                    <span className="w-28 text-muted-foreground">
+                      {r.suEcos ? `su Ecos ${r.suEcos}` : "non ancora su Ecos"}
+                    </span>
+                    <Input
+                      type="time"
+                      value={scelto}
+                      onChange={(e) => setOrari((prev) => ({ ...prev, [r.punchId]: e.target.value }))}
+                      disabled={!canWrite || !r.inviabile || r.incerta}
+                      aria-label={`Orario su Ecos per ${versoTimbratura(r.direction).toLowerCase()}`}
+                      className="h-8 w-28"
+                    />
+                    {r.tipo === "rettifica" && <Badge variant="default">RETTIFICA</Badge>}
+                    {r.incerta ? (
+                      <span className="text-xs text-destructive">
+                        mandata senza risposta certa: verificare su Ecos
+                      </span>
+                    ) : !r.inviabile ? (
+                      <span className="text-xs text-muted-foreground">non inviabile: cambierebbe giorno</span>
+                    ) : cambia ? (
+                      <span className="text-xs text-amber-700 dark:text-amber-400">da scrivere</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">uguale</span>
+                    )}
                   </li>
-                ))}
-              </ul>
-            )}
-            {ecos.pausaDaInserire && (
-              <p className="text-sm tabular-nums">
-                Pausa pranzo dedotta dal motore: su Ecos nascono{" "}
-                <span className="font-medium">
-                  uscita {giornata.clockOut1.replace("*", "")} e rientro {giornata.clockIn2.replace("*", "")}
-                </span>{" "}
-                <Badge variant="default">PAUSA</Badge>
-              </p>
-            )}
-            {ecos.nonInviabili > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {ecos.nonInviabili === 1
-                  ? "Una timbratura non è inviabile: l'arrotondamento cambierebbe giorno."
-                  : `${ecos.nonInviabili} timbrature non sono inviabili: l'arrotondamento cambierebbe giorno.`}
-              </p>
-            )}
-            {ecos.incerte > 0 && (
-              <p className="text-xs text-destructive">
-                {ecos.incerte === 1
-                  ? "Una rettifica è stata mandata a Ecos senza risposta certa: verificare su Ecos. Non riparte da sola; se là non c'è, togliere la rettifica e rifarla."
-                  : `${ecos.incerte} rettifiche sono state mandate a Ecos senza risposta certa: verificare su Ecos. Non ripartono da sole; se là non ci sono, togliere le rettifiche e rifarle.`}
-              </p>
-            )}
+                )
+              })}
+              {proposta.pausa && (
+                <li className="flex flex-wrap items-center gap-2 tabular-nums">
+                  <span className="w-14">Pausa</span>
+                  <span className="w-28 text-muted-foreground">non ancora su Ecos</span>
+                  <Input
+                    type="time"
+                    value={pausaOre.uscita}
+                    onChange={(e) => setPausaOre((prev) => ({ ...prev, uscita: e.target.value }))}
+                    disabled={!canWrite}
+                    aria-label="Uscita per la pausa"
+                    className="h-8 w-28"
+                  />
+                  <span className="text-muted-foreground">→</span>
+                  <Input
+                    type="time"
+                    value={pausaOre.rientro}
+                    onChange={(e) => setPausaOre((prev) => ({ ...prev, rientro: e.target.value }))}
+                    disabled={!canWrite}
+                    aria-label="Rientro dalla pausa"
+                    className="h-8 w-28"
+                  />
+                  <Badge variant="default">PAUSA</Badge>
+                  <span className="text-xs text-amber-700 dark:text-amber-400">da scrivere</span>
+                </li>
+              )}
+            </ul>
             <p className="text-xs text-muted-foreground">
-              Su Ecos l'orario timbrato viene sovrascritto con quello arrotondato e le rettifiche
-              nascono come timbrature nuove. L'ora timbrata resta qui e nel registro degli invii.
+              Proposto l'orario arrotondato dal motore: cambialo se serve. Su Ecos, e qui, va quello
+              che scrivi; le rettifiche e la pausa nascono su Ecos come timbrature nuove. L'orario
+              originale resta nel registro degli invii.
             </p>
-            {canWrite && ecos.daScrivere && (
+            {canWrite && scelte.totale > 0 && (
               <div className="flex justify-end">
                 <Button size="sm" disabled={invioEcos.isPending} onClick={() => void inviaAEcos()}>
                   <Send className="size-4" />
-                  Scrivi su Ecos
+                  Scrivi su Ecos ({scelte.totale})
                 </Button>
               </div>
             )}

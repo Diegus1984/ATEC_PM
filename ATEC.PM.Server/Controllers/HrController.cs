@@ -669,7 +669,7 @@ public class HrController : ControllerBase
                 ApiResponse<string>.Fail("L'invio a Ecos richiede la scrittura su Timbrature."));
 
         HrEcosSendResultDto esito = await _attendance.SendDayToEcosAsync(
-            req.EmployeeId, req.WorkDate.Date, MeId, HttpContext.RequestAborted);
+            req.EmployeeId, req.WorkDate.Date, MeId, req.Times, HttpContext.RequestAborted);
         if (esito.Sent > 0 || esito.Inserted > 0 || esito.BreakInserted > 0 || esito.Failed > 0)
             _realtime.Notify("ecos-send", req.EmployeeId, req.WorkDate.Date);
         return Ok(ApiResponse<HrEcosSendResultDto>.Ok(esito, esito.Message));

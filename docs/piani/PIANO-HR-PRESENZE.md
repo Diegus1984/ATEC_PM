@@ -625,6 +625,15 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   l'orario che Ecos ha adesso (ambra se diverso dall'ora calcolata), nel dettaglio la lista si chiama
   «Timbrature su Ecos». La regola dell'08/09 «`punched_at` non cambia mai» è superata; M130 allinea le
   righe scritte prima del cambio e segna le loro giornate da ricalcolare (`rules_version = 0`).
+- **Orari decisi a mano (09/09 sera).** Diego: «devo poter modificare a mano gli orari». Nel dettaglio
+  della giornata il riquadro «Orari su Ecos» ha un campo ora per ogni timbratura (di Ecos o rettifica)
+  e due per la pausa dedotta, proposti con l'arrotondato del motore: su Ecos — e qui, che ne è lo
+  specchio — va quello che HR scrive. `POST /api/hr/ecos/send-day` porta `Times[]` (`HrEcosTimeDto`:
+  `PunchId` + `Direction` + `Time` «HH:mm»; per la pausa `PunchId` null); il server usa `Target`
+  (`Forzata ?? Arrotondata`) per modifiche, inserimenti e specchio, e rifiuta tutto prima di toccare
+  Ecos se un orario non è «HH:mm». Logica pura del dialogo in `invio-ecos.ts` (`orariDaScrivere`,
+  `scelteDaScrivere`, `orarioValido`) col suo test; test C# in `AllineaEcosTests` («gli orari decisi a
+  mano vincono»). La nuvola della riga (resoconto) resta con i valori proposti dal motore.
 - Il dettaglio della giornata (`GiornataDialog`) mostra la pausa fra le cose da inviare e il pulsante
   si chiama «Scrivi su Ecos»; la conferma elenca modifiche, rettifiche e pausa.
 - Test: `PausaDedottaTests` (regola pura) e `AllineaEcosTests` (resoconto, inserimento, anomalia,

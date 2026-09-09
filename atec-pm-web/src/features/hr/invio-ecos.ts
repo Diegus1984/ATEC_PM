@@ -87,3 +87,83 @@ export function oraSuEcos(
   const suEcos = t?.ecosPunchedAt?.slice(11, 16)
   return suEcos && suEcos !== timbrato ? suEcos : null
 }
+
+// ── Gli orari decisi a mano (09/09/2026 sera) ─────────────────────────────────
+//
+// Diego: «devo poter modificare a mano gli orari». Nel dettaglio della giornata ogni
+// timbratura che riguarda Ecos ha un campo ora, proposto con l'arrotondato del motore: su
+// Ecos (e qui, che ne è lo specchio) va quello che HR scrive. Qui la parte pura: cosa si
+// propone e cosa parte davvero.
+
+/** Una timbratura su cui HR decide l'orario da scrivere su Ecos. */
+export interface OrarioDaScrivere {
+  punchId: number
+  direction: string
+  tipo: "ecos" | "rettifica"
+  /** L'orario che Ecos ha adesso («HH:mm»); null per una rettifica non ancora su Ecos. */
+  suEcos: string | null
+  /** La proposta del motore: l'orario arrotondato («HH:mm»). */
+  proposto: string
+  /** false = l'arrotondamento cambierebbe giorno: si guarda a mano. */
+  inviabile: boolean
+  /** Rettifica mandata senza risposta certa: non riparte da sola. */
+  incerta: boolean
+}
+
+/** La pausa dedotta dal motore, proposta con i suoi orari. */
+export interface PausaDaScrivere {
+  uscita: string
+  rientro: string
+}
+
+function hhmm(iso: string | null | undefined): string {
+  return iso ? iso.slice(11, 16) : ""
+}
+
+export function orariDaScrivere(
+  giornata: Pick<HrDay, "punches" | "clockOut1" | "clockIn2"> & { ecosBreakToInsert?: boolean }
+): { righe: OrarioDaScrivere[]; pausa: PausaDaScrivere | null } {
+  const righe: OrarioDaScrivere[] = []
+  for (const t of giornata.punches) {
+    const diEcos = t.source === "ECOS" && Boolean(t.ecosStampId)
+    if (!diEcos && !t.ecosInsert) continue
+    righe.push({
+      punchId: t.id,
+      direction: t.direction,
+      tipo: diEcos ? "ecos" : "rettifica",
+      suEcos: diEcos ? hhmm(t.ecosPunchedAt ?? t.punchedAt) : null,
+      proposto: hhmm(t.roundedAt ?? t.punchedAt),
+      inviabile: t.canSendToEcos || t.ecosUncertain,
+      incerta: t.ecosUncertain,
+    })
+  }
+  const pausa: PausaDaScrivere | null =
+    giornata.ecosBreakToInsert === true
+      ? { uscita: giornata.clockOut1.replace("*", ""), rientro: giornata.clockIn2.replace("*", "") }
+      : null
+  return { righe, pausa }
+}
+
+/**
+ * Cosa parte davvero con gli orari scelti: le timbrature il cui orario scelto è diverso da
+ * quello che Ecos ha (le rettifiche sempre, non sono ancora là), più le due strisciate della
+ * pausa. Le incerte e le non inviabili restano fuori.
+ */
+export function scelteDaScrivere(
+  righe: OrarioDaScrivere[],
+  valori: Record<number, string>,
+  pausa: PausaDaScrivere | null
+): { timbrature: OrarioDaScrivere[]; conPausa: boolean; totale: number } {
+  const timbrature = righe.filter((r) => {
+    if (!r.inviabile || r.incerta) return false
+    const scelto = valori[r.punchId] ?? r.proposto
+    return r.suEcos == null || scelto !== r.suEcos
+  })
+  const conPausa = pausa != null
+  return { timbrature, conPausa, totale: timbrature.length + (conPausa ? 2 : 0) }
+}
+
+/** «08:00» sì, «8.00» o vuoto no: il server rifiuterebbe tutto prima di toccare Ecos. */
+export function orarioValido(valore: string | undefined): boolean {
+  return /^\d{2}:\d{2}$/.test(valore ?? "")
+}

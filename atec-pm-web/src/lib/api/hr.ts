@@ -9,6 +9,7 @@ import type {
   HrDailyCheck,
   HrEcosPlan,
   HrEcosSendResult,
+  HrEcosTime,
   HrGiustificaInfo,
   HrGiustificaRequest,
   HrImportResult,
@@ -121,6 +122,8 @@ export async function sendHrDayToEcos(payload: {
   employeeId: number
   /** «yyyy-MM-dd». */
   workDate: string
+  /** Gli orari decisi a mano da HR; senza, valgono gli arrotondati del motore. */
+  times?: HrEcosTime[]
 }): Promise<HrEcosSendResult> {
   const r = await apiPost<ApiResponse<HrEcosSendResult>>("/api/hr/ecos/send-day", payload)
   return unwrapApi(r)

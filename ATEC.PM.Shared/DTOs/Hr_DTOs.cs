@@ -208,6 +208,23 @@ public class HrEcosSendRequest
 {
     public int EmployeeId { get; set; }
     public DateTime WorkDate { get; set; }
+
+    /// <summary>
+    /// Gli orari decisi A MANO da HR nel dettaglio della giornata (Diego, 09/09/2026 sera:
+    /// «devo poter modificare a mano gli orari»): uno per timbratura (<c>PunchId</c>) e, per la
+    /// pausa dedotta, uno per verso senza <c>PunchId</c>. Senza, valgono gli orari arrotondati
+    /// dal motore. Su Ecos e qui va quello che HR ha scritto.
+    /// </summary>
+    public List<HrEcosTimeDto>? Times { get; set; }
+}
+
+/// <summary>Un orario scelto da HR per una timbratura («HH:mm», nel giorno della giornata).</summary>
+public class HrEcosTimeDto
+{
+    /// <summary>La timbratura (di Ecos o rettifica); null = una strisciata della pausa dedotta.</summary>
+    public long? PunchId { get; set; }
+    public string Direction { get; set; } = "";
+    public string Time { get; set; } = "";
 }
 
 /// <summary>Esito del pulsante «Invia a Ecos» di una giornata. Viaggia sempre come dato, anche se fallito.</summary>

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { oraSuEcos, riassuntoInvioEcos, versoTimbratura } from "@/features/hr/invio-ecos"
+import {
+  oraSuEcos,
+  orariDaScrivere,
+  orarioValido,
+  riassuntoInvioEcos,
+  scelteDaScrivere,
+  versoTimbratura,
+} from "@/features/hr/invio-ecos"
 import type { HrPunch } from "@/lib/api/types"
 
 function timbratura(over: Partial<HrPunch>): HrPunch {
@@ -125,5 +132,63 @@ describe("versoTimbratura", () => {
   it("traduce il verso di Ecos", () => {
     expect(versoTimbratura("IN")).toBe("Entrata")
     expect(versoTimbratura("OUT")).toBe("Uscita")
+  })
+})
+
+describe("orari decisi a mano (09/09/2026 sera)", () => {
+  const giornata = {
+    clockOut1: "12:30*",
+    clockIn2: "13:30*",
+    ecosBreakToInsert: true,
+    punches: [
+      timbratura({ id: 1, punchedAt: "2026-09-08T08:10:00", direction: "IN", roundedAt: "2026-09-08T08:00:00" }),
+      timbratura({ id: 2, punchedAt: "2026-09-08T17:21:00", direction: "OUT", roundedAt: "2026-09-08T17:30:00" }),
+      timbratura({
+        id: 3, punchedAt: "2026-09-08T18:00:00", direction: "OUT", source: "ADJUSTMENT", ecosStampId: null,
+        ecosInsert: true, roundedAt: "2026-09-08T18:00:00",
+      }),
+    ],
+  }
+
+  it("propone l'arrotondato del motore e dice cosa Ecos ha adesso", () => {
+    const { righe, pausa } = orariDaScrivere(giornata)
+    expect(righe.map((r) => [r.punchId, r.tipo, r.suEcos, r.proposto])).toEqual([
+      [1, "ecos", "08:10", "08:00"],
+      [2, "ecos", "17:21", "17:30"],
+      [3, "rettifica", null, "18:00"],
+    ])
+    expect(pausa).toEqual({ uscita: "12:30", rientro: "13:30" })
+  })
+
+  it("parte solo ciò che differisce da Ecos, con gli orari scelti da HR, più la pausa", () => {
+    const { righe, pausa } = orariDaScrivere(giornata)
+    // HR rimette l'entrata com'era (08:10 = niente da scrivere) e cambia l'uscita in 17:00.
+    const scelte = scelteDaScrivere(righe, { 1: "08:10", 2: "17:00" }, pausa)
+    expect(scelte.timbrature.map((r) => r.punchId)).toEqual([2, 3])
+    expect(scelte.conPausa).toBe(true)
+    expect(scelte.totale).toBe(4)
+
+    const senzaPausa = scelteDaScrivere(righe, {}, null)
+    expect(senzaPausa.timbrature.map((r) => r.punchId)).toEqual([1, 2, 3])
+    expect(senzaPausa.totale).toBe(3)
+  })
+
+  it("una rettifica incerta o una timbratura non inviabile restano fuori", () => {
+    const { righe } = orariDaScrivere({
+      clockOut1: "", clockIn2: "", ecosBreakToInsert: false,
+      punches: [
+        timbratura({ id: 1, canSendToEcos: false, toSendToEcos: false }),
+        timbratura({ id: 2, source: "ADJUSTMENT", ecosStampId: null, ecosInsert: true, ecosUncertain: true, canSendToEcos: false }),
+      ],
+    })
+    expect(righe.map((r) => [r.inviabile, r.incerta])).toEqual([[false, false], [true, true]])
+    expect(scelteDaScrivere(righe, {}, null).totale).toBe(0)
+  })
+
+  it("accetta solo «HH:mm»", () => {
+    expect(orarioValido("08:00")).toBe(true)
+    expect(orarioValido("8.00")).toBe(false)
+    expect(orarioValido("")).toBe(false)
+    expect(orarioValido(undefined)).toBe(false)
   })
 })

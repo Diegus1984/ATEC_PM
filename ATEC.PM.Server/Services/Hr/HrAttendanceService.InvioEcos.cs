@@ -34,22 +34,28 @@ public partial class HrAttendanceService
         /// <summary>L'orario arrotondato dal motore (scatto 30', tolleranza 10': entrata su, uscita giù).</summary>
         public DateTime Arrotondata => OraArrotondata(PunchedAt, Direction);
 
+        /// <summary>L'orario deciso a mano da HR nel dettaglio (09/09/2026 sera); null = vale l'arrotondato.</summary>
+        public DateTime? Forzata { get; init; }
+
+        /// <summary>Quello che va su Ecos: la scelta di HR, altrimenti l'arrotondato.</summary>
+        public DateTime Target => Forzata ?? Arrotondata;
+
         /// <summary>Quello che Ecos ha adesso, per quanto ne sappiamo: l'ultimo inviato, altrimenti il timbrato.</summary>
         public DateTime OraSuEcos => EcosPunchedAt ?? PunchedAt;
 
         /// <summary>
-        /// Si può mandare solo se l'arrotondamento resta nello stesso giorno: un'entrata alle
-        /// 23:55 arrotonda a mezzanotte del giorno dopo, e su Ecos la timbratura cambierebbe
+        /// Si può mandare solo se l'orario resta nello stesso giorno: un'entrata alle 23:55
+        /// arrotonda a mezzanotte del giorno dopo, e su Ecos la timbratura cambierebbe
         /// cartellino. Quelle restano da guardare a mano.
         /// </summary>
-        public bool Inviabile => Arrotondata.Date == PunchedAt.Date;
+        public bool Inviabile => Target.Date == PunchedAt.Date;
 
         /// <summary>
         /// Si confronta al minuto: una timbratura alle 08:00:52 è già sullo scatto, e mandare
         /// 08:00:00 sarebbe una riga «08:00 diventa 08:00» nel registro (vista l'08/09/2026 alla
         /// prima prova in produzione). I secondi non contano né qui né su Ecos.
         /// </summary>
-        public bool DaInviare => Inviabile && Arrotondata != AlMinuto(OraSuEcos);
+        public bool DaInviare => Inviabile && AlMinuto(Target) != AlMinuto(OraSuEcos);
     }
 
     /// <summary>
@@ -62,7 +68,14 @@ public partial class HrAttendanceService
         DateTime? EcosPunchedAt, DateTime? EcosSentAt)
     {
         public DateTime Arrotondata => OraArrotondata(PunchedAt, Direction);
-        public bool Inviabile => Arrotondata.Date == PunchedAt.Date;
+
+        /// <summary>L'orario deciso a mano da HR nel dettaglio; null = vale l'arrotondato.</summary>
+        public DateTime? Forzata { get; init; }
+
+        /// <summary>Quello che nasce su Ecos: la scelta di HR, altrimenti l'arrotondato.</summary>
+        public DateTime Target => Forzata ?? Arrotondata;
+
+        public bool Inviabile => Target.Date == PunchedAt.Date;
 
         /// <summary>
         /// Un tentativo senza risposta certa (timeout dopo la scrittura): Ecos può averla creata
@@ -348,8 +361,13 @@ public partial class HrAttendanceService
     /// modifiche sono innocue da ripetere; gli inserimenti incerti non ripartono). L'esito è
     /// sempre un dato, anche quando è un fallimento.
     /// </summary>
+    /// <param name="times">
+    /// Gli orari decisi a mano da HR (09/09/2026 sera, «devo poter modificare a mano gli
+    /// orari»): per timbratura e per la pausa dedotta. Null o vuoto = gli arrotondati del motore.
+    /// </param>
     public async Task<HrEcosSendResultDto> SendDayToEcosAsync(
-        int employeeId, DateTime workDate, int autoreId, CancellationToken ct = default)
+        int employeeId, DateTime workDate, int autoreId, IReadOnlyList<HrEcosTimeDto>? times = null,
+        CancellationToken ct = default)
     {
         var esito = new HrEcosSendResultDto();
         if (!_ecos.Configured)
@@ -358,13 +376,38 @@ public partial class HrAttendanceService
             return esito;
         }
 
+        // Gli orari scelti a mano: «HH:mm» nel giorno della giornata, per timbratura o per verso della pausa.
+        var forzatePerTimbratura = new Dictionary<long, DateTime>();
+        var forzatePausa = new Dictionary<bool, DateTime>();
+        foreach (HrEcosTimeDto scelta in times ?? Array.Empty<HrEcosTimeDto>())
+        {
+            if (!TimeSpan.TryParseExact((scelta.Time ?? "").Trim(), "hh\\:mm", System.Globalization.CultureInfo.InvariantCulture, out TimeSpan ora))
+            {
+                esito.Failed = 1;
+                esito.Errors.Add($"Orario non valido: «{scelta.Time}».");
+                esito.Message = $"Orario non valido: «{scelta.Time}». Scriverlo come 08:00.";
+                return esito;
+            }
+            DateTime quando = workDate.Date + ora;
+            if (scelta.PunchId is long id) forzatePerTimbratura[id] = quando;
+            else forzatePausa[NightShift.IsEntry(scelta.Direction)] = quando;
+        }
+
         using MySqlConnection c = _db.Open();
-        List<TimbraturaEcos> tutte = TimbratureEcosDelGiorno(c, employeeId, workDate);
-        List<RettificaEcos> rettifiche = RettificheDelGiorno(c, employeeId, workDate);
+        List<TimbraturaEcos> tutte = TimbratureEcosDelGiorno(c, employeeId, workDate)
+            .Select(t => forzatePerTimbratura.TryGetValue(t.PunchId, out DateTime f) ? t with { Forzata = f } : t)
+            .ToList();
+        List<RettificaEcos> rettifiche = RettificheDelGiorno(c, employeeId, workDate)
+            .Select(r => forzatePerTimbratura.TryGetValue(r.PunchId, out DateTime f) ? r with { Forzata = f } : r)
+            .ToList();
         List<TimbraturaEcos> daInviare = tutte.Where(t => t.DaInviare).ToList();
         List<RettificaEcos> daInserire = rettifiche.Where(r => r.DaInviare).ToList();
         (List<TimbraturaDedotta> pausaDaInserire, int pauseIncerte) = PausaDaInserire(
             c, employeeId, workDate, GiornataCalcolata(c, employeeId, workDate), tutte, rettifiche);
+        // La pausa dedotta con gli orari scelti da HR (solo dove la pausa è davvero da inserire).
+        pausaDaInserire = pausaDaInserire
+            .Select(d => forzatePausa.TryGetValue(NightShift.IsEntry(d.Direction), out DateTime f) ? d with { Quando = f } : d)
+            .ToList();
         esito.Total = tutte.Count + rettifiche.Count;
         esito.Skipped = tutte.Count(t => !t.Inviabile) + rettifiche.Count(r => !r.Inviabile);
         int incerte = rettifiche.Count(r => r.Incerta) + pauseIncerte;
@@ -398,12 +441,12 @@ public partial class HrAttendanceService
             string? messaggio;
             try
             {
-                messaggio = await _ecos.UpdateStampTimeAsync(token, t.StampId, t.Arrotondata, ct);
+                messaggio = await _ecos.UpdateStampTimeAsync(token, t.StampId, t.Target, ct);
                 outcome = "OK";
                 // Specchio di Ecos: anche punched_at prende l'orario scritto (l'originale è nel registro).
                 c.Execute(
                     "UPDATE hr_punches SET punched_at = @Ora, ecos_punched_at = @Ora, ecos_sent_at = NOW() WHERE id = @Id",
-                    new { Ora = t.Arrotondata, Id = t.PunchId });
+                    new { Ora = t.Target, Id = t.PunchId });
                 esito.Sent++;
             }
             catch (EcosApiException ex)
@@ -414,10 +457,10 @@ public partial class HrAttendanceService
                 esito.Errors.Add($"{Verso(t.Direction)} {t.PunchedAt:HH:mm}: {ex.Message}");
                 _logger.LogWarning(
                     "[HR] Invio a Ecos fallito: dipendente {Dip}, {Giorno:yyyy-MM-dd}, StampID {Stamp} verso {Ora:HH:mm}: {Msg}",
-                    employeeId, workDate, t.StampId, t.Arrotondata, ex.Message);
+                    employeeId, workDate, t.StampId, t.Target, ex.Message);
             }
 
-            RegistraInvio(c, employeeId, workDate, t.PunchId, t.StampId, t.Direction, t.PunchedAt, t.Arrotondata,
+            RegistraInvio(c, employeeId, workDate, t.PunchId, t.StampId, t.Direction, t.PunchedAt, t.Target,
                 t.OraSuEcos, outcome, messaggio, autoreId);
 
             // 🪤 Al primo errore ci si ferma: se è il token o la rete, insistere fa solo altre
@@ -609,7 +652,7 @@ public partial class HrAttendanceService
             string stampId = "";
             try
             {
-                EcosStampInserted ins = await _ecos.InsertStampAsync(token, badge, r.Arrotondata, r.Direction, r.Nota, ct);
+                EcosStampInserted ins = await _ecos.InsertStampAsync(token, badge, r.Target, r.Direction, r.Nota, ct);
                 stampId = ins.StampId;
                 bool personaGiusta = ins.EmplId == emplId.ToString()
                     || (!string.IsNullOrEmpty(persona.EmplCode) && ins.EmplCode == persona.EmplCode);
@@ -632,7 +675,7 @@ public partial class HrAttendanceService
                         UPDATE hr_punches
                         SET source = 'ECOS', external_id = @Stamp, punched_at = @Ora, ecos_punched_at = @Ora, ecos_sent_at = NOW()
                         WHERE id = @Id",
-                        new { Stamp = ins.StampId, Ora = r.Arrotondata, Id = r.PunchId });
+                        new { Stamp = ins.StampId, Ora = r.Target, Id = r.PunchId });
                     outcome = "OK";
                     messaggio = "Correct Record Insert";
                     esito.Inserted++;
@@ -644,7 +687,7 @@ public partial class HrAttendanceService
                 // timbratura se Ecos la restituisce con quest'orario (ImportPunches).
                 c.Execute(
                     "UPDATE hr_punches SET ecos_punched_at = @Ora, ecos_sent_at = NOW() WHERE id = @Id",
-                    new { Ora = r.Arrotondata, Id = r.PunchId });
+                    new { Ora = r.Target, Id = r.PunchId });
                 messaggio = $"Esito incerto (nessuna risposta): {ex.Message}. Verificare su Ecos; non si rimanda da sola.";
                 esito.Failed++;
             }
@@ -659,10 +702,10 @@ public partial class HrAttendanceService
                 esito.Errors.Add($"{Verso(r.Direction)} {r.PunchedAt:HH:mm} (rettifica): {messaggio}");
                 _logger.LogWarning(
                     "[HR] Inserimento su Ecos fallito: dipendente {Dip}, {Giorno:yyyy-MM-dd}, {Verso} {Ora:HH:mm}: {Msg}",
-                    employeeId, workDate, r.Direction, r.Arrotondata, messaggio);
+                    employeeId, workDate, r.Direction, r.Target, messaggio);
             }
 
-            RegistraInvio(c, employeeId, workDate, r.PunchId, stampId, r.Direction, r.PunchedAt, r.Arrotondata,
+            RegistraInvio(c, employeeId, workDate, r.PunchId, stampId, r.Direction, r.PunchedAt, r.Target,
                 null, outcome, messaggio, autoreId);
             if (outcome == "ERROR") break;
         }
