@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260909-1633",
+                     "data":  "2026-09-09T16:33:22",
+                     "hash":  "104d2899c63b311c1d5744bba83d04f80a14d275",
+                     "modifiche":  [
+                                       "Configurazione email: l\u0027occhiolino mostra anche la password salvata"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1625",
                      "data":  "2026-09-09T16:25:44",
                      "hash":  "4dabde76c6d5e080288603a0a24b9b32367b6838",
