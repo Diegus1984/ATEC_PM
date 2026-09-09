@@ -1,6 +1,5 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "react-router-dom"
 import { Check, Clock, Plus, Trash2, X } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
@@ -37,7 +36,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   approveHrAbsence,
@@ -142,22 +140,14 @@ function statoBadge(status: string) {
   }
 }
 
-type Scheda = "mie" | "da_approvare" | "tutte"
-
-/** Ogni scheda è una rotta: sottovoci del menu e schede in pagina dicono la stessa cosa (08/09). */
-const PERCORSO_SCHEDA: Record<Scheda, string> = {
-  mie: "/hr/richieste",
-  da_approvare: "/hr/richieste/da-approvare",
-  tutte: "/hr/richieste/tutte",
-}
-
-export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
-  const navigate = useNavigate()
+/**
+ * Una pagina sola (Diego, 09/09/2026): le schede «Le mie» / «Da approvare» / «Tutte» sono
+ * durate un giorno, al loro posto ci sono i filtri. Chi non approva riceve dal server solo le
+ * sue richieste, qualunque filtro; chi approva vede tutte quelle dell'anno.
+ */
+export function RichiestePage() {
   const queryClient = useQueryClient()
   const canManage = canWriteFeature("nav.hr_richieste")
-
-  // Chi non approva vede solo le sue: le altre schede non esistono per lui, qualunque rotta.
-  const activeTab: Scheda = canManage ? vista : "mie"
   const confirm = useConfirm()
   const [dialogNuovaAperta, setDialogNuovaAperta] = React.useState(false)
   // Dettaglio di una richiesta: la riga dice il minimo, il clic dice tutto (Diego, 08/09).
@@ -200,19 +190,13 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
     queryFn: () => fetchHrAbsences({ year: filtroAnno }),
   })
 
-  const daApprovareCount = React.useMemo(
-    () => richieste.filter((r) => r.status === "PENDING").length,
-    [richieste]
-  )
-
-  // Filtri sulla lista (Diego, 09/09/2026): dipendente, reparto, tipo, stato. Lavorano sulla
-  // lista dell'anno già scaricata: niente giri al server per un filtro.
+  // Filtri sulla lista (Diego, 09/09/2026): dipendente, tipo, stato. Lavorano sulla lista
+  // dell'anno già scaricata: niente giri al server per un filtro. Il reparto non c'è: basta il
+  // dipendente, e la colonna lo dice comunque.
   const [filtroDipendente, setFiltroDipendente] = React.useState<number | null>(null)
-  const [filtroReparto, setFiltroReparto] = React.useState<string>("tutti")
   const [filtroTipo, setFiltroTipo] = React.useState<string>("tutti")
   const [filtroStato, setFiltroStato] = React.useState<string>("tutti")
-  const filtriAttivi =
-    filtroDipendente != null || filtroReparto !== "tutti" || filtroTipo !== "tutti" || filtroStato !== "tutti"
+  const filtriAttivi = filtroDipendente != null || filtroTipo !== "tutti" || filtroStato !== "tutti"
 
   const opzioniDipendenti: LookupComboboxOption<number>[] = React.useMemo(() => {
     const visti = new Map<number, string>()
@@ -221,21 +205,22 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name, "it"))
   }, [richieste])
-  const reparti = React.useMemo(
-    () => [...new Set(richieste.map((r) => r.departmentName).filter((x): x is string => Boolean(x)))].sort(),
-    [richieste]
-  )
-
   const displayedRichieste = React.useMemo(() => {
-    let lista = activeTab === "da_approvare" ? richieste.filter((r) => r.status === "PENDING") : richieste
+    let lista = richieste
     if (filtroDipendente != null) lista = lista.filter((r) => r.employeeId === filtroDipendente)
-    if (filtroReparto !== "tutti") lista = lista.filter((r) => (r.departmentName ?? "") === filtroReparto)
     if (filtroTipo !== "tutti") lista = lista.filter((r) => r.absenceType === filtroTipo)
     if (filtroStato !== "tutti") lista = lista.filter((r) => r.status === filtroStato)
     // Dalla più recente inserita: il server ordina già così, qui si tiene l'ordine anche se un
     // giorno la lista arrivasse da altrove.
     return [...lista].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
-  }, [richieste, activeTab, filtroDipendente, filtroReparto, filtroTipo, filtroStato])
+  }, [richieste, filtroDipendente, filtroTipo, filtroStato])
+
+  // Quante, fra quelle in vista, aspettano una decisione: lo stesso numero del badge nel menu
+  // quando i filtri sono a riposo.
+  const inAttesa = React.useMemo(
+    () => displayedRichieste.filter((r) => r.status === "PENDING").length,
+    [displayedRichieste]
+  )
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["hr-absences"] })
@@ -276,20 +261,13 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
         <div>
           <h1 className="text-lg font-semibold">Ferie e Permessi</h1>
           <p className="text-sm text-muted-foreground">
-            Richieste di assenza, permessi orari e autorizzazioni reparto.
+            {canManage
+              ? "Richieste di assenza e permessi orari di tutti, dalla più recente inserita."
+              : "Le tue richieste di ferie e permessi, dalla più recente inserita."}
           </p>
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1">
-            <Label className="text-xs text-muted-foreground">Anno:</Label>
-            <Input
-              type="number"
-              value={filtroAnno}
-              onChange={(e) => setFiltroAnno(Number(e.target.value))}
-              className="w-20 h-8 text-sm"
-            />
-          </div>
           <Button size="sm" onClick={() => setDialogNuovaAperta(true)}>
             <Plus className="mr-1 size-3.5" />
             Nuova richiesta
@@ -298,56 +276,64 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
         </div>
       </div>
 
-      {/* Filtri */}
-      <div className="flex flex-wrap items-center gap-2">
-        <LookupCombobox<number>
-          options={opzioniDipendenti}
-          value={filtroDipendente}
-          onValueChange={setFiltroDipendente}
-          placeholder="Tutti i dipendenti"
-          noneLabel="— tutti i dipendenti —"
-          className="w-56"
-        />
-        {reparti.length > 0 && (
-          <Select value={filtroReparto} onValueChange={setFiltroReparto}>
-            <SelectTrigger className="h-8 w-52 text-sm">
-              <SelectValue placeholder="Reparto" />
+      {/* Filtri: etichetta sopra il campo, «Azzera filtri» e il conteggio allineati in basso. */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-1">
+          <Label htmlFor="richieste-anno" className="text-xs text-muted-foreground">
+            Anno
+          </Label>
+          <Input
+            id="richieste-anno"
+            type="number"
+            value={filtroAnno}
+            onChange={(e) => setFiltroAnno(Number(e.target.value))}
+            className="h-8 w-20 text-sm"
+          />
+        </div>
+        {canManage && (
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground">Dipendente</Label>
+            <LookupCombobox<number>
+              options={opzioniDipendenti}
+              value={filtroDipendente}
+              onValueChange={setFiltroDipendente}
+              placeholder="Tutti i dipendenti"
+              noneLabel="— tutti i dipendenti —"
+              className="w-56"
+            />
+          </div>
+        )}
+        <div className="grid gap-1">
+          <Label className="text-xs text-muted-foreground">Tipo</Label>
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger className="h-8 w-44 text-sm">
+              <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="tutti">Tutti i reparti</SelectItem>
-              {reparti.map((rep) => (
-                <SelectItem key={rep} value={rep}>
-                  {rep}
+              <SelectItem value="tutti">Tutti i tipi</SelectItem>
+              {(["VACATION", "PERMIT", "SICKNESS", "INJURY", "OTHER"] as const).map((t) => (
+                <SelectItem key={t} value={t}>
+                  {tipoLabel(t)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        )}
-        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="h-8 w-44 text-sm">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tutti">Tutti i tipi</SelectItem>
-            {(["VACATION", "PERMIT", "SICKNESS", "INJURY", "OTHER"] as const).map((t) => (
-              <SelectItem key={t} value={t}>
-                {tipoLabel(t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filtroStato} onValueChange={setFiltroStato}>
-          <SelectTrigger className="h-8 w-40 text-sm">
-            <SelectValue placeholder="Stato" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tutti">Tutti gli stati</SelectItem>
-            <SelectItem value="PENDING">In attesa</SelectItem>
-            <SelectItem value="APPROVED">Approvate</SelectItem>
-            <SelectItem value="REJECTED">Rifiutate</SelectItem>
-            <SelectItem value="CANCELLED">Annullate</SelectItem>
-          </SelectContent>
-        </Select>
+        </div>
+        <div className="grid gap-1">
+          <Label className="text-xs text-muted-foreground">Stato</Label>
+          <Select value={filtroStato} onValueChange={setFiltroStato}>
+            <SelectTrigger className="h-8 w-40 text-sm">
+              <SelectValue placeholder="Stato" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tutti">Tutti gli stati</SelectItem>
+              <SelectItem value="PENDING">In attesa</SelectItem>
+              <SelectItem value="APPROVED">Approvate</SelectItem>
+              <SelectItem value="REJECTED">Rifiutate</SelectItem>
+              <SelectItem value="CANCELLED">Annullate</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {filtriAttivi && (
           <Button
             size="sm"
@@ -355,7 +341,6 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
             className="h-8 text-xs"
             onClick={() => {
               setFiltroDipendente(null)
-              setFiltroReparto("tutti")
               setFiltroTipo("tutti")
               setFiltroStato("tutti")
             }}
@@ -363,31 +348,11 @@ export function RichiestePage({ vista = "mie" }: { vista?: Scheda }) {
             Azzera filtri
           </Button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto pb-1.5 text-xs text-muted-foreground">
           {displayedRichieste.length} richieste
+          {inAttesa > 0 && `, ${inAttesa} in attesa`}
         </span>
       </div>
-
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => navigate(PERCORSO_SCHEDA[v as Scheda])}
-      >
-        <TabsList>
-          <TabsTrigger value="mie">Le mie richieste</TabsTrigger>
-          {canManage && (
-            <TabsTrigger value="da_approvare" className="relative">
-              Da approvare
-              {daApprovareCount > 0 && (
-                <span className="ml-1.5 rounded-full bg-amber-500 text-white text-[10px] px-1.5 py-0.2 font-medium">
-                  {daApprovareCount}
-                </span>
-              )}
-            </TabsTrigger>
-          )}
-          {canManage && <TabsTrigger value="tutte">Tutte le richieste</TabsTrigger>}
-        </TabsList>
-      </Tabs>
 
       {/* Table */}
       <GridScroller>

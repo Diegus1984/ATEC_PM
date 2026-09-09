@@ -6,9 +6,9 @@ import { canWriteFeature } from "@/lib/auth/permissions"
 export const HR_DA_APPROVARE_QUERY_KEY = ["hr-absences", "da-approvare"] as const
 
 /**
- * Badge «Da approvare» della sottovoce Ferie e permessi (08/09/2026): quante richieste
- * dell'anno sono in attesa. Lo stesso numero della scheda in pagina, così menu e pagina
- * dicono la stessa cosa. Solo per chi approva (scrittura sulla chiave), come la scheda.
+ * Badge della voce «Ferie e permessi» (08/09/2026): quante richieste dell'anno sono in
+ * attesa. Lo stesso numero del contatore in pagina, così menu e pagina dicono la stessa
+ * cosa. Solo per chi approva (scrittura sulla chiave): agli altri il numero non serve.
  *
  * La chiave è figlia di `["hr-absences"]`: ogni invalidazione della pagina Richieste e
  * del real-time HR rinfresca anche il contatore; in più si rilegge al minuto come gli altri.

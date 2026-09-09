@@ -138,9 +138,6 @@ function isNavActive(item: NavItemConfig, pathname: string): boolean {
   if (item.id === "gestore-ddp-controllo") {
     return pathname.startsWith("/gestore-ddp/controllo") && pathname !== "/gestore-ddp/controllo/consegne"
   }
-  if (item.id === "hr-richieste") {
-    return pathname === "/hr/richieste"
-  }
   if (item.id === "hr-timbrature") {
     // La prima sottovoce ha il percorso del gruppo: senza il confronto esatto resterebbe
     // accesa anche sulle altre viste (/hr/timbrature/calendario…).
@@ -501,8 +498,7 @@ export function AppShell() {
               sal: salWarningsCount,
               "gestore-ddp": ddpDaVerificare,
               "gestore-ddp-group": ddpDaVerificare,
-              "hr-richieste-group": hrDaApprovare,
-              "hr-richieste-da-approvare": hrDaApprovare,
+              "hr-richieste": hrDaApprovare,
             }
             const groupBadgeCount = group.items.reduce(
               (sum, item) => sum + (badgeById[item.id] ?? sectionCounts?.[item.id] ?? 0),

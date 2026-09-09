@@ -79,8 +79,6 @@ const LIVE_ROUTES: Record<string, ReactNode> = {
   "hr-timbrature-quadratura": <TimbraturePage vista="quadratura" />,
   "hr-timbrature-cronologia": <TimbraturePage vista="cronologia" />,
   "hr-richieste": <RichiestePage />,
-  "hr-richieste-da-approvare": <RichiestePage vista="da_approvare" />,
-  "hr-richieste-tutte": <RichiestePage vista="tutte" />,
   sal: <SalPage />,
   trasferta: <TrasfertaPage />,
   "ore-commessa": <OreCommessaPage />,
@@ -197,6 +195,10 @@ export function AppRoutes() {
         path="gestore-ddp/consegne"
         element={<Navigate to="/gestore-ddp/controllo/consegne" replace />}
       />
+      {/* Le sottovoci «Da approvare» e «Tutte le richieste» sono durate un giorno (08-09/09/2026):
+          la pagina è una sola con i filtri. I preferiti restano validi. */}
+      <Route path="hr/richieste/da-approvare" element={<Navigate to="/hr/richieste" replace />} />
+      <Route path="hr/richieste/tutte" element={<Navigate to="/hr/richieste" replace />} />
       <Route
         path="gestore-ddp/:projectId"
         element={guarded("gestore-ddp/:projectId", <DdpSintesiPage />)}
