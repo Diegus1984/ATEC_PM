@@ -67,11 +67,12 @@ export function versoTimbratura(direction: string): string {
 
 /**
  * L'ora che Ecos ha ADESSO per la timbratura di una cella, quando è diversa da quella
- * timbrata: dopo «Scrivi su Ecos» la riga mostra ancora «timbrato 07:48» (l'ora originale
- * non sparisce mai, regola di Diego) e senza questa riga sembrava che niente fosse partito
- * (09/09/2026). La cella conosce solo l'orario grezzo «07:48» e il verso: si cerca la
- * timbratura della giornata con quell'ora e quel verso e si legge `ecosPunchedAt`.
- * Null = mai inviata, o inviata uguale al timbrato (niente da dire).
+ * timbrata: dopo «Scrivi su Ecos» la riga piccola della cella mostra QUESTA al posto del
+ * timbrato («timbrato 08:00»), così ora calcolata e riga piccola coincidono e la giornata si
+ * legge sincronizzata (Diego, 09/09/2026, anteprima «A»); l'orario originale resta nel
+ * dettaglio e nel registro. La cella conosce solo l'orario grezzo «07:48» e il verso: si cerca
+ * la timbratura della giornata con quell'ora e quel verso e si legge `ecosPunchedAt`.
+ * Null = mai inviata, o inviata uguale al timbrato (niente da cambiare).
  */
 export function oraSuEcos(
   giornata: Pick<HrDay, "punches">,

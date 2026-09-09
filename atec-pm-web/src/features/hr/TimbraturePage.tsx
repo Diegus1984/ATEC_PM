@@ -621,7 +621,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                     <span className="size-3.5 rounded border border-amber-400 bg-amber-500/10" />
                     Oggi
                   </span>
-                  <span>In grande l'ora che vale, in piccolo l'ora timbrata e, dopo la scrittura, quella che Ecos ha adesso.</span>
+                  <span>In grande l'ora che vale, in piccolo l'orario che Ecos ha adesso: in ambra se è diverso.</span>
                 </div>
               </div>
 

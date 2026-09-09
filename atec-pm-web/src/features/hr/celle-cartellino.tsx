@@ -16,11 +16,13 @@ import type { ToneStato } from "./stato-giornata"
 // Solo componenti qui (fast refresh): le funzioni sulle durate stanno in ore.ts.
 
 /**
- * Una cella di orario: in grande l'ora che vale, in piccolo l'ora timbrata davvero — sempre,
- * anche quando coincide (Diego, 08/09/2026: il riferimento resta sotto, così si legge a colpo
- * d'occhio che la riga è stata confrontata). «??:??» del motore (uscita mai timbrata)
- * diventa una parola. Dopo «Scrivi su Ecos» la riga piccola dice anche l'ora che Ecos ha
- * adesso («timbrato 07:48 · Ecos 08:00», 09/09/2026): senza, sembrava che niente fosse partito.
+ * Una cella di orario: in grande l'ora che vale, in piccolo — sempre, anche quando coincide —
+ * l'orario che Ecos ha ADESSO per quella timbratura (Diego, 09/09/2026, anteprima «A»):
+ * prima della scrittura è quello timbrato, dopo è uguale all'ora calcolata, e quando le due
+ * coincidono la giornata è sincronizzata. Se non coincidono la riga piccola è in ambra: si vede
+ * a colpo d'occhio cosa cambierà su Ecos. L'orario originale non sparisce: sta nel dettaglio
+ * della giornata e nel registro degli invii. «??:??» del motore (uscita mai timbrata) diventa
+ * una parola.
  */
 export function CellaOra({
   valore,
@@ -56,6 +58,9 @@ export function CellaOra({
   // Senza ora timbrata (orario stimato o rettificato a mano) la riga resta, invisibile,
   // così tutte le celle hanno la stessa altezza.
   const conTimbrata = Boolean(timbrato)
+  const suEcosAdesso = suEcos ?? timbrato
+  // Ambra = su Ecos c'è ancora un orario diverso da quello calcolato (da scrivere).
+  const diversa = conTimbrata && !spenta && suEcosAdesso !== valore.replace("*", "")
   return (
     <TableCell className="leading-tight">
       <span className={cn("tabular-nums font-semibold", spenta && "text-muted-foreground")}>
@@ -63,17 +68,20 @@ export function CellaOra({
       </span>
       <span
         className={cn(
-          "block text-[11px] tabular-nums text-muted-foreground",
+          "block text-[11px] tabular-nums",
+          diversa ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground",
           !conTimbrata && "invisible"
         )}
         aria-hidden={!conTimbrata}
+        title={
+          conTimbrata
+            ? diversa
+              ? `Su Ecos c'è ${suEcosAdesso}: con «Scrivi su Ecos» diventa ${valore.replace("*", "")}`
+              : "Su Ecos c'è lo stesso orario della giornata calcolata"
+            : undefined
+        }
       >
-        timbrato {conTimbrata ? timbrato : "—"}
-        {conTimbrata && suEcos && (
-          <span className="text-sky-700 dark:text-sky-400" title={`Su Ecos ora è ${suEcos}: l'orario arrotondato è stato scritto`}>
-            {" "}· Ecos {suEcos}
-          </span>
-        )}
+        timbrato {conTimbrata ? suEcosAdesso : "—"}
       </span>
     </TableCell>
   )

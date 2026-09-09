@@ -308,7 +308,7 @@ export function ControlloGiornalieroView({
           Oggi
         </span>
         <span>
-          In grande l'ora che vale, in piccolo l'ora timbrata e, dopo la scrittura, quella che Ecos ha adesso. Clic sulla riga per il dettaglio
+          In grande l'ora che vale, in piccolo l'orario che Ecos ha adesso (in ambra se è diverso). Clic sulla riga per il dettaglio
           {canWrite
             ? ", la nuvola per scrivere su Ecos la giornata calcolata, 📧 per il sollecito, la casella per sollecitarne più d'uno."
             : "."}
