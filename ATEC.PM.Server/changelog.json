@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1201",
+                     "data":  "2026-09-10T12:01:41",
+                     "hash":  "e9d8cdce03cc9ea058c35d2d122049acae873b37",
+                     "modifiche":  [
+                                       "HR trasferta: riga in fondo al blocco e combo coi soli importi"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1157",
                      "data":  "2026-09-10T11:57:15",
                      "hash":  "ee64a10eb7022de1efdd175c0a423d59ea98bab2",
