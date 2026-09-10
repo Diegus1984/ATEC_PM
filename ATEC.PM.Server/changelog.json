@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1204",
+                     "data":  "2026-09-10T12:05:02",
+                     "hash":  "54a4bfe61988544c3d3bded7be65ee7e7c6d160f",
+                     "modifiche":  [
+                                       "HR calendario: caratteri leggibili e caselle di trasferta vuote quando non c\u0027è nulla"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1201",
                      "data":  "2026-09-10T12:01:41",
                      "hash":  "e9d8cdce03cc9ea058c35d2d122049acae873b37",
