@@ -280,8 +280,10 @@ public partial class HrAttendanceService
     ///
     /// <para>Le ore coperte da un permesso o da una ferie di mezza giornata contano come
     /// fatte: chi lavora quattro ore e ne ha quattro di permesso ha fatto la sua giornata.
-    /// Lo straordinario invece non copre nulla, perché è la <b>parte ordinaria</b> a dover
-    /// arrivare alle ore del contratto.</para>
+    /// Conta anche lo straordinario, perché chi è stato in azienda più delle ore previste non
+    /// è in difetto: è lo stesso conto del calendario mensile («Tutti, mese per mese»), che
+    /// tinge di rosso la casella quando mancano ore, e le due pagine devono dire lo stesso.
+    /// Da lì viene anche la soglia del quarto d'ora (Diego, 10/09/2026).</para>
     /// </summary>
     /// <summary>
     /// Di quanti minuti l'entrata arrotondata sta prima delle 8 (0 = nessun anticipo). Fuori
@@ -308,11 +310,13 @@ public partial class HrAttendanceService
         int previsti = (int)(dipendente.DailyHours * 60m);
         if (previsti <= 0) return 0;
 
-        int coperti = TimesheetRules.MinutesFromDuration(riga.RegularHours);
+        int coperti = TimesheetRules.MinutesFromDuration(riga.RegularHours)
+                      + TimesheetRules.MinutesFromDuration(riga.Overtime);
         if (assenza is not null)
             coperti += assenza.IsFullDay ? previsti : (int)Math.Round((assenza.Hours ?? 0m) * 60m);
 
-        return Math.Max(0, previsti - coperti);
+        int mancanti = previsti - coperti;
+        return mancanti >= TimesheetRules.ShortDayToleranceMinutes ? mancanti : 0;
     }
 
     // ── ENTRATA PRIMA DELLE 8 (Diego, 10/09/2026) ─────────────────────────────

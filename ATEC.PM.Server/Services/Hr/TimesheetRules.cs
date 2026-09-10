@@ -78,6 +78,13 @@ public static class TimesheetRules
     public const int StandardStartMinutes = 8 * 60;
 
     /// <summary>
+    /// Sotto questo scarto la giornata si considera piena: è la soglia con cui il calendario
+    /// mensile tinge di rosso una casella («Tutti, mese per mese», un quarto d'ora), e vale
+    /// anche per l'avviso «Mancano … sul contratto», così le pagine non si contraddicono.
+    /// </summary>
+    public const int ShortDayToleranceMinutes = 15;
+
+    /// <summary>
     /// Sotto quest'ora non si parla più di «arrivare in anticipo»: è un altro turno, e la
     /// regola delle 8 non lo tocca (un turno che comincia alle 4 del mattino resta com'è).
     /// </summary>

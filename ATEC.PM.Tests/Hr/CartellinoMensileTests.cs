@@ -112,10 +112,30 @@ public class CartellinoMensileTests
 
         Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 4).ShortMinutes);
         Assert.Equal(30, giorni.Single(g => g.WorkDate.Day == 5).ShortMinutes);
-        // Lo straordinario non copre il buco, ma qui la parte ordinaria è già piena.
         Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 6).ShortMinutes);
         // Una giornata senza timbrature non ha ore da confrontare: la sua parola è un'altra.
         Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 10).ShortMinutes);
+    }
+
+    /// <summary>
+    /// Il conto è quello del calendario mensile, che tinge di rosso la casella quando mancano
+    /// ore: dentro ci va anche lo straordinario, e sotto il quarto d'ora la giornata è piena.
+    /// Le due pagine devono dire la stessa cosa della stessa giornata (10/09/2026).
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Chi_e_rimasto_oltre_l_orario_non_risulta_in_difetto()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Giornata(c, mario, 4, ordinari: 450, straordinari: 60);  // 7h30 + 1h = più delle otto
+        Giornata(c, mario, 5, ordinari: 470);                    // dieci minuti: è dentro la tolleranza
+        Giornata(c, mario, 6, ordinari: 450, straordinari: 15);  // 7h45: ne mancano quindici
+
+        List<HrDayDto> giorni = Servizio().GetMonthlyTimesheet(mario, Anno, Mese).Days;
+
+        Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 4).ShortMinutes);
+        Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 5).ShortMinutes);
+        Assert.Equal(15, giorni.Single(g => g.WorkDate.Day == 6).ShortMinutes);
     }
 
     [FactRichiedeMySql]

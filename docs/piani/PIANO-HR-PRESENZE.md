@@ -736,6 +736,15 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   pagina e con i loro test: numero del riquadro e righe filtrate non possono scollarsi. Il resto
   delle novità di oggi era già lì, perché sta nel server (`ShortMinutes`, entrata anticipata) e
   nel `GiornataDialog`, che le due pagine si dividono.
+- **Le tre pagine dicono la stessa cosa della stessa giornata (10/09).** Il calendario «Tutti,
+  mese per mese» segnalava già le ore mancanti (casella rossa quando `oreMancanti >= 0.25h`) e ha
+  la causale col doppio clic o col tasto destro: non gli mancava niente. Il suo conto però
+  includeva lo **straordinario** e aveva una tolleranza di un quarto d'ora, mentre
+  `ShortMinutes` guardava le sole ore ordinarie e segnalava da un minuto in su. Allineato il
+  secondo al primo (`TimesheetRules.ShortDayToleranceMinutes`): chi è rimasto oltre l'orario non
+  risulta in difetto, e la stessa giornata non può essere «a posto» in una pagina e «corta» in
+  un'altra. I riquadri-filtro nel calendario non hanno senso: non ha riquadri, è la griglia a
+  voci del programma originale.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
