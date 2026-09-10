@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1055",
+                     "data":  "2026-09-10T10:55:52",
+                     "hash":  "1b2ffa7ebecbd626cb08a09ada6d2c74ce837a4d",
+                     "modifiche":  [
+                                       "HR: l\u0027anticipo si approva o si rifiuta dalla riga",
+                                       "HR: un test prova che la causale si vede anche nel Controllo di ieri"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1046",
                      "data":  "2026-09-10T10:46:45",
                      "hash":  "bcd0cd16318ac51853ec49f817b6cad7503ea521",
