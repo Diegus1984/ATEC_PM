@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1157",
+                     "data":  "2026-09-10T11:57:15",
+                     "hash":  "ee64a10eb7022de1efdd175c0a423d59ea98bab2",
+                     "modifiche":  [
+                                       "HR trasferta: la combo mostra il nome della tariffa"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1155",
                      "data":  "2026-09-10T11:55:35",
                      "hash":  "34967122558b5c291256285284c8091a8cf28088",
