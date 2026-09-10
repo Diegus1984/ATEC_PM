@@ -339,6 +339,25 @@ public class HrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Mette (o toglie) l'indennità di trasferta di una giornata, dalla riga «TRASFERTA - €»
+    /// del calendario mensile. Diego, 10/09/2026: si sceglie fra le tariffe, solo sui giorni
+    /// lavorati, e resta un dato nostro — su Ecos non va.
+    /// </summary>
+    [HttpPost("calendar/trasferta")]
+    public IActionResult SetTravelDay([FromBody] HrTravelDayRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("La trasferta richiede la scrittura su Timbrature."));
+
+        string? error = _attendance.SetTravelDay(req.EmployeeId, req.Date, req.Amount, MeId);
+        if (error == null) _realtime.Notify("giustifica", req.EmployeeId, req.Date.Date);
+        return Ok(error == null
+            ? ApiResponse<bool>.Ok(true, req.Amount is null or 0 ? "Trasferta tolta" : "Trasferta registrata")
+            : ApiResponse<bool>.Fail(error));
+    }
+
     // ── SOLLECITI TIMBRATURE MANCANTI ─────────────────────────────────────────
 
     /// <summary>

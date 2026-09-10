@@ -130,6 +130,20 @@ export async function sendHrDayToEcos(payload: {
 }
 
 /**
+ * Mette (o toglie, con importo nullo) l'indennità di trasferta di una giornata, dalla riga
+ * «TRASFERTA - €» del calendario mensile (Diego, 10/09/2026). Solo sui giorni lavorati.
+ */
+export async function setHrTravelDay(req: {
+  employeeId: number
+  date: string
+  amount: number | null
+}): Promise<string> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/calendar/trasferta", req)
+  unwrapApi(r)
+  return r.message ?? ""
+}
+
+/**
  * Corregge il verso di una timbratura (entrata ↔ uscita), prima su Ecos e poi qui: capita che
  * il lettore registri il gesto al contrario (Diego, 10/09/2026).
  */

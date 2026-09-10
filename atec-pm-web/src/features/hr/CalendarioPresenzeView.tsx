@@ -28,7 +28,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { AnteprimaMailDialog, type MessaggioMail } from "./AnteprimaMailDialog"
+import { fetchTariffOptions } from "@/lib/api/tariffs"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
+import { TrasfertaCella } from "./TrasfertaCella"
 import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
   downloadHrCalendarExcel,
@@ -46,6 +48,8 @@ import { cn } from "@/lib/utils"
 interface CalendarioPresenzeViewProps {
   anno: number
   mese: number
+  /** Con la sola lettura la riga della trasferta si vede ma non si compila. */
+  canWrite: boolean
 }
 
 /**
@@ -80,7 +84,7 @@ const COLORI_STAMPA: Record<string, string> = {
   TEAL: "#b4ebe6",
 }
 
-export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewProps) {
+export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPresenzeViewProps) {
   const [departmentId, setDepartmentId] = React.useState<number | null>(null)
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
   const [scaricando, setScaricando] = React.useState(false)
@@ -107,6 +111,18 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
     queryKey: ["hr-calendar", anno, mese, departmentId],
     queryFn: () => fetchHrCalendar(anno, mese, departmentId),
   })
+
+  // Gli importi che la combo della trasferta propone: sono le tariffe dell'indennità di
+  // trasferta dell'anagrafica («Costi e tariffe → Tariffe»), non una seconda lista.
+  const tariffeQuery = useQuery({
+    queryKey: ["tariff-options", "DAILY_ALLOWANCE"],
+    queryFn: () => fetchTariffOptions("DAILY_ALLOWANCE"),
+    enabled: canWrite,
+  })
+  const tariffe: number[] = React.useMemo(
+    () => (tariffeQuery.data ?? []).map((x) => x.value).sort((a, b) => a - b),
+    [tariffeQuery.data]
+  )
 
   const opzioniReparti: LookupComboboxOption<number>[] = React.useMemo(
     () => (repartiQuery.data ?? []).map((d) => ({ id: d.id, name: d.name })),
@@ -471,6 +487,30 @@ export function CalendarioPresenzeView({ anno, mese }: CalendarioPresenzeViewPro
                       const g = i + 1
                       const cella: HrCalendarCell | undefined = riga.days[g]
                       const cliccabile = giornoGiustificabile(g)
+
+                      // La riga della trasferta è l'unica che si compila da qui: una combo
+                      // con le tariffe dell'indennità (Diego, 10/09/2026).
+                      if (riga.voceType === "TRASFERTA") {
+                        return (
+                          <TableCell
+                            key={g}
+                            className={cn(
+                              "border-r p-0 text-center font-mono text-[10px]",
+                              cella?.color ? COLORI[cella.color] : ""
+                            )}
+                          >
+                            <TrasfertaCella
+                              employeeId={riga.employeeId}
+                              date={dateToIso(new Date(anno, mese - 1, g))}
+                              importo={cella?.text ?? ""}
+                              modificabile={canWrite && cella?.editable === true}
+                              tariffe={tariffe}
+                              onSalvata={() => void calendarioQuery.refetch()}
+                            />
+                          </TableCell>
+                        )
+                      }
+
                       const apriGiustifica = () =>
                         setGiustifica({
                           employeeId: riga.employeeId,

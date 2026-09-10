@@ -643,3 +643,15 @@ modifiche di comportamento dell'import: si fanno **su ordine**, non di iniziativ
 ---
 
 *Ultimo aggiornamento: 2026-06-10 — sez. 9 PORTATA (tranne export/import JSON, da valutare): conflitti ferie+ferie, fix colonne Gantt, selettore risorse+persistenza, riattivazione cessati, blocco login completo. Build 0 err/0 warn; endpoint testati runtime read-only (login/mustChangePassword, session, includeTerminated, change-password-login). DA VERIFICARE A VISTA: Gantt allineato, selettore risorse, flusso cambio password forzato, reset password, riattiva cessato.*
+
+## HR — trasferta e commesse (10/09/2026)
+
+L'indennità di trasferta delle presenze (riga «TRASFERTA - €» del calendario mensile, M132) e il
+modulo **Trasferta delle commesse** (`/trasferta`, blocco 6) oggi **non si parlano**: il primo è
+quanto si paga alla persona per la giornata, il secondo è il costo della trasferta sulla commessa.
+Diego, 10/09/2026: «per ora non li facciamo parlare, eventualmente mettilo come un possibile todo
+futuro».
+
+Se un giorno servisse: la strada è legare la giornata di trasferta alla commessa su cui la persona
+ha lavorato quel giorno (il timesheet lo sa) e portare l'indennità fra le spese di quella commessa,
+senza duplicare il dato — la riga delle presenze resta la sola fonte.

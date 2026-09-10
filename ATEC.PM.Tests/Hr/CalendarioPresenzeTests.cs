@@ -42,7 +42,9 @@ public class CalendarioPresenzeTests
         HrMonthlyCalendarDto cal = Servizio().GetMonthlyCalendar(Anno, Mese, null);
 
         Assert.Equal(28, cal.DaysInMonth);
-        Assert.Equal(new[] { "ORE ORDINARIE", "PRESENZA", "FERIE", "PERMESSI", "MALATTIA", "INFORTUNIO" },
+        // In coda la trasferta, come nel foglio del consulente (10/09/2026).
+        Assert.Equal(
+            new[] { "ORE ORDINARIE", "PRESENZA", "FERIE", "PERMESSI", "MALATTIA", "INFORTUNIO", "TRASFERTA - €" },
             cal.Rows.Select(r => r.Voce).ToArray());
 
         // Il nome (con la matricola) sta solo sulla prima riga: sotto è la stessa persona.
@@ -140,6 +142,68 @@ public class CalendarioPresenzeTests
     }
 
     // ── Attrezzi ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// La riga «TRASFERTA - €» del foglio del consulente (Diego, 10/09/2026, da «PRESENZE 08
+    /// AGOSTO 26.xlsx»): un importo per giornata scelto fra le tariffe, e il totale a fine
+    /// riga. Si mette solo dove la persona ha lavorato.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void La_trasferta_si_mette_sui_giorni_lavorati_e_fa_il_totale_della_persona()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        GiornataLavorata(c, mario, 3, ordinari: 480);
+        GiornataLavorata(c, mario, 4, ordinari: 480);
+        HrAttendanceService servizio = Servizio();
+
+        Assert.Null(servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 3), 20m, autoreId: mario));
+        Assert.Null(servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 4), 40m, autoreId: mario));
+
+        HrCalendarRowDto riga = servizio.GetMonthlyCalendar(Anno, Mese, null)
+            .Rows.Single(r => r.EmployeeId == mario && r.VoceType == "TRASFERTA");
+
+        Assert.Equal("TRASFERTA - €", riga.Voce);
+        Assert.Equal("20", riga.Days[3].Text);
+        Assert.Equal("40", riga.Days[4].Text);
+        Assert.Equal("60", riga.Total);
+        // Dove ha lavorato la casella si compila; sul 5, che non ha lavorato, no (e la cella
+        // non esiste nemmeno: il client la legge come non modificabile).
+        Assert.True(riga.Days[3].Editable);
+        Assert.False(riga.Days.TryGetValue(5, out HrCalendarCellDto? quinto) && quinto.Editable);
+    }
+
+    [FactRichiedeMySql]
+    public void Sui_giorni_non_lavorati_la_trasferta_si_rifiuta()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        GiornataLavorata(c, mario, 3, ordinari: 480);
+        HrAttendanceService servizio = Servizio();
+
+        // Il 5 non ha lavorato: niente indennità.
+        Assert.Contains("giorni lavorati",
+            servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 5), 20m, autoreId: mario));
+        Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_travel_days"));
+    }
+
+    [FactRichiedeMySql]
+    public void La_trasferta_si_toglie_rimettendo_la_casella_a_vuoto()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        GiornataLavorata(c, mario, 3, ordinari: 480);
+        HrAttendanceService servizio = Servizio();
+        Assert.Null(servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 3), 20m, autoreId: mario));
+
+        Assert.Null(servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 3), null, autoreId: mario));
+
+        Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_travel_days"));
+        HrCalendarRowDto riga = servizio.GetMonthlyCalendar(Anno, Mese, null)
+            .Rows.Single(r => r.EmployeeId == mario && r.VoceType == "TRASFERTA");
+        Assert.Equal("", riga.Days[3].Text);
+        Assert.Equal("", riga.Total);
+    }
 
     private HrAttendanceService Servizio()
     {

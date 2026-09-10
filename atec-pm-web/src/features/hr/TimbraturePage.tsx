@@ -459,7 +459,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
       {vista === "ieri" ? (
         <ControlloGiornalieroView canWrite={canWrite} onChanged={invalidate} />
       ) : vista === "calendario" ? (
-        <CalendarioPresenzeView anno={periodo.anno} mese={periodo.mese} />
+        <CalendarioPresenzeView anno={periodo.anno} mese={periodo.mese} canWrite={canWrite} />
       ) : vista === "quadratura" ? (
         <QuadraturaPresenzeView anno={periodo.anno} mese={periodo.mese} />
       ) : vista === "cronologia" ? (

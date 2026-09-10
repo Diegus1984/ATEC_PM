@@ -795,6 +795,19 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   (`EcosClient.UpdateStampDirectionAsync`, senza toccare l'orario), poi aggiorna qui e rifà la
   giornata. Se Ecos rifiuta, qui non cambia niente. Mai sul proprio cartellino.
   `POST /api/hr/punch-direction` → `SetPunchDirectionAsync`, test in `AllineaEcosTests`.
+- **L'indennità di trasferta nel calendario (10/09, M132).** Dal foglio del consulente
+  «PRESENZE 08 AGOSTO 26.xlsx»: sotto le voci di ogni persona c'è una riga «TRASFERTA - €» con un
+  importo per giornata (ad agosto 20 o 40 euro, dieci persone, 4.300 euro) e il totale a fine
+  riga. Ora c'è anche qui: ultima riga di ogni persona nel calendario «Tutti, mese per mese», con
+  una combo per giorno che propone le tariffe dell'**indennità di trasferta** già in anagrafica
+  (`tariff_options`, tipo `DAILY_ALLOWANCE`) più «(nessuna)». Si salva subito, senza conferma. Le
+  scelte di Diego (10/09): solo dal calendario mensile, tariffe quelle esistenti, **niente Ecos**,
+  totale solo per persona, solo sui giorni lavorati. Il dato sta in `hr_travel_days` (una riga per
+  persona e giorno, con l'importo COPIATO dalla tariffa: cambiarla domani non riscrive i mesi
+  chiusi); `POST /api/hr/calendar/trasferta` → `SetTravelDay`, che controlla la giornata lavorata
+  (ore dal motore, o giorno feriale passato per chi è a forfait). La riga entra da sola
+  nell'export Excel, che cicla su `Rows`. Test in `CalendarioPresenzeTests`. 🔜 Il legame con il
+  modulo Trasferta delle commesse è un TODO dichiarato (`docs/TODO.md`): per ora non si parlano.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

@@ -134,6 +134,13 @@ public partial class HrAttendanceService
             };
         }
 
+        // L'indennità di trasferta del mese: una riga per persona e giorno (M132).
+        var trasferte = c.Query<(int EmployeeId, DateTime WorkDate, decimal Amount)>(@"
+            SELECT employee_id AS EmployeeId, work_date AS WorkDate, amount AS Amount
+            FROM hr_travel_days
+            WHERE work_date BETWEEN @Primo AND @Ultimo", p)
+            .ToDictionary(x => (x.EmployeeId, x.WorkDate.Date), x => x.Amount);
+
         var result = new HrMonthlyCalendarDto
         {
             Year = year,
@@ -178,6 +185,8 @@ public partial class HrAttendanceService
             HrCalendarRowDto rowPerm = NuovaRiga("PERMESSI", "PERMESSI");
             HrCalendarRowDto rowMal = NuovaRiga("MALATTIA", "MALATTIA");
             HrCalendarRowDto rowInf = NuovaRiga("INFORTUNIO", "INFORTUNIO");
+            // La riga del foglio del consulente: importi in euro, non ore (Diego, 10/09/2026).
+            HrCalendarRowDto rowTrasferta = NuovaRiga("TRASFERTA - €", "TRASFERTA");
 
             HrCalendarRowDto[] righeFisse = { rowOrd, rowPres, rowFerie, rowPerm, rowMal, rowInf };
 
@@ -329,6 +338,20 @@ public partial class HrAttendanceService
                 }
             }
 
+            // La trasferta si mette solo dove la persona ha lavorato: la riga PRESENZA dice «P»
+            // proprio lì (chi timbra e chi è a forfait). Le altre caselle restano ferme.
+            for (int giorno = 1; giorno <= daysInMonth; giorno++)
+            {
+                var data = new DateTime(year, month, giorno);
+                if (Cella(rowPres, giorno).Text == "P") Cella(rowTrasferta, giorno).Editable = true;
+                if (trasferte.TryGetValue((emp.EmployeeId, data), out decimal importo))
+                    Scrivi(rowTrasferta, giorno, Euro(importo), "PURPLE",
+                        $"{emp.EmployeeName} — {data:dd/MM/yyyy}\nIndennità di trasferta {Euro(importo)} €");
+            }
+            rowTrasferta.Total = Euro(trasferte
+                .Where(x => x.Key.EmployeeId == emp.EmployeeId)
+                .Sum(x => x.Value));
+
             rowOrd.Total = Totale(rowOrd);
             rowFerie.Total = Totale(rowFerie);
             rowPerm.Total = Totale(rowPerm);
@@ -352,9 +375,64 @@ public partial class HrAttendanceService
             result.Rows.Add(rowPerm);
             result.Rows.Add(rowMal);
             result.Rows.Add(rowInf);
+            result.Rows.Add(rowTrasferta);
         }
 
         return result;
+    }
+
+    /// <summary>Gli euro come si scrivono nel foglio: «20», «37,50». Zero resta vuoto.</summary>
+    private static string Euro(decimal importo) =>
+        importo == 0 ? "" : importo.ToString("0.##", CultureInfo.GetCultureInfo("it-IT"));
+
+    /// <summary>
+    /// Mette (o toglie) l'indennità di trasferta di una giornata. L'importo lo sceglie HR fra
+    /// le tariffe dell'indennità; qui si controlla solo che sia una giornata lavorata, perché
+    /// la trasferta si paga a chi c'è stato (Diego, 10/09/2026). Zero o null = togli.
+    /// </summary>
+    /// <returns>Il motivo del rifiuto, o null se è andata.</returns>
+    public string? SetTravelDay(int employeeId, DateTime workDate, decimal? amount, int autoreId)
+    {
+        if (employeeId <= 0) return "Dipendente non indicato.";
+        if (amount is < 0) return "L'importo non può essere negativo.";
+
+        DateTime giorno = workDate.Date;
+        using MySqlConnection c = _db.Open();
+
+        if (amount is null or 0)
+        {
+            c.Execute("DELETE FROM hr_travel_days WHERE employee_id = @Id AND work_date = @Giorno",
+                new { Id = employeeId, Giorno = giorno });
+            return null;
+        }
+
+        // Giornata lavorata: ore dal motore, oppure forfait per chi non timbra.
+        var profilo = c.QueryFirstOrDefault<(bool MustPunch, bool Attivo)>(
+            "SELECT hr_must_punch AS MustPunch, status = 'ACTIVE' AS Attivo FROM employees WHERE id = @Id",
+            new { Id = employeeId });
+        if (!profilo.Attivo) return "Dipendente non attivo.";
+
+        bool lavorata = !profilo.MustPunch
+            ? giorno < DateTime.Today && !TimesheetRules.IsHoliday(giorno)
+                && giorno.DayOfWeek != DayOfWeek.Saturday && giorno.DayOfWeek != DayOfWeek.Sunday
+            : c.ExecuteScalar<int>(@"
+                SELECT COUNT(*) FROM hr_days
+                WHERE employee_id = @Id AND work_date = @Giorno AND regular_minutes + overtime_minutes > 0",
+                new { Id = employeeId, Giorno = giorno }) > 0;
+
+        if (!lavorata) return "La trasferta si mette solo sui giorni lavorati.";
+
+        c.Execute(@"
+            INSERT INTO hr_travel_days (employee_id, work_date, amount, created_by)
+            VALUES (@Id, @Giorno, @Importo, @Autore)
+            ON DUPLICATE KEY UPDATE amount = VALUES(amount), created_by = VALUES(created_by),
+                                    created_at = NOW()",
+            new { Id = employeeId, Giorno = giorno, Importo = amount, Autore = autoreId });
+
+        _logger.LogInformation(
+            "[HR] Trasferta del {Giorno:yyyy-MM-dd} di {Dip}: {Importo} euro, da {Autore}.",
+            giorno, employeeId, amount, autoreId);
+        return null;
     }
 
     // ── Aiuti del calendario ──────────────────────────────────────────────────

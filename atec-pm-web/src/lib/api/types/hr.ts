@@ -328,6 +328,11 @@ export interface HrRemindersResult {
 // dati genera anche il file Excel.
 
 export interface HrCalendarCell {
+  /**
+   * true = la casella si può cambiare da qui: oggi solo la riga della trasferta, sui giorni
+   * lavorati. Le altre voci vengono dalle timbrature e dalle assenze, e si sistemano là.
+   */
+  editable?: boolean
   text: string
   /** GRAY · GREEN · RED · ORANGE · BLUE · PURPLE · YELLOW · TEAL */
   color: string

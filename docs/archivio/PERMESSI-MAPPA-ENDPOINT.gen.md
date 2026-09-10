@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 10/09/2026 11:36.
+> Fotografia del 10/09/2026 11:51.
 
 ## Chiavi con endpoint
 
@@ -492,6 +492,7 @@
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/calendar/trasferta` (HrController.SetTravelDay)
 - `POST /api/hr/day-reminder` (HrController.SendDayReminder)
 - `POST /api/hr/early-entry` (HrController.SetEarlyEntry)
 - `POST /api/hr/ecos/send-day` (HrController.SendDayToEcos)
@@ -528,6 +529,7 @@
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
+- `POST /api/hr/calendar/trasferta` (HrController.SetTravelDay)
 - `POST /api/hr/day-reminder` (HrController.SendDayReminder)
 - `POST /api/hr/early-entry` (HrController.SetEarlyEntry)
 - `POST /api/hr/ecos/send-day` (HrController.SendDayToEcos)

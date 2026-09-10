@@ -256,6 +256,14 @@ public class HrEcosSendRequest
     public List<HrEcosTimeDto>? Times { get; set; }
 }
 
+/// <summary>L'indennità di trasferta di una giornata; importo nullo o zero = togli.</summary>
+public class HrTravelDayRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime Date { get; set; }
+    public decimal? Amount { get; set; }
+}
+
 /// <summary>Il verso giusto di una timbratura, quando il lettore l'ha registrato al contrario.</summary>
 public class HrPunchDirectionRequest
 {
@@ -433,6 +441,12 @@ public class HrApproveAbsenceRequest
 /// <summary>Una cella del calendario: cosa scrivere, di che colore, cosa dice il tooltip.</summary>
 public class HrCalendarCellDto
 {
+    /// <summary>
+    /// true = la casella si può cambiare da qui. Oggi solo la riga della trasferta, sui giorni
+    /// lavorati: le altre voci vengono dalle timbrature e dalle assenze, e si sistemano là.
+    /// </summary>
+    public bool Editable { get; set; }
+
     public string Text { get; set; } = "";
 
     /// <summary>GRAY · GREEN · RED · ORANGE · BLUE · PURPLE · YELLOW · TEAL (vuoto = nessuno).</summary>
