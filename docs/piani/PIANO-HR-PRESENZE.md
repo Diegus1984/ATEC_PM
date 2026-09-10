@@ -725,6 +725,17 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   `controllo-giornaliero.ts`, usate sia da `riassuntoControllo` sia da `filtraRighe`), così il
   numero grande e le righe non possono scollarsi — c'è un test apposta. `Riquadro` di
   `celle-cartellino.tsx` diventa un pulsante quando riceve `onFiltra`.
+- **Le stesse cose anche sul cartellino di una persona (10/09).** Diego: «tutte le modifiche
+  fatte qua devono esserci anche sulla pagina cartellino di una persona». I quattro riquadri del
+  mese filtrano le giornate che hanno contato («Ore ordinarie» → i giorni lavorati,
+  «Straordinario» → le giornate con straordinario, «Ferie e assenze» → le assenze, «Giornate da
+  sistemare» → rosse e ambra), e il pulsante «Solo le giornate da segnalare» usa lo stesso stato,
+  così un filtro solo è acceso per volta. «Giornate da sistemare» ora conta anche l'ambra, come
+  nel Controllo di ieri (prima solo il rosso). C'è anche la colonna «Causale». Regole e totali in
+  `cartellino-mese.ts` (`totaliMese`, `filtraGiornate`, `daGiustificareGiornata`), fuori dalla
+  pagina e con i loro test: numero del riquadro e righe filtrate non possono scollarsi. Il resto
+  delle novità di oggi era già lì, perché sta nel server (`ShortMinutes`, entrata anticipata) e
+  nel `GiornataDialog`, che le due pagine si dividono.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

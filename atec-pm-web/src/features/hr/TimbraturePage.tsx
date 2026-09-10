@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { formatDateTimeShort } from "@/lib/date-iso"
 import { useNavigate } from "react-router-dom"
 import {
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -43,6 +44,7 @@ import { cn } from "@/lib/utils"
 
 import { AzioniGiornata } from "./AzioniGiornata"
 import { GiornataDialog } from "./GiornataDialog"
+import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
 import { MappaturaEcosDialog } from "./MappaturaEcosDialog"
 import { CalendarioPresenzeView } from "./CalendarioPresenzeView"
 import { ControlloGiornalieroView } from "./ControlloGiornalieroView"
@@ -51,8 +53,14 @@ import { CronologiaMailView } from "./CronologiaMailView"
 import { QuadraturaPresenzeView } from "./QuadraturaPresenzeView"
 import { SincronizzaEcosDialog } from "./SincronizzaEcosDialog"
 import { SollecitoGiornataDialog } from "./SollecitoGiornataDialog"
+import {
+  daGiustificareGiornata,
+  filtraGiornate,
+  totaliMese,
+  type FiltroCartellino,
+} from "./cartellino-mese"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
-import { FASCE_LABELS, durata, isZero, minutiDa, oreLeggibili } from "./ore"
+import { FASCE_LABELS, durata, isZero, oreLeggibili } from "./ore"
 import { oraSuEcos } from "./invio-ecos"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
@@ -130,11 +138,14 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
   const [employeeId, setEmployeeId] = React.useState<number | null>(null)
   const [searchEmployee, setSearchEmployee] = React.useState("")
   const [giornoAperto, setGiornoAperto] = React.useState<string | null>(null)
+  const [giustifica, setGiustifica] = React.useState<{ employeeId: number; date: string } | null>(null)
   const [mappaturaAperta, setMappaturaAperta] = React.useState(false)
   const [credenzialiAperte, setCredenzialiAperte] = React.useState(false)
   const [sincronizzaAperto, setSincronizzaAperto] = React.useState(false)
   // Voce 3 del port: l'interruttore «📧 Da segnalare» del ReportPage originale.
-  const [soloDaSegnalare, setSoloDaSegnalare] = React.useState(false)
+  // Il riquadro (o il pulsante) su cui si è cliccato filtra il mese; «tutti» = tutte le
+  // giornate. Uno stato solo: due filtri accesi insieme non si capirebbero.
+  const [filtro, setFiltro] = React.useState<FiltroCartellino>("tutti")
   const [sollecito, setSollecito] = React.useState<{
     employeeId: number
     date: string
@@ -246,59 +257,18 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
 
   // I quattro numeri del mese. «Da sistemare» = le giornate con anomalia (la regola del ⚠
   // la decide il motore); «di cui segnalate» conta quelle con un sollecito già partito.
-  const totali = React.useMemo(() => {
-    const giornate = cartellino?.days ?? []
-    let ordinarie = 0
-    let straordinario = 0
-    let giorniLavorati = 0
-    let giorniStraordinario = 0
-    let notturno = 0
-    let anomalie = 0
-    let segnalate = 0
-    let assenzeIntere = 0
-    let assenzeParziali = 0
-    const fasce = new Set<string>()
-    for (const g of giornate) {
-      const st = statoGiornata(g)
-      // «Da sistemare» = tutto ciò che la pillola mostra in rosso: le anomalie del motore
-      // e i giorni lavorativi passati senza timbrature né assenza.
-      if (st.tone === "bad") {
-        anomalie++
-        if (g.lastReminderAt) segnalate++
-      }
-      if (!g.hasData) continue
-      if (st.assenza) {
-        if (st.assenzaParziale) assenzeParziali++
-        else assenzeIntere++
-      }
-      ordinarie += minutiDa(g.regularHours)
-      straordinario += minutiDa(g.overtime)
-      if (!isZero(g.regularHours) && !st.assenza) giorniLavorati++
-      if (!isZero(g.overtime)) giorniStraordinario++
-      for (const k of Object.keys(g.bands ?? {})) fasce.add(k)
-      // Fascia b (#145): il notturno ordinario non è straordinario, ma è maggiorato.
-      notturno += minutiDa(g.bands?.B1 ?? "") + minutiDa(g.bands?.B2 ?? "")
-    }
-    return {
-      ordinarie,
-      straordinario,
-      notturno,
-      giorniLavorati,
-      giorniStraordinario,
-      anomalie,
-      segnalate,
-      assenzeIntere,
-      assenzeParziali,
-      fasce: [...fasce],
-    }
-  }, [cartellino])
+  const totali = React.useMemo(() => totaliMese(cartellino?.days ?? []), [cartellino])
 
-  // Voce 3 del port: il filtro mostra le stesse giornate che hanno il pulsante 📧 —
-  // la regola la decide il server (canRemind), qui non se ne fa una seconda copia.
-  const giornate = React.useMemo(() => {
-    const tutte = cartellino?.days ?? []
-    return soloDaSegnalare ? tutte.filter((g) => g.canRemind) : tutte
-  }, [cartellino, soloDaSegnalare])
+  // Le regole di quali giornate stanno dietro a un riquadro sono in cartellino-mese.ts, le
+  // stesse che ne contano il numero: il filtro «da segnalare» resta quello del server
+  // (canRemind), qui non se ne fa una seconda copia.
+  const giornate = React.useMemo(
+    () => filtraGiornate(cartellino?.days ?? [], filtro),
+    [cartellino, filtro]
+  )
+  // Un clic sul riquadro già acceso lo spegne e rimette tutto il mese.
+  const cambiaFiltro = (quale: FiltroCartellino) =>
+    setFiltro((prima) => (prima === quale ? "tutti" : quale))
 
   const daSegnalare = React.useMemo(
     () => (cartellino?.days ?? []).filter((g) => g.canRemind).length,
@@ -308,7 +278,8 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
   const visibleCount =
     1 +
     COLUMNS.filter((c) => c.id !== "calcolo" && show(c.id)).length +
-    (show("calcolo") ? 2 : 0)
+    (show("calcolo") ? 2 : 0) +
+    (canWrite ? 1 : 0)
 
   async function esportaExcel() {
     if (!cartellino) return
@@ -549,7 +520,8 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
             </p>
           ) : cartellino ? (
             <>
-              {/* I quattro numeri del mese: si capisce com'è andato prima di leggere le righe. */}
+              {/* I quattro numeri del mese: si capisce com'è andato prima di leggere le righe,
+                  e ognuno filtra le giornate che ha contato (Diego, 10/09/2026). */}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Riquadro
                   etichetta="Ore ordinarie"
@@ -559,6 +531,8 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                       ? "in 1 giorno lavorato"
                       : `in ${totali.giorniLavorati} giorni lavorati`
                   }
+                  onFiltra={() => cambiaFiltro("lavorate")}
+                  attivo={filtro === "lavorate"}
                 />
                 <Riquadro
                   etichetta="Straordinario e maggiorazioni"
@@ -581,6 +555,8 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                       .join(" · ")
                   }
                   tone={totali.straordinario > 0 || totali.notturno > 0 ? "warn" : undefined}
+                  onFiltra={() => cambiaFiltro("straordinario")}
+                  attivo={filtro === "straordinario"}
                 />
                 <Riquadro
                   etichetta="Ferie e assenze"
@@ -592,12 +568,14 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                         }`
                       : "interi, da Ecos"
                   }
+                  onFiltra={() => cambiaFiltro("assenze")}
+                  attivo={filtro === "assenze"}
                 />
                 <Riquadro
                   etichetta="Giornate da sistemare"
-                  valore={String(totali.anomalie)}
+                  valore={String(totali.daSistemare)}
                   dettaglio={
-                    totali.anomalie === 0
+                    totali.daSistemare === 0
                       ? "tutto in ordine"
                       : totali.segnalate > 0
                         ? `di cui ${totali.segnalate} già ${
@@ -605,16 +583,18 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                           } via email`
                         : "nessuna ancora segnalata"
                   }
-                  tone={totali.anomalie > 0 ? "bad" : undefined}
+                  tone={totali.daSistemare > 0 ? "bad" : undefined}
+                  onFiltra={() => cambiaFiltro("sistemare")}
+                  attivo={filtro === "sistemare"}
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {canWrite && (
                   <Button
-                    variant={soloDaSegnalare ? "default" : "outline"}
+                    variant={filtro === "segnalare" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setSoloDaSegnalare((v) => !v)}
+                    onClick={() => cambiaFiltro("segnalare")}
                     title="Mostra solo le giornate per cui c'è una segnalazione da mandare"
                   >
                     <Mail className="mr-1 size-3.5" />
@@ -664,6 +644,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                         </>
                       )}
                       {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+                      {canWrite && <TableHead className="w-12 text-center">Causale</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -731,6 +712,29 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                               {g.note || "—"}
                             </TableCell>
                           )}
+                          {canWrite && (
+                            // Le ore che mancano si coprono con una causale anche da qui, senza
+                            // passare dal Calendario (Diego, 10/09/2026).
+                            <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+                              {daGiustificareGiornata(g) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  onClick={() =>
+                                    setGiustifica({
+                                      employeeId: cartellino.employeeId,
+                                      date: dataIso,
+                                    })
+                                  }
+                                  aria-label={`Inserisci una causale per il ${dataIso}`}
+                                  title="Copri le ore che mancano con una causale (permesso, ferie, malattia…)"
+                                >
+                                  <CalendarPlus className="size-4 text-amber-600 dark:text-amber-400" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       )
                     })}
@@ -740,14 +744,14 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                           colSpan={visibleCount}
                           className="text-center text-sm text-muted-foreground"
                         >
-                          {soloDaSegnalare
-                            ? "Nessuna giornata da segnalare in questo mese."
-                            : "Nessuna giornata nel mese."}
+                          {filtro === "tutti"
+                            ? "Nessuna giornata nel mese."
+                            : "Nessuna giornata con questo filtro."}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
-                  {giornate.length > 0 && !soloDaSegnalare && (
+                  {giornate.length > 0 && filtro === "tutti" && (
                     <TableFooter>
                       <TableRow className="h-11 font-semibold">
                         <TableCell
@@ -783,6 +787,14 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
               </GridScroller>
             </>
           ) : null}
+
+          <GiustificaCausaleDialog
+            target={giustifica}
+            onOpenChange={(open) => {
+              if (!open) setGiustifica(null)
+            }}
+            onSaved={invalidate}
+          />
 
           <GiornataDialog
             open={giornataAperta != null}
