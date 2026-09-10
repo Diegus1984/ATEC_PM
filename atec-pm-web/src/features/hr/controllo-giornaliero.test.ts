@@ -4,6 +4,7 @@ import {
   NON_COLLEGATO,
   daGiustificare,
   daSistemare,
+  filtraRighe,
   descriviBlocco,
   etichettaGiorno,
   riassuntoControllo,
@@ -176,6 +177,37 @@ describe("riassuntoControllo e daSistemare", () => {
       "Luca Neri",
       "Elena Blu",
     ])
+  })
+})
+
+describe("filtraRighe — i riquadri filtrano quello che hanno contato (Diego, 10/09/2026)", () => {
+  it("ogni riquadro mostra tante righe quante ne ha contate", () => {
+    const controllo = bloccoDiLunedi([
+      dipendente(1, "Mario Rossi", [giornata(VEN), vuota(SAB), vuota(DOM, true)]),
+      dipendente(2, "Anna Bianchi", [vuota(VEN), vuota(SAB), vuota(DOM, true)]),
+      dipendente(3, "Sara Gialli", [giornata(VEN, { note: "PERMIT (4h)", regularHours: "0h 0m" }), vuota(SAB), vuota(DOM, true)]),
+      dipendente(4, "Luca Neri", [
+        giornata(VEN, { regularHours: "7h 30m", shortMinutes: 30 }),
+        vuota(SAB),
+        vuota(DOM, true),
+      ]),
+    ])
+    const righe = righeControllo(controllo)
+    const r = riassuntoControllo(controllo, righe)
+
+    // È l'invariante che conta: il numero grande e le righe che si vedono cliccandolo.
+    expect(filtraRighe(righe, "regolari")).toHaveLength(r.regolari)
+    expect(filtraRighe(righe, "sistemare")).toHaveLength(r.daSistemare)
+    expect(filtraRighe(righe, "assenti")).toHaveLength(r.assenti)
+    expect(filtraRighe(righe, "tutti")).toEqual(righe)
+  })
+
+  it("«da sistemare» filtra le stesse righe di daSistemare", () => {
+    const righe = righeControllo(bloccoDiLunedi([
+      dipendente(1, "Mario Rossi", [giornata(VEN), vuota(SAB), vuota(DOM, true)]),
+      dipendente(2, "Anna Bianchi", [vuota(VEN), vuota(SAB), vuota(DOM, true)]),
+    ]))
+    expect(filtraRighe(righe, "sistemare")).toEqual(righe.filter(daSistemare))
   })
 })
 

@@ -93,6 +93,25 @@ export interface RiassuntoControllo {
   senzaTimbrature: number
 }
 
+/** Quale dei quattro riquadri sta filtrando la griglia; «tutti» = nessun filtro. */
+export type FiltroControllo = "tutti" | "regolari" | "sistemare" | "assenti"
+
+/**
+ * Le regole dietro ai riquadri: le stesse che contano il numero e che filtrano le righe
+ * quando ci si clicca sopra (Diego, 10/09/2026: «questi blocchi in alto devono già fare da
+ * filtro»). Una regola sola per i due usi, altrimenti il numero e le righe si scollano.
+ */
+const REGOLE: Record<Exclude<FiltroControllo, "tutti">, (riga: RigaControllo) => boolean> = {
+  regolari: (r) => r.stato.tone === "ok",
+  sistemare: daSistemare,
+  assenti: (r) => r.stato.assenza,
+}
+
+/** Le righe che stanno dietro al riquadro scelto. */
+export function filtraRighe(righe: RigaControllo[], filtro: FiltroControllo): RigaControllo[] {
+  return filtro === "tutti" ? righe : righe.filter(REGOLE[filtro])
+}
+
 /** I numeri dei riquadri, contati sulle righe a video. */
 export function riassuntoControllo(
   controllo: HrDailyCheck,
@@ -103,9 +122,9 @@ export function riassuntoControllo(
   let assenti = 0
   let senzaTimbrature = 0
   for (const r of righe) {
-    if (r.stato.tone === "ok") regolari++
-    if (daSistemare(r)) sistemare++
-    if (r.stato.assenza) assenti++
+    if (REGOLE.regolari(r)) regolari++
+    if (REGOLE.sistemare(r)) sistemare++
+    if (REGOLE.assenti(r)) assenti++
     if (r.stato.label.startsWith("Nessuna timbratura")) senzaTimbrature++
   }
   return {

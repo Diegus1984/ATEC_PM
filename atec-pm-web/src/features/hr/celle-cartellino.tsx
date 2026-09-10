@@ -151,19 +151,19 @@ export function Riquadro({
   valore,
   dettaglio,
   tone,
+  onFiltra,
+  attivo,
 }: {
   etichetta: string
   valore: string
   dettaglio: string
   tone?: ToneStato
+  /** Se c'è, il riquadro filtra la griglia sulle righe che ha contato: un clic accende, un altro spegne. */
+  onFiltra?: () => void
+  attivo?: boolean
 }) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border bg-card px-4 py-3 shadow-xs",
-        tone === "bad" && "border-destructive/40"
-      )}
-    >
+  const contenuto = (
+    <>
       <p className="text-sm text-muted-foreground">{etichetta}</p>
       <p
         className={cn(
@@ -175,6 +175,29 @@ export function Riquadro({
         {valore}
       </p>
       <p className="text-sm text-muted-foreground">{dettaglio}</p>
-    </div>
+    </>
+  )
+
+  const base = cn(
+    "rounded-lg border bg-card px-4 py-3 text-left shadow-xs",
+    tone === "bad" && "border-destructive/40"
+  )
+
+  if (!onFiltra) return <div className={base}>{contenuto}</div>
+
+  return (
+    <button
+      type="button"
+      onClick={onFiltra}
+      aria-pressed={attivo}
+      title={attivo ? "Togli il filtro" : `Mostra solo: ${etichetta.toLowerCase()}`}
+      className={cn(
+        base,
+        "transition-colors hover:border-primary/40 hover:bg-accent",
+        attivo && "border-primary bg-accent ring-1 ring-primary"
+      )}
+    >
+      {contenuto}
+    </button>
   )
 }

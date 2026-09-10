@@ -26,7 +26,8 @@ import { AzioniGiornata } from "./AzioniGiornata"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import {
   daGiustificare,
-  daSistemare,
+  filtraRighe,
+  type FiltroControllo,
   descriviBlocco,
   etichettaGiorno,
   riassuntoControllo,
@@ -84,7 +85,8 @@ export function ControlloGiornalieroView({
 }) {
   // null = il giorno lo decide il server (ieri): riaprendo la pagina domani è già sul giorno giusto.
   const [scelto, setScelto] = React.useState<string | null>(null)
-  const [soloDaSistemare, setSoloDaSistemare] = React.useState(false)
+  // Il riquadro su cui si è cliccato filtra la griglia; «tutti» = nessun filtro.
+  const [filtro, setFiltro] = React.useState<FiltroControllo>("tutti")
   const [aperta, setAperta] = React.useState<{ employeeId: number; dataIso: string } | null>(null)
   const [sollecito, setSollecito] = React.useState<SollecitoTarget[] | null>(null)
   // La causale che copre le ore mancanti, senza passare dal Calendario (Diego, 10/09/2026).
@@ -118,10 +120,10 @@ export function ControlloGiornalieroView({
     () => (controllo ? riassuntoControllo(controllo, righe) : null),
     [controllo, righe]
   )
-  const visibili = React.useMemo(
-    () => (soloDaSistemare ? righe.filter(daSistemare) : righe),
-    [righe, soloDaSistemare]
-  )
+  const visibili = React.useMemo(() => filtraRighe(righe, filtro), [righe, filtro])
+  // Un clic sul riquadro già acceso lo spegne e rimette tutte le righe.
+  const cambiaFiltro = (quale: FiltroControllo) =>
+    setFiltro((prima) => (prima === quale ? "tutti" : quale))
 
   // Giorno per giorno, nell'ordine del blocco; l'intestazione del giorno compare solo
   // quando i giorni sono più d'uno.
@@ -254,9 +256,9 @@ export function ControlloGiornalieroView({
             </Button>
           )}
           <Button
-            variant={soloDaSistemare ? "default" : "outline"}
+            variant={filtro === "sistemare" ? "default" : "outline"}
             size="sm"
-            onClick={() => setSoloDaSistemare((v) => !v)}
+            onClick={() => cambiaFiltro("sistemare")}
             title="Mostra solo le giornate in rosso o in ambra"
           >
             <TriangleAlert className="mr-1 size-3.5" />
@@ -267,17 +269,22 @@ export function ControlloGiornalieroView({
       </div>
       {spiegazione && <p className="text-sm text-muted-foreground">{spiegazione}</p>}
 
-      {/* I quattro numeri: si capisce com'è andata prima di leggere le righe. */}
+      {/* I quattro numeri: si capisce com'è andata prima di leggere le righe, e ognuno
+          filtra la griglia sulle righe che ha contato (Diego, 10/09/2026). */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Riquadro
           etichetta="Dipendenti"
           valore={String(riassunto.dipendenti)}
           dettaglio="che timbrano"
+          onFiltra={() => setFiltro("tutti")}
+          attivo={filtro === "tutti"}
         />
         <Riquadro
           etichetta="Tutto regolare"
           valore={String(riassunto.regolari)}
           dettaglio={riassunto.regolari === 1 ? "giornata a posto" : "giornate a posto"}
+          onFiltra={() => cambiaFiltro("regolari")}
+          attivo={filtro === "regolari"}
         />
         <Riquadro
           etichetta="Da sistemare"
@@ -290,11 +297,15 @@ export function ControlloGiornalieroView({
                 : "orari da verificare"
           }
           tone={riassunto.daSistemare > 0 ? "bad" : undefined}
+          onFiltra={() => cambiaFiltro("sistemare")}
+          attivo={filtro === "sistemare"}
         />
         <Riquadro
           etichetta="Assenti"
           valore={String(riassunto.assenti)}
           dettaglio="ferie, permessi, malattia"
+          onFiltra={() => cambiaFiltro("assenti")}
+          attivo={filtro === "assenti"}
         />
       </div>
 
@@ -391,9 +402,13 @@ export function ControlloGiornalieroView({
                       colSpan={visibleCount}
                       className="text-center text-sm text-muted-foreground"
                     >
-                      {soloDaSistemare
+                      {filtro === "sistemare"
                         ? "Niente da sistemare."
-                        : giorno.lavorativo
+                        : filtro === "regolari"
+                          ? "Nessuna giornata a posto."
+                          : filtro === "assenti"
+                            ? "Nessun assente."
+                            : giorno.lavorativo
                           ? "Nessun dipendente da controllare."
                           : "Nessuno ha timbrato."}
                     </TableCell>

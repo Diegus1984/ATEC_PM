@@ -718,6 +718,13 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   ore mancano e quali causali sono ammesse. Il pulsante compare dove ha senso — regola pura
   `daGiustificare` in `controllo-giornaliero.ts` (da sistemare, non assenza, non riposo) col suo
   test.
+- **I riquadri in alto filtrano (10/09).** Diego: «questi blocchi in alto devono già fare da
+  filtro come già fatto in altre pagine». «Tutto regolare», «Da sistemare» e «Assenti» filtrano la
+  griglia sulle righe che hanno contato, «Dipendenti» toglie il filtro; il riquadro acceso si vede
+  e un secondo clic lo spegne. Le regole del filtro sono le STESSE del conteggio (`REGOLE` in
+  `controllo-giornaliero.ts`, usate sia da `riassuntoControllo` sia da `filtraRighe`), così il
+  numero grande e le righe non possono scollarsi — c'è un test apposta. `Riquadro` di
+  `celle-cartellino.tsx` diventa un pulsante quando riceve `onFiltra`.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
