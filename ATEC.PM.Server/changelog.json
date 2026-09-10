@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-0942",
+                     "data":  "2026-09-10T09:42:27",
+                     "hash":  "e1525bd2ac04c9eca16d9c2557af66edd8f1de14",
+                     "modifiche":  [
+                                       "HR: i riquadri del Controllo di ieri fanno da filtro"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-0937",
                      "data":  "2026-09-10T09:37:41",
                      "hash":  "f9288fbe0212998d8054349d82241c2b76b083ca",
