@@ -750,6 +750,16 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   (nuvola / spunta / nuvola spenta) e il 📧 sulla riga. La regola di cosa dice il pulsante è
   passata in `invio-ecos.ts` (`statoEcos`, col suo test) e la usano tutte e due le pagine: prima
   viveva dentro `ControlloGiornalieroView` e il cartellino non poteva averla.
+- **Le ore già giustificate si vedono (10/09).** Diego: «se le ore sono meno delle ore previste le
+  abbiamo giustificate, vorrei si vedesse in modo da non doverle rigiustificare». Su una giornata
+  LAVORATA con un permesso o una ferie parziale la causale non compariva da nessuna parte: la nota
+  restava quella del motore («OK») e il cartellino diceva «Tutto regolare» (caso vero: Cassano
+  09/09, sette ore più un'ora di permesso). Ora `HrDayDto.JustifiedType` e `JustifiedHours`
+  viaggiano insieme alla giornata, la pillola dice «Tutto regolare · 1h di permesso»
+  (`coperturaGiornata`) e il pulsante della causale resta acceso con l'icona del calendario
+  spuntato, per cambiarla senza rimetterla da capo (`giaGiustificata`, in `stato-giornata.tsx`
+  perché la usano tutte e due le pagine). Sulle giornate di sola assenza non cambia niente: là lo
+  dice già la nota.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

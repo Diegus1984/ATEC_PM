@@ -1,7 +1,7 @@
 import type { HrDay } from "@/lib/api/types"
 
 import { isZero, minutiDa } from "./ore"
-import { statoGiornata } from "./stato-giornata"
+import { giaGiustificata, statoGiornata } from "./stato-giornata"
 
 /**
  * I numeri del mese e i filtri del cartellino di una persona: le stesse regole contano il
@@ -43,7 +43,7 @@ const REGOLE: Record<Exclude<FiltroCartellino, "tutti">, (g: HrDay) => boolean> 
  */
 export function daGiustificareGiornata(g: HrDay): boolean {
   const st = statoGiornata(g)
-  return REGOLE.sistemare(g) && !st.assenza && !st.riposo
+  return (REGOLE.sistemare(g) || giaGiustificata(g)) && !st.assenza && !st.riposo
 }
 
 export function filtraGiornate(giornate: HrDay[], filtro: FiltroCartellino): HrDay[] {

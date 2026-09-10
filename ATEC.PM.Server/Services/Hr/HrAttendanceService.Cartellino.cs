@@ -254,9 +254,21 @@ public partial class HrAttendanceService
         // La timbratura che manca (l'uscita): HR la scrive nel dettaglio, «Scrivi su Ecos» la inserisce.
         riga.EcosMissingToInsert = VersoMancante(riga.Note);
 
+        assenzeGiorno.TryGetValue(work_date, out HrAbsenceDto? assenzaDelGiorno);
+
+        // La causale che copre le ore mancanti si vede anche sulla giornata lavorata: senza,
+        // il cartellino diceva «tutto regolare» e chi guardava non sapeva che il permesso
+        // c'era già (Diego, 10/09/2026). Sulle giornate di sola assenza lo dice già la nota.
+        if (assenzaDelGiorno is not null && giornate.ContainsKey(work_date))
+        {
+            riga.JustifiedType = assenzaDelGiorno.AbsenceType;
+            riga.JustifiedHours = assenzaDelGiorno.IsFullDay
+                ? dipendente.DailyHours
+                : assenzaDelGiorno.Hours;
+        }
+
         // Le ore del contratto: una giornata più corta non è «tutto regolare».
-        riga.ShortMinutes = MinutiMancanti(riga, dipendente, giornate.ContainsKey(work_date),
-            assenzeGiorno.TryGetValue(work_date, out HrAbsenceDto? assenzaDelGiorno) ? assenzaDelGiorno : null);
+        riga.ShortMinutes = MinutiMancanti(riga, dipendente, giornate.ContainsKey(work_date), assenzaDelGiorno);
 
         // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
         // riga e il filtro «📧 Da segnalare», che così non possono divergere.

@@ -154,6 +154,16 @@ public class CartellinoMensileTests
 
         // Quattro lavorate più quattro di permesso: la giornata è piena.
         Assert.Equal(0, giornata.ShortMinutes);
+
+        // E la causale si vede, così nessuno la rimette una seconda volta (Diego, 10/09/2026).
+        Assert.Equal("PERMIT", giornata.JustifiedType);
+        Assert.Equal(4m, giornata.JustifiedHours);
+
+        // Su una giornata senza causale non c'è niente da dire.
+        HrDayDto senza = Servizio().GetMonthlyTimesheet(mario, Anno, Mese).Days
+            .Single(g => g.WorkDate.Day == 5);
+        Assert.Null(senza.JustifiedType);
+        Assert.Null(senza.JustifiedHours);
     }
 
     [FactRichiedeMySql]

@@ -116,6 +116,12 @@ export interface HrDay {
    */
   shortMinutes?: number
   /**
+   * La causale che copre le ore mancanti di una giornata comunque lavorata (permesso o ferie
+   * di mezza giornata): serve a farla vedere, così nessuno la mette due volte.
+   */
+  justifiedType?: string | null
+  justifiedHours?: number | null
+  /**
    * Di quanti minuti l'entrata arrotondata sta prima delle 8; 0 = nessun anticipo.
    * Diego, 10/09/2026: «c'è gente che arriva, timbra alle 7:30 e si fa mezz'ora di
    * straordinario non autorizzato tutti i giorni».

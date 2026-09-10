@@ -1,6 +1,6 @@
 import type { HrDailyCheck, HrDailyCheckEmployee, HrDay } from "@/lib/api/types"
 
-import { statoGiornata, type StatoLetto } from "./stato-giornata"
+import { giaGiustificata, statoGiornata, type StatoLetto } from "./stato-giornata"
 
 // La logica pura del «Controllo di ieri» (09/09/2026): quali righe si mettono a video, i numeri
 // dei riquadri, come si chiama il blocco di giorni. Il blocco lo decide il server
@@ -80,7 +80,11 @@ export function daSistemare(riga: RigaControllo): boolean {
  * quali causali siano ammesse lo dice il server, quando il dialogo si apre.
  */
 export function daGiustificare(riga: RigaControllo): boolean {
-  return daSistemare(riga) && !riga.stato.assenza && !riga.stato.riposo
+  return (
+    (daSistemare(riga) || giaGiustificata(riga.giorno)) &&
+    !riga.stato.assenza &&
+    !riga.stato.riposo
+  )
 }
 
 export interface RiassuntoControllo {

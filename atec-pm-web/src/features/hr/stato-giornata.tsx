@@ -30,6 +30,32 @@ const ASSENZE: Record<string, string> = {
  * cosa è anomalia resta del server (`hasAnomaly` = nota che comincia con ⚠): qui si
  * scelgono solo le parole. La nota originale resta disponibile nella colonna «Nota».
  */
+/** «1h», «0,5h»: le ore di una causale come si scrivono in italiano. */
+function oreCausale(ore: number): string {
+  return `${ore.toLocaleString("it-IT", { maximumFractionDigits: 1 })}h`
+}
+
+/**
+ * La causale che copre le ore mancanti, da mettere in coda alla frase: «· 1h di permesso».
+ * Diego, 10/09/2026: «se le ore sono meno delle ore previste le abbiamo giustificate, vorrei
+ * si vedesse in modo da non doverle rigiustificare».
+ */
+export function coperturaGiornata(g: HrDay): string {
+  const ore = g.justifiedHours ?? 0
+  if (ore <= 0 || !g.justifiedType) return ""
+  const tipo = (ASSENZE[g.justifiedType] ?? "assenza").toLowerCase()
+  return ` · ${oreCausale(ore)} di ${tipo}`
+}
+
+/**
+ * La giornata è lavorata ma ha già una causale che ne copre una parte: il pulsante della
+ * causale resta, con un'altra faccia, così si vede che c'è e la si può cambiare senza
+ * rimetterla da capo (Diego, 10/09/2026).
+ */
+export function giaGiustificata(g: HrDay): boolean {
+  return (g.justifiedHours ?? 0) > 0 && !statoGiornata(g).assenza
+}
+
 export function statoGiornata(g: HrDay): StatoLetto {
   const nota = (g.note ?? "").trim()
   const segnalata = g.lastReminderAt
@@ -166,7 +192,8 @@ export function statoGiornata(g: HrDay): StatoLetto {
     .filter(Boolean)
     .join(" e ")
   return {
-    label: (extra ? `Regolare, con ${extra}` : "Tutto regolare") + segnalata,
+    // La causale che copre le ore mancanti si legge qui: chi guarda vede che c'è già.
+    label: (extra ? `Regolare, con ${extra}` : "Tutto regolare") + coperturaGiornata(g) + segnalata,
     tone: "ok",
     riposo: false,
     assenza: false,

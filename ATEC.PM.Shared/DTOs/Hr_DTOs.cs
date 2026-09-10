@@ -40,6 +40,17 @@ public class HrDayDto
     public int ShortMinutes { get; set; }
 
     /// <summary>
+    /// La causale che copre le ore mancanti di una giornata comunque lavorata (permesso o ferie
+    /// di mezza giornata): tipo e ore. Serve a farla VEDERE sulla riga, così nessuno la mette
+    /// una seconda volta (Diego, 10/09/2026: «se le ore sono meno delle ore previste le abbiamo
+    /// giustificate, vorrei si vedesse in modo da non doverle rigiustificare»). Null = niente.
+    /// Sulle giornate di sola assenza resta null: là lo dice già la nota.
+    /// </summary>
+    public string? JustifiedType { get; set; }
+
+    public decimal? JustifiedHours { get; set; }
+
+    /// <summary>
     /// Di quanti minuti l'entrata arrotondata sta prima delle 8; 0 = nessun anticipo. Serve a
     /// far comparire i due pulsanti «Autorizza» / «Non autorizzare» (Diego, 10/09/2026).
     /// </summary>

@@ -54,6 +54,27 @@ describe("statoGiornata — ore del contratto (Diego, 10/09/2026)", () => {
   })
 })
 
+describe("statoGiornata — le ore già giustificate si vedono (Diego, 10/09/2026)", () => {
+  it("dice la causale che copre le ore mancanti, così non la si rimette due volte", () => {
+    // La giornata vera di Cassano del 09/09: sette ore lavorate e un'ora di permesso.
+    const st = statoGiornata(giornata({
+      clockIn1: "09:00", clockOut2: "17:00", regularHours: "7h 0m",
+      shortMinutes: 0, justifiedType: "PERMIT", justifiedHours: 1,
+    }))
+    expect(st.label).toBe("Tutto regolare · 1h di permesso")
+    expect(st.tone).toBe("ok")
+  })
+
+  it("le mezze ore si scrivono all'italiana", () => {
+    const st = statoGiornata(giornata({ justifiedType: "PERMIT", justifiedHours: 0.5 }))
+    expect(st.label).toBe("Tutto regolare · 0,5h di permesso")
+  })
+
+  it("senza causale la frase resta quella di prima", () => {
+    expect(statoGiornata(giornata({})).label).toBe("Tutto regolare")
+  })
+})
+
 describe("statoGiornata — mezza giornata (Diego, 08/09/2026)", () => {
   it("una entrata e una uscita al mattino non sono «tutto regolare»: si dice cosa manca", () => {
     const st = statoGiornata(giornata({ note: "Turno mattutino" }))

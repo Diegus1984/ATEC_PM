@@ -1,6 +1,16 @@
 import * as React from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { CalendarPlus, Check, ChevronLeft, ChevronRight, CloudUpload, Mail, MailCheck, TriangleAlert } from "lucide-react"
+import {
+  CalendarCheck,
+  CalendarPlus,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CloudUpload,
+  Mail,
+  MailCheck,
+  TriangleAlert,
+} from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { DateField } from "@/components/shared/date-field"
@@ -40,7 +50,7 @@ import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
 import { oraSuEcos, statoEcos } from "./invio-ecos"
 import { isZero, oreLeggibili } from "./ore"
 import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
-import { StatoGiornata } from "./stato-giornata"
+import { coperturaGiornata, giaGiustificata, StatoGiornata } from "./stato-giornata"
 
 // «Controllo di ieri» (09/09/2026, richiesta di Diego): la pagina che l'ufficio HR apre al
 // mattino — le timbrature di ieri di TUTTI i dipendenti, una riga a testa, così si vede in un
@@ -588,10 +598,18 @@ function RigaDipendente({
               size="icon"
               className="size-8"
               onClick={onGiustifica}
-              aria-label={`Inserisci una causale per ${dipendente.employeeName}`}
-              title="Copri le ore che mancano con una causale (permesso, ferie, malattia…)"
+              aria-label={`Causale per ${dipendente.employeeName}`}
+              title={
+                giaGiustificata(g)
+                  ? `Ore già giustificate${coperturaGiornata(g).replace(" · ", ": ")} — clic per cambiarle`
+                  : "Copri le ore che mancano con una causale (permesso, ferie, malattia…)"
+              }
             >
-              <CalendarPlus className="size-4 text-amber-600 dark:text-amber-400" />
+              {giaGiustificata(g) ? (
+                <CalendarCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <CalendarPlus className="size-4 text-amber-600 dark:text-amber-400" />
+              )}
             </Button>
           )}
         </TableCell>

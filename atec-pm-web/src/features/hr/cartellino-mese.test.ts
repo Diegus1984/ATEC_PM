@@ -103,4 +103,14 @@ describe("daGiustificareGiornata", () => {
       "2026-09-07",
     ])
   })
+
+  it("il pulsante resta anche dove la causale c'è già, per poterla cambiare", () => {
+    // Sette ore lavorate e un'ora di permesso: le ore tornano, ma la causale si deve vedere.
+    const coperta = giornata("2026-09-08", {
+      regularHours: "7h 0m",
+      justifiedType: "PERMIT",
+      justifiedHours: 1,
+    })
+    expect(daGiustificareGiornata(coperta)).toBe(true)
+  })
 })
