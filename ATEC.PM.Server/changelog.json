@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-0937",
+                     "data":  "2026-09-10T09:37:41",
+                     "hash":  "f9288fbe0212998d8054349d82241c2b76b083ca",
+                     "modifiche":  [
+                                       "HR: la causale si mette anche dal Controllo di ieri"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-0933",
                      "data":  "2026-09-10T09:33:47",
                      "hash":  "26a05f76e797792dbde51bb60805a2b5c14f1a82",
