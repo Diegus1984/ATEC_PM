@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1046",
+                     "data":  "2026-09-10T10:46:45",
+                     "hash":  "bcd0cd16318ac51853ec49f817b6cad7503ea521",
+                     "modifiche":  [
+                                       "HR: le ore già giustificate si vedono sulla giornata"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1036",
                      "data":  "2026-09-10T10:36:24",
                      "hash":  "725d8c9c5854a5550e090a47bd51babb88f291a4",
