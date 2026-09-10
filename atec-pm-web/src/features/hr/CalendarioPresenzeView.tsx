@@ -119,11 +119,8 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
     queryFn: () => fetchTariffOptions("DAILY_ALLOWANCE"),
     enabled: canWrite,
   })
-  const tariffe: { label: string; value: number }[] = React.useMemo(
-    () =>
-      (tariffeQuery.data ?? [])
-        .map((x) => ({ label: x.label, value: x.value }))
-        .sort((a, b) => a.value - b.value),
+  const tariffe: number[] = React.useMemo(
+    () => (tariffeQuery.data ?? []).map((x) => x.value).sort((a, b) => a - b),
     [tariffeQuery.data]
   )
 
@@ -468,8 +465,11 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
               </TableRow>
             ) : (
               righe.map((riga, indice) => {
-                // L'infortunio chiude il dipendente: sotto ci va la riga di separazione.
-                const chiudeDipendente = riga.voceType === "INFORTUNIO"
+                // L'ultima voce della persona chiude il blocco: sotto ci va la riga di
+                // separazione. Dal 10/09/2026 è la trasferta, non più l'infortunio: con il
+                // bordo ancora sull'infortunio la riga della trasferta sembrava del
+                // dipendente successivo.
+                const chiudeDipendente = riga.voceType === "TRASFERTA"
 
                 return (
                   <TableRow
