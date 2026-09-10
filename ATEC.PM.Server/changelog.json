@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1036",
+                     "data":  "2026-09-10T10:36:24",
+                     "hash":  "725d8c9c5854a5550e090a47bd51babb88f291a4",
+                     "modifiche":  [
+                                       "HR: anche «Ecos» e «Sollecito» sul cartellino di una persona"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-0948",
                      "data":  "2026-09-10T09:56:28",
                      "hash":  "6959ddaa887c8d3cb2e5b8234f921fec0ed7a2ef",
