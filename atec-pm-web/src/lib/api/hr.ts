@@ -130,6 +130,20 @@ export async function sendHrDayToEcos(payload: {
 }
 
 /**
+ * Autorizza (o no) l'entrata prima delle 8 di una giornata: autorizzata vale l'orario
+ * timbrato, altrimenti la giornata parte dalle 8. Il server ricalcola subito (10/09/2026).
+ */
+export async function setHrEarlyEntry(req: {
+  employeeId: number
+  workDate: string
+  authorized: boolean
+}): Promise<string> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/early-entry", req)
+  unwrapApi(r)
+  return r.message ?? ""
+}
+
+/**
  * Cancella una timbratura: una rettifica nostra, o una di Ecos, che il server cancella PRIMA
  * su Ecos (cancellazione logica) e poi qui (segnalazione #152, 09/09/2026). Se Ecos rifiuta,
  * arriva l'errore e qui non cambia niente.

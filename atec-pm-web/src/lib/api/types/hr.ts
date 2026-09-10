@@ -110,6 +110,22 @@ export interface HrDay {
    * un'ora dopo l'uscita) che su Ecos non esiste: «Allinea Ecos» la inserisce come
    * timbrature vere (09/09/2026).
    */
+  /**
+   * Quanti minuti mancano alle ore previste dal contratto; 0 = giornata piena. Chi ha otto
+   * ore non può farne sette e mezza e passare per «tutto regolare» (Diego, 10/09/2026).
+   */
+  shortMinutes?: number
+  /**
+   * Di quanti minuti l'entrata arrotondata sta prima delle 8; 0 = nessun anticipo.
+   * Diego, 10/09/2026: «c'è gente che arriva, timbra alle 7:30 e si fa mezz'ora di
+   * straordinario non autorizzato tutti i giorni».
+   */
+  earlyEntryMinutes?: number
+  /**
+   * La decisione sull'anticipo: true = vale l'orario timbrato, false = la giornata parte
+   * dalle 8, null/assente = nessuno ha ancora deciso, e intanto vale il no.
+   */
+  earlyEntryAuthorized?: boolean | null
   ecosBreakToInsert: boolean
   /**
    * Il verso della timbratura che MANCA («OUT» per la sola entrata o l'uscita mancante), o

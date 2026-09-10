@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteHrPunch, sendHrAdjustment, sendHrDayToEcos } from "@/lib/api/hr"
+import { deleteHrPunch, sendHrAdjustment, sendHrDayToEcos, setHrEarlyEntry } from "@/lib/api/hr"
 import type { HrDay, HrEcosTime, HrPunch } from "@/lib/api/types"
 import { formatDateTimeShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
@@ -36,6 +36,7 @@ import {
   scelteDaScrivere,
   versoTimbratura,
 } from "./invio-ecos"
+import { durataBreve } from "./ore"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 function oraDa(iso: string): string {
@@ -185,6 +186,18 @@ export function GiornataDialog({
       onOpenChange(false)
     },
     onError: (e) => notifyError((e as Error).message),
+  })
+
+  // L'entrata prima delle 8 vale solo se qualcuno la autorizza; finché nessuno decide la
+  // giornata parte dalle 8 (Diego, 10/09/2026). Decidere rifà subito il conto della giornata.
+  const anticipo = useMutation({
+    mutationFn: (authorized: boolean) =>
+      setHrEarlyEntry({ employeeId, workDate: giorno, authorized }),
+    onSuccess: (messaggio) => {
+      notifySuccess(messaggio || "Deciso.")
+      onChanged()
+    },
+    onError: (e) => notifyError(e instanceof Error ? e.message : "Non riuscito."),
   })
 
   const elimina = useMutation({
@@ -358,6 +371,46 @@ export function GiornataDialog({
             </ul>
           )}
         </div>
+
+        {canWrite && (giornata.earlyEntryMinutes ?? 0) > 0 && (
+          <div className="space-y-2 rounded-md border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium">Entrata prima delle 8</p>
+              {giornata.earlyEntryAuthorized === true ? (
+                <Badge variant="default">AUTORIZZATA</Badge>
+              ) : giornata.earlyEntryAuthorized === false ? (
+                <Badge variant="outline">NON AUTORIZZATA</Badge>
+              ) : (
+                <Badge variant="destructive">DA DECIDERE</Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {`Ha timbrato ${durataBreve(giornata.earlyEntryMinutes ?? 0)} prima delle 8 (${
+                giornata.normalized?.clockIn1 || giornata.raw?.clockIn1 || ""
+              }). `}
+              {giornata.earlyEntryAuthorized === true
+                ? "Autorizzata: la giornata conta dall'orario timbrato."
+                : "La giornata conta dalle 8: l'anticipo non entra nelle ore finché non lo autorizzi."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={anticipo.isPending || giornata.earlyEntryAuthorized === false}
+                onClick={() => anticipo.mutate(false)}
+              >
+                Non autorizzare
+              </Button>
+              <Button
+                size="sm"
+                disabled={anticipo.isPending || giornata.earlyEntryAuthorized === true}
+                onClick={() => anticipo.mutate(true)}
+              >
+                Autorizza l'anticipo
+              </Button>
+            </div>
+          </div>
+        )}
 
         {(proposta.righe.length > 0 || proposta.pausa || proposta.mancante) && (
           <div className="space-y-2 rounded-md border p-3">

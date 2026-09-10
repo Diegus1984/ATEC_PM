@@ -104,6 +104,14 @@ public partial class HrAttendanceService
                 new { Id = employeeId, Da = primo, A = ultimo })
             .ToDictionary(x => x.WorkDate.Date, x => x.SentAt);
 
+        // Le entrate anticipate già decise nel mese: senza riga vale il no.
+        var anticipi = c.Query<(DateTime WorkDate, bool Authorized)>(
+                @"SELECT work_date AS WorkDate, authorized AS Authorized
+                  FROM hr_early_entries
+                  WHERE employee_id = @Id AND work_date BETWEEN @Da AND @A",
+                new { Id = employeeId, Da = primo, A = ultimo })
+            .ToDictionary(x => x.WorkDate.Date, x => x.Authorized);
+
         DateTime oggi = DateTime.Today;
 
         var dto = new HrMonthlyTimesheetDto
@@ -119,7 +127,7 @@ public partial class HrAttendanceService
         for (DateTime work_date = primo; work_date <= ultimo; work_date = work_date.AddDays(1))
         {
             dto.Days.Add(CostruisciGiornata(
-                work_date, oggi, profilo, giornate, timbrature, assenzeGiorno, inviiEcos, solleciti));
+                work_date, oggi, profilo, giornate, timbrature, assenzeGiorno, inviiEcos, solleciti, anticipi));
         }
 
         return dto;
@@ -144,7 +152,8 @@ public partial class HrAttendanceService
         IReadOnlyDictionary<DateTime, List<PunchRow>> timbrature,
         IReadOnlyDictionary<DateTime, HrAbsenceDto> assenzeGiorno,
         IReadOnlyDictionary<DateTime, List<HrEcosSendDto>> inviiEcos,
-        IReadOnlyDictionary<DateTime, DateTime> solleciti)
+        IReadOnlyDictionary<DateTime, DateTime> solleciti,
+        IReadOnlyDictionary<DateTime, bool> anticipiDecisi)
     {
         bool isHoliday = TimesheetRules.IsHoliday(work_date);
         var riga = new HrDayDto
@@ -215,6 +224,11 @@ public partial class HrAttendanceService
                 BreakTime = stadi.RawBreak,
                 TotalHours = stadi.RawTotal,
             };
+            // L'entrata prima delle 8: quanto anticipo e se qualcuno l'ha già deciso. Si guarda
+            // l'orario ARROTONDATO, che è quello su cui vale la regola (Diego, 10/09/2026).
+            riga.EarlyEntryMinutes = MinutiPrimaDelleOtto(stadi.NormEntrata1, stadi.Note);
+            if (anticipiDecisi.TryGetValue(work_date, out bool deciso)) riga.EarlyEntryAuthorized = deciso;
+
             riga.Normalized = new HrDayStageDto
             {
                 ClockIn1 = stadi.NormEntrata1,
@@ -240,6 +254,10 @@ public partial class HrAttendanceService
         // La timbratura che manca (l'uscita): HR la scrive nel dettaglio, «Scrivi su Ecos» la inserisce.
         riga.EcosMissingToInsert = VersoMancante(riga.Note);
 
+        // Le ore del contratto: una giornata più corta non è «tutto regolare».
+        riga.ShortMinutes = MinutiMancanti(riga, dipendente, giornate.ContainsKey(work_date),
+            assenzeGiorno.TryGetValue(work_date, out HrAbsenceDto? assenzaDelGiorno) ? assenzaDelGiorno : null);
+
         // La regola sta in un posto solo (HrDayReminder): la usano il pulsante 📧 sulla
         // riga e il filtro «📧 Da segnalare», che così non possono divergere.
         riga.CanRemind = HrDayReminder.Serve(riga.Note, work_date, oggi);
@@ -247,6 +265,88 @@ public partial class HrAttendanceService
             riga.LastReminderAt = quando;
 
         return riga;
+    }
+
+    /// <summary>
+    /// Quanti minuti mancano alle ore previste dal contratto (0 = giornata piena). Le ore
+    /// previste sono quelle dell'anagrafica (<c>employees.hr_daily_hours</c>): chi ha otto ore
+    /// non può farne sette e mezza e passare per «tutto regolare» (Diego, 10/09/2026, sulle
+    /// giornate di Maracich e Saffioti del 09/09).
+    ///
+    /// <para>Vale solo dove la persona ha davvero lavorato, cioè dove il motore ha prodotto
+    /// una giornata. Restano fuori: chi non timbra (forfait), i giorni senza timbrature
+    /// (riposo, festivi e assenze hanno già la loro parola), le giornate già rosse — un
+    /// secondo avviso non aiuta chi deve sistemare un buco — e quella ancora in corso.</para>
+    ///
+    /// <para>Le ore coperte da un permesso o da una ferie di mezza giornata contano come
+    /// fatte: chi lavora quattro ore e ne ha quattro di permesso ha fatto la sua giornata.
+    /// Lo straordinario invece non copre nulla, perché è la <b>parte ordinaria</b> a dover
+    /// arrivare alle ore del contratto.</para>
+    /// </summary>
+    /// <summary>
+    /// Di quanti minuti l'entrata arrotondata sta prima delle 8 (0 = nessun anticipo). Fuori
+    /// dal conto i turni di notte e chi comincia prima delle 5: là «prima delle 8» non vuol
+    /// dire arrivare in anticipo, sono altri turni. Stessa soglia del motore.
+    /// </summary>
+    private static int MinutiPrimaDelleOtto(string? entrataArrotondata, string? nota)
+    {
+        if (nota is not null && nota.Contains(NightShift.NoteMarker, StringComparison.Ordinal)) return 0;
+        if (!TimeSpan.TryParse(entrataArrotondata, CultureInfo.InvariantCulture, out TimeSpan ora)) return 0;
+
+        int minuti = (int)ora.TotalMinutes;
+        return minuti >= TimesheetRules.EarlyEntryEarliestMinutes && minuti < TimesheetRules.StandardStartMinutes
+            ? TimesheetRules.StandardStartMinutes - minuti
+            : 0;
+    }
+
+    private static int MinutiMancanti(
+        HrDayDto riga, ProfiloCartellino dipendente, bool calcolataDalMotore, HrAbsenceDto? assenza)
+    {
+        if (!dipendente.MustPunch || !calcolataDalMotore || riga.HasAnomaly) return 0;
+        if (riga.Note.StartsWith("Giornata in corso", StringComparison.Ordinal)) return 0;
+
+        int previsti = (int)(dipendente.DailyHours * 60m);
+        if (previsti <= 0) return 0;
+
+        int coperti = TimesheetRules.MinutesFromDuration(riga.RegularHours);
+        if (assenza is not null)
+            coperti += assenza.IsFullDay ? previsti : (int)Math.Round((assenza.Hours ?? 0m) * 60m);
+
+        return Math.Max(0, previsti - coperti);
+    }
+
+    // ── ENTRATA PRIMA DELLE 8 (Diego, 10/09/2026) ─────────────────────────────
+
+    /// <summary>
+    /// Decide se l'entrata anticipata di una giornata vale l'orario timbrato o parte dalle 8,
+    /// e rifà subito il conto della giornata. Diego: «c'è gente che arriva, timbra alle 7:30 e
+    /// si fa mezz'ora di straordinario non autorizzato tutti i giorni».
+    /// </summary>
+    /// <returns>Il motivo del rifiuto, o null se è andata.</returns>
+    public string? SetEarlyEntry(int employeeId, DateTime workDate, bool authorized, int autoreId)
+    {
+        if (employeeId <= 0) return "Dipendente non indicato.";
+        if (workDate.Date > DateTime.Today) return "Giornata futura: non c'è ancora niente da autorizzare.";
+
+        using MySqlConnection c = _db.Open();
+        if (c.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id AND work_date = @Giorno",
+                new { Id = employeeId, Giorno = workDate.Date }) == 0)
+            return "Questa giornata non ha timbrature.";
+
+        c.Execute(@"
+            INSERT INTO hr_early_entries (employee_id, work_date, authorized, decided_by)
+            VALUES (@Id, @Giorno, @Ok, @Autore)
+            ON DUPLICATE KEY UPDATE authorized = VALUES(authorized), decided_by = VALUES(decided_by),
+                                    decided_at = NOW()",
+            new { Id = employeeId, Giorno = workDate.Date, Ok = authorized, Autore = autoreId });
+
+        _logger.LogInformation(
+            "[HR] Entrata anticipata del {Giorno:yyyy-MM-dd} di {Dip}: {Esito} da {Autore}.",
+            workDate, employeeId, authorized ? "AUTORIZZATA" : "non autorizzata", autoreId);
+
+        RicalcolaConVicine(c, employeeId, workDate.Date);
+        return null;
     }
 
     // ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────

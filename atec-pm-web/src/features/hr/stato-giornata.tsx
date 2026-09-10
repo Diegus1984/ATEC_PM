@@ -2,6 +2,8 @@ import type { HrDay } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
 import { cn } from "@/lib/utils"
 
+import { durataBreve } from "./ore"
+
 export type ToneStato = "ok" | "bad" | "warn" | "info" | "dim"
 
 export interface StatoLetto {
@@ -124,6 +126,32 @@ export function statoGiornata(g: HrDay): StatoLetto {
       label:
         (mattina ? `Solo mattina${ore}: pomeriggio senza timbrature` : `Solo pomeriggio${ore}: mattina senza timbrature`)
         + segnalata,
+      tone: "warn",
+      riposo: false,
+      assenza: false,
+      assenzaParziale: false,
+    }
+  }
+
+  // L'entrata prima delle 8 che nessuno ha ancora deciso: è la cosa da fare, e viene prima
+  // delle ore mancanti (che dipendono proprio da come si decide). Diego, 10/09/2026.
+  if ((g.earlyEntryMinutes ?? 0) > 0 && (g.earlyEntryAuthorized ?? null) === null) {
+    return {
+      label: `Entrata ${durataBreve(g.earlyEntryMinutes ?? 0)} prima delle 8: da autorizzare` + segnalata,
+      tone: "warn",
+      riposo: false,
+      assenza: false,
+      assenzaParziale: false,
+    }
+  }
+
+  // Le ore del contratto non ci sono tutte: la giornata è più corta del dovuto e va guardata,
+  // non archiviata come regolare (Diego, 10/09/2026, su Maracich e Saffioti). Quante ne
+  // manchino lo decide il server, che ha l'anagrafica e i permessi del giorno.
+  const mancanti = g.shortMinutes ?? 0
+  if (mancanti > 0) {
+    return {
+      label: `Mancano ${durataBreve(mancanti)} sul contratto` + segnalata,
       tone: "warn",
       riposo: false,
       assenza: false,

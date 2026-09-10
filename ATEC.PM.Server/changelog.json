@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260909-1705",
+                     "data":  "2026-09-10T09:15:14",
+                     "hash":  "837d64f10d13a875c3b882395fd0b4b08f4dd18d",
+                     "modifiche":  [
+                                       "HR motore v6: la pausa breve non si perde più, e l\u0027uscita timbrata sta nella sua colonna"
+                                   ]
+                 },
+                 {
+                     "build":  "20260909-1705",
                      "data":  "2026-09-09T17:05:14",
                      "hash":  "baa0019a4ab2c4440f5f57cd52f944ecf6459c80",
                      "modifiche":  [

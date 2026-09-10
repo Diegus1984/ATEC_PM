@@ -134,6 +134,13 @@ public partial class HrAttendanceService
             .GroupBy(x => x.EmployeeId)
             .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.WorkDate.Date, x => x.SentAt));
 
+        Dictionary<int, Dictionary<DateTime, bool>> anticipi = c.Query<(int EmployeeId, DateTime WorkDate, bool Authorized)>(@"
+            SELECT employee_id AS EmployeeId, work_date AS WorkDate, authorized AS Authorized
+            FROM hr_early_entries
+            WHERE work_date BETWEEN @Da AND @A", p)
+            .GroupBy(x => x.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.WorkDate.Date, x => x.Authorized));
+
         var dto = new HrDailyCheckDto
         {
             Date = fine,
@@ -167,11 +174,13 @@ public partial class HrAttendanceService
             Dictionary<DateTime, HrAbsenceDto> assenzeEmp = assenzeGiorno.GetValueOrDefault(emp.EmployeeId) ?? new();
             Dictionary<DateTime, List<HrEcosSendDto>> inviiEmp = inviiEcos.GetValueOrDefault(emp.EmployeeId) ?? new();
             Dictionary<DateTime, DateTime> sollecitiEmp = solleciti.GetValueOrDefault(emp.EmployeeId) ?? new();
+            Dictionary<DateTime, bool> anticipiEmp = anticipi.GetValueOrDefault(emp.EmployeeId) ?? new();
 
             foreach (HrDailyCheckDayDto giorno in dto.Days)
             {
                 riga.Days.Add(CostruisciGiornata(
-                    giorno.Date, oggi, profilo, giornateEmp, timbratureEmp, assenzeEmp, inviiEmp, sollecitiEmp));
+                    giorno.Date, oggi, profilo, giornateEmp, timbratureEmp, assenzeEmp, inviiEmp, sollecitiEmp,
+                    anticipiEmp));
             }
 
             dto.Employees.Add(riga);

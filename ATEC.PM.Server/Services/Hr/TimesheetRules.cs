@@ -28,7 +28,7 @@ public static class TimesheetRules
     /// finché non c'è l'uscita vera; oggi con due entrate e una uscita resta «Giornata in
     /// corso».</para>
     /// </summary>
-    public const int Version = 6;
+    public const int Version = 7;
 
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int StandardDayMinutes = 480;
@@ -70,6 +70,28 @@ public static class TimesheetRules
     public const int NightShiftMaxBreakMinutes = 2 * 60;
 
     /// <summary>Passo dell'arrotondamento delle timbrature.</summary>
+    /// <summary>
+    /// L'ora di inizio del mattino: le 8. Chi timbra prima non si fa lo straordinario da
+    /// solo — l'entrata anticipata conta solo se qualcuno l'ha autorizzata, altrimenti la
+    /// giornata parte da qui (Diego, 10/09/2026).
+    /// </summary>
+    public const int StandardStartMinutes = 8 * 60;
+
+    /// <summary>
+    /// Sotto quest'ora non si parla più di «arrivare in anticipo»: è un altro turno, e la
+    /// regola delle 8 non lo tocca (un turno che comincia alle 4 del mattino resta com'è).
+    /// </summary>
+    public const int EarlyEntryEarliestMinutes = 5 * 60;
+
+    /// <summary>
+    /// Da quando vale la regola dell'entrata da autorizzare: dal primo del mese in cui è
+    /// nata (settembre 2026). Il mese in corso non è ancora stato chiuso, quindi HR fa in
+    /// tempo a decidere le entrate anticipate già timbrate; i mesi prima restano com'erano,
+    /// perché sono già stati controllati e pagati e riscriverli all'indietro sposterebbe
+    /// numeri che qualcuno ha già usato.
+    /// </summary>
+    public static readonly DateTime EarlyEntryRuleFrom = new(2026, 9, 1);
+
     public const int RoundingStepMinutes = 30;
 
     /// <summary>Entro questi minuti l'punched_at resta allo scatto in corso invece di saltare al successivo.</summary>
@@ -180,6 +202,15 @@ public static class TimesheetRules
         return ore >= 24
             ? work_date.Date.AddDays(1)
             : new DateTime(work_date.Year, work_date.Month, work_date.Day, ore, minuti, 0);
+    }
+
+    /// <summary>I minuti da «8h 30m»; 0 da «---», da «» e da tutto ciò che non è una durata.</summary>
+    public static int MinutesFromDuration(string? durata)
+    {
+        if (string.IsNullOrWhiteSpace(durata)) return 0;
+        System.Text.RegularExpressions.Match m =
+            System.Text.RegularExpressions.Regex.Match(durata, @"^(\d+)h (\d+)m$");
+        return m.Success ? int.Parse(m.Groups[1].Value) * 60 + int.Parse(m.Groups[2].Value) : 0;
     }
 
     /// <summary>«8h 30m» dai minuti; mai negativo.</summary>

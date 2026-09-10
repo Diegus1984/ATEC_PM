@@ -911,8 +911,18 @@ public partial class HrAttendanceService
                 "SELECT hr_counts_overtime FROM employees WHERE id = @EmployeeId",
                 new { EmployeeId = employeeId })
             ?? true;
+
+        // L'entrata prima delle 8 vale solo se qualcuno l'ha autorizzata: senza riga è un no,
+        // e la giornata comincia alle 8 (Diego, 10/09/2026).
+        bool anticipoAutorizzato = c.ExecuteScalar<bool?>(
+                @"SELECT authorized FROM hr_early_entries
+                  WHERE employee_id = @EmployeeId AND work_date = @WorkDate",
+                new { EmployeeId = employeeId, WorkDate = work_date.Date })
+            ?? false;
+
         TimesheetDay cart = TimesheetEngine.Calcola(
-            work_date.Date, grezze, DateTime.Today, new TimesheetEngine.EmployeeConfig(countsOvertime),
+            work_date.Date, grezze, DateTime.Today,
+            new TimesheetEngine.EmployeeConfig(countsOvertime, anticipoAutorizzato),
             NightContextOf(c, employeeId, work_date.Date));
 
         c.Execute(@"

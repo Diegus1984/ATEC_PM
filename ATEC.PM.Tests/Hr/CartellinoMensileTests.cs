@@ -93,6 +93,67 @@ public class CartellinoMensileTests
         Assert.Equal("17:00", quarto.Normalized.ClockOut2);
     }
 
+    /// <summary>
+    /// Diego, 10/09/2026: «le persone devono fare le ore previste dal contratto, se uno ha un
+    /// contratto da 8 ore non può farne meno — vedi Maracich e Saffioti — quindi non deve
+    /// esserci scritto tutto regolare». In anagrafica le ore previste sono otto (il default
+    /// della colonna): una giornata da sette e mezza ne deve dichiarare trenta mancanti.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Una_giornata_piu_corta_del_contratto_dice_quanti_minuti_mancano()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Giornata(c, mario, 4, ordinari: 480);                    // otto ore piene
+        Giornata(c, mario, 5, ordinari: 450);                    // sette e mezza, come Saffioti
+        Giornata(c, mario, 6, ordinari: 480, straordinari: 60);  // otto più straordinario
+
+        List<HrDayDto> giorni = Servizio().GetMonthlyTimesheet(mario, Anno, Mese).Days;
+
+        Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 4).ShortMinutes);
+        Assert.Equal(30, giorni.Single(g => g.WorkDate.Day == 5).ShortMinutes);
+        // Lo straordinario non copre il buco, ma qui la parte ordinaria è già piena.
+        Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 6).ShortMinutes);
+        // Una giornata senza timbrature non ha ore da confrontare: la sua parola è un'altra.
+        Assert.Equal(0, giorni.Single(g => g.WorkDate.Day == 10).ShortMinutes);
+    }
+
+    [FactRichiedeMySql]
+    public void Il_permesso_di_mezza_giornata_copre_le_ore_che_mancano()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Giornata(c, mario, 4, ordinari: 240);   // ha lavorato quattro ore
+        c.Execute(@"
+            INSERT INTO hr_absences (employee_id, date_from, date_to, hours, is_full_day, absence_type, status)
+            VALUES (@Id, @Giorno, @Giorno, 4, 0, 'PERMIT', 'APPROVED')",
+            new { Id = mario, Giorno = new DateTime(Anno, Mese, 4) });
+
+        HrDayDto giornata = Servizio().GetMonthlyTimesheet(mario, Anno, Mese).Days
+            .Single(g => g.WorkDate.Day == 4);
+
+        // Quattro lavorate più quattro di permesso: la giornata è piena.
+        Assert.Equal(0, giornata.ShortMinutes);
+    }
+
+    [FactRichiedeMySql]
+    public void Una_giornata_gia_rossa_non_prende_anche_l_avviso_delle_ore()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        c.Execute(@"
+            INSERT INTO hr_days (employee_id, work_date, clock_in_1, clock_out_1, clock_in_2, clock_out_2,
+                                 regular_minutes, overtime_minutes, break_minutes, note, has_anomaly)
+            VALUES (@Id, @Giorno, '08:00', '??:??', '', '', 0, 0, 0, '⚠ INCOMPLETO: Solo entrata', 1)",
+            new { Id = mario, Giorno = new DateTime(Anno, Mese, 4) });
+
+        HrDayDto giornata = Servizio().GetMonthlyTimesheet(mario, Anno, Mese).Days
+            .Single(g => g.WorkDate.Day == 4);
+
+        Assert.True(giornata.HasAnomaly);
+        Assert.Equal(0, giornata.ShortMinutes);
+    }
+
     // ── Attrezzi ──────────────────────────────────────────────────────────────
 
     private HrAttendanceService Servizio()

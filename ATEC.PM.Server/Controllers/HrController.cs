@@ -663,6 +663,28 @@ public class HrController : ControllerBase
             : ApiResponse<bool>.Fail(error));
     }
 
+    // ── ENTRATA PRIMA DELLE 8 ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Autorizza (o no) l'entrata anticipata di una giornata: autorizzata vale l'orario
+    /// timbrato, altrimenti la giornata parte dalle 8. Ricalcola subito (Diego, 10/09/2026).
+    /// </summary>
+    [HttpPost("early-entry")]
+    public IActionResult SetEarlyEntry([FromBody] HrEarlyEntryRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Autorizzare le entrate anticipate richiede la scrittura su Timbrature."));
+
+        string? error = _attendance.SetEarlyEntry(req.EmployeeId, req.WorkDate, req.Authorized, MeId);
+        if (error == null) _realtime.Notify("adjustment", req.EmployeeId, req.WorkDate.Date);
+        return Ok(error == null
+            ? ApiResponse<bool>.Ok(true, req.Authorized
+                ? "Entrata anticipata autorizzata: vale l'orario timbrato."
+                : "Entrata anticipata non autorizzata: la giornata parte dalle 8.")
+            : ApiResponse<bool>.Fail(error));
+    }
+
     // ── INVIA A ECOS ──────────────────────────────────────────────────────────
 
     /// <summary>

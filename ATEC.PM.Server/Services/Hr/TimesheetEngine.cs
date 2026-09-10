@@ -88,7 +88,12 @@ public static class TimesheetEngine
 {
     /// <summary>Configurazione della persona che incide sul calcolo.</summary>
     /// <param name="CountsOvertime">false = overtime is not counted for this employee.</param>
-    public record EmployeeConfig(bool CountsOvertime = true);
+    /// <param name="CountsOvertime">false = straordinario azzerato sul cartellino.</param>
+    /// <param name="EarlyEntryAuthorized">
+    /// true = per QUESTA giornata l'entrata prima delle 8 è stata autorizzata e vale l'orario
+    /// timbrato. Senza autorizzazione la giornata comincia alle 8 (Diego, 10/09/2026).
+    /// </param>
+    public record EmployeeConfig(bool CountsOvertime = true, bool EarlyEntryAuthorized = false);
 
     /// <summary>Timbrature assegnate ai quattro posti del cartellino, già arrotondate.</summary>
     private sealed class Assignment
@@ -178,6 +183,12 @@ public static class TimesheetEngine
 
         RiempiStadio(cartellino, dati.Entrata1, dati.Uscita1, dati.Entrata2, dati.Uscita2,
             dati.NumIngressi, dati.NumUscite, grezzo: false);
+
+        // 🪤 Dopo i due stadi e prima dei conti: gli stadi devono continuare a dire da dove
+        // viene l'orario (timbrato 07:30, arrotondato 07:30), mentre la giornata comincia
+        // alle 8. Così il cartellino mostra «08:00» con sotto «timbrato 07:30», che è
+        // esattamente quello che è successo.
+        EntrataNonPrimaDelleOtto(dati, work_date.Date, notte, config.EarlyEntryAuthorized);
 
         int minutiLavorati = ProcessDay(cartellino, dati);
         if (minutiLavorati < 0) return AnnotaNotte(cartellino, notte, dati);   // ramo d'errore: ha già scritto tutto
@@ -589,6 +600,34 @@ public static class TimesheetEngine
             : TimesheetRules.FormatClock(valore);
 
     // ── TURNI ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// L'orario di inizio del mattino è le 8: un'entrata arrotondata prima conta dalle 8,
+    /// a meno che qualcuno l'abbia autorizzata (Diego, 10/09/2026: «c'è gente che arriva,
+    /// timbra alle 7:30 e si fa mezz'ora di straordinario non autorizzato tutti i giorni»).
+    ///
+    /// <para>Restano fuori: le giornate precedenti alla regola, che sono già state guardate
+    /// e pagate com'erano; i turni che scavalcano la mezzanotte, dove «prima delle 8» non
+    /// vuol dire arrivare in anticipo; e chi comincia prima delle 5, che sta facendo un
+    /// altro turno, non arrivando presto. Se la giornata finisse prima delle 8 non si tocca
+    /// niente: l'entrata finirebbe dopo l'uscita.</para>
+    /// </summary>
+    private static void EntrataNonPrimaDelleOtto(
+        Assignment d, DateTime workDate, NightSplit notte, bool autorizzata)
+    {
+        if (autorizzata || workDate < TimesheetRules.EarlyEntryRuleFrom) return;
+        if (notte != NightSplit.None) return;
+        if (d.Entrata1 is not DateTime e1) return;
+
+        int minuti = e1.Hour * 60 + e1.Minute;
+        if (minuti >= TimesheetRules.StandardStartMinutes) return;
+        if (minuti < TimesheetRules.EarlyEntryEarliestMinutes) return;
+
+        DateTime inizio = workDate.AddMinutes(TimesheetRules.StandardStartMinutes);
+        if (d.Uscita1 is DateTime u1 && u1 <= inizio) return;
+
+        d.Entrata1 = inizio;
+    }
 
     /// <summary>Riconosce il turno e riempie il cartellino. Torna i minuti lavorati, o -1 se non calcolabile.</summary>
     private static int ProcessDay(TimesheetDay c, Assignment d)

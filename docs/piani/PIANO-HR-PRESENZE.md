@@ -679,6 +679,39 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   niente (riga ERROR nel registro, messaggio a video). Mai sul proprio cartellino. Test in `AllineaEcosTests`
   («Una timbratura di Ecos si cancella prima su Ecos e poi qui», «Se Ecos rifiuta…»); i vecchi test della
   rettifica in `ImportPresenzeTests` sono passati alla nuova firma.
+- **Il motore non perde più le pause brevi, e l'uscita timbrata sta nella sua colonna (10/09,
+  regole v6).** Guardando il Controllo di ieri del 09/09 Diego chiede cosa non torna oltre alle
+  righe rosse. Due difetti veri: (a) lo stadio 2 di `Assign` (raggruppamento a 30 minuti)
+  guardava solo il tempo, così il rientro di Cimmino alle 14:07, a 29 minuti dall'uscita delle
+  13:38, veniva inghiottito: la giornata diventava «1 IN / 2 OUT», il motore deduceva un rientro
+  che nessuno aveva timbrato e contava un'ora piena di pausa al posto della mezz'ora vera —
+  mezz'ora di lavoro persa. Ora il gruppo si chiude anche al cambio di VERSO; (b) chi timbra solo
+  entrata e uscita si vedeva l'uscita della sera sotto la colonna della pausa dedotta
+  (`UscitaTimbrataInFondo`). Sul banco di prova delle 330 giornate VB divergono 5 giornate (Cesi
+  e Cimmino), tutte per il difetto (a) e tutte a favore della persona: sono dichiarate in
+  `MotoreCartellinoTests.CorrezioniVolute`, che segnala anche il caso opposto. Test in
+  `PausaBreveTests`.
+- **Le ore del contratto (10/09).** Diego: «le persone devono fare le ore previste dal contratto,
+  se uno ha un contratto da 8 ore non può farne meno — vedi Maracich e Saffioti — quindi non deve
+  esserci scritto tutto regolare». `HrDayDto.ShortMinutes` dice quanti minuti mancano alle ore
+  dell'anagrafica (`employees.hr_daily_hours`), contando come fatte quelle coperte da un permesso
+  o da una ferie parziale; regola in `CostruisciGiornata.MinutiMancanti`, fuori chi non timbra, i
+  giorni senza timbrature, le giornate già rosse e quella in corso. A video diventa «Mancano 30m
+  sul contratto» in ambra, e siccome `daSistemare` conta anche l'ambra entra da sola nel riquadro
+  «Da sistemare» e nel filtro. Test: `CartellinoMensileTests` (tre casi) e `stato-giornata.test.ts`.
+- **L'entrata prima delle 8 si autorizza (10/09, regole v7, M131).** Diego: «l'orario di inizio al
+  mattino è alle 8; se l'orario arrotondato è prima delle 8 bisogna avere un pulsante Autorizza /
+  Non autorizzare — se premo autorizza mantengo l'orario, altrimenti va approssimato alle 8,
+  questo perché c'è gente che arriva, timbra alle 7:30 e si fa mezz'ora di straordinario non
+  autorizzato tutti i giorni». La decisione sta in `hr_early_entries` (una riga per persona e
+  giorno, che non esiste finché nessuno decide: **senza riga vale il no**); il motore alza
+  l'entrata alle 8 in `EntrataNonPrimaDelleOtto`, lasciando intatti i due stadi — il cartellino
+  mostra «08:00» con sotto «timbrato 07:30». Restano fuori i turni di notte, chi comincia prima
+  delle 5 (è un altro turno, non un anticipo) e le giornate precedenti al **1° settembre 2026**
+  (`TimesheetRules.EarlyEntryRuleFrom`): il mese in corso non è ancora chiuso, i mesi prima sì.
+  `POST /api/hr/early-entry` salva e ricalcola subito; i due pulsanti stanno nel dettaglio della
+  giornata, e nel Controllo di ieri la riga dice «Entrata 30m prima delle 8: da autorizzare» in
+  ambra. Test: `EntrataAnticipataTests` (motore e servizio).
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

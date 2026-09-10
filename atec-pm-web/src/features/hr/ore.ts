@@ -27,6 +27,17 @@ export function durata(minuti: number): string {
   return `${Math.floor(minuti / 60)}h ${String(minuti % 60).padStart(2, "0")}m`
 }
 
+/**
+ * La durata dentro una frase: «30m», «1h», «1h 30m». Serve dove «0h 30m» suonerebbe male
+ * («Mancano 0h 30m»); nelle colonne di numeri resta `oreLeggibili`, che incolonna.
+ */
+export function durataBreve(minuti: number): string {
+  const ore = Math.floor(minuti / 60)
+  const resto = minuti % 60
+  if (ore === 0) return `${resto}m`
+  return resto === 0 ? `${ore}h` : `${ore}h ${String(resto).padStart(2, "0")}m`
+}
+
 /** «8h 0m» → «8h 00m»; «---» e vuoto restano com'erano. */
 export function oreLeggibili(valore: string): string {
   const m = /^(\d+)h (\d+)m$/.exec(valore)

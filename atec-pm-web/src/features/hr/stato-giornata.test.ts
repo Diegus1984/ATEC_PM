@@ -30,6 +30,30 @@ function giornata(over: Partial<HrDay>): HrDay {
   }
 }
 
+describe("statoGiornata — ore del contratto (Diego, 10/09/2026)", () => {
+  it("una giornata più corta del contratto non è «tutto regolare»: dice quanto manca", () => {
+    const st = statoGiornata(giornata({
+      clockOut1: "12:30", clockIn2: "13:30", clockOut2: "17:00",
+      regularHours: "7h 30m", note: "AUTO_P: Pausa 1h detratta", shortMinutes: 30,
+    }))
+    expect(st.label).toBe("Mancano 30m sul contratto")
+    expect(st.tone).toBe("warn")
+  })
+
+  it("l'ora intera si legge come ora, non come sessanta minuti", () => {
+    const st = statoGiornata(giornata({ regularHours: "7h 0m", shortMinutes: 60 }))
+    expect(st.label).toBe("Mancano 1h sul contratto")
+  })
+
+  it("con le ore al completo resta «tutto regolare»", () => {
+    const st = statoGiornata(giornata({ regularHours: "8h 0m", shortMinutes: 0 }))
+    expect(st.label).toBe("Tutto regolare")
+    expect(st.tone).toBe("ok")
+    // Senza il campo (giornata vecchia in cache) si comporta come se non mancasse niente.
+    expect(statoGiornata(giornata({ regularHours: "8h 0m" })).tone).toBe("ok")
+  })
+})
+
 describe("statoGiornata — mezza giornata (Diego, 08/09/2026)", () => {
   it("una entrata e una uscita al mattino non sono «tutto regolare»: si dice cosa manca", () => {
     const st = statoGiornata(giornata({ note: "Turno mattutino" }))

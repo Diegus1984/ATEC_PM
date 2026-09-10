@@ -31,6 +31,26 @@ public class HrDayDto
     /// <summary>Il registro degli invii a Ecos di questa giornata, dal più recente.</summary>
     public List<HrEcosSendDto> EcosSends { get; set; } = new();
 
+    /// <summary>
+    /// Quanti minuti mancano alle ore che il contratto prevede per la giornata; 0 = giornata
+    /// piena. Diego, 10/09/2026: «le persone devono fare le ore previste dal contratto, se uno
+    /// ha un contratto da 8 ore non può farne meno — vedi Maracich e Saffioti — quindi non
+    /// deve esserci scritto tutto regolare».
+    /// </summary>
+    public int ShortMinutes { get; set; }
+
+    /// <summary>
+    /// Di quanti minuti l'entrata arrotondata sta prima delle 8; 0 = nessun anticipo. Serve a
+    /// far comparire i due pulsanti «Autorizza» / «Non autorizzare» (Diego, 10/09/2026).
+    /// </summary>
+    public int EarlyEntryMinutes { get; set; }
+
+    /// <summary>
+    /// La decisione sull'entrata anticipata: true = vale l'orario timbrato, false = la
+    /// giornata parte dalle 8, <b>null</b> = nessuno ha ancora deciso, e intanto vale il no.
+    /// </summary>
+    public bool? EarlyEntryAuthorized { get; set; }
+
     // ── I due stadi che precedono il cartellino ───────────────────────────────
     //
     // Il ReportPage del programma «Timbrature» mostra tre blocchi di colonne per la stessa
@@ -223,6 +243,15 @@ public class HrEcosSendRequest
     /// dal motore. Su Ecos e qui va quello che HR ha scritto.
     /// </summary>
     public List<HrEcosTimeDto>? Times { get; set; }
+}
+
+/// <summary>La decisione su un'entrata prima delle 8 (Diego, 10/09/2026).</summary>
+public class HrEarlyEntryRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime WorkDate { get; set; }
+    /// <summary>true = vale l'orario timbrato; false = la giornata parte dalle 8.</summary>
+    public bool Authorized { get; set; }
 }
 
 /// <summary>Un orario scelto da HR per una timbratura («HH:mm», nel giorno della giornata).</summary>
