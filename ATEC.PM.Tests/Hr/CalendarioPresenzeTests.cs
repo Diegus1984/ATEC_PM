@@ -173,6 +173,64 @@ public class CalendarioPresenzeTests
         Assert.False(riga.Days.TryGetValue(5, out HrCalendarCellDto? quinto) && quinto.Editable);
     }
 
+    /// <summary>
+    /// Il totale a fine riga segue quello che si sceglie, a ogni passo (Diego, 10/09/2026:
+    /// «controlla che il totale in fondo alla riga si aggiorni»). La pagina rilegge il
+    /// calendario dopo ogni scelta, quindi è questo numero che finisce a video.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Il_totale_segue_ogni_scelta()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        GiornataLavorata(c, mario, 3, ordinari: 480);
+        GiornataLavorata(c, mario, 4, ordinari: 480);
+        GiornataLavorata(c, mario, 5, ordinari: 480);
+        HrAttendanceService servizio = Servizio();
+
+        string Totale() => servizio.GetMonthlyCalendar(Anno, Mese, null)
+            .Rows.Single(r => r.EmployeeId == mario && r.VoceType == "TRASFERTA").Total;
+
+        Assert.Equal("", Totale());
+
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 3), 20m, mario);
+        Assert.Equal("20", Totale());
+
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 4), 20m, mario);
+        Assert.Equal("40", Totale());
+
+        // Cambiata: il totale non somma due volte, la sostituisce.
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 4), 40m, mario);
+        Assert.Equal("60", Totale());
+
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 5), 60m, mario);
+        Assert.Equal("120", Totale());
+
+        // Tolta una: torna indietro.
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 5), null, mario);
+        Assert.Equal("60", Totale());
+    }
+
+    [FactRichiedeMySql]
+    public void Il_totale_di_una_persona_non_prende_le_trasferte_delle_altre()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        int anna = CreaDipendente(c, "Anna", "Bianchi", "43");
+        GiornataLavorata(c, mario, 3, ordinari: 480);
+        GiornataLavorata(c, anna, 3, ordinari: 480);
+        HrAttendanceService servizio = Servizio();
+
+        servizio.SetTravelDay(mario, new DateTime(Anno, Mese, 3), 20m, mario);
+        servizio.SetTravelDay(anna, new DateTime(Anno, Mese, 3), 40m, mario);
+
+        List<HrCalendarRowDto> righe = servizio.GetMonthlyCalendar(Anno, Mese, null)
+            .Rows.Where(r => r.VoceType == "TRASFERTA").ToList();
+
+        Assert.Equal("20", righe.Single(r => r.EmployeeId == mario).Total);
+        Assert.Equal("40", righe.Single(r => r.EmployeeId == anna).Total);
+    }
+
     [FactRichiedeMySql]
     public void Sui_giorni_non_lavorati_la_trasferta_si_rifiuta()
     {
