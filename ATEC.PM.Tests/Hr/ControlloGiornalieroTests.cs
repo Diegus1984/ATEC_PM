@@ -209,6 +209,36 @@ public class ControlloGiornalieroTests
         Assert.True(controllo.From <= controllo.To);
     }
 
+    /// <summary>
+    /// Diego, 10/09/2026: «se le ore sono meno delle ore previste le abbiamo giustificate,
+    /// vorrei si vedesse in modo da non doverle rigiustificare». Vale anche qui, non solo sul
+    /// cartellino: è questa la pagina che HR guarda al mattino. La giornata vera è quella di
+    /// Cassano del 09/09: sette ore lavorate e un'ora di permesso.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void La_causale_che_copre_le_ore_mancanti_si_vede_anche_qui()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Giornata(c, mario, Venerdi, "09:00", "12:30", "13:30", "17:00", ordinari: 420, nota: "OK");
+        Timbratura(c, mario, Venerdi, "09:00", "IN");
+        Timbratura(c, mario, Venerdi, "17:00", "OUT");
+        c.Execute(@"
+            INSERT INTO hr_absences (employee_id, date_from, date_to, hours, is_full_day, absence_type, status)
+            VALUES (@Id, @Giorno, @Giorno, 1, 0, 'PERMIT', 'APPROVED')",
+            new { Id = mario, Giorno = Venerdi });
+
+        HrDayDto giornata = Servizio().GetDailyCheck(Venerdi)
+            .Employees.Single(e => e.EmployeeId == mario)
+            .Days.Single(g => g.WorkDate == Venerdi);
+
+        // L'ora che manca è coperta, e la copertura viaggia con la giornata: la pagina scrive
+        // «Tutto regolare · 1h di permesso» e il pulsante della causale resta acceso.
+        Assert.Equal(0, giornata.ShortMinutes);
+        Assert.Equal("PERMIT", giornata.JustifiedType);
+        Assert.Equal(1m, giornata.JustifiedHours);
+    }
+
     // ── Attrezzi ──────────────────────────────────────────────────────────────
 
     private HrAttendanceService Servizio()
