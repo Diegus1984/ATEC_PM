@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-0948",
+                     "data":  "2026-09-10T09:48:56",
+                     "hash":  "9e5da1eb8f018e0fcb2ef1a8c393bb86348cf6f9",
+                     "modifiche":  [
+                                       "HR: il cartellino di una persona prende le novità del Controllo di ieri"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-0942",
                      "data":  "2026-09-10T09:42:27",
                      "hash":  "e1525bd2ac04c9eca16d9c2557af66edd8f1de14",
