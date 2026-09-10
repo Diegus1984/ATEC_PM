@@ -760,6 +760,13 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   spuntato, per cambiarla senza rimetterla da capo (`giaGiustificata`, in `stato-giornata.tsx`
   perché la usano tutte e due le pagine). Sulle giornate di sola assenza non cambia niente: là lo
   dice già la nota.
+- **L'anticipo si approva dalla riga (10/09).** Diego: «l'approvazione dell'orario prima delle 8
+  vorrei apparisse anche così», con i pulsanti «✓ Approva» e «✗ Rifiuta» delle richieste. Colonna
+  «Anticipo» nel Controllo di ieri e nel cartellino: finché nessuno decide ci sono i due pulsanti
+  (stesso stile di `RichiestePage`), dopo resta un segno con quanto era l'anticipo e cosa si è
+  deciso. Un componente solo per le due pagine, `AnticipoAzioni.tsx`, che chiama
+  `POST /api/hr/early-entry` e fa rileggere la pagina. I pulsanti nel dettaglio della giornata
+  restano: servono a tornare sulla decisione.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

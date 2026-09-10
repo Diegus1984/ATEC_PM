@@ -32,6 +32,7 @@ import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibil
 import { cn } from "@/lib/utils"
 
 import { AllineaEcosDialog, type AllineaEcosTarget } from "./AllineaEcosDialog"
+import { AnticipoAzioni } from "./AnticipoAzioni"
 import { AzioniGiornata } from "./AzioniGiornata"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import {
@@ -184,7 +185,7 @@ export function ControlloGiornalieroView({
 
   const oggiIso = dateToIso(new Date())
   // Colonne fisse: la casella di selezione (solo con la scrittura), il nome, «Ecos» e il 📧.
-  const visibleCount = (canWrite ? 4 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
+  const visibleCount = (canWrite ? 5 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
   const quantiDaSistemare = riassunto?.daSistemare ?? 0
 
   if (query.isLoading) {
@@ -365,6 +366,7 @@ export function ControlloGiornalieroView({
               {show("stato") && <TableHead>Com'è la giornata</TableHead>}
               {show("pausa") && <TableHead className="text-right">Pausa</TableHead>}
               {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+              {canWrite && <TableHead className="w-40 text-center">Anticipo</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Causale</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Ecos</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
@@ -404,6 +406,7 @@ export function ControlloGiornalieroView({
                     onGiustifica={() =>
                       setGiustifica({ employeeId: r.dipendente.employeeId, date: r.dataIso })
                     }
+                    onCambiata={onChanged}
                   />
                 ))}
                 {giorno.righe.length === 0 && (
@@ -507,6 +510,7 @@ function RigaDipendente({
   onSollecito,
   onAllinea,
   onGiustifica,
+  onCambiata,
 }: {
   riga: RigaControllo
   show: (id: string) => boolean
@@ -518,6 +522,8 @@ function RigaDipendente({
   onSollecito: () => void
   onAllinea: () => void
   onGiustifica: () => void
+  /** Dopo una decisione presa dalla riga: la pagina rilegge. */
+  onCambiata: () => void
 }) {
   const { giorno: g, stato: st, dipendente } = riga
   const spenta = st.tone === "dim"
@@ -585,6 +591,17 @@ function RigaDipendente({
       {show("nota") && (
         <TableCell className="max-w-60 truncate text-xs text-muted-foreground" title={g.note}>
           {g.note || "—"}
+        </TableCell>
+      )}
+      {canWrite && (
+        // L'entrata prima delle 8 si approva o si rifiuta dalla riga, come una richiesta.
+        <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+          <AnticipoAzioni
+            employeeId={dipendente.employeeId}
+            date={riga.dataIso}
+            giornata={g}
+            onChanged={onCambiata}
+          />
         </TableCell>
       )}
       {canWrite && (

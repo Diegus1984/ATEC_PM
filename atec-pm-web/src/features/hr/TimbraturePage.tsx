@@ -47,6 +47,7 @@ import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibil
 import { cn } from "@/lib/utils"
 
 import { AllineaEcosDialog, type AllineaEcosTarget } from "./AllineaEcosDialog"
+import { AnticipoAzioni } from "./AnticipoAzioni"
 import { AzioniGiornata } from "./AzioniGiornata"
 import { GiornataDialog } from "./GiornataDialog"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
@@ -290,7 +291,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
     1 +
     COLUMNS.filter((c) => c.id !== "calcolo" && show(c.id)).length +
     (show("calcolo") ? 2 : 0) +
-    (canWrite ? 3 : 0)
+    (canWrite ? 4 : 0)
 
   async function esportaExcel() {
     if (!cartellino) return
@@ -655,6 +656,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                         </>
                       )}
                       {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+                      {canWrite && <TableHead className="w-40 text-center">Anticipo</TableHead>}
                       {canWrite && <TableHead className="w-12 text-center">Causale</TableHead>}
                       {canWrite && <TableHead className="w-12 text-center">Ecos</TableHead>}
                       {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
@@ -723,6 +725,17 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                               title={g.note}
                             >
                               {g.note || "—"}
+                            </TableCell>
+                          )}
+                          {canWrite && cartellino && (
+                            // L'entrata prima delle 8 si approva o si rifiuta dalla riga.
+                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                              <AnticipoAzioni
+                                employeeId={cartellino.employeeId}
+                                date={dataIso}
+                                giornata={g}
+                                onChanged={invalidate}
+                              />
                             </TableCell>
                           )}
                           {canWrite && (
