@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1137",
+                     "data":  "2026-09-10T11:38:01",
+                     "hash":  "618550ddb2179825dd45c4edcb6288af19d3bc44",
+                     "modifiche":  [
+                                       "HR: il verso di una timbratura si corregge, prima su Ecos e poi qui"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1124",
                      "data":  "2026-09-10T11:24:41",
                      "hash":  "25ddc8cdbae448c4d31260a13b1b17edd86b7429",
