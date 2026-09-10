@@ -82,11 +82,15 @@ public class CartellinoMensileTests
         // I due stadi che precedono il risultato: il grezzo è l'orario com'è arrivato,
         // il normalizzato quello arrotondato allo scatto.
         Assert.Equal("08:02", quarto.Raw.ClockIn1);
-        Assert.Equal("17:03", quarto.Raw.ClockOut1);
+        // 🪤 Il 4 la persona ha timbrato due volte sole, e la pausa è DEDOTTA: l'uscita
+        // timbrata è quella di fine giornata e sta sotto l'ULTIMA colonna (10/09/2026).
+        // Sotto la pausa inventata non c'è niente da mostrare.
+        Assert.Equal("17:03", quarto.Raw.ClockOut2);
+        Assert.Equal("--:--", quarto.Raw.ClockOut1);
         // 08:02 sta dentro la tolleranza di 10', quindi resta l'orario canonico 08:00;
         // 17:03 torna indietro allo scatto. È lo scarto che le tre colonne fanno vedere.
         Assert.Equal("08:00", quarto.Normalized.ClockIn1);
-        Assert.Equal("17:00", quarto.Normalized.ClockOut1);
+        Assert.Equal("17:00", quarto.Normalized.ClockOut2);
     }
 
     // ── Attrezzi ──────────────────────────────────────────────────────────────

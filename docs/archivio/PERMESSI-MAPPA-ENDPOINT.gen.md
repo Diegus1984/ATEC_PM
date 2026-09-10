@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 09/09/2026 16:43.
+> Fotografia del 10/09/2026 09:11.
 
 ## Chiavi con endpoint
 
@@ -469,7 +469,7 @@
 
 ### `nav.hr_richieste` — Ferie e permessi
 - `DELETE /api/hr/absences/{id:int}` (HrController.CancelAbsence)
-- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeleteAdjustment)
+- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeletePunch)
 - `GET /api/hr/absences` (HrController.GetAbsences)
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
@@ -503,7 +503,7 @@
 
 ### `nav.hr_timbrature` — Timbrature
 - `DELETE /api/hr/absences/{id:int}` (HrController.CancelAbsence)
-- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeleteAdjustment)
+- `DELETE /api/hr/adjustment/{id:long}` (HrController.DeletePunch)
 - `GET /api/hr/absences` (HrController.GetAbsences)
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)

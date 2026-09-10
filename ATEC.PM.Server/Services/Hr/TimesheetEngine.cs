@@ -262,13 +262,26 @@ public static class TimesheetEngine
                 pulite.Add(timbrature[i]);
         }
 
-        // Stadio 2 — raggruppamento a 30 minuti.
+        // Stadio 2 — raggruppamento a 30 minuti: più strisciate ravvicinate sono lo STESSO
+        // gesto ripetuto, e ne vale la prima.
+        //
+        // 🪤 Il gruppo si chiude anche quando cambia il VERSO, non solo quando passano 30
+        // minuti (10/09/2026, giornata di Cimmino del 09/09: uscita 13:38, rientro 14:07).
+        // Uscire e rientrare sono due gesti OPPOSTI: a 29 minuti di distanza restano una
+        // pausa breve vera, non una strisciata ripetuta. Guardando il solo tempo il rientro
+        // finiva inghiottito, restavano una entrata e due uscite, e il motore deduceva al
+        // suo posto un rientro che nessuno aveva timbrato — con «AUTO_P: Pausa implicita»
+        // e un'ora piena di pausa al posto della mezz'ora vera. I doppioni veri sono dello
+        // stesso verso e li prende ancora questo stadio; quelli di verso opposto a pochi
+        // minuti (rimbalzo del lettore) li ha già tolti lo stadio 1.
         var filtrate = new List<RawPunch>();
         RawPunch inizioGruppo = pulite[0];
         for (int i = 1; i < pulite.Count; i++)
         {
             double gap = (pulite[i].PunchedAt - pulite[i - 1].PunchedAt).TotalMinutes;
-            if (gap >= 30)
+            bool cambiaVerso = NightShift.IsEntry(pulite[i].Direction)
+                               != NightShift.IsEntry(pulite[i - 1].Direction);
+            if (gap >= 30 || cambiaVerso)
             {
                 filtrate.Add(inizioGruppo);
                 inizioGruppo = pulite[i];
@@ -707,7 +720,28 @@ public static class TimesheetEngine
         c.Uscita2 = ClockOut(uscita, c.WorkDate);
         c.BreakTime = "1h 0m";
         c.Note = "AUTO_P: Pausa 1h detratta";
+        UscitaTimbrataInFondo(c);
         return minutiTotali - TimesheetRules.ForcedBreakMinutes;
+    }
+
+    /// <summary>
+    /// Porta all'ultima colonna gli orari dei due stadi quando la pausa in mezzo è stata
+    /// DEDOTTA da una giornata con una sola entrata e una sola uscita: l'uscita che la
+    /// persona ha timbrato è quella di FINE giornata, e sotto la pausa appena inventata non
+    /// c'è niente da mostrare.
+    ///
+    /// <para>Senza, il cartellino diceva «uscita per il pranzo 12:30*, timbrato 17:01» e
+    /// lasciava vuota la riga sotto l'uscita vera: l'orario giusto nella casella sbagliata
+    /// (10/09/2026, giornata di Di Monte del 09/09 e di altri otto che non timbrano la
+    /// pausa). Gli stadi servono solo a mostrare da dove viene l'orario arrotondato: nessun
+    /// conto li guarda, quindi qui si spostano e basta.</para>
+    /// </summary>
+    private static void UscitaTimbrataInFondo(TimesheetDay c)
+    {
+        c.RawUscita2 = c.RawUscita1;
+        c.RawUscita1 = "--:--";
+        c.NormUscita2 = c.NormUscita1;
+        c.NormUscita1 = "--:--";
     }
 
     /// <summary>Una entrata e due uscite: manca il rientro dalla pausa.</summary>

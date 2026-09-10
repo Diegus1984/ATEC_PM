@@ -75,12 +75,39 @@ public class MotoreCartellinoTests
             "troppo pochi casi con timbrature: il banco di prova è stato svuotato?");
     }
 
+    /// <summary>
+    /// Il motore originale, quando fra un'uscita e il rientro passavano meno di 30 minuti,
+    /// si mangiava il rientro: la giornata diventava «1 entrata / 2 uscite», lui deduceva
+    /// un'ora piena di pausa al posto della mezz'ora vera e la persona ci rimetteva mezz'ora
+    /// di lavoro. Corretto il 10/09/2026 (regole v6), quindi su queste giornate il port
+    /// DEVE dare un risultato diverso dal VB.
+    /// </summary>
+    private const string PausaBreveTimbrata =
+        "pausa breve timbrata: il VB perdeva il rientro sotto i 30 minuti e ne deduceva uno (regole v6, 10/09/2026)";
+
+    /// <summary>
+    /// Le giornate su cui il port si scosta dal VB APPOSTA, col perché. Il banco di prova
+    /// resta la fotografia fedele del motore in esercizio: le correzioni volute si
+    /// dichiarano qui, non riscrivendo il file di riferimento. Una giornata elencata che
+    /// tornasse a coincidere col VB è un errore quanto una divergenza non prevista: vuol
+    /// dire che la correzione è stata persa.
+    /// </summary>
+    private static readonly Dictionary<string, string> CorrezioniVolute = new()
+    {
+        ["Cesi, Gabriele|2026-02-02"] = PausaBreveTimbrata,
+        ["Cesi, Gabriele|2026-02-04"] = PausaBreveTimbrata,
+        ["Cesi, Gabriele|2026-02-05"] = PausaBreveTimbrata,
+        ["Cesi, Gabriele|2026-02-17"] = PausaBreveTimbrata,
+        ["Cimmino, Paolo|2026-02-16"] = PausaBreveTimbrata,
+    };
+
     [Fact]
     public void Il_port_riproduce_il_motore_originale()
     {
         List<Caso> casi = CaricaCasi().Where(c => c.Timbrature.Count > 0).ToList();
 
         var divergenze = new List<string>();
+        var corretteMaUguali = new List<string>();
         int confrontati = 0;
 
         foreach (Caso caso in casi)
@@ -110,8 +137,27 @@ public class MotoreCartellinoTests
                     Confronta(diff, $"fascia {lettera}", atteso,
                         calcolato.Fasce.TryGetValue(lettera, out string? v) ? v : "0h 0m");
 
+            string chiave = $"{caso.Dipendente}|{caso.Giorno}";
+            if (CorrezioniVolute.TryGetValue(chiave, out string? motivo))
+            {
+                // Qui il port deve divergere: se coincide col VB, la correzione è sparita.
+                if (diff.Count == 0)
+                    corretteMaUguali.Add($"{caso.Dipendente} {caso.Giorno} ({motivo})");
+                continue;
+            }
+
             if (diff.Count > 0)
                 divergenze.Add($"{caso.Dipendente} {caso.Giorno}: {string.Join(" · ", diff)}");
+        }
+
+        if (corretteMaUguali.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"{corretteMaUguali.Count} giornate corrette a mano tornano a dare il risultato del VB:");
+            sb.AppendLine("la correzione è stata persa, oppure l'elenco CorrezioniVolute è da aggiornare.");
+            sb.AppendLine();
+            foreach (string d in corretteMaUguali) sb.AppendLine("  " + d);
+            Assert.Fail(sb.ToString());
         }
 
         if (divergenze.Count > 0)

@@ -136,7 +136,8 @@ public class InvioEcosTests
         Assert.NotNull(riga.Quando);
         HrDayDto giornata = Servizio(new EcosFinto()).GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno);
         Assert.Equal("08:00", giornata.Raw.ClockIn1);
-        Assert.Equal("17:00", giornata.Raw.ClockOut1);
+        // Due timbrature sole, pausa dedotta: l'uscita timbrata sta sotto l'ultima colonna.
+        Assert.Equal("17:00", giornata.Raw.ClockOut2);
 
         // Il registro tiene la storia: ora originale, ora inviata, esito e autore.
         var registro = c.Query<(long PunchId, DateTime PunchedAt, DateTime SentTime, string Outcome, int SentBy)>(
