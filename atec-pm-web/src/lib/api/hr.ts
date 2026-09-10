@@ -11,6 +11,7 @@ import type {
   HrEcosSendResult,
   HrEcosTime,
   HrGiustificaInfo,
+  HrSicknessProtocolInfo,
   HrGiustificaRequest,
   HrImportResult,
   HrMappingRow,
@@ -127,6 +128,33 @@ export async function sendHrDayToEcos(payload: {
 }): Promise<HrEcosSendResult> {
   const r = await apiPost<ApiResponse<HrEcosSendResult>>("/api/hr/ecos/send-day", payload)
   return unwrapApi(r)
+}
+
+/** Il protocollo della mutua di una giornata di malattia: quello che c'è e l'ultimo da proporre. */
+export async function fetchHrSicknessProtocol(
+  employeeId: number,
+  date: string
+): Promise<HrSicknessProtocolInfo> {
+  const q = new URLSearchParams({ employeeId: String(employeeId), date })
+  const r = await apiGet<ApiResponse<HrSicknessProtocolInfo>>(
+    `/api/hr/calendar/protocollo?${q.toString()}`
+  )
+  return unwrapApi(r)
+}
+
+/**
+ * Scrive (o toglie, con testo vuoto) il protocollo della mutua su una giornata già segnata
+ * malattia, senza toccare la causale: serve per i certificati che arrivano dopo e per le
+ * malattie che vengono da Ecos (Diego, 10/09/2026).
+ */
+export async function setHrSicknessProtocol(req: {
+  employeeId: number
+  date: string
+  protocol: string
+}): Promise<string> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/calendar/protocollo", req)
+  unwrapApi(r)
+  return r.message ?? ""
 }
 
 /**

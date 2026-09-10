@@ -263,6 +263,166 @@ public class CalendarioPresenzeTests
         Assert.Equal("", riga.Total);
     }
 
+    // ── PROTOCOLLO DELLA MUTUA (Diego, 10/09/2026) ────────────────────────────
+
+    /// <summary>
+    /// «Quando segnamo una giornata come malattia dobbiamo inserire il numero di protocollo
+    /// della mutua». Il numero sta sulla riga della giornata, e i giorni dello stesso
+    /// certificato portano lo stesso numero.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void La_malattia_porta_il_protocollo_e_il_giorno_dopo_lo_propone()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        HrAttendanceService servizio = Servizio();
+
+        // Primo giorno: il numero si scrive.
+        Assert.Null(servizio.SaveGiustifica(new HrGiustificaRequest
+        {
+            EmployeeId = mario, Date = new DateTime(Anno, Mese, 3), Causale = "MA", Protocol = " 453206692 ",
+        }, mario));
+
+        Assert.Equal("453206692", c.ExecuteScalar<string>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+
+        // Giorno dopo: il dialogo lo propone già, con la data da cui viene.
+        HrGiustificaInfoDto info = servizio.GetGiustificaInfo(mario, new DateTime(Anno, Mese, 4));
+        Assert.Equal("453206692", info.LastProtocol);
+        Assert.Equal(new DateTime(Anno, Mese, 3), info.LastProtocolDate);
+        Assert.Equal("", info.Protocol);   // su questa giornata non c'è ancora niente
+    }
+
+    /// <summary>
+    /// Diego: «il protocollo si può aggiungere anche dopo». La malattia si segna comunque, e
+    /// il numero arriva col certificato.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void La_malattia_si_segna_anche_senza_protocollo_e_il_numero_arriva_dopo()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        HrAttendanceService servizio = Servizio();
+
+        Assert.Null(servizio.SaveGiustifica(new HrGiustificaRequest
+        {
+            EmployeeId = mario, Date = new DateTime(Anno, Mese, 3), Causale = "MA",
+        }, mario));
+        Assert.Null(c.ExecuteScalar<string?>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+
+        Assert.Null(servizio.SetSicknessProtocol(mario, new DateTime(Anno, Mese, 3), "453206692", mario));
+
+        Assert.Equal("453206692", c.ExecuteScalar<string>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+
+        // E si può anche togliere.
+        Assert.Null(servizio.SetSicknessProtocol(mario, new DateTime(Anno, Mese, 3), "", mario));
+        Assert.Null(c.ExecuteScalar<string?>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+    }
+
+    /// <summary>
+    /// Diego: «se una malattia arriva da Ecos devo poterlo aggiungere a posteriori». Là la
+    /// causale non si tocca, ma il protocollo è roba nostra e si scrive lo stesso.
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Anche_su_una_malattia_arrivata_da_Ecos_il_protocollo_si_scrive()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Assenza(c, mario, giorno: 5, tipo: "SICKNESS", ore: 8m, sorgente: "ECOS");
+        HrAttendanceService servizio = Servizio();
+
+        // La causale è bloccata…
+        HrSicknessProtocolInfoDto info = servizio.GetSicknessProtocol(mario, new DateTime(Anno, Mese, 5));
+        Assert.Equal("", info.Blocco);
+        Assert.Equal("", info.Current);
+
+        // …ma il protocollo si mette.
+        Assert.Null(servizio.SetSicknessProtocol(mario, new DateTime(Anno, Mese, 5), "461877310", mario));
+        Assert.Equal("461877310", c.ExecuteScalar<string>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+    }
+
+    [FactRichiedeMySql]
+    public void Su_una_giornata_che_non_e_malattia_il_protocollo_si_rifiuta()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        Assenza(c, mario, giorno: 5, tipo: "VACATION", ore: 8m, sorgente: "MANUAL");
+
+        Assert.Contains("non è segnata come malattia",
+            Servizio().SetSicknessProtocol(mario, new DateTime(Anno, Mese, 5), "999", mario));
+    }
+
+    /// <summary>
+    /// Un certificato può cominciare a fine mese e finire in quello dopo: la proposta guarda
+    /// indietro nei giorni, non «dentro il mese» (Diego, 10/09/2026).
+    /// </summary>
+    [FactRichiedeMySql]
+    public void Il_protocollo_del_mese_prima_si_propone_lo_stesso()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        // 31 gennaio: ultimo giorno del mese precedente.
+        c.Execute(@"
+            INSERT INTO hr_absences (employee_id, date_from, date_to, hours, is_full_day,
+                                     absence_type, status, source, sickness_protocol)
+            VALUES (@Id, @Data, @Data, 8, 1, 'SICKNESS', 'APPROVED', 'MANUAL', '453206692')",
+            new { Id = mario, Data = new DateTime(Anno, 1, 31) });
+
+        // Lunedì 2 febbraio: è lo stesso certificato, e il numero viene proposto lo stesso.
+        HrGiustificaInfoDto info = Servizio().GetGiustificaInfo(mario, new DateTime(Anno, Mese, 2));
+        Assert.Equal("453206692", info.LastProtocol);
+        Assert.Equal(new DateTime(Anno, 1, 31), info.LastProtocolDate);
+    }
+
+    [FactRichiedeMySql]
+    public void I_protocolli_del_mese_stanno_sotto_il_nome_senza_ripetersi()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        HrAttendanceService servizio = Servizio();
+        foreach (int giorno in new[] { 3, 4 })
+            servizio.SaveGiustifica(new HrGiustificaRequest
+            {
+                EmployeeId = mario, Date = new DateTime(Anno, Mese, giorno), Causale = "MA", Protocol = "453206692",
+            }, mario);
+        servizio.SaveGiustifica(new HrGiustificaRequest
+        {
+            EmployeeId = mario, Date = new DateTime(Anno, Mese, 10), Causale = "MA", Protocol = "461877310",
+        }, mario);
+
+        HrCalendarRowDto conNome = servizio.GetMonthlyCalendar(Anno, Mese, null)
+            .Rows.First(r => r.EmployeeId == mario);
+
+        // Due certificati, in ordine di data, e il primo non si ripete per i suoi due giorni.
+        Assert.Equal(new[] { "453206692", "461877310" }, conNome.SicknessProtocols.ToArray());
+        Assert.Contains("Mario Rossi", conNome.Employee);
+    }
+
+    [FactRichiedeMySql]
+    public void Cambiando_causale_il_protocollo_sparisce()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = CreaDipendente(c, "Mario", "Rossi", "42");
+        HrAttendanceService servizio = Servizio();
+        servizio.SaveGiustifica(new HrGiustificaRequest
+        {
+            EmployeeId = mario, Date = new DateTime(Anno, Mese, 3), Causale = "MA", Protocol = "453206692",
+        }, mario);
+
+        // Era malattia, è un permesso: il protocollo non c'entra più niente.
+        Assert.Null(servizio.SaveGiustifica(new HrGiustificaRequest
+        {
+            EmployeeId = mario, Date = new DateTime(Anno, Mese, 3), Causale = "PE",
+        }, mario));
+
+        Assert.Null(c.ExecuteScalar<string?>(
+            "SELECT sickness_protocol FROM hr_absences WHERE employee_id = @Id", new { Id = mario }));
+    }
+
     private HrAttendanceService Servizio()
     {
         IConfiguration configVuota = new ConfigurationBuilder().Build();

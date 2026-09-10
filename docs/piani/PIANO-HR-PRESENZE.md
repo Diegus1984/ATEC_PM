@@ -808,6 +808,22 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   (ore dal motore, o giorno feriale passato per chi è a forfait). La riga entra da sola
   nell'export Excel, che cicla su `Rows`. Test in `CalendarioPresenzeTests`. 🔜 Il legame con il
   modulo Trasferta delle commesse è un TODO dichiarato (`docs/TODO.md`): per ora non si parlano.
+- **Il protocollo della mutua sulle malattie (10/09, M133).** Diego: «quando segnamo una giornata
+  come malattia dobbiamo inserire il numero di protocollo della mutua; una malattia può coprire
+  più giorni ma l'immissione è giornaliera, quindi propongo l'ultimo inserito e se cambia si
+  sceglie nuovo». Colonna `hr_absences.sickness_protocol` (testo, 40): ogni giornata di malattia
+  è già una riga a sé, quindi i giorni dello stesso certificato portano lo stesso numero e non
+  serve nessuna tabella. Nel dialogo della causale, scegliendo MA compare il blocco del
+  protocollo: se la persona ne ha uno nei **45 giorni prima** quello è la prima scelta (così un
+  certificato a cavallo di due mesi si propone anche il primo del mese nuovo), altrimenti campo
+  vuoto. **Facoltativo**: la malattia si segna anche senza, e il numero si aggiunge dopo con
+  «Protocollo della mutua…» dal menu della cella — che è anche l'unico modo per le malattie
+  arrivate da **Ecos**, dove la causale non si tocca (`GET`/`POST /api/hr/calendar/protocollo`,
+  `GetSicknessProtocol`/`SetSicknessProtocol`). Cambiando causale il protocollo sparisce. Nel
+  calendario i numeri stanno sotto il nome, uno per riga, senza ripetersi e senza date (scelta di
+  Diego), e finiscono anche nell'export Excel, dove il consulente li scrive a mano in colonna B.
+  Test in `CalendarioPresenzeTests` (sette casi). Anteprima concordata:
+  https://claude.ai/code/artifact/a62398e9-9e9d-4ca7-a3d5-3541562808f6
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

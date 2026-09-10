@@ -458,6 +458,12 @@ public class HrCalendarCellDto
 /// <summary>Una riga del calendario: una voce di un dipendente lungo tutto il mese.</summary>
 public class HrCalendarRowDto
 {
+    /// <summary>
+    /// I protocolli della mutua del mese, valorizzati solo sulla riga che porta il nome: si
+    /// leggono sotto la persona, uno per riga, come nel foglio del consulente (10/09/2026).
+    /// </summary>
+    public List<string> SicknessProtocols { get; set; } = new();
+
     public int EmployeeId { get; set; }
 
     /// <summary>Nome + matricola: valorizzato SOLO sulla prima riga del dipendente, come nel VB.</summary>
@@ -709,6 +715,18 @@ public class HrGiustificaInfoDto
     /// <summary>Codici ammessi su QUESTA giornata (FE/PE/MA/IN).</summary>
     public List<string> Causali { get; set; } = new();
 
+    /// <summary>
+    /// L'ultimo protocollo della mutua di questa persona nei giorni prima (mese corrente e coda
+    /// di quello precedente), da proporre quando si sceglie malattia; «» se non ce n'è.
+    /// </summary>
+    public string LastProtocol { get; set; } = "";
+
+    /// <summary>Il giorno a cui apparteneva <see cref="LastProtocol"/>.</summary>
+    public DateTime? LastProtocolDate { get; set; }
+
+    /// <summary>Il protocollo già scritto su QUESTA giornata, «» se non c'è.</summary>
+    public string Protocol { get; set; } = "";
+
     /// <summary>Codice già presente sulla giornata, "" se non c'è niente.</summary>
     public string CausaleCorrente { get; set; } = "";
 
@@ -736,6 +754,37 @@ public class HrGiustificaRequest
 
     /// <summary>Ore da coprire; se omesso vale l'intero buco calcolato dal server.</summary>
     public decimal? Hours { get; set; }
+
+    /// <summary>
+    /// Il numero di protocollo della mutua, solo con la causale MA. Facoltativo: la malattia si
+    /// segna anche senza, e il numero si aggiunge quando arriva il certificato (Diego, 10/09/2026).
+    /// </summary>
+    public string? Protocol { get; set; }
+}
+
+/// <summary>Il protocollo della mutua di una giornata già segnata malattia (anche se viene da Ecos).</summary>
+public class HrSicknessProtocolRequest
+{
+    public int EmployeeId { get; set; }
+    public DateTime Date { get; set; }
+    /// <summary>Vuoto = toglie il protocollo dalla giornata.</summary>
+    public string Protocol { get; set; } = "";
+}
+
+/// <summary>Cosa serve al dialogo del protocollo: quello che c'è e quello da proporre.</summary>
+public class HrSicknessProtocolInfoDto
+{
+    public int EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public DateTime Date { get; set; }
+    /// <summary>Il protocollo già scritto su questa giornata, «» se non c'è.</summary>
+    public string Current { get; set; } = "";
+    /// <summary>L'ultimo protocollo della persona nei giorni prima, da proporre; «» se non ce n'è.</summary>
+    public string Last { get; set; } = "";
+    /// <summary>Il giorno a cui apparteneva quel protocollo (per dirlo a chi sceglie).</summary>
+    public DateTime? LastDate { get; set; }
+    /// <summary>Perché non si può mettere il protocollo qui; «» = si può.</summary>
+    public string Blocco { get; set; } = "";
 }
 
 // ── SOLLECITO DELLA SINGOLA GIORNATA (PIANO-HR-PORT-ORIGINALE.md, voce 1) ────

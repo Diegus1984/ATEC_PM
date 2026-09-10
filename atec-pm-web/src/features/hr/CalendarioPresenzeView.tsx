@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { CalendarCheck, Download, Mail, MailCheck, Printer, RotateCcw } from "lucide-react"
+import { CalendarCheck, Download, Mail, MailCheck, Printer, RotateCcw, Stethoscope } from "lucide-react"
 
 import { GridScroller } from "@/components/shared/grid-scroller"
 import {
@@ -30,6 +30,7 @@ import {
 import { AnteprimaMailDialog, type MessaggioMail } from "./AnteprimaMailDialog"
 import { fetchTariffOptions } from "@/lib/api/tariffs"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
+import { ProtocolloMutuaDialog } from "./ProtocolloMutuaDialog"
 import { TrasfertaCella } from "./TrasfertaCella"
 import { fetchDepartmentsLookup } from "@/lib/api/departments"
 import {
@@ -96,6 +97,9 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
     messaggi: MessaggioMail[]
     riepilogo: string
   } | null>(null)
+  // Il protocollo della mutua da mettere (o cambiare) su una giornata di malattia: serve per
+  // i certificati che arrivano dopo e per le malattie che vengono da Ecos (10/09/2026).
+  const [protocollo, setProtocollo] = React.useState<{ employeeId: number; date: string } | null>(null)
   // #132: giornata su cui si e fatto doppio clic, in attesa della causale.
   const [giustifica, setGiustifica] = React.useState<{
     employeeId: number
@@ -481,6 +485,17 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                   >
                     <TableCell className="sticky left-0 z-10 whitespace-pre-line bg-background font-semibold">
                       {riga.employee}
+                      {/* I protocolli della mutua del mese, uno per riga sotto il nome, come
+                          nel foglio del consulente (Diego, 10/09/2026). */}
+                      {(riga.sicknessProtocols ?? []).map((p) => (
+                        <span
+                          key={p}
+                          className="block font-mono text-xs font-normal tabular-nums text-amber-700 dark:text-amber-500"
+                          title="Protocollo della mutua"
+                        >
+                          Prot. {p}
+                        </span>
+                      ))}
                     </TableCell>
                     <TableCell className="sticky left-44 z-10 whitespace-nowrap bg-background text-xs font-semibold">
                       {riga.voce}
@@ -572,6 +587,21 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                                   <CalendarCheck className="size-3.5" />
                                   Giustifica ore mancanti…
                                 </ContextMenuItem>
+                                {/* Sulle giornate di malattia: il protocollo si mette anche
+                                    dopo, e sulle malattie di Ecos si mette solo da qui. */}
+                                {riga.voceType === "MALATTIA" && cella?.text && (
+                                  <ContextMenuItem
+                                    onSelect={() =>
+                                      setProtocollo({
+                                        employeeId: riga.employeeId,
+                                        date: dateToIso(new Date(anno, mese - 1, g)),
+                                      })
+                                    }
+                                  >
+                                    <Stethoscope className="size-3.5" />
+                                    Protocollo della mutua…
+                                  </ContextMenuItem>
+                                )}
                               </ContextMenuContent>
                             </ContextMenu>
                           ) : (
@@ -610,6 +640,14 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
         onOpenChange={(open) => {
           if (!open) setAnteprima(null)
         }}
+      />
+
+      <ProtocolloMutuaDialog
+        target={protocollo}
+        onOpenChange={(open) => {
+          if (!open) setProtocollo(null)
+        }}
+        onSaved={() => void calendarioQuery.refetch()}
       />
 
       <GiustificaCausaleDialog

@@ -134,6 +134,23 @@ public partial class HrAttendanceService
             };
         }
 
+        // I protocolli della mutua del mese: si leggono sotto il nome, uno per riga, come nel
+        // foglio del consulente. In ordine di data, senza ripetere lo stesso numero (M133).
+        var protocolli = new Dictionary<int, List<string>>();
+        foreach (var riga in c.Query<(int EmployeeId, string Protocollo)>(@"
+            SELECT employee_id AS EmployeeId, sickness_protocol AS Protocollo
+            FROM hr_absences
+            WHERE absence_type = 'SICKNESS' AND sickness_protocol IS NOT NULL
+              AND sickness_protocol <> '' AND status IN ('APPROVED', 'PENDING')
+              AND date_from <= @Ultimo AND date_to >= @Primo
+            ORDER BY date_from", p))
+        {
+            List<string> suoi = protocolli.TryGetValue(riga.EmployeeId, out List<string>? elenco)
+                ? elenco
+                : protocolli[riga.EmployeeId] = new List<string>();
+            if (!suoi.Contains(riga.Protocollo)) suoi.Add(riga.Protocollo);
+        }
+
         // L'indennità di trasferta del mese: una riga per persona e giorno (M132).
         var trasferte = c.Query<(int EmployeeId, DateTime WorkDate, decimal Amount)>(@"
             SELECT employee_id AS EmployeeId, work_date AS WorkDate, amount AS Amount
@@ -178,6 +195,8 @@ public partial class HrAttendanceService
             };
 
             HrCalendarRowDto rowOrd = NuovaRiga("ORE ORDINARIE", "ORE_ORDINARIE", etichetta);
+            // I protocolli stanno sulla riga che porta il nome: è lì che si leggono, sotto la persona.
+            rowOrd.SicknessProtocols = protocolli.GetValueOrDefault(emp.EmployeeId) ?? new List<string>();
             var straordRows = VociStraordinario.ToDictionary(
                 v => v.Band, v => NuovaRiga(v.Label, v.VoceType));
             HrCalendarRowDto rowPres = NuovaRiga("PRESENZA", "PRESENZA");
@@ -435,6 +454,103 @@ public partial class HrAttendanceService
         return null;
     }
 
+    // ── PROTOCOLLO DELLA MUTUA (Diego, 10/09/2026) ────────────────────────────
+
+    /// <summary>Il numero ripulito, o null se non c'è: gli spazi ai bordi non servono a nessuno.</summary>
+    private static string? Protocollo(string? scritto)
+    {
+        string pulito = (scritto ?? "").Trim();
+        return pulito.Length == 0 ? null : pulito[..Math.Min(pulito.Length, 40)];
+    }
+
+    /// <summary>
+    /// L'ultimo protocollo della mutua di una persona PRIMA di un certo giorno, da proporre a
+    /// chi segna la malattia: un certificato copre più giorni e si scrive una volta sola.
+    ///
+    /// <para>Si guarda indietro di 45 giorni, non «il mese corrente»: un certificato a cavallo
+    /// fra due mesi va proposto anche il primo del mese nuovo (Diego, 10/09/2026: «controlla
+    /// anche i giorni a cavallo del mese precedente»).</para>
+    /// </summary>
+    private static (string Numero, DateTime? Giorno) UltimoProtocollo(
+        MySqlConnection c, int employeeId, DateTime giorno)
+    {
+        var riga = c.QueryFirstOrDefault<(string Protocollo, DateTime Giorno)>(@"
+            SELECT sickness_protocol AS Protocollo, date_from AS Giorno
+            FROM hr_absences
+            WHERE employee_id = @Id AND absence_type = 'SICKNESS'
+              AND sickness_protocol IS NOT NULL AND sickness_protocol <> ''
+              AND date_from < @G AND date_from >= @Da
+            ORDER BY date_from DESC LIMIT 1",
+            new { Id = employeeId, G = giorno, Da = giorno.AddDays(-45) });
+
+        return riga == default ? ("", null) : (riga.Protocollo, riga.Giorno);
+    }
+
+    /// <summary>
+    /// Cosa mostrare nel dialogo del protocollo di una giornata già segnata malattia: quello
+    /// che c'è, e l'ultimo da proporre. Vale anche sulle malattie arrivate da Ecos, dove il
+    /// numero non c'è mai (Diego, 10/09/2026: «devo poterlo aggiungere a posteriori»).
+    /// </summary>
+    public HrSicknessProtocolInfoDto GetSicknessProtocol(int employeeId, DateTime data)
+    {
+        DateTime giorno = data.Date;
+        using MySqlConnection c = _db.Open();
+
+        var dto = new HrSicknessProtocolInfoDto
+        {
+            EmployeeId = employeeId,
+            Date = giorno,
+            EmployeeName = c.ExecuteScalar<string?>(
+                "SELECT CONCAT_WS(' ', first_name, last_name) FROM employees WHERE id = @Id",
+                new { Id = employeeId }) ?? "",
+        };
+
+        var malattia = c.QueryFirstOrDefault<(int Id, string? Protocollo)>(@"
+            SELECT id AS Id, sickness_protocol AS Protocollo
+            FROM hr_absences
+            WHERE employee_id = @Id AND absence_type = 'SICKNESS'
+              AND date_from <= @G AND date_to >= @G AND status IN ('APPROVED', 'PENDING')
+            ORDER BY (source = 'ECOS'), id DESC LIMIT 1",
+            new { Id = employeeId, G = giorno });
+
+        if (malattia == default)
+        {
+            dto.Blocco = "Questa giornata non è segnata come malattia.";
+            return dto;
+        }
+
+        dto.Current = malattia.Protocollo ?? "";
+        (dto.Last, dto.LastDate) = UltimoProtocollo(c, employeeId, giorno);
+        return dto;
+    }
+
+    /// <summary>
+    /// Scrive (o toglie, con testo vuoto) il protocollo della mutua su una giornata di
+    /// malattia, senza toccare la causale: serve per i certificati che arrivano dopo e per le
+    /// malattie che vengono da Ecos, dove la causale non si può cambiare da qui.
+    /// </summary>
+    /// <returns>Il motivo del rifiuto, o null se è andata.</returns>
+    public string? SetSicknessProtocol(int employeeId, DateTime data, string? protocollo, int autoreId)
+    {
+        if (employeeId <= 0) return "Dipendente non indicato.";
+
+        DateTime giorno = data.Date;
+        using MySqlConnection c = _db.Open();
+
+        int righe = c.Execute(@"
+            UPDATE hr_absences SET sickness_protocol = @Protocollo
+            WHERE employee_id = @Id AND absence_type = 'SICKNESS'
+              AND date_from <= @G AND date_to >= @G AND status IN ('APPROVED', 'PENDING')",
+            new { Id = employeeId, G = giorno, Protocollo = Protocollo(protocollo) });
+
+        if (righe == 0) return "Questa giornata non è segnata come malattia.";
+
+        _logger.LogInformation(
+            "[HR] Protocollo mutua del {Giorno:yyyy-MM-dd} di {Dip}: {Protocollo}, da {Autore}.",
+            giorno, employeeId, Protocollo(protocollo) ?? "(tolto)", autoreId);
+        return null;
+    }
+
     // ── Aiuti del calendario ──────────────────────────────────────────────────
 
     private static HrCalendarCellDto Cella(HrCalendarRowDto riga, int giorno)
@@ -656,7 +772,8 @@ public partial class HrAttendanceService
         // sovrapposte vince quella di un giorno solo: è la nostra, quella modificabile.
         var assenza = c.QueryFirstOrDefault<GiustificaAssenza>(@"
             SELECT id AS Id, date_from AS DateFrom, date_to AS DateTo, hours AS Hours,
-                   absence_type AS AbsenceType, source AS Source, status AS Status
+                   absence_type AS AbsenceType, source AS Source, status AS Status,
+                   sickness_protocol AS SicknessProtocol
             FROM hr_absences
             WHERE employee_id = @Id AND status IN ('APPROVED', 'PENDING')
               AND date_from <= @G AND date_to >= @G
@@ -701,6 +818,11 @@ public partial class HrAttendanceService
             ? 0m
             : Math.Round((decimal)(day.RegularMinutes + day.OvertimeMinutes) / 60m, 2);
         info.OreMancanti = Math.Max(0m, emp.DailyHours - info.OreLavorate);
+
+        // Il protocollo della mutua: quello già scritto qui, e l'ultimo da proporre se si
+        // sceglie malattia — il certificato copre più giorni e si scrive una volta sola.
+        info.Protocol = assenza?.SicknessProtocol ?? "";
+        (info.LastProtocol, info.LastProtocolDate) = UltimoProtocollo(c, employeeId, giorno);
 
         // Niente da coprire e niente da togliere: è la stessa informazione che dava il
         // messaggio «Nessuna ora da giustificare per questo giorno» dell'originale.
@@ -762,24 +884,37 @@ public partial class HrAttendanceService
 
         // Una riga per giornata: se ce n'è già una nostra la si riscrive, non se ne aggiunge
         // una seconda (il calendario ne mostrerebbe una sola e l'altra resterebbe invisibile).
+        // Il protocollo della mutua vale solo sulla malattia: cambiando causale sparisce.
+        string? protocollo = tipo == "SICKNESS" ? Protocollo(req.Protocol) : null;
+
         int aggiornate = c.Execute(@"
             UPDATE hr_absences
                SET absence_type = @Tipo, hours = @Ore, is_full_day = @Piena,
                    status = 'APPROVED', source = 'MANUAL', created_by = @Autore,
-                   approved_by = @Autore, approved_at = CURRENT_TIMESTAMP
+                   approved_by = @Autore, approved_at = CURRENT_TIMESTAMP,
+                   sickness_protocol = @Protocollo
              WHERE employee_id = @Id AND date_from = @G AND date_to = @G AND source <> 'ECOS'",
-            new { Tipo = tipo, Ore = ore, Piena = giornataPiena, Autore = autore, Id = req.EmployeeId, G = giorno });
+            new
+            {
+                Tipo = tipo, Ore = ore, Piena = giornataPiena, Autore = autore,
+                Id = req.EmployeeId, G = giorno, Protocollo = protocollo,
+            });
 
         if (aggiornate == 0)
         {
             c.Execute(@"
                 INSERT INTO hr_absences
                     (employee_id, date_from, date_to, hours, is_full_day, absence_type,
-                     status, source, notes, created_by, approved_by, approved_at)
+                     status, source, notes, created_by, approved_by, approved_at, sickness_protocol)
                 VALUES
                     (@Id, @G, @G, @Ore, @Piena, @Tipo, 'APPROVED', 'MANUAL',
-                     'Giustificazione ore mancanti da Calendario mensile', @Autore, @Autore, CURRENT_TIMESTAMP)",
-                new { Id = req.EmployeeId, G = giorno, Ore = ore, Piena = giornataPiena, Tipo = tipo, Autore = autore });
+                     'Giustificazione ore mancanti da Calendario mensile', @Autore, @Autore,
+                     CURRENT_TIMESTAMP, @Protocollo)",
+                new
+                {
+                    Id = req.EmployeeId, G = giorno, Ore = ore, Piena = giornataPiena,
+                    Tipo = tipo, Autore = autore, Protocollo = protocollo,
+                });
         }
 
         return null;
@@ -794,6 +929,8 @@ public partial class HrAttendanceService
         public string AbsenceType { get; set; } = "";
         public string Source { get; set; } = "";
         public string Status { get; set; } = "";
+        /// <summary>Il protocollo della mutua, solo sulle malattie.</summary>
+        public string? SicknessProtocol { get; set; }
     }
 
     private sealed class GiustificaGiornata

@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 10/09/2026 12:09.
+> Fotografia del 10/09/2026 12:30.
 
 ## Chiavi con endpoint
 
@@ -474,6 +474,7 @@
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
+- `GET /api/hr/calendar/protocollo` (HrController.SicknessProtocol)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
 - `GET /api/hr/daily-check` (HrController.DailyCheck)
 - `GET /api/hr/day-reminder` (HrController.DayReminder)
@@ -490,6 +491,7 @@
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
+- `POST /api/hr/calendar/protocollo` (HrController.SetSicknessProtocol)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
 - `POST /api/hr/calendar/trasferta` (HrController.SetTravelDay)
@@ -511,6 +513,7 @@
 - `GET /api/hr/calendar` (HrController.Calendar)
 - `GET /api/hr/calendar/export` (HrController.CalendarExport)
 - `GET /api/hr/calendar/giustifica` (HrController.GiustificaInfo)
+- `GET /api/hr/calendar/protocollo` (HrController.SicknessProtocol)
 - `GET /api/hr/calendar/reminders` (HrController.Reminders)
 - `GET /api/hr/daily-check` (HrController.DailyCheck)
 - `GET /api/hr/day-reminder` (HrController.DayReminder)
@@ -527,6 +530,7 @@
 - `POST /api/hr/absences/{id:int}/approve` (HrController.ApproveAbsence)
 - `POST /api/hr/adjustment` (HrController.Adjustment)
 - `POST /api/hr/calendar/giustifica` (HrController.Giustifica)
+- `POST /api/hr/calendar/protocollo` (HrController.SetSicknessProtocol)
 - `POST /api/hr/calendar/reminders` (HrController.SendReminders)
 - `POST /api/hr/calendar/reminders/mark` (HrController.MarkReminders)
 - `POST /api/hr/calendar/trasferta` (HrController.SetTravelDay)

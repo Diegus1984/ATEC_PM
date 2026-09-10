@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { fetchHrGiustificaInfo, saveHrGiustifica } from "@/lib/api/hr"
+import { ProtocolloScelta } from "./protocollo-scelta"
 import { HR_CAUSALE_LABEL, type HrCausale } from "@/lib/api/types"
 import { formatDateShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
@@ -72,12 +73,20 @@ export function GiustificaCausaleDialog({
     setScelta(RIMUOVI)
   }, [target?.employeeId, target?.date])
 
+  // Il protocollo della mutua: si scrive solo con la malattia, e si riparte da quello che la
+  // giornata ha già, o dall'ultimo della persona (Diego, 10/09/2026).
+  const [protocollo, setProtocollo] = React.useState("")
+  React.useEffect(() => {
+    if (info) setProtocollo(info.protocol || info.lastProtocol || "")
+  }, [info])
+
   const salva = useMutation({
     mutationFn: () =>
       saveHrGiustifica({
         employeeId: target!.employeeId,
         date: target!.date,
         causale: scelta === RIMUOVI ? "" : scelta,
+        protocol: scelta === "MA" ? protocollo.trim() : undefined,
       }),
     onSuccess: async (messaggio) => {
       // Il server dice se la causale è andata anche su Ecos (#151).
@@ -170,6 +179,19 @@ export function GiustificaCausaleDialog({
                 </p>
               )}
             </div>
+
+            {/* Il protocollo della mutua vale solo per la malattia: un certificato copre più
+                giorni, quindi si propone l'ultimo della persona (Diego, 10/09/2026). */}
+            {scelta === "MA" && (
+              <div className="rounded-md border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <ProtocolloScelta
+                  ultimo={info.lastProtocol ?? ""}
+                  ultimoGiorno={info.lastProtocolDate ?? null}
+                  valore={protocollo}
+                  onValore={setProtocollo}
+                />
+              </div>
+            )}
 
             <div className="flex items-baseline justify-between rounded-md bg-muted/50 px-3 py-2">
               <span className="text-sm font-medium">Ore</span>

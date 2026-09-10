@@ -95,7 +95,12 @@ public static class HrCalendarExcel
         foreach (HrCalendarRowDto r in righe)
         {
             ExcelRange dipendente = ws.Cells[riga, 1];
-            dipendente.Value = r.Employee;
+            // Sotto il nome i protocolli della mutua del mese, uno per riga: nel foglio del
+            // consulente stanno lì, in colonna B, scritti a mano (Diego, 10/09/2026).
+            dipendente.Value = r.SicknessProtocols.Count > 0
+                ? r.Employee + Environment.NewLine
+                  + string.Join(Environment.NewLine, r.SicknessProtocols.Select(p => "Prot. " + p))
+                : r.Employee;
             dipendente.Style.WrapText = true;
             dipendente.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
             if (!string.IsNullOrEmpty(r.Employee)) dipendente.Style.Font.Bold = true;

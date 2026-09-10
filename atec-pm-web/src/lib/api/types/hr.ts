@@ -340,6 +340,8 @@ export interface HrCalendarCell {
 }
 
 export interface HrCalendarRow {
+  /** I protocolli della mutua del mese: valorizzati solo sulla riga che porta il nome. */
+  sicknessProtocols?: string[]
   employeeId: number
   /** Nome + matricola: valorizzato solo sulla prima riga del dipendente. */
   employee: string
@@ -350,6 +352,20 @@ export interface HrCalendarRow {
   voceType: string
   days: Record<number, HrCalendarCell>
   total: string
+}
+
+/** Cosa serve al dialogo del protocollo della mutua. */
+export interface HrSicknessProtocolInfo {
+  employeeId: number
+  employeeName: string
+  date: string
+  /** Il protocollo già scritto su questa giornata, «» se non c'è. */
+  current: string
+  /** L'ultimo della persona nei giorni prima, da proporre; «» se non ce n'è. */
+  last: string
+  lastDate?: string | null
+  /** Perché non si può mettere il protocollo qui; «» = si può. */
+  blocco: string
 }
 
 export interface HrCalendarEmployee {
@@ -433,6 +449,11 @@ export interface HrGiustificaInfo {
   oreMancanti: number
   /** Codici ammessi su QUESTA giornata. */
   causali: HrCausale[]
+  /** L'ultimo protocollo della mutua nei giorni prima, da proporre; «» se non ce n'è. */
+  lastProtocol?: string
+  lastProtocolDate?: string | null
+  /** Il protocollo già scritto su questa giornata, «» se non c'è. */
+  protocol?: string
   /** Codice già presente sulla giornata, "" se non c'è niente. */
   causaleCorrente: string
   oreCorrenti: number | null
@@ -449,6 +470,8 @@ export interface HrGiustificaRequest {
   /** FE | PE | MA | IN, oppure "" per togliere la causale. */
   causale: string
   hours?: number | null
+  /** Il protocollo della mutua, solo con MA; facoltativo, si aggiunge anche dopo. */
+  protocol?: string
 }
 
 // ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────

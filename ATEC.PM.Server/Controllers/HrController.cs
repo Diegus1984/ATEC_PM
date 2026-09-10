@@ -340,6 +340,42 @@ public class HrController : ControllerBase
     }
 
     /// <summary>
+    /// Il protocollo della mutua di una giornata di malattia: quello che c'è e l'ultimo da
+    /// proporre. Vale anche sulle malattie arrivate da Ecos (Diego, 10/09/2026).
+    /// </summary>
+    [HttpGet("calendar/protocollo")]
+    public IActionResult SicknessProtocol([FromQuery] int employeeId, [FromQuery] DateTime date)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Il protocollo della mutua richiede la scrittura su Timbrature."));
+
+        return Ok(ApiResponse<HrSicknessProtocolInfoDto>.Ok(
+            _attendance.GetSicknessProtocol(employeeId, date)));
+    }
+
+    /// <summary>
+    /// Scrive (o toglie) il protocollo della mutua su una giornata già segnata malattia, senza
+    /// toccare la causale: i certificati arrivano dopo, e le malattie di Ecos qui non si
+    /// modificano (Diego, 10/09/2026: «devo poterlo aggiungere a posteriori»).
+    /// </summary>
+    [HttpPost("calendar/protocollo")]
+    public IActionResult SetSicknessProtocol([FromBody] HrSicknessProtocolRequest req)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Il protocollo della mutua richiede la scrittura su Timbrature."));
+
+        string? error = _attendance.SetSicknessProtocol(req.EmployeeId, req.Date, req.Protocol, MeId);
+        if (error == null) _realtime.Notify("giustifica", req.EmployeeId, req.Date.Date);
+        return Ok(error == null
+            ? ApiResponse<bool>.Ok(true, string.IsNullOrWhiteSpace(req.Protocol)
+                ? "Protocollo tolto"
+                : "Protocollo registrato")
+            : ApiResponse<bool>.Fail(error));
+    }
+
+    /// <summary>
     /// Mette (o toglie) l'indennità di trasferta di una giornata, dalla riga «TRASFERTA - €»
     /// del calendario mensile. Diego, 10/09/2026: si sceglie fra le tariffe, solo sui giorni
     /// lavorati, e resta un dato nostro — su Ecos non va.
