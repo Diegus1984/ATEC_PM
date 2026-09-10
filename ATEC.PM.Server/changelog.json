@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1155",
+                     "data":  "2026-09-10T11:55:35",
+                     "hash":  "34967122558b5c291256285284c8091a8cf28088",
+                     "modifiche":  [
+                                       "HR: l\u0027indennità di trasferta nel calendario mensile (M132)"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1137",
                      "data":  "2026-09-10T11:38:01",
                      "hash":  "618550ddb2179825dd45c4edcb6288af19d3bc44",
