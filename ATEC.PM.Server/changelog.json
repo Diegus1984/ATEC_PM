@@ -1,6 +1,15 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1233",
+                     "data":  "2026-09-10T12:33:56",
+                     "hash":  "4e72c99de26dcb6290695005e1e5472024abbeed",
+                     "modifiche":  [
+                                       "HR: il protocollo della mutua sulle giornate di malattia (M133)",
+                                       "HR trasferta: due test che seguono il totale della riga"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1204",
                      "data":  "2026-09-10T12:05:02",
                      "hash":  "54a4bfe61988544c3d3bded7be65ee7e7c6d160f",
