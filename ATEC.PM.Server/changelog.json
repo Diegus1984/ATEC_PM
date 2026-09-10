@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1108",
+                     "data":  "2026-09-10T11:09:10",
+                     "hash":  "98011bd9da5316a77269371ae96844e4fbe0fd47",
+                     "modifiche":  [
+                                       "HR: decidere l\u0027anticipo scrive subito l\u0027entrata su Ecos e qui"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1055",
                      "data":  "2026-09-10T10:55:52",
                      "hash":  "1b2ffa7ebecbd626cb08a09ada6d2c74ce837a4d",
