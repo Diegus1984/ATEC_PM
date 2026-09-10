@@ -41,8 +41,8 @@ export function TrasfertaCella({
   /** L'importo già scritto, come lo manda il server («20», «» se non c'è). */
   importo: string
   modificabile: boolean
-  /** Gli importi proposti, dall'anagrafica tariffe. */
-  tariffe: number[]
+  /** Le tariffe proposte, dall'anagrafica: nome («Italia») e importo. */
+  tariffe: { label: string; value: number }[]
   onSalvata: () => void
 }) {
   const salva = useMutation({
@@ -62,7 +62,8 @@ export function TrasfertaCella({
   // coda, altrimenti la combo mostrerebbe vuoto su un valore che c'è.
   const attuale = importo ? Number(importo.replace(",", ".")) : null
   const voci = [...tariffe]
-  if (attuale != null && !voci.includes(attuale)) voci.push(attuale)
+  if (attuale != null && !voci.some((v) => v.value === attuale))
+    voci.push({ label: "", value: attuale })
 
   return (
     <Select
@@ -80,10 +81,10 @@ export function TrasfertaCella({
       <SelectContent>
         <SelectItem value={NESSUNA}>(nessuna)</SelectItem>
         {voci
-          .sort((a, b) => a - b)
+          .sort((a, b) => a.value - b.value)
           .map((v) => (
-            <SelectItem key={v} value={String(v)}>
-              {euro(v)} €
+            <SelectItem key={v.value} value={String(v.value)}>
+              {v.label ? `${v.label} — ${euro(v.value)} €` : `${euro(v.value)} €`}
             </SelectItem>
           ))}
       </SelectContent>

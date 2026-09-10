@@ -119,8 +119,11 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
     queryFn: () => fetchTariffOptions("DAILY_ALLOWANCE"),
     enabled: canWrite,
   })
-  const tariffe: number[] = React.useMemo(
-    () => (tariffeQuery.data ?? []).map((x) => x.value).sort((a, b) => a - b),
+  const tariffe: { label: string; value: number }[] = React.useMemo(
+    () =>
+      (tariffeQuery.data ?? [])
+        .map((x) => ({ label: x.label, value: x.value }))
+        .sort((a, b) => a.value - b.value),
     [tariffeQuery.data]
   )
 
