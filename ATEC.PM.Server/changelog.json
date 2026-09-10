@@ -2,6 +2,14 @@
     "voci":  [
                  {
                      "build":  "20260910-0948",
+                     "data":  "2026-09-10T09:56:28",
+                     "hash":  "6959ddaa887c8d3cb2e5b8234f921fec0ed7a2ef",
+                     "modifiche":  [
+                                       "HR: un solo conto delle ore mancanti per tutte e tre le pagine"
+                                   ]
+                 },
+                 {
+                     "build":  "20260910-0948",
                      "data":  "2026-09-10T09:48:56",
                      "hash":  "9e5da1eb8f018e0fcb2ef1a8c393bb86348cf6f9",
                      "modifiche":  [
