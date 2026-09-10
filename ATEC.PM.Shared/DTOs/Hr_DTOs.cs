@@ -256,6 +256,14 @@ public class HrEcosSendRequest
     public List<HrEcosTimeDto>? Times { get; set; }
 }
 
+/// <summary>Il verso giusto di una timbratura, quando il lettore l'ha registrato al contrario.</summary>
+public class HrPunchDirectionRequest
+{
+    public long PunchId { get; set; }
+    /// <summary>«IN» o «OUT».</summary>
+    public string Direction { get; set; } = "";
+}
+
 /// <summary>La decisione su un'entrata prima delle 8 (Diego, 10/09/2026).</summary>
 public class HrEarlyEntryRequest
 {

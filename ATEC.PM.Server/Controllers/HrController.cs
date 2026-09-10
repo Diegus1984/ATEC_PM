@@ -663,6 +663,24 @@ public class HrController : ControllerBase
             : ApiResponse<bool>.Fail(error));
     }
 
+    /// <summary>
+    /// Corregge il verso di una timbratura (entrata ↔ uscita): prima su Ecos, poi qui.
+    /// Diego, 10/09/2026: capita che il lettore registri il gesto al contrario.
+    /// </summary>
+    [HttpPost("punch-direction")]
+    public async Task<IActionResult> SetPunchDirection([FromBody] HrPunchDirectionRequest req, CancellationToken ct)
+    {
+        if (!CanManageTimbrature)
+            return StatusCode(StatusCodes.Status403Forbidden,
+                ApiResponse<string>.Fail("Correggere le timbrature richiede la scrittura su Timbrature."));
+
+        string? error = await _attendance.SetPunchDirectionAsync(req.PunchId, req.Direction, MeId, ct);
+        if (error == null) _realtime.Notify("adjustment");
+        return Ok(error == null
+            ? ApiResponse<bool>.Ok(true, "Verso corretto su Ecos e qui.")
+            : ApiResponse<bool>.Fail(error));
+    }
+
     // ── ENTRATA PRIMA DELLE 8 ─────────────────────────────────────────────────
 
     /// <summary>

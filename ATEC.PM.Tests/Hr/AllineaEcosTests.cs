@@ -499,6 +499,83 @@ public class AllineaEcosTests
         Assert.Empty(ecos.UrlChiamati);
     }
 
+    /// <summary>
+    /// Il lettore a volte registra il gesto al contrario: la timbratura delle 17 finisce come
+    /// ENTRATA, e la giornata racconta il rovescio di quello che è successo. HR corregge il
+    /// verso dal dettaglio, la correzione va prima su Ecos e la giornata si rifà (Diego,
+    /// 10/09/2026, dopo il caso Obreja).
+    /// </summary>
+    [FactRichiedeMySql]
+    public async Task Il_verso_sbagliato_si_corregge_prima_su_Ecos_e_poi_qui()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int capo = Dipendente(c, null);
+        long unica = Grezza(c, mario, "s1", Giorno.AddHours(17).AddMinutes(3), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaUpdate());
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        // Come sta adesso: per il motore è entrato alle 17 e non è più uscito.
+        Assert.Equal("⚠ INCOMPLETO: Solo entrata",
+            c.ExecuteScalar<string>("SELECT note FROM hr_days WHERE employee_id = @Id", new { Id = mario }));
+
+        Assert.Null(await servizio.SetPunchDirectionAsync(unica, "OUT", capo));
+
+        // Su Ecos è partito il verso, non l'orario.
+        Assert.Equal(2, ecos.UrlChiamati.Count);
+        Assert.Contains("Edit=true", ecos.UrlChiamati[1]);
+        Assert.Contains("StampID=s1", ecos.CorpiInviati[1]);
+        Assert.Contains("VersusCode=OUT", ecos.CorpiInviati[1]);
+        Assert.DoesNotContain("StampDateTime", ecos.CorpiInviati[1]);
+
+        // Qui la timbratura è un'uscita, e la giornata dice la cosa giusta.
+        Assert.Equal("OUT", c.ExecuteScalar<string>("SELECT direction FROM hr_punches WHERE id = @Id", new { Id = unica }));
+        var giornata = c.QuerySingle<(string In1, string Out1, string Note)>(
+            "SELECT clock_in_1, clock_out_1, note FROM hr_days WHERE employee_id = @Id", new { Id = mario });
+        Assert.Equal(("??:??", "17:00", "⚠ INCOMPLETO: Solo uscita"), giornata);
+
+        // E il registro tiene la storia della correzione.
+        Assert.Contains("Verso corretto",
+            c.ExecuteScalar<string>("SELECT message FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario }));
+    }
+
+    [FactRichiedeMySql]
+    public async Task Se_Ecos_rifiuta_il_verso_qui_resta_com_era()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int capo = Dipendente(c, null);
+        long unica = Grezza(c, mario, "s1", Giorno.AddHours(17), "IN");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaErrore("-2", "Record not found"));
+        HrAttendanceService servizio = Servizio(ecos);
+
+        string? errore = await servizio.SetPunchDirectionAsync(unica, "OUT", capo);
+
+        Assert.NotNull(errore);
+        Assert.Contains("rifiutato", errore);
+        Assert.Equal("IN", c.ExecuteScalar<string>("SELECT direction FROM hr_punches WHERE id = @Id", new { Id = unica }));
+        Assert.Equal("ERROR",
+            c.ExecuteScalar<string>("SELECT outcome FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario }));
+    }
+
+    [FactRichiedeMySql]
+    public async Task Il_verso_non_si_cambia_sul_proprio_cartellino_ne_in_quello_che_e_gia()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int capo = Dipendente(c, null);
+        long unica = Grezza(c, mario, "s1", Giorno.AddHours(17), "IN");
+        var ecos = new InvioEcosTests.EcosFinto();
+        HrAttendanceService servizio = Servizio(ecos);
+
+        Assert.Contains("tuo cartellino", await servizio.SetPunchDirectionAsync(unica, "OUT", mario));
+        Assert.Contains("già un'entrata", await servizio.SetPunchDirectionAsync(unica, "IN", capo));
+        Assert.Contains("non trovata", await servizio.SetPunchDirectionAsync(999999, "OUT", capo));
+        Assert.Empty(ecos.UrlChiamati);
+    }
+
     [FactRichiedeMySql]
     public async Task Una_timbratura_di_Ecos_si_cancella_prima_su_Ecos_e_poi_qui()
     {

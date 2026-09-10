@@ -23,7 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteHrPunch, sendHrAdjustment, sendHrDayToEcos, setHrEarlyEntry } from "@/lib/api/hr"
+import {
+  deleteHrPunch,
+  sendHrAdjustment,
+  sendHrDayToEcos,
+  setHrEarlyEntry,
+  setHrPunchDirection,
+} from "@/lib/api/hr"
 import type { HrDay, HrEcosTime, HrPunch } from "@/lib/api/types"
 import { formatDateTimeShort } from "@/lib/date-iso"
 import { notifyError, notifySuccess } from "@/lib/toast"
@@ -208,6 +214,17 @@ export function GiornataDialog({
     onError: (e) => notifyError(e instanceof Error ? e.message : "Non riuscito."),
   })
 
+  // Il lettore a volte registra il gesto al contrario: il verso si corregge da qui, e la
+  // correzione va prima su Ecos (Diego, 10/09/2026).
+  const cambiaVerso = useMutation({
+    mutationFn: setHrPunchDirection,
+    onSuccess: (messaggio) => {
+      notifySuccess(messaggio || "Verso corretto.")
+      onChanged()
+    },
+    onError: (e) => notifyError(e instanceof Error ? e.message : "Non riuscito."),
+  })
+
   const elimina = useMutation({
     mutationFn: deleteHrPunch,
     onSuccess: () => {
@@ -349,7 +366,29 @@ export function GiornataDialog({
                   className="flex items-center gap-2 rounded-md border px-2 py-1 text-sm"
                 >
                   <span className="tabular-nums font-medium">{oraDa(t.punchedAt)}</span>
-                  <span>{t.direction === "IN" ? "Entrata" : "Uscita"}</span>
+                  {canWrite ? (
+                    <Select
+                      value={t.direction === "IN" ? "IN" : "OUT"}
+                      onValueChange={(v) =>
+                        cambiaVerso.mutate({ punchId: t.id, direction: v as "IN" | "OUT" })
+                      }
+                      disabled={cambiaVerso.isPending}
+                    >
+                      <SelectTrigger
+                        className="h-7 w-28"
+                        aria-label={`Verso della timbratura delle ${oraDa(t.punchedAt)}`}
+                        title="Se il lettore ha registrato il gesto al contrario, correggilo: la modifica va anche su Ecos"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="IN">Entrata</SelectItem>
+                        <SelectItem value="OUT">Uscita</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span>{t.direction === "IN" ? "Entrata" : "Uscita"}</span>
+                  )}
                   <Badge variant={t.source === "ADJUSTMENT" ? "default" : "outline"}>
                     {t.source === "ADJUSTMENT" ? "RETTIFICA" : t.source}
                   </Badge>

@@ -794,6 +794,70 @@ public partial class HrAttendanceService
     /// Una riga del registro: <c>previous_time</c> NULL = inserimento, altrimenti modifica;
     /// <c>punch_id</c> NULL = pausa dedotta che non è (ancora) una timbratura qui.
     /// </summary>
+    // ── VERSO DI UNA TIMBRATURA ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Cambia il verso di una timbratura (entrata ↔ uscita), prima su Ecos e poi qui: capita
+    /// che il lettore registri il gesto al contrario, e da lì in poi la giornata racconta una
+    /// cosa che non è successa (Diego, 10/09/2026). Ecos è la bibbia: se là non passa, qui non
+    /// si tocca niente.
+    /// </summary>
+    /// <returns>Il motivo del rifiuto, o null se è andata.</returns>
+    public async Task<string?> SetPunchDirectionAsync(
+        long punchId, string direction, int autoreId, CancellationToken ct = default)
+    {
+        string verso = NightShift.IsEntry(direction) ? "IN" : "OUT";
+
+        using MySqlConnection c = _db.Open();
+        var riga = c.QueryFirstOrDefault<(int EmployeeId, DateTime WorkDate, DateTime PunchedAt,
+            string Direction, string Source, string? ExternalId)>(@"
+            SELECT employee_id AS EmployeeId, work_date AS WorkDate, punched_at AS PunchedAt,
+                   direction AS Direction, source AS Source, external_id AS ExternalId
+            FROM hr_punches WHERE id = @Id", new { Id = punchId });
+
+        if (riga == default) return "Timbratura non trovata.";
+        if (riga.EmployeeId == autoreId) return "Non puoi cambiare le timbrature sul tuo cartellino.";
+        if (string.Equals(riga.Direction, verso, StringComparison.OrdinalIgnoreCase))
+            return $"Questa timbratura è già un'{(verso == "IN" ? "entrata" : "uscita")}.";
+
+        bool diEcos = string.Equals(riga.Source, "ECOS", StringComparison.OrdinalIgnoreCase)
+                      && !string.IsNullOrWhiteSpace(riga.ExternalId);
+        if (diEcos)
+        {
+            string stampId = riga.ExternalId!.Trim();
+            try
+            {
+                string token = await _ecos.TokenAsync(ct);
+                string messaggio = await _ecos.UpdateStampDirectionAsync(token, stampId, verso, ct);
+                RegistraInvio(c, riga.EmployeeId, riga.WorkDate, punchId, stampId, verso, riga.PunchedAt,
+                    riga.PunchedAt, riga.PunchedAt, "OK",
+                    $"Verso corretto in {Verso(verso)}: {messaggio}", autoreId);
+            }
+            catch (EcosApiException ex)
+            {
+                RegistraInvio(c, riga.EmployeeId, riga.WorkDate, punchId, stampId, verso, riga.PunchedAt,
+                    riga.PunchedAt, riga.PunchedAt, "ERROR",
+                    $"Verso non corretto su Ecos: {ex.Message}", autoreId);
+                _logger.LogWarning(
+                    "[HR] Verso non cambiato su Ecos: timbratura {Id}, StampID {Stamp}: {Msg}",
+                    punchId, stampId, ex.Message);
+                return ex.EsitoIncerto
+                    ? $"Ecos non ha risposto: verificare là prima di riprovare ({ex.Message})."
+                    : $"Ecos ha rifiutato il cambio di verso: {ex.Message}";
+            }
+        }
+
+        c.Execute("UPDATE hr_punches SET direction = @Verso WHERE id = @Id",
+            new { Verso = verso, Id = punchId });
+
+        _logger.LogInformation(
+            "[HR] Verso della timbratura {Id} ({Orario:yyyy-MM-dd HH:mm}) di {Dip}: {Vecchio} → {Nuovo}, da {Autore}.",
+            punchId, riga.PunchedAt, riga.EmployeeId, riga.Direction, verso, autoreId);
+
+        RicalcolaConVicine(c, riga.EmployeeId, riga.WorkDate);
+        return null;
+    }
+
     // ── ENTRATA PRIMA DELLE 8 ─────────────────────────────────────────────────
 
     /// <summary>

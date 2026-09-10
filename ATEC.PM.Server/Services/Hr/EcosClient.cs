@@ -443,6 +443,29 @@ public class EcosClient
     }
 
     /// <summary>
+    /// Cambia il VERSO di una timbratura già su Ecos (entrata ↔ uscita): stessa
+    /// <c>PeopleStampPost</c> con <c>Edit=true</c> della modifica d'orario, con
+    /// <c>VersusCode</c> al posto di <c>StampDateTime</c>. Serve quando il lettore ha
+    /// registrato il gesto al contrario (Diego, 10/09/2026).
+    /// </summary>
+    public async Task<string> UpdateStampDirectionAsync(
+        string token, string stampId, string verso, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(stampId))
+            throw new EcosApiException("PeopleStampPost: senza StampID sarebbe un inserimento, non una modifica.");
+
+        string url = $"{ResolveCredenziali().BaseUrl}PeopleStampPost&Edit=true&DF=1&AppCode=ATEC_PM" +
+                     $"&AuthToken={Uri.EscapeDataString(token)}";
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["StampID"] = stampId.Trim(),
+            ["VersusCode"] = NightShift.IsEntry(verso) ? "IN" : "OUT",
+        });
+        string body = await PostAsync(url, form, ct);
+        return EsitoScrittura(body, "PeopleStampPost");
+    }
+
+    /// <summary>
     /// La busta di una Post: <c>CODE</c> OK, oppure errore con <c>ERROR_CODE</c>. Torna il
     /// <c>MESSAGE</c>. Trappola: <c>Edit=true</c> a corpo vuoto risponde VUOTO, non -17: anche
     /// quello è un errore (lo intercetta <see cref="ParseDocumento"/>). Statico per i test.

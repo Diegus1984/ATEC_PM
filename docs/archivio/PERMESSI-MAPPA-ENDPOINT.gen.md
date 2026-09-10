@@ -2,7 +2,7 @@
 
 > Generata da `CensimentoCatalogoTests.Mappa_chiave_endpoint_generata` a ogni run dei test.
 > NON MODIFICARE A MANO — PIANO-PERMESSI-REBUILD.md §12.3.
-> Fotografia del 10/09/2026 11:21.
+> Fotografia del 10/09/2026 11:36.
 
 ## Chiavi con endpoint
 
@@ -500,6 +500,7 @@
 - `POST /api/hr/import` (HrController.Import)
 - `POST /api/hr/import/day` (HrController.ImportDay)
 - `POST /api/hr/import/month` (HrController.ImportMonth)
+- `POST /api/hr/punch-direction` (HrController.SetPunchDirection)
 - `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
 
 ### `nav.hr_timbrature` — Timbrature
@@ -535,6 +536,7 @@
 - `POST /api/hr/import` (HrController.Import)
 - `POST /api/hr/import/day` (HrController.ImportDay)
 - `POST /api/hr/import/month` (HrController.ImportMonth)
+- `POST /api/hr/punch-direction` (HrController.SetPunchDirection)
 - `PUT /api/hr/mapping/{employeeId:int}` (HrController.UpdateMapping)
 
 ### `nav.milestones` — Milestones

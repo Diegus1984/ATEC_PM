@@ -130,6 +130,19 @@ export async function sendHrDayToEcos(payload: {
 }
 
 /**
+ * Corregge il verso di una timbratura (entrata ↔ uscita), prima su Ecos e poi qui: capita che
+ * il lettore registri il gesto al contrario (Diego, 10/09/2026).
+ */
+export async function setHrPunchDirection(req: {
+  punchId: number
+  direction: "IN" | "OUT"
+}): Promise<string> {
+  const r = await apiPost<ApiResponse<boolean>>("/api/hr/punch-direction", req)
+  unwrapApi(r)
+  return r.message ?? ""
+}
+
+/**
  * Autorizza (o no) l'entrata prima delle 8 di una giornata: autorizzata vale l'orario
  * timbrato, altrimenti la giornata parte dalle 8. Il server ricalcola subito (10/09/2026).
  */

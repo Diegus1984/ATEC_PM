@@ -789,6 +789,12 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   l'entrata» nella pillola, il testo del sollecito e la spiegazione del dettaglio, e il modulo
   della rettifica parte già su «Entrata». Test in `UscitaMancanteTests` e `AllineaEcosTests`; il
   banco di prova delle 330 giornate VB non si sposta.
+- **Il verso di una timbratura si corregge (10/09).** Capita che il lettore registri il gesto al
+  contrario. Nel dettaglio della giornata, nella lista «Timbrature su Ecos», il verso è una
+  tendina Entrata/Uscita: cambiarlo manda `PeopleStampPost Edit=true` con `VersusCode`
+  (`EcosClient.UpdateStampDirectionAsync`, senza toccare l'orario), poi aggiorna qui e rifà la
+  giornata. Se Ecos rifiuta, qui non cambia niente. Mai sul proprio cartellino.
+  `POST /api/hr/punch-direction` → `SetPunchDirectionAsync`, test in `AllineaEcosTests`.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
