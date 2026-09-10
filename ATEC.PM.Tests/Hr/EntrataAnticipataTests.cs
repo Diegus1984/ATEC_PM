@@ -101,45 +101,120 @@ public class EntrataAnticipataServizioTests
     /// <summary>Ieri: una giornata chiusa (oggi sarebbe «in corso» e non si calcola).</summary>
     private static readonly DateTime Giorno = new(2026, 9, 9);
 
+    /// <summary>
+    /// Diego, 10/09/2026: «sia che accetto o che rifiuto l'ingresso in anticipo, fai
+    /// aggiornamento dell'orario di ingresso su Ecos e sul locale», senza chiedere conferma.
+    /// Rifiutare vuol dire che la giornata comincia alle 8: e quelle vanno anche su Ecos.
+    /// </summary>
     [FactRichiedeMySql]
-    public void Autorizzare_l_anticipo_rifa_il_conto_della_giornata()
+    public async Task Rifiutare_porta_l_entrata_alle_otto_su_Ecos_e_qui()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = Dipendente(c, "42");
         int capo = Dipendente(c, null);
         Grezza(c, mario, "s1", Giorno.AddHours(7).AddMinutes(30), "IN");
         Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
-        HrAttendanceService servizio = Servizio();
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaUpdate());
+        HrAttendanceService servizio = Servizio(ecos);
         servizio.RecalculateDay(c, mario, Giorno);
 
-        // Nessuno ha deciso: la giornata parte dalle 8 e sono otto ore tonde.
+        (string? errore, string? avviso) = await servizio.SetEarlyEntryAsync(mario, Giorno, authorized: false, capo);
+
+        Assert.Null(errore);
+        Assert.Null(avviso);
+
+        // Una modifica sola, sull'entrata: il resto della giornata non c'entra.
+        Assert.Equal(2, ecos.UrlChiamati.Count);
+        Assert.Contains("Edit=true", ecos.UrlChiamati[1]);
+        Assert.Contains("StampID=s1", ecos.CorpiInviati[1]);
+        Assert.Contains("StampDateTime=2026-09-09+08%3A00%3A00", ecos.CorpiInviati[1]);
+
+        // Specchio: qui l'entrata è le 8, l'uscita è rimasta dov'era.
+        Assert.Equal(
+            (Giorno.AddHours(8), (DateTime?)Giorno.AddHours(8)),
+            c.QuerySingle<(DateTime PunchedAt, DateTime? SuEcos)>(
+                "SELECT punched_at, ecos_punched_at FROM hr_punches WHERE external_id = 's1'"));
+        Assert.Equal(Giorno.AddHours(17),
+            c.ExecuteScalar<DateTime>("SELECT punched_at FROM hr_punches WHERE external_id = 's2'"));
+
+        // La giornata è rifatta, e il registro tiene la storia.
         Assert.Equal(("08:00", 480, 0), Giornata(c, mario));
-        HrDayDto prima = servizio.GetMonthlyTimesheet(mario, 2026, 9).Days.Single(g => g.WorkDate == Giorno);
-        Assert.Equal(30, prima.EarlyEntryMinutes);
-        Assert.Null(prima.EarlyEntryAuthorized);
-
-        Assert.Null(servizio.SetEarlyEntry(mario, Giorno, authorized: true, autoreId: capo));
-
-        // Autorizzata: vale l'orario timbrato, e la mezz'ora diventa straordinario.
-        Assert.Equal(("07:30", 480, 30), Giornata(c, mario));
-        HrDayDto dopo = servizio.GetMonthlyTimesheet(mario, 2026, 9).Days.Single(g => g.WorkDate == Giorno);
-        Assert.True(dopo.EarlyEntryAuthorized);
-
-        // E si può tornare indietro: la giornata riparte dalle 8.
-        Assert.Null(servizio.SetEarlyEntry(mario, Giorno, authorized: false, autoreId: capo));
-        Assert.Equal(("08:00", 480, 0), Giornata(c, mario));
-        Assert.False(servizio.GetMonthlyTimesheet(mario, 2026, 9).Days
-            .Single(g => g.WorkDate == Giorno).EarlyEntryAuthorized);
+        var registro = c.QuerySingle<(string StampId, DateTime PunchedAt, DateTime SentTime, string Outcome, string Message)>(
+            "SELECT ecos_stamp_id, punched_at, sent_time, outcome, message FROM hr_ecos_sends WHERE employee_id = @Id",
+            new { Id = mario });
+        Assert.Equal("s1", registro.StampId);
+        Assert.Equal(Giorno.AddHours(7).AddMinutes(30), registro.PunchedAt);
+        Assert.Equal(Giorno.AddHours(8), registro.SentTime);
+        Assert.Equal("OK", registro.Outcome);
+        Assert.Contains("rifiutata", registro.Message);
     }
 
     [FactRichiedeMySql]
-    public void Una_giornata_senza_timbrature_non_si_autorizza()
+    public async Task Approvare_porta_su_Ecos_l_orario_timbrato_arrotondato()
     {
         using MySqlConnection c = _schema.Apri();
         int mario = Dipendente(c, "42");
+        int capo = Dipendente(c, null);
+        // Timbra 07:35: dentro la tolleranza, l'ora che vale è le 07:30.
+        Grezza(c, mario, "s1", Giorno.AddHours(7).AddMinutes(35), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
+        var ecos = new InvioEcosTests.EcosFinto(InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaUpdate());
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
 
-        Assert.Contains("non ha timbrature", Servizio().SetEarlyEntry(mario, Giorno, true, mario));
+        (string? errore, string? avviso) = await servizio.SetEarlyEntryAsync(mario, Giorno, authorized: true, capo);
+
+        Assert.Null(errore);
+        Assert.Null(avviso);
+        Assert.Contains("StampDateTime=2026-09-09+07%3A30%3A00", ecos.CorpiInviati[1]);
+
+        // Qui l'entrata è le 07:30 e la mezz'ora davanti si conta.
+        Assert.Equal(Giorno.AddHours(7).AddMinutes(30),
+            c.ExecuteScalar<DateTime>("SELECT punched_at FROM hr_punches WHERE external_id = 's1'"));
+        Assert.Equal(("07:30", 480, 30), Giornata(c, mario));
+    }
+
+    [FactRichiedeMySql]
+    public async Task Se_Ecos_rifiuta_la_modifica_qui_non_si_cambia_niente()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42");
+        int capo = Dipendente(c, null);
+        Grezza(c, mario, "s1", Giorno.AddHours(7).AddMinutes(30), "IN");
+        Grezza(c, mario, "s2", Giorno.AddHours(17), "OUT");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaErrore("-2", "Record not found"));
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        (string? errore, string? avviso) = await servizio.SetEarlyEntryAsync(mario, Giorno, authorized: false, capo);
+
+        // La decisione vale comunque, ma l'orario qui resta quello di prima: i due non si
+        // devono scollare, e il perché si legge.
+        Assert.Null(errore);
+        Assert.NotNull(avviso);
+        Assert.Contains("Record not found", avviso);
+        Assert.Equal(Giorno.AddHours(7).AddMinutes(30),
+            c.ExecuteScalar<DateTime>("SELECT punched_at FROM hr_punches WHERE external_id = 's1'"));
+        Assert.Equal("ERROR",
+            c.ExecuteScalar<string>("SELECT outcome FROM hr_ecos_sends WHERE employee_id = @Id", new { Id = mario }));
+
+        // Il conto della giornata rispetta lo stesso la decisione: si parte dalle 8.
+        Assert.Equal(("08:00", 480, 0), Giornata(c, mario));
+    }
+
+    [FactRichiedeMySql]
+    public async Task Una_giornata_senza_timbrature_non_si_decide()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42");
+        var ecos = new InvioEcosTests.EcosFinto();
+
+        (string? errore, _) = await Servizio(ecos).SetEarlyEntryAsync(mario, Giorno, true, mario);
+
+        Assert.Contains("non ha timbrature", errore);
         Assert.Equal(0, c.ExecuteScalar<int>("SELECT COUNT(*) FROM hr_early_entries"));
+        Assert.Empty(ecos.UrlChiamati);
     }
 
     private static (string Entrata, int Ordinari, int Straordinari) Giornata(MySqlConnection c, int employeeId) =>
@@ -162,10 +237,17 @@ public class EntrataAnticipataServizioTests
             new { Id = employeeId, Giorno = orario.Date, Quando = orario, Verso = verso, Stamp = stampId });
     }
 
-    private HrAttendanceService Servizio()
+    private HrAttendanceService Servizio(HttpMessageHandler handler)
     {
-        IConfiguration config = new ConfigurationBuilder().Build();
-        var ecos = new EcosClient(config, NullLogger<EcosClient>.Instance);
+        IConfiguration config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Ecos:UserId"] = "utente",
+                ["Ecos:Password"] = "segreta",
+                ["Ecos:ClientId"] = "atec",
+            })
+            .Build();
+        var ecos = new EcosClient(config, NullLogger<EcosClient>.Instance, new HttpClient(handler));
         return new HrAttendanceService(_schema.Servizio(), ecos, NullLogger<HrAttendanceService>.Instance);
     }
 }

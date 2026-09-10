@@ -54,7 +54,7 @@ export function AnticipoAzioni({
           className="h-7 text-xs text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950"
           onClick={() => anticipo.mutate(true)}
           disabled={anticipo.isPending}
-          title={`Ha timbrato ${quanto} prima delle 8: approvando vale l'orario timbrato`}
+          title={`Ha timbrato ${quanto} prima delle 8: approvando vale l'orario timbrato, e va subito su Ecos`}
         >
           <Check className="mr-1 size-3" />
           Approva
@@ -65,7 +65,7 @@ export function AnticipoAzioni({
           className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950"
           onClick={() => anticipo.mutate(false)}
           disabled={anticipo.isPending}
-          title={`Ha timbrato ${quanto} prima delle 8: rifiutando la giornata conta dalle 8`}
+          title={`Ha timbrato ${quanto} prima delle 8: rifiutando la giornata parte dalle 8, anche su Ecos`}
         >
           <X className="mr-1 size-3" />
           Rifiuta
@@ -79,8 +79,8 @@ export function AnticipoAzioni({
       className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground"
       title={
         deciso
-          ? `Anticipo di ${quanto} approvato: la giornata conta dall'orario timbrato`
-          : `Anticipo di ${quanto} rifiutato: la giornata conta dalle 8`
+          ? `Anticipo di ${quanto} approvato: su Ecos e qui vale l'orario timbrato`
+          : `Anticipo di ${quanto} rifiutato: su Ecos e qui la giornata parte dalle 8`
       }
     >
       {deciso ? (

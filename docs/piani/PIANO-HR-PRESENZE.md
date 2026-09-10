@@ -767,6 +767,18 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   deciso. Un componente solo per le due pagine, `AnticipoAzioni.tsx`, che chiama
   `POST /api/hr/early-entry` e fa rileggere la pagina. I pulsanti nel dettaglio della giornata
   restano: servono a tornare sulla decisione.
+- **Decidere l'anticipo scrive l'entrata su Ecos (10/09).** Diego: «sia che accetto o che rifiuto
+  l'ingresso in anticipo, fai aggiornamento dell'orario di ingresso su Ecos e sul locale», senza
+  conferme — «la conferma è già data dalla approvazione o dal rifiuto». `SetEarlyEntryAsync`
+  (in `HrAttendanceService.InvioEcos.cs`) salva la decisione e porta subito l'orario che vale
+  sulla SOLA entrata del mattino: approvata l'arrotondato timbrato (07:30), rifiutata le 8. Una
+  `PeopleStampPost` con `Edit=true` sullo StampID dell'entrata, poi lo specchio locale
+  (`punched_at` = `ecos_punched_at` = orario deciso), la riga nel registro e il ricalcolo. Se Ecos
+  rifiuta, qui NON si tocca niente — i due non devono scollarsi — e il motivo torna come avviso
+  nel messaggio: la decisione resta comunque registrata e il conto della giornata la rispetta.
+  Test in `EntrataAnticipataTests` (rifiuto, approvazione, Ecos che rifiuta). 🪤 Dopo un rifiuto
+  l'entrata locale è le 8, quindi l'anticipo non si vede più e la colonna resta vuota: per
+  tornare indietro si cambia l'orario a mano dal dettaglio e si riscrive su Ecos.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

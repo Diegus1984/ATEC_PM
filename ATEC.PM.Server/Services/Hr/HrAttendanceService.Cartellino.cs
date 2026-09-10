@@ -331,40 +331,6 @@ public partial class HrAttendanceService
         return mancanti >= TimesheetRules.ShortDayToleranceMinutes ? mancanti : 0;
     }
 
-    // ── ENTRATA PRIMA DELLE 8 (Diego, 10/09/2026) ─────────────────────────────
-
-    /// <summary>
-    /// Decide se l'entrata anticipata di una giornata vale l'orario timbrato o parte dalle 8,
-    /// e rifà subito il conto della giornata. Diego: «c'è gente che arriva, timbra alle 7:30 e
-    /// si fa mezz'ora di straordinario non autorizzato tutti i giorni».
-    /// </summary>
-    /// <returns>Il motivo del rifiuto, o null se è andata.</returns>
-    public string? SetEarlyEntry(int employeeId, DateTime workDate, bool authorized, int autoreId)
-    {
-        if (employeeId <= 0) return "Dipendente non indicato.";
-        if (workDate.Date > DateTime.Today) return "Giornata futura: non c'è ancora niente da autorizzare.";
-
-        using MySqlConnection c = _db.Open();
-        if (c.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM hr_punches WHERE employee_id = @Id AND work_date = @Giorno",
-                new { Id = employeeId, Giorno = workDate.Date }) == 0)
-            return "Questa giornata non ha timbrature.";
-
-        c.Execute(@"
-            INSERT INTO hr_early_entries (employee_id, work_date, authorized, decided_by)
-            VALUES (@Id, @Giorno, @Ok, @Autore)
-            ON DUPLICATE KEY UPDATE authorized = VALUES(authorized), decided_by = VALUES(decided_by),
-                                    decided_at = NOW()",
-            new { Id = employeeId, Giorno = workDate.Date, Ok = authorized, Autore = autoreId });
-
-        _logger.LogInformation(
-            "[HR] Entrata anticipata del {Giorno:yyyy-MM-dd} di {Dip}: {Esito} da {Autore}.",
-            workDate, employeeId, authorized ? "AUTORIZZATA" : "non autorizzata", autoreId);
-
-        RicalcolaConVicine(c, employeeId, workDate.Date);
-        return null;
-    }
-
     // ── SOLLECITO DELLA SINGOLA GIORNATA (voce 1 del port) ────────────────────
 
     /// <summary>

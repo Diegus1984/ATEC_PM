@@ -389,8 +389,8 @@ export function GiornataDialog({
                 giornata.normalized?.clockIn1 || giornata.raw?.clockIn1 || ""
               }). `}
               {giornata.earlyEntryAuthorized === true
-                ? "Autorizzata: la giornata conta dall'orario timbrato."
-                : "La giornata conta dalle 8: l'anticipo non entra nelle ore finché non lo autorizzi."}
+                ? "Approvata: su Ecos e qui vale l'orario timbrato."
+                : "La giornata parte dalle 8, e l'anticipo non entra nelle ore finché non lo approvi. La decisione scrive subito l'entrata su Ecos."}
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -399,14 +399,14 @@ export function GiornataDialog({
                 disabled={anticipo.isPending || giornata.earlyEntryAuthorized === false}
                 onClick={() => anticipo.mutate(false)}
               >
-                Non autorizzare
+                Rifiuta
               </Button>
               <Button
                 size="sm"
                 disabled={anticipo.isPending || giornata.earlyEntryAuthorized === true}
                 onClick={() => anticipo.mutate(true)}
               >
-                Autorizza l'anticipo
+                Approva
               </Button>
             </div>
           </div>

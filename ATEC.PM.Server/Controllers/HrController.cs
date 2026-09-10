@@ -670,18 +670,23 @@ public class HrController : ControllerBase
     /// timbrato, altrimenti la giornata parte dalle 8. Ricalcola subito (Diego, 10/09/2026).
     /// </summary>
     [HttpPost("early-entry")]
-    public IActionResult SetEarlyEntry([FromBody] HrEarlyEntryRequest req)
+    public async Task<IActionResult> SetEarlyEntry([FromBody] HrEarlyEntryRequest req, CancellationToken ct)
     {
         if (!CanManageTimbrature)
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponse<string>.Fail("Autorizzare le entrate anticipate richiede la scrittura su Timbrature."));
 
-        string? error = _attendance.SetEarlyEntry(req.EmployeeId, req.WorkDate, req.Authorized, MeId);
+        // Niente resoconto da confermare: la conferma è l'aver premuto «Approva» o «Rifiuta»
+        // (Diego, 10/09/2026). L'orario deciso va su Ecos e qui, e l'esito torna nel messaggio.
+        (string? error, string? avviso) =
+            await _attendance.SetEarlyEntryAsync(req.EmployeeId, req.WorkDate, req.Authorized, MeId, ct);
         if (error == null) _realtime.Notify("adjustment", req.EmployeeId, req.WorkDate.Date);
+
+        string esito = req.Authorized
+            ? "Anticipo approvato: su Ecos e qui vale l'orario timbrato."
+            : "Anticipo rifiutato: su Ecos e qui la giornata parte dalle 8.";
         return Ok(error == null
-            ? ApiResponse<bool>.Ok(true, req.Authorized
-                ? "Entrata anticipata autorizzata: vale l'orario timbrato."
-                : "Entrata anticipata non autorizzata: la giornata parte dalle 8.")
+            ? ApiResponse<bool>.Ok(true, avviso == null ? esito : $"{esito} {avviso}")
             : ApiResponse<bool>.Fail(error));
     }
 

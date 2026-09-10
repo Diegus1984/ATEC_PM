@@ -779,6 +779,112 @@ public partial class HrAttendanceService
     /// Una riga del registro: <c>previous_time</c> NULL = inserimento, altrimenti modifica;
     /// <c>punch_id</c> NULL = pausa dedotta che non è (ancora) una timbratura qui.
     /// </summary>
+    // ── ENTRATA PRIMA DELLE 8 ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Decide l'entrata anticipata di una giornata e porta subito l'orario deciso su Ecos e
+    /// qui: approvata vale l'orario arrotondato che la persona ha timbrato (07:30), rifiutata
+    /// valgono le 8. Diego, 10/09/2026: «sia che accetto o che rifiuto l'ingresso in anticipo,
+    /// fai aggiornamento dell'orario di ingresso su Ecos e sul locale», e senza chiedere niente
+    /// — «la conferma è già data dalla approvazione o dal rifiuto».
+    ///
+    /// <para>Si tocca la SOLA entrata del mattino: il resto della giornata non c'entra con
+    /// questa decisione. Se Ecos rifiuta la modifica, qui non si cambia niente (resterebbero
+    /// disallineati) e il motivo torna come avviso: la decisione però resta registrata, e il
+    /// conto della giornata la rispetta comunque.</para>
+    /// </summary>
+    /// <returns>Il motivo del rifiuto (allora non è stato fatto niente), e l'avviso su Ecos.</returns>
+    public async Task<(string? Error, string? Avviso)> SetEarlyEntryAsync(
+        int employeeId, DateTime workDate, bool authorized, int autoreId, CancellationToken ct = default)
+    {
+        if (employeeId <= 0) return ("Dipendente non indicato.", null);
+        if (workDate.Date > DateTime.Today) return ("Giornata futura: non c'è ancora niente da autorizzare.", null);
+
+        DateTime giorno = workDate.Date;
+        using MySqlConnection c = _db.Open();
+
+        // L'entrata del mattino: la prima della giornata, e deve essere un'entrata.
+        var entrata = c.QueryFirstOrDefault<PunchRow>(@"
+            SELECT id AS Id, punched_at AS PunchedAt, direction AS Direction, source AS Source,
+                   external_id AS ExternalId, ecos_punched_at AS EcosPunchedAt
+            FROM hr_punches
+            WHERE employee_id = @Id AND work_date = @Giorno
+            ORDER BY punched_at LIMIT 1",
+            new { Id = employeeId, Giorno = giorno });
+
+        if (entrata == null) return ("Questa giornata non ha timbrature.", null);
+        if (!NightShift.IsEntry(entrata.Direction)) return ("La prima timbratura della giornata non è un'entrata.", null);
+
+        c.Execute(@"
+            INSERT INTO hr_early_entries (employee_id, work_date, authorized, decided_by)
+            VALUES (@Id, @Giorno, @Ok, @Autore)
+            ON DUPLICATE KEY UPDATE authorized = VALUES(authorized), decided_by = VALUES(decided_by),
+                                    decided_at = NOW()",
+            new { Id = employeeId, Giorno = giorno, Ok = authorized, Autore = autoreId });
+
+        _logger.LogInformation(
+            "[HR] Entrata anticipata del {Giorno:yyyy-MM-dd} di {Dip}: {Esito} da {Autore}.",
+            giorno, employeeId, authorized ? "APPROVATA" : "rifiutata", autoreId);
+
+        string? avviso = await ScriviEntrataDecisaAsync(c, employeeId, giorno, entrata, authorized, autoreId, ct);
+
+        RicalcolaConVicine(c, employeeId, giorno);
+        return (null, avviso);
+    }
+
+    /// <summary>
+    /// Porta su Ecos (e qui, che ne è lo specchio) l'orario di entrata deciso. Torna un avviso
+    /// quando non è stato possibile, mai un errore: la decisione vale comunque.
+    /// </summary>
+    private async Task<string?> ScriviEntrataDecisaAsync(
+        MySqlConnection c, int employeeId, DateTime giorno, PunchRow entrata, bool authorized,
+        int autoreId, CancellationToken ct)
+    {
+        DateTime oraCheVale = authorized
+            ? OraArrotondata(entrata.PunchedAt, entrata.Direction)
+            : giorno.AddMinutes(TimesheetRules.StandardStartMinutes);
+
+        DateTime oraSuEcos = entrata.EcosPunchedAt ?? entrata.PunchedAt;
+        if (AlMinuto(oraSuEcos) == AlMinuto(oraCheVale)) return null;   // Ecos ha già l'ora giusta
+
+        bool diEcos = string.Equals(entrata.Source, "ECOS", StringComparison.OrdinalIgnoreCase)
+                      && !string.IsNullOrWhiteSpace(entrata.ExternalId);
+        if (!diEcos)
+            return "L'entrata non è ancora su Ecos: là non c'è niente da correggere.";
+
+        string stampId = entrata.ExternalId!.Trim();
+        string outcome;
+        string? messaggio;
+        try
+        {
+            string token = await _ecos.TokenAsync(ct);
+            messaggio = await _ecos.UpdateStampTimeAsync(token, stampId, oraCheVale, ct);
+            outcome = "OK";
+
+            // Specchio di Ecos: l'orario che vale è quello, anche qui. L'originale resta nel registro.
+            c.Execute(
+                "UPDATE hr_punches SET punched_at = @Ora, ecos_punched_at = @Ora, ecos_sent_at = NOW() WHERE id = @Id",
+                new { Ora = oraCheVale, Id = entrata.Id });
+        }
+        catch (EcosApiException ex)
+        {
+            outcome = "ERROR";
+            messaggio = ex.Message;
+            _logger.LogWarning(
+                "[HR] Entrata decisa non scritta su Ecos: dipendente {Dip}, {Giorno:yyyy-MM-dd}, StampID {Stamp}: {Msg}",
+                employeeId, giorno, stampId, ex.Message);
+        }
+
+        RegistraInvio(c, employeeId, giorno, entrata.Id, stampId, entrata.Direction, entrata.PunchedAt,
+            oraCheVale, oraSuEcos, outcome,
+            (authorized ? "Entrata anticipata approvata: " : "Entrata anticipata rifiutata: ") + messaggio,
+            autoreId);
+
+        return outcome == "OK"
+            ? null
+            : $"Su Ecos l'entrata non è stata cambiata: {messaggio}. Qui la giornata conta comunque l'orario deciso.";
+    }
+
     private static void RegistraInvio(
         MySqlConnection c, int employeeId, DateTime workDate, long? punchId, string stampId, string direction,
         DateTime punchedAt, DateTime sentTime, DateTime? previousTime, string outcome, string? messaggio, int autoreId)
