@@ -1,6 +1,6 @@
 import * as React from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { Check, ChevronLeft, ChevronRight, CloudUpload, Mail, MailCheck, TriangleAlert } from "lucide-react"
+import { CalendarPlus, Check, ChevronLeft, ChevronRight, CloudUpload, Mail, MailCheck, TriangleAlert } from "lucide-react"
 
 import { ColumnsMenu } from "@/components/shared/columns-menu"
 import { DateField } from "@/components/shared/date-field"
@@ -25,6 +25,7 @@ import { AllineaEcosDialog, type AllineaEcosTarget } from "./AllineaEcosDialog"
 import { AzioniGiornata } from "./AzioniGiornata"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import {
+  daGiustificare,
   daSistemare,
   descriviBlocco,
   etichettaGiorno,
@@ -34,6 +35,7 @@ import {
   type RigaControllo,
 } from "./controllo-giornaliero"
 import { GiornataDialog } from "./GiornataDialog"
+import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
 import { oraSuEcos, riassuntoInvioEcos } from "./invio-ecos"
 import { isZero, oreLeggibili } from "./ore"
 import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
@@ -85,6 +87,8 @@ export function ControlloGiornalieroView({
   const [soloDaSistemare, setSoloDaSistemare] = React.useState(false)
   const [aperta, setAperta] = React.useState<{ employeeId: number; dataIso: string } | null>(null)
   const [sollecito, setSollecito] = React.useState<SollecitoTarget[] | null>(null)
+  // La causale che copre le ore mancanti, senza passare dal Calendario (Diego, 10/09/2026).
+  const [giustifica, setGiustifica] = React.useState<{ employeeId: number; date: string } | null>(null)
   const [allinea, setAllinea] = React.useState<AllineaEcosTarget | null>(null)
   // Le righe scelte per il sollecito in blocco (chiave = persona|giorno).
   const [selezionate, setSelezionate] = React.useState<Set<string>>(() => new Set())
@@ -168,7 +172,7 @@ export function ControlloGiornalieroView({
 
   const oggiIso = dateToIso(new Date())
   // Colonne fisse: la casella di selezione (solo con la scrittura), il nome, «Ecos» e il 📧.
-  const visibleCount = (canWrite ? 3 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
+  const visibleCount = (canWrite ? 4 : 0) + 1 + COLUMNS.filter((c) => show(c.id)).length
   const quantiDaSistemare = riassunto?.daSistemare ?? 0
 
   if (query.isLoading) {
@@ -340,6 +344,7 @@ export function ControlloGiornalieroView({
               {show("stato") && <TableHead>Com'è la giornata</TableHead>}
               {show("pausa") && <TableHead className="text-right">Pausa</TableHead>}
               {show("nota") && <TableHead className="w-60">Nota</TableHead>}
+              {canWrite && <TableHead className="w-12 text-center">Causale</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Ecos</TableHead>}
               {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
             </TableRow>
@@ -375,6 +380,9 @@ export function ControlloGiornalieroView({
                       setSollecito([{ employeeId: r.dipendente.employeeId, date: r.dataIso }])
                     }
                     onAllinea={() => setAllinea({ employeeId: r.dipendente.employeeId, date: r.dataIso })}
+                    onGiustifica={() =>
+                      setGiustifica({ employeeId: r.dipendente.employeeId, date: r.dataIso })
+                    }
                   />
                 ))}
                 {giorno.righe.length === 0 && (
@@ -433,6 +441,14 @@ export function ControlloGiornalieroView({
           if (!open) setAllinea(null)
         }}
         onChanged={onChanged}
+      />
+
+      <GiustificaCausaleDialog
+        target={giustifica}
+        onOpenChange={(open) => {
+          if (!open) setGiustifica(null)
+        }}
+        onSaved={onChanged}
       />
 
       <SollecitoGiornataDialog
@@ -500,6 +516,7 @@ function RigaDipendente({
   onOpen,
   onSollecito,
   onAllinea,
+  onGiustifica,
 }: {
   riga: RigaControllo
   show: (id: string) => boolean
@@ -510,6 +527,7 @@ function RigaDipendente({
   onOpen: () => void
   onSollecito: () => void
   onAllinea: () => void
+  onGiustifica: () => void
 }) {
   const { giorno: g, stato: st, dipendente } = riga
   const spenta = st.tone === "dim"
@@ -577,6 +595,25 @@ function RigaDipendente({
       {show("nota") && (
         <TableCell className="max-w-60 truncate text-xs text-muted-foreground" title={g.note}>
           {g.note || "—"}
+        </TableCell>
+      )}
+      {canWrite && (
+        // Le ore che mancano si coprono con una causale anche da qui, senza passare dal
+        // Calendario (Diego, 10/09/2026). Quante ne mancano e quali causali siano ammesse
+        // lo dice il dialogo, che li chiede al server.
+        <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+          {daGiustificare(riga) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={onGiustifica}
+              aria-label={`Inserisci una causale per ${dipendente.employeeName}`}
+              title="Copri le ore che mancano con una causale (permesso, ferie, malattia…)"
+            >
+              <CalendarPlus className="size-4 text-amber-600 dark:text-amber-400" />
+            </Button>
+          )}
         </TableCell>
       )}
       {canWrite && ecos && (

@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-0933",
+                     "data":  "2026-09-10T09:33:47",
+                     "hash":  "26a05f76e797792dbde51bb60805a2b5c14f1a82",
+                     "modifiche":  [
+                                       "HR: le ore del contratto e l\u0027entrata prima delle 8 da autorizzare (regole v7, M131)"
+                                   ]
+                 },
+                 {
                      "build":  "20260909-1705",
                      "data":  "2026-09-10T09:15:14",
                      "hash":  "837d64f10d13a875c3b882395fd0b4b08f4dd18d",

@@ -73,6 +73,16 @@ export function daSistemare(riga: RigaControllo): boolean {
   return riga.stato.tone === "bad" || riga.stato.tone === "warn"
 }
 
+/**
+ * Dove ha senso mettere una causale che copra le ore mancanti: una giornata da sistemare
+ * che non sia già un'assenza né un riposo (Diego, 10/09/2026: «le ore da giustificare
+ * vorrei poterle inserire anche nella pagina Controllo di ieri»). Quante ore manchino e
+ * quali causali siano ammesse lo dice il server, quando il dialogo si apre.
+ */
+export function daGiustificare(riga: RigaControllo): boolean {
+  return daSistemare(riga) && !riga.stato.assenza && !riga.stato.riposo
+}
+
 export interface RiassuntoControllo {
   dipendenti: number
   regolari: number

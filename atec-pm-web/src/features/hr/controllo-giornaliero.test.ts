@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   NON_COLLEGATO,
+  daGiustificare,
   daSistemare,
   descriviBlocco,
   etichettaGiorno,
@@ -175,6 +176,29 @@ describe("riassuntoControllo e daSistemare", () => {
       "Luca Neri",
       "Elena Blu",
     ])
+  })
+})
+
+describe("daGiustificare — dove ha senso la causale (Diego, 10/09/2026)", () => {
+  it("le ore si coprono dove mancano: non su chi è già a posto, in ferie o a riposo", () => {
+    const righe = righeControllo(bloccoDiLunedi([
+      dipendente(1, "Mario Rossi", [giornata(VEN), vuota(SAB), vuota(DOM, true)]),
+      dipendente(2, "Anna Bianchi", [vuota(VEN), vuota(SAB), vuota(DOM, true)]),
+      dipendente(3, "Sara Gialli", [giornata(VEN, { note: "VACATION" }), vuota(SAB), vuota(DOM, true)]),
+      dipendente(4, "Luca Neri", [
+        giornata(VEN, { regularHours: "7h 30m", shortMinutes: 30 }),
+        vuota(SAB),
+        vuota(DOM, true),
+      ]),
+    ]))
+
+    // Chi non ha timbrato (otto ore scoperte) e chi è sotto il contratto di mezz'ora.
+    expect(righe.filter(daGiustificare).map((x) => x.dipendente.employeeName)).toEqual([
+      "Anna Bianchi",
+      "Luca Neri",
+    ])
+    // Il sabato e la domenica di chi non ha timbrato restano fuori: sono riposo.
+    expect(righe.filter(daGiustificare).every((x) => x.dataIso === VEN)).toBe(true)
   })
 })
 

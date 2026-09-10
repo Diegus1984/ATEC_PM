@@ -712,6 +712,12 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   `POST /api/hr/early-entry` salva e ricalcola subito; i due pulsanti stanno nel dettaglio della
   giornata, e nel Controllo di ieri la riga dice «Entrata 30m prima delle 8: da autorizzare» in
   ambra. Test: `EntrataAnticipataTests` (motore e servizio).
+- **La causale si mette anche dal Controllo di ieri (10/09).** Diego: «le ore da giustificare
+  vorrei poterle inserire anche nella pagina Controllo di ieri». Colonna «Causale» prima di
+  «Ecos»: apre lo stesso `GiustificaCausaleDialog` del Calendario, che chiede al server quante
+  ore mancano e quali causali sono ammesse. Il pulsante compare dove ha senso — regola pura
+  `daGiustificare` in `controllo-giornaliero.ts` (da sistemare, non assenza, non riposo) col suo
+  test.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
