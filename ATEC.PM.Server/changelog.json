@@ -1,6 +1,14 @@
 {
     "voci":  [
                  {
+                     "build":  "20260910-1124",
+                     "data":  "2026-09-10T11:24:41",
+                     "hash":  "25ddc8cdbae448c4d31260a13b1b17edd86b7429",
+                     "modifiche":  [
+                                       "HR motore v8: chi ha timbrato solo l\u0027uscita non è entrato a quell\u0027ora"
+                                   ]
+                 },
+                 {
                      "build":  "20260910-1108",
                      "data":  "2026-09-10T11:09:10",
                      "hash":  "98011bd9da5316a77269371ae96844e4fbe0fd47",
