@@ -55,7 +55,7 @@ export function TrasfertaCella({
   })
 
   if (!modificabile) {
-    return <div className="flex h-6 w-full items-center justify-center">{importo}</div>
+    return <div className="flex h-7 w-full items-center justify-center">{importo}</div>
   }
 
   // L'importo di oggi può non essere fra le tariffe (tariffa cambiata dopo): si aggiunge in
@@ -66,12 +66,15 @@ export function TrasfertaCella({
 
   return (
     <Select
-      value={attuale == null ? NESSUNA : String(attuale)}
+      // 🪤 Senza importo il valore è la stringa vuota, non la voce «(nessuna)»: altrimenti
+      // ogni casella di ogni giorno scriverebbe «(nessuna)» e la griglia diventa illeggibile
+      // (Diego, 10/09/2026). La voce serve solo a togliere un importo già messo.
+      value={attuale == null ? "" : String(attuale)}
       onValueChange={(v) => salva.mutate(v === NESSUNA ? null : Number(v))}
       disabled={salva.isPending}
     >
       <SelectTrigger
-        className="h-6 w-full justify-center gap-0.5 border-0 bg-transparent px-0 font-mono text-[10px] shadow-none focus:ring-0 [&>svg]:size-2.5 [&>svg]:opacity-40"
+        className="h-7 w-full justify-center gap-0.5 border-0 bg-transparent px-0 font-mono text-sm shadow-none focus:ring-0 [&>svg]:size-3 [&>svg]:opacity-40"
         aria-label={`Indennità di trasferta del ${date}`}
         title="Scegli l'indennità di trasferta della giornata"
       >

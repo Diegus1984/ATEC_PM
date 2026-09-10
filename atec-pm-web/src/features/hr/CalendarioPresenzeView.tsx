@@ -435,7 +435,7 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                     )}
                   >
                     <div>{g}</div>
-                    <div className="text-[10px] font-normal opacity-80">
+                    <div className="text-xs font-normal opacity-80">
                       {calendario?.dayLabels[g] ?? ""}
                     </div>
                   </TableHead>
@@ -482,7 +482,7 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                     <TableCell className="sticky left-0 z-10 whitespace-pre-line bg-background font-semibold">
                       {riga.employee}
                     </TableCell>
-                    <TableCell className="sticky left-44 z-10 whitespace-nowrap bg-background text-[11px] font-semibold">
+                    <TableCell className="sticky left-44 z-10 whitespace-nowrap bg-background text-xs font-semibold">
                       {riga.voce}
                     </TableCell>
 
@@ -498,7 +498,7 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                           <TableCell
                             key={g}
                             className={cn(
-                              "border-r p-0 text-center font-mono text-[10px]",
+                              "border-r p-0 text-center font-mono text-sm",
                               cella?.color ? COLORI[cella.color] : ""
                             )}
                           >
@@ -555,7 +555,7 @@ export function CalendarioPresenzeView({ anno, mese, canWrite }: CalendarioPrese
                               : undefined
                           }
                           className={cn(
-                            "border-r p-0.5 text-center font-mono text-[10px]",
+                            "border-r p-0.5 text-center font-mono text-sm",
                             cella?.color ? COLORI[cella.color] : "",
                             cliccabile && "cursor-pointer"
                           )}
