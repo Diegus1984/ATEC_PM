@@ -118,16 +118,22 @@ public partial class HrAttendanceService
     }
 
     /// <summary>
-    /// Il verso della timbratura che manca in una giornata incompleta: l'uscita, sia con la sola
-    /// entrata sia con entrata-uscita-rientro. HR la scrive nella sua riga del dettaglio e
-    /// «Scrivi su Ecos» la inserisce là (Diego, 09/09/2026 sera). Null = niente manca.
+    /// Il verso della timbratura che manca in una giornata incompleta. HR la scrive nella sua
+    /// riga del dettaglio e «Scrivi su Ecos» la inserisce là (Diego, 09/09/2026 sera).
+    /// Null = niente manca.
+    ///
+    /// <para>Di solito è l'uscita: sola entrata, o entrata-uscita-rientro senza l'ultima
+    /// uscita. Ma chi ha timbrato soltanto l'USCITA ha dimenticato di timbrare la mattina, e
+    /// lì quella che manca è l'entrata (10/09/2026).</para>
     /// </summary>
-    internal static string? VersoMancante(string? nota) =>
-        nota != null
-        && (nota.StartsWith("⚠ INCOMPLETO: Uscita mancante", StringComparison.Ordinal)
-            || nota.StartsWith("⚠ INCOMPLETO: Solo entrata", StringComparison.Ordinal))
-            ? "OUT"
-            : null;
+    internal static string? VersoMancante(string? nota) => nota switch
+    {
+        null => null,
+        _ when nota.StartsWith("⚠ INCOMPLETO: Uscita mancante", StringComparison.Ordinal) => "OUT",
+        _ when nota.StartsWith("⚠ INCOMPLETO: Solo entrata", StringComparison.Ordinal) => "OUT",
+        _ when nota.StartsWith("⚠ INCOMPLETO: Solo uscita", StringComparison.Ordinal) => "IN",
+        _ => null,
+    };
 
     /// <summary>
     /// Le sole note del motore in cui la pausa è dedotta E NON timbrata. 🪤 «Pausa 1h forzata»
@@ -453,14 +459,23 @@ public partial class HrAttendanceService
                 esito.Errors.Add(esito.Message);
                 return esito;
             }
-            DateTime? ultima = tutte.Select(x => x.Target).Concat(rettifiche.Select(x => x.Target))
-                .Concat(pausaDaInserire.Select(x => x.Quando)).DefaultIfEmpty().Max();
-            if (ultima is { } u && u != default && m.Quando <= u)
+            // L'ora deve stare dalla parte giusta: l'uscita che manca dopo l'ultima
+            // timbratura, l'entrata che manca prima della prima.
+            List<DateTime> orari = tutte.Select(x => x.Target).Concat(rettifiche.Select(x => x.Target))
+                .Concat(pausaDaInserire.Select(x => x.Quando)).ToList();
+            if (orari.Count > 0)
             {
-                esito.Failed = 1;
-                esito.Message = $"L'uscita mancante deve venire dopo l'ultima timbratura del giorno ({u:HH:mm}).";
-                esito.Errors.Add(esito.Message);
-                return esito;
+                bool entrata = m.Direction == "IN";
+                DateTime confine = entrata ? orari.Min() : orari.Max();
+                if (entrata ? m.Quando >= confine : m.Quando <= confine)
+                {
+                    esito.Failed = 1;
+                    esito.Message = entrata
+                        ? $"L'entrata mancante deve venire prima della prima timbratura del giorno ({confine:HH:mm})."
+                        : $"L'uscita mancante deve venire dopo l'ultima timbratura del giorno ({confine:HH:mm}).";
+                    esito.Errors.Add(esito.Message);
+                    return esito;
+                }
             }
             if (PauseIncerte(c, employeeId, workDate).Contains((m.Direction, AlMinuto(m.Quando))))
             {

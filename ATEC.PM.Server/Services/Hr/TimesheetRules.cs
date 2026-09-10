@@ -28,7 +28,7 @@ public static class TimesheetRules
     /// finché non c'è l'uscita vera; oggi con due entrate e una uscita resta «Giornata in
     /// corso».</para>
     /// </summary>
-    public const int Version = 7;
+    public const int Version = 8;
 
     /// <summary>Giornata lavorativa ordinaria: oltre questa soglia è straordinario.</summary>
     public const int StandardDayMinutes = 480;

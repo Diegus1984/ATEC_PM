@@ -105,6 +105,10 @@ function spiegazione(g: HrDay, nome: string, canWrite: boolean): string | null {
       return canWrite
         ? `Senza l'uscita non si possono contare le ore. Chiedi a ${chi} a che ora è uscito, scrivilo nella riga «Uscita» di «Orari su Ecos» e premi «Scrivi su Ecos»: la timbratura nasce su Ecos e qui.`
         : "Senza l'uscita non si possono contare le ore. Segnalalo a chi gestisce le presenze."
+    if (st.label.startsWith("Manca l'entrata"))
+      return canWrite
+        ? `Ha timbrato solo l'uscita: la mattina non è passato dal lettore. Chiedi a ${chi} a che ora è arrivato, scrivilo nella riga «Entrata» di «Orari su Ecos» e premi «Scrivi su Ecos».`
+        : "Risulta solo l'uscita: manca l'entrata del mattino. Segnalalo a chi gestisce le presenze."
     return canWrite
       ? "Le timbrature di questo giorno non tornano: guardale qui sotto e, se serve, aggiungi quella che manca con il motivo."
       : "Le timbrature di questo giorno non tornano. Segnalalo a chi gestisce le presenze."
@@ -164,19 +168,23 @@ export function GiornataDialog({
   }, [open, proposta])
 
   // Se manca l'uscita, la rettifica parte già impostata su «Uscita».
-  const mancaUscita = giornata
+  // Cosa manca alla giornata: serve a partire col verso giusto nel modulo della rettifica.
+  const manca: "OUT" | "IN" | null = giornata
     ? (() => {
         const st = statoGiornata(giornata)
-        return st.tone === "bad" && st.label.startsWith("Manca l'uscita")
+        if (st.tone !== "bad") return null
+        if (st.label.startsWith("Manca l'uscita")) return "OUT"
+        if (st.label.startsWith("Manca l'entrata")) return "IN"
+        return null
       })()
-    : false
+    : null
 
   React.useEffect(() => {
     if (!open) return
     setOra("")
-    setVerso(mancaUscita ? "OUT" : "IN")
+    setVerso(manca ?? "IN")
     setMotivo("")
-  }, [open, mancaUscita])
+  }, [open, manca])
 
   const rettifica = useMutation({
     mutationFn: sendHrAdjustment,

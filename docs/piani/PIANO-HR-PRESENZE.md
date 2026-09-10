@@ -779,6 +779,16 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   Test in `EntrataAnticipataTests` (rifiuto, approvazione, Ecos che rifiuta). 🪤 Dopo un rifiuto
   l'entrata locale è le 8, quindi l'anticipo non si vede più e la colonna resta vuota: per
   tornare indietro si cambia l'orario a mano dal dettaglio e si riscrive su Ecos.
+- **La sola uscita non è un'entrata (10/09, regole v8).** Diego: «controlla Vasile». Obreja il 02/09
+  aveva una sola strisciata, l'USCITA delle 17:03, e il cartellino diceva «Entrata 17:00, uscita
+  non timbrata»: l'esatto contrario di quello che era successo. Il `case 1` di `Assign` metteva la
+  timbratura unica nella casella dell'entrata senza guardarne il verso — nove giornate su venti
+  erano così. Ora il verso conta: con la sola uscita la nota è «⚠ INCOMPLETO: Solo uscita»,
+  l'entrata resta «??:??», `VersoMancante` dice «IN» e l'entrata mancante si inserisce PRIMA della
+  prima timbratura (il controllo era tarato solo sull'uscita). Cambiano anche le parole: «Manca
+  l'entrata» nella pillola, il testo del sollecito e la spiegazione del dettaglio, e il modulo
+  della rettifica parte già su «Entrata». Test in `UscitaMancanteTests` e `AllineaEcosTests`; il
+  banco di prova delle 330 giornate VB non si sposta.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.

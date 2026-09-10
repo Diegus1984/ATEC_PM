@@ -74,6 +74,7 @@ public class PausaDedottaTests
     [Theory]
     [InlineData("⚠ INCOMPLETO: Uscita mancante", "OUT")]
     [InlineData("⚠ INCOMPLETO: Solo entrata", "OUT")]
+    [InlineData("⚠ INCOMPLETO: Solo uscita", "IN")]
     [InlineData("⚠ INCOMPLETO: Solo entrata · 🌙 Notte: il turno finisce domattina", "OUT")]
     [InlineData("OK", null)]
     [InlineData("AUTO_P: Pausa 1h detratta", null)]
@@ -425,6 +426,48 @@ public class AllineaEcosTests
             new { Id = mario, Giorno });
         Assert.Equal(("17:00", 480, "OK", false), giornata);
         Assert.Null(servizio.GetMonthlyTimesheet(mario, 2026, 2).Days.Single(g => g.WorkDate == Giorno).EcosMissingToInsert);
+    }
+
+    /// <summary>
+    /// Chi ha timbrato solo l'uscita ha dimenticato di timbrare la mattina: quella che si
+    /// inserisce è l'ENTRATA, e va PRIMA di quello che c'è (10/09/2026, caso Obreja).
+    /// </summary>
+    [FactRichiedeMySql]
+    public async Task L_entrata_che_manca_si_inserisce_prima_della_prima_timbratura()
+    {
+        using MySqlConnection c = _schema.Apri();
+        int mario = Dipendente(c, "42", emplId: 5374);
+        int autore = Dipendente(c, null);
+        Grezza(c, mario, "s1", Giorno.AddHours(17), "OUT");
+        var ecos = new InvioEcosTests.EcosFinto(
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaBadge("246b3548"),
+            InvioEcosTests.RispostaInsert("s9", "5374", "42"),
+            InvioEcosTests.RispostaToken(), InvioEcosTests.RispostaTimbrature(
+                InvioEcosTests.Riga("s1", "2026-02-05 17:00:00", "42", "OUT")));
+        HrAttendanceService servizio = Servizio(ecos);
+        servizio.RecalculateDay(c, mario, Giorno);
+
+        // Le 18:00 stanno DOPO l'uscita: non è un'entrata del mattino.
+        HrEcosSendResultDto tardi = await servizio.SendDayToEcosAsync(mario, Giorno, autore,
+            new List<HrEcosTimeDto> { new() { PunchId = null, Direction = "IN", Time = "18:00", Kind = "MISSING" } });
+        Assert.False(tardi.Success);
+        Assert.Contains("prima della prima timbratura", tardi.Message);
+
+        // Alle 08:00 invece sì.
+        HrEcosSendResultDto esito = await servizio.SendDayToEcosAsync(mario, Giorno, autore,
+            new List<HrEcosTimeDto> { new() { PunchId = null, Direction = "IN", Time = "08:00", Kind = "MISSING" } });
+
+        Assert.True(esito.Success, esito.Message);
+        Assert.Equal(1, esito.Inserted);
+        Assert.Contains("VersusCode=IN", ecos.CorpiInviati[2]);
+        Assert.Contains("StampDateTime=2026-02-05+08%3A00%3A00", ecos.CorpiInviati[2]);
+
+        // La giornata torna intera: otto ore con la pausa dedotta.
+        var giornata = c.QuerySingle<(string In1, string Note)>(
+            "SELECT clock_in_1, note FROM hr_days WHERE employee_id = @Id AND work_date = @Giorno",
+            new { Id = mario, Giorno });
+        Assert.Equal("08:00", giornata.In1);
+        Assert.StartsWith("AUTO_P", giornata.Note);
     }
 
     [FactRichiedeMySql]

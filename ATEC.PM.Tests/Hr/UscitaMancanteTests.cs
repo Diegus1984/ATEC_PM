@@ -24,6 +24,41 @@ public class UscitaMancanteTests
     private static TimesheetDay Calcola(DateTime giorno, DateTime oggi, params RawPunch[] timbrature) =>
         TimesheetEngine.Calcola(giorno, timbrature, oggi, new TimesheetEngine.EmployeeConfig(true));
 
+    /// <summary>
+    /// 10/09/2026, Diego: «controlla Vasile». Obreja il 02/09 aveva una sola strisciata,
+    /// l'USCITA delle 17:03, e il cartellino diceva «Entrata 17:00, uscita non timbrata»:
+    /// l'esatto contrario. Il motore metteva la timbratura unica nella casella dell'entrata
+    /// senza guardarne il verso — nove giornate su venti erano così.
+    /// </summary>
+    [Fact]
+    public void Chi_ha_timbrato_solo_l_uscita_non_e_entrato_a_quell_ora()
+    {
+        TimesheetDay c = Calcola(Ieri, Oggi, T("2026-09-08 17:03", "OUT"));
+
+        Assert.Equal("⚠ INCOMPLETO: Solo uscita", c.Note);
+        Assert.True(c.HasAnomaly);
+        Assert.Equal("??:??", c.Entrata1);
+        Assert.Equal("17:00", c.Uscita1);
+        Assert.Equal("17:03", c.RawUscita1);
+        Assert.Equal("--:--", c.RawEntrata1);
+        // Niente ore: non si sa da che ora, e non si inventa.
+        Assert.Equal("0h 0m", c.RegularHours);
+
+        // Quella che manca è l'ENTRATA, ed è quella che HR scriverà su Ecos.
+        Assert.Equal("IN", HrAttendanceService.VersoMancante(c.Note));
+    }
+
+    [Fact]
+    public void Con_la_sola_entrata_resta_l_uscita_a_mancare()
+    {
+        TimesheetDay c = Calcola(Ieri, Oggi, T("2026-09-08 08:00", "IN"));
+
+        Assert.Equal("⚠ INCOMPLETO: Solo entrata", c.Note);
+        Assert.Equal("08:00", c.Entrata1);
+        Assert.Equal("??:??", c.Uscita1);
+        Assert.Equal("OUT", HrAttendanceService.VersoMancante(c.Note));
+    }
+
     [Fact]
     public void Due_entrate_e_una_uscita_su_un_giorno_passato_sono_una_giornata_incompleta()
     {

@@ -150,6 +150,14 @@ public static class HrDayReminder
             sb.AppendLine("  Risultano l'entrata, l'uscita per la pausa e il rientro, ma non l'ultima uscita.");
             sb.AppendLine("  Comunica l'orario di uscita all'ufficio HR per inserire la timbratura mancante.");
         }
+        else if (nota.Contains("INCOMPLETO", StringComparison.Ordinal)
+                 && nota.Contains("Solo uscita", StringComparison.Ordinal))
+        {
+            // Chi ha timbrato solo l'uscita ha dimenticato di timbrare arrivando (10/09/2026).
+            sb.AppendLine("  ⚠ Timbrature incomplete — manca l'entrata del mattino.");
+            sb.AppendLine("  Risulta registrata solo l'uscita.");
+            sb.AppendLine("  Comunica l'orario di arrivo all'ufficio HR per inserire la timbratura mancante.");
+        }
         else if (nota.Contains("INCOMPLETO", StringComparison.Ordinal))
         {
             sb.AppendLine("  ⚠ Timbrature incomplete — manca l'uscita.");

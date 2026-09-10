@@ -205,6 +205,8 @@ function fraseAnomalia(nota: string): string {
   const testo = nota.split(" · ")[0]
   // Sola entrata, oppure entrata-uscita-rientro senza l'ultima uscita: in entrambi i casi la
   // stessa frase, e il dialogo della giornata parte già con la rettifica su «Uscita».
+  // Solo l'uscita: quella che manca è l'entrata del mattino, non l'uscita.
+  if (testo.includes("Solo uscita")) return "Manca l'entrata"
   if (testo.includes("Solo entrata") || testo.includes("Uscita mancante")) return "Manca l'uscita"
   if (testo.includes("manca una timbratura della notte")) return "Manca una timbratura della notte"
   if (testo.includes("due turni nella stessa giornata")) return "Due turni nello stesso giorno"

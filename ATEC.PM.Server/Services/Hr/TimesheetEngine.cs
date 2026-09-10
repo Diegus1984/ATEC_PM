@@ -324,7 +324,15 @@ public static class TimesheetEngine
         switch (filtrate.Count)
         {
             case 1:
-                Posiziona(dati, filtrate[0], null, null, null, numIngressi: 1, numUscite: 0);
+                // 🪤 Il VERSO conta anche quando la timbratura è una sola: chi ha timbrato
+                // soltanto l'uscita delle 17 non è «entrato alle 17», ha dimenticato di
+                // timbrare la mattina (10/09/2026, giornata di Obreja del 02/09 — e altre
+                // otto come quella). Prima finiva sempre nella casella dell'entrata, e il
+                // cartellino diceva l'esatto contrario di quello che era successo.
+                if (NightShift.IsEntry(filtrate[0].Direction))
+                    Posiziona(dati, filtrate[0], null, null, null, numIngressi: 1, numUscite: 0);
+                else
+                    Posiziona(dati, null, filtrate[0], null, null, numIngressi: 0, numUscite: 1);
                 break;
 
             case 2:
@@ -645,6 +653,17 @@ public static class TimesheetEngine
         if (d.NumIngressi == 2 && d.NumUscite == 1 && d.Entrata1.HasValue && d.Uscita1.HasValue
             && d.Entrata2.HasValue)
             return TurnoUscitaMancante(c, d);
+
+        if (d.NumIngressi == 0 && d.NumUscite == 1 && d.Uscita1.HasValue)
+        {
+            // Solo l'uscita: manca l'entrata del mattino. Come il ramo qui sotto, ma
+            // dall'altra parte — e senza inventare l'ora di arrivo.
+            c.Note = "⚠ INCOMPLETO: Solo uscita";
+            c.Entrata1 = "??:??";
+            c.Uscita1 = ClockOut(d.Uscita1, c.WorkDate);
+            c.BreakTime = "0h 0m";
+            return 0;
+        }
 
         if (d.NumIngressi == 1 && d.NumUscite == 0 && d.Entrata1.HasValue)
         {

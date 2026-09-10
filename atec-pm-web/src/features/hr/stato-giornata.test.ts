@@ -54,6 +54,18 @@ describe("statoGiornata — ore del contratto (Diego, 10/09/2026)", () => {
   })
 })
 
+describe("statoGiornata — chi ha timbrato solo l'uscita (Diego, 10/09/2026)", () => {
+  it("dice che manca l'entrata, non l'uscita", () => {
+    // La giornata vera di Obreja del 02/09: una sola strisciata, l'uscita delle 17:03.
+    const st = statoGiornata(giornata({
+      note: "⚠ INCOMPLETO: Solo uscita", hasAnomaly: true,
+      clockIn1: "??:??", clockOut1: "17:00", regularHours: "0h 0m",
+    }))
+    expect(st.label).toBe("Manca l'entrata")
+    expect(st.tone).toBe("bad")
+  })
+})
+
 describe("statoGiornata — le ore già giustificate si vedono (Diego, 10/09/2026)", () => {
   it("dice la causale che copre le ore mancanti, così non la si rimette due volte", () => {
     // La giornata vera di Cassano del 09/09: sette ore lavorate e un'ora di permesso.
