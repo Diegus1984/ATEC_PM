@@ -1,4 +1,5 @@
 import type { HrDay, HrPunch } from "@/lib/api/types"
+import { formatDateTimeShort } from "@/lib/date-iso"
 
 /**
  * Cosa dice il pulsante «Invia a Ecos» di una giornata (08/09/2026).
@@ -71,6 +72,48 @@ export function riassuntoInvioEcos(
       !pausaDaInserire &&
       !mancanteDaInserire,
   }
+}
+
+/**
+ * Cosa dice il pulsante «Ecos» sulla riga: cosa c'è da scrivere, o perché non si può ancora.
+ * La usano il «Controllo di ieri» e il cartellino di una persona, che devono dire la stessa
+ * cosa della stessa giornata (Diego, 10/09/2026).
+ */
+export function statoEcos(
+  g: Parameters<typeof riassuntoInvioEcos>[0],
+  stato: { tone: string; label: string }
+): { tipo: "scrivi" | "allineato" | "bloccato" | "niente"; titolo: string } {
+  const ecos = riassuntoInvioEcos(g)
+  if (ecos.mancanteDaInserire) {
+    return {
+      tipo: "bloccato",
+      titolo:
+        "Manca l'uscita: apri la giornata, scrivi l'ora nella riga «Uscita» di «Orari su Ecos» e premi «Scrivi su Ecos»",
+    }
+  }
+  if (ecos.daScrivere) {
+    if (stato.tone === "bad") {
+      return { tipo: "bloccato", titolo: "La giornata ha un'anomalia: prima si sistema, poi si allinea Ecos" }
+    }
+    if (stato.label === "Giornata in corso") {
+      return { tipo: "bloccato", titolo: "Giornata ancora in corso: si allinea quando è finita" }
+    }
+    const cose = [
+      ecos.daInviare.length > 0 ? `${ecos.daInviare.length} orari` : "",
+      ecos.pausaDaInserire ? "la pausa dedotta" : "",
+    ].filter(Boolean)
+    return { tipo: "scrivi", titolo: `Scrivi su Ecos la giornata calcolata: ${cose.join(" e ")} (prima il resoconto)` }
+  }
+  if (ecos.allineato) {
+    return {
+      tipo: "allineato",
+      titolo: ecos.ultimoInvio
+        ? `Allineato con Ecos: scritto il ${formatDateTimeShort(ecos.ultimoInvio)}. La vista per giorno di Ecos si aggiorna col suo ricalcolo notturno.`
+        : "Ecos ha già gli orari calcolati",
+    }
+  }
+  if (ecos.incerte > 0) return { tipo: "bloccato", titolo: "Un invio è rimasto senza risposta certa: verificare su Ecos" }
+  return { tipo: "niente", titolo: "" }
 }
 
 /** «Entrata» / «Uscita» dal verso di Ecos. */

@@ -5,13 +5,16 @@ import { formatDateTimeShort } from "@/lib/date-iso"
 import { useNavigate } from "react-router-dom"
 import {
   CalendarPlus,
+  Check,
   ChevronLeft,
   ChevronRight,
+  CloudUpload,
   Download,
   DownloadCloud,
   KeyRound,
   Link2,
   Mail,
+  MailCheck,
   Search,
 } from "lucide-react"
 
@@ -42,6 +45,7 @@ import { notifyError } from "@/lib/toast"
 import { usePersistedColumnVisibility } from "@/lib/use-persisted-column-visibility"
 import { cn } from "@/lib/utils"
 
+import { AllineaEcosDialog, type AllineaEcosTarget } from "./AllineaEcosDialog"
 import { AzioniGiornata } from "./AzioniGiornata"
 import { GiornataDialog } from "./GiornataDialog"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
@@ -61,7 +65,7 @@ import {
 } from "./cartellino-mese"
 import { CellaOra, CellaOre, CellaStraordinario, Riquadro } from "./celle-cartellino"
 import { FASCE_LABELS, durata, isZero, oreLeggibili } from "./ore"
-import { oraSuEcos } from "./invio-ecos"
+import { oraSuEcos, statoEcos } from "./invio-ecos"
 import { StatoGiornata, statoGiornata } from "./stato-giornata"
 
 // Il cartellino letto da chi non usa il computer tutti i giorni (02/09/2026): una riga per
@@ -150,6 +154,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
     employeeId: number
     date: string
   } | null>(null)
+  const [allinea, setAllinea] = React.useState<AllineaEcosTarget | null>(null)
   const [nonAbbinati, setNonAbbinati] = React.useState<string[]>([])
   const [esportando, setEsportando] = React.useState(false)
 
@@ -279,7 +284,7 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
     1 +
     COLUMNS.filter((c) => c.id !== "calcolo" && show(c.id)).length +
     (show("calcolo") ? 2 : 0) +
-    (canWrite ? 1 : 0)
+    (canWrite ? 3 : 0)
 
   async function esportaExcel() {
     if (!cartellino) return
@@ -645,6 +650,8 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                       )}
                       {show("nota") && <TableHead className="w-60">Nota</TableHead>}
                       {canWrite && <TableHead className="w-12 text-center">Causale</TableHead>}
+                      {canWrite && <TableHead className="w-12 text-center">Ecos</TableHead>}
+                      {canWrite && <TableHead className="w-12 text-center">Sollecito</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -735,6 +742,79 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
                               )}
                             </TableCell>
                           )}
+                          {canWrite && cartellino && (
+                            // «Allinea Ecos» e sollecito 📧 sulla riga, come nel Controllo di
+                            // ieri: la regola di cosa dice il pulsante è una sola, in
+                            // invio-ecos.ts (Diego, 10/09/2026).
+                            <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+                              {(() => {
+                                const ecos = statoEcos(g, st)
+                                if (ecos.tipo === "scrivi") {
+                                  return (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8"
+                                      onClick={() =>
+                                        setAllinea({ employeeId: cartellino.employeeId, date: dataIso })
+                                      }
+                                      aria-label={`Allinea Ecos per il ${dataIso}`}
+                                      title={ecos.titolo}
+                                    >
+                                      <CloudUpload className="size-4 text-sky-600 dark:text-sky-400" />
+                                    </Button>
+                                  )
+                                }
+                                if (ecos.tipo === "allineato") {
+                                  return (
+                                    <span
+                                      className="inline-flex size-8 items-center justify-center"
+                                      title={ecos.titolo}
+                                    >
+                                      <Check className="size-4 text-muted-foreground" />
+                                    </span>
+                                  )
+                                }
+                                if (ecos.tipo === "bloccato") {
+                                  return (
+                                    <span
+                                      className="inline-flex size-8 items-center justify-center"
+                                      title={ecos.titolo}
+                                    >
+                                      <CloudUpload className="size-4 text-muted-foreground/40" />
+                                    </span>
+                                  )
+                                }
+                                return null
+                              })()}
+                            </TableCell>
+                          )}
+                          {canWrite && cartellino && (
+                            <TableCell className="w-12 text-center" onClick={(e) => e.stopPropagation()}>
+                              {g.canRemind && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  onClick={() =>
+                                    setSollecito({ employeeId: cartellino.employeeId, date: dataIso })
+                                  }
+                                  aria-label={`Sollecita la giornata del ${dataIso}`}
+                                  title={
+                                    g.lastReminderAt
+                                      ? `Sollecito già inviato il ${formatDateTimeShort(g.lastReminderAt)}: manda di nuovo l'email`
+                                      : "Manda al dipendente un'email con la giornata da verificare"
+                                  }
+                                >
+                                  {g.lastReminderAt ? (
+                                    <MailCheck className="size-4 text-muted-foreground" />
+                                  ) : (
+                                    <Mail className="size-4 text-amber-600 dark:text-amber-500" />
+                                  )}
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       )
                     })}
@@ -787,6 +867,14 @@ export function TimbraturePage({ vista: vistaRichiesta = "ieri" }: { vista?: Vis
               </GridScroller>
             </>
           ) : null}
+
+          <AllineaEcosDialog
+            target={allinea}
+            onOpenChange={(open) => {
+              if (!open) setAllinea(null)
+            }}
+            onChanged={invalidate}
+          />
 
           <GiustificaCausaleDialog
             target={giustifica}

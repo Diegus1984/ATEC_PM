@@ -37,7 +37,7 @@ import {
 } from "./controllo-giornaliero"
 import { GiornataDialog } from "./GiornataDialog"
 import { GiustificaCausaleDialog } from "./GiustificaCausaleDialog"
-import { oraSuEcos, riassuntoInvioEcos } from "./invio-ecos"
+import { oraSuEcos, statoEcos } from "./invio-ecos"
 import { isZero, oreLeggibili } from "./ore"
 import { SollecitoGiornataDialog, type SollecitoTarget } from "./SollecitoGiornataDialog"
 import { StatoGiornata } from "./stato-giornata"
@@ -481,41 +481,6 @@ export function ControlloGiornalieroView({
   )
 }
 
-/** Cosa dice il pulsante «Ecos» della riga: cosa c'è da scrivere, o perché non si può ancora. */
-function statoEcos(riga: RigaControllo): { tipo: "scrivi" | "allineato" | "bloccato" | "niente"; titolo: string } {
-  const { giorno: g, stato: st } = riga
-  const ecos = riassuntoInvioEcos(g)
-  if (ecos.mancanteDaInserire) {
-    return {
-      tipo: "bloccato",
-      titolo: "Manca l'uscita: apri la giornata, scrivi l'ora nella riga «Uscita» di «Orari su Ecos» e premi «Scrivi su Ecos»",
-    }
-  }
-  if (ecos.daScrivere) {
-    if (st.tone === "bad") {
-      return { tipo: "bloccato", titolo: "La giornata ha un'anomalia: prima si sistema, poi si allinea Ecos" }
-    }
-    if (st.label === "Giornata in corso") {
-      return { tipo: "bloccato", titolo: "Giornata ancora in corso: si allinea quando è finita" }
-    }
-    const cose = [
-      ecos.daInviare.length > 0 ? `${ecos.daInviare.length} orari` : "",
-      ecos.pausaDaInserire ? "la pausa dedotta" : "",
-    ].filter(Boolean)
-    return { tipo: "scrivi", titolo: `Scrivi su Ecos la giornata calcolata: ${cose.join(" e ")} (prima il resoconto)` }
-  }
-  if (ecos.allineato) {
-    return {
-      tipo: "allineato",
-      titolo: ecos.ultimoInvio
-        ? `Allineato con Ecos: scritto il ${formatDateTimeShort(ecos.ultimoInvio)}. La vista per giorno di Ecos si aggiorna col suo ricalcolo notturno.`
-        : "Ecos ha già gli orari calcolati",
-    }
-  }
-  if (ecos.incerte > 0) return { tipo: "bloccato", titolo: "Un invio è rimasto senza risposta certa: verificare su Ecos" }
-  return { tipo: "niente", titolo: "" }
-}
-
 /**
  * Una persona in un giorno: la casella per il sollecito in blocco, nome e reparto, le stesse
  * celle del cartellino, la nuvola «Ecos» e il 📧 in fondo (solo sulle giornate che il server
@@ -547,7 +512,7 @@ function RigaDipendente({
   const { giorno: g, stato: st, dipendente } = riga
   const spenta = st.tone === "dim"
   const daSollecitare = canWrite && sollecitabile(riga)
-  const ecos = canWrite ? statoEcos(riga) : null
+  const ecos = canWrite ? statoEcos(g, st) : null
   return (
     <TableRow
       className={cn(

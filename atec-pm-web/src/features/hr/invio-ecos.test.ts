@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   oraSuEcos,
+  statoEcos,
   orariDaScrivere,
   orarioValido,
   riassuntoInvioEcos,
@@ -209,5 +210,48 @@ describe("orari decisi a mano (09/09/2026 sera)", () => {
     expect(orarioValido("8.00")).toBe(false)
     expect(orarioValido("")).toBe(false)
     expect(orarioValido(undefined)).toBe(false)
+  })
+})
+
+describe("statoEcos — cosa dice il pulsante «Ecos» sulla riga (10/09/2026)", () => {
+  const aPosto = { tone: "ok", label: "Tutto regolare" }
+
+  it("con orari da scrivere invita a scrivere, e dice quanti", () => {
+    const st = statoEcos({ punches: [timbratura({ id: 1 }), timbratura({ id: 2 })] }, aPosto)
+    expect(st.tipo).toBe("scrivi")
+    expect(st.titolo).toContain("2 orari")
+  })
+
+  it("una giornata con anomalia si sistema prima di toccare Ecos", () => {
+    const st = statoEcos({ punches: [timbratura({ id: 1 })] }, { tone: "bad", label: "Manca l'uscita" })
+    expect(st.tipo).toBe("bloccato")
+    expect(st.titolo).toContain("prima si sistema")
+  })
+
+  it("la giornata ancora aperta si allinea quando è finita", () => {
+    const st = statoEcos({ punches: [timbratura({ id: 1 })] }, { tone: "info", label: "Giornata in corso" })
+    expect(st.tipo).toBe("bloccato")
+    expect(st.titolo).toContain("quando è finita")
+  })
+
+  it("se manca l'uscita rimanda al dettaglio, prima di ogni altra cosa", () => {
+    const st = statoEcos(
+      { punches: [timbratura({ id: 1 })], ecosMissingToInsert: "OUT" },
+      aPosto
+    )
+    expect(st.tipo).toBe("bloccato")
+    expect(st.titolo).toContain("Manca l'uscita")
+  })
+
+  it("quando Ecos ha già tutto, il segno di spunta", () => {
+    const st = statoEcos(
+      { punches: [timbratura({ id: 1, toSendToEcos: false }), timbratura({ id: 2, toSendToEcos: false })] },
+      aPosto
+    )
+    expect(st.tipo).toBe("allineato")
+  })
+
+  it("una giornata senza niente da dire non mostra nulla", () => {
+    expect(statoEcos({ punches: [] }, aPosto).tipo).toBe("niente")
   })
 })

@@ -745,6 +745,11 @@ esiste la devo inserire; ovviamente con una conferma con il resoconto di cosa an
   risulta in difetto, e la stessa giornata non può essere «a posto» in una pagina e «corta» in
   un'altra. I riquadri-filtro nel calendario non hanno senso: non ha riquadri, è la griglia a
   voci del programma originale.
+- **Anche «Ecos» e «Sollecito» sul cartellino di una persona (10/09).** Nel cartellino c'era la
+  sola colonna «Causale»: ora ci sono tutte e tre come nel Controllo di ieri, con «Allinea Ecos»
+  (nuvola / spunta / nuvola spenta) e il 📧 sulla riga. La regola di cosa dice il pulsante è
+  passata in `invio-ecos.ts` (`statoEcos`, col suo test) e la usano tutte e due le pagine: prima
+  viveva dentro `ControlloGiornalieroView` e il cartellino non poteva averla.
 - **Ultima sincronizzazione sotto «Aggiorna da Ecos» (09/09 sera).** Data in grigio sotto il
   pulsante (`HrStatusDto.LastImport`); l'ultimo import riuscito resta scritto in `app_config`
   (`hr_last_import_at`, `ScriviUltimoImport`) così sopravvive ai riavvii del servizio.
